@@ -1,4 +1,4 @@
-import { AppType } from "next/app";
+import { type AppType } from "next/app";
 import { Geist } from "next/font/google";
 import "~/styles/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
