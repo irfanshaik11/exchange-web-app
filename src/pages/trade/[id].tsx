@@ -4,14 +4,23 @@ import type { MemeCoin } from "../../data/memecoins";
 import Head from "next/head";
 import Link from "next/link";
 import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff } from "react-icons/fa";
-import { OHLCChart } from "../../components/OHLCChart";
-import type { OHLC } from "../../components/OHLCChart";
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 
 export default function TradePage() {
   const router = useRouter();
   const { id } = router.query;
   const coin = memecoins[typeof id === "string" ? parseInt(id) : -1];
-  const chartData = generateRandomOHLC(60);
+  const [chartHeight, setChartHeight] = useState(600);
+
+  useEffect(() => {
+    function handleResize() {
+      setChartHeight(window.innerHeight - 220);
+    }
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   if (!coin) {
     return <div className="text-center mt-20 text-2xl text-red-400">Memecoin not found</div>;
@@ -28,32 +37,12 @@ export default function TradePage() {
     { name: "Rewards", href: "#" },
   ];
 
-  function generateRandomOHLC(count: number): OHLC[] {
-    let price = 1 + Math.random() * 2;
-    const data: OHLC[] = [];
-    for (let i = 0; i < count; i++) {
-      const open = price;
-      const close = open + (Math.random() - 0.5) * 0.2;
-      const high = Math.max(open, close) + Math.random() * 0.1;
-      const low = Math.min(open, close) - Math.random() * 0.1;
-      data.push({
-        time: (Math.floor(Date.now() / 1000) - (count - i) * 60) as any,
-        open: Number(open.toFixed(2)),
-        high: Number(high.toFixed(2)),
-        low: Number(low.toFixed(2)),
-        close: Number(close.toFixed(2)),
-      });
-      price = close;
-    }
-    return data;
-  }
-
   return (
     <>
       <Head>
         <title>{coin.name} | Trade</title>
       </Head>
-      <div className="min-h-screen bg-neutral-950 text-neutral-100">
+      <div className="h-screen w-screen bg-neutral-950 text-neutral-100 overflow-hidden">
         {/* Header */}
         <header className="w-full border-b border-neutral-800 bg-neutral-900/90 backdrop-blur sticky top-0 z-20">
           <div className="max-w-full flex items-center justify-between px-8 py-3">
@@ -94,9 +83,9 @@ export default function TradePage() {
           </div>
         </header>
         {/* Main Layout */}
-        <div className="max-w-7xl mx-auto px-4 py-8 flex gap-8">
+        <div className="flex flex-row h-[calc(100vh-72px)] w-full gap-0">
           {/* Left: Chart and Info */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 flex flex-col h-full px-8 pt-8 pb-4">
             {/* Token Info Header */}
             <div className="flex items-center gap-4 mb-2">
               <img src={coin.icon} alt={coin.name} width={48} height={48} className="rounded" />
@@ -125,8 +114,14 @@ export default function TradePage() {
               </div>
             </div>
             {/* Chart */}
-            <div className="bg-neutral-900 rounded-lg p-4 mb-4" style={{ minHeight: 400 }}>
-              <OHLCChart data={chartData} width={900} height={350} />
+            <div className="bg-neutral-900 rounded-lg p-4 mb-4 flex-1 flex flex-col min-h-0 min-w-0">
+              <iframe
+                src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_btc_chart&symbol=BINANCE:BTCUSDT&interval=15&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=18181b&studies=[]&theme=dark&style=1&timezone=Etc/UTC&withdateranges=1&hidevolume=0&hidelegend=0&studies_overrides={}&overrides={}&enabled_features=[]&disabled_features=[]&locale=en"
+                id="tradingview_btc_chart"
+                style={{ width: '100%', height: chartHeight, border: 0 }}
+                allowFullScreen
+                title="BTC Chart"
+              />
             </div>
             {/* Tabs (Positions, Trades, etc.) */}
             <div className="bg-neutral-900 rounded-lg p-2 flex gap-4 text-xs mt-2">
@@ -140,32 +135,32 @@ export default function TradePage() {
             <div className="bg-neutral-900 rounded-lg p-4 mt-2 text-neutral-400 text-center text-xs">[Positions Table Placeholder]</div>
           </div>
           {/* Right: Buy/Sell and Token Info */}
-          <div className="w-[340px] flex-shrink-0">
-            <div className="bg-neutral-900 rounded-lg p-4 mb-4">
+          <div className="w-[380px] flex-shrink-0 h-full bg-neutral-950 border-l border-neutral-800 flex flex-col p-4">
+            <div className="bg-neutral-900 rounded-lg p-4 mb-4 text-xs">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-xs text-neutral-400">5m Vol</span>
-                <span className="text-xs text-neutral-400">Buys</span>
-                <span className="text-xs text-neutral-400">Sells</span>
-                <span className="text-xs text-neutral-400">Net Vol.</span>
+                <span className="text-[11px] text-neutral-400">5m Vol</span>
+                <span className="text-[11px] text-neutral-400">Buys</span>
+                <span className="text-[11px] text-neutral-400">Sells</span>
+                <span className="text-[11px] text-neutral-400">Net Vol.</span>
               </div>
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-white font-semibold">$51.2K</span>
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-base text-white font-semibold">$51.2K</span>
                 <span className="text-emerald-400">767 / $26K</span>
                 <span className="text-red-400">732 / $25.2K</span>
                 <span className="text-emerald-400">+$768.2</span>
               </div>
-              <button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded mb-2">Buy</button>
-              <button className="w-full bg-neutral-800 text-white font-bold py-2 rounded mb-4">Sell</button>
+              <button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded mb-2 text-sm">Buy</button>
+              <button className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded mb-4 text-sm">Sell</button>
               <div className="bg-neutral-800 rounded p-2 mb-2">
-                <div className="flex justify-between text-xs text-neutral-400 mb-1">
+                <div className="flex justify-between text-[11px] text-neutral-400 mb-1">
                   <span>Market</span>
                   <span>Limit</span>
                   <span>Adv.</span>
                 </div>
-                <input className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-sm text-white mb-2" placeholder="AMOUNT" />
-                <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded">Buy {coin.name}</button>
+                <input className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-white mb-2" placeholder="AMOUNT" />
+                <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded text-sm">Buy {coin.name}</button>
               </div>
-              <div className="flex justify-between text-xs text-neutral-400 mt-2">
+              <div className="flex justify-between text-[11px] text-neutral-400 mt-2">
                 <span>Bought</span>
                 <span>Sold</span>
                 <span>Holding</span>
@@ -176,11 +171,6 @@ export default function TradePage() {
                 <span>$0</span>
                 <span>$0</span>
                 <span className="text-emerald-400">+$0 (+0%)</span>
-              </div>
-              <div className="flex gap-2 mt-2">
-                <button className="flex-1 bg-neutral-800 text-white py-1 rounded">PRESET 1</button>
-                <button className="flex-1 bg-neutral-800 text-white py-1 rounded">PRESET 2</button>
-                <button className="flex-1 bg-neutral-800 text-white py-1 rounded">PRESET 3</button>
               </div>
             </div>
             <div className="bg-neutral-900 rounded-lg p-4">

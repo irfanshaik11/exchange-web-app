@@ -17,7 +17,7 @@ function formatTime(t: Time) {
   return String(t);
 }
 
-export function OHLCChart({ data, width = 900, height = 350 }: { data: OHLC[]; width?: number; height?: number }) {
+export function OHLCChart({ data, width = 900, height = 350, bodyWidth = 12, wickWidth = 2 }: { data: OHLC[]; width?: number; height?: number; bodyWidth?: number; wickWidth?: number }) {
   // Recharts expects data as array of objects with x/y values
   const chartData = data.map((d, i) => ({
     ...d,
@@ -51,7 +51,7 @@ export function OHLCChart({ data, width = 900, height = 350 }: { data: OHLC[]; w
           fill="#fff0"
           shape={(props: any) => {
             const { x, y, width: w, height: h, payload } = props;
-            const chartHeight = height - 40; // account for margins
+            const chartHeight = height ? height - 40 : 350;
             const openY = priceToY(payload.open, chartHeight);
             const closeY = priceToY(payload.close, chartHeight);
             const highY = priceToY(payload.high, chartHeight);
@@ -60,12 +60,12 @@ export function OHLCChart({ data, width = 900, height = 350 }: { data: OHLC[]; w
             return (
               <g>
                 {/* Wick */}
-                <rect x={x + w / 2 - 1} y={highY} width={2} height={lowY - highY} fill={color} />
+                <rect x={x + w / 2 - wickWidth / 2} y={highY} width={wickWidth} height={lowY - highY} fill={color} />
                 {/* Body */}
                 <rect
-                  x={x + w / 2 - 6}
+                  x={x + w / 2 - bodyWidth / 2}
                   y={Math.min(openY, closeY)}
-                  width={12}
+                  width={bodyWidth}
                   height={Math.max(2, Math.abs(closeY - openY))}
                   fill={color}
                   rx={2}
