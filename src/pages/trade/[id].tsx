@@ -6,12 +6,30 @@ import Link from "next/link";
 import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
+import { useWallet } from "../../components/useWallet";
+import { env } from "../../env";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 export default function TradePage() {
   const router = useRouter();
   const { id } = router.query;
   const coin = memecoins[typeof id === "string" ? parseInt(id) : -1];
   const [chartHeight, setChartHeight] = useState(600);
+  const { address, isConnected } = useWallet();
+  const [buyAmount, setBuyAmount] = useState("");
+  const [sellAmount, setSellAmount] = useState("");
+  const [sellPercentage, setSellPercentage] = useState("");
+  const [txStatus, setTxStatus] = useState<string | null>(null);
+  const [txLoading, setTxLoading] = useState(false);
+  const [usdcAmount, setUsdcAmount] = useState("");
+  const [memeAmount, setMemeAmount] = useState("");
+  const [memePrice, setMemePrice] = useState<number | null>(null); // price in USDC per memecoin
+  const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>("buy");
+  const [tradeAmount, setTradeAmount] = useState<string>("");
+  const amountOptions = ["0.1", "1", "10"];
+
+  // Helper to get backend URL
+  const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
 
   useEffect(() => {
     function handleResize() {
@@ -21,6 +39,35 @@ export default function TradePage() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // On mount, randomize a price for the memecoin (e.g., 0.5 - 4.0 USDC)
+  useEffect(() => {
+    setMemePrice(Number((Math.random() * 3.5 + 0.5).toFixed(4)));
+  }, []);
+
+  // When USDC changes, update memeAmount
+  function handleUsdcChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setUsdcAmount(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && memePrice) {
+      setMemeAmount((num / memePrice).toFixed(4));
+    } else {
+      setMemeAmount("");
+    }
+  }
+
+  // When memeAmount changes, update USDC
+  function handleMemeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value;
+    setMemeAmount(val);
+    const num = parseFloat(val);
+    if (!isNaN(num) && memePrice) {
+      setUsdcAmount((num * memePrice).toFixed(4));
+    } else {
+      setUsdcAmount("");
+    }
+  }
 
   if (!coin) {
     return <div className="text-center mt-20 text-2xl text-red-400">Memecoin not found</div>;
@@ -36,6 +83,69 @@ export default function TradePage() {
     { name: "Portfolio", href: "#" },
     { name: "Rewards", href: "#" },
   ];
+
+  // Buy handler
+  async function handleBuy() {
+    if (!isConnected || !address || !buyAmount) return;
+    setTxLoading(true);
+    setTxStatus(null);
+    try {
+      const res = await fetch(`${backendUrl}/api/trade/buy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tokenAddress: address, amount: parseFloat(buyAmount) }),
+      });
+      const data = await res.json();
+      if (res.ok) setTxStatus("Buy transaction sent!");
+      else setTxStatus(data?.error || "Buy failed");
+    } catch (e) {
+      setTxStatus("Buy failed");
+    } finally {
+      setTxLoading(false);
+    }
+  }
+
+  // Sell by percentage handler
+  async function handleSellPercentage() {
+    if (!isConnected || !address || !sellPercentage) return;
+    setTxLoading(true);
+    setTxStatus(null);
+    try {
+      const res = await fetch(`${backendUrl}/api/trade/sell_percentage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tokenAddress: address, percentageToSell: parseFloat(sellPercentage) }),
+      });
+      const data = await res.json();
+      if (res.ok) setTxStatus("Sell (percentage) transaction sent!");
+      else setTxStatus(data?.error || "Sell failed");
+    } catch (e) {
+      setTxStatus("Sell failed");
+    } finally {
+      setTxLoading(false);
+    }
+  }
+
+  // Sell by exact amount handler
+  async function handleSellExactAmount() {
+    if (!isConnected || !address || !sellAmount) return;
+    setTxLoading(true);
+    setTxStatus(null);
+    try {
+      const res = await fetch(`${backendUrl}/api/trade/sell_exactAmount`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tokenAddress: address, tokenAmount: parseFloat(sellAmount) }),
+      });
+      const data = await res.json();
+      if (res.ok) setTxStatus("Sell (exact amount) transaction sent!");
+      else setTxStatus(data?.error || "Sell failed");
+    } catch (e) {
+      setTxStatus("Sell failed");
+    } finally {
+      setTxLoading(false);
+    }
+  }
 
   return (
     <>
@@ -69,6 +179,76 @@ export default function TradePage() {
               </nav>
             </div>
             <div className="flex items-center gap-4 min-w-0">
+              {/* Wallet Connect UI - RainbowKit */}
+              <div className="ml-2">
+                <ConnectButton.Custom>
+                  {({
+                    account,
+                    chain,
+                    openAccountModal,
+                    openChainModal,
+                    openConnectModal,
+                    authenticationStatus,
+                    mounted,
+                  }) => {
+                    const ready = mounted && authenticationStatus !== "loading";
+                    const connected =
+                      ready &&
+                      account &&
+                      chain &&
+                      (!authenticationStatus || authenticationStatus === "authenticated");
+
+                    return (
+                      <div
+                        {...(!ready && {
+                          'aria-hidden': true,
+                          style: {
+                            opacity: 0,
+                            pointerEvents: 'none',
+                            userSelect: 'none',
+                          },
+                        })}
+                      >
+                        {(() => {
+                          if (!connected) {
+                            return (
+                              <button
+                                onClick={openConnectModal}
+                                type="button"
+                                className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold"
+                              >
+                                Connect Wallet
+                              </button>
+                            );
+                          }
+                          if (chain.unsupported) {
+                            return (
+                              <button
+                                onClick={openChainModal}
+                                type="button"
+                                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-semibold"
+                              >
+                                Wrong network
+                              </button>
+                            );
+                          }
+                          return (
+                            <button
+                              onClick={openAccountModal}
+                              type="button"
+                              className="flex items-center gap-2 px-3 py-1 bg-neutral-800 text-emerald-400 rounded-full text-xs font-semibold border border-emerald-400"
+                            >
+                              <FaPowerOff />
+                              {account.displayName}
+                              {account.displayBalance ? ` (${account.displayBalance})` : ''}
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    );
+                  }}
+                </ConnectButton.Custom>
+              </div>
               <div className="relative flex items-center">
                 <span className="absolute left-3 text-neutral-400">
                   <FaSearch size={16} />
@@ -101,7 +281,7 @@ export default function TradePage() {
               <div className="ml-8 flex gap-8">
                 <div>
                   <div className="text-neutral-400 text-xs">Price</div>
-                  <div className="text-lg font-semibold">$0.{Math.floor(Math.random()*100)}</div>
+                  <div className="text-lg font-semibold">{memePrice ? `$${memePrice}` : "-"}</div>
                 </div>
                 <div>
                   <div className="text-neutral-400 text-xs">Liquidity</div>
@@ -136,6 +316,7 @@ export default function TradePage() {
           </div>
           {/* Right: Buy/Sell and Token Info */}
           <div className="w-[380px] flex-shrink-0 h-full bg-neutral-950 border-l border-neutral-800 flex flex-col p-4">
+            {/* Stats Box */}
             <div className="bg-neutral-900 rounded-lg p-4 mb-4 text-xs">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-[11px] text-neutral-400">5m Vol</span>
@@ -149,29 +330,92 @@ export default function TradePage() {
                 <span className="text-red-400">732 / $25.2K</span>
                 <span className="text-emerald-400">+$768.2</span>
               </div>
-              <button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 rounded mb-2 text-sm">Buy</button>
-              <button className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded mb-4 text-sm">Sell</button>
-              <div className="bg-neutral-800 rounded p-2 mb-2">
-                <div className="flex justify-between text-[11px] text-neutral-400 mb-1">
-                  <span>Market</span>
-                  <span>Limit</span>
-                  <span>Adv.</span>
+            </div>
+            {/* Trade Box */}
+            <div
+              className={`rounded-lg p-6 flex flex-col gap-5 mb-4 shadow-lg bg-neutral-900`}
+            >
+              {/* Toggle */}
+              <div className="flex mb-4 rounded-[4px] overflow-hidden border border-neutral-800 w-full">
+                <button
+                  className={`px-6 py-2 w-full font-bold text-base transition-all ${
+                    tradeMode === "buy"
+                      ? "bg-emerald-500 text-white"
+                      : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"
+                  }`}
+                  onClick={() => setTradeMode("buy")}
+                  type="button"
+                >
+                  Buy
+                </button>
+                <button
+                  className={`px-6 py-2 w-full font-bold text-base transition-all ${
+                    tradeMode === "sell"
+                      ? "bg-red-500 text-white"
+                      : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"
+                  }`}
+                  onClick={() => setTradeMode("sell")}
+                  type="button"
+                >
+                  Sell
+                </button>
+              </div>
+              {/* Tabs: Market, Limit, Adv. */}
+              {/* <div className="flex items-center gap-4 mb-3 text-sm font-semibold">
+                <button className="border-b-2 border-emerald-400 text-emerald-400 pb-1">Market</button>
+                <button className="text-neutral-400 pb-1">Limit</button>
+                <button className="text-neutral-400 pb-1">Adv.</button>
+                <div className="flex items-center ml-auto gap-2 text-neutral-400">
+                  <span className="bg-neutral-800 rounded px-2 py-0.5 text-xs flex items-center gap-1"><svg width='16' height='16' fill='none'><rect width='16' height='16' rx='4' fill='#23272A'/><path d='M4 8h8M8 4v8' stroke='#A3E635' strokeWidth='2' strokeLinecap='round'/></svg>1</span>
+                  <span className="bg-neutral-800 rounded px-2 py-0.5 text-xs flex items-center gap-1"><svg width='16' height='16' fill='none'><rect width='16' height='16' rx='4' fill='#23272A'/><path d='M8 4v8' stroke='#A3E635' strokeWidth='2' strokeLinecap='round'/></svg>0</span>
                 </div>
-                <input className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-white mb-2" placeholder="AMOUNT" />
-                <button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded text-sm">Buy {coin.name}</button>
+              </div> */}
+              {/* Amount Row */}
+              <div className="bg-neutral-900 rounded-lg px-4 py-3 mb-2 border border-neutral-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-neutral-400 text-xs font-semibold flex items-center gap-1">AMOUNT</span>
+                  <span className="text-white text-base font-bold">{tradeAmount || "-"}</span>
+                </div>
+                <div className="flex gap-2 mt-2 items-center">
+                  {amountOptions.map((opt) => (
+                    <button
+                      key={opt}
+                      className={`px-4 py-1 rounded text-white font-semibold border border-neutral-700 transition-all ${
+                        tradeAmount === opt ? (tradeMode === "buy" ? "bg-emerald-600" : "bg-red-500") : ""
+                      }`}
+                      onClick={() => setTradeAmount(opt)}
+                      type="button"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    className="w-20 px-2 py-1 rounded bg-neutral-800 text-white font-semibold border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 ml-2"
+                    placeholder="Custom"
+                    value={amountOptions.includes(tradeAmount) ? "" : tradeAmount}
+                    onChange={e => setTradeAmount(e.target.value)}
+                  />
+                  <svg width='20' height='20' fill='none' className='ml-2'><rect width='20' height='20' rx='4' fill='#23272A'/><path d='M5 10h10M10 5v10' stroke='#A3E635' strokeWidth='2' strokeLinecap='round'/></svg>
+                </div>
               </div>
-              <div className="flex justify-between text-[11px] text-neutral-400 mt-2">
-                <span>Bought</span>
-                <span>Sold</span>
-                <span>Holding</span>
-                <span>PnL</span>
-              </div>
-              <div className="flex justify-between text-xs text-white font-semibold mb-2">
-                <span>$0</span>
-                <span>$0</span>
-                <span>$0</span>
-                <span className="text-emerald-400">+$0 (+0%)</span>
-              </div>
+              {/* Action Button */}
+              <button
+                className={`w-full font-bold py-3 rounded text-base disabled:opacity-50 mt-2 transition ${
+                  tradeMode === "buy"
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                }`}
+                onClick={tradeMode === "buy" ? () => handleBuy() : () => handleSellExactAmount()}
+                disabled={!isConnected || txLoading || !tradeAmount || parseFloat(tradeAmount) <= 0}
+              >
+                {txLoading
+                  ? "Processing..."
+                  : `${tradeMode === "buy" ? "Buy" : "Sell"}  ${tradeAmount || ""} ${coin.name}`}
+              </button>
+              {txStatus && <div className="text-center text-xs mt-2 text-emerald-400">{txStatus}</div>}
             </div>
             <div className="bg-neutral-900 rounded-lg p-4">
               <div className="text-xs text-neutral-400 mb-2">Token Info</div>
