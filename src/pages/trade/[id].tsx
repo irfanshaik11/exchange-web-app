@@ -333,12 +333,12 @@ export default function TradePage() {
             </div>
             {/* Trade Box */}
             <div
-              className={`rounded-lg p-6 flex flex-col gap-5 mb-4 shadow-lg bg-neutral-900`}
+              className={`rounded-lg p-6 flex flex-col gap-2 mb-4 shadow-lg bg-neutral-900`}
             >
               {/* Toggle */}
               <div className="flex mb-4 rounded-[4px] overflow-hidden border border-neutral-800 w-full">
                 <button
-                  className={`px-6 py-2 w-full font-bold text-base transition-all ${
+                  className={`px-6 py-2 w-full font-bold text-sm transition-all ${
                     tradeMode === "buy"
                       ? "bg-emerald-500 text-white"
                       : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"
@@ -346,10 +346,10 @@ export default function TradePage() {
                   onClick={() => setTradeMode("buy")}
                   type="button"
                 >
-                  Buy
+                  BUY 
                 </button>
                 <button
-                  className={`px-6 py-2 w-full font-bold text-base transition-all ${
+                  className={`px-6 py-2 w-full font-bold text-sm transition-all ${
                     tradeMode === "sell"
                       ? "bg-red-500 text-white"
                       : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"
@@ -357,7 +357,7 @@ export default function TradePage() {
                   onClick={() => setTradeMode("sell")}
                   type="button"
                 >
-                  Sell
+                  SELL 
                 </button>
               </div>
               {/* Tabs: Market, Limit, Adv. */}
@@ -374,13 +374,13 @@ export default function TradePage() {
               <div className="bg-neutral-900 rounded-lg px-4 py-3 mb-2 border border-neutral-800">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-neutral-400 text-xs font-semibold flex items-center gap-1">AMOUNT</span>
-                  <span className="text-white text-base font-bold">{tradeAmount || "-"}</span>
+                  <span className="text-white text-xs font-bold">{tradeAmount || "-"}</span>
                 </div>
                 <div className="flex gap-2 mt-2 items-center">
                   {amountOptions.map((opt) => (
                     <button
                       key={opt}
-                      className={`px-4 py-1 rounded text-white font-semibold border border-neutral-700 transition-all ${
+                      className={`px-4 text-xs py-1 rounded text-white font-semibold border border-neutral-700 transition-all ${
                         tradeAmount === opt ? (tradeMode === "buy" ? "bg-emerald-600" : "bg-red-500") : ""
                       }`}
                       onClick={() => setTradeAmount(opt)}
@@ -393,8 +393,8 @@ export default function TradePage() {
                     type="number"
                     min="0"
                     step="any"
-                    className="w-20 px-2 py-1 rounded bg-neutral-800 text-white font-semibold border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 ml-2"
-                    placeholder="Custom"
+                    className="w-20 px-2 py-1 rounded bg-neutral-800 text-white font-semibold border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 ml-2 text-xs"
+                    placeholder="100"
                     value={amountOptions.includes(tradeAmount) ? "" : tradeAmount}
                     onChange={e => setTradeAmount(e.target.value)}
                   />
@@ -403,7 +403,7 @@ export default function TradePage() {
               </div>
               {/* Action Button */}
               <button
-                className={`w-full font-bold py-3 rounded text-base disabled:opacity-50 mt-2 transition ${
+                className={`w-full font-bold py-3 rounded text-xs disabled:opacity-50 mt-2 transition ${
                   tradeMode === "buy"
                     ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                     : "bg-red-600 hover:bg-red-700 text-white"
@@ -413,7 +413,7 @@ export default function TradePage() {
               >
                 {txLoading
                   ? "Processing..."
-                  : `${tradeMode === "buy" ? "Buy" : "Sell"}  ${tradeAmount || ""} ${coin.name}`}
+                  : `${tradeMode === "buy" ? "BUY" : "SELL"}  ${tradeAmount || ""} ${coin.name}`}
               </button>
               {txStatus && <div className="text-center text-xs mt-2 text-emerald-400">{txStatus}</div>}
             </div>
