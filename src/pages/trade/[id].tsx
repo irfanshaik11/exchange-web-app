@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { useWallet } from "../../components/useWallet";
 import { env } from "../../env";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function TradePage() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function TradePage() {
   const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>("buy");
   const [tradeAmount, setTradeAmount] = useState<string>("");
   const amountOptions = ["0.1", "1", "10"];
+  const [tradeHistory, setTradeHistory] = useState<any[]>([]);
 
   // Helper to get backend URL
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
@@ -96,8 +98,19 @@ export default function TradePage() {
         body: JSON.stringify({ tokenAddress: tempAddress, amount: parseFloat(tradeAmount), mevProtection: 0 }),
       });
       const data = await res.json();
-      if (res.ok) setTxStatus("Buy transaction sent!");
-      else setTxStatus(data?.error || "Buy failed");
+      if (res.ok) {
+        setTxStatus("Buy transaction sent!");
+        toast.success(`Buy order successful! Bought ${data.amount} ${coin.name}`);
+        setTradeHistory(prev => [
+          ...prev,
+          {
+            coin: coin,
+            amount: data.amount,
+            hash: data.hash,
+            time: new Date().toLocaleTimeString(),
+          }
+        ]);
+      } else setTxStatus(data?.error || "Buy failed");
     } catch (e) {
       setTxStatus("Buy failed");
     } finally {
@@ -152,6 +165,7 @@ export default function TradePage() {
       <Head>
         <title>{coin.name} | Trade</title>
       </Head>
+      <Toaster position="top-right" />
       <div className="h-screen w-screen bg-neutral-950 text-neutral-100 overflow-hidden">
         {/* Header */}
         <header className="w-full border-b border-neutral-800 bg-neutral-900/90 backdrop-blur sticky top-0 z-20">
@@ -447,6 +461,33 @@ export default function TradePage() {
               </div>
             </div>
           </div>
+        </div>
+        {/* Trade History Table */}
+        <div className="bg-neutral-900 rounded-lg p-4 mt-4 max-w-4xl mx-auto">
+          <div className="text-lg font-bold mb-2 text-white">Trade History</div>
+          <table className="w-full text-xs text-left">
+            <thead>
+              <tr className="text-neutral-400">
+                <th className="py-1 px-2">Time</th>
+                <th className="py-1 px-2">Coin</th>
+                <th className="py-1 px-2">Amount</th>
+                <th className="py-1 px-2">Hash</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tradeHistory.map((trade, idx) => (
+                <tr key={idx} className="border-t border-neutral-800">
+                  <td className="py-1 px-2">{trade.time}</td>
+                  <td className="py-1 px-2 flex items-center gap-2">
+                    <img src={trade.coin.icon} alt={trade.coin.name} className="w-5 h-5 rounded" />
+                    {trade.coin.name}
+                  </td>
+                  <td className="py-1 px-2">{trade.amount}</td>
+                  <td className="py-1 px-2 truncate max-w-[120px]">{trade.hash}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </>
