@@ -16,8 +16,6 @@ export default function TradePage() {
   const coin = memecoins[typeof id === "string" ? parseInt(id) : -1];
   const [chartHeight, setChartHeight] = useState(600);
   const { address, isConnected } = useWallet();
-  const [buyAmount, setBuyAmount] = useState("");
-  const [sellAmount, setSellAmount] = useState("");
   const [sellPercentage, setSellPercentage] = useState("");
   const [txStatus, setTxStatus] = useState<string | null>(null);
   const [txLoading, setTxLoading] = useState(false);
@@ -86,14 +84,16 @@ export default function TradePage() {
 
   // Buy handler
   async function handleBuy() {
-    if (!isConnected || !address || !buyAmount) return;
+    console.log(tradeAmount, isConnected)
+    if (!isConnected || !address || !tradeAmount) return;
     setTxLoading(true);
     setTxStatus(null);
+    const tempAddress = "FMGU4vKjT3MW4GBTP8ru8JWs1R552FUU8PTqo65ppump";
     try {
       const res = await fetch(`${backendUrl}/api/trade/buy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tokenAddress: address, amount: parseFloat(buyAmount) }),
+        body: JSON.stringify({ tokenAddress: tempAddress, amount: parseFloat(tradeAmount), mevProtection: 0 }),
       });
       const data = await res.json();
       if (res.ok) setTxStatus("Buy transaction sent!");
@@ -128,14 +128,14 @@ export default function TradePage() {
 
   // Sell by exact amount handler
   async function handleSellExactAmount() {
-    if (!isConnected || !address || !sellAmount) return;
+    if (!isConnected || !address || !tradeAmount) return;
     setTxLoading(true);
     setTxStatus(null);
     try {
       const res = await fetch(`${backendUrl}/api/trade/sell_exactAmount`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tokenAddress: address, tokenAmount: parseFloat(sellAmount) }),
+        body: JSON.stringify({ tokenAddress: address, tokenAmount: parseFloat(tradeAmount) }),
       });
       const data = await res.json();
       if (res.ok) setTxStatus("Sell (exact amount) transaction sent!");
