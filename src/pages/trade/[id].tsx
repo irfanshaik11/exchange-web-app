@@ -249,15 +249,21 @@ export default function TradePage() {
                   }}
                 </ConnectButton.Custom>
               </div>
-              <div className="relative flex items-center">
-                <span className="absolute left-3 text-neutral-400">
+              <div className="relative group w-full max-w-xs">
+                <span className="absolute inset-y-0 left-3 flex items-center text-neutral-400 group-focus-within:text-emerald-400 transition-colors">
                   <FaSearch size={16} />
                 </span>
                 <input
                   type="text"
                   placeholder="Search by token or CA..."
-                  className="bg-neutral-800 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
+                  className="w-full bg-neutral-800/80 border border-neutral-700 rounded-full pl-9 pr-4 py-2.5 text-sm text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent hover:bg-neutral-800 transition-all duration-200 shadow-lg"
                 />
+                <button
+                  className="absolute inset-y-0 right-3 flex items-center opacity-0 group-focus-within:opacity-100 transition-opacity"
+                  onClick={() => console.log('Search clicked')}
+                  >
+                    <FaTimes className="text-neutral-400 hover:text-red-400" size={14} />
+                  </button>
               </div>
             </div>
           </div>
