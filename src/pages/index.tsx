@@ -7,6 +7,7 @@ import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff 
 import Image from "next/image";
 import { memecoins } from "../data/memecoins";
 import type { MemeCoin } from "../data/memecoins";
+import LoginModal from "../components/LoginModal";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -38,6 +39,7 @@ export default function Home() {
   const timeframes = ["1m", "5m", "30m", "1h"];
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
   const [displayed, setDisplayed] = useState(() => memecoins.slice(0, 10));
+  const [loginOpen, setLoginOpen] = useState(false);
 
   const handleTimeframeClick = (tf: string) => {
     setSelectedTimeframe(tf);
@@ -91,77 +93,12 @@ export default function Home() {
                   className="bg-neutral-800 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
                 />
               </div>
-             {/*  <button className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none">
-                Deposit
-              </button> */}
-              <div className="ml-2">
-                <ConnectButton.Custom>
-                  {({
-                    account,
-                    chain,
-                    openAccountModal,
-                    openChainModal,
-                    openConnectModal,
-                    authenticationStatus,
-                    mounted,
-                  }) => {
-                    const ready = mounted && authenticationStatus !== "loading";
-                    const connected =
-                      ready &&
-                      account &&
-                      chain &&
-                      (!authenticationStatus || authenticationStatus === "authenticated");
-
-                    return (
-                      <div
-                        {...(!ready && {
-                          'aria-hidden': true,
-                          style: {
-                            opacity: 0,
-                            pointerEvents: 'none',
-                            userSelect: 'none',
-                          },
-                        })}
-                      >
-                        {(() => {
-                          if (!connected) {
-                            return (
-                              <button
-                                onClick={openConnectModal}
-                                type="button"
-                                className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
-                              >
-                                Connect Wallet
-                              </button>
-                            );
-                          }
-                          if (chain.unsupported) {
-                            return (
-                              <button
-                                onClick={openChainModal}
-                                type="button"
-                                className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-red-600 hover:bg-red-700 text-white text-base transition shadow focus:outline-none"
-                              >
-                                Wrong network
-                              </button>
-                            );
-                          }
-                          return (
-                            <button
-                              onClick={openAccountModal}
-                              type="button"
-                              className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
-                            >
-                              {account.displayName}
-                              {account.displayBalance ? ` (${account.displayBalance})` : ''}
-                            </button>
-                          );
-                        })()}
-                      </div>
-                    );
-                  }}
-                </ConnectButton.Custom>
-              </div>
+              <button
+                className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
+                onClick={() => setLoginOpen(true)}
+              >
+                Login
+              </button>
             </div>
           </div>
         </header>
@@ -272,6 +209,7 @@ export default function Home() {
             </table>
           </div>
         </main>
+        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       </div>
     </>
   );
