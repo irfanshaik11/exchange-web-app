@@ -11,6 +11,7 @@ import { env } from "../../env";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import toast, { Toaster } from 'react-hot-toast';
 import LoginModal from "../../components/LoginModal";
+import { useUser } from "../../components/UserContext";
 
 export default function TradePage() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function TradePage() {
   const amountOptions = ["0.1", "1", "10"];
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
   const [loginOpen, setLoginOpen] = useState(false);
+  const { user, loading: userLoading } = useUser();
 
   // Helper to get backend URL
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
@@ -70,6 +72,11 @@ export default function TradePage() {
       setUsdcAmount("");
     }
   }
+
+  useEffect(() => {
+    if (!user && !userLoading) setLoginOpen(true);
+    else setLoginOpen(false);
+  }, [user, userLoading]);
 
   if (!coin) {
     return <div className="text-center mt-20 text-2xl text-red-400">Memecoin not found</div>;
@@ -195,13 +202,15 @@ export default function TradePage() {
               </nav>
             </div>
             <div className="flex items-center gap-4 min-w-0">
-              {/* Remove ConnectButton and add Login button */}
-              <button
-                className="ml-2 px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold"
-                onClick={() => setLoginOpen(true)}
-              >
-                Login
-              </button>
+              {/* Only show Login button if not logged in */}
+              {!user && !userLoading && (
+                <button
+                  className="ml-2 px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold"
+                  onClick={() => setLoginOpen(true)}
+                >
+                  Login
+                </button>
+              )}
               <div className="relative group w-full max-w-xs">
                 <span className="absolute inset-y-0 left-3 flex items-center text-neutral-400 group-focus-within:text-emerald-400 transition-colors">
                   <FaSearch size={16} />

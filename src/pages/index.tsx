@@ -2,12 +2,13 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff } from "react-icons/fa";
 import Image from "next/image";
 import { memecoins } from "../data/memecoins";
 import type { MemeCoin } from "../data/memecoins";
 import LoginModal from "../components/LoginModal";
+import { useUser } from "../components/UserContext";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -40,11 +41,17 @@ export default function Home() {
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
   const [displayed, setDisplayed] = useState(() => memecoins.slice(0, 10));
   const [loginOpen, setLoginOpen] = useState(false);
+  const { user, loading: userLoading } = useUser();
 
   const handleTimeframeClick = (tf: string) => {
     setSelectedTimeframe(tf);
     setDisplayed(shuffleArray(memecoins).slice(0, 10));
   };
+
+  useEffect(() => {
+    if (!user && !userLoading) setLoginOpen(true);
+    else setLoginOpen(false);
+  }, [user, userLoading]);
 
   return (
     <>
@@ -93,12 +100,14 @@ export default function Home() {
                   className="bg-neutral-800 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
                 />
               </div>
-              <button
-                className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
-                onClick={() => setLoginOpen(true)}
-              >
-                Login
-              </button>
+              {!user && !userLoading && (
+                <button
+                  className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
+                  onClick={() => setLoginOpen(true)}
+                >
+                  Login
+                </button>
+              )}
             </div>
           </div>
         </header>
