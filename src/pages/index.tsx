@@ -48,10 +48,13 @@ export default function Home() {
     setDisplayed(shuffleArray(memecoins).slice(0, 10));
   };
 
+  /*
+  disable popup for now 
+
   useEffect(() => {
     if (!user && !userLoading) setLoginOpen(true);
     else setLoginOpen(false);
-  }, [user, userLoading]);
+  }, [user, userLoading]); */
 
   return (
     <>

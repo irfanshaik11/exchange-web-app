@@ -12,6 +12,7 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import toast, { Toaster } from 'react-hot-toast';
 import LoginModal from "../../components/LoginModal";
 import { useUser } from "../../components/UserContext";
+import PriceChartWidget from "../../components/PriceChartWidget";
 
 export default function TradePage() {
   const router = useRouter();
@@ -73,10 +74,12 @@ export default function TradePage() {
     }
   }
 
+  /* 
+  Disable popup for now  
   useEffect(() => {
     if (!user && !userLoading) setLoginOpen(true);
     else setLoginOpen(false);
-  }, [user, userLoading]);
+  }, [user, userLoading]); */
 
   if (!coin) {
     return <div className="text-center mt-20 text-2xl text-red-400">Memecoin not found</div>;
@@ -262,15 +265,7 @@ export default function TradePage() {
               </div>
             </div>
             {/* Chart */}
-            <div className="bg-neutral-900 rounded-lg p-4 mb-4 flex-1 flex flex-col min-h-0 min-w-0">
-              <iframe
-                src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_btc_chart&symbol=BINANCE:BTCUSDT&interval=15&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=18181b&studies=[]&theme=dark&style=1&timezone=Etc/UTC&withdateranges=1&hidevolume=0&hidelegend=0&studies_overrides={}&overrides={}&enabled_features=[]&disabled_features=[]&locale=en"
-                id="tradingview_btc_chart"
-                style={{ width: '100%', height: chartHeight, border: 0 }}
-                allowFullScreen
-                title="BTC Chart"
-              />
-            </div>
+            <PriceChartWidget tokenAddress={coin.tokenAddress} />
             {/* Tabs (Positions, Trades, etc.) */}
             <div className="bg-neutral-900 rounded-lg p-2 flex gap-4 text-xs mt-2">
               <button className="px-3 py-1 rounded bg-neutral-800 text-white font-semibold">Positions</button>
