@@ -40,6 +40,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         },
       });
       const data = await res.json();
+      console.log("data_id",data);
       if (res.ok && data.user) {
         setUser({ bearerToken: token, ...data.user});
       } else {
