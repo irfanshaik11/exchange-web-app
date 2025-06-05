@@ -10,6 +10,7 @@ import type { MemeCoin } from "../data/memecoins";
 import LoginModal from "../components/LoginModal";
 import { useUser } from "../components/UserContext";
 import Cookies from 'js-cookie';
+import QRCode from 'qrcode';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -38,12 +39,33 @@ export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const isDiscover = router.pathname === "/";
   const timeframes = ["1m", "5m", "30m", "1h"];
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
   const [displayed, setDisplayed] = useState(() => memecoins.slice(0, 10));
   const [loginOpen, setLoginOpen] = useState(false);
   const { user, loading: userLoading, refreshUser } = useUser();
+
+  // Generate QR code when user changes
+  useEffect(() => {
+    if (user?.publicKey) {
+      QRCode.toDataURL(user.publicKey, {
+        width: 200,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      })
+      .then(url => {
+        setQrCodeDataUrl(url);
+      })
+      .catch(err => {
+        console.error('Error generating QR code:', err);
+      });
+    }
+  }, [user?.publicKey]);
 
   // Copy address to clipboard
   const copyToClipboard = (text: string) => {
@@ -315,21 +337,45 @@ export default function Home() {
                       </label>
                       
                       <div className="space-y-3">
+                        {/* QR Code and Address Display */}
                         <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm text-neutral-300">Deposit Address:</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <code className="text-sm text-emerald-400 bg-neutral-900 px-2 py-1 rounded flex-1 truncate">
-                              {user.publicKey}
-                            </code>
-                            <button
-                              onClick={() => copyToClipboard(user.publicKey)}
-                              className="text-neutral-400 hover:text-white transition-colors p-1"
-                              title="Copy address"
-                            >
-                              <FaCopy size={14} />
-                            </button>
+                          <div className="flex gap-4">
+                            {/* Left: QR Code */}
+                            <div className="flex-shrink-0">
+                              {qrCodeDataUrl ? (
+                                <img 
+                                  src={qrCodeDataUrl} 
+                                  alt="Deposit Address QR Code" 
+                                  className="w-32 h-32 rounded border border-neutral-600"
+                                />
+                              ) : (
+                                <div className="w-32 h-32 bg-neutral-700 rounded flex items-center justify-center">
+                                  <span className="text-neutral-400 text-xs">Generating QR...</span>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Right: Address Details */}
+                            <div className="flex-1 flex flex-col justify-center">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm text-neutral-300">Deposit Address:</span>
+                              </div>
+                              <div className="flex items-start gap-2">
+                                <code className="text-sm text-emerald-400 bg-neutral-900 px-2 py-1 rounded flex-1 break-all leading-relaxed">
+                                  {user.publicKey}
+                                </code>
+                                <button
+                                  onClick={() => copyToClipboard(user.publicKey)}
+                                  className="text-neutral-400 hover:text-white transition-colors p-1 flex-shrink-0 mt-1"
+                                  title="Copy address"
+                                >
+                                  <FaCopy size={14} />
+                                </button>
+                              </div>
+                              <div className="text-xs text-neutral-500 mt-2">
+                                Scan QR code with your wallet or copy the address above
+                              </div>
+                            </div>
                           </div>
                         </div>
                         
