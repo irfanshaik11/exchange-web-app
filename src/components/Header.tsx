@@ -3,8 +3,8 @@ import { useRouter } from "next/router";
 import { useState } from "react";
 import { FaSearch } from "react-icons/fa";
 import { useUser } from "./UserContext";
-import DepositModal from "./DepositModal";
 import Cookies from 'js-cookie';
+import dynamic from "next/dynamic";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -21,6 +21,10 @@ interface HeaderProps {
   setSearch?: (val: string) => void;
   showSearch?: boolean;
 }
+
+const DepositModal = dynamic(() => import("./DepositModal"), {
+  ssr: false, // NO SSR PLEASE 
+});
 
 export default function Header({ search = "", setSearch, showSearch = true }: HeaderProps) {
   const router = useRouter();

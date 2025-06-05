@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import React, { useEffect, useState } from "react";
 import { FaCheckCircle, FaCopy, FaTimes } from "react-icons/fa";
@@ -48,9 +48,19 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
   }, [user?.publicKey]);
 
   const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        })
+        .catch((err) => {
+          console.error("Clipboard write failed:", err);
+        });
+    } else {
+      console.warn("Clipboard API not available.");
+    }
   };
 
   if (!open && !show) return null;
@@ -188,7 +198,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
                     </div>
                   </div>
 
-                  <div className="text-sm text-neutral-500 mt-3">
+                  <div className="mt-3 text-sm text-neutral-500">
                     Don't have any Solana?{" "}
                     <span className="text-blue-400">Buy through Coinbase.</span>
                   </div>
