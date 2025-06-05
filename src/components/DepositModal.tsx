@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { FaCheckCircle, FaCopy, FaTimes } from 'react-icons/fa';
-import Cookies from 'js-cookie';
-import QRCode from 'qrcode';
-import { useUser } from './UserContext';
+import React, { useEffect, useState } from "react";
+import { FaCheckCircle, FaCopy, FaTimes } from "react-icons/fa";
+import Cookies from "js-cookie";
+import QRCode from "qrcode";
+import { useUser } from "./UserContext";
 
 interface DepositModalProps {
   open: boolean;
@@ -11,7 +11,7 @@ interface DepositModalProps {
 
 const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
   const { user, loading: userLoading, refreshUser } = useUser();
-  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -30,18 +30,18 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
         width: 200,
         margin: 2,
         color: {
-          dark: '#000000',
-          light: '#FFFFFF',
+          dark: "#000000",
+          light: "#FFFFFF",
         },
       })
         .then((url) => {
           setQrCodeDataUrl(url);
         })
         .catch((err) => {
-          setQrCodeDataUrl('');
+          setQrCodeDataUrl("");
         });
     } else {
-      setQrCodeDataUrl('');
+      setQrCodeDataUrl("");
     }
   }, [user?.publicKey]);
 
@@ -55,52 +55,57 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center transition-colors duration-500 ${open ? 'bg-black/40' : 'bg-black/0'}`}
-      style={{ backdropFilter: 'blur(2px)' }}
+      className={`fixed inset-0 z-50 flex items-center justify-center transition-colors duration-500 ${open ? "bg-black/40" : "bg-black/0"}`}
+      style={{ backdropFilter: "blur(2px)" }}
       onClick={onClose}
     >
       <div
-        className={`bg-neutral-900 rounded-xl shadow-2xl w-full max-w-md mx-4 relative border border-neutral-700 text-neutral-100 transform transition-all duration-500 p-6
-            ${open ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-75 translate-y-2'}`}
-        onClick={e => e.stopPropagation()}
+        className={`relative mx-4 w-full max-w-md transform rounded-lg border border-neutral-700 bg-neutral-900 p-6 py-4 text-neutral-100 shadow-2xl transition-all duration-500 ${open ? "translate-y-0 scale-100 opacity-100" : "translate-y-2 scale-75 opacity-0"}`}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-neutral-400 hover:text-white transition-colors"
-        >
-          <FaTimes size={20} />
-        </button>
+
         {/* Modal Content */}
         <div className="">
-          <h2 className="text-2xl font-bold text-white mb-6">Deposit</h2>
+          <div className="mb-2 flex flex-row items-center justify-between">
+            <h2 className="text-xl font-bold text-white">Deposit</h2>
+            <button
+              onClick={onClose}
+              className="text-neutral-400 transition-colors hover:text-white"
+            >
+              <FaTimes size={20} />
+            </button>
+          </div>
+
+          <hr className="-mx-6 mb-2 border-neutral-600" />
+
           <div className="space-y-4">
             {userLoading ? (
               <div className="space-y-4">
-                <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4 text-center">
-                  <div className="text-neutral-300 text-sm">
+                <div className="rounded-lg border border-neutral-700 bg-neutral-800 p-4 text-center">
+                  <div className="text-sm text-neutral-300">
                     Loading user data...
                   </div>
                 </div>
               </div>
             ) : !user ? (
               <div className="space-y-4">
-                <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4 text-center">
-                  <div className="text-red-400 text-sm">
+                <div className="rounded-lg border border-red-500/30 bg-red-900/20 p-4 text-center">
+                  <div className="text-sm text-red-400">
                     Please login first to view your deposit address
                   </div>
-                  <div className="text-xs text-neutral-400 mt-2">
+                  {/* <div className="text-xs text-neutral-400 mt-2">
                     Debug: User = {JSON.stringify(user)}, Loading = {userLoading.toString()}
                   </div>
                   <div className="text-xs text-neutral-400 mt-1">
                     Token exists: {!!Cookies.get('token') ? 'Yes' : 'No'}
-                  </div>
-                  {Cookies.get('token') && (
+                  </div> */}
+                  {Cookies.get("token") && (
                     <button
                       onClick={() => {
                         refreshUser();
                       }}
-                      className="mt-2 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded"
+                      className="mt-2 rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
                     >
                       Refresh User Data
                     </button>
@@ -109,67 +114,90 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
               </div>
             ) : user.publicKey ? (
               <div className="space-y-4">
+                <div className="flex w-full flex-row items-center gap-2">
+                  <div className="flex h-10 w-full flex-row items-center gap-2 rounded border border-neutral-600 p-2 text-sm">
+                    <img
+                      src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                      className="h-6 w-6"
+                    />
+                    Solana
+                  </div>
+
+                  <div className="flex h-10 w-full flex-row items-center justify-between gap-2 rounded border border-neutral-600 p-2 text-sm">
+                    <span className="text-neutral-500">Balance: </span>
+                    <span className="">0 SOL</span>
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-neutral-300 mb-3">
-                    Your Solana Deposit Address
+                  <label className="mb-3 block text-sm text-neutral-400">
+                    Only deposit SOL through the Solana Network for this
+                    address.
                   </label>
+
                   <div className="space-y-3">
-                    <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
-                      <div className="flex gap-4">
+                    <div className="rounded-lg border border-neutral-700 p-1">
+                      <div className="flex gap-2">
                         <div className="flex-shrink-0">
                           {qrCodeDataUrl ? (
                             <img
                               src={qrCodeDataUrl}
                               alt="Deposit Address QR Code"
-                              className="w-32 h-32 rounded border border-neutral-600"
+                              className="h-40 w-40 rounded border border-neutral-600"
                             />
                           ) : (
-                            <div className="w-32 h-32 bg-neutral-700 rounded flex items-center justify-center">
-                              <span className="text-neutral-400 text-xs">Generating QR...</span>
+                            <div className="flex h-32 w-32 items-center justify-center rounded bg-neutral-700">
+                              <span className="text-xs text-neutral-400">
+                                Generating QR...
+                              </span>
                             </div>
                           )}
                         </div>
-                        <div className="flex-1 flex flex-col justify-center">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm text-neutral-300">Deposit Address:</span>
+                        <div className="mt-2 flex flex-1 flex-col">
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-sm text-neutral-300">
+                              Deposit Address:
+                            </span>
                           </div>
-                          <div className="flex items-start gap-2 relative">
-                            <code className="text-sm text-emerald-400 bg-neutral-900 px-2 py-1 rounded flex-1 break-all leading-relaxed">
+                          <div className="relative flex items-start gap-2">
+                            <code
+                              onClick={() => copyToClipboard(user.publicKey)}
+                              className="flex-1 cursor-pointer rounded bg-neutral-800 px-2 py-1 text-sm leading-relaxed break-all text-emerald-400 hover:bg-neutral-700"
+                            >
                               {user.publicKey}
                             </code>
                             <div className="relative flex items-center">
                               <button
                                 onClick={() => copyToClipboard(user.publicKey)}
-                                className="text-neutral-400 hover:text-white transition-colors p-1 flex-shrink-0 mt-1"
+                                className="mt-1 flex-shrink-0 p-1 text-neutral-400 transition-colors hover:text-white"
                                 title="Copy address"
                               >
                                 <FaCopy size={14} />
                               </button>
                               {copied && (
-                                <span className="absolute -top-7 left-1/2 -translate-x-1/2 bg-neutral-800 text-emerald-400 text-xs px-3 py-1 rounded shadow transition-opacity duration-300 opacity-100 whitespace-nowrap z-20">
+                                <span className="absolute -top-7 left-1/2 z-20 -translate-x-1/2 rounded bg-neutral-800 px-3 py-1 text-xs whitespace-nowrap text-emerald-400 opacity-100 shadow transition-opacity duration-300">
                                   Address copied successfully!
                                 </span>
                               )}
                             </div>
                           </div>
-                          <div className="text-xs text-neutral-500 mt-2">
-                            Scan QR code with your wallet or copy the address above
-                          </div>
                         </div>
                       </div>
                     </div>
-                    <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3">
-                      <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                        <FaCheckCircle />
-                        <span>Deposit address loaded successfully</span>
-                      </div>
-                    </div>
+                  </div>
+
+                  <div className="text-sm text-neutral-500 mt-3">
+                    Don't have any Solana?{" "}
+                    <span className="text-blue-400">Buy through Coinbase.</span>
                   </div>
                 </div>
+
+                <hr className="-mx-6 mb-2 border-neutral-600" />
+
                 <div className="pt-4">
                   <button
                     onClick={() => copyToClipboard(user.publicKey)}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 px-4 rounded-lg font-semibold transition cursor-pointer"
+                    className="w-full cursor-pointer rounded-3xl bg-emerald-600 px-4 py-3 font-semibold text-white transition hover:bg-emerald-700"
                   >
                     Copy Deposit Address
                   </button>
@@ -177,11 +205,11 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4 text-center">
-                  <div className="text-yellow-400 text-sm mb-3">
+                <div className="rounded-lg border border-yellow-500/30 bg-yellow-900/20 p-4 text-center">
+                  <div className="mb-3 text-sm text-yellow-400">
                     No deposit address found for your account
                   </div>
-                  <div className="text-neutral-400 text-xs">
+                  <div className="text-xs text-neutral-400">
                     Please contact support to set up your deposit address
                   </div>
                 </div>
@@ -194,4 +222,4 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
   );
 };
 
-export default DepositModal; 
+export default DepositModal;
