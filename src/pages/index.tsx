@@ -7,6 +7,8 @@ import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff,
 import Image from "next/image";
 import { memecoins } from "../data/memecoins";
 import type { MemeCoin } from "../data/memecoins";
+import LoginModal from "../components/LoginModal";
+import { useUser } from "../components/UserContext";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -41,6 +43,8 @@ export default function Home() {
   const timeframes = ["1m", "5m", "30m", "1h"];
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
   const [displayed, setDisplayed] = useState(() => memecoins.slice(0, 10));
+  const [loginOpen, setLoginOpen] = useState(false);
+  const { user, loading: userLoading } = useUser();
 
   // Check if Phantom wallet is available
   const getProvider = () => {
@@ -123,6 +127,14 @@ export default function Home() {
     setIsDepositModalOpen(false);
   };
 
+  /*
+  disable popup for now 
+
+  useEffect(() => {
+    if (!user && !userLoading) setLoginOpen(true);
+    else setLoginOpen(false);
+  }, [user, userLoading]); */
+
   return (
     <>
       <Head>
@@ -176,74 +188,21 @@ export default function Home() {
               >
                 Deposit
               </button>
-              <div className="ml-2">
-                <ConnectButton.Custom>
-                  {({
-                    account,
-                    chain,
-                    openAccountModal,
-                    openChainModal,
-                    openConnectModal,
-                    authenticationStatus,
-                    mounted,
-                  }) => {
-                    const ready = mounted && authenticationStatus !== "loading";
-                    const connected =
-                      ready &&
-                      account &&
-                      chain &&
-                      (!authenticationStatus || authenticationStatus === "authenticated");
-
-                    return (
-                      <div
-                        {...(!ready && {
-                          'aria-hidden': true,
-                          style: {
-                            opacity: 0,
-                            pointerEvents: 'none',
-                            userSelect: 'none',
-                          },
-                        })}
-                      >
-                        {(() => {
-                          if (!connected) {
-                            return (
-                              <button
-                                onClick={openConnectModal}
-                                type="button"
-                                className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
-                              >
-                                Connect Wallet
-                              </button>
-                            );
-                          }
-                          if (chain.unsupported) {
-                            return (
-                              <button
-                                onClick={openChainModal}
-                                type="button"
-                                className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-red-600 hover:bg-red-700 text-white text-base transition shadow focus:outline-none"
-                              >
-                                Wrong network
-                              </button>
-                            );
-                          }
-                          return (
-                            <button
-                              onClick={openAccountModal}
-                              type="button"
-                              className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
-                            >
-                              {account.displayName}
-                              {account.displayBalance ? ` (${account.displayBalance})` : ''}
-                            </button>
-                          );
-                        })()}
-                      </div>
-                    );
-                  }}
-                </ConnectButton.Custom>
-              </div>
+              {user ? (
+                <button
+                  className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-neutral-700 hover:bg-neutral-600 text-white text-base transition shadow focus:outline-none"
+                  onClick={() => setLoginOpen(true)}
+                >
+                  {user.name || user.email || 'User'}
+                </button>
+              ) : (
+                <button
+                  className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
+                  onClick={() => setLoginOpen(true)}
+                >
+                  Login
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -354,6 +313,7 @@ export default function Home() {
             </table>
           </div>
         </main>
+        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       </div>
 
       {/* Deposit Modal */}

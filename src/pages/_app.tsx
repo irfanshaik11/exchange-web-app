@@ -6,6 +6,7 @@ import { getDefaultConfig, RainbowKitProvider, darkTheme } from "@rainbow-me/rai
 import { WagmiProvider } from "wagmi";
 import { mainnet } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { UserProvider } from "../components/UserContext";
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
@@ -26,7 +27,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
           <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
-            <Component {...pageProps} />
+            <UserProvider>
+              <Component {...pageProps} />
+            </UserProvider>
           </RainbowKitProvider>
         </QueryClientProvider>
       </WagmiProvider>

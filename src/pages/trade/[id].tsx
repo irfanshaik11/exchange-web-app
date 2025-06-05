@@ -10,6 +10,9 @@ import { useWallet } from "../../components/useWallet";
 import { env } from "../../env";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import toast, { Toaster } from 'react-hot-toast';
+import LoginModal from "../../components/LoginModal";
+import { useUser } from "../../components/UserContext";
+import PriceChartWidget from "../../components/PriceChartWidget";
 
 export default function TradePage() {
   const router = useRouter();
@@ -27,6 +30,8 @@ export default function TradePage() {
   const [tradeAmount, setTradeAmount] = useState<string>("");
   const amountOptions = ["0.1", "1", "10"];
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const { user, loading: userLoading } = useUser();
 
   // Helper to get backend URL
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
@@ -68,6 +73,13 @@ export default function TradePage() {
       setUsdcAmount("");
     }
   }
+
+  /* 
+  Disable popup for now  
+  useEffect(() => {
+    if (!user && !userLoading) setLoginOpen(true);
+    else setLoginOpen(false);
+  }, [user, userLoading]); */
 
   if (!coin) {
     return <div className="text-center mt-20 text-2xl text-red-400">Memecoin not found</div>;
@@ -193,76 +205,15 @@ export default function TradePage() {
               </nav>
             </div>
             <div className="flex items-center gap-4 min-w-0">
-              {/* Wallet Connect UI - RainbowKit */}
-              <div className="ml-2">
-                <ConnectButton.Custom>
-                  {({
-                    account,
-                    chain,
-                    openAccountModal,
-                    openChainModal,
-                    openConnectModal,
-                    authenticationStatus,
-                    mounted,
-                  }) => {
-                    const ready = mounted && authenticationStatus !== "loading";
-                    const connected =
-                      ready &&
-                      account &&
-                      chain &&
-                      (!authenticationStatus || authenticationStatus === "authenticated");
-
-                    return (
-                      <div
-                        {...(!ready && {
-                          'aria-hidden': true,
-                          style: {
-                            opacity: 0,
-                            pointerEvents: 'none',
-                            userSelect: 'none',
-                          },
-                        })}
-                      >
-                        {(() => {
-                          if (!connected) {
-                            return (
-                              <button
-                                onClick={openConnectModal}
-                                type="button"
-                                className="px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold"
-                              >
-                                Connect Wallet
-                              </button>
-                            );
-                          }
-                          if (chain.unsupported) {
-                            return (
-                              <button
-                                onClick={openChainModal}
-                                type="button"
-                                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-semibold"
-                              >
-                                Wrong network
-                              </button>
-                            );
-                          }
-                          return (
-                            <button
-                              onClick={openAccountModal}
-                              type="button"
-                              className="flex items-center gap-2 px-3 py-1 bg-neutral-800 text-emerald-400 rounded-full text-xs font-semibold border border-emerald-400"
-                            >
-                              <FaPowerOff />
-                              {account.displayName}
-                              {account.displayBalance ? ` (${account.displayBalance})` : ''}
-                            </button>
-                          );
-                        })()}
-                      </div>
-                    );
-                  }}
-                </ConnectButton.Custom>
-              </div>
+              {/* Only show Login button if not logged in */}
+              {!user && !userLoading && (
+                <button
+                  className="ml-2 px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold"
+                  onClick={() => setLoginOpen(true)}
+                >
+                  Login
+                </button>
+              )}
               <div className="relative group w-full max-w-xs">
                 <span className="absolute inset-y-0 left-3 flex items-center text-neutral-400 group-focus-within:text-emerald-400 transition-colors">
                   <FaSearch size={16} />
@@ -314,15 +265,7 @@ export default function TradePage() {
               </div>
             </div>
             {/* Chart */}
-            <div className="bg-neutral-900 rounded-lg p-4 mb-4 flex-1 flex flex-col min-h-0 min-w-0">
-              <iframe
-                src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_btc_chart&symbol=BINANCE:BTCUSDT&interval=15&hidesidetoolbar=1&symboledit=1&saveimage=1&toolbarbg=18181b&studies=[]&theme=dark&style=1&timezone=Etc/UTC&withdateranges=1&hidevolume=0&hidelegend=0&studies_overrides={}&overrides={}&enabled_features=[]&disabled_features=[]&locale=en"
-                id="tradingview_btc_chart"
-                style={{ width: '100%', height: chartHeight, border: 0 }}
-                allowFullScreen
-                title="BTC Chart"
-              />
-            </div>
+            <PriceChartWidget tokenAddress={coin.tokenAddress} />
             {/* Tabs (Positions, Trades, etc.) */}
             <div className="bg-neutral-900 rounded-lg p-2 flex gap-4 text-xs mt-2">
               <button className="px-3 py-1 rounded bg-neutral-800 text-white font-semibold">Positions</button>
@@ -495,6 +438,7 @@ export default function TradePage() {
             </tbody>
           </table>
         </div>
+        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       </div>
     </>
   );
