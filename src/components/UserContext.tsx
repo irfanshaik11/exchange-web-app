@@ -8,7 +8,7 @@ export interface UserInfo {
   name: string;
   email: string;
   publicKey: string;
-  walletPrivateKey: string;
+  bearerToken: string;
 }
 
 interface UserContextType {
@@ -41,7 +41,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       });
       const data = await res.json();
       if (res.ok && data.user) {
-        setUser(data.user);
+        setUser({ bearerToken: token, ...data.user});
       } else {
         setUser(null);
         Cookies.remove('token');
