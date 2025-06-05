@@ -43,13 +43,17 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
+
       if (res.ok && data.token) {
         Cookies.set('token', data.token, { expires: 7, path: '/' });
         await refreshUser();
         setSuccess('Login successful!');
+        
+        // Trigger page reload to refresh user context
         setTimeout(() => {
           setSuccess(null);
           onClose();
+          window.location.reload();
         }, 1200);
       } else {
         setError(data.message || 'Login failed');
