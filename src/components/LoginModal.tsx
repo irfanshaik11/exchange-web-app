@@ -41,14 +41,23 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (res.ok && data.user && data.user.token) {
-        Cookies.set('token', data.user.token, { expires: 7 });
-        Cookies.set('username', data.user.name || '');
+      console.log("data",data);
+      
+      // Handle both response formats: data.token or data.user.token
+      const token = data.token || (data.user && data.user.token);
+      const userName = data.user?.name || username;
+      
+      if (res.ok && token) {
+        Cookies.set('token', token, { expires: 7 });
+        Cookies.set('username', userName || '');
         Cookies.set('email', email, { expires: 7 });
         setSuccess('Login successful!');
+        
+        // Trigger page reload to refresh user context
         setTimeout(() => {
           setSuccess(null);
           onClose();
+          window.location.reload();
         }, 1200);
       } else {
         setError(data.message || 'Login failed');
