@@ -140,23 +140,38 @@ export default function TradePage() {
     }
   }
 
-  // Sell by percentage handler
+  // Sell by percentage handler (with auth, like buy)
   async function handleSellPercentage() {
     if (!sellPercentage || !user) return;
     setTxLoading(true);
     setTxStatus(null);
+    const tempAddress = "FMGU4vKjT3MW4GBTP8ru8JWs1R552FUU8PTqo65ppump";
     try {
       const res = await fetch(`${backendUrl}/api/trade/sell_percentage`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.bearerToken}`,
+        },
         body: JSON.stringify({
-          tokenAddress: address,
+          tokenAddress: tempAddress,
           percentageToSell: parseFloat(sellPercentage),
         }),
       });
       const data = await res.json();
-      if (res.ok) setTxStatus("Sell (percentage) transaction sent!");
-      else setTxStatus(data?.error || "Sell failed");
+      if (res.ok) {
+        setTxStatus(data.message || "Sell (percentage) transaction sent!");
+        toast.success(data.message || "Sell order successful!");
+        setTradeHistory((prev) => [
+          ...prev,
+          {
+            coin: coin,
+            amount: `${sellPercentage}%`,
+            hash: data.hash,
+            time: new Date().toLocaleTimeString(),
+          },
+        ]);
+      } else setTxStatus(data?.message || data?.error || "Sell failed");
     } catch (e) {
       setTxStatus("Sell failed");
     } finally {
@@ -323,55 +338,85 @@ export default function TradePage() {
                   <span className="bg-neutral-800 rounded px-2 py-0.5 text-xs flex items-center gap-1"><svg width='16' height='16' fill='none'><rect width='16' height='16' rx='4' fill='#23272A'/><path d='M8 4v8' stroke='#A3E635' strokeWidth='2' strokeLinecap='round'/></svg>0</span>
                 </div>
               </div> */}
-              {/* Amount Row */}
-              <div className="mb-2 rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">
-                    AMOUNT
-                  </span>
-                  <span className="text-xs font-bold text-white">
-                    {tradeAmount || "-"}
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center gap-2">
-                  {amountOptions.map((opt) => (
-                    <button
-                      key={opt}
-                      className={`rounded border border-neutral-700 px-4 py-1 text-xs font-semibold text-white transition-all ${
-                        tradeAmount === opt
-                          ? tradeMode === "buy"
-                            ? "bg-emerald-600"
-                            : "bg-red-500"
-                          : ""
-                      }`}
-                      onClick={() => setTradeAmount(opt)}
-                      type="button"
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    className="ml-2 w-20 rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-semibold text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    placeholder="100"
-                    value={
-                      amountOptions.includes(tradeAmount) ? "" : tradeAmount
-                    }
-                    onChange={(e) => setTradeAmount(e.target.value)}
-                  />
-                  <svg width="20" height="20" fill="none" className="ml-2">
-                    <rect width="20" height="20" rx="4" fill="#23272A" />
-                    <path
-                      d="M5 10h10M10 5v10"
-                      stroke="#A3E635"
-                      strokeWidth="2"
-                      strokeLinecap="round"
+              {/* Amount Row (Buy or Sell) */}
+              {tradeMode === "buy" ? (
+                <div className="mb-2 rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">
+                      AMOUNT
+                    </span>
+                    <span className="text-xs font-bold text-white">
+                      {tradeAmount || "-"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    {amountOptions.map((opt) => (
+                      <button
+                        key={opt}
+                        className={`rounded border border-neutral-700 px-4 py-1 text-xs font-semibold text-white transition-all ${
+                          tradeAmount === opt
+                            ? tradeMode === "buy"
+                              ? "bg-emerald-600"
+                              : "bg-red-500"
+                            : ""
+                        }`}
+                        onClick={() => setTradeAmount(opt)}
+                        type="button"
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      className="ml-2 w-20 rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-semibold text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      placeholder="100"
+                      value={amountOptions.includes(tradeAmount) ? "" : tradeAmount}
+                      onChange={(e) => setTradeAmount(e.target.value)}
                     />
-                  </svg>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mb-2 rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">
+                      PERCENTAGE
+                    </span>
+                    <span className="text-xs font-bold text-white">
+                      {sellPercentage || "-"}%
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    {["25", "50", "100"].map((opt) => (
+                      <button
+                        key={opt}
+                        className={`rounded border border-neutral-700 px-2 py-1 text-xs font-semibold text-white transition-all ${
+                          sellPercentage === opt ? "bg-red-500" : ""
+                        }`}
+                        onClick={() => setSellPercentage(opt)}
+                        type="button"
+                      >
+                        {opt}%
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="any"
+                      className="ml-2 w-20 rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-semibold text-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                      placeholder="Custom %"
+                      value={(["25", "50", "100"].includes(sellPercentage) ? "" : sellPercentage) || ""}
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        if (parseFloat(val) > 100) val = "100";
+                        setSellPercentage(val);
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
               {/* Action Button */}
               <button
                 className={`mt-2 w-full rounded py-3 text-xs font-bold transition disabled:opacity-50 ${
@@ -382,17 +427,20 @@ export default function TradePage() {
                 onClick={
                   tradeMode === "buy"
                     ? () => handleBuy()
-                    : () => handleSellExactAmount()
+                    : () => handleSellPercentage()
                 }
                 disabled={
                   txLoading ||
-                  !tradeAmount ||
-                  parseFloat(tradeAmount) <= 0
+                  (tradeMode === "buy"
+                    ? !tradeAmount || parseFloat(tradeAmount) <= 0
+                    : !sellPercentage || parseFloat(sellPercentage) <= 0)
                 }
               >
                 {txLoading
                   ? "Processing..."
-                  : `${tradeMode === "buy" ? "BUY" : "SELL"}  ${tradeAmount || ""} ${coin.name}`}
+                  : tradeMode === "buy"
+                  ? `BUY  ${tradeAmount || ""} ${coin.name}`
+                  : `SELL  ${sellPercentage || ""}% ${coin.name}`}
               </button>
               {txStatus && (
                 <div className="mt-2 text-center text-xs text-emerald-400">
