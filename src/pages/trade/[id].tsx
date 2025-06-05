@@ -13,6 +13,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import LoginModal from "../../components/LoginModal";
 import { useUser } from "../../components/UserContext";
 import PriceChartWidget from "../../components/PriceChartWidget";
+import Header from "../../components/Header";
 
 export default function TradePage() {
   const router = useRouter();
@@ -37,6 +38,7 @@ export default function TradePage() {
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
 
   useEffect(() => {
+    console.log(user)
     function handleResize() {
       setChartHeight(window.innerHeight - 220);
     }
@@ -74,12 +76,11 @@ export default function TradePage() {
     }
   }
 
-  /* 
-  Disable popup for now  
   useEffect(() => {
-    if (!user && !userLoading) setLoginOpen(true);
-    else setLoginOpen(false);
-  }, [user, userLoading]); */
+    const handler = () => setLoginOpen(true);
+    window.addEventListener('open-login-modal', handler);
+    return () => window.removeEventListener('open-login-modal', handler);
+  }, []);
 
   if (!coin) {
     return <div className="text-center mt-20 text-2xl text-red-400">Memecoin not found</div>;
@@ -180,59 +181,7 @@ export default function TradePage() {
       <Toaster position="top-right" />
       <div className="h-screen w-screen bg-neutral-950 text-neutral-100 overflow-hidden">
         {/* Header */}
-        <header className="w-full border-b border-neutral-800 bg-neutral-900/90 backdrop-blur sticky top-0 z-20">
-          <div className="max-w-full flex items-center justify-between px-8 py-3">
-            <div className="flex items-center gap-10 min-w-0">
-              <span className="text-2xl font-extrabold tracking-tight text-white select-none flex items-center">
-                <img src="/logo.png" className="w-12 h-auto" />
-                <span className="rounded-full inline-block mr-1" />
-                Interstate
-              </span>
-              <nav className="flex items-center gap-6 ml-8">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.name}
-                    href={link.href}
-                    className={`px-1.5 py-0.5 font-medium transition-colors text-base ${
-                      link.name === "Discover"
-                        ? "text-emerald-400 border-b-2 border-emerald-400"
-                        : "text-neutral-200 hover:text-emerald-400"
-                    }`}
-                  >
-                    {link.name}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-            <div className="flex items-center gap-4 min-w-0">
-              {/* Only show Login button if not logged in */}
-              {!user && !userLoading && (
-                <button
-                  className="ml-2 px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-xs font-semibold"
-                  onClick={() => setLoginOpen(true)}
-                >
-                  Login
-                </button>
-              )}
-              <div className="relative group w-full max-w-xs">
-                <span className="absolute inset-y-0 left-3 flex items-center text-neutral-400 group-focus-within:text-emerald-400 transition-colors">
-                  <FaSearch size={16} />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Search by token or CA..."
-                  className="w-full bg-neutral-800/80 border border-neutral-700 rounded-full pl-9 pr-4 py-2.5 text-sm text-neutral-100 placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent hover:bg-neutral-800 transition-all duration-200 shadow-lg"
-                />
-                <button
-                  className="absolute inset-y-0 right-3 flex items-center opacity-0 group-focus-within:opacity-100 transition-opacity"
-                  onClick={() => console.log('Search clicked')}
-                  >
-                    <FaTimes className="text-neutral-400 hover:text-red-400" size={14} />
-                  </button>
-              </div>
-            </div>
-          </div>
-        </header>
+        <Header showSearch={false} />
         {/* Main Layout */}
         <div className="flex flex-row h-[calc(100vh-72px)] w-full gap-0">
           {/* Left: Chart and Info */}

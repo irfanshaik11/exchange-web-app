@@ -9,6 +9,7 @@ import { memecoins } from "../data/memecoins";
 import type { MemeCoin } from "../data/memecoins";
 import LoginModal from "../components/LoginModal";
 import { useUser } from "../components/UserContext";
+import Header from "../components/Header";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -48,13 +49,11 @@ export default function Home() {
     setDisplayed(shuffleArray(memecoins).slice(0, 10));
   };
 
-  /*
-  disable popup for now 
-
   useEffect(() => {
-    if (!user && !userLoading) setLoginOpen(true);
-    else setLoginOpen(false);
-  }, [user, userLoading]); */
+    const handler = () => setLoginOpen(true);
+    window.addEventListener('open-login-modal', handler);
+    return () => window.removeEventListener('open-login-modal', handler);
+  }, []);
 
   return (
     <>
@@ -65,55 +64,7 @@ export default function Home() {
       </Head>
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         {/* Header */}
-        <header className="w-full border-b border-neutral-800 bg-neutral-900/90 backdrop-blur sticky top-0 z-20">
-          <div className="max-w-full flex items-center justify-between px-8 py-3">
-            <div className="flex items-center gap-10 min-w-0">
-              <span className="text-2xl font-extrabold tracking-tight text-white select-none flex items-center">
-                <img src="/logo.png" className="w-12 h-auto" />
-                <span className="rounded-full inline-block mr-1" />
-                Interstate
-              </span>
-              <nav className="flex items-center gap-6 ml-8">
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.name}
-                    href={link.href}
-                    className={`px-1.5 py-0.5 font-medium transition-colors text-base ${
-                      link.name === "Discover" && isDiscover
-                        ? "text-emerald-400 border-b-2 border-emerald-400"
-                        : "text-neutral-200 hover:text-emerald-400"
-                    }`}
-                  >
-                    {link.name}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-            {/* Right: Search, Deposit, Wallet */}
-            <div className="flex items-center gap-4 min-w-0">
-              <div className="relative flex items-center">
-                <span className="absolute left-3 text-neutral-400">
-                  <FaSearch size={16} />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Search by token or CA..."
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="bg-neutral-800 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
-                />
-              </div>
-              {!user && !userLoading && (
-                <button
-                  className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
-                  onClick={() => setLoginOpen(true)}
-                >
-                  Login
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
+        <Header search={search} setSearch={setSearch} showSearch={true} />
         {/* Section Header */}
         <div className="max-w-7xl mx-auto px-4 pt-8 pb-2 flex flex-col gap-2">
           <div className="flex items-center gap-4 text-lg font-semibold text-neutral-300">
