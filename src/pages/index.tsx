@@ -2,8 +2,8 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useState } from "react";
-import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff } from "react-icons/fa";
+import { useState, useEffect } from "react";
+import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff, FaTimes, FaCopy } from "react-icons/fa";
 import Image from "next/image";
 import { memecoins } from "../data/memecoins";
 import type { MemeCoin } from "../data/memecoins";
@@ -34,14 +34,93 @@ function shuffleArray<T extends NonNullable<unknown>>(array: T[]): T[] {
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false);
+  const [solanaAddress, setSolanaAddress] = useState<string | null>(null);
+  const [isPhantomConnected, setIsPhantomConnected] = useState(false);
   const isDiscover = router.pathname === "/";
   const timeframes = ["1m", "5m", "30m", "1h"];
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
   const [displayed, setDisplayed] = useState(() => memecoins.slice(0, 10));
 
+  // Check if Phantom wallet is available
+  const getProvider = () => {
+    if (typeof window !== 'undefined' && 'solana' in window) {
+      const provider = (window as any).solana;
+      if (provider.isPhantom) return provider;
+    }
+    return null;
+  };
+
+  // Connect to Phantom wallet
+  const connectPhantomWallet = async () => {
+    const provider = getProvider();
+    if (!provider) {
+      alert('Phantom wallet not detected! Please install Phantom wallet.');
+      return;
+    }
+
+    try {
+      const response = await provider.connect();
+      setSolanaAddress(response.publicKey.toString());
+      setIsPhantomConnected(true);
+    } catch (error) {
+      console.error('Error connecting to Phantom wallet:', error);
+    }
+  };
+
+  // Disconnect from Phantom wallet
+  const disconnectPhantomWallet = async () => {
+    const provider = getProvider();
+    if (provider) {
+      try {
+        await provider.disconnect();
+        setSolanaAddress(null);
+        setIsPhantomConnected(false);
+      } catch (error) {
+        console.error('Error disconnecting from Phantom wallet:', error);
+      }
+    }
+  };
+
+  // Copy address to clipboard
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('Address copied to clipboard!');
+  };
+
+  // Check if wallet is already connected on component mount
+  useEffect(() => {
+    const provider = getProvider();
+    if (provider) {
+      provider.on('connect', (publicKey: any) => {
+        setSolanaAddress(publicKey.toString());
+        setIsPhantomConnected(true);
+      });
+      
+      provider.on('disconnect', () => {
+        setSolanaAddress(null);
+        setIsPhantomConnected(false);
+      });
+
+      // Check if already connected
+      if (provider.publicKey) {
+        setSolanaAddress(provider.publicKey.toString());
+        setIsPhantomConnected(true);
+      }
+    }
+  }, []);
+
   const handleTimeframeClick = (tf: string) => {
     setSelectedTimeframe(tf);
     setDisplayed(shuffleArray(memecoins).slice(0, 10));
+  };
+
+  const handleDepositClick = () => {
+    setIsDepositModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsDepositModalOpen(false);
   };
 
   return (
@@ -91,9 +170,12 @@ export default function Home() {
                   className="bg-neutral-800 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
                 />
               </div>
-             {/*  <button className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none">
+              <button 
+                onClick={handleDepositClick}
+                className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none cursor-pointer"
+              >
                 Deposit
-              </button> */}
+              </button>
               <div className="ml-2">
                 <ConnectButton.Custom>
                   {({
@@ -273,6 +355,99 @@ export default function Home() {
           </div>
         </main>
       </div>
+
+      {/* Deposit Modal */}
+      {isDepositModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={handleCloseModal}
+        >
+          <div 
+            className="bg-neutral-900 rounded-lg p-6 w-full max-w-md mx-4 relative border border-neutral-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={handleCloseModal}
+              className="absolute top-4 right-4 text-neutral-400 hover:text-white transition-colors"
+            >
+              <FaTimes size={20} />
+            </button>
+            
+            {/* Modal Content */}
+            <div className="pr-8">
+              <h2 className="text-2xl font-bold text-white mb-6">Deposit Funds</h2>
+              
+              <div className="space-y-4">
+                {/* Phantom Wallet Connection */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-300 mb-3">
+                      Solana Wallet (Phantom)
+                    </label>
+                    
+                    {!isPhantomConnected ? (
+                      <button
+                        onClick={connectPhantomWallet}
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-lg font-semibold transition cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-6 h-6" />
+                        Connect Phantom Wallet
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm text-neutral-300">Connected Address:</span>
+                            <button
+                              onClick={disconnectPhantomWallet}
+                              className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                            >
+                              Disconnect
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <code className="text-sm text-emerald-400 bg-neutral-900 px-2 py-1 rounded flex-1 truncate">
+                              {solanaAddress}
+                            </code>
+                            <button
+                              onClick={() => solanaAddress && copyToClipboard(solanaAddress)}
+                              className="text-neutral-400 hover:text-white transition-colors p-1"
+                              title="Copy address"
+                            >
+                              <FaCopy size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-lg p-3">
+                          <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                            <FaCheckCircle />
+                            <span>Phantom wallet connected successfully</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button 
+                    className={`w-full py-3 px-4 rounded-lg font-semibold transition cursor-pointer ${
+                      isPhantomConnected 
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white' 
+                        : 'bg-neutral-700 text-neutral-400 cursor-not-allowed'
+                    }`}
+                    disabled={!isPhantomConnected}
+                  >
+                    {isPhantomConnected ? 'Deposit to Solana Address' : 'Connect Wallet to Deposit'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

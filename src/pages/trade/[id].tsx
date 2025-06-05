@@ -3,7 +3,7 @@ import { memecoins } from "../../data/memecoins";
 import type { MemeCoin } from "../../data/memecoins";
 import Head from "next/head";
 import Link from "next/link";
-import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff } from "react-icons/fa";
+import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff, FaTimes } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useWallet } from "../../components/useWallet";
