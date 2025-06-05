@@ -11,6 +11,8 @@ import LoginModal from "../components/LoginModal";
 import { useUser } from "../components/UserContext";
 import Cookies from 'js-cookie';
 import QRCode from 'qrcode';
+import Header from "../components/Header";
+
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -78,6 +80,7 @@ export default function Home() {
     setDisplayed(shuffleArray(memecoins).slice(0, 10));
   };
 
+
   const handleDepositClick = () => {
     const token = Cookies.get('token');
     console.log('Deposit clicked - User:', user);
@@ -97,6 +100,12 @@ export default function Home() {
   const handleCloseModal = () => {
     setIsDepositModalOpen(false);
   };
+
+  useEffect(() => {
+    const handler = () => setLoginOpen(true);
+    window.addEventListener('open-login-modal', handler);
+    return () => window.removeEventListener('open-login-modal', handler);
+  }, []);
 
   return (
     <>
@@ -160,6 +169,7 @@ export default function Home() {
             </div>
           </div>
         </header>
+
         {/* Section Header */}
         <div className="max-w-7xl mx-auto px-4 pt-8 pb-2 flex flex-col gap-2">
           <div className="flex items-center gap-4 text-lg font-semibold text-neutral-300">
