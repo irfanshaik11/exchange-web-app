@@ -8,6 +8,7 @@ export const env = createEnv({
    */
   server: {
     NODE_ENV: z.enum(["development", "test", "production"]),
+    MORALIS_API_KEY: z.string(),
   },
 
   /**
@@ -17,6 +18,7 @@ export const env = createEnv({
    */
   client: {
     NEXT_PUBLIC_BACKEND_URL: z.string().url(),
+    NEXT_PUBLIC_MORALIS_URL: z.string().url(),
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
 
@@ -27,6 +29,8 @@ export const env = createEnv({
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
+    NEXT_PUBLIC_MORALIS_URL: process.env.NEXT_PUBLIC_MORALIS_URL,
+    MORALIS_API_KEY: process.env.MORALIS_API_KEY,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**
