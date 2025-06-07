@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
-import { memecoins } from "../../data/memecoins";
-import type { MemeCoin } from "../../data/memecoins";
+import { useEffect, useState } from "react";
+import type { DexPair } from "~/utils/moralis";
 import Head from "next/head";
 import Link from "next/link";
 import {
@@ -13,7 +13,6 @@ import {
   FaTimes,
 } from "react-icons/fa";
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
 import { useWallet } from "../../components/useWallet";
 import { env } from "../../env";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -23,10 +22,20 @@ import { useUser } from "../../components/UserContext";
 import PriceChartWidget from "../../components/PriceChartWidget";
 import Header from "../../components/Header";
 
+function formatUSD(value: number | string | undefined) {
+  if (value === undefined || value === null || isNaN(Number(value))) return '-';
+  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+function formatNumber(value: number | string | undefined) {
+  if (value === undefined || value === null || isNaN(Number(value))) return '-';
+  return Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
 export default function TradePage() {
   const router = useRouter();
-  const { id } = router.query;
-  const coin = memecoins[typeof id === "string" ? parseInt(id) : -1];
+  const { id, price: queryPrice, volume: queryVolume, liquidity: queryLiquidity } = router.query;
+  const [pair, setPair] = useState<DexPair | null>(null);
+  const [loading, setLoading] = useState(true);
   const [chartHeight, setChartHeight] = useState(600);
   const { address, isConnected } = useWallet();
   const [sellPercentage, setSellPercentage] = useState("");
@@ -41,23 +50,33 @@ export default function TradePage() {
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
   const [loginOpen, setLoginOpen] = useState(false);
   const { user, loading: userLoading } = useUser();
-
-  // Helper to get backend URL
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
 
+  // Parse query params as numbers
+  const priceProp = queryPrice ? Number(queryPrice) : undefined;
+  const volumeProp = queryVolume ? Number(queryVolume) : undefined;
+  const liquidityProp = queryLiquidity ? Number(queryLiquidity) : undefined;
+
   useEffect(() => {
-    console.log(user);
+    if (!id) return;
+    setLoading(true);
+    fetch("/api/tokens")
+      .then(res => res.json())
+      .then((data: DexPair[]) => {
+        const found = data.find((p) => p.pairAddress === id);
+        setPair(found || null);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [id]);
+
+  useEffect(() => {
     function handleResize() {
       setChartHeight(window.innerHeight - 220);
     }
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  // On mount, randomize a price for the memecoin (e.g., 0.5 - 4.0 USDC)
-  useEffect(() => {
-    setMemePrice(Number((Math.random() * 3.5 + 0.5).toFixed(4)));
   }, []);
 
   // When USDC changes, update memeAmount
@@ -90,20 +109,27 @@ export default function TradePage() {
     return () => window.removeEventListener("open-login-modal", handler);
   }, []);
 
-  if (!coin) {
+  if (loading) {
     return (
-      <div className="mt-20 text-center text-2xl text-red-400">
-        Memecoin not found
+      <div className="mt-20 text-center text-2xl text-neutral-400">
+        Loading...
       </div>
     );
   }
 
-  // Buy handler
+  if (!pair) {
+    return (
+      <div className="mt-20 text-center text-2xl text-red-400">
+        Pair not found
+      </div>
+    );
+  }
+
+  // Buy handler (update as needed for your backend)
   async function handleBuy() {
     if (!user || !tradeAmount) return;
     setTxLoading(true);
     setTxStatus(null);
-    const tempAddress = "FMGU4vKjT3MW4GBTP8ru8JWs1R552FUU8PTqo65ppump";
     try {
       const res = await fetch(`${backendUrl}/api/trade/buy`, {
         method: "POST",
@@ -112,7 +138,7 @@ export default function TradePage() {
           Authorization: `Bearer ${user.bearerToken}`,
         },
         body: JSON.stringify({
-          tokenAddress: tempAddress,
+          tokenAddress: pair.baseToken,
           amount: parseFloat(tradeAmount),
           mevProtection: 0,
         }),
@@ -121,12 +147,12 @@ export default function TradePage() {
       if (res.ok) {
         setTxStatus("Buy transaction sent!");
         toast.success(
-          `Buy order successful! Bought ${data.amount} ${coin.name}`,
+          `Buy order successful! Bought ${data.amount} ${pair.pairLabel}`,
         );
         setTradeHistory((prev) => [
           ...prev,
           {
-            coin: coin,
+            pair: pair,
             amount: data.amount,
             hash: data.hash,
             time: new Date().toLocaleTimeString(),
@@ -145,7 +171,6 @@ export default function TradePage() {
     if (!sellPercentage || !user) return;
     setTxLoading(true);
     setTxStatus(null);
-    const tempAddress = "FMGU4vKjT3MW4GBTP8ru8JWs1R552FUU8PTqo65ppump";
     try {
       const res = await fetch(`${backendUrl}/api/trade/sell_percentage`, {
         method: "POST",
@@ -154,7 +179,7 @@ export default function TradePage() {
           Authorization: `Bearer ${user.bearerToken}`,
         },
         body: JSON.stringify({
-          tokenAddress: tempAddress,
+          tokenAddress: pair.baseToken,
           percentageToSell: parseFloat(sellPercentage),
         }),
       });
@@ -165,7 +190,7 @@ export default function TradePage() {
         setTradeHistory((prev) => [
           ...prev,
           {
-            coin: coin,
+            pair: pair,
             amount: `${sellPercentage}%`,
             hash: data.hash,
             time: new Date().toLocaleTimeString(),
@@ -206,7 +231,7 @@ export default function TradePage() {
   return (
     <>
       <Head>
-        <title>{coin.name} | Trade</title>
+        <title>{pair?.pairLabel} | Trade</title>
       </Head>
       <Toaster position="top-right" />
       <div className="h-screen w-screen overflow-hidden bg-neutral-950 text-neutral-100">
@@ -219,17 +244,17 @@ export default function TradePage() {
             {/* Token Info Header */}
             <div className="mb-2 flex items-center gap-4">
               <img
-                src={coin.icon}
-                alt={coin.name}
+                src={pair?.pair[0].tokenLogo}
+                alt={pair?.pairLabel}
                 width={48}
                 height={48}
                 className="rounded"
               />
               <div>
                 <div className="flex items-center gap-2 text-xl font-bold text-white">
-                  {coin.name}
+                  {pair?.pairLabel}
                 </div>
-                <div className="text-xs text-neutral-400">{coin.label}</div>
+                <div className="text-xs text-neutral-400">{pair?.liquidityUsd}</div>
                 <div className="mt-1 flex gap-2 text-xs text-neutral-400">
                   <FaUser />
                   <FaGlobe />
@@ -240,21 +265,21 @@ export default function TradePage() {
                 <div>
                   <div className="text-xs text-neutral-400">Price</div>
                   <div className="text-lg font-semibold">
-                    {memePrice ? `$${memePrice}` : "-"}
+                    {formatUSD(pair?.usdPrice ?? priceProp)}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-neutral-400">Liquidity</div>
-                  <div className="text-lg font-semibold">{coin.liquidity}</div>
+                  <div className="text-lg font-semibold">{formatUSD(pair?.liquidityUsd ?? liquidityProp)}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-neutral-400">Supply</div>
-                  <div className="text-lg font-semibold">1B</div>
+                  <div className="text-xs text-neutral-400">Volume (24h)</div>
+                  <div className="text-lg font-semibold">{formatUSD(pair?.volume24hrUsd ?? volumeProp)}</div>
                 </div>
               </div>
             </div>
             {/* Chart */}
-            <PriceChartWidget tokenAddress={coin.tokenAddress} />
+            <PriceChartWidget tokenAddress={pair?.baseToken} />
             {/* Tabs (Positions, Trades, etc.) */}
             <div className="mt-2 flex gap-4 rounded-lg bg-neutral-900 p-2 text-xs">
               <button className="rounded bg-neutral-800 px-3 py-1 font-semibold text-white">
@@ -439,8 +464,8 @@ export default function TradePage() {
                 {txLoading
                   ? "Processing..."
                   : tradeMode === "buy"
-                  ? `BUY  ${tradeAmount || ""} ${coin.name}`
-                  : `SELL  ${sellPercentage || ""}% ${coin.name}`}
+                  ? `BUY  ${tradeAmount || ""} ${pair?.pairLabel}`
+                  : `SELL  ${sellPercentage || ""}% ${pair?.pairLabel}`}
               </button>
               {txStatus && (
                 <div className="mt-2 text-center text-xs text-emerald-400">
@@ -497,11 +522,11 @@ export default function TradePage() {
                   <td className="px-2 py-1">{trade.time}</td>
                   <td className="flex items-center gap-2 px-2 py-1">
                     <img
-                      src={trade.coin.icon}
-                      alt={trade.coin.name}
+                      src={trade.pair.pair[0].tokenLogo}
+                      alt={trade.pair.pairLabel}
                       className="h-5 w-5 rounded"
                     />
-                    {trade.coin.name}
+                    {trade.pair.pairLabel}
                   </td>
                   <td className="px-2 py-1">{trade.amount}</td>
                   <td className="max-w-[120px] truncate px-2 py-1">
@@ -517,3 +542,4 @@ export default function TradePage() {
     </>
   );
 }
+

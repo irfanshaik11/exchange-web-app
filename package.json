@@ -23,6 +23,7 @@
     "js-cookie": "^3.0.5",
     "lightweight-charts": "^5.0.7",
     "next": "^15.2.3",
+    "pg": "^8.16.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
