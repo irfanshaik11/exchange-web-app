@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaStar, FaBell } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from 'js-cookie';
 import dynamic from "next/dynamic";
@@ -26,12 +26,22 @@ const DepositModal = dynamic(() => import("./DepositModal"), {
   ssr: false, // NO SSR PLEASE 
 });
 
+const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
+  ssr: false,
+});
+
+const NotificationDropdown = dynamic(() => import("./NotificationDropdown"), {
+  ssr: false,
+});
+
 export default function Header({ search = "", setSearch, showSearch = true }: HeaderProps) {
   const router = useRouter();
   const isDiscover = router.pathname === "/";
   const { user, loading: userLoading } = useUser();
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
 
   // Handles opening the deposit modal
   const handleDepositClick = () => {
@@ -44,10 +54,10 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
 
   return (
     <>
-      <header className="w-full border-b border-neutral-800 bg-neutral-900/90 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-full flex items-center justify-between px-8 py-3">
-          <div className="flex items-center gap-10 min-w-0">
-            <span className="text-2xl font-extrabold tracking-tight text-white select-none flex items-center">
+      <header className="w-full border-b border-emerald-950 bg-neutral-950 backdrop-blur sticky top-0 z-20">
+        <div className="max-w-full flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-4 min-w-0">
+            <span className="text-2xl tracking-tight text-white select-none flex items-center">
               <img src="/logo.png" className="w-12 h-auto" />
               <span className="rounded-full inline-block mr-1" />
               Interstate
@@ -57,9 +67,9 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`px-1.5 py-0.5 font-medium transition-colors text-base ${
+                  className={`px-1.5 py-0.5 font-medium transition-colors text-sm ${
                     link.name === "Discover" && isDiscover
-                      ? "text-emerald-400 border-b-2 border-emerald-400"
+                      ? "text-emerald-400 border-emerald-400"
                       : "text-neutral-200 hover:text-emerald-400"
                   }`}
                 >
@@ -68,7 +78,7 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             {showSearch && (
               <div className="relative flex items-center">
                 <span className="absolute left-3 text-neutral-400">
@@ -79,15 +89,29 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                   placeholder="Search by token or CA..."
                   value={search}
                   onChange={e => setSearch && setSearch(e.target.value)}
-                  className="bg-neutral-800 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
+                  className="bg-neutral-950 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
                 />
               </div>
             )}
             <button
               onClick={handleDepositClick}
-              className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none cursor-pointer"
+              className="ml-2 px-4 py-1 rounded-full font-semibold bg-emerald-500 hover:bg-emerald-400 text-black text-base transition shadow focus:outline-none cursor-default"
             >
               Deposit
+            </button>
+            <button
+              onClick={() => setWatchlistOpen(true)}
+              className="ml-2 px-3 py-1 rounded-full font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-base transition flex items-center gap-2 border border-neutral-700 h-8"
+              title="Watchlist"
+            >
+              <FaStar className="text-neutral-400" />
+            </button>
+            <button
+              onClick={() => setNotificationOpen(true)}
+              className="ml-2 px-3 py-1 rounded-full font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-base transition flex items-center gap-2 border border-neutral-700 h-8"
+              title="Notifications"
+            >
+              <FaBell className="text-neutral-400" />
             </button>
             {user && !userLoading ? (
               <div className="relative group flex items-center gap-2 cursor-pointer">
@@ -95,7 +119,7 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                 <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-lg select-none">
                   {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                 </div>
-                <span className="font-semibold text-white text-sm truncate max-w-[100px]">{user.name}</span>
+                <span className="font-semibold text-black text-sm truncate max-w-[100px]">{user.name}</span>
                 {/* Dropdown for logout */}
                 <div className="absolute right-0 top-10 bg-neutral-900 border border-neutral-800 rounded shadow-lg py-2 px-4 min-w-[120px] opacity-0 group-hover:opacity-100 transition-opacity z-50">
                   <button
@@ -119,7 +143,7 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
               </div>
             ) : !userLoading && (
               <button
-                className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
+                className="ml-2 px-4 py-1 rounded-full font-semibold bg-emerald-500 hover:bg-emerald-400 text-black text-base transition shadow focus:outline-none"
                 onClick={() => {
                   // Use a custom event or context to open login modal in parent
                   const event = new CustomEvent('open-login-modal');
@@ -133,6 +157,8 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
         </div>
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
+      <WatchlistModal open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
+      <NotificationDropdown open={notificationOpen} onClose={() => setNotificationOpen(false)} />
     </>
   );
 } 
