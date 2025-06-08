@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
-import type { DexPair } from "~/utils/moralis";
+import type { DexToken } from "~/utils/moralis";
 import Head from "next/head";
 import Link from "next/link";
 import {
@@ -33,8 +33,8 @@ function formatNumber(value: number | string | undefined) {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, price: queryPrice, volume: queryVolume, liquidity: queryLiquidity } = router.query;
-  const [pair, setPair] = useState<DexPair | null>(null);
+  const { id } = router.query;
+  const [token, setToken] = useState<DexToken | null>(null);
   const [loading, setLoading] = useState(true);
   const [chartHeight, setChartHeight] = useState(600);
   const { address, isConnected } = useWallet();
@@ -52,19 +52,13 @@ export default function TradePage() {
   const { user, loading: userLoading } = useUser();
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
 
-  // Parse query params as numbers
-  const priceProp = queryPrice ? Number(queryPrice) : undefined;
-  const volumeProp = queryVolume ? Number(queryVolume) : undefined;
-  const liquidityProp = queryLiquidity ? Number(queryLiquidity) : undefined;
-
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    fetch("/api/tokens")
+    fetch(`/api/token/${id}`)
       .then(res => res.json())
-      .then((data: DexPair[]) => {
-        const found = data.find((p) => p.pairAddress === id);
-        setPair(found || null);
+      .then((data: { result: DexToken | null }) => {
+        setToken(data.result || null);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -117,10 +111,10 @@ export default function TradePage() {
     );
   }
 
-  if (!pair) {
+  if (!token) {
     return (
       <div className="mt-20 text-center text-2xl text-red-400">
-        Pair not found
+        Token not found
       </div>
     );
   }
@@ -138,7 +132,7 @@ export default function TradePage() {
           Authorization: `Bearer ${user.bearerToken}`,
         },
         body: JSON.stringify({
-          tokenAddress: pair.baseToken,
+          tokenAddress: token.tokenAddress,
           amount: parseFloat(tradeAmount),
           mevProtection: 0,
         }),
@@ -147,12 +141,12 @@ export default function TradePage() {
       if (res.ok) {
         setTxStatus("Buy transaction sent!");
         toast.success(
-          `Buy order successful! Bought ${data.amount} ${pair.pairLabel}`,
+          `Buy order successful! Bought ${data.amount} ${token.symbol}`,
         );
         setTradeHistory((prev) => [
           ...prev,
           {
-            pair: pair,
+            pair: token,
             amount: data.amount,
             hash: data.hash,
             time: new Date().toLocaleTimeString(),
@@ -179,7 +173,7 @@ export default function TradePage() {
           Authorization: `Bearer ${user.bearerToken}`,
         },
         body: JSON.stringify({
-          tokenAddress: pair.baseToken,
+          tokenAddress: token.tokenAddress,
           percentageToSell: parseFloat(sellPercentage),
         }),
       });
@@ -190,7 +184,7 @@ export default function TradePage() {
         setTradeHistory((prev) => [
           ...prev,
           {
-            pair: pair,
+            pair: token,
             amount: `${sellPercentage}%`,
             hash: data.hash,
             time: new Date().toLocaleTimeString(),
@@ -231,7 +225,7 @@ export default function TradePage() {
   return (
     <>
       <Head>
-        <title>{pair?.pairLabel} | Trade</title>
+        <title>{token?.name} | Trade</title>
       </Head>
       <Toaster position="top-right" />
       <div className="h-screen w-screen overflow-hidden bg-neutral-950 text-neutral-100">
@@ -244,17 +238,17 @@ export default function TradePage() {
             {/* Token Info Header */}
             <div className="mb-2 flex items-center gap-4">
               <img
-                src={pair?.pair[0].tokenLogo}
-                alt={pair?.pairLabel}
+                src={token.logo}
+                alt={token.name}
                 width={48}
                 height={48}
                 className="rounded"
               />
               <div>
                 <div className="flex items-center gap-2 text-xl font-bold text-white">
-                  {pair?.pairLabel}
+                  {token.name}
                 </div>
-                <div className="text-xs text-neutral-400">{pair?.liquidityUsd}</div>
+                <div className="text-xs text-neutral-400">{token.symbol}</div>
                 <div className="mt-1 flex gap-2 text-xs text-neutral-400">
                   <FaUser />
                   <FaGlobe />
@@ -265,21 +259,21 @@ export default function TradePage() {
                 <div>
                   <div className="text-xs text-neutral-400">Price</div>
                   <div className="text-lg font-semibold">
-                    {formatUSD(pair?.usdPrice ?? priceProp)}
+                    ${token.priceUsd}
                   </div>
                 </div>
                 <div>
                   <div className="text-xs text-neutral-400">Liquidity</div>
-                  <div className="text-lg font-semibold">{formatUSD(pair?.liquidityUsd ?? liquidityProp)}</div>
+                  <div className="text-lg font-semibold">{formatUSD(token.liquidity)}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-neutral-400">Volume (24h)</div>
-                  <div className="text-lg font-semibold">{formatUSD(pair?.volume24hrUsd ?? volumeProp)}</div>
+                  <div className="text-xs text-neutral-400">FDV</div>
+                  <div className="text-lg font-semibold">{formatUSD(token.fullyDilutedValuation)}</div>
                 </div>
               </div>
             </div>
             {/* Chart */}
-            <PriceChartWidget tokenAddress={pair?.baseToken} />
+            <PriceChartWidget tokenAddress={token.tokenAddress} />
             {/* Tabs (Positions, Trades, etc.) */}
             <div className="mt-2 flex gap-4 rounded-lg bg-neutral-900 p-2 text-xs">
               <button className="rounded bg-neutral-800 px-3 py-1 font-semibold text-white">
@@ -464,8 +458,8 @@ export default function TradePage() {
                 {txLoading
                   ? "Processing..."
                   : tradeMode === "buy"
-                  ? `BUY  ${tradeAmount || ""} ${pair?.pairLabel}`
-                  : `SELL  ${sellPercentage || ""}% ${pair?.pairLabel}`}
+                  ? `BUY  ${tradeAmount || ""} ${token?.symbol}`
+                  : `SELL  ${sellPercentage || ""}% ${token?.symbol}`}
               </button>
               {txStatus && (
                 <div className="mt-2 text-center text-xs text-emerald-400">
@@ -522,11 +516,11 @@ export default function TradePage() {
                   <td className="px-2 py-1">{trade.time}</td>
                   <td className="flex items-center gap-2 px-2 py-1">
                     <img
-                      src={trade.pair.pair[0].tokenLogo}
-                      alt={trade.pair.pairLabel}
+                      src={token.logo}
+                      alt={token.name}
                       className="h-5 w-5 rounded"
                     />
-                    {trade.pair.pairLabel}
+                    {token.name}
                   </td>
                   <td className="px-2 py-1">{trade.amount}</td>
                   <td className="max-w-[120px] truncate px-2 py-1">

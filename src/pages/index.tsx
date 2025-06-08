@@ -10,7 +10,7 @@ import { useUser } from "../components/UserContext";
 import Cookies from 'js-cookie';
 import QRCode from 'qrcode';
 import Header from "../components/Header";
-import type { DexPair } from "~/utils/moralis";
+import type { DexToken } from "~/utils/moralis";
 
 
 const navLinks = [
@@ -52,7 +52,7 @@ export default function Home() {
   const isDiscover = router.pathname === "/";
   const timeframes = ["1m", "5m", "30m", "1h"];
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
-  const [displayed, setDisplayed] = useState<DexPair[]>([]);
+  const [displayed, setDisplayed] = useState<DexToken[]>([]);
   const [loginOpen, setLoginOpen] = useState(false);
   const { user, loading: userLoading, refreshUser } = useUser();
 
@@ -65,9 +65,8 @@ export default function Home() {
     fetch('/api/tokens')
       .then(res => res.json())
       .then(data => {
-        console.log(data)
-        setDisplayed(data)
-  })
+        setDisplayed(data.result)
+      })
       .catch(console.error);
   }, []);
 
@@ -113,78 +112,51 @@ export default function Home() {
             <table className="min-w-full divide-y divide-neutral-800">
               <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Pair Info</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Market Cap</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Token</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Symbol</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Price (USD)</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Liquidity</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Volume</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">TXNS</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">FDV</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Bonding Curve %</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800">
-                {displayed.map((coin, i) => {
-                  const fakeTxns = Math.floor(Math.random() * 4000) + 1000;
-                  return (
-                    <tr
-                      className="hover:bg-neutral-800/60 transition cursor-pointer"
-                      key={coin.pairAddress}
-                      onClick={() => {
-                        router.push({
-                          pathname: `/trade/${coin.pairAddress}`,
-                          query: {
-                            price: coin.usdPrice,
-                            volume: coin.volume24hrUsd,
-                            liquidity: coin.liquidityUsd,
-                          },
-                        });
-                      }}
-                    >
-                      {/* Pair Info */}
-                      <td className="px-4 py-2 flex items-center gap-3 min-w-[220px]">
-                        <div className="w-10 h-10 rounded bg-neutral-800 flex items-center justify-center overflow-hidden">
-                          <img src={coin.pair[0].tokenLogo} alt={coin.pair[0].tokenName} width={60} height={60} />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-white leading-tight flex items-center gap-1 truncate">
-                            {coin.pairLabel}
-                          </span>
-                          <span className="text-xs text-neutral-400 truncate">{coin.pair[0].tokenName}</span>
-                          <div className="flex gap-2 mt-1 text-neutral-400 text-xs">
-                            <FaUser />
-                            <FaGlobe />
-                            <FaSearch />
-                          </div>
-                        </div>
-                      </td>
-                      {/* Market Cap */}
-                      <td className="px-4 py-2 align-middle">
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-white">{formatUSD(coin.liquidityUsd)}</span>
-                          <span className={`text-xs font-medium ${coin.usdPrice24hrPercentChange > 0 ? "text-emerald-400" : "text-red-400"}`}>{formatNumber(coin.volume24hrNative)}</span>
-                        </div>
-                      </td>
-                      {/* Liquidity */}
-                      <td className="px-4 py-2 text-neutral-300 align-middle">{formatUSD(coin.pair[0].liquidityUsd)}</td>
-                      {/* Volume */}
-                      <td className="px-4 py-2 text-neutral-300 align-middle">{formatUSD(coin.volume24hrUsd)}</td>
-                      {/* TXNS */}
-                      <td className="px-4 py-2 align-middle">
-                        <div className="flex flex-col items-start">
-                          <span className="font-semibold text-white">{fakeTxns}</span>
-                          <span className="text-xs">
-                            <span className="text-emerald-400">{Math.floor(fakeTxns * 0.6)}</span>
-                            <span className="text-neutral-400"> / </span>
-                            <span className="text-red-400">{Math.floor(fakeTxns * 0.4)}</span>
-                          </span>
-                        </div>
-                      </td>
-                      {/* Action */}
-                      <td className="px-4 py-2 align-middle">
-                        <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-md font-semibold transition">Buy</button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {displayed.map((token, i) => (
+                  <tr
+                    className="hover:bg-neutral-800/60 transition cursor-pointer"
+                    key={token.tokenAddress}
+                    onClick={() => {
+                      router.push(`/trade/${token.tokenAddress}`);
+                    }}
+                  >
+                    {/* Token */}
+                    <td className="px-4 py-2 flex items-center gap-3 min-w-[180px]">
+                      <div className="w-10 h-10 rounded bg-neutral-800 flex items-center justify-center overflow-hidden">
+                        <img src={token.logo} alt={token.name} width={60} height={60} />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-white leading-tight flex items-center gap-1 truncate">
+                          {token.name}
+                        </span>
+                      </div>
+                    </td>
+                    {/* Symbol */}
+                    <td className="px-4 py-2 text-neutral-300 align-middle">{token.symbol}</td>
+                    {/* Price (USD) */}
+                    <td className="px-4 py-2 text-neutral-300 align-middle">${token.priceUsd}</td>
+                    {/* Liquidity */}
+                    <td className="px-4 py-2 text-neutral-300 align-middle">{formatUSD(token.liquidity)}</td>
+                    {/* FDV */}
+                    <td className="px-4 py-2 text-neutral-300 align-middle">{formatUSD(token.fullyDilutedValuation)}</td>
+                    {/* Bonding Curve Progress */}
+                    <td className="px-4 py-2 text-neutral-300 align-middle">{formatNumber(token.bondingCurveProgress)}%</td>
+                    {/* Action */}
+                    <td className="px-4 py-2 align-middle">
+                      <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-md font-semibold transition">Buy</button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

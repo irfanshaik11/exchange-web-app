@@ -29,3 +29,22 @@ export interface DexPair {
 export interface DexPairsResponse {
   pairs: DexPair[];
 }
+
+
+export interface DexToken {
+  tokenAddress: string;
+  name: string;
+  symbol: string;
+  logo: string;
+  decimals: string;
+  priceNative: string;
+  priceUsd: string;
+  liquidity: string;
+  fullyDilutedValuation: string;
+  bondingCurveProgress: number;
+}
+
+export interface DexTokenResponse {
+  result: DexToken[];
+}
+
