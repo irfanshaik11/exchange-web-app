@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaStar, FaBell } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from 'js-cookie';
 import dynamic from "next/dynamic";
+import InterstateButton from './InterstateButton';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -26,12 +27,22 @@ const DepositModal = dynamic(() => import("./DepositModal"), {
   ssr: false, // NO SSR PLEASE 
 });
 
+const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
+  ssr: false,
+});
+
+const NotificationDropdown = dynamic(() => import("./NotificationDropdown"), {
+  ssr: false,
+});
+
 export default function Header({ search = "", setSearch, showSearch = true }: HeaderProps) {
   const router = useRouter();
   const isDiscover = router.pathname === "/";
   const { user, loading: userLoading } = useUser();
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
 
   // Handles opening the deposit modal
   const handleDepositClick = () => {
@@ -44,10 +55,10 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
 
   return (
     <>
-      <header className="w-full border-b border-neutral-800 bg-neutral-900/90 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-full flex items-center justify-between px-8 py-3">
-          <div className="flex items-center gap-10 min-w-0">
-            <span className="text-2xl font-extrabold tracking-tight text-white select-none flex items-center">
+      <header className="w-full border-b border-emerald-950 bg-neutral-950 backdrop-blur sticky top-0 z-20">
+        <div className="max-w-full flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-4 min-w-0">
+            <span className="text-2xl tracking-tight text-white select-none flex items-center">
               <img src="/logo.png" className="w-12 h-auto" />
               <span className="rounded-full inline-block mr-1" />
               Interstate
@@ -57,9 +68,9 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`px-1.5 py-0.5 font-medium transition-colors text-base ${
+                  className={`px-1.5 py-0.5 font-medium transition-colors text-sm ${
                     link.name === "Discover" && isDiscover
-                      ? "text-emerald-400 border-b-2 border-emerald-400"
+                      ? "text-emerald-400 border-emerald-400"
                       : "text-neutral-200 hover:text-emerald-400"
                   }`}
                 >
@@ -68,7 +79,7 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             {showSearch && (
               <div className="relative flex items-center">
                 <span className="absolute left-3 text-neutral-400">
@@ -79,29 +90,48 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                   placeholder="Search by token or CA..."
                   value={search}
                   onChange={e => setSearch && setSearch(e.target.value)}
-                  className="bg-neutral-800 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
+                  className="bg-neutral-950 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
                 />
               </div>
             )}
-            <button
+            <InterstateButton
               onClick={handleDepositClick}
-              className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none cursor-pointer"
+              variant="primary"
+              size="md"
+              className="ml-2"
             >
               Deposit
-            </button>
+            </InterstateButton>
+            <InterstateButton
+              onClick={() => setWatchlistOpen(true)}
+              variant="secondary"
+              size="sm"
+              icon={<FaStar className="text-neutral-400" />}
+              className="ml-2 h-8"
+              title="Watchlist"
+            />
+            <InterstateButton
+              onClick={() => setNotificationOpen(true)}
+              variant="secondary"
+              size="sm"
+              icon={<FaBell className="text-neutral-400" />}
+              className="ml-2 h-8"
+              title="Notifications"
+            />
             {user && !userLoading ? (
               <div className="relative group flex items-center gap-2 cursor-pointer">
                 {/* Circular profile picture (placeholder) */}
                 <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-lg select-none">
                   {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                 </div>
-                <span className="font-semibold text-white text-sm truncate max-w-[100px]">{user.name}</span>
+                <span className="font-semibold text-black text-sm truncate max-w-[100px]">{user.name}</span>
                 {/* Dropdown for logout */}
                 <div className="absolute right-0 top-10 bg-neutral-900 border border-neutral-800 rounded shadow-lg py-2 px-4 min-w-[120px] opacity-0 group-hover:opacity-100 transition-opacity z-50">
-                  <button
-                    className="text-red-400 text-xs font-semibold w-full text-left hover:underline"
+                  <InterstateButton
+                    variant="danger"
+                    size="sm"
+                    className="text-xs font-semibold w-full text-left hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto"
                     onClick={() => {
-                      // Remove token and reset user
                       if (typeof window !== 'undefined') {
                         document.cookie = 'token=; Max-Age=0; path=/;';
                       }
@@ -114,25 +144,28 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                     }}
                   >
                     Logout
-                  </button>
+                  </InterstateButton>
                 </div>
               </div>
             ) : !userLoading && (
-              <button
-                className="ml-2 px-5 py-1.5 rounded-full font-semibold bg-emerald-600 hover:bg-emerald-700 text-white text-base transition shadow focus:outline-none"
+              <InterstateButton
+                className="ml-2"
+                variant="primary"
+                size="md"
                 onClick={() => {
-                  // Use a custom event or context to open login modal in parent
                   const event = new CustomEvent('open-login-modal');
                   window.dispatchEvent(event);
                 }}
               >
                 Login
-              </button>
+              </InterstateButton>
             )}
           </div>
         </div>
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
+      <WatchlistModal open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
+      <NotificationDropdown open={notificationOpen} onClose={() => setNotificationOpen(false)} />
     </>
   );
 } 

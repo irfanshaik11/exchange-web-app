@@ -8,7 +8,7 @@ interface TokenInfo {
   liquidityUsd: number;
 }
 
-interface DexPair {
+export interface DexPair {
   exchangeAddress: string;
   exchangeName: string;
   exchangeLogo: string;
@@ -26,6 +26,25 @@ interface DexPair {
   pair: TokenInfo[];
 }
 
-interface DexPairsResponse {
+export interface DexPairsResponse {
   pairs: DexPair[];
 }
+
+
+export interface DexToken {
+  tokenAddress: string;
+  name: string;
+  symbol: string;
+  logo: string;
+  decimals: string;
+  priceNative: string;
+  priceUsd: string;
+  liquidity: string;
+  fullyDilutedValuation: string;
+  bondingCurveProgress: number;
+}
+
+export interface DexTokenResponse {
+  result: DexToken[];
+}
+
