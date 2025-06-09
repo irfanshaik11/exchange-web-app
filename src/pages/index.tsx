@@ -10,7 +10,7 @@ import { useUser } from "../components/UserContext";
 import Cookies from 'js-cookie';
 import QRCode from 'qrcode';
 import Header from "../components/Header";
-import type { DexToken } from "~/utils/moralis";
+import type { DexToken, DexTokenResponse } from "~/utils/moralis";
 import InterstateButton from "../components/InterstateButton";
 import InterstateTable from "../components/InterstateTable";
 
@@ -51,38 +51,47 @@ function formatNumber(value: number | string | undefined) {
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [filteredTokens, setFilteredTokens] = useState<MemeCoin[]>(memecoins);
-  useEffect(() => {
-  const results = memecoins.filter(token =>
-    token.name?.toLowerCase().includes(search.toLowerCase()) ||
-    token.symbol?.toLowerCase().includes(search.toLowerCase())
-  );
-  setFilteredTokens(results);
-}, [search]);
+  const [allTokens, setAllTokens] = useState<DexToken[]>([]);
+  const [filteredTokens, setFilteredTokens] = useState<DexToken[]>([]);
+  const [displayed, setDisplayed] = useState<DexToken[]>([]);
   const isDiscover = router.pathname === "/";
   const timeframes = ["1m", "5m", "30m", "1h"];
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
-  const [displayed, setDisplayed] = useState<MemeCoin[]>(memecoins.slice(0, 10));
-  useEffect(() => {
-    setDisplayed(filteredTokens.slice(0, 10));
-  }, [filteredTokens]);
   const [loginOpen, setLoginOpen] = useState(false);
   const { user, loading: userLoading, refreshUser } = useUser();
   const [selectedTab, setSelectedTab] = useState<'dex' | 'trending'>('trending');
+
+  // Fetch tokens from API on mount
+  useEffect(() => {
+    fetch('/api/tokens')
+      .then(res => res.json())
+      .then((data: DexTokenResponse) => {
+        setAllTokens(data.result);
+        setFilteredTokens(data.result);
+        setDisplayed(data.result.slice(0, 10));
+      })
+      .catch(console.error);
+  }, []);
+
+  // Filter tokens when search changes
+  useEffect(() => {
+    if (!search) {
+      setFilteredTokens(allTokens);
+      setDisplayed(allTokens.slice(0, 10));
+      return;
+    }
+    const results = allTokens.filter(token =>
+      token.name?.toLowerCase().includes(search.toLowerCase()) ||
+      token.symbol?.toLowerCase().includes(search.toLowerCase())
+    );
+    setFilteredTokens(results);
+    setDisplayed(results.slice(0, 10));
+  }, [search, allTokens]);
 
   const handleTimeframeClick = (tf: string) => {
     setSelectedTimeframe(tf);
     // Optionally, refetch or shuffle if needed, but for now just keep the same data
   };
-
-  useEffect(() => {
-    fetch('/api/tokens')
-      .then(res => res.json())
-      .then(data => {
-        setDisplayed(data.result)
-      })
-      .catch(console.error);
-  }, []);
 
   useEffect(() => {
     const handler = () => setLoginOpen(true);
