@@ -14,6 +14,44 @@ import {
 } from "react-icons/fa";
 import { FiCopy } from "react-icons/fi";
 
+function formatSmartNumber(val: string | number): string {
+  let num = typeof val === "string" ? Number(val) : val;
+  if (isNaN(num)) return "-";
+  const absNum = Math.abs(num);
+
+  // Large number formatting
+  if (absNum >= 1e12) {
+    return (num / 1e12).toFixed(2).replace(/\.00$/, "") + "T";
+  } else if (absNum >= 1e9) {
+    return (num / 1e9).toFixed(2).replace(/\.00$/, "") + "B";
+  } else if (absNum >= 1e6) {
+    return (num / 1e6).toFixed(2).replace(/\.00$/, "") + "M";
+  } else if (absNum >= 1e3) {
+    return (num / 1e3).toFixed(2).replace(/\.00$/, "") + "k";
+  }
+
+  // For numbers >= 0.01, show two decimals
+  if (absNum >= 0.01) {
+    return num.toFixed(2);
+  }
+
+  // For very small numbers, show up to the first two significant digits after the decimal
+  const str = absNum.toString();
+  const match = str.match(/^0\.0*(\d{1,2})/);
+  if (match) {
+    // Find where the first non-zero digit is
+    const firstNonZero = str.match(/^0\.0*([1-9]\d?)/);
+    if (firstNonZero) {
+      // Return up to and including the next digit if available
+      const idx = str.indexOf(firstNonZero[1]) + firstNonZero[1].length;
+      return num < 0 ? "-" + str.slice(0, idx) : str.slice(0, idx);
+    }
+  }
+  // fallback
+  return num.toString();
+}
+
+
 interface TradeHeaderProps {
   token: DexToken;
   mockData: {
@@ -31,7 +69,7 @@ const HeaderColumnSection = ({
   value,
 }: {
   label: string;
-  value: number | string;
+  value: React.ReactNode;
 }) => {
   return (
     <div className="flex min-w-[90px] flex-col items-start gap-1">
@@ -45,7 +83,7 @@ const HeaderColumnSection = ({
 
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token, mockData }) => {
   return (
-    <div className="mb-2 flex w-full items-center justify-between rounded-lg bg-neutral-900 px-3 py-1.5">
+    <div className="mb-2 flex w-full items-center justify-between rounded-lg px-3 py-1.5">
       {/* Left: Logo, Symbol, Name, Clipboard, Age */}
       <div className="flex min-w-0 items-center gap-3">
         {/* Logo */}
@@ -90,30 +128,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, mockData }) => {
           </span>
         </div>
         {/* Price */}
-        <HeaderColumnSection label={'Price'} value={`$${token.priceUsd}`} />
-        <HeaderColumnSection label={'Liquidity'} value={`$${Number(token.liquidity).toLocaleString(undefined, {maximumFractionDigits: 2,})}`} />
-        {/* Supply */}
-        <div className="flex min-w-[70px] flex-col items-start">
-          <span className="text-xs leading-none text-neutral-400">Supply</span>
-          <span className="text-base leading-tight font-semibold text-white">
-            {mockData.supply}
-          </span>
-        </div>
-        {/* Global Fees Paid + Crown */}
-        <div className="flex min-w-[120px] flex-col items-start">
-          <span className="text-xs leading-none text-neutral-400">
-            Global Fees Paid
-          </span>
-          <span className="flex items-center gap-2 text-base leading-tight font-semibold text-blue-300">
-            <span className="font-bold text-blue-300">
-              Ξ {mockData.globalFees}
-            </span>
-            <FaCrown className="ml-1 text-[15px] text-yellow-400" />
-            <span className="ml-0.5 text-sm text-white">
-              {mockData.crownCount || 1}
-            </span>
-          </span>
-        </div>
+        <HeaderColumnSection label={'Price'} value={`$${formatSmartNumber(token.priceUsd)}`} />
+        <HeaderColumnSection label={'Liquidity'} value={`$${formatSmartNumber(token.liquidity)}`} />
+        <HeaderColumnSection label={'Supply'} value={mockData.supply} />
+        <HeaderColumnSection label={'Global Fees Paid'} value={<span className="flex items-center gap-2 text-blue-300"><span className="font-bold">Ξ {mockData.globalFees}</span><FaCrown className="ml-1 text-[15px] text-yellow-400" /><span className="ml-0.5 text-sm text-white">{mockData.crownCount || 1}</span></span>} />
       </div>
       {/* Right: Action Icons */}
       <div className="flex items-center gap-4 pr-1 text-lg text-neutral-300">
