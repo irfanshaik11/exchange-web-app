@@ -16,6 +16,7 @@ interface UserContextType {
   loading: boolean;
   refreshUser: () => Promise<void>;
   setUser: (user: UserInfo | null) => void;
+  logout: () => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -55,13 +56,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const logout = () => {
+    Cookies.remove('token');
+    setUser(null);
+  };
+
   useEffect(() => {
     refreshUser();
     // Optionally, listen for cookie changes
   }, []);
 
   return (
-    <UserContext.Provider value={{ user, loading, refreshUser, setUser }}>
+    <UserContext.Provider value={{ user, loading, refreshUser, setUser, logout }}>
       {children}
     </UserContext.Provider>
   );
