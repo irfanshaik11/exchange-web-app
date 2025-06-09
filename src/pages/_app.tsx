@@ -7,6 +7,7 @@ import { WagmiProvider } from "wagmi";
 import { mainnet } from "wagmi/chains";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { UserProvider } from "../components/UserContext";
+import { Toaster } from 'react-hot-toast';
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
@@ -33,6 +34,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
           </RainbowKitProvider>
         </QueryClientProvider>
       </WagmiProvider>
+      <Toaster position="top-right" />
     </div>
   );
 };

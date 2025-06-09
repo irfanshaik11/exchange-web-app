@@ -13,6 +13,7 @@ import Header from "../components/Header";
 import type { DexToken, DexTokenResponse } from "~/utils/moralis";
 import InterstateButton from "../components/InterstateButton";
 import InterstateTable from "../components/InterstateTable";
+import toast from "react-hot-toast";
 
 
 const navLinks = [
@@ -99,6 +100,36 @@ export default function Home() {
     return () => window.removeEventListener('open-login-modal', handler);
   }, []);
 
+  // QUICK BUY handler
+  async function handleQuickBuy(token: DexToken) {
+    if (!user) {
+      setLoginOpen(true);
+      return;
+    }
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || ''}/api/trade/buy`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.bearerToken}`,
+        },
+        body: JSON.stringify({
+          tokenAddress: token.tokenAddress,
+          amount: 0.05,
+          mevProtection: 0,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Quick Buy successful! Bought ${data.amount} ${token.symbol}`);
+      } else {
+        toast.error(data?.error || "Quick Buy failed");
+      }
+    } catch (e) {
+      toast.error("Quick Buy failed");
+    }
+  }
+
   return (
     <>
       <Head>
@@ -141,7 +172,7 @@ export default function Home() {
         </div>
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 pb-10">
-          <InterstateTable rows={displayed.map((token, i) => ({ token, i }))} />
+          <InterstateTable rows={displayed.map((token, i) => ({ token, i }))} onQuickBuy={handleQuickBuy} />
         </main>
         <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       </div>

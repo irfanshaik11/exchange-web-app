@@ -19,9 +19,10 @@ export interface InterstateTableRow {
 
 interface InterstateTableProps {
   rows: InterstateTableRow[];
+  onQuickBuy?: (token: DexToken) => void;
 }
 
-export default function InterstateTable({ rows }: InterstateTableProps) {
+export default function InterstateTable({ rows, onQuickBuy }: InterstateTableProps) {
   const router = useRouter();
   return (
     <div className="overflow-x-auto border border-neutral-800 bg-neutral-900/80 shadow-lg">
@@ -163,9 +164,13 @@ export default function InterstateTable({ rows }: InterstateTableProps) {
                     variant="primary"
                     size="sm"
                     className="!px-4 !py-1 text-xs"
-                    onClick={(e) => {
+                    onClick={e => {
                       e.stopPropagation();
-                      router.push(`/trade/${token.tokenAddress}`);
+                      if (onQuickBuy) {
+                        onQuickBuy(token);
+                      } else {
+                        router.push(`/trade/${token.tokenAddress}`);
+                      }
                     }}
                   >
                     Buy 0.05 SOL
