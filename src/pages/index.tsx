@@ -36,10 +36,21 @@ function shuffleArray<T extends NonNullable<unknown>>(array: T[]): T[] {
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [filteredTokens, setFilteredTokens] = useState<MemeCoin[]>(memecoins);
+  useEffect(() => {
+  const results = memecoins.filter(token =>
+    token.name?.toLowerCase().includes(search.toLowerCase()) ||
+    token.symbol?.toLowerCase().includes(search.toLowerCase())
+  );
+  setFilteredTokens(results);
+}, [search]);
   const isDiscover = router.pathname === "/";
   const timeframes = ["1m", "5m", "30m", "1h"];
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
-  const [displayed, setDisplayed] = useState(() => memecoins.slice(0, 10));
+  const [displayed, setDisplayed] = useState<MemeCoin[]>(memecoins.slice(0, 10));
+  useEffect(() => {
+    setDisplayed(filteredTokens.slice(0, 10));
+  }, [filteredTokens]);
   const [loginOpen, setLoginOpen] = useState(false);
   const { user, loading: userLoading } = useUser();
 
