@@ -11,6 +11,7 @@ import Cookies from 'js-cookie';
 import QRCode from 'qrcode';
 import Header from "../components/Header";
 import type { DexToken } from "~/utils/moralis";
+import InterstateButton from "../components/InterstateButton";
 
 
 const navLinks = [
@@ -111,14 +112,14 @@ export default function Home() {
           <div className="bg-neutral-900/80 rounded-xl shadow-lg overflow-x-auto border border-neutral-800">
             <table className="min-w-full divide-y divide-neutral-800">
               <thead>
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Token</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Symbol</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Price (USD)</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Liquidity</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">FDV</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Bonding Curve %</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-400">Action</th>
+                <tr className="bg-neutral-800/80">
+                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Pair Info</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Market Cap</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Liquidity</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Volume</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200 flex items-center gap-1">TXNS <span className="text-[10px]">↓</span></th>
+                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Audit Log</th>
+                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800">
@@ -126,34 +127,72 @@ export default function Home() {
                   <tr
                     className="hover:bg-neutral-800/60 transition cursor-pointer"
                     key={token.tokenAddress}
-                    onClick={() => {
-                      router.push(`/trade/${token.tokenAddress}`);
-                    }}
                   >
-                    {/* Token */}
-                    <td className="px-4 py-2 flex items-center gap-3 min-w-[180px]">
-                      <div className="w-10 h-10 rounded bg-neutral-800 flex items-center justify-center overflow-hidden">
-                        <img src={token.logo} alt={token.name} width={60} height={60} />
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-bold text-white leading-tight flex items-center gap-1 truncate">
-                          {token.name}
-                        </span>
+                    {/* Pair Info */}
+                    <td className="px-3 py-2 min-w-[200px] align-middle">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center overflow-hidden border border-yellow-400">
+                          <img src={token.logo} alt={token.name} width={32} height={32} className="object-cover w-8 h-8" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-1">
+                            <span className="font-bold text-white text-xs leading-tight truncate">{token.name}</span>
+                            <span className="text-neutral-400 text-[11px] font-medium truncate">Father Of Fartcoin</span>
+                            <FaCopy className="ml-1 text-neutral-500 text-xs cursor-pointer" />
+                          </div>
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-emerald-400 text-[11px] font-semibold">{[56,26,31,14][i%4]}m</span>
+                            <FaUser className="text-sky-400 text-xs" />
+                            <FaGlobe className="text-sky-400 text-xs" />
+                            <FaSearch className="text-sky-400 text-xs" />
+                            {i === 1 && <span className="text-red-600"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186c-.197-.74-.777-1.32-1.517-1.517C20.34 4.333 12 4.333 12 4.333s-8.34 0-9.981.336c-.74.197-1.32.777-1.517 1.517C.166 7.827.166 12 .166 12s0 4.173.336 5.814c.197.74.777 1.32 1.517 1.517C3.66 19.667 12 19.667 12 19.667s8.34 0 9.981-.336c.74-.197 1.32-.777 1.517-1.517.336-1.641.336-5.814.336-5.814s0-4.173-.336-5.814zM9.797 15.568V8.432l6.568 3.568-6.568 3.568z"/></svg></span>}
+                          </div>
+                        </div>
                       </div>
                     </td>
-                    {/* Symbol */}
-                    <td className="px-4 py-2 text-neutral-300 align-middle">{token.symbol}</td>
-                    {/* Price (USD) */}
-                    <td className="px-4 py-2 text-neutral-300 align-middle">${token.priceUsd}</td>
+                    {/* Market Cap */}
+                    <td className="px-3 py-2 align-middle">
+                      <div className="text-neutral-100 text-xs">{formatUSD([397000,189000,36000,4010][i%4])}</div>
+                      <div className={`text-[11px] font-semibold mt-0.5 ${i === 3 ? 'text-red-400' : 'text-emerald-400'}`}>{['+18.43%','+103.5%','+35.71%','-96.2%'][i%4]}</div>
+                    </td>
                     {/* Liquidity */}
-                    <td className="px-4 py-2 text-neutral-300 align-middle">{formatUSD(token.liquidity)}</td>
-                    {/* FDV */}
-                    <td className="px-4 py-2 text-neutral-300 align-middle">{formatUSD(token.fullyDilutedValuation)}</td>
-                    {/* Bonding Curve Progress */}
-                    <td className="px-4 py-2 text-neutral-300 align-middle">{formatNumber(token.bondingCurveProgress)}%</td>
+                    <td className="px-3 py-2 align-middle">
+                      <div className="text-neutral-100 text-xs">{formatUSD([72700,47500,43900,6890][i%4])}</div>
+                    </td>
+                    {/* Volume */}
+                    <td className="px-3 py-2 align-middle">
+                      <div className="text-neutral-100 text-xs">{formatUSD([168000,117000,136000,147000][i%4])}</div>
+                    </td>
+                    {/* TXNS */}
+                    <td className="px-3 py-2 align-middle">
+                      <div className="text-neutral-100 text-xs">{[1550,1500,1390,1380][i%4]/1000}K</div>
+                      <div className="text-[11px] font-semibold mt-0.5">
+                        <span className="text-emerald-400">{[804,736,829,507][i%4]}</span>
+                        <span className="text-neutral-400"> / </span>
+                        <span className="text-red-400">{[751,764,563,875][i%4]}</span>
+                      </div>
+                    </td>
+                    {/* Audit Log */}
+                    <td className="px-3 py-2 align-middle">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-400 px-1.5 py-0.5 rounded"><FaUser className="text-red-400 text-xs" /> {['18.27%','21.67%','17.77%','6.9%'][i%4]}</span>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400  px-1.5 py-0.5 rounded"><FaCheckCircle className="text-emerald-400 text-xs" /> {['100%','100%','???','100%'][i%4]}</span>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-300 px-1.5 py-0.5 rounded"><FaQuestionCircle className="text-sky-300 text-xs" /> Off</span>
+                      </div>
+                    </td>
                     {/* Action */}
-                    <td className="px-4 py-2 align-middle">
-                      <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-md font-semibold transition">Buy</button>
+                    <td className="px-3 py-2 align-middle">
+                      <InterstateButton
+                        variant="primary"
+                        size="sm"
+                        className="!px-4 !py-1 text-xs"
+                        onClick={e => {
+                          e.stopPropagation();
+                          router.push(`/trade/${token.tokenAddress}`);
+                        }}
+                      >
+                        Buy 0.05 SOL
+                      </InterstateButton>
                     </td>
                   </tr>
                 ))}
