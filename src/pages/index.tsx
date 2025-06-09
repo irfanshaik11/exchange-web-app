@@ -109,17 +109,17 @@ export default function Home() {
         </div>
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 pb-10">
-          <div className="bg-neutral-900/80 rounded-xl shadow-lg overflow-x-auto border border-neutral-800">
+          <div className="bg-neutral-900/80 shadow-lg overflow-x-auto border border-neutral-800">
             <table className="min-w-full divide-y divide-neutral-800">
               <thead>
                 <tr className="bg-neutral-800/80">
-                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Pair Info</th>
-                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Market Cap</th>
-                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Liquidity</th>
-                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Volume</th>
-                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200 flex items-center gap-1">TXNS <span className="text-[10px]">↓</span></th>
-                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Audit Log</th>
-                  <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Action</th>
+                  <th className="px-3 py-4 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Pair Info</th>
+                  <th className="px-3 py-4 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Market Cap</th>
+                  <th className="px-3 py-4 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Liquidity</th>
+                  <th className="px-3 py-4 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Volume</th>
+                  <th className="px-3 py-4 text-left text-xs font-bold tracking-wide uppercase text-neutral-200 flex items-center gap-1">TXNS <span className="text-[10px]">↓</span></th>
+                  <th className="px-3 py-4 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Audit Log</th>
+                  <th className="px-3 py-4 text-left text-xs font-bold tracking-wide uppercase text-neutral-200">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800">
@@ -129,7 +129,7 @@ export default function Home() {
                     key={token.tokenAddress}
                   >
                     {/* Pair Info */}
-                    <td className="px-3 py-2 min-w-[200px] align-middle">
+                    <td className="px-3 py-2 w-auto align-middle">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center overflow-hidden border border-yellow-400">
                           <img src={token.logo} alt={token.name} width={32} height={32} className="object-cover w-8 h-8" />
