@@ -125,7 +125,7 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                 <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-lg select-none">
                   {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                 </div>
-                <span className="font-semibold text-black text-sm truncate max-w-[100px]">{user.name}</span>
+                <span className="text-white text-sm truncate max-w-[100px]">{user.name}</span>
                 {/* Dropdown for logout */}
                 <div className="absolute right-0 top-10 bg-neutral-900 border border-neutral-800 rounded shadow-lg py-2 px-4 min-w-[120px] opacity-0 group-hover:opacity-100 transition-opacity z-50">
                   <InterstateButton

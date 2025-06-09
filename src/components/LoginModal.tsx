@@ -137,10 +137,14 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
       return;
     }
     try {
+      // Ensure connection
+      if (!provider.isConnected) {
+        await provider.connect();
+      }
       const message = `Login to Interstate with nonce: ${Date.now()}`;
       const encodedMessage = new TextEncoder().encode(message);
-      const signed = await provider.signMessage(encodedMessage, 'utf8');
-      const publicKey = signed.publicKey.toString();
+      const signed = await provider.signMessage(encodedMessage);
+      const publicKey = signed.publicKey.toBase58 ? signed.publicKey.toBase58() : signed.publicKey.toString();
       const signature = bs58.encode(signed.signature);
       const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/users/phantom/login`, {
         method: 'POST',
@@ -160,8 +164,12 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
       } else {
         setError(data.message || 'Phantom login failed');
       }
-    } catch (error) {
-      setError('Phantom login failed');
+    } catch (error: any) {
+      if (error && error.code === 4001) {
+        setError('You must approve the request in Phantom.');
+      } else {
+        setError(error?.message || 'Phantom login failed');
+      }
     } finally {
       setLoading(false);
     }
