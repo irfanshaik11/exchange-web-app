@@ -12,6 +12,7 @@ import {
   FaStar,
   FaRegSquare,
 } from "react-icons/fa";
+import { FiCopy } from "react-icons/fi";
 
 interface TradeHeaderProps {
   token: DexToken;
@@ -25,89 +26,102 @@ interface TradeHeaderProps {
   };
 }
 
+const HeaderColumnSection = ({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string;
+}) => {
+  return (
+    <div className="flex min-w-[90px] flex-col items-start gap-1">
+      <span className="text-xs leading-none text-neutral-400">{label}</span>
+      <span className="mt-0.5 text-sm leading-none text-white">
+        {value} 
+      </span>
+    </div>
+  );
+};
+
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token, mockData }) => {
   return (
-    <div className="flex w-full items-center justify-between rounded-lg px-2 py-2">
-      {/* Left: Logo and Info */}
+    <div className="mb-2 flex w-full items-center justify-between rounded-lg bg-neutral-900 px-3 py-1.5">
+      {/* Left: Logo, Symbol, Name, Clipboard, Age */}
       <div className="flex min-w-0 items-center gap-3">
         {/* Logo */}
         <img
           src={token.logo}
           alt={token.name}
-          width={40}
-          height={40}
-          className="min-h-[40px] min-w-[40px]"
+          width={36}
+          height={36}
+          className="min-h-[36px] min-w-[36px] rounded border border-neutral-800"
         />
-        {/* Symbol, Name, Age */}
+        {/* Symbol, Name, Clipboard, Age */}
         <div className="flex min-w-0 flex-col">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-base font-bold text-white">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-base leading-none font-bold text-white">
               {token.symbol}
             </span>
-            <span className="truncate text-sm text-neutral-400">
+            <span className="truncate text-sm leading-none text-neutral-400">
               {token.name}
             </span>
-            {/* Age with gold circle and clock */}
+            <FiCopy className="ml-1 cursor-pointer text-xs text-neutral-400" />
           </div>
-          {/* Icons row: website, holders, search */}
-          <div className="mt-1 flex items-center gap-3 text-sm text-blue-300">
-            <span className="ml-2 flex items-center text-xs">
+          <div className="mt-1 flex items-center gap-2">
+            {/* Age with gold circle and clock */}
+            <span className="flex items-center text-xs font-semibold">
               <span className="text-green-300">{mockData.age}</span>
             </span>
-            <FaGlobe className="cursor-pointer hover:text-blue-400" />
-            <FaUser className="cursor-pointer hover:text-blue-400" />
-            <FaSearch className="cursor-pointer hover:text-blue-400" />
+            {/* Website, Holders, Search icons */}
+            <FaGlobe className="cursor-pointer text-[15px] text-blue-300 hover:text-blue-400" />
+            <FaUser className="cursor-pointer text-[15px] text-blue-300 hover:text-blue-400" />
+            <FaSearch className="cursor-pointer text-[15px] text-blue-300 hover:text-blue-400" />
           </div>
         </div>
       </div>
       {/* Center: Price, Liquidity, Supply, Global Fees Paid */}
-      <div className="flex flex-1 items-center justify-center gap-8">
-        {/* Price (large) */}
-        <div className="flex flex-col items-start">
-          <span className="text-xs text-neutral-400">Price</span>
-          <span className="text-2xl font-bold text-white">
+      <div className="flex flex-1 items-center justify-center gap-10">
+        <div>
+          <span className="text-base leading-tight font-medium text-white">
             $
-            {Number(token.priceUsd).toLocaleString(undefined, {
-              maximumFractionDigits: 2,
+            {Number(token.fullyDilutedValuation).toLocaleString(undefined, {
+              maximumFractionDigits: 8,
             })}
-            K
           </span>
         </div>
-        {/* Liquidity */}
-        <div className="flex flex-col items-start">
-          <span className="text-xs text-neutral-400">Liquidity</span>
-          <span className="text-base font-semibold text-white">
-            $
-            {Number(token.liquidity).toLocaleString(undefined, {
-              maximumFractionDigits: 2,
-            })}
-            K
-          </span>
-        </div>
+        {/* Price */}
+        <HeaderColumnSection label={'Price'} value={`$${token.priceUsd}`} />
+        <HeaderColumnSection label={'Liquidity'} value={`$${Number(token.liquidity).toLocaleString(undefined, {maximumFractionDigits: 2,})}`} />
         {/* Supply */}
-        <div className="flex flex-col items-start">
-          <span className="text-xs text-neutral-400">Supply</span>
-          <span className="text-base font-semibold text-white">
+        <div className="flex min-w-[70px] flex-col items-start">
+          <span className="text-xs leading-none text-neutral-400">Supply</span>
+          <span className="text-base leading-tight font-semibold text-white">
             {mockData.supply}
           </span>
         </div>
         {/* Global Fees Paid + Crown */}
-        <div className="flex flex-col items-start">
-          <span className="text-xs text-neutral-400">Global Fees Paid</span>
-          <span className="flex items-center gap-1 text-base font-semibold text-blue-300">
-            <span className="text-blue-300">Ξ {mockData.globalFees}</span>
-            <FaCrown className="ml-2 text-yellow-400" />
-            <span className="ml-1 text-white">{mockData.crownCount || 1}</span>
+        <div className="flex min-w-[120px] flex-col items-start">
+          <span className="text-xs leading-none text-neutral-400">
+            Global Fees Paid
+          </span>
+          <span className="flex items-center gap-2 text-base leading-tight font-semibold text-blue-300">
+            <span className="font-bold text-blue-300">
+              Ξ {mockData.globalFees}
+            </span>
+            <FaCrown className="ml-1 text-[15px] text-yellow-400" />
+            <span className="ml-0.5 text-sm text-white">
+              {mockData.crownCount || 1}
+            </span>
           </span>
         </div>
       </div>
       {/* Right: Action Icons */}
-      <div className="flex items-center gap-4 text-lg text-neutral-300">
-        <FaFilter className="cursor-pointer hover:text-white" />
-        <FaShareAlt className="cursor-pointer hover:text-white" />
-        <FaEye className="cursor-pointer hover:text-white" />
-        <FaStar className="cursor-pointer hover:text-white" />
-        <FaRegSquare className="cursor-pointer hover:text-white" />
+      <div className="flex items-center gap-4 pr-1 text-lg text-neutral-300">
+        <FaFilter className="cursor-pointer text-[17px] hover:text-white" />
+        <FaShareAlt className="cursor-pointer text-[17px] hover:text-white" />
+        <FaEye className="cursor-pointer text-[17px] hover:text-white" />
+        <FaStar className="cursor-pointer text-[17px] hover:text-white" />
+        <FaRegSquare className="cursor-pointer text-[17px] hover:text-white" />
       </div>
     </div>
   );
