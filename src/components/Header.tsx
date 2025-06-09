@@ -6,6 +6,7 @@ import { useUser } from "./UserContext";
 import Cookies from 'js-cookie';
 import dynamic from "next/dynamic";
 import InterstateButton from './InterstateButton';
+import { FiBarChart, FiStar } from "react-icons/fi";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -56,7 +57,7 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
   return (
     <>
       <header className="w-full border-b border-emerald-950 bg-neutral-950 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-full flex items-center justify-between px-4 py-3">
+        <div className="max-w-full  border-b border-emerald-950 flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-4 min-w-0">
             <span className="text-2xl tracking-tight text-white select-none flex items-center">
               <img src="/logo.png" className="w-12 h-auto" />
@@ -161,6 +162,15 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
               </InterstateButton>
             )}
           </div>
+        </div>
+        <div className="flex items-center px-4 gap-1 py-1">
+          <button onClick={() => setWatchlistOpen(true)} className="p-1 hover:bg-emerald-950/90 hover:brightness-110 duration-150 ease-in-out rounded cursor-pointer">
+            <FiStar />
+          </button>
+          <button className="p-1 hover:bg-emerald-950/90 hover:brightness-110 duration-150 ease-in-out rounded cursor-pointer">
+            <FiBarChart />
+          </button>
+          <div className="border-r border-emerald-950 h-5"> </div>
         </div>
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
