@@ -5,6 +5,7 @@ import { FaSearch, FaStar, FaBell } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from 'js-cookie';
 import dynamic from "next/dynamic";
+import InterstateButton from './InterstateButton';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -93,26 +94,30 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                 />
               </div>
             )}
-            <button
+            <InterstateButton
               onClick={handleDepositClick}
-              className="ml-2 px-4 py-1 rounded-full font-semibold bg-emerald-500 hover:bg-emerald-400 text-black text-base transition shadow focus:outline-none cursor-default"
+              variant="primary"
+              size="md"
+              className="ml-2"
             >
               Deposit
-            </button>
-            <button
+            </InterstateButton>
+            <InterstateButton
               onClick={() => setWatchlistOpen(true)}
-              className="ml-2 px-3 py-1 rounded-full font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-base transition flex items-center gap-2 border border-neutral-700 h-8"
+              variant="secondary"
+              size="sm"
+              icon={<FaStar className="text-neutral-400" />}
+              className="ml-2 h-8"
               title="Watchlist"
-            >
-              <FaStar className="text-neutral-400" />
-            </button>
-            <button
+            />
+            <InterstateButton
               onClick={() => setNotificationOpen(true)}
-              className="ml-2 px-3 py-1 rounded-full font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-base transition flex items-center gap-2 border border-neutral-700 h-8"
+              variant="secondary"
+              size="sm"
+              icon={<FaBell className="text-neutral-400" />}
+              className="ml-2 h-8"
               title="Notifications"
-            >
-              <FaBell className="text-neutral-400" />
-            </button>
+            />
             {user && !userLoading ? (
               <div className="relative group flex items-center gap-2 cursor-pointer">
                 {/* Circular profile picture (placeholder) */}
@@ -122,10 +127,11 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                 <span className="font-semibold text-black text-sm truncate max-w-[100px]">{user.name}</span>
                 {/* Dropdown for logout */}
                 <div className="absolute right-0 top-10 bg-neutral-900 border border-neutral-800 rounded shadow-lg py-2 px-4 min-w-[120px] opacity-0 group-hover:opacity-100 transition-opacity z-50">
-                  <button
-                    className="text-red-400 text-xs font-semibold w-full text-left hover:underline"
+                  <InterstateButton
+                    variant="danger"
+                    size="sm"
+                    className="text-xs font-semibold w-full text-left hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto"
                     onClick={() => {
-                      // Remove token and reset user
                       if (typeof window !== 'undefined') {
                         document.cookie = 'token=; Max-Age=0; path=/;';
                       }
@@ -138,20 +144,21 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                     }}
                   >
                     Logout
-                  </button>
+                  </InterstateButton>
                 </div>
               </div>
             ) : !userLoading && (
-              <button
-                className="ml-2 px-4 py-1 rounded-full font-semibold bg-emerald-500 hover:bg-emerald-400 text-black text-base transition shadow focus:outline-none"
+              <InterstateButton
+                className="ml-2"
+                variant="primary"
+                size="md"
                 onClick={() => {
-                  // Use a custom event or context to open login modal in parent
                   const event = new CustomEvent('open-login-modal');
                   window.dispatchEvent(event);
                 }}
               >
                 Login
-              </button>
+              </InterstateButton>
             )}
           </div>
         </div>
