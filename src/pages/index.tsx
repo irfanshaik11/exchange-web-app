@@ -10,7 +10,7 @@ import { useUser } from "../components/UserContext";
 import Cookies from 'js-cookie';
 import QRCode from 'qrcode';
 import Header from "../components/Header";
-import type { DexToken, DexTokenResponse } from "~/utils/moralis";
+import type { Token } from "~/utils/db";
 import InterstateButton from "../components/InterstateButton";
 import InterstateTable from "../components/InterstateTable";
 import toast from "react-hot-toast";
@@ -52,9 +52,11 @@ function formatNumber(value: number | string | undefined) {
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [allTokens, setAllTokens] = useState<DexToken[]>([]);
-  const [filteredTokens, setFilteredTokens] = useState<DexToken[]>([]);
-  const [displayed, setDisplayed] = useState<DexToken[]>([]);
+  const [allTokens, setAllTokens] = useState<Token[]>([]);
+  const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
+  const [displayed, setDisplayed] = useState<Token[]>([]);
+  const [loadingTokens, setLoadingTokens] = useState(true);
+  const [tokenError, setTokenError] = useState<string | null>(null);
   const isDiscover = router.pathname === "/";
   const timeframes = ["1m", "5m", "30m", "1h"];
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
@@ -64,27 +66,47 @@ export default function Home() {
 
   // Fetch tokens from API on mount
   useEffect(() => {
-    fetch('/api/tokens')
-      .then(res => res.json())
-      .then((data: DexTokenResponse) => {
-        setAllTokens(data.result);
-        setFilteredTokens(data.result);
-        setDisplayed(data.result.slice(0, 10));
+    setLoadingTokens(true);
+    setTokenError(null);
+    fetch('/api/getAllTokens')
+      .then(res => {
+        if (!res.ok) throw new Error("Failed to fetch tokens");
+        return res.json();
       })
-      .catch(console.error);
+      .then((data: { result: Token[] }) => {
+        console.log(data)
+        if (!data.result || !Array.isArray(data.result) || data.result.length === 0) {
+          setAllTokens([]);
+          setFilteredTokens([]);
+          setDisplayed([]);
+        } else {
+          setAllTokens(data.result);
+          setFilteredTokens(data.result);
+          setDisplayed(data.result.slice(0, 10));
+        }
+      })
+      .catch((err) => {
+        setTokenError("No tokens found or failed to load tokens.");
+        setAllTokens([]);
+        setFilteredTokens([]);
+        setDisplayed([]);
+      })
+      .finally(() => setLoadingTokens(false));
   }, []);
 
   // Filter tokens when search changes
   useEffect(() => {
     if (!search) {
       setFilteredTokens(allTokens);
-      setDisplayed(allTokens.slice(0, 10));
+      setDisplayed(Array.isArray(allTokens) ? allTokens.slice(0, 10) : []);
       return;
     }
-    const results = allTokens.filter(token =>
-      token.name?.toLowerCase().includes(search.toLowerCase()) ||
-      token.symbol?.toLowerCase().includes(search.toLowerCase())
-    );
+    const results = Array.isArray(allTokens)
+      ? allTokens.filter(token =>
+          token.name?.toLowerCase().includes(search.toLowerCase()) ||
+          token.label?.toLowerCase().includes(search.toLowerCase())
+        )
+      : [];
     setFilteredTokens(results);
     setDisplayed(results.slice(0, 10));
   }, [search, allTokens]);
@@ -101,7 +123,7 @@ export default function Home() {
   }, []);
 
   // QUICK BUY handler
-  async function handleQuickBuy(token: DexToken) {
+  async function handleQuickBuy(token: Token) {
     if (!user) {
       setLoginOpen(true);
       return;
@@ -114,14 +136,14 @@ export default function Home() {
           Authorization: `Bearer ${user.bearerToken}`,
         },
         body: JSON.stringify({
-          tokenAddress: token.tokenAddress,
+          tokenAddress: token.token_address,
           amount: 0.05,
           mevProtection: 0,
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success(`Quick Buy successful! Bought ${data.amount} ${token.symbol}`);
+        toast.success(`Quick Buy successful! Bought ${data.amount} ${token.label}`);
       } else {
         toast.error(data?.error || "Quick Buy failed");
       }
@@ -172,7 +194,15 @@ export default function Home() {
         </div>
         {/* Main Content */}
         <main className="max-w-7xl mx-auto px-4 pb-10">
-          <InterstateTable rows={displayed.map((token, i) => ({ token, i }))} onQuickBuy={handleQuickBuy} />
+          {loadingTokens ? (
+            <div className="text-center text-neutral-400 py-10">Loading tokens...</div>
+          ) : tokenError ? (
+            <div className="text-center text-red-400 py-10">{tokenError}</div>
+          ) : displayed.length === 0 ? (
+            <div className="text-center text-neutral-400 py-10">No tokens found.</div>
+          ) : (
+            <InterstateTable rows={displayed.map((token, i) => ({ token, i }))} onQuickBuy={handleQuickBuy} />
+          )}
         </main>
         <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       </div>

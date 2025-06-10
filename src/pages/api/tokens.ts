@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 import { env } from '../../env';
-import type { DexToken } from '~/utils/moralis';
+import type { Token } from '~/utils/db';
 
 const pool = new Pool({
   connectionString: env.NEON_DB_API_KEY,
@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       LIMIT 100
     `);
 
-    const result: DexToken[] = rows.map((row: any) => ({
+    const result: Token[] = rows.map((row: any) => ({
       tokenAddress: row.token_address,
       name: row.name,
       symbol: row.symbol,

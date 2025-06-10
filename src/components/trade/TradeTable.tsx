@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DexToken } from '~/utils/moralis';
+import type { DexToken } from '~/utils/db';
 
 interface TradeTableProps {
   token: DexToken;

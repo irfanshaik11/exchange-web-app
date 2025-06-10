@@ -1,5 +1,5 @@
 import React from "react";
-import type { DexToken } from "~/utils/moralis";
+import type { Token } from "~/utils/db";
 import {
   FaGlobe,
   FaUser,
@@ -11,8 +11,11 @@ import {
   FaEye,
   FaStar,
   FaRegSquare,
+  FaRegStar,
+  FaExpand,
 } from "react-icons/fa";
-import { FiCopy } from "react-icons/fi";
+import { FiCopy, FiShare } from "react-icons/fi";
+import { IoShareSocialOutline } from "react-icons/io5";
 
 function formatSmartNumber(val: string | number): string {
   let num = typeof val === "string" ? Number(val) : val;
@@ -27,7 +30,7 @@ function formatSmartNumber(val: string | number): string {
   } else if (absNum >= 1e6) {
     return (num / 1e6).toFixed(2).replace(/\.00$/, "") + "M";
   } else if (absNum >= 1e3) {
-    return (num / 1e3).toFixed(2).replace(/\.00$/, "") + "k";
+    return (num / 1e3).toFixed(2).replace(/\.00$/, "") + "K";
   }
 
   // For numbers >= 0.01, show two decimals
@@ -51,9 +54,8 @@ function formatSmartNumber(val: string | number): string {
   return num.toString();
 }
 
-
 interface TradeHeaderProps {
-  token: DexToken;
+  token: Token;
   mockData: {
     supply: string;
     globalFees: string;
@@ -72,18 +74,41 @@ const HeaderColumnSection = ({
   value: React.ReactNode;
 }) => {
   return (
-    <div className="flex min-w-[90px] flex-col items-start gap-1">
+    <div className="flex flex-col items-start gap-1">
       <span className="text-xs leading-none text-neutral-400">{label}</span>
-      <span className="mt-0.5 text-sm leading-none text-white">
-        {value} 
-      </span>
+      <span className="mt-0.5 text-sm leading-none text-white">{value}</span>
     </div>
+  );
+};
+
+// Tooltip component
+const Tooltip: React.FC<{ label: string; children: React.ReactNode }> = ({
+  label,
+  children,
+}) => {
+  const [show, setShow] = React.useState(false);
+  return (
+    <span
+      className="relative flex items-center"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
+      tabIndex={0}
+    >
+      {children}
+      {show && (
+        <span className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded bg-neutral-900 px-2 py-1 text-xs whitespace-nowrap text-white shadow-lg">
+          {label}
+        </span>
+      )}
+    </span>
   );
 };
 
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token, mockData }) => {
   return (
-    <div className="mb-2 flex w-full items-center justify-between rounded-lg px-3 py-1.5">
+    <div className="mb-2 flex w-full items-center gap-6 rounded-lg px-3 py-1.5">
       {/* Left: Logo, Symbol, Name, Clipboard, Age */}
       <div className="flex min-w-0 items-center gap-3">
         {/* Logo */}
@@ -98,10 +123,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, mockData }) => {
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-base leading-none font-bold text-white">
-              {token.symbol}
+              {token.name}
             </span>
             <span className="truncate text-sm leading-none text-neutral-400">
-              {token.name}
+              {token.label}
             </span>
             <FiCopy className="ml-1 cursor-pointer text-xs text-neutral-400" />
           </div>
@@ -118,28 +143,43 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, mockData }) => {
         </div>
       </div>
       {/* Center: Price, Liquidity, Supply, Global Fees Paid */}
-      <div className="flex flex-1 items-center justify-center gap-10">
-        <div>
-          <span className="text-base leading-tight font-medium text-white">
-            $
-            {Number(token.fullyDilutedValuation).toLocaleString(undefined, {
-              maximumFractionDigits: 8,
-            })}
-          </span>
+      <div className="flex items-center justify-center gap-4">
+        <div className="text-base leading-tight font-medium text-white">
+          ${formatSmartNumber(token.market_cap_total).toLocaleString()}
         </div>
         {/* Price */}
-        <HeaderColumnSection label={'Price'} value={`$${formatSmartNumber(token.priceUsd)}`} />
-        <HeaderColumnSection label={'Liquidity'} value={`$${formatSmartNumber(token.liquidity)}`} />
-        <HeaderColumnSection label={'Supply'} value={mockData.supply} />
-        <HeaderColumnSection label={'Global Fees Paid'} value={<span className="flex items-center gap-2 text-blue-300"><span className="font-bold">Ξ {mockData.globalFees}</span><FaCrown className="ml-1 text-[15px] text-yellow-400" /><span className="ml-0.5 text-sm text-white">{mockData.crownCount || 1}</span></span>} />
+        <HeaderColumnSection
+          label={"Price"}
+          value={`$${formatSmartNumber(token.price_native)}`}
+        />
+        <HeaderColumnSection
+          label={"Liquidity"}
+          value={`$${formatSmartNumber(token.liquidity)}`}
+        />
+        <HeaderColumnSection
+          label={"Supply"}
+          value={formatSmartNumber(token.supply)}
+        />
+        <HeaderColumnSection
+          label={"Global Fees Paid"}
+          value={
+            <span className="flex items-center gap-2 text-blue-300">
+              <span className="font-bold">Ξ {token.global_fees_paid}</span>
+            </span>
+          }
+        />
       </div>
       {/* Right: Action Icons */}
-      <div className="flex items-center gap-4 pr-1 text-lg text-neutral-300">
-        <FaFilter className="cursor-pointer text-[17px] hover:text-white" />
-        <FaShareAlt className="cursor-pointer text-[17px] hover:text-white" />
-        <FaEye className="cursor-pointer text-[17px] hover:text-white" />
-        <FaStar className="cursor-pointer text-[17px] hover:text-white" />
-        <FaRegSquare className="cursor-pointer text-[17px] hover:text-white" />
+      <div className="mr-0 ml-auto flex items-center gap-4 pr-1 text-lg text-neutral-300">
+        <Tooltip label="Share token pair">
+          <IoShareSocialOutline className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />
+        </Tooltip>
+        <Tooltip label="Add token to Watchlist">
+          <FaRegStar className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />
+        </Tooltip>
+        <Tooltip label="Expand Chart">
+          <FaExpand className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />
+        </Tooltip>
       </div>
     </div>
   );

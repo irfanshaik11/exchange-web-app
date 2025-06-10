@@ -9,17 +9,17 @@ import {
 } from "react-icons/fa";
 import InterstateButton from "./InterstateButton";
 import { useRouter } from "next/router";
-import type { DexToken } from "~/utils/moralis";
+import type { Token } from "~/utils/db";
 import Link from "next/link";
 
 export interface InterstateTableRow {
-  token: DexToken;
+  token: Token;
   i: number;
 }
 
 interface InterstateTableProps {
   rows: InterstateTableRow[];
-  onQuickBuy?: (token: DexToken) => void;
+  onQuickBuy?: (token: Token) => void;
 }
 
 export default function InterstateTable({ rows, onQuickBuy }: InterstateTableProps) {
@@ -56,8 +56,8 @@ export default function InterstateTable({ rows, onQuickBuy }: InterstateTablePro
           {rows.map(({ token, i }) => (
             <tr
               className="cursor-pointer transition hover:bg-neutral-800/60"
-              key={token.tokenAddress}
-              onClick={() => router.push(`/trade/${token.tokenAddress}`)}
+              key={token.token_address}
+              onClick={() => router.push(`/trade/${token.token_address}`)}
             >
                 {/* Pair Info */}
                 <td className="w-auto px-3 py-2 align-middle">
@@ -77,7 +77,7 @@ export default function InterstateTable({ rows, onQuickBuy }: InterstateTablePro
                           {token.name}
                         </span>
                         <span className="truncate text-[11px] font-medium text-neutral-400">
-                          Father Of Fartcoin
+                          {token.label}
                         </span>
                         <FaCopy className="ml-1 cursor-pointer text-xs text-neutral-500" />
                       </div>
@@ -169,7 +169,7 @@ export default function InterstateTable({ rows, onQuickBuy }: InterstateTablePro
                       if (onQuickBuy) {
                         onQuickBuy(token);
                       } else {
-                        router.push(`/trade/${token.tokenAddress}`);
+                        router.push(`/trade/${token.token_address}`);
                       }
                     }}
                   >

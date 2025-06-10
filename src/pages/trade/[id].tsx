@@ -1,6 +1,6 @@
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
-import type { DexToken } from "~/utils/moralis";
+import type { Token } from "~/utils/db";
 import Head from "next/head";
 import Link from "next/link";
 import {
@@ -38,7 +38,7 @@ function formatNumber(value: number | string | undefined) {
 export default function TradePage() {
   const router = useRouter();
   const { id } = router.query;
-  const [token, setToken] = useState<DexToken | null>(null);
+  const [token, setToken] = useState<Token | null>(null);
   const [loading, setLoading] = useState(true);
   const [chartHeight, setChartHeight] = useState(600);
   const { address, isConnected } = useWallet();
@@ -61,7 +61,7 @@ export default function TradePage() {
     setLoading(true);
     fetch(`/api/token/${id}`)
       .then(res => res.json())
-      .then((data: { result: DexToken | null }) => {
+      .then((data: { result: Token | null }) => {
         setToken(data.result || null);
         setLoading(false);
       })
@@ -136,7 +136,7 @@ export default function TradePage() {
           Authorization: `Bearer ${user.bearerToken}`,
         },
         body: JSON.stringify({
-          tokenAddress: token.tokenAddress,
+          tokenAddress: token.token_address,
           amount: parseFloat(tradeAmount),
           mevProtection: 0,
         }),
@@ -145,7 +145,7 @@ export default function TradePage() {
       if (res.ok) {
         setTxStatus("Buy transaction sent!");
         toast.success(
-          `Buy order successful! Bought ${data.amount} ${token.symbol}`,
+          `Buy order successful! Bought ${data.amount} ${token.label}`,
         );
         setTradeHistory((prev) => [
           ...prev,
@@ -177,7 +177,7 @@ export default function TradePage() {
           Authorization: `Bearer ${user.bearerToken}`,
         },
         body: JSON.stringify({
-          tokenAddress: token.tokenAddress,
+          tokenAddress: token.token_address,
           percentageToSell: parseFloat(sellPercentage),
         }),
       });
@@ -249,7 +249,7 @@ export default function TradePage() {
               website: '---' // placeholder if needed
             }} />
             {/* Chart */}
-            <PriceChartWidget tokenAddress={token.tokenAddress} />
+            <PriceChartWidget tokenAddress={token.token_address} />
             {/* Tabs (Positions, Trades, etc.) */}
             <TradeTabs />
             <div className="mt-2 rounded-lg bg-neutral-900 p-4 text-center text-xs text-neutral-400">

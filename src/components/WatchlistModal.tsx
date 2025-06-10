@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FaStar } from 'react-icons/fa';
-import type { DexToken } from "../utils/moralis";
+import type { DexToken } from "../utils/db";
 import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
 
