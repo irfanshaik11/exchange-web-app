@@ -9,25 +9,61 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
   const [mode, setMode] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
   const [tab, setTab] = useState<'market' | 'limit' | 'adv'>('market');
+
+  // Calculate stats from token fields
+  const buyVol = parseFloat(token.buy_volume_5m) || 0;
+  const sellVol = parseFloat(token.sell_volume_5m) || 0;
+  const vol5m = buyVol + sellVol;
+  const buysCount = token.buy_transaction_count_5m || 0;
+  const buysValue = buyVol;
+  const sellsCount = token.sell_transaction_count_5m || 0;
+  const sellsValue = sellVol;
+  const netVol = buyVol - sellVol;
+  const totalValue = buyVol + sellVol;
+  const buyPct = totalValue ? (buyVol / totalValue) * 100 : 50;
+  const sellPct = totalValue ? (sellVol / totalValue) * 100 : 50;
+
+  function formatK(num) {
+    if (Math.abs(num) >= 1000) return "$" + (num / 1000).toFixed(1) + "K";
+    return "$" + num.toFixed(2);
+  }
+
   return (
-    <div className="flex h-full w-[380px] flex-shrink-0 flex-col border-l border-neutral-800 bg-neutral-950 p-4">
-      {/* Stats Box */}
-      <div className="mb-4 rounded-lg bg-neutral-900 p-4 text-xs">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[11px] text-neutral-400">5m Vol</span>
-          <span className="text-[11px] text-neutral-400">Buys</span>
-          <span className="text-[11px] text-neutral-400">Sells</span>
-          <span className="text-[11px] text-neutral-400">Net Vol.</span>
+    <div className="flex h-full w-[380px] flex-shrink-0 flex-col border-l border-neutral-800 bg-neutral-950">
+      {/* Stats Bar - Redesigned */}
+      <div className="border-b border-emerald-950 p-4">
+        <div className="flex items-end justify-between text-xs ">
+          <div className="flex flex-col items-start">
+            <span className="text-gray-500 text-xs">5m Vol</span>
+            <span className="text-white text-xs">{formatK(vol5m)}</span>
+          </div>
+          <div className="flex flex-col items-start">
+            <span className="text-gray-500 text-xs">Buys</span>
+            <span className="text-white text-xs">{buysCount} <span className="text-xs text-gray-500">/</span> <span className="text-white text-xs">{formatK(buysValue)}</span></span>
+          </div>
+          <div className="flex flex-col items-start">
+            <span className="text-gray-500 text-xs">Sells</span>
+            <span className="text-white text-xs">{sellsCount} <span className="text-xs text-gray-500">/</span> <span className="text-white text-xs">{formatK(sellsValue)}</span></span>
+          </div>
+          <div className="flex flex-col items-start">
+            <span className="text-gray-500 text-xs">Net Vol.</span>
+            <span className={`text-white text-xs`}>{netVol < 0 ? "-" : ""}${Math.abs(netVol).toLocaleString(undefined, {maximumFractionDigits:2})}</span>
+          </div>
         </div>
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-base font-semibold text-white">$0</span>
-          <span className="text-emerald-400">0 / $0</span>
-          <span className="text-red-400">0 / $0</span>
-          <span className="text-emerald-400">-$0</span>
+        {/* Progress Bar */}
+        <div className="mt-2 flex h-[3px] w-full overflow-hidden rounded gap-1">
+          <div
+            className="bg-emerald-400"
+            style={{ width: `${buyPct}%`, transition: "width 0.3s" }}
+          />
+          <div
+            className="bg-red-400"
+            style={{ width: `${sellPct}%`, transition: "width 0.3s" }}
+          />
         </div>
       </div>
       {/* Trade Box */}
-      <div className="mb-4 flex flex-col gap-2 rounded-lg bg-neutral-900 p-6 shadow-lg">
+      <div className="mb-4 flex flex-col gap-2 border-b border-emerald-950 p-6 shadow-lg">
         {/* Toggle */}
         <div className="mb-4 flex w-full overflow-hidden rounded-[4px] border border-neutral-800">
           <button
@@ -46,7 +82,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </button>
         </div>
         {/* Tabs: Market, Limit, Adv. */}
-        <div className="flex items-center gap-4 mb-3 text-sm font-semibold">
+        <div className="flex items-center gap-4 mb-3 text-sm font-semibold ">
           <button className={tab === 'market' ? 'border-b-2 border-emerald-400 text-emerald-400 pb-1' : 'text-neutral-400 pb-1'} onClick={() => setTab('market')}>Market</button>
           <button className={tab === 'limit' ? 'border-b-2 border-emerald-400 text-emerald-400 pb-1' : 'text-neutral-400 pb-1'} onClick={() => setTab('limit')}>Limit</button>
           <button className={tab === 'adv' ? 'border-b-2 border-emerald-400 text-emerald-400 pb-1' : 'text-neutral-400 pb-1'} onClick={() => setTab('adv')}>Adv.</button>
@@ -93,7 +129,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </button>
       </div>
       {/* Token Info Box (mocked) */}
-      <div className="rounded-lg bg-neutral-900 p-4">
+      <div className="border-b border-emerald-950 p-4">
         <div className="mb-2 text-xs text-neutral-400">Token Info</div>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="flex flex-col items-center rounded bg-neutral-800 p-2">

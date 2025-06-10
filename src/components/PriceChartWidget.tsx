@@ -76,37 +76,6 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
 
   return (
     <div style={{ width: "100%", height: "100%" }}>
-      {/* Stats Bar */}
-      <div className="mb-2 flex flex-row items-end gap-8 rounded-lg bg-neutral-900 px-4 py-2 text-xs">
-        <div className="flex flex-col items-start">
-          <span className="text-neutral-400">5m Vol</span>
-          <span className="text-white font-bold">{formatK(vol5m)}</span>
-        </div>
-        <div className="flex flex-col items-start">
-          <span className="text-green-400">Buys</span>
-          <span className="font-bold text-green-300">{buysCount} / {formatK(buysValue)}</span>
-        </div>
-        <div className="flex flex-col items-start">
-          <span className="text-red-400">Sells</span>
-          <span className="font-bold text-red-300">{sellsCount} / {formatK(sellsValue)}</span>
-        </div>
-        <div className="flex flex-col items-start">
-          <span className="text-neutral-400">Net Vol.</span>
-          <span className={`font-bold ${netVol < 0 ? "text-red-400" : "text-green-400"}`}>{netVol < 0 ? "-" : ""}{formatK(Math.abs(netVol))}</span>
-        </div>
-      </div>
-      {/* Progress Bar */}
-      <div className="mb-2 flex h-1 w-full overflow-hidden rounded bg-neutral-800">
-        <div
-          className="bg-green-400"
-          style={{ width: `${buyPct}%`, transition: "width 0.3s" }}
-        />
-        <div
-          className="bg-red-400"
-          style={{ width: `${sellPct}%`, transition: "width 0.3s" }}
-        />
-      </div>
-      {/* Chart */}
       <div
         id={PRICE_CHART_ID}
         ref={containerRef}
