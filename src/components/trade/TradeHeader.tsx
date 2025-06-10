@@ -96,10 +96,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-base leading-none font-bold text-white">
-              {token.name}
+              {token.symbol}
             </span>
             <span className="truncate text-sm leading-none text-neutral-400">
-              {token.label}
+              {token.name}
             </span>
             <FiCopy className="ml-1 cursor-pointer text-xs text-neutral-400" />
           </div>
@@ -120,26 +120,26 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
       {/* Center: Price, Liquidity, Supply, Global Fees Paid */}
       <div className="flex items-center justify-center gap-4">
         <div className="text-base leading-tight font-medium text-white">
-          ${formatSmartNumber(token.market_cap_total).toLocaleString()}
+          ${formatSmartNumber(token.fully_diluted_value).toLocaleString()}
         </div>
         {/* Price */}
         <HeaderColumnSection
           label={"Price"}
-          value={`$${formatSmartNumber(token.price_native)}`}
+          value={`$${formatSmartNumber(token.usd_price)}`}
         />
         <HeaderColumnSection
           label={"Liquidity"}
-          value={`$${formatSmartNumber(token.liquidity)}`}
+          value={`$${formatSmartNumber(token.total_liquidity_usd)}`}
         />
         <HeaderColumnSection
           label={"Supply"}
-          value={formatSmartNumber(token.supply)}
+          value={formatSmartNumber(token.total_supply)}
         />
         <HeaderColumnSection
           label={"Global Fees Paid"}
           value={
             <span className="flex items-center gap-2 text-blue-300">
-              <span className="font-bold">Ξ {token.global_fees_paid}</span>
+              <span className="font-bold">Ξ {10.2}</span>
             </span>
           }
         />
