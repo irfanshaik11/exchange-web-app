@@ -5,7 +5,6 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useState, useEffect } from "react";
 import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff, FaTimes, FaCopy } from "react-icons/fa";
 import Image from "next/image";
-import LoginModal from "../components/LoginModal";
 import { useUser } from "../components/UserContext";
 import Cookies from 'js-cookie';
 import QRCode from 'qrcode';
@@ -60,7 +59,6 @@ export default function Home() {
   const isDiscover = router.pathname === "/";
   const timeframes = ["1m", "5m", "30m", "1h"];
   const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
-  const [loginOpen, setLoginOpen] = useState(false);
   const { user, loading: userLoading, refreshUser } = useUser();
   const [selectedTab, setSelectedTab] = useState<'dex' | 'trending'>('trending');
 
@@ -116,16 +114,9 @@ export default function Home() {
     // Optionally, refetch or shuffle if needed, but for now just keep the same data
   };
 
-  useEffect(() => {
-    const handler = () => setLoginOpen(true);
-    window.addEventListener('open-login-modal', handler);
-    return () => window.removeEventListener('open-login-modal', handler);
-  }, []);
-
   // QUICK BUY handler
   async function handleQuickBuy(token: Token) {
     if (!user) {
-      setLoginOpen(true);
       return;
     }
     try {
@@ -204,7 +195,6 @@ export default function Home() {
             <InterstateTable rows={displayed.map((token, i) => ({ token, i }))} onQuickBuy={handleQuickBuy} />
           )}
         </main>
-        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       </div>
     </>
   );

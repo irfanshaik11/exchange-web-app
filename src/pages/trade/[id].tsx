@@ -17,7 +17,6 @@ import { useWallet } from "../../components/useWallet";
 import { env } from "../../env";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import toast, { Toaster } from "react-hot-toast";
-import LoginModal from "../../components/LoginModal";
 import { useUser } from "../../components/UserContext";
 import PriceChartWidget from "../../components/PriceChartWidget";
 import Header from "../../components/Header";
@@ -52,7 +51,6 @@ export default function TradePage() {
   const [tradeAmount, setTradeAmount] = useState<string>("");
   const amountOptions = ["0.1", "1", "10"];
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
-  const [loginOpen, setLoginOpen] = useState(false);
   const { user, loading: userLoading } = useUser();
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -100,12 +98,6 @@ export default function TradePage() {
       setUsdcAmount("");
     }
   }
-
-  useEffect(() => {
-    const handler = () => setLoginOpen(true);
-    window.addEventListener("open-login-modal", handler);
-    return () => window.removeEventListener("open-login-modal", handler);
-  }, []);
 
   if (loading) {
     return (
@@ -254,7 +246,6 @@ export default function TradePage() {
         </div>
         {/* Trade History Table */}
         <TradeTable token={token} />
-        <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       </div>
     </>
   );

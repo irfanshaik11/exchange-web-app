@@ -7,11 +7,13 @@ import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { UserProvider, useUser } from "../components/UserContext";
 import { Toaster } from 'react-hot-toast';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Cookies from 'js-cookie';
 import { useRouter } from 'next/router';
 import toast from 'react-hot-toast';
 import { mainnet } from 'viem/chains';
+import LoginModal from '../components/LoginModal';
+import { env } from '../env';
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
@@ -46,6 +48,24 @@ function TokenHandler() {
   return null;
 }
 
+function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
+  const { user, loading: userLoading } = useUser();
+  const [loginOpen, setLoginOpen] = useState(false);
+  useEffect(() => {
+    if (enforceLogin && !userLoading && !user) {
+      setLoginOpen(true);
+    }
+  }, [user, userLoading, enforceLogin]);
+  // Prevent closing if not logged in
+  const handleLoginClose = () => {
+    if (user) setLoginOpen(false);
+  };
+  if (!enforceLogin) return null;
+  return (
+    <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
+  );
+}
+
 const MyApp: AppType = ({ Component, pageProps }) => {
   return (
     <div className={geist.className}>
@@ -55,6 +75,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
             <UserProvider>
               <TokenHandler />
               <Component {...pageProps} />
+              <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
             </UserProvider>
           </RainbowKitProvider>
         </QueryClientProvider>

@@ -19,6 +19,7 @@ export const env = createEnv({
    */
   client: {
     NEXT_PUBLIC_BACKEND_URL: z.string().url(),
+    NEXT_PUBLIC_IS_BACKEND_DEPLOYED: z.preprocess((val) => val === 'true' || val === true, z.boolean()),
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
 
@@ -31,6 +32,7 @@ export const env = createEnv({
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
     MORALIS_API_KEY: process.env.MORALIS_API_KEY,
     NEON_DB_API_KEY: process.env.NEON_DB_API_KEY,
+    NEXT_PUBLIC_IS_BACKEND_DEPLOYED: process.env.IS_BACKEND_DEPLOYED,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**

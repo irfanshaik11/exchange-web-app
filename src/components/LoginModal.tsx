@@ -5,10 +5,12 @@ import { useUser } from "./UserContext";
 import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
 import bs58 from 'bs58';
+import { toast } from 'react-hot-toast';
 
 interface LoginModalProps {
   open: boolean;
   onClose: () => void;
+  forceLogin?: boolean;
 }
 
 // Extend the Window interface to include the solana property
@@ -18,7 +20,7 @@ declare global {
   }
 }
 
-export default function LoginModal({ open, onClose }: LoginModalProps) {
+export default function LoginModal({ open, onClose, forceLogin = false }: LoginModalProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -28,6 +30,7 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const { refreshUser } = useUser();
+  const [wiggle, setWiggle] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -175,11 +178,23 @@ export default function LoginModal({ open, onClose }: LoginModalProps) {
     }
   }
 
+  // Handle close attempt
+  const handleClose = () => {
+    if (forceLogin) {
+      setWiggle(true);
+      toast.error('Please log-in to trade on Narrative.');
+      setTimeout(() => setWiggle(false), 600);
+      return;
+    }
+    onClose();
+  };
+
   return (
-    <InterstatePopout open={open} onClose={onClose} align="center" className="bg-neutral-900 rounded-xl shadow-2xl w-[350px] p-6 relative text-neutral-100">
+    <InterstatePopout open={open} onClose={handleClose} align="center" className={`bg-neutral-900 rounded-xl shadow-2xl w-[350px] p-6 relative text-neutral-100${wiggle ? ' wiggle' : ''}`} disableClickOutside={forceLogin}>
       <button
         className="absolute top-3 right-3 text-neutral-400 hover:text-white text-xl"
-        onClick={onClose}
+        onClick={handleClose}
+        type="button"
       >
         ×
       </button>
