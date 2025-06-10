@@ -23,9 +23,9 @@ import Header from "../../components/Header";
 import TradeHeader from '../../components/trade/TradeHeader';
 import TradeActionPanel from '../../components/trade/TradeActionPanel';
 import TradeTabs from '../../components/trade/TradeTabs';
-import TradeTable from '../../components/trade/TradeTable';
 import { formatSmartNumber } from '~/utils/db';
 import Trades from '../../components/trade/Trades';
+import Positions from "~/components/trade/Positions";
 
 export default function TradePage() {
   const router = useRouter();
@@ -218,26 +218,26 @@ export default function TradePage() {
         <title>{token?.name} | Trade</title>
       </Head>
       <Toaster position="top-right" />
-      <div className="h-screen w-screen overflow-hidden bg-neutral-950 text-neutral-100">
+      <div className="min-h-screen w-screen bg-neutral-950 text-neutral-100">
         {/* Header */}
         <Header showSearch={false} />
         {/* Main Layout */}
-        <div className="flex h-[calc(100vh-72px)] w-full flex-row gap-0">
+        <div className="flex w-full flex-row gap-0">
           {/* Left: Chart and Info */}
-          <div className="flex h-full min-w-0 flex-1 flex-col pb-4">
+          <div className="flex min-w-0 flex-1 flex-col pb-4">
             {/* Token Info Header */}
             <TradeHeader token={token}  />
             {/* Chart */}
             <PriceChartWidget token={token} />
+            <hr className="border-emerald-950" />
             {/* Tabs (Positions, Trades, etc.) */}
             <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
             {selectedTab === 'Trades' && <Trades token={token} />}
+            {selectedTab === 'Positions' && <Positions userId={user?.id} />}
           </div>
           {/* Right: Buy/Sell and Token Info */}
           <TradeActionPanel token={token} />
         </div>
-        {/* Trade History Table */}
-        <TradeTable token={token} />
       </div>
     </>
   );
