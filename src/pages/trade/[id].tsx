@@ -240,14 +240,7 @@ export default function TradePage() {
           {/* Left: Chart and Info */}
           <div className="flex h-full min-w-0 flex-1 flex-col pb-4">
             {/* Token Info Header */}
-            <TradeHeader token={token} mockData={{
-              supply: '1B',
-              globalFees: '50.46',
-              age: '21h',
-              crownCount: 1,
-              holders: '---', // placeholder if needed
-              website: '---' // placeholder if needed
-            }} />
+            <TradeHeader token={token}  />
             {/* Chart */}
             <PriceChartWidget tokenAddress={token.token_address} />
             {/* Tabs (Positions, Trades, etc.) */}

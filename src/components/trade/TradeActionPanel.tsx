@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import type { DexToken } from '~/utils/db';
+import type { Token } from '~/utils/db';
 
 interface TradeActionPanelProps {
-  token: DexToken;
+  token: Token;
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {

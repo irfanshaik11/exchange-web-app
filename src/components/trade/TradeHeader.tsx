@@ -54,16 +54,25 @@ function formatSmartNumber(val: string | number): string {
   return num.toString();
 }
 
+// Helper function to format age
+function getTokenAge(createdAt: string) {
+  const createdDate = new Date(createdAt);
+  const now = new Date();
+  const diffMs = now.getTime() - createdDate.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays > 0) {
+    return `${diffDays}d`;
+  } else if (diffHours > 0) {
+    return `${diffHours}h`;
+  } else {
+    return `${diffMins}m`;
+  }
+}
+
 interface TradeHeaderProps {
   token: Token;
-  mockData: {
-    supply: string;
-    globalFees: string;
-    age: string;
-    holders?: string;
-    website?: string;
-    crownCount?: number;
-  };
 }
 
 const HeaderColumnSection = ({
@@ -106,7 +115,7 @@ const Tooltip: React.FC<{ label: string; children: React.ReactNode }> = ({
   );
 };
 
-const TradeHeader: React.FC<TradeHeaderProps> = ({ token, mockData }) => {
+const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   return (
     <div className="mb-2 flex w-full items-center gap-6 rounded-lg px-3 py-1.5">
       {/* Left: Logo, Symbol, Name, Clipboard, Age */}
@@ -133,7 +142,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token, mockData }) => {
           <div className="mt-1 flex items-center gap-2">
             {/* Age with gold circle and clock */}
             <span className="flex items-center text-xs font-semibold">
-              <span className="text-green-300">{mockData.age}</span>
+              <span className="text-green-300">
+                {getTokenAge(token.created_at)}
+              </span>
             </span>
             {/* Website, Holders, Search icons */}
             <FaGlobe className="cursor-pointer text-[15px] text-blue-300 hover:text-blue-400" />

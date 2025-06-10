@@ -1,8 +1,8 @@
 import React from 'react';
-import type { DexToken } from '~/utils/db';
+import type { Token } from '~/utils/db';
 
 interface TradeTableProps {
-  token: DexToken;
+  token: Token;
 }
 
 const holders = [
