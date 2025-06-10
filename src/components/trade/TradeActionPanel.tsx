@@ -89,7 +89,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           className={`mt-2 w-full rounded py-3 text-xs font-bold transition disabled:opacity-50 ${mode === 'buy' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700'}`}
           disabled={!amount}
         >
-          {mode === 'buy' ? `Buy ${token.symbol}` : `Sell ${token.symbol}`}
+          {mode === 'buy' ? `Buy ${token.name}` : `Sell ${token.name}`}
         </button>
       </div>
       {/* Token Info Box (mocked) */}

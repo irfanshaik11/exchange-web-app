@@ -242,7 +242,7 @@ export default function TradePage() {
             {/* Token Info Header */}
             <TradeHeader token={token}  />
             {/* Chart */}
-            <PriceChartWidget tokenAddress={token.token_address} />
+            <PriceChartWidget token={token} />
             {/* Tabs (Positions, Trades, etc.) */}
             <TradeTabs />
             <div className="mt-2 rounded-lg bg-neutral-900 p-4 text-center text-xs text-neutral-400">
