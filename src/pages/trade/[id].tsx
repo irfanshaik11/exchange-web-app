@@ -25,6 +25,7 @@ import TradeActionPanel from '../../components/trade/TradeActionPanel';
 import TradeTabs from '../../components/trade/TradeTabs';
 import TradeTable from '../../components/trade/TradeTable';
 import { formatSmartNumber } from '~/utils/db';
+import Trades from '../../components/trade/Trades';
 
 export default function TradePage() {
   const router = useRouter();
@@ -45,6 +46,7 @@ export default function TradePage() {
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
   const { user, loading: userLoading } = useUser();
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
+  const [selectedTab, setSelectedTab] = useState('Trades');
 
   useEffect(() => {
     if (!id) return;
@@ -228,10 +230,8 @@ export default function TradePage() {
             {/* Chart */}
             <PriceChartWidget token={token} />
             {/* Tabs (Positions, Trades, etc.) */}
-            <TradeTabs />
-            <div className="mt-2 rounded-lg bg-neutral-900 p-4 text-center text-xs text-neutral-400">
-              [Positions Table Placeholder]
-            </div>
+            <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
+            {selectedTab === 'Trades' && <Trades token={token} />}
           </div>
           {/* Right: Buy/Sell and Token Info */}
           <TradeActionPanel token={token} />

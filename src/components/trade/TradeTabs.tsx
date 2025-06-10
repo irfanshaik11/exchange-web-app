@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 const tabs = [
   'Trades',
@@ -9,15 +9,19 @@ const tabs = [
   'Dev Tokens',
 ];
 
-const TradeTabs: React.FC = () => {
-  const [selected, setSelected] = useState('Positions');
+interface TradeTabsProps {
+  selectedTab: string;
+  setSelectedTab: (tab: string) => void;
+}
+
+const TradeTabs: React.FC<TradeTabsProps> = ({ selectedTab, setSelectedTab }) => {
   return (
     <div className="mt-2 flex gap-4 rounded-lg bg-neutral-900 p-2 text-xs">
       {tabs.map(tab => (
         <button
           key={tab}
-          className={`rounded px-3 py-1 font-semibold ${selected === tab ? 'bg-neutral-800 text-white' : 'text-neutral-400'}`}
-          onClick={() => setSelected(tab)}
+          className={`rounded px-3 py-1 font-semibold ${selectedTab === tab ? 'bg-neutral-800 text-white' : 'text-neutral-400'}`}
+          onClick={() => setSelectedTab(tab)}
         >
           {tab}
         </button>
