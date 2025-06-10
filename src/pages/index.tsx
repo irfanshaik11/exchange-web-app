@@ -99,7 +99,7 @@ export default function Home() {
     const results = Array.isArray(allTokens)
       ? allTokens.filter(token =>
           token.name?.toLowerCase().includes(search.toLowerCase()) ||
-          token.label?.toLowerCase().includes(search.toLowerCase())
+          token.symbol?.toLowerCase().includes(search.toLowerCase())
         )
       : [];
     setFilteredTokens(results);
@@ -131,7 +131,7 @@ export default function Home() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success(`Quick Buy successful! Bought ${data.amount} ${token.label}`);
+        toast.success(`Quick Buy successful! Bought ${data.amount} ${token.symbol}`);
       } else {
         toast.error(data?.error || "Quick Buy failed");
       }

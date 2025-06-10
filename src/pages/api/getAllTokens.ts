@@ -9,7 +9,7 @@ const pool = new Pool({
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     // Get all data from the tokens table
-    const { rows } = await pool.query('SELECT * FROM tokens');
+    const { rows } = await pool.query('SELECT * FROM token_details');
     res.status(200).json({ result: rows });
   } catch (error) {
     console.error(error);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Token } from '~/utils/db';
+import { formatSmartNumber, type Token } from '~/utils/db';
 
 interface TradeActionPanelProps {
   token: Token;
@@ -11,22 +11,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
   const [tab, setTab] = useState<'market' | 'limit' | 'adv'>('market');
 
   // Calculate stats from token fields
-  const buyVol = parseFloat(token.buy_volume_5m) || 0;
-  const sellVol = parseFloat(token.sell_volume_5m) || 0;
+  const buyVol = token.total_buy_volume_5m || 0;
+  const sellVol = token.total_sell_volume_5m || 0;
   const vol5m = buyVol + sellVol;
-  const buysCount = token.buy_transaction_count_5m || 0;
+  const buysCount = token.total_buys_5m || 0;
   const buysValue = buyVol;
-  const sellsCount = token.sell_transaction_count_5m || 0;
+  const sellsCount = token.total_sells_5m || 0;
   const sellsValue = sellVol;
-  const netVol = buyVol - sellVol;
-  const totalValue = buyVol + sellVol;
-  const buyPct = totalValue ? (buyVol / totalValue) * 100 : 50;
-  const sellPct = totalValue ? (sellVol / totalValue) * 100 : 50;
-
-  function formatK(num) {
-    if (Math.abs(num) >= 1000) return "$" + (num / 1000).toFixed(1) + "K";
-    return "$" + num.toFixed(2);
-  }
+  const netVol = Number(buyVol) - Number(sellVol);
+  const totalValue = Number(buyVol) + Number(sellVol);
+  const buyPct = Number(totalValue) ? (Number(buyVol) / Number(totalValue)) * 100 : 50;
+  const sellPct = Number(totalValue) ? (Number(sellVol) / Number(totalValue)) * 100 : 50;
 
   return (
     <div className="flex h-full w-[380px] flex-shrink-0 flex-col border-l border-neutral-800 bg-neutral-950">
@@ -35,15 +30,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         <div className="flex items-end justify-between text-xs ">
           <div className="flex flex-col items-start">
             <span className="text-gray-500 text-xs">5m Vol</span>
-            <span className="text-white text-xs">{formatK(vol5m)}</span>
+            <span className="text-white text-xs">{formatSmartNumber(vol5m)}</span>
           </div>
           <div className="flex flex-col items-start">
             <span className="text-gray-500 text-xs">Buys</span>
-            <span className="text-white text-xs">{buysCount} <span className="text-xs text-gray-500">/</span> <span className="text-white text-xs">{formatK(buysValue)}</span></span>
+            <span className="text-white text-xs">{buysCount} <span className="text-xs text-gray-500">/</span> <span className="text-white text-xs">{formatSmartNumber(buysValue)}</span></span>
           </div>
           <div className="flex flex-col items-start">
             <span className="text-gray-500 text-xs">Sells</span>
-            <span className="text-white text-xs">{sellsCount} <span className="text-xs text-gray-500">/</span> <span className="text-white text-xs">{formatK(sellsValue)}</span></span>
+            <span className="text-white text-xs">{sellsCount} <span className="text-xs text-gray-500">/</span> <span className="text-white text-xs">{formatSmartNumber(sellsValue)}</span></span>
           </div>
           <div className="flex flex-col items-start">
             <span className="text-gray-500 text-xs">Net Vol.</span>
@@ -131,6 +126,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
       {/* Token Info Box (mocked) */}
       <div className="border-b border-emerald-950 p-4">
         <div className="mb-2 text-xs text-neutral-400">Token Info</div>
+        {/* TODO: Replace the following mocked values with real data from the Token type if available */}
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
             <span className="font-bold text-emerald-400">9.39%</span>

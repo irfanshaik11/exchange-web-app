@@ -62,12 +62,12 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
   }, [token.token_address]);
 
   // Calculate stats from token fields
-  const buyVol = parseFloat(token.buy_volume_5m) || 0;
-  const sellVol = parseFloat(token.sell_volume_5m) || 0;
+  const buyVol = token.total_buy_volume_5m || 0;
+  const sellVol = token.total_sell_volume_5m || 0;
   const vol5m = buyVol + sellVol;
-  const buysCount = token.buy_transaction_count_5m || 0;
+  const buysCount = token.total_buys_5m || 0;
   const buysValue = buyVol;
-  const sellsCount = token.sell_transaction_count_5m || 0;
+  const sellsCount = token.total_sells_5m || 0;
   const sellsValue = sellVol;
   const netVol = buyVol - sellVol;
   const totalValue = buyVol + sellVol;

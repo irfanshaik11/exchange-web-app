@@ -89,31 +89,47 @@ export type Token = {
   updated_at: string; // ISO timestamp
 };
 
-export function formatSmartNumber(val: string | number): string {
-  let num = typeof val === "string" ? Number(val) : val;
-  if (isNaN(num)) return "-";
-  const absNum = Math.abs(num);
-  if (absNum >= 1e12) {
-    return (num / 1e12).toFixed(2).replace(/\.00$/, "") + "T";
-  } else if (absNum >= 1e9) {
-    return (num / 1e9).toFixed(2).replace(/\.00$/, "") + "B";
-  } else if (absNum >= 1e6) {
-    return (num / 1e6).toFixed(2).replace(/\.00$/, "") + "M";
-  } else if (absNum >= 1e3) {
-    return (num / 1e3).toFixed(2).replace(/\.00$/, "") + "K";
-  }
-  if (absNum >= 0.01) {
-    return num.toFixed(2);
-  }
-  const str = absNum.toString();
-  const match = str.match(/^0\.0*(\d{1,2})/);
-  if (match) {
-    const firstNonZero = str.match(/^0\.0*([1-9]\d?)/);
-    if (firstNonZero) {
-      const idx = str.indexOf(firstNonZero[1]) + firstNonZero[1].length;
-      return num < 0 ? "-" + str.slice(0, idx) : str.slice(0, idx);
+/**
+ * Formats a number into a human-readable abbreviated form.
+ * Examples:
+ *   1234567    => "1.23M"
+ *   1000       => "1K"
+ *   0.0054321  => "0.0054"
+ *   0.00000012 => "0.00000012"
+ *   "abc"      => "-"
+ */
+export function formatSmartNumber(val: string | number | null | undefined): string {
+  if (val === null || val === undefined) return "-";
+
+  const num = typeof val === "string" ? parseFloat(val) : val;
+
+  if (isNaN(num) || !isFinite(num)) return "-";
+
+  const abs = Math.abs(num);
+
+  const abbreviations = [
+    { value: 1e12, suffix: "T" },
+    { value: 1e9, suffix: "B" },
+    { value: 1e6, suffix: "M" },
+    { value: 1e3, suffix: "K" },
+  ];
+
+  for (const { value, suffix } of abbreviations) {
+    if (abs >= value) {
+      const formatted = (num / value).toFixed(2);
+      return formatted.endsWith(".00")
+        ? `${parseInt(formatted)}${suffix}`
+        : `${formatted}${suffix}`;
     }
   }
-  return num.toString();
+
+  // Show full precision for very small values < 0.01
+  if (abs > 0 && abs < 0.01) {
+    return num.toPrecision(2);
+  }
+
+  // Normal decimal formatting for values >= 0.01
+  return num.toFixed(2);
 }
+
 

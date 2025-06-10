@@ -131,7 +131,7 @@ export default function TradePage() {
       if (res.ok) {
         setTxStatus("Buy transaction sent!");
         toast.success(
-          `Buy order successful! Bought ${data.amount} ${token.label}`,
+          `Buy order successful! Bought ${data.amount} ${token.symbol}`,
         );
         setTradeHistory((prev) => [
           ...prev,

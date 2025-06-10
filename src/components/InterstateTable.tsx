@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   FaUser,
   FaGlobe,
@@ -58,6 +58,10 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
     if (!setSort) return;
     setSort(key);
   };
+
+  useEffect(() => {
+    console.log(sortedRows);
+  }, [sortedRows]);
   return (
     <div className="overflow-x-auto border border-neutral-800 bg-neutral-900/80 shadow-lg">
       <table className="min-w-full divide-y divide-neutral-800">
@@ -66,11 +70,11 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
             <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('name')}>
               Pair Info {sortKey === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
             </th>
-            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('market_cap_total')}>
-              Market Cap {sortKey === 'market_cap_total' && (sortDirection === 'asc' ? '▲' : '▼')}
+            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('fully_diluted_value')}>
+              Market Cap {sortKey === 'fully_diluted_value' && (sortDirection === 'asc' ? '▲' : '▼')}
             </th>
-            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('liquidity')}>
-              Liquidity {sortKey === 'liquidity' && (sortDirection === 'asc' ? '▲' : '▼')}
+            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('total_liquidity_usd')}>
+              Liquidity {sortKey === 'total_liquidity_usd' && (sortDirection === 'asc' ? '▲' : '▼')}
             </th>
             <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('volume')}>
               Volume {sortKey === 'volume' && (sortDirection === 'asc' ? '▲' : '▼')}
@@ -111,7 +115,7 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                           {token.name}
                         </span>
                         <span className="truncate text-[11px] font-medium text-neutral-400">
-                          {token.label}
+                          {token.symbol}
                         </span>
                         <FaCopy className="ml-1 cursor-pointer text-xs text-neutral-500" />
                       </div>
@@ -141,7 +145,7 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                 {/* Market Cap */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {formatSmartNumber(token.market_cap_total)}
+                    {formatSmartNumber(token.fully_diluted_value)}
                   </div>
                   <div
                     className={`mt-0.5 text-[11px] font-semibold ${i === 3 ? "text-red-400" : "text-emerald-400"}`}
@@ -152,41 +156,42 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                 {/* Liquidity */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {formatSmartNumber(token.liquidity)}
+                    {formatSmartNumber(token.total_liquidity_usd)}
                   </div>
                 </td>
                 {/* Volume */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {formatSmartNumber(token.volume)}
+                    {formatSmartNumber((token.total_buy_volume_24h || 0) + (token.total_sell_volume_24h || 0))}
                   </div>
                 </td>
                 {/* TXNS */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {formatSmartNumber(token.txns)}
+                    {formatSmartNumber((token.total_buys_24h) + (token.total_sells_24h))}
                   </div>
                   <div className="mt-0.5 text-[11px] font-semibold">
                     <span className="text-emerald-400">
-                      {[804, 736, 829, 507][i % 4]}
+                      {formatSmartNumber(token.total_buys_24h)}
                     </span>
                     <span className="text-neutral-400"> / </span>
                     <span className="text-red-400">
-                      {[751, 764, 563, 875][i % 4]}
+                      {formatSmartNumber(token.total_sells_24h)}
                     </span>
-                  </div>
+                    </div>
                 </td>
                 {/* Audit Log */}
                 <td className="px-3 py-2 align-middle">
                   <div className="flex flex-col gap-0.5">
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-red-400">
+                    {/* No top_holders_percentage or paid_audit in new Token type, so these are commented out or replaced with placeholders */}
+                    {/* <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-red-400">
                       <FaUser className="text-xs text-red-400" />{" "}
                       {token.top_holders_percentage}%
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-emerald-400">
+                    </span> */}
+                    {/* <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-emerald-400">
                       <FaCheckCircle className="text-xs text-emerald-400" />{" "}
                       {token.paid_audit ? "Yes" : "No"}
-                    </span>
+                    </span> */}
                     <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-sky-300">
                       <FaQuestionCircle className="text-xs text-sky-300" /> Off
                     </span>
