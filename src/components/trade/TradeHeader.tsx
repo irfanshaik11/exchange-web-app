@@ -16,43 +16,7 @@ import {
 } from "react-icons/fa";
 import { FiCopy, FiShare } from "react-icons/fi";
 import { IoShareSocialOutline } from "react-icons/io5";
-
-function formatSmartNumber(val: string | number): string {
-  let num = typeof val === "string" ? Number(val) : val;
-  if (isNaN(num)) return "-";
-  const absNum = Math.abs(num);
-
-  // Large number formatting
-  if (absNum >= 1e12) {
-    return (num / 1e12).toFixed(2).replace(/\.00$/, "") + "T";
-  } else if (absNum >= 1e9) {
-    return (num / 1e9).toFixed(2).replace(/\.00$/, "") + "B";
-  } else if (absNum >= 1e6) {
-    return (num / 1e6).toFixed(2).replace(/\.00$/, "") + "M";
-  } else if (absNum >= 1e3) {
-    return (num / 1e3).toFixed(2).replace(/\.00$/, "") + "K";
-  }
-
-  // For numbers >= 0.01, show two decimals
-  if (absNum >= 0.01) {
-    return num.toFixed(2);
-  }
-
-  // For very small numbers, show up to the first two significant digits after the decimal
-  const str = absNum.toString();
-  const match = str.match(/^0\.0*(\d{1,2})/);
-  if (match) {
-    // Find where the first non-zero digit is
-    const firstNonZero = str.match(/^0\.0*([1-9]\d?)/);
-    if (firstNonZero) {
-      // Return up to and including the next digit if available
-      const idx = str.indexOf(firstNonZero[1]) + firstNonZero[1].length;
-      return num < 0 ? "-" + str.slice(0, idx) : str.slice(0, idx);
-    }
-  }
-  // fallback
-  return num.toString();
-}
+import { formatSmartNumber } from '~/utils/db';
 
 // Helper function to format age
 function getTokenAge(createdAt: string) {

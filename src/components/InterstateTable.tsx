@@ -11,6 +11,7 @@ import InterstateButton from "./InterstateButton";
 import { useRouter } from "next/router";
 import type { Token } from "~/utils/db";
 import Link from "next/link";
+import { formatSmartNumber } from '~/utils/db';
 
 export interface InterstateTableRow {
   token: Token;
@@ -20,29 +21,62 @@ export interface InterstateTableRow {
 interface InterstateTableProps {
   rows: InterstateTableRow[];
   onQuickBuy?: (token: Token) => void;
+  sortKey?: string;
+  sortDirection?: 'asc' | 'desc';
+  setSort?: (key: string) => void;
 }
 
-export default function InterstateTable({ rows, onQuickBuy }: InterstateTableProps) {
+export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirection, setSort }: InterstateTableProps) {
   const router = useRouter();
+  // Helper to get sortable value from token
+  function getSortableValue(token: Token, key: string) {
+    let val = token[key];
+    if (typeof val === 'string') {
+      // Remove commas, $ signs, and whitespace
+      val = val.replace(/[$,\s]/g, '');
+    }
+    const num = parseFloat(val);
+    if (isNaN(num)) return -Infinity;
+    return num;
+  }
+  // Sort rows if sortKey is provided
+  let sortedRows = rows;
+  console.log(sortedRows)
+  if (sortKey) {
+    sortedRows = [...rows].sort((a, b) => {
+      const aVal = getSortableValue(a.token, sortKey);
+      const bVal = getSortableValue(b.token, sortKey);
+      if (sortDirection === 'asc') {
+        return aVal - bVal;
+      } else {
+        return bVal - aVal;
+      }
+    });
+  }
+  // Helper to handle header click
+  const handleSort = (key: string) => {
+    if (!setSort) return;
+    setSort(key);
+  };
   return (
     <div className="overflow-x-auto border border-neutral-800 bg-neutral-900/80 shadow-lg">
       <table className="min-w-full divide-y divide-neutral-800">
         <thead>
           <tr className="bg-neutral-800/80">
-            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase">
-              Pair Info
+            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('name')}>
+              Pair Info {sortKey === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
             </th>
-            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase">
-              Market Cap
+            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('market_cap_total')}>
+              Market Cap {sortKey === 'market_cap_total' && (sortDirection === 'asc' ? '▲' : '▼')}
             </th>
-            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase">
-              Liquidity
+            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('liquidity')}>
+              Liquidity {sortKey === 'liquidity' && (sortDirection === 'asc' ? '▲' : '▼')}
             </th>
-            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase">
-              Volume
+            <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('volume')}>
+              Volume {sortKey === 'volume' && (sortDirection === 'asc' ? '▲' : '▼')}
             </th>
-            <th className="flex items-center gap-1 px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase">
-              TXNS <span className="text-[10px]">↓</span>
+            <th className="flex items-center gap-1 px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => handleSort('txns')}>
+              TXNS {sortKey === 'txns' && (sortDirection === 'asc' ? '▲' : '▼')}
             </th>
             <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase">
               Audit Log
@@ -53,7 +87,7 @@ export default function InterstateTable({ rows, onQuickBuy }: InterstateTablePro
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-800">
-          {rows.map(({ token, i }) => (
+          {sortedRows.map(({ token, i }) => (
             <tr
               className="cursor-pointer transition hover:bg-neutral-800/60"
               key={token.token_address}
@@ -107,7 +141,7 @@ export default function InterstateTable({ rows, onQuickBuy }: InterstateTablePro
                 {/* Market Cap */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {formatUSD([397000, 189000, 36000, 4010][i % 4])}
+                    {formatSmartNumber(token.market_cap_total)}
                   </div>
                   <div
                     className={`mt-0.5 text-[11px] font-semibold ${i === 3 ? "text-red-400" : "text-emerald-400"}`}
@@ -118,19 +152,19 @@ export default function InterstateTable({ rows, onQuickBuy }: InterstateTablePro
                 {/* Liquidity */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {formatUSD([72700, 47500, 43900, 6890][i % 4])}
+                    {formatSmartNumber(token.liquidity)}
                   </div>
                 </td>
                 {/* Volume */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {formatUSD([168000, 117000, 136000, 147000][i % 4])}
+                    {formatSmartNumber(token.volume)}
                   </div>
                 </td>
                 {/* TXNS */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {[1550, 1500, 1390, 1380][i % 4] / 1000}K
+                    {formatSmartNumber(token.txns)}
                   </div>
                   <div className="mt-0.5 text-[11px] font-semibold">
                     <span className="text-emerald-400">
@@ -147,11 +181,11 @@ export default function InterstateTable({ rows, onQuickBuy }: InterstateTablePro
                   <div className="flex flex-col gap-0.5">
                     <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-red-400">
                       <FaUser className="text-xs text-red-400" />{" "}
-                      {["18.27%", "21.67%", "17.77%", "6.9%"][i % 4]}
+                      {token.top_holders_percentage}%
                     </span>
                     <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-emerald-400">
                       <FaCheckCircle className="text-xs text-emerald-400" />{" "}
-                      {["100%", "100%", "???", "100%"][i % 4]}
+                      {token.paid_audit ? "Yes" : "No"}
                     </span>
                     <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-sky-300">
                       <FaQuestionCircle className="text-xs text-sky-300" /> Off
@@ -182,10 +216,4 @@ export default function InterstateTable({ rows, onQuickBuy }: InterstateTablePro
       </table>
     </div>
   );
-}
-
-// Helper for USD formatting
-function formatUSD(value: number | string | undefined) {
-  if (value === undefined || value === null || isNaN(Number(value))) return "-";
-  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }

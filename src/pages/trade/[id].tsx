@@ -24,15 +24,7 @@ import TradeHeader from '../../components/trade/TradeHeader';
 import TradeActionPanel from '../../components/trade/TradeActionPanel';
 import TradeTabs from '../../components/trade/TradeTabs';
 import TradeTable from '../../components/trade/TradeTable';
-
-function formatUSD(value: number | string | undefined) {
-  if (value === undefined || value === null || isNaN(Number(value))) return '-';
-  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-}
-function formatNumber(value: number | string | undefined) {
-  if (value === undefined || value === null || isNaN(Number(value))) return '-';
-  return Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-}
+import { formatSmartNumber } from '~/utils/db';
 
 export default function TradePage() {
   const router = useRouter();

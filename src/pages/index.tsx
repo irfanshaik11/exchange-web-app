@@ -13,6 +13,7 @@ import type { Token } from "~/utils/db";
 import InterstateButton from "../components/InterstateButton";
 import InterstateTable from "../components/InterstateTable";
 import toast from "react-hot-toast";
+import { formatSmartNumber } from '~/utils/db';
 
 
 const navLinks = [
@@ -38,16 +39,6 @@ function shuffleArray<T extends NonNullable<unknown>>(array: T[]): T[] {
   return arr;
 }
 
-function formatUSD(value: number | string | undefined) {
-  if (value === undefined || value === null || isNaN(Number(value))) return '-';
-  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-}
-
-function formatNumber(value: number | string | undefined) {
-  if (value === undefined || value === null || isNaN(Number(value))) return '-';
-  return Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-}
-
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -57,10 +48,16 @@ export default function Home() {
   const [loadingTokens, setLoadingTokens] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const isDiscover = router.pathname === "/";
-  const timeframes = ["1m", "5m", "30m", "1h"];
-  const [selectedTimeframe, setSelectedTimeframe] = useState("5m");
+  const timeframes = ["5m", "1h", "6h", "24h"];
+  const [selectedTimeframe, setSelectedTimeframe] = useState("24h");
   const { user, loading: userLoading, refreshUser } = useUser();
   const [selectedTab, setSelectedTab] = useState<'dex' | 'trending'>('trending');
+  const [sortKey, setSortKey] = useState<'market_cap_total' | 'liquidity' | 'volume' | 'txns' | 'name'>('volume');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  useEffect(() => {
+    console.log(sortKey);
+  }, [sortKey]);
 
   // Fetch tokens from API on mount
   useEffect(() => {
@@ -143,6 +140,41 @@ export default function Home() {
     }
   }
 
+  useEffect(() => {
+    if (selectedTab === 'trending') {
+      setSortKey('volume');
+      setSortDirection('desc');
+    }
+  }, [selectedTab]);
+
+  useEffect(() => {
+    if (selectedTab === 'trending') {
+      const sortedTokens = Array.isArray(filteredTokens) ? [...filteredTokens] : [];
+      sortedTokens.sort((a, b) => {
+        const aVal = Number(a[sortKey]) || 0;
+        const bVal = Number(b[sortKey]) || 0;
+        if (sortDirection === 'asc') {
+          return aVal - bVal;
+        } else {
+          return bVal - aVal;
+        }
+      });
+      setDisplayed(sortedTokens);
+    } else {
+      setDisplayed(filteredTokens.slice(0, 10));
+    }
+  }, [selectedTab, filteredTokens, sortKey, sortDirection]);
+
+  // Sorting handler for table headers
+  const handleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('desc');
+    }
+  };
+
   return (
     <>
       <Head>
@@ -192,7 +224,13 @@ export default function Home() {
           ) : displayed.length === 0 ? (
             <div className="text-center text-neutral-400 py-10">No tokens found.</div>
           ) : (
-            <InterstateTable rows={displayed.map((token, i) => ({ token, i }))} onQuickBuy={handleQuickBuy} />
+            <InterstateTable
+              rows={displayed.map((token, i) => ({ token, i }))}
+              onQuickBuy={handleQuickBuy}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              setSort={handleSort}
+            />
           )}
         </main>
       </div>
