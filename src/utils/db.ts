@@ -30,65 +30,64 @@ export interface DexPairsResponse {
   pairs: DexPair[];
 }
 
-export interface Token {
-  bonding_completion_percentage: string;
-  bonding_status: string;
-  bundlers: string;
-  buy_transaction_count_1h: number;
-  buy_transaction_count_5m: number;
-  buy_transaction_count_6h: number;
-  buy_transaction_count_24h: number;
-  buy_volume_1h: string;
-  buy_volume_5m: string;
-  buy_volume_6h: string;
-  buy_volume_24h: string;
-  created_at: string;
-  data_source: string;
-  dev_holding_percentage: string;
-  dev_tokens: string[];
-  developer_address: string;
-  dex_paid: boolean;
-  global_fees_paid: string;
-  holders: string[];
-  holders_count: number;
-  insiders: string;
-  label: string;
-  liquidity: string;
-  logo: string;
-  lp_burned: string;
-  market_cap_total: string;
-  name: string;
-  paid_audit: boolean;
-  price: string;
-  price_change_1h: string;
-  price_change_5m: string;
-  price_change_6h: string;
-  price_change_24h: string;
-  price_native: string;
-  pro_traders: number;
-  sell_transaction_count_1h: number;
-  sell_transaction_count_5m: number;
-  sell_transaction_count_6h: number;
-  sell_transaction_count_24h: number;
-  sell_volume_1h: string;
-  sell_volume_5m: string;
-  sell_volume_6h: string;
-  sell_volume_24h: string;
-  snipers_holding: string;
-  social_telegram: string | null;
-  social_website: string | null;
-  social_x: string | null;
-  supply: string;
+export type Token = {
+  id: number;
   token_address: string;
-  top_holders_percentage: string;
-  txn_change_1h: string;
-  txn_change_5m: string;
-  txn_change_6h: string;
-  txn_change_24h: string;
-  txns: number;
-  updated_at: string;
-  volume: string;
-}
+  mint: string;
+  standard: string;
+  name: string;
+  symbol: string;
+  logo: string;
+  decimals: number;
+  metaplex: object | null; // The original value is [object Object], so it's likely a JSON object
+  fully_diluted_value: number;
+  total_supply: number;
+  total_supply_formatted: number;
+  links: object | null; // Similarly [object Object]
+  description: string;
+  is_verified_contract: boolean;
+  possible_spam: boolean;
+  total_buy_volume_5m: number;
+  total_buy_volume_1h: number;
+  total_buy_volume_6h: number;
+  total_buy_volume_24h: number;
+  total_sell_volume_5m: number;
+  total_sell_volume_1h: number;
+  total_sell_volume_6h: number;
+  total_sell_volume_24h: number;
+  total_buyers_5m: number;
+  total_buyers_1h: number;
+  total_buyers_6h: number;
+  total_buyers_24h: number;
+  total_sellers_5m: number;
+  total_sellers_1h: number;
+  total_sellers_6h: number;
+  total_sellers_24h: number;
+  total_buys_5m: number;
+  total_buys_1h: number;
+  total_buys_6h: number;
+  total_buys_24h: number;
+  total_sells_5m: number;
+  total_sells_1h: number;
+  total_sells_6h: number;
+  total_sells_24h: number;
+  unique_wallets_5m: number;
+  unique_wallets_1h: number;
+  unique_wallets_6h: number;
+  unique_wallets_24h: number;
+  price_percent_change_5m: number;
+  price_percent_change_1h: number;
+  price_percent_change_6h: number;
+  price_percent_change_24h: number;
+  usd_price: number;
+  total_liquidity_usd: number;
+  total_fully_diluted_valuation: number;
+  total_snipers: number;
+  pair_address: string;
+  total_holders: number;
+  created_at: string; // ISO timestamp
+  updated_at: string; // ISO timestamp
+};
 
 export function formatSmartNumber(val: string | number): string {
   let num = typeof val === "string" ? Number(val) : val;
