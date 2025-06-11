@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatSmartNumber } from '~/utils/db';
-import { env } from '../../env';
+import { getTradeHistoryByTokenAddress } from '~/utils/functions';
+import type { TradeRow } from '~/utils/functions';
 import type { Token } from '~/utils/db';
 
 function getAge(ts: string | number) {
@@ -24,33 +25,15 @@ interface TradesProps {
   token: Token;
 }
 
-interface TradeRow {
-  id: number;
-  tokenAddress: string;
-  tradeTime: string;
-  type: 'Buy' | 'Sell';
-  marketCap: string | number;
-  solAmount: string | number;
-  tokenAmount: string | number;
-  usdValue: string | number;
-  transactionHash: string;
-  createdAt: string;
-}
-
 const Trades: React.FC<TradesProps> = ({ token }) => {
   const [trades, setTrades] = useState<TradeRow[]>([]);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!token?.token_address) return;
     setLoading(true);
-    fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_tokenaddress?tokenAddress=FMGU4vKjT3MW4GBTP8ru8JWs1R552FUU8PTqo65ppump`)
-      .then(res => res.json())
-      .then(data => {
-        console.log(data)
-        setTrades(data ? data : []);
-        setLoading(false);
-      })
-      .catch(() => setTrades([]));
+    getTradeHistoryByTokenAddress(token.token_address)
+      .then(setTrades)
+      .finally(() => setLoading(false));
   }, [token?.token_address]);
 
   return (

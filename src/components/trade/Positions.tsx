@@ -1,19 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatSmartNumber } from '~/utils/db';
-import { env } from '../../env';
-
-interface PositionRow {
-  tokenAddress: string;
-  bought: number;
-  boughtUsdValue: number;
-  sold: number;
-  soldUsdValue: number;
-  remaining: number;
-  remainingUsdValue: number;
-  pnl: number;
-  pnlPercentage: number;
-  actions: string;
-}
+import { getActivePositionsByUser } from '~/utils/functions';
+import type { PositionRow } from '~/utils/functions';
 
 interface PositionsProps {
   userId: string;
@@ -31,13 +19,9 @@ const Positions: React.FC<PositionsProps> = ({ userId }) => {
   useEffect(() => {
     if (!userId) return;
     setLoading(true);
-    fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}`)
-      .then(res => res.json())
-      .then(data => {
-        setPositions(Array.isArray(data) ? data : []);
-        setLoading(false);
-      })
-      .catch(() => setPositions([]));
+    getActivePositionsByUser(userId)
+      .then(setPositions)
+      .finally(() => setLoading(false));
   }, [userId]);
 
   return (

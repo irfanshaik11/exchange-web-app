@@ -14,7 +14,7 @@ const navLinks = [
   { name: "Trackers", href: "#" },
   { name: "Perpetuals", href: "#" },
   { name: "Yield", href: "#" },
-  { name: "Portfolio", href: "#" },
+  { name: "Portfolio", href: "/portfolio" },
   { name: "Rewards", href: "#" },
 ];
 
