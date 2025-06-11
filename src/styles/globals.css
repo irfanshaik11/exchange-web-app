@@ -4,7 +4,14 @@
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
-
+/* styles/globals.css */
+html,
+body {
+  overflow-x: hidden;
+  height: 100vh; /* or h-screen with Tailwind */
+  margin: 0;
+  padding: 0;
+}
 .interstate-overlay {
   position: fixed;
   inset: 0;
