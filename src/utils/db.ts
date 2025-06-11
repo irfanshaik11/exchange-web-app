@@ -87,6 +87,7 @@ export type Token = {
   total_holders: number;
   created_at: string; // ISO timestamp
   updated_at: string; // ISO timestamp
+  bonding_curve_progress: number | string;
 };
 
 /**

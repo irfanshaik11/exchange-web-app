@@ -10,7 +10,7 @@ import { FiBarChart, FiStar } from "react-icons/fi";
 
 const navLinks = [
   { name: "Discover", href: "/" },
-  { name: "Pulse", href: "#" },
+  { name: "Pulse", href: "/pulse" },
   { name: "Trackers", href: "#" },
   { name: "Perpetuals", href: "#" },
   { name: "Yield", href: "#" },
