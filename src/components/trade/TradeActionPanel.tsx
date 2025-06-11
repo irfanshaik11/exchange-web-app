@@ -52,15 +52,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
             style={{ width: `${buyPct}%`, transition: "width 0.3s" }}
           />
           <div
-            className="bg-red-400"
+            className="bg-red-500"
             style={{ width: `${sellPct}%`, transition: "width 0.3s" }}
           />
         </div>
       </div>
       {/* Trade Box */}
-      <div className="mb-4 flex flex-col gap-2 border-b border-emerald-950 p-6 shadow-lg">
+      <div className="pb-4 flex flex-col border-b border-emerald-950 shadow-lg">
         {/* Toggle */}
-        <div className="mb-4 flex w-full overflow-hidden rounded-[4px] border border-neutral-800">
+        <div className=" flex border-emerald-950 border-b p-2">
           <button
             className={`w-full px-6 py-2 text-sm font-bold transition-all ${mode === 'buy' ? 'bg-emerald-500 text-white' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}
             onClick={() => setMode('buy')}
@@ -77,22 +77,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </button>
         </div>
         {/* Tabs: Market, Limit, Adv. */}
-        <div className="flex items-center gap-4 mb-3 text-sm font-semibold ">
+        <div className="flex items-center gap-4 border-b border-emerald-950 text-sm font-semibold pt-2 px-4">
           <button className={tab === 'market' ? 'border-b-2 border-emerald-400 text-emerald-400 pb-1' : 'text-neutral-400 pb-1'} onClick={() => setTab('market')}>Market</button>
           <button className={tab === 'limit' ? 'border-b-2 border-emerald-400 text-emerald-400 pb-1' : 'text-neutral-400 pb-1'} onClick={() => setTab('limit')}>Limit</button>
           <button className={tab === 'adv' ? 'border-b-2 border-emerald-400 text-emerald-400 pb-1' : 'text-neutral-400 pb-1'} onClick={() => setTab('adv')}>Adv.</button>
         </div>
         {/* Amount Row */}
-        <div className="mb-2 rounded-lg border border-neutral-800 bg-neutral-900 px-4 py-3">
-          <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 mx-4 my-3 bg-neutral-800 p-2 pb-0 px-0">
+          <div className="mb-2 flex items-center justify-between px-2">
             <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">AMOUNT</span>
             <span className="text-xs font-bold text-white">{amount || '-'}</span>
           </div>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex items-center w-full">
             {[0.01, 0.1, 1, 10].map(opt => (
               <button
                 key={opt}
-                className={`rounded border border-neutral-700 px-4 py-1 text-xs font-semibold text-white transition-all ${amount === String(opt) ? (mode === 'buy' ? 'bg-emerald-600' : 'bg-red-500') : ''}`}
+                className={`cursor-pointer hover:bg-neutral-800 bg-neutral-950 border border-neutral-800 px-4 py-1 text-xs font-semibold text-white transition-all ${amount === String(opt) ? (mode === 'buy' ? 'bg-emerald-600' : 'bg-red-500') : ''}`}
                 onClick={() => setAmount(String(opt))}
                 type="button"
               >
@@ -103,7 +103,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
               type="number"
               min="0"
               step="any"
-              className="ml-2 w-20 rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs font-semibold text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className=" border bg-neutral-950 border-neutral-800 px-2 py-1 text-xs font-semibold text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               placeholder="0.0"
               value={['0.01','0.1','1','10'].includes(amount) ? '' : amount}
               onChange={e => setAmount(e.target.value)}
@@ -111,13 +111,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </div>
         </div>
         {/* Advanced Trading Strategy */}
-        <div className="flex items-center gap-2 mt-2">
+        <div className="flex items-center gap-2 mt-1 mx-4">
           <input type="checkbox" id="adv-strategy" className="accent-emerald-500" />
           <label htmlFor="adv-strategy" className="text-xs text-neutral-400">Advanced Trading Strategy</label>
         </div>
         {/* Action Button */}
         <button
-          className={`mt-2 w-full rounded py-3 text-xs font-bold transition disabled:opacity-50 ${mode === 'buy' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-600 text-white hover:bg-red-700'}`}
+          className={`mt-2 w-full mx-4 py-3 text-xs font-bold transition disabled:opacity-50 ${mode === 'buy' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-red-500 text-white hover:bg-pink-700'}`}
           disabled={!amount}
         >
           {mode === 'buy' ? `Buy ${token.name}` : `Sell ${token.name}`}
