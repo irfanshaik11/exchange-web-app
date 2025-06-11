@@ -1,5 +1,8 @@
 import React, { useState } from "react";
 import { formatSmartNumber, type Token } from "~/utils/db";
+import { useQuickBuy } from '~/components/QuickBuyContext';
+import { FaRunning, FaGasPump, FaCoins, FaBan } from 'react-icons/fa';
+import InterstateTooltip from '../InterstateTooltip';
 
 interface TradeActionPanelProps {
   token: Token;
@@ -9,6 +12,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
   const [mode, setMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [tab, setTab] = useState<"market" | "limit" | "adv">("market");
+  const { presets, activePreset } = useQuickBuy();
+  const settings = mode === 'buy' ? presets[activePreset].quickBuySettings : presets[activePreset].quickSellSettings;
 
   // Calculate stats from token fields
   const buyVol = token.total_buy_volume_5m || 0;
@@ -162,8 +167,23 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
             />
           </div>
         </div>
-        {/* Advanced Trading Strategy */}
-        <div className="mx-4 mt-1 flex items-center gap-2">
+        {/* QuickBuy Settings Summary */}
+        <div className="mx-4 my-1 flex items-center gap-4 text-neutral-200 text-xs">
+          <InterstateTooltip label="Max Slippage">
+            <span className="flex items-center gap-1"><FaRunning /> {settings.maxSlippage * 100}%</span>
+          </InterstateTooltip>
+          <InterstateTooltip label={`Priority Fee: ${settings.priority}. ${settings.priority < 0.01 ? 'We recommend a priority fee of atleast 0.01' : ''}`}>
+            <span className="flex items-center gap-1 text-yellow-400"><FaGasPump /> {settings.priority} {settings.priority < 0.01 ? <span className="text-yellow-400">&#9888;</span> : ''}</span>
+          </InterstateTooltip>
+          <InterstateTooltip label="Bribe">
+            <span className="flex items-center gap-1 text-yellow-400"><FaCoins /> {settings.bribe} <span className="text-yellow-400">&#9888;</span></span>
+          </InterstateTooltip>
+          <InterstateTooltip label="MEV Protection">
+            <span className={`flex items-center gap-1 ${settings.mevMode === 'off' ? 'text-neutral-400' : settings.mevMode === 'reduced' ? 'text-yellow-400' : 'text-emerald-400'}`}><FaBan /> {settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}</span>
+          </InterstateTooltip>
+        </div>
+        {/* Advanced Trading Strategy DO THIS AGAIN ADVANCED  */}
+        {/* <div className="mx-4 mt-1 flex items-center gap-2">
           <input
             type="checkbox"
             id="adv-strategy"
@@ -172,7 +192,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           <label htmlFor="adv-strategy" className="text-xs text-neutral-400">
             Advanced Trading Strategy
           </label>
-        </div>
+        </div> */}
         {/* Action Button */}
         <button
           className={`mx-4 mt-2 py-3 text-xs font-bold transition disabled:opacity-50 ${mode === "buy" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-500 text-white hover:bg-pink-700"}`}

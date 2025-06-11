@@ -31,9 +31,9 @@ export interface QuickBuyPreset {
 }
 
 const defaultSettings: QuickBuySettings = {
-  maxSlippage: 0.5,
-  priority: 1,
-  bribe: 0,
+  maxSlippage: 0.2,
+  priority: 0.001,
+  bribe: 0.05,
   mevMode: 'off',
   autoFee: false,
   maxFee: 0,
