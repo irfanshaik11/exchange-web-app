@@ -1,2 +1,1 @@
 memecoin ui
-h
