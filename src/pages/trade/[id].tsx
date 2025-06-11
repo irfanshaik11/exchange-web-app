@@ -20,11 +20,11 @@ import toast, { Toaster } from "react-hot-toast";
 import { useUser } from "../../components/UserContext";
 import PriceChartWidget from "../../components/PriceChartWidget";
 import Header from "../../components/Header";
-import TradeHeader from '../../components/trade/TradeHeader';
-import TradeActionPanel from '../../components/trade/TradeActionPanel';
-import TradeTabs from '../../components/trade/TradeTabs';
-import { formatSmartNumber } from '~/utils/db';
-import Trades from '../../components/trade/Trades';
+import TradeHeader from "../../components/trade/TradeHeader";
+import TradeActionPanel from "../../components/trade/TradeActionPanel";
+import TradeTabs from "../../components/trade/TradeTabs";
+import { formatSmartNumber } from "~/utils/db";
+import Trades from "../../components/trade/Trades";
 import Positions from "~/components/trade/Positions";
 
 export default function TradePage() {
@@ -46,13 +46,13 @@ export default function TradePage() {
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
   const { user, loading: userLoading } = useUser();
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
-  const [selectedTab, setSelectedTab] = useState('Trades');
+  const [selectedTab, setSelectedTab] = useState("Trades");
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
     fetch(`/api/token/${id}`)
-      .then(res => res.json())
+      .then((res) => res.json())
       .then((data: { result: Token | null }) => {
         setToken(data.result || null);
         setLoading(false);
@@ -224,16 +224,21 @@ export default function TradePage() {
         {/* Main Layout */}
         <div className="flex w-full flex-row gap-0">
           {/* Left: Chart and Info */}
-          <div className="flex min-w-0 flex-1 flex-col pb-4">
+          <div className="flex min-w-0 flex-1 flex-col pb-4 border-r border-emerald-950">
             {/* Token Info Header */}
-            <TradeHeader token={token}  />
+            <TradeHeader token={token} />
             {/* Chart */}
-            <PriceChartWidget token={token} />
+            <div className="min-h-[500px]">
+              <PriceChartWidget token={token} />
+            </div>
             <hr className="border-emerald-950" />
             {/* Tabs (Positions, Trades, etc.) */}
-            <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
-            {selectedTab === 'Trades' && <Trades token={token} />}
-            {selectedTab === 'Positions' && <Positions userId={user?.id} />}
+            <TradeTabs
+              selectedTab={selectedTab}
+              setSelectedTab={setSelectedTab}
+            />
+            {selectedTab === "Trades" && <Trades token={token} />}
+            {selectedTab === "Positions" && <Positions userId={user?.id} />}
           </div>
           {/* Right: Buy/Sell and Token Info */}
           <TradeActionPanel token={token} />
@@ -242,4 +247,3 @@ export default function TradePage() {
     </>
   );
 }
-
