@@ -3,18 +3,29 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useState, useEffect } from "react";
-import { FaGlobe, FaUser, FaSearch, FaCheckCircle, FaQuestionCircle, FaPowerOff, FaTimes, FaCopy } from "react-icons/fa";
+import {
+  FaGlobe,
+  FaUser,
+  FaSearch,
+  FaCheckCircle,
+  FaQuestionCircle,
+  FaPowerOff,
+  FaTimes,
+  FaCopy,
+  FaCog,
+} from "react-icons/fa";
 import Image from "next/image";
 import { useUser } from "../components/UserContext";
-import Cookies from 'js-cookie';
-import QRCode from 'qrcode';
+import Cookies from "js-cookie";
+import QRCode from "qrcode";
 import Header from "../components/Header";
 import type { Token } from "~/utils/db";
 import InterstateButton from "../components/InterstateButton";
 import InterstateTable from "../components/InterstateTable";
 import toast from "react-hot-toast";
-import { formatSmartNumber } from '~/utils/db';
-
+import { formatSmartNumber } from "~/utils/db";
+import { useQuickBuy } from "~/components/QuickBuyContext";
+import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -48,12 +59,20 @@ export default function Home() {
   const [loadingTokens, setLoadingTokens] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const isDiscover = router.pathname === "/";
-  const timeframes = ["5m", "1h", "6h", "24h"];
-  const [selectedTimeframe, setSelectedTimeframe] = useState("24h");
+  const timeframes = ["5m", "1h", "6h", "24h"] as const;
+  const [selectedTimeframe, setSelectedTimeframe] =
+    useState<(typeof timeframes)[number]>("24h");
   const { user, loading: userLoading, refreshUser } = useUser();
-  const [selectedTab, setSelectedTab] = useState<'dex' | 'trending'>('trending');
-  const [sortKey, setSortKey] = useState<'market_cap_total' | 'liquidity' | 'volume' | 'txns' | 'name'>('volume');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [selectedTab, setSelectedTab] = useState<"dex" | "trending">(
+    "trending",
+  );
+  const [sortKey, setSortKey] = useState<
+    "market_cap_total" | "liquidity" | "volume" | "txns" | "name"
+  >("volume");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [quickBuyAmount, setQuickBuyAmount] = useState(0.05);
+  const { quickBuySettings, presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     console.log(sortKey);
@@ -63,14 +82,18 @@ export default function Home() {
   useEffect(() => {
     setLoadingTokens(true);
     setTokenError(null);
-    fetch('/api/getAllTokens')
-      .then(res => {
+    fetch("/api/getAllTokens")
+      .then((res) => {
         if (!res.ok) throw new Error("Failed to fetch tokens");
         return res.json();
       })
       .then((data: { result: Token[] }) => {
-        console.log(data)
-        if (!data.result || !Array.isArray(data.result) || data.result.length === 0) {
+        console.log(data);
+        if (
+          !data.result ||
+          !Array.isArray(data.result) ||
+          data.result.length === 0
+        ) {
           setAllTokens([]);
           setFilteredTokens([]);
           setDisplayed([]);
@@ -97,9 +120,10 @@ export default function Home() {
       return;
     }
     const results = Array.isArray(allTokens)
-      ? allTokens.filter(token =>
-          token.name?.toLowerCase().includes(search.toLowerCase()) ||
-          token.symbol?.toLowerCase().includes(search.toLowerCase())
+      ? allTokens.filter(
+          (token) =>
+            token.name?.toLowerCase().includes(search.toLowerCase()) ||
+            token.symbol?.toLowerCase().includes(search.toLowerCase()),
         )
       : [];
     setFilteredTokens(results);
@@ -107,8 +131,23 @@ export default function Home() {
   }, [search, allTokens]);
 
   const handleTimeframeClick = (tf: string) => {
-    setSelectedTimeframe(tf);
-    // Optionally, refetch or shuffle if needed, but for now just keep the same data
+    setSelectedTimeframe(tf as (typeof timeframes)[number]);
+    setSortKey("volume");
+    setSortDirection("desc");
+    // Sort by volume for the new timeframe
+    if (Array.isArray(filteredTokens)) {
+      const sorted = [...filteredTokens].sort((a, b) => {
+        // Use the new timeframe's volume fields
+        const aVol =
+          (a[`total_buy_volume_${tf}`] || 0) +
+          (a[`total_sell_volume_${tf}`] || 0);
+        const bVol =
+          (b[`total_buy_volume_${tf}`] || 0) +
+          (b[`total_sell_volume_${tf}`] || 0);
+        return bVol - aVol;
+      });
+      setDisplayed(sorted);
+    }
   };
 
   // QUICK BUY handler
@@ -117,21 +156,26 @@ export default function Home() {
       return;
     }
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || ''}/api/trade/buy`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.bearerToken}`,
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL || ""}/api/trade/buy`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+          body: JSON.stringify({
+            tokenAddress: token.token_address,
+            amount: 0.05,
+            mevProtection: 0,
+          }),
         },
-        body: JSON.stringify({
-          tokenAddress: token.token_address,
-          amount: 0.05,
-          mevProtection: 0,
-        }),
-      });
+      );
       const data = await res.json();
       if (res.ok) {
-        toast.success(`Quick Buy successful! Bought ${data.amount} ${token.symbol}`);
+        toast.success(
+          `Quick Buy successful! Bought ${data.amount} ${token.symbol}`,
+        );
       } else {
         toast.error(data?.error || "Quick Buy failed");
       }
@@ -141,19 +185,21 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (selectedTab === 'trending') {
-      setSortKey('volume');
-      setSortDirection('desc');
+    if (selectedTab === "trending") {
+      setSortKey("volume");
+      setSortDirection("desc");
     }
   }, [selectedTab]);
 
   useEffect(() => {
-    if (selectedTab === 'trending') {
-      const sortedTokens = Array.isArray(filteredTokens) ? [...filteredTokens] : [];
+    if (selectedTab === "trending") {
+      const sortedTokens = Array.isArray(filteredTokens)
+        ? [...filteredTokens]
+        : [];
       sortedTokens.sort((a, b) => {
         const aVal = Number(a[sortKey]) || 0;
         const bVal = Number(b[sortKey]) || 0;
-        if (sortDirection === 'asc') {
+        if (sortDirection === "asc") {
           return aVal - bVal;
         } else {
           return bVal - aVal;
@@ -168,12 +214,20 @@ export default function Home() {
   // Sorting handler for table headers
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
       setSortKey(key);
-      setSortDirection('desc');
+      setSortDirection("desc");
     }
   };
+
+  // When activePreset changes, update quickBuySettings to match preset
+  useEffect(() => {
+    if (presets && presets[activePreset]) {
+      // Optionally, update quickBuySettings globally if needed
+      // setQuickBuySettings(presets[activePreset].quickBuySettings);
+    }
+  }, [activePreset, presets]);
 
   return (
     <>
@@ -186,43 +240,79 @@ export default function Home() {
         {/* Header */}
         <Header search={search} setSearch={setSearch} />
         {/* Tab Navigation */}
-        <div className="max-w-7xl mx-auto px-4 pt-8 flex items-center gap-6">
-          <button
-            className={`text-lg font-semibold transition-colors ${selectedTab === 'dex' ? 'text-white' : 'text-neutral-400'} cursor-pointer`}
-            onClick={() => setSelectedTab('dex')}
-          >
-            DEX Screener
-          </button>
-          <button
-            className={`text-lg font-semibold transition-colors ${selectedTab === 'trending' ? 'text-white' : 'text-neutral-400'} cursor-pointer`}
-            onClick={() => setSelectedTab('trending')}
-          >
-            Trending
-          </button>
-        </div>
-        {/* Timeframes Row (for both tabs) */}
-        <div className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-4 text-xs font-medium">
-          {timeframes.map(tf => (
+        <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-20">
+          <div className="flex max-w-7xl items-center gap-6">
             <button
-              key={tf}
-              className={
-                (selectedTimeframe === tf ? "text-emerald-400 " : "text-neutral-400 ") +
-                "transition-colors"
-              }
-              onClick={() => handleTimeframeClick(tf)}
+              className={`text-lg font-semibold transition-colors ${selectedTab === "dex" ? "text-white" : "text-neutral-400"} cursor-pointer`}
+              onClick={() => setSelectedTab("dex")}
             >
-              {tf}
+              DEX Screener
             </button>
-          ))}
+            <button
+              className={`text-lg font-semibold transition-colors ${selectedTab === "trending" ? "text-white" : "text-neutral-400"} cursor-pointer`}
+              onClick={() => setSelectedTab("trending")}
+            >
+              Trending
+            </button>
+          </div>
+          {/* Quick Buy pill UI */}
+          <div className="flex flex-row items-center gap-4">
+            {/* Timeframes Row (for both tabs) */}
+            <div className="flex max-w-7xl items-center gap-4 text-sm font-medium">
+              {timeframes.map((tf) => (
+                <button
+                  key={tf}
+                  className={
+                    (selectedTimeframe === tf
+                      ? "text-emerald-400 "
+                      : "text-neutral-400 ") +
+                    "cursor-pointer transition-colors"
+                  }
+                  onClick={() => handleTimeframeClick(tf)}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+            {/* Settings*/}
+            <button className="group cursor-pointer text-neutral-400 transition-colors hover:text-white" onClick={() => setSettingsOpen(true)}>
+              <FaCog className="transition-transform duration-300 group-hover:rotate-90" />
+            </button>
+            <div className="flex items-center flex-row rounded-full border border-neutral-800 px-4 py-1.5 shadow-inner">
+              <span className="mr-2 text-sm text-neutral-400">
+                Quick Buy
+              </span>
+              <input value={quickBuyAmount} onChange={(e) => setQuickBuyAmount(e.target.value as unknown as number)} className="text-sm text-neutral-200 focus:outline-none outline-none w-12" />
+              <img
+                src="https://axiom.trade/images/sol-fill.svg"
+                alt="Solana"
+                className="mr-4 h-5 w-5"
+              />
+              {[0, 1, 2].map((i) => (
+                <button
+                  key={i}
+                  className={`mr-2 cursor-pointer font-semibold ${activePreset === i ? "text-emerald-300" : "text-neutral-400"}`}
+                  onClick={() => setActivePreset(i)}
+                >
+                  {`P${i + 1}`}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-4 pb-10">
+        <main className="mx-auto px-20 pb-10">
           {loadingTokens ? (
-            <div className="text-center text-neutral-400 py-10">Loading tokens...</div>
+            <div className="py-10 text-center text-neutral-400">
+              Loading tokens...
+            </div>
           ) : tokenError ? (
-            <div className="text-center text-red-400 py-10">{tokenError}</div>
+            <div className="py-10 text-center text-red-400">{tokenError}</div>
           ) : displayed.length === 0 ? (
-            <div className="text-center text-neutral-400 py-10">No tokens found.</div>
+            <div className="py-10 text-center text-neutral-400">
+              No tokens found.
+            </div>
           ) : (
             <InterstateTable
               rows={displayed.map((token, i) => ({ token, i }))}
@@ -230,9 +320,11 @@ export default function Home() {
               sortKey={sortKey}
               sortDirection={sortDirection}
               setSort={handleSort}
+              selectedTimeframe={selectedTimeframe}
             />
           )}
         </main>
+        <QuickBuySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </div>
     </>
   );

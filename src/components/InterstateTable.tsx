@@ -24,9 +24,26 @@ interface InterstateTableProps {
   sortKey?: string;
   sortDirection?: 'asc' | 'desc';
   setSort?: (key: string) => void;
+  selectedTimeframe: '5m' | '1h' | '6h' | '24h';
 }
 
-export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirection, setSort }: InterstateTableProps) {
+// Helper to map timeframe to token property suffix
+function getTokenStat(token: Token, stat: string, timeframe: '5m' | '1h' | '6h' | '24h'): number {
+  const key = `${stat}_${timeframe}`;
+  // @ts-ignore
+  const val = token[key];
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') return parseFloat(val) || 0;
+  return 0;
+}
+
+function formatPercentChange(val: number): string {
+  if (val === 0) return '0.00';
+  const sign = val > 0 ? '+' : '';
+  return sign + formatSmartNumber(val);
+}
+
+export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirection, setSort, selectedTimeframe }: InterstateTableProps) {
   const router = useRouter();
   // Helper to get sortable value from token
   function getSortableValue(token: Token, key: string) {
@@ -59,9 +76,6 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
     setSort(key);
   };
 
-  useEffect(() => {
-    console.log(sortedRows);
-  }, [sortedRows]);
   return (
     <div className="overflow-x-auto border border-neutral-800 bg-neutral-900/80 shadow-lg">
       <table className="min-w-full divide-y divide-neutral-800">
@@ -150,7 +164,7 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                   <div
                     className={`mt-0.5 text-[11px] font-semibold ${i === 3 ? "text-red-400" : "text-emerald-400"}`}
                   >
-                    {["+18.43%", "+103.5%", "+35.71%", "-96.2%"][i % 4]}
+                    {formatPercentChange(getTokenStat(token, 'price_percent_change', selectedTimeframe))}%
                   </div>
                 </td>
                 {/* Liquidity */}
@@ -162,23 +176,29 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                 {/* Volume */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {formatSmartNumber((token.total_buy_volume_24h || 0) + (token.total_sell_volume_24h || 0))}
+                    {formatSmartNumber(
+                      getTokenStat(token, 'total_buy_volume', selectedTimeframe) +
+                      getTokenStat(token, 'total_sell_volume', selectedTimeframe)
+                    )}
                   </div>
                 </td>
                 {/* TXNS */}
                 <td className="px-3 py-2 align-middle">
                   <div className="text-xs text-neutral-100">
-                    {formatSmartNumber((token.total_buys_24h) + (token.total_sells_24h))}
+                    {formatSmartNumber(
+                      getTokenStat(token, 'total_buys', selectedTimeframe) +
+                      getTokenStat(token, 'total_sells', selectedTimeframe)
+                    )}
                   </div>
                   <div className="mt-0.5 text-[11px] font-semibold">
                     <span className="text-emerald-400">
-                      {formatSmartNumber(token.total_buys_24h)}
+                      {formatSmartNumber(getTokenStat(token, 'total_buys', selectedTimeframe))}
                     </span>
                     <span className="text-neutral-400"> / </span>
                     <span className="text-red-400">
-                      {formatSmartNumber(token.total_sells_24h)}
+                      {formatSmartNumber(getTokenStat(token, 'total_sells', selectedTimeframe))}
                     </span>
-                    </div>
+                  </div>
                 </td>
                 {/* Audit Log */}
                 <td className="px-3 py-2 align-middle">

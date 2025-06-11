@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 import { mainnet } from 'viem/chains';
 import LoginModal from '../components/LoginModal';
 import { env } from '../env';
+import { QuickBuyProvider } from '../components/QuickBuyContext';
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
@@ -74,7 +75,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
           <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
             <UserProvider>
               <TokenHandler />
-              <Component {...pageProps} />
+              <QuickBuyProvider>
+                <Component {...pageProps} />
+              </QuickBuyProvider>
               <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
             </UserProvider>
           </RainbowKitProvider>
