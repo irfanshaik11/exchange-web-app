@@ -1,11 +1,175 @@
 import React, { useState } from "react";
 import { formatSmartNumber, type Token } from "~/utils/db";
-import { useQuickBuy } from '~/components/QuickBuyContext';
-import { FaRunning, FaGasPump, FaCoins, FaBan } from 'react-icons/fa';
-import InterstateTooltip from '../InterstateTooltip';
+import { useQuickBuy } from "~/components/QuickBuyContext";
+import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
+import InterstateTooltip from "../InterstateTooltip";
+import { QuickBuyPresetBar } from "./TradeHeader";
 
 interface TradeActionPanelProps {
   token: Token;
+}
+
+const presetLabels = ["PRESET 1", "PRESET 2", "PRESET 3"];
+const mevModes = [
+  { label: "Off", value: "off" },
+  { label: "Reduced", value: "reduced" },
+  { label: "Secure", value: "on" },
+];
+
+function QuickBuySettingsSection() {
+  const { presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+
+  // Local state for editing (for instant UI feedback)
+  const [localBuy, setLocalBuy] = useState({
+    ...presets[activePreset].quickBuySettings,
+  });
+  const [localSell, setLocalSell] = useState({
+    ...presets[activePreset].quickSellSettings,
+  });
+
+  React.useEffect(() => {
+    setLocalBuy({ ...presets[activePreset].quickBuySettings });
+    setLocalSell({ ...presets[activePreset].quickSellSettings });
+  }, [activePreset, presets]);
+
+  // Save changes to context and presets immediately
+  const updateSettings = (s) => {
+    if (side === "buy") setLocalBuy(s);
+    else setLocalSell(s);
+    const newPresets = presets.map((p, i) =>
+      i === activePreset
+        ? {
+            ...p,
+            quickBuySettings: side === "buy" ? { ...s } : { ...localBuy },
+            quickSellSettings: side === "sell" ? { ...s } : { ...localSell },
+          }
+        : p,
+    );
+    setPresets(newPresets);
+  };
+
+  const settings = side === "buy" ? localBuy : localSell;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg px-3 py-3">
+      <div className="mb-2 flex gap-2">
+        {presetLabels.map((label, i) => (
+          <button
+            key={label}
+            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? "bg-blue-700 text-white" : "bg-neutral-800 text-blue-300 hover:bg-neutral-700"}`}
+            onClick={() => setActivePreset(i)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="mb-2 flex gap-2">
+        <button
+          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${side === "buy" ? "bg-emerald-700 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
+          onClick={() => setSide("buy")}
+        >
+          Buy settings
+        </button>
+        <button
+          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${side === "sell" ? "bg-emerald-700 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
+          onClick={() => setSide("sell")}
+        >
+          Sell settings
+        </button>
+      </div>
+      <div className="mb-2 grid grid-cols-3 gap-2">
+        <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
+          <input
+            type="number"
+            className="w-full bg-transparent text-center text-sm font-bold text-white outline-none"
+            value={settings.maxSlippage}
+            onChange={(e) =>
+              updateSettings({
+                ...settings,
+                maxSlippage: Number(e.target.value),
+              })
+            }
+          />
+          <span className="mt-1 flex items-center gap-1 text-[10px] text-neutral-400">
+            <FaRunning /> SLIPPAGE
+          </span>
+        </div>
+        <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
+          <input
+            type="number"
+            className="w-full bg-transparent text-center text-sm font-bold text-white outline-none"
+            value={settings.priority}
+            onChange={(e) =>
+              updateSettings({ ...settings, priority: Number(e.target.value) })
+            }
+          />
+          <span className="mt-1 flex items-center gap-1 text-[10px] text-neutral-400">
+            <FaGasPump /> PRIORITY
+          </span>
+        </div>
+        <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
+          <input
+            type="number"
+            className="w-full bg-transparent text-center text-sm font-bold text-white outline-none"
+            value={settings.bribe}
+            onChange={(e) =>
+              updateSettings({ ...settings, bribe: Number(e.target.value) })
+            }
+          />
+          <span className="mt-1 flex items-center gap-1 text-[10px] text-neutral-400">
+            <FaCoins /> BRIBE
+          </span>
+        </div>
+      </div>
+      <div className="mb-2 flex items-center gap-2">
+        <label className="flex cursor-pointer items-center gap-2">
+          <input
+            type="checkbox"
+            checked={settings.autoFee}
+            onChange={(e) =>
+              updateSettings({ ...settings, autoFee: e.target.checked })
+            }
+            className="accent-emerald-500"
+          />
+          <span className="text-xs text-neutral-300">Auto Fee</span>
+        </label>
+        <input
+          type="number"
+          className="ml-2 flex-1 rounded bg-neutral-800 px-2 py-1 text-xs text-white outline-none"
+          placeholder="MAX FEE"
+          value={settings.maxFee}
+          onChange={(e) =>
+            updateSettings({ ...settings, maxFee: Number(e.target.value) })
+          }
+          disabled={settings.autoFee}
+        />
+      </div>
+      <div className="mb-2 flex items-center gap-2">
+        <span className="mr-2 text-xs text-neutral-300">MEV Mode</span>
+        {mevModes.map((mode) => (
+          <button
+            key={mode.value}
+            className={`rounded border px-2 py-1 text-xs font-semibold ${settings.mevMode === mode.value ? "border-blue-400 bg-blue-800 text-blue-200" : "border-neutral-700 bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
+            onClick={() =>
+              updateSettings({ ...settings, mevMode: mode.value as any })
+            }
+          >
+            {mode.label}
+          </button>
+        ))}
+      </div>
+      <div>
+        <input
+          type="text"
+          className="w-full rounded bg-neutral-800 px-3 py-2 text-xs text-neutral-300 outline-none"
+          placeholder="RPC https://a...e.com"
+          value={settings.rpc || ""}
+          onChange={(e) => updateSettings({ ...settings, rpc: e.target.value })}
+        />
+      </div>
+    </div>
+  );
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
@@ -13,7 +177,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
   const [amount, setAmount] = useState("");
   const [tab, setTab] = useState<"market" | "limit" | "adv">("market");
   const { presets, activePreset } = useQuickBuy();
-  const settings = mode === 'buy' ? presets[activePreset].quickBuySettings : presets[activePreset].quickSellSettings;
+  const settings =
+    mode === "buy"
+      ? presets[activePreset].quickBuySettings
+      : presets[activePreset].quickSellSettings;
 
   // Calculate stats from token fields
   const buyVol = token.total_buy_volume_5m || 0;
@@ -33,7 +200,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
     : 50;
 
   return (
-    <div className="flex h-full w-[380px] flex-shrink-0 flex-col bg-neutral-950">
+    <div className="flex h-full flex-shrink-0 flex-col bg-neutral-950">
       {/* Stats Bar - Redesigned */}
       <div className="border-b border-emerald-950 p-4">
         <div className="flex items-end justify-between text-xs">
@@ -168,18 +335,41 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </div>
         </div>
         {/* QuickBuy Settings Summary */}
-        <div className="mx-4 my-1 flex items-center gap-4 text-neutral-200 text-xs">
+        <div className="mx-4 my-1 flex items-center gap-4 text-xs text-neutral-200">
           <InterstateTooltip label="Max Slippage">
-            <span className="flex items-center gap-1"><FaRunning /> {settings.maxSlippage * 100}%</span>
+            <span className="flex items-center gap-1">
+              <FaRunning /> {settings.maxSlippage * 100}%
+            </span>
           </InterstateTooltip>
-          <InterstateTooltip label={`Priority Fee: ${settings.priority}. ${settings.priority < 0.01 ? 'We recommend a priority fee of atleast 0.01' : ''}`}>
-            <span className="flex items-center gap-1 text-yellow-400"><FaGasPump /> {settings.priority} {settings.priority < 0.01 ? <span className="text-yellow-400">&#9888;</span> : ''}</span>
+          <InterstateTooltip
+            label={`Priority Fee: ${settings.priority}. ${settings.priority < 0.01 ? "We recommend a priority fee of atleast 0.01" : ""}`}
+          >
+            <span className="flex items-center gap-1 text-yellow-400">
+              <FaGasPump /> {settings.priority}{" "}
+              {settings.priority < 0.01 ? (
+                <span className="text-yellow-400">&#9888;</span>
+              ) : (
+                ""
+              )}
+            </span>
           </InterstateTooltip>
           <InterstateTooltip label="Bribe">
-            <span className="flex items-center gap-1 text-yellow-400"><FaCoins /> {settings.bribe} <span className="text-yellow-400">&#9888;</span></span>
+            <span className="flex items-center gap-1 text-yellow-400">
+              <FaCoins /> {settings.bribe}{" "}
+              <span className="text-yellow-400">&#9888;</span>
+            </span>
           </InterstateTooltip>
           <InterstateTooltip label="MEV Protection">
-            <span className={`flex items-center gap-1 ${settings.mevMode === 'off' ? 'text-neutral-400' : settings.mevMode === 'reduced' ? 'text-yellow-400' : 'text-emerald-400'}`}><FaBan /> {settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}</span>
+            <span
+              className={`flex items-center gap-1 ${settings.mevMode === "off" ? "text-neutral-400" : settings.mevMode === "reduced" ? "text-yellow-400" : "text-emerald-400"}`}
+            >
+              <FaBan />{" "}
+              {settings.mevMode === "off"
+                ? "Off"
+                : settings.mevMode === "reduced"
+                  ? "Reduced"
+                  : "Secure"}
+            </span>
           </InterstateTooltip>
         </div>
         {/* Advanced Trading Strategy DO THIS AGAIN ADVANCED  */}
@@ -202,22 +392,26 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </button>
       </div>
       <div className="flex flex-row border-b border-emerald-950">
-          <div className="border-r border-emerald-950 flex flex-col items-center text-xs text-neutral-500 gap-2 p-2 w-full">
-            <span>Bought</span> 
-            <span className="text-emerald-300 text-sm">$0</span>
-          </div>
-          <div className="border-r border-emerald-950 flex flex-col items-center text-xs text-neutral-500 gap-2 p-2 w-full">
-            <span>Sold</span> 
-            <span className="text-red-400 text-sm">$0</span>
-          </div>
-          <div className="border-r border-emerald-950 flex flex-col items-center text-xs text-neutral-500 gap-2 p-2 w-full">
-            <span>Holding</span> 
-            <span className="text-neutral-50 text-sm">$0</span>
-          </div>
-          <div className="border-r border-emerald-950 flex flex-col items-center text-xs text-neutral-500 gap-2 p-2 w-full">
-            <span>PnL</span> 
-            <span className="text-emerald-300 text-sm">$0(+0%)</span>
-          </div>
+        <div className="flex w-full flex-col items-center gap-2 border-r border-emerald-950 p-2 text-xs text-neutral-500">
+          <span>Bought</span>
+          <span className="text-sm text-emerald-300">$0</span>
+        </div>
+        <div className="flex w-full flex-col items-center gap-2 border-r border-emerald-950 p-2 text-xs text-neutral-500">
+          <span>Sold</span>
+          <span className="text-sm text-red-400">$0</span>
+        </div>
+        <div className="flex w-full flex-col items-center gap-2 border-r border-emerald-950 p-2 text-xs text-neutral-500">
+          <span>Holding</span>
+          <span className="text-sm text-neutral-50">$0</span>
+        </div>
+        <div className="flex w-full flex-col items-center gap-2 border-r border-emerald-950 p-2 text-xs text-neutral-500">
+          <span>PnL</span>
+          <span className="text-sm text-emerald-300">$0(+0%)</span>
+        </div>
+      </div>
+      {/* QuickBuy Preset Bar  FIX THE WIDTH THING */}
+      <div className="border-b border-emerald-950 w-[350px]">
+        <QuickBuySettingsSection />
       </div>
       {/* Token Info Box (mocked) */}
       <div className="border-b border-emerald-950 p-4">
