@@ -1,7 +1,1 @@
-deployment
- 
- 
- 
-WS
- 
- 
+memecoin ui
