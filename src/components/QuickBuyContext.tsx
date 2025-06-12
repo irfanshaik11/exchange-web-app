@@ -49,10 +49,36 @@ const defaultPresets: QuickBuyPreset[] = [
 const QuickBuyContext = createContext<QuickBuyContextType | undefined>(undefined);
 
 export function QuickBuyProvider({ children }: { children: ReactNode }) {
+  // Load from localStorage if available
+  const getInitialState = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('quickBuySettings');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          return {
+            presets: parsed.presets || [...defaultPresets],
+            activePreset: typeof parsed.activePreset === 'number' ? parsed.activePreset : 0,
+          };
+        } catch {
+          // ignore parse errors
+        }
+      }
+    }
+    return { presets: [...defaultPresets], activePreset: 0 };
+  };
+  const initial = getInitialState();
   const [quickBuySettings, setQuickBuySettings] = useState<QuickBuySettings>({ ...defaultSettings });
   const [quickSellSettings, setQuickSellSettings] = useState<QuickBuySettings>({ ...defaultSettings });
-  const [presets, setPresets] = useState<QuickBuyPreset[]>([...defaultPresets]);
-  const [activePreset, setActivePreset] = useState(0);
+  const [presets, setPresets] = useState<QuickBuyPreset[]>(initial.presets);
+  const [activePreset, setActivePreset] = useState(initial.activePreset);
+
+  // Save to localStorage on change
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('quickBuySettings', JSON.stringify({ presets, activePreset }));
+    }
+  }, [presets, activePreset]);
 
   // Optionally, add localStorage persistence here
 
