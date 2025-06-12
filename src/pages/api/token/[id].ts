@@ -80,6 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       total_holders: row.total_holders,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      bonding_curve_progress: row.bonding_curve_progress,
     };
     res.status(200).json({ result });
   } catch (error) {
