@@ -4,6 +4,7 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import { QuickBuyPresetBar } from "./TradeHeader";
+import QuickBuy from "../QuickBuy";
 
 interface TradeActionPanelProps {
   token: Token;
@@ -15,162 +16,6 @@ const mevModes = [
   { label: "Reduced", value: "reduced" },
   { label: "Secure", value: "on" },
 ];
-
-function QuickBuySettingsSection() {
-  const { presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
-  const [side, setSide] = useState<"buy" | "sell">("buy");
-
-  // Local state for editing (for instant UI feedback)
-  const [localBuy, setLocalBuy] = useState({
-    ...presets[activePreset].quickBuySettings,
-  });
-  const [localSell, setLocalSell] = useState({
-    ...presets[activePreset].quickSellSettings,
-  });
-
-  React.useEffect(() => {
-    setLocalBuy({ ...presets[activePreset].quickBuySettings });
-    setLocalSell({ ...presets[activePreset].quickSellSettings });
-  }, [activePreset, presets]);
-
-  // Save changes to context and presets immediately
-  const updateSettings = (s) => {
-    if (side === "buy") setLocalBuy(s);
-    else setLocalSell(s);
-    const newPresets = presets.map((p, i) =>
-      i === activePreset
-        ? {
-            ...p,
-            quickBuySettings: side === "buy" ? { ...s } : { ...localBuy },
-            quickSellSettings: side === "sell" ? { ...s } : { ...localSell },
-          }
-        : p,
-    );
-    setPresets(newPresets);
-  };
-
-  const settings = side === "buy" ? localBuy : localSell;
-
-  return (
-    <div className="flex flex-col gap-2 rounded-lg px-3 py-3">
-      <div className="mb-2 flex gap-2">
-        {presetLabels.map((label, i) => (
-          <button
-            key={label}
-            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? "bg-blue-700 text-white" : "bg-neutral-800 text-blue-300 hover:bg-neutral-700"}`}
-            onClick={() => setActivePreset(i)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div className="mb-2 flex gap-2">
-        <button
-          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${side === "buy" ? "bg-emerald-700 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
-          onClick={() => setSide("buy")}
-        >
-          Buy settings
-        </button>
-        <button
-          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${side === "sell" ? "bg-emerald-700 text-white" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
-          onClick={() => setSide("sell")}
-        >
-          Sell settings
-        </button>
-      </div>
-      <div className="mb-2 grid grid-cols-3 gap-2">
-        <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
-          <input
-            type="number"
-            className="w-full bg-transparent text-center text-sm font-bold text-white outline-none"
-            value={settings.maxSlippage}
-            onChange={(e) =>
-              updateSettings({
-                ...settings,
-                maxSlippage: Number(e.target.value),
-              })
-            }
-          />
-          <span className="mt-1 flex items-center gap-1 text-[10px] text-neutral-400">
-            <FaRunning /> SLIPPAGE
-          </span>
-        </div>
-        <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
-          <input
-            type="number"
-            className="w-full bg-transparent text-center text-sm font-bold text-white outline-none"
-            value={settings.priority}
-            onChange={(e) =>
-              updateSettings({ ...settings, priority: Number(e.target.value) })
-            }
-          />
-          <span className="mt-1 flex items-center gap-1 text-[10px] text-neutral-400">
-            <FaGasPump /> PRIORITY
-          </span>
-        </div>
-        <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
-          <input
-            type="number"
-            className="w-full bg-transparent text-center text-sm font-bold text-white outline-none"
-            value={settings.bribe}
-            onChange={(e) =>
-              updateSettings({ ...settings, bribe: Number(e.target.value) })
-            }
-          />
-          <span className="mt-1 flex items-center gap-1 text-[10px] text-neutral-400">
-            <FaCoins /> BRIBE
-          </span>
-        </div>
-      </div>
-      <div className="mb-2 flex items-center gap-2">
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={settings.autoFee}
-            onChange={(e) =>
-              updateSettings({ ...settings, autoFee: e.target.checked })
-            }
-            className="accent-emerald-500"
-          />
-          <span className="text-xs text-neutral-300">Auto Fee</span>
-        </label>
-        <input
-          type="number"
-          className="ml-2 flex-1 rounded bg-neutral-800 px-2 py-1 text-xs text-white outline-none"
-          placeholder="MAX FEE"
-          value={settings.maxFee}
-          onChange={(e) =>
-            updateSettings({ ...settings, maxFee: Number(e.target.value) })
-          }
-          disabled={settings.autoFee}
-        />
-      </div>
-      <div className="mb-2 flex items-center gap-2">
-        <span className="mr-2 text-xs text-neutral-300">MEV Mode</span>
-        {mevModes.map((mode) => (
-          <button
-            key={mode.value}
-            className={`rounded border px-2 py-1 text-xs font-semibold ${settings.mevMode === mode.value ? "border-blue-400 bg-blue-800 text-blue-200" : "border-neutral-700 bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
-            onClick={() =>
-              updateSettings({ ...settings, mevMode: mode.value as any })
-            }
-          >
-            {mode.label}
-          </button>
-        ))}
-      </div>
-      <div>
-        <input
-          type="text"
-          className="w-full rounded bg-neutral-800 px-3 py-2 text-xs text-neutral-300 outline-none"
-          placeholder="RPC https://a...e.com"
-          value={settings.rpc || ""}
-          onChange={(e) => updateSettings({ ...settings, rpc: e.target.value })}
-        />
-      </div>
-    </div>
-  );
-}
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
   const [mode, setMode] = useState<"buy" | "sell">("buy");
@@ -411,7 +256,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
       </div>
       {/* QuickBuy Preset Bar  FIX THE WIDTH THING */}
       <div className="border-b border-emerald-950 w-[350px]">
-        <QuickBuySettingsSection />
+        <QuickBuy hideActionButton className="bg-transparent border-none rounded-none" />
       </div>
       {/* Token Info Box (mocked) */}
       <div className="border-b border-emerald-950 p-4">

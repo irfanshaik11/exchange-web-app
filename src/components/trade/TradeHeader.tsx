@@ -122,7 +122,6 @@ const QuickBuyPresetBar: React.FC = () => {
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   return (
     <>
-      <QuickBuyPresetBar />
       <div className="mb-2 flex w-full items-center gap-6 rounded-lg px-3 py-1.5">
         {/* Left: Logo, Symbol, Name, Clipboard, Age */}
         <div className="flex min-w-0 items-center gap-3">

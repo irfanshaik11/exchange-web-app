@@ -35,6 +35,7 @@ export async function getActivePositionsByUser(userId: string): Promise<Position
 
 export async function getTradeHistoryByTokenAddress(tokenAddress: string): Promise<TradeRow[]> {
   if (!tokenAddress) return [];
+  console.log(env.NEXT_PUBLIC_BACKEND_URL)
   const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_tokenaddress?tokenAddress=${tokenAddress}`);
   const data = await res.json();
   return Array.isArray(data) ? data : [];

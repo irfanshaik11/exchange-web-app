@@ -29,12 +29,24 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const { refreshUser } = useUser();
+  const { refreshUser, user, loading: userLoading } = useUser();
   const [wiggle, setWiggle] = useState(false);
 
   useEffect(() => {
     if (open) {
       setShow(true);
+      // Check for token in cookies and refresh user if not already authenticated
+      const token = Cookies.get('token');
+      if (token && !user && !userLoading) {
+        setLoading(true);
+        refreshUser().then(() => {
+          setLoading(false);
+          // If user is now authenticated, close the modal
+          if (user) {
+            onClose();
+          }
+        }).catch(() => setLoading(false));
+      }
     } else {
       const timeout = setTimeout(() => setShow(false), 220);
       return () => clearTimeout(timeout);
