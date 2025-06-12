@@ -32,10 +32,6 @@ export default function QuickBuySettingsModal({
   onClose,
 }: QuickBuySettingsModalProps) {
   const {
-    quickBuySettings,
-    setQuickBuySettings,
-    quickSellSettings,
-    setQuickSellSettings,
     presets,
     setPresets,
     activePreset,
@@ -43,15 +39,31 @@ export default function QuickBuySettingsModal({
   } = useQuickBuy();
   const [side, setSide] = useState<"buy" | "sell">("buy");
 
+  // Helper to update a field in the correct preset and side
+  const updateSetting = (key: keyof QuickBuySettings, value: any) => {
+    const newPresets = presets.map((p, i) =>
+      i === activePreset
+        ? {
+            ...p,
+            quickBuySettings: side === "buy"
+              ? { ...p.quickBuySettings, [key]: value }
+              : p.quickBuySettings,
+            quickSellSettings: side === "sell"
+              ? { ...p.quickSellSettings, [key]: value }
+              : p.quickSellSettings,
+          }
+        : p
+    );
+    setPresets(newPresets);
+  };
+
+  const settings = side === "buy"
+    ? presets[activePreset].quickBuySettings
+    : presets[activePreset].quickSellSettings;
+
   // Save changes to context and presets
   const handleContinue = () => {
     onClose();
-  };
-
-  const settings = side === "buy" ? quickBuySettings : quickSellSettings;
-  const setSettings = (s: QuickBuySettings) => {
-    if (side === "buy") setQuickBuySettings(s);
-    else setQuickSellSettings(s);
   };
 
   return (
@@ -102,19 +114,19 @@ export default function QuickBuySettingsModal({
         <VerticalInput
           label="SLIPPAGE"
           value={settings.maxSlippage}
-          setValue={(v) => setSettings({ ...settings, maxSlippage: v })}
+          setValue={v => updateSetting('maxSlippage', v)}
           icon={<FaRunning />}
         />
         <VerticalInput
           label="PRIORITY"
           value={settings.priority}
-          setValue={(v) => setSettings({ ...settings, priority: v })}
+          setValue={v => updateSetting('priority', v)}
           icon={<FaGasPump />}
         />
         <VerticalInput
           label="BRIBE"
           value={settings.bribe}
-          setValue={(v) => setSettings({ ...settings, bribe: v })}
+          setValue={v => updateSetting('bribe', v)}
           icon={<FaCoins />}
         />
       </div>
@@ -139,9 +151,7 @@ export default function QuickBuySettingsModal({
               <input
                 type="checkbox"
                 checked={settings.autoFee}
-                onChange={(e) =>
-                  setSettings({ ...settings, autoFee: e.target.checked })
-                }
+                onChange={e => updateSetting('autoFee', e.target.checked)}
                 className="accent-emerald-500"
               />
               <span className="text-xs font-bold text-neutral-300">
@@ -157,9 +167,7 @@ export default function QuickBuySettingsModal({
             className="ml-2 w-28 flex-1 text-xs text-neutral-200 outline-none"
             placeholder="MAX FEE"
             value={settings.maxFee}
-            onChange={(e) =>
-              setSettings({ ...settings, maxFee: Number(e.target.value) })
-            }
+            onChange={e => updateSetting('maxFee', Number(e.target.value))}
             disabled={settings.autoFee}
           />
         </div>
@@ -198,7 +206,7 @@ export default function QuickBuySettingsModal({
             key={mode.value}
             className={`flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold ${settings.mevMode === mode.value ? "text-black bg-neutral-100" : "text-neutral-300 bg-neutral-800 hover:bg-neutral-700"} border border-neutral-100`}
             onClick={() =>
-              setSettings({ ...settings, mevMode: mode.value as any })
+              updateSetting('mevMode', mode.value as any)
             }
           >
             {mode.value === "off" && <FaBan />}
@@ -216,7 +224,7 @@ export default function QuickBuySettingsModal({
           className="w-full px-3 py-2 text-xs text-neutral-300 outline-none"
           placeholder="https://"
           value={settings.rpc || ""}
-          onChange={(e) => setSettings({ ...settings, rpc: e.target.value })}
+          onChange={e => updateSetting('rpc', e.target.value)}
         />
       </div>
       <div className="p-4 border-t border-neutral-700/90 w-full">
