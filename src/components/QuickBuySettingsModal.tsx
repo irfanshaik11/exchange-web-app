@@ -1,21 +1,36 @@
-import React, { useState } from 'react';
-import InterstatePopout from './InterstatePopout';
-import { useQuickBuy } from './QuickBuyContext';
-import type { QuickBuySettings, QuickBuyPreset } from './QuickBuyContext';
+import React, { useState } from "react";
+import InterstatePopout from "./InterstatePopout";
+import { useQuickBuy } from "./QuickBuyContext";
+import type { QuickBuySettings, QuickBuyPreset } from "./QuickBuyContext";
+import VerticalInput from "./VerticalInput";
+import {
+  FaRunning,
+  FaGasPump,
+  FaCoins,
+  FaInfoCircle,
+  FaBan,
+  FaShieldAlt,
+  FaLock,
+} from "react-icons/fa";
+import InterstateTooltip from "./InterstateTooltip";
+import InterstateButton from "./InterstateButton";
 
 interface QuickBuySettingsModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-const presetLabels = ['PRESET 1', 'PRESET 2', 'PRESET 3'];
+const presetLabels = ["PRESET 1", "PRESET 2", "PRESET 3"];
 const mevModes = [
-  { label: 'Off', value: 'off' },
-  { label: 'Reduced', value: 'reduced' },
-  { label: 'Secure', value: 'on' },
+  { label: "Off", value: "off" },
+  { label: "Reduced", value: "reduced" },
+  { label: "Secure", value: "on" },
 ];
 
-export default function QuickBuySettingsModal({ open, onClose }: QuickBuySettingsModalProps) {
+export default function QuickBuySettingsModal({
+  open,
+  onClose,
+}: QuickBuySettingsModalProps) {
   const {
     quickBuySettings,
     setQuickBuySettings,
@@ -26,55 +41,41 @@ export default function QuickBuySettingsModal({ open, onClose }: QuickBuySetting
     activePreset,
     setActivePreset,
   } = useQuickBuy();
-  const [side, setSide] = useState<'buy' | 'sell'>('buy');
-
-  // Local state for editing
-  const [localBuy, setLocalBuy] = useState<QuickBuySettings>({ ...presets[activePreset].quickBuySettings });
-  const [localSell, setLocalSell] = useState<QuickBuySettings>({ ...presets[activePreset].quickSellSettings });
-
-  // Sync local state when preset changes
-  React.useEffect(() => {
-    setLocalBuy({ ...presets[activePreset].quickBuySettings });
-    setLocalSell({ ...presets[activePreset].quickSellSettings });
-  }, [activePreset, presets]);
+  const [side, setSide] = useState<"buy" | "sell">("buy");
 
   // Save changes to context and presets
   const handleContinue = () => {
-    // Update context
-    setQuickBuySettings(localBuy);
-    setQuickSellSettings(localSell);
-    // Update presets
-    const newPresets = presets.map((p, i) =>
-      i === activePreset
-        ? {
-            ...p,
-            quickBuySettings: { ...localBuy },
-            quickSellSettings: { ...localSell },
-          }
-        : p
-    );
-    setPresets(newPresets);
     onClose();
   };
 
-  const settings = side === 'buy' ? localBuy : localSell;
+  const settings = side === "buy" ? quickBuySettings : quickSellSettings;
   const setSettings = (s: QuickBuySettings) => {
-    if (side === 'buy') setLocalBuy(s);
-    else setLocalSell(s);
+    if (side === "buy") setQuickBuySettings(s);
+    else setQuickSellSettings(s);
   };
 
   return (
-    <InterstatePopout open={open} onClose={onClose} align="center" className="bg-neutral-900 rounded-xl shadow-2xl w-full max-w-md p-6 relative text-neutral-100">
-      <div className="text-lg font-bold mb-4 flex items-center justify-between">
+    <InterstatePopout
+      open={open}
+      onClose={onClose}
+      align="center"
+      className="relative flex max-w-96 flex-col gap-2 border border-neutral-600 bg-neutral-900 text-neutral-100 shadow-2xl"
+    >
+      <div className="flex items-center justify-between border-b border-neutral-600 px-4 py-2 text-lg text-neutral-300">
         Trading Settings
-        <button onClick={onClose} className="text-2xl text-neutral-400 hover:text-white">×</button>
+        <button
+          onClick={onClose}
+          className="text-2xl text-neutral-400 hover:text-white"
+        >
+          ×
+        </button>
       </div>
       {/* Presets */}
-      <div className="flex gap-2 mb-4">
+      <div className="mx-3 mb-4 flex gap-2 rounded-lg border border-neutral-700/90 px-1 py-1">
         {presetLabels.map((label, i) => (
           <button
             key={label}
-            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? 'bg-blue-700 text-white' : 'bg-neutral-800 text-blue-300 hover:bg-neutral-700'}`}
+            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? "bg-emerald-300/20 text-emerald-200" : "bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200"}`}
             onClick={() => setActivePreset(i)}
           >
             {label}
@@ -82,99 +83,145 @@ export default function QuickBuySettingsModal({ open, onClose }: QuickBuySetting
         ))}
       </div>
       {/* Buy/Sell Tabs */}
-      <div className="flex gap-2 mb-4">
+      <div className="mx-3 flex gap-2 rounded-lg border border-neutral-700/90 px-1 py-1">
         <button
-          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${side === 'buy' ? 'bg-emerald-700 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'}`}
-          onClick={() => setSide('buy')}
+          className={`flex-1 rounded-md px-3 py-1.5 text-xs uppercase transition-colors ${side === "buy" ? "bg-emerald-400/20 text-emerald-200" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
+          onClick={() => setSide("buy")}
         >
           Buy Settings
         </button>
         <button
-          className={`flex-1 rounded-md px-3 py-1.5 text-xs font-bold transition-colors ${side === 'sell' ? 'bg-emerald-700 text-white' : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'}`}
-          onClick={() => setSide('sell')}
+          className={`flex-1 rounded-md px-3 py-1.5 text-xs uppercase transition-colors ${side === "sell" ? "bg-red-400/80 text-red-50" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
+          onClick={() => setSide("sell")}
         >
           Sell Settings
         </button>
       </div>
       {/* Settings Inputs */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="flex flex-col items-center bg-neutral-800 rounded p-2">
-          <input
-            type="number"
-            className="w-full bg-transparent text-center text-white font-bold text-sm outline-none"
-            value={settings.maxSlippage}
-            onChange={e => setSettings({ ...settings, maxSlippage: Number(e.target.value) })}
-          />
-          <span className="text-[10px] text-neutral-400 mt-1">SLIPPAGE</span>
-        </div>
-        <div className="flex flex-col items-center bg-neutral-800 rounded p-2">
-          <input
-            type="number"
-            className="w-full bg-transparent text-center text-white font-bold text-sm outline-none"
-            value={settings.priority}
-            onChange={e => setSettings({ ...settings, priority: Number(e.target.value) })}
-          />
-          <span className="text-[10px] text-neutral-400 mt-1">PRIORITY</span>
-        </div>
-        <div className="flex flex-col items-center bg-neutral-800 rounded p-2">
-          <input
-            type="number"
-            className="w-full bg-transparent text-center text-white font-bold text-sm outline-none"
-            value={settings.bribe}
-            onChange={e => setSettings({ ...settings, bribe: Number(e.target.value) })}
-          />
-          <span className="text-[10px] text-neutral-400 mt-1">BRIBE</span>
-        </div>
-      </div>
-      {/* Auto Fee and Max Fee */}
-      <div className="flex items-center gap-2 mb-4">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={settings.autoFee}
-            onChange={e => setSettings({ ...settings, autoFee: e.target.checked })}
-            className="accent-emerald-500"
-          />
-          <span className="text-xs text-neutral-300">Auto Fee</span>
-        </label>
-        <input
-          type="number"
-          className="flex-1 bg-neutral-800 rounded px-2 py-1 text-xs text-white ml-2 outline-none"
-          placeholder="MAX FEE"
-          value={settings.maxFee}
-          onChange={e => setSettings({ ...settings, maxFee: Number(e.target.value) })}
-          disabled={settings.autoFee}
+      <div className="mb-4 grid grid-cols-3 gap-2 px-4">
+        <VerticalInput
+          label="SLIPPAGE"
+          value={settings.maxSlippage}
+          setValue={(v) => setSettings({ ...settings, maxSlippage: v })}
+          icon={<FaRunning />}
+        />
+        <VerticalInput
+          label="PRIORITY"
+          value={settings.priority}
+          setValue={(v) => setSettings({ ...settings, priority: v })}
+          icon={<FaGasPump />}
+        />
+        <VerticalInput
+          label="BRIBE"
+          value={settings.bribe}
+          setValue={(v) => setSettings({ ...settings, bribe: v })}
+          icon={<FaCoins />}
         />
       </div>
+      {/* Auto Fee and Max Fee */}
+      <div className="mx-4 mb-4 flex items-center justify-between gap-2">
+        <label className="flex cursor-pointer items-center gap-2">
+          <InterstateTooltip
+            label={
+              <div className="p-1 text-center">
+                Automatically adjusts priority
+                <br />
+                and bribe fees based on network
+                <br />
+                conditions. Locked upon order
+                <br />
+                creation for limit orders.
+              </div>
+            }
+            widthClass="w-52"
+          >
+            <span className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={settings.autoFee}
+                onChange={(e) =>
+                  setSettings({ ...settings, autoFee: e.target.checked })
+                }
+                className="accent-emerald-500"
+              />
+              <span className="text-xs font-bold text-neutral-300">
+                Auto Fee
+              </span>
+            </span>
+          </InterstateTooltip>
+        </label>
+        <div className="rounded-3xl border border-neutral-700/90 px-2 py-1">
+          <span className="text-xs text-neutral-600">MAX FEE</span>
+          <input
+            type="number"
+            className="ml-2 w-28 flex-1 text-xs text-neutral-200 outline-none"
+            placeholder="MAX FEE"
+            value={settings.maxFee}
+            onChange={(e) =>
+              setSettings({ ...settings, maxFee: Number(e.target.value) })
+            }
+            disabled={settings.autoFee}
+          />
+        </div>
+      </div>
       {/* MEV Mode */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-xs text-neutral-300 mr-2">MEV Mode</span>
-        {mevModes.map(mode => (
+      <div className="mb-4 flex items-center gap-2 mx-4">
+        <InterstateTooltip
+          widthClass="w-90"
+          label={
+            <>
+              <b>Off</b>
+              <br />
+              Send trades as fast as possible to all Solana validators
+              <br />
+              <br />
+              <b>Reduced</b>
+              <br />
+              Avoid sending transactions to blacklisted validators to reduce
+              chances of MEV attacks
+              <br />
+              <br />
+              <b>Secure [BETA]</b>
+              <br />
+              Only sends transactions to whitelisted validators.
+              <br />
+              This can be slow.
+            </>
+          }
+        >
+          <span className="mr-2 flex cursor-pointer items-center text-xs text-neutral-300">
+            MEV Mode <FaInfoCircle className="ml-1" />
+          </span>
+        </InterstateTooltip>
+        {mevModes.map((mode) => (
           <button
             key={mode.value}
-            className={`rounded px-2 py-1 text-xs font-semibold border ${settings.mevMode === mode.value ? 'bg-blue-800 border-blue-400 text-blue-200' : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700'}`}
-            onClick={() => setSettings({ ...settings, mevMode: mode.value as any })}
+            className={`flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold ${settings.mevMode === mode.value ? "text-black bg-neutral-100" : "text-neutral-300 bg-neutral-800 hover:bg-neutral-700"} border border-neutral-100`}
+            onClick={() =>
+              setSettings({ ...settings, mevMode: mode.value as any })
+            }
           >
+            {mode.value === "off" && <FaBan />}
+            {mode.value === "reduced" && <FaShieldAlt />}
+            {mode.value === "on" && <FaLock />}
             {mode.label}
           </button>
         ))}
       </div>
       {/* RPC Input */}
-      <div className="mb-6">
+      <div className="mx-4 mb-6 flex flex-row items-center rounded-3xl border border-neutral-700/90 pl-2">
+        <span className="text-xs text-neutral-600">RPC</span>
         <input
           type="text"
-          className="w-full bg-neutral-800 rounded px-3 py-2 text-xs text-neutral-300 outline-none"
-          placeholder="RPC https://a...e.com"
-          value={settings.rpc || ''}
-          onChange={e => setSettings({ ...settings, rpc: e.target.value })}
+          className="w-full px-3 py-2 text-xs text-neutral-300 outline-none"
+          placeholder="https://"
+          value={settings.rpc || ""}
+          onChange={(e) => setSettings({ ...settings, rpc: e.target.value })}
         />
       </div>
-      <button
-        className="w-full rounded-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 text-base transition"
-        onClick={handleContinue}
-      >
-        Continue
-      </button>
+      <div className="p-4 border-t border-neutral-700/90 w-full">
+        <InterstateButton onClick={handleContinue} className="w-full">Continue</InterstateButton>
+      </div>
     </InterstatePopout>
   );
-} 
+}
