@@ -21,6 +21,7 @@ export const env = createEnv({
     NEXT_PUBLIC_API_URL:z.string().url().optional(),
     NEXT_PUBLIC_BACKEND_URL: z.string(),
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED: z.preprocess((val) => val === 'true' || val === true, z.boolean()),
+    
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
 
