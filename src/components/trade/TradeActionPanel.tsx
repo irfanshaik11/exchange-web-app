@@ -96,18 +96,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div>
       </div>
       {/* Trade Box */}
-      <div className="flex flex-col border-b border-emerald-950 pb-4 shadow-lg">
+      <div className="flex flex-col border-b border-emerald-950 pb-4 w-full shadow-lg">
         {/* Toggle */}
-        <div className="flex border-b border-emerald-950 p-2">
+        <div className="flex border-b border-emerald-950 p-2 w-full">
           <button
-            className={`px-6 py-2 text-sm font-bold transition-all ${mode === "buy" ? "bg-emerald-500 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}
+            className={`px-6 py-2 text-sm font-bold transition-all w-full ${mode === "buy" ? "bg-emerald-500 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}
             onClick={() => setMode("buy")}
             type="button"
           >
             Buy
           </button>
           <button
-            className={`px-6 py-2 text-sm font-bold transition-all ${mode === "sell" ? "bg-red-500 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}
+            className={`px-6 py-2 text-sm font-bold transition-all w-full ${mode === "sell" ? "bg-red-500 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}
             onClick={() => setMode("sell")}
             type="button"
           >
