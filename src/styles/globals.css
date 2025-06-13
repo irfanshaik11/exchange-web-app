@@ -11,6 +11,7 @@ body {
   height: 100vh; /* or h-screen with Tailwind */
   margin: 0;
   padding: 0;
+  background-color: #1a1a1a;
 }
 .interstate-overlay {
   position: fixed;
