@@ -94,7 +94,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast }: PulseTableP
                       </span>
                     ))}
                   </div>
-                  <button className="flex items-center gap-1 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-full px-4 py-1 transition">
+                  <button className="flex items-center gap-1 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-full px-4 py-1 transition shadow">
                     <FaBolt className="text-yellow-300" /> 0 SOL
                   </button>
                 </div>

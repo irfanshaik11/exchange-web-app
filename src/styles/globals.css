@@ -71,22 +71,22 @@ body {
 /* Custom Scrollbar for PulseTable and other scrollable areas */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #5a5e7a #23243a;
+  scrollbar-color: #14532d #0f2417; /* green thumb, dark green track */
 }
 .custom-scrollbar::-webkit-scrollbar {
   width: 8px;
-  background: #23243a;
+  background: #0f2417; /* very dark green track */
   border-radius: 8px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #5a5e7a;
+  background: #14532d; /* dark green thumb */
   border-radius: 8px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #7a7fc7;
+  background: #166534; /* lighter green on hover */
 }
 .custom-scrollbar::-webkit-scrollbar-corner {
-  background: #23243a;
+  background: #0f2417;
 }
 
 /* Optional: Hide scrollbar buttons/arrows for a cleaner look */
