@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM token_details WHERE token_address = $1 LIMIT 1`,
+      `SELECT * FROM bonding_tokens WHERE token_address = $1 LIMIT 1`,
       [id]
     );
 

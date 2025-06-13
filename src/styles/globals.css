@@ -66,3 +66,29 @@ body {
 .wiggle {
   animation: wiggle 0.6s cubic-bezier(.36,.07,.19,.97) both;
 }
+
+/* Custom Scrollbar for PulseTable and other scrollable areas */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #5a5e7a #23243a;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  background: #23243a;
+  border-radius: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #5a5e7a;
+  border-radius: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #7a7fc7;
+}
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: #23243a;
+}
+
+/* Optional: Hide scrollbar buttons/arrows for a cleaner look */
+.custom-scrollbar::-webkit-scrollbar-button {
+  display: none;
+}

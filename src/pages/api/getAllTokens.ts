@@ -10,7 +10,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     console.log("Connection string: ",env.NEON_DB_API_KEY);
     // Get all data from the tokens table
-    const { rows } = await pool.query('SELECT * FROM token_details');
+    const { rows } = await pool.query('SELECT * FROM bonding_tokens');
     console.log("Query Results: ", rows);
     res.status(200).json({ result: rows });
   } catch (error) {
