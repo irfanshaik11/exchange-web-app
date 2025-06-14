@@ -52,7 +52,7 @@ export default function PulsePage() {
           ) : error ? (
             <div className="text-center text-red-400 py-10">{error}</div>
           ) : (
-            <div className="flex flex-row w-full  overflow-x-auto">
+            <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
               <PulseTable title="New Pairs" tokens={newPairs} isFirstOrLast="first" />
               <PulseTable title="Final Stretch" tokens={finalStretch} />
               <PulseTable title="Migrated" tokens={migrated} isFirstOrLast="last" />

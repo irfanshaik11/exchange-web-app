@@ -172,9 +172,70 @@ export default function PortfolioPage() {
             </>
           )}
 
-          {/* Wallet Section (empty for now) */}
+          {/* Wallet Section */}
           {activeSection === 'wallet' && (
-            <div className="text-neutral-500 py-20 text-center">Wallet section coming soon.</div>
+            <div className="w-full">
+              {/* Top Bar */}
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="text"
+                  placeholder="Search by name or address"
+                  className="bg-neutral-900 border border-neutral-800 rounded px-4 py-2 text-sm text-neutral-200 focus:outline-none w-80"
+                  disabled
+                />
+                <span className="ml-2 flex items-center gap-2">
+                  <button className="text-neutral-400 text-xs flex items-center gap-1"><span className="opacity-60"><svg width="16" height="16" fill="none"><path d="M2 8h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></span>Show Archived</button>
+                  <button className="bg-neutral-800 text-white font-semibold rounded px-4 py-1.5 text-sm ml-2">Import</button>
+                  <button className="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded px-4 py-1.5 text-sm ml-2">Create Wallet</button>
+                </span>
+              </div>
+              {/* Wallets Table */}
+              <div className="flex flex-row gap-4 w-full">
+                {/* Wallets List */}
+                <div className="flex-1 bg-neutral-900 rounded-lg p-2 min-h-[400px]">
+                  <div className="flex flex-col">
+                    <div className="flex items-center border-b border-neutral-800 pb-2 mb-2">
+                      <span className="w-1/3 text-neutral-400 text-sm">Wallet</span>
+                      <span className="w-1/4 text-neutral-400 text-sm">Balance</span>
+                      <span className="w-1/4 text-neutral-400 text-sm">Holdings</span>
+                      <span className="w-1/6 text-neutral-400 text-sm">Actions</span>
+                    </div>
+                    {/* Only show if user is logged in */}
+                    {user ? (
+                      <div className="flex items-center border-b border-neutral-800 py-2 group hover:bg-neutral-800/60 transition">
+                        <input type="checkbox" className="mr-2 accent-blue-600" />
+                        <span className="w-1/3 flex items-center gap-2 font-semibold text-amber-400">
+                          Axiom Main
+                          <span className="text-xs text-neutral-500 font-mono">{user.publicKey.slice(0, 4)}...{user.publicKey.slice(-4)}</span>
+                          <button className="ml-1 text-neutral-400 hover:text-white" title="Copy address"><svg width="14" height="14" fill="none"><path d="M3 3h8v8H3V3z" stroke="currentColor" strokeWidth="1.5"/><path d="M6 6h5v5H6V6z" stroke="currentColor" strokeWidth="1.5"/></svg></button>
+                        </span>
+                        <span className="w-1/4 flex items-center gap-1"><svg width="18" height="18" className="mr-1" viewBox="0 0 24 24"><rect width="24" height="24" rx="4" fill="url(#solana-gradient)"/><defs><linearGradient id="solana-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#00FFA3"/><stop offset="100%" stopColor="#DC1FFF"/></linearGradient></defs></svg><span className="font-mono">0</span></span>
+                        <span className="w-1/4 flex items-center"><span className="bg-neutral-800 rounded-full px-3 py-1 text-xs text-neutral-400">0</span></span>
+                        <span className="w-1/6 flex items-center justify-center">
+                          <button className="text-neutral-400 hover:text-white"><svg width="16" height="16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/></svg></button>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-32 text-neutral-500">Please log in to view your wallets.</div>
+                    )}
+                  </div>
+                </div>
+                {/* Source Wallets (right panel) */}
+                <div className="flex-1 bg-neutral-900 rounded-lg p-2 min-h-[400px] flex flex-col">
+                  <div className="flex items-center border-b border-neutral-800 pb-2 mb-2">
+                    <span className="w-1/3 text-neutral-400 text-sm">Source wallets</span>
+                  </div>
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <svg width="40" height="40" fill="none" viewBox="0 0 40 40"><path d="M20 10v20M10 20h20" stroke="#444" strokeWidth="2" strokeLinecap="round"/></svg>
+                    <span className="text-neutral-500 mt-2">Drag wallets to distribute SOL</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-4 text-neutral-700 text-xs">
+                    <span>Destination</span>
+                    <button className="bg-neutral-900 text-neutral-700 rounded px-4 py-1.5 ml-auto" disabled>Start Transfer</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
