@@ -321,6 +321,7 @@ export default function Home() {
               sortDirection={sortDirection}
               setSort={handleSort}
               selectedTimeframe={selectedTimeframe}
+              quickBuyAmount={quickBuyAmount}
             />
           )}
         </main>

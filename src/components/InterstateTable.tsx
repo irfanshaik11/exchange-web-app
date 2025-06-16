@@ -25,6 +25,7 @@ interface InterstateTableProps {
   sortDirection?: 'asc' | 'desc';
   setSort?: (key: string) => void;
   selectedTimeframe: '5m' | '1h' | '6h' | '24h';
+  quickBuyAmount?: number | string;
 }
 
 // Helper to map timeframe to token property suffix
@@ -43,7 +44,7 @@ function formatPercentChange(val: number): string {
   return sign + formatSmartNumber(val);
 }
 
-export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirection, setSort, selectedTimeframe }: InterstateTableProps) {
+export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirection, setSort, selectedTimeframe, quickBuyAmount = 0.05 }: InterstateTableProps) {
   const router = useRouter();
   // Helper to get sortable value from token
   function getSortableValue(token: Token, key: string) {
@@ -232,7 +233,7 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                       }
                     }}
                   >
-                    Buy 0.05 SOL
+                    {`Buy ${quickBuyAmount} SOL`}
                   </InterstateButton>
                 </td>
             </tr>
