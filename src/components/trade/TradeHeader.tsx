@@ -180,7 +180,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
             label={"Global Fees Paid"}
             value={
               <span className="flex items-center gap-2 text-blue-300">
-                <span className="font-bold">Ξ {10.2}</span>
+                <span className="font-bold">Ξ {formatSmartNumber(token.global_fees_paid)}</span>
               </span>
             }
           />
