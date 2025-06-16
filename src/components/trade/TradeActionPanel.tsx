@@ -5,6 +5,7 @@ import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import { QuickBuyPresetBar } from "./TradeHeader";
 import QuickBuy from "../QuickBuy";
+import CustomCheckbox from '../CustomCheckbox';
 
 interface TradeActionPanelProps {
   token: Token;

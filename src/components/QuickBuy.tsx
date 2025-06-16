@@ -13,6 +13,7 @@ import {
 } from "react-icons/fa";
 import InterstateTooltip from "./InterstateTooltip";
 import InterstateButton from "./InterstateButton";
+import CustomCheckbox from './CustomCheckbox';
 
 const presetLabels = ["PRESET 1", "PRESET 2", "PRESET 3"];
 const mevModes = [
@@ -144,12 +145,7 @@ const QuickBuy: React.FC<QuickBuyProps> = ({ hideActionButton = false, sideProp,
               widthClass="w-52"
             >
               <span className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.autoFee}
-                  onChange={e => updateSetting('autoFee', e.target.checked)}
-                  className="accent-emerald-500"
-                />
+                <CustomCheckbox checked={settings.autoFee} onChange={e => updateSetting('autoFee', e.target.checked)} className="mr-2" />
                 <span className="text-xs font-bold text-neutral-300">
                   Auto Fee
                 </span>

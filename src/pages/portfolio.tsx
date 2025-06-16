@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import Positions from '../components/trade/Positions';
 import { useUser } from '../components/UserContext';
 import InterstateTooltip from '~/components/InterstateTooltip';
+import CustomCheckbox from '../components/CustomCheckbox';
 
 const spotTabs = ['Active Positions', 'History', 'Top 100'];
 const activityTabs = ['Activity'];
@@ -13,6 +14,7 @@ export default function PortfolioPage() {
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activeActivityTab, setActiveActivityTab] = useState(0);
   const { user, loading: userLoading } = useUser();
+  const [walletChecked, setWalletChecked] = useState(false);
 
   return (
     <>
@@ -204,7 +206,7 @@ export default function PortfolioPage() {
                     {/* Only show if user is logged in */}
                     {user ? (
                       <div className="flex items-center border-b border-neutral-800 py-2 group hover:bg-neutral-800/60 transition">
-                        <input type="checkbox" className="mr-2 accent-blue-600" />
+                        <CustomCheckbox checked={walletChecked} onChange={e => setWalletChecked(e.target.checked)} className="mr-2" />
                         <span className="w-1/3 flex items-center gap-2 font-semibold text-amber-400">
                           Axiom Main
                           <span className="text-xs text-neutral-500 font-mono">{user.publicKey.slice(0, 4)}...{user.publicKey.slice(-4)}</span>
