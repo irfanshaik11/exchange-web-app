@@ -48,11 +48,12 @@ export default function PortfolioPage() {
 
           {/* Spot Section */}
           {activeSection === 'spot' && (
-            <>
+            <div className="border border-emerald-950 p-4">
               {/* Top Panels */}
-              <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="flex flex-row w-full border-b border-emerald-950 mb-0 ">
+
                 {/* Balance */}
-                <div className="bg-neutral-900 rounded-lg p-6 flex flex-col min-h-[180px]">
+                <div className="flex-1 flex flex-col min-h-[180px] border-r border-emerald-950">
                   <div className="text-base font-semibold mb-2">Balance</div>
                   <div className="flex-1 flex flex-col justify-between">
                     <div>
@@ -70,7 +71,7 @@ export default function PortfolioPage() {
                   </div>
                 </div>
                 {/* Realized PNL */}
-                <div className="bg-neutral-900 rounded-lg p-6 flex flex-col min-h-[180px]">
+                <div className="flex-1 flex flex-col min-h-[180px] border-r border-emerald-950">
                   <div className="text-base font-semibold mb-2">Realized PNL</div>
                   <div className="flex-1 flex items-center justify-center">
                     {/* Placeholder for chart */}
@@ -81,7 +82,7 @@ export default function PortfolioPage() {
                   </div>
                 </div>
                 {/* Performance */}
-                <div className="bg-neutral-900 rounded-lg p-6 flex flex-col min-h-[180px]">
+                <div className="flex-1 flex flex-col min-h-[180px]">
                   <div className="text-base font-semibold mb-2">Performance</div>
                   <div className="flex-1 flex flex-col gap-1 text-xs">
                     <div className="flex justify-between"><span>Total PNL</span><span className="text-white">$0.00</span></div>
@@ -98,7 +99,7 @@ export default function PortfolioPage() {
               </div>
 
               {/* Tables Section */}
-              <div className="bg-neutral-900 rounded-lg p-4 mt-2">
+              <div className="mt-2 border-b border-emerald-950">
                 <div className="flex gap-8 border-b border-neutral-800 mb-2">
                   {spotTabs.map((tab, i) => (
                     <button
@@ -131,7 +132,7 @@ export default function PortfolioPage() {
               </div>
 
               {/* Activity Section */}
-              <div className="bg-neutral-900 rounded-lg p-4 mt-4">
+              <div className="mt-4 border-b border-emerald-950">
                 <div className="flex gap-8 border-b border-neutral-800 mb-2">
                   {activityTabs.map((tab, i) => (
                     <button
@@ -169,12 +170,12 @@ export default function PortfolioPage() {
                   </table>
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {/* Wallet Section */}
           {activeSection === 'wallet' && (
-            <div className="w-full">
+            <div className="w-full border border-emerald-950 p-4">
               {/* Top Bar */}
               <div className="flex items-center gap-2 mb-2">
                 <input
@@ -192,7 +193,7 @@ export default function PortfolioPage() {
               {/* Wallets Table */}
               <div className="flex flex-row gap-4 w-full">
                 {/* Wallets List */}
-                <div className="flex-1 bg-neutral-900 rounded-lg p-2 min-h-[400px]">
+                <div className="flex-1 p-2 min-h-[400px] border-r border-emerald-950">
                   <div className="flex flex-col">
                     <div className="flex items-center border-b border-neutral-800 pb-2 mb-2">
                       <span className="w-1/3 text-neutral-400 text-sm">Wallet</span>
@@ -221,7 +222,7 @@ export default function PortfolioPage() {
                   </div>
                 </div>
                 {/* Source Wallets (right panel) */}
-                <div className="flex-1 bg-neutral-900 rounded-lg p-2 min-h-[400px] flex flex-col">
+                <div className="flex-1 p-2 min-h-[400px] flex flex-col">
                   <div className="flex items-center border-b border-neutral-800 pb-2 mb-2">
                     <span className="w-1/3 text-neutral-400 text-sm">Source wallets</span>
                   </div>
