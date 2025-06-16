@@ -23,6 +23,7 @@ import { IoShareSocialOutline } from "react-icons/io5";
 import { formatSmartNumber } from '~/utils/db';
 import { useQuickBuy } from '../QuickBuyContext';
 import InterstateTooltip from '../InterstateTooltip';
+import { useWatchlist } from '../WatchlistContext';
 
 // Helper function to format age
 function getTokenAge(createdAt: string) {
@@ -120,6 +121,17 @@ const QuickBuyPresetBar: React.FC = () => {
 };
 
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
+  const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
+  const isWatched = isInWatchlist(token.token_address);
+
+  const handleWatchlistClick = () => {
+    if (isWatched) {
+      removeFromWatchlist(token.token_address);
+    } else {
+      addToWatchlist(token);
+    }
+  };
+
   return (
     <>
       <div className="mb-2 flex w-full items-center gap-6 rounded-lg px-3 py-1.5">
@@ -190,8 +202,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
           <Tooltip label="Share token pair">
             <IoShareSocialOutline className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />
           </Tooltip>
-          <Tooltip label="Add token to Watchlist">
-            <FaRegStar className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />
+          <Tooltip label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}>
+            <button
+              onClick={handleWatchlistClick}
+              className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400"
+            >
+              {isWatched ? <FaStar className="text-yellow-400" /> : <FaRegStar />}
+            </button>
           </Tooltip>
           <Tooltip label="Expand Chart">
             <FaExpand className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />

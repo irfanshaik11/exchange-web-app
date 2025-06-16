@@ -15,6 +15,7 @@ import { mainnet } from 'viem/chains';
 import LoginModal from '../components/LoginModal';
 import { env } from '../env';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
+import { WatchlistProvider } from '../components/WatchlistContext';
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
@@ -76,7 +77,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
             <UserProvider>
               <TokenHandler />
               <QuickBuyProvider>
-                <Component {...pageProps} />
+                <WatchlistProvider>
+                  <Component {...pageProps} />
+                </WatchlistProvider>
               </QuickBuyProvider>
               <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
             </UserProvider>
