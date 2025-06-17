@@ -12,6 +12,7 @@ import { useRouter } from "next/router";
 import type { Token } from "~/utils/db";
 import Link from "next/link";
 import { formatSmartNumber } from '~/utils/db';
+import InterstateTooltip from './InterstateTooltip';
 
 export interface InterstateTableRow {
   token: Token;
@@ -114,21 +115,99 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                 {/* Pair Info */}
                 <td className="w-auto px-3 py-2 align-middle">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded border border-yellow-400 bg-neutral-800">
-                      <img
-                        src={token.logo}
-                        alt={token.name}
-                        width={32}
-                        height={32}
-                        className="h-8 w-8 object-cover"
+                    <InterstateTooltip
+                      width={300}
+                      height={undefined}
+                      xOffset="ml-0"
+                      label={
+                        <div className="p-2">
+                          {/* Enlarged Picture (top, centered) */}
+                          <div className="mb-2 flex justify-center">
+                            <img
+                              src={token.logo}
+                              alt={token.name}
+                              width={200}
+                              height={200}
+                              className="border border-neutral-700"
+                            />
+                          </div>
+
+                          {/* Token Details below image - Re-arranged to match image */}
+                          <div className="mb-2 text-center">
+                            <div className="text-xl font-bold text-white">
+                              {token.name}
+                            </div>
+                            <div className="text-base font-medium text-neutral-400 mb-2">
+                              ({token.symbol})
+                            </div>
+                            <p className="text-lg font-semibold text-white">
+                              ${formatSmartNumber(token.usd_price)} <span className={`text-base ${token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{formatPercentChange(token.price_percent_change_1h)}%</span>
+                            </p>
+                            <div className="mt-2 flex items-center justify-center gap-2">
+                              <span className="text-sm font-semibold text-emerald-400">
+                                1h
+                              </span>
+                              <FaUser className="text-sm text-sky-400" />
+                              <FaGlobe className="text-sm text-sky-400" />
+                              <FaSearch className="text-sm text-sky-400" />
+                              <FaCopy className="ml-1 cursor-pointer text-sm text-neutral-500" />
+                            </div>
+                          </div>
+
+                          {/* Similar Tokens */}
+                          <div className="border-t border-neutral-700 pt-2 mt-2">
+                            <p className="mb-1 text-xs font-semibold text-neutral-300">
+                              Similar Tokens:
+                            </p>
+                            <ul className="text-xs text-neutral-500 space-y-1">
+                              {sortedRows
+                                .filter(row => row.token.token_address !== token.token_address) // Exclude the current token
+                                .sort((a, b) => {
+                                  const diffA = Math.abs(a.token.fully_diluted_value - token.fully_diluted_value);
+                                  const diffB = Math.abs(b.token.fully_diluted_value - token.fully_diluted_value);
+                                  return diffA - diffB;
+                                }) // Sort by market cap similarity
+                                .slice(0, 2) // Take up to 2 similar tokens
+                                .map((similarTokenRow, idx) => (
+                                  <li key={idx} className="flex items-center gap-2">
+                                    <img
+                                      src={similarTokenRow.token.logo}
+                                      alt={similarTokenRow.token.name}
+                                      width={32}
+                                      height={32}
+                                      className="border border-neutral-700"
+                                    />
+                                    <span className="text-neutral-300 truncate max-w-[80px]">
+                                      {similarTokenRow.token.name}
+                                    </span>
+                                    {/* Using a placeholder for age and getting actual TX data */}
+                                    <span className="text-[10px] text-neutral-500">{similarTokenRow.token.created_at ? `${Math.floor((new Date().getTime() - new Date(similarTokenRow.token.created_at).getTime()) / (1000 * 60 * 60 * 24))}d` : '-'}</span>
+                                    <span className="text-[10px] text-neutral-500">
+                                      TX: {formatSmartNumber(getTokenStat(similarTokenRow.token, 'total_buy_volume', '1h') + getTokenStat(similarTokenRow.token, 'total_sell_volume', '1h'))}
+                                    </span>
+                                  </li>
+                                ))}
+                            </ul>
+                          </div>
+                        </div>
+                      }
+                    >
+                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded border border-yellow-400 bg-neutral-800">
+                        <img
+                          src={token.logo}
+                          alt={token.name}
+                          width={48}
+                          height={48}
+                          className="h-12 w-12 object-cover"
                       />
                     </div>
+                    </InterstateTooltip>
                     <div className="flex min-w-0 flex-col">
                       <div className="flex items-center gap-1">
-                        <span className="truncate text-xs leading-tight font-bold text-white">
+                        <span className="truncate text-sm leading-tight font-bold text-white">
                           {token.name}
                         </span>
-                        <span className="truncate text-[11px] font-medium text-neutral-400">
+                        <span className="truncate text-xs font-medium text-neutral-400">
                           {token.symbol}
                         </span>
                         <FaCopy className="ml-1 cursor-pointer text-xs text-neutral-500" />
