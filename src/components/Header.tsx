@@ -12,10 +12,10 @@ const navLinks = [
   { name: "Discover", href: "/" },
   { name: "Pulse", href: "/pulse" },
   { name: "Trackers", href: "/trackers" },
-  { name: "Perpetuals", href: "#" },
-  { name: "Yield", href: "#" },
+  //{ name: "Perpetuals", href: "#" },
+  //{ name: "Yield", href: "#" },
   { name: "Portfolio", href: "/portfolio" },
-  { name: "Rewards", href: "#" },
+  //{ name: "Rewards", href: "#" },
 ];
 
 interface HeaderProps {

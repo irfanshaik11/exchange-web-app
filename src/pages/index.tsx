@@ -13,6 +13,7 @@ import {
   FaTimes,
   FaCopy,
   FaCog,
+  FaFilter,
 } from "react-icons/fa";
 import Image from "next/image";
 import { useUser } from "../components/UserContext";
@@ -279,6 +280,12 @@ export default function Home() {
             <button className="group cursor-pointer text-neutral-400 transition-colors hover:text-white" onClick={() => setSettingsOpen(true)}>
               <FaCog className="transition-transform duration-300 group-hover:rotate-90" />
             </button>
+            <button className="relative flex flex-row items-center rounded-full bg-neutral-900 px-4 py-1.5 shadow-inner border border-neutral-800 group mr-2">
+              <FaFilter className="text-lg mr-2 text-white" />
+              <span className="font-semibold text-white text-base">Filters</span>
+              <svg className="ml-2 w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+              <span className="absolute left-3 top-1 w-2 h-2 bg-blue-400 rounded-full"></span>
+            </button>
             <div className="flex items-center flex-row rounded-full border border-neutral-800 px-4 py-1.5 shadow-inner">
               <span className="mr-2 text-sm text-neutral-400">
                 Quick Buy
@@ -322,6 +329,7 @@ export default function Home() {
               sortDirection={sortDirection}
               setSort={handleSort}
               selectedTimeframe={selectedTimeframe}
+              quickBuyAmount={quickBuyAmount}
             />
           )}
         </main>

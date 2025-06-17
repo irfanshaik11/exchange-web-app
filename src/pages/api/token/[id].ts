@@ -9,7 +9,6 @@ const pool = new Pool({
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { id } = req.query;
-  console.log(id)
   if (!id || typeof id !== 'string') {
     return res.status(400).json({ error: 'Missing or invalid token address' });
   }
@@ -81,6 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       created_at: row.created_at,
       updated_at: row.updated_at,
       bonding_curve_progress: row.bonding_curve_progress,
+      global_fees_paid: row.global_fees_paid,
     };
     res.status(200).json({ result });
   } catch (error) {

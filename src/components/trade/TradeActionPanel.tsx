@@ -5,6 +5,7 @@ import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import { QuickBuyPresetBar } from "./TradeHeader";
 import QuickBuy from "../QuickBuy";
+import CustomCheckbox from '../CustomCheckbox';
 
 interface TradeActionPanelProps {
   token: Token;
@@ -233,7 +234,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           className={`mx-4 mt-2 py-3 text-xs font-bold transition disabled:opacity-50 ${mode === "buy" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-500 text-white hover:bg-pink-700"}`}
           disabled={!amount}
         >
-          {mode === "buy" ? `Buy ${token.name}` : `Sell ${token.name}`}
+          {mode === "buy" ? `Buy ${token.symbol}` : `Sell ${token.symbol}`}
         </button>
       </div>
       <div className="flex flex-row border-b border-emerald-950">
@@ -258,34 +259,45 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
       <div className="border-b border-emerald-950 w-[350px]">
         <QuickBuy hideActionButton className="bg-transparent border-none rounded-none" />
       </div>
-      {/* Token Info Box (mocked) */}
+      {/* Token Info Box */}
       <div className="border-b border-emerald-950 p-4">
         <div className="mb-2 text-xs text-neutral-400">Token Info</div>
-        {/* TODO: Replace the following mocked values with real data from the Token type if available */}
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
-            <span className="font-bold text-emerald-400">9.39%</span>
+            <span className="font-bold text-emerald-400">
+              {token.total_holders ? ((token.total_holders / token.total_supply) * 100).toFixed(2) : "0"}%
+            </span>
             <span className="text-neutral-400">Top 10 H.</span>
           </div>
           <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
-            <span className="font-bold text-neutral-400">0%</span>
+            <span className="font-bold text-neutral-400">
+              {token.is_verified_contract ? "Yes" : "No"}
+            </span>
             <span className="text-neutral-400">Dev H.</span>
           </div>
           <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
-            <span className="font-bold text-red-400">20.37%</span>
+            <span className="font-bold text-red-400">
+              {token.total_snipers ? ((token.total_snipers / token.total_supply) * 100).toFixed(2) : "0"}%
+            </span>
             <span className="text-neutral-400">Snipers H.</span>
           </div>
           <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
-            <span className="font-bold text-red-400">20.02%</span>
+            <span className="font-bold text-red-400">
+              {token.possible_spam ? "Yes" : "No"}
+            </span>
             <span className="text-neutral-400">Insiders</span>
           </div>
           <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
-            <span className="font-bold text-red-400">29.55%</span>
-            <span className="text-neutral-400">Bundlers</span>
+            <span className="font-bold text-red-400">
+              {token.total_liquidity_usd ? formatSmartNumber(token.total_liquidity_usd) : "0"}
+            </span>
+            <span className="text-neutral-400">Liquidity</span>
           </div>
           <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
-            <span className="font-bold text-red-400">LP Burned</span>
-            <span className="text-neutral-400">LP Burned</span>
+            <span className="font-bold text-red-400">
+              {token.bonding_curve_progress ? `${(Number(token.bonding_curve_progress) * 100).toFixed(2)}%` : "0%"}
+            </span>
+            <span className="text-neutral-400">Progress</span>
           </div>
         </div>
       </div>
