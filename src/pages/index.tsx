@@ -28,6 +28,7 @@ import { formatSmartNumber } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { FilterProvider } from '../components/FilterContext';
+import InterstatePopout from '../components/InterstatePopout';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -75,6 +76,7 @@ export default function Home() {
   const [quickBuyAmount, setQuickBuyAmount] = useState(0.05);
   const { quickBuySettings, presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
 
   useEffect(() => {
     console.log(sortKey);
@@ -231,6 +233,17 @@ export default function Home() {
     }
   }, [activePreset, presets]);
 
+  // Helper function to render Min/Max inputs
+  const renderMinMaxInputs = (label: string) => (
+    <div>
+      <h3 className="text-neutral-300 text-sm font-semibold mb-2">{label}</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <input type="number" placeholder="Min" className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        <input type="number" placeholder="Max" className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+      </div>
+    </div>
+  );
+
   return (
     <FilterProvider>
       <Head>
@@ -280,7 +293,10 @@ export default function Home() {
             <button className="group cursor-pointer text-neutral-400 transition-colors hover:text-white" onClick={() => setSettingsOpen(true)}>
               <FaCog className="transition-transform duration-300 group-hover:rotate-90" />
             </button>
-            <button className="relative flex flex-row items-center rounded-full bg-neutral-900 px-4 py-1.5 shadow-inner border border-neutral-800 group mr-2">
+            <button
+              className="relative flex flex-row items-center rounded-full bg-neutral-900 px-4 py-1.5 shadow-inner border border-neutral-800 group mr-2"
+              onClick={() => setIsFilterPopoutOpen(true)}
+            >
               <FaFilter className="text-lg mr-2 text-white" />
               <span className="font-semibold text-white text-base">Filters</span>
               <svg className="ml-2 w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
@@ -308,6 +324,66 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* Filter Popout */}
+        <InterstatePopout
+          open={isFilterPopoutOpen}
+          onClose={() => setIsFilterPopoutOpen(false)}
+          align="center"
+          className="bg-neutral-900 rounded-xl shadow-2xl w-full max-w-md p-6 relative text-neutral-100"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Filters</h2>
+              <button onClick={() => setIsFilterPopoutOpen(false)} className="text-neutral-400 hover:text-white text-xl">×</button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-neutral-300 text-sm font-semibold mb-2">Protocols</h3>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="form-checkbox text-purple-600 rounded" defaultChecked /> Raydium
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="form-checkbox text-purple-600 rounded" defaultChecked /> Pump
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="form-checkbox text-purple-600 rounded" defaultChecked /> Moonit
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-neutral-300 text-sm font-semibold mb-1">Search Keywords</label>
+                  <input type="text" placeholder="keyword1, keyword2..." className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+                <div>
+                  <label className="block text-neutral-300 text-sm font-semibold mb-1">Exclude Keywords</label>
+                  <input type="text" placeholder="keyword1, keyword2..." className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2">
+                <input type="checkbox" className="form-checkbox text-purple-600 rounded" /> Dex Paid
+              </label>
+
+              {/* Min/Max Input Fields */}
+              {renderMinMaxInputs("Top 10 Holders %")}
+              {renderMinMaxInputs("Liquidity ($)")}
+              {renderMinMaxInputs("Volume ($)")}
+              {renderMinMaxInputs("Market Cap ($)")}
+              {renderMinMaxInputs("Txns")}
+
+            </div>
+            <div className="flex justify-between items-center mt-6">
+              <button onClick={() => { /* Reset logic here */ setIsFilterPopoutOpen(false); }} className="text-neutral-400 hover:text-white flex items-center gap-2">
+                <FaPowerOff /> Reset
+              </button>
+              <InterstateButton variant="primary" onClick={() => setIsFilterPopoutOpen(false)}>Apply all</InterstateButton>
+            </div>
+          </div>
+        </InterstatePopout>
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
