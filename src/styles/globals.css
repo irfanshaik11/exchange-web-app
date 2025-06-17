@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import './interstate.css';
 
 @theme {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
@@ -13,40 +14,44 @@ body {
   padding: 0;
   background-color: #1a1a1a;
 }
+
+/* Interstate Popout Styles */
 .interstate-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
   display: flex;
-  background-color: rgba(0, 0, 0, 0);
-  backdrop-filter: blur(4px);
+  background-color: transparent;
   opacity: 0;
-  transition: opacity 200ms ease-in-out, background-color 200ms ease-in-out;
+  transition: opacity 200ms ease-in-out;
   pointer-events: none;
 }
 
 .interstate-overlay.visible {
-  background-color: rgba(0, 0, 0, 0.4);
   opacity: 1;
   pointer-events: auto;
 }
 
-.align-center {
+.interstate-overlay.align-center {
   justify-content: center;
   align-items: center;
 }
 
-.align-top-right {
+.interstate-overlay.align-top-right {
   justify-content: flex-end;
   align-items: flex-start;
-  padding: 2rem;
+  padding: 1rem;
 }
 
 .interstate-content {
+  position: relative;
   opacity: 0;
-  transform: scale(0.85);
-  transition: opacity 200ms ease-in-out, transform 200ms ease-in-out;
+  transform: scale(0.95);
+  transition: all 200ms ease-in-out;
   will-change: opacity, transform;
+  background: #262626;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
 .interstate-content.visible {

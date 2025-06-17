@@ -26,6 +26,7 @@ import toast from "react-hot-toast";
 import { formatSmartNumber } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
+import { FilterProvider } from '../components/FilterContext';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -230,7 +231,7 @@ export default function Home() {
   }, [activePreset, presets]);
 
   return (
-    <>
+    <FilterProvider>
       <Head>
         <title>Interstate Memeboard | Discover</title>
         <meta name="description" content="Interstate dashboard" />
@@ -326,6 +327,6 @@ export default function Home() {
         </main>
         <QuickBuySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </div>
-    </>
+    </FilterProvider>
   );
 }
