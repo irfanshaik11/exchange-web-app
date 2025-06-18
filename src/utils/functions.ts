@@ -31,6 +31,7 @@ export interface Wallet {
   address: string;
   name: string;
   createdAt: number; // Timestamp for creation date
+  emoji?: string;
 }
 
 // New: Helper to get stored wallets from localStorage

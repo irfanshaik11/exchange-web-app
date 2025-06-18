@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import Header from '../components/Header';
 import { getActivePositionsByUser, getStoredWallets, storeWallets } from '~/utils/functions';
 import type { PositionRow, Wallet } from '~/utils/functions';
 import AddWalletModal from '../components/AddWalletModal';
 import WalletRow from '../components/WalletRow';
+import ImportExportWalletModal from '../components/ImportExportWalletModal';
 
 const TABS = ['Wallet Manager', 'Live Trades'];
+const EMOJIS = ['💰','🚀','🦄','🐉','🦊','🐸','🐼','🐧','🦁','🐵','🐻','🐨','🐯','🦕','🦖','🐙','🐳','🐬','🦋','🌟','🔥','🌈','🍀','🍕','🍔','🍣','🍩','🍦','🎲','🎯','🎮','🎸','🎹','🏆','🥇','🥈','🥉','⚡','💎','🧊','🪐','🌌','🌠','🛸','🛰️','🚁','🚢','✈️','🚗','🏎️','🚓','🚑','🚒','🚜','🚲','🛴','🛵','🏍️','🦽','🦼','🛹','🛶','⛵','🚤','🛥️','🚀'];
 
 export default function TrackersPage() {
   const [activeTab, setActiveTab] = useState(0);
@@ -15,6 +17,9 @@ export default function TrackersPage() {
   const [showAddWalletModal, setShowAddWalletModal] = useState(false);
   const [wallets, setWallets] = useState<Wallet[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [toast, setToast] = useState('');
 
   useEffect(() => {
     // Load wallets from localStorage on component mount
@@ -36,6 +41,7 @@ export default function TrackersPage() {
       address,
       name: name || `Wallet ${wallets.length + 1}`,
       createdAt: Date.now(),
+      emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
     };
     const updatedWallets = [...wallets, newWallet];
     setWallets(updatedWallets);
@@ -65,6 +71,37 @@ export default function TrackersPage() {
     wallet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     wallet.address.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Export: copy addresses to clipboard and show toast
+  const handleExportAddresses = () => {
+    const addresses = wallets.map(w => w.address).join(', ');
+    navigator.clipboard.writeText(addresses);
+    setToast('Wallets copied to clipboard');
+    setTimeout(() => setToast(''), 2000);
+  };
+
+  // Import wallets from JSON file
+  const handleImportWallets = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const imported = JSON.parse(event.target?.result as string);
+        if (Array.isArray(imported)) {
+          setWallets(imported);
+          storeWallets(imported);
+        } else {
+          alert('Invalid wallet file format.');
+        }
+      } catch {
+        alert('Failed to import wallets.');
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be imported again if needed
+    e.target.value = '';
+  };
 
   return (
     <>
@@ -102,8 +139,18 @@ export default function TrackersPage() {
             />
             {activeTab === 0 && (
               <>
-                <button className="bg-neutral-800/50 hover:bg-neutral-700 text-white font-semibold rounded-lg px-4 py-2 mr-2 transition-all duration-300 backdrop-blur-sm">Import</button>
-                <button className="bg-neutral-800/50 hover:bg-neutral-700 text-white font-semibold rounded-lg px-4 py-2 mr-2 transition-all duration-300 backdrop-blur-sm">Export</button>
+                <button
+                  className="bg-neutral-800/50 hover:bg-neutral-700 text-white font-semibold rounded-lg px-4 py-2 mr-2 transition-all duration-300 backdrop-blur-sm"
+                  onClick={() => setShowImportModal(true)}
+                >
+                  Import
+                </button>
+                <button
+                  className="bg-neutral-800/50 hover:bg-neutral-700 text-white font-semibold rounded-lg px-4 py-2 mr-2 transition-all duration-300 backdrop-blur-sm"
+                  onClick={handleExportAddresses}
+                >
+                  Export
+                </button>
                 <button 
                   className="bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-500 hover:to-blue-700 text-white font-semibold rounded-lg px-4 py-2 shadow-lg shadow-blue-500/20 transition-all duration-300"
                   onClick={() => setShowAddWalletModal(true)}
@@ -124,8 +171,6 @@ export default function TrackersPage() {
                     <div className="flex-1 flex gap-8 text-neutral-400 text-sm">
                       <span className="w-32">Created</span>
                       <span className="flex-1">Name</span>
-                      <span className="w-48">Token Address</span>
-                      <span className="w-24 text-right">Balance</span>
                     </div>
                     <div className="flex gap-4 items-center">
                       <span className="text-neutral-400 text-sm">Actions</span>
@@ -211,6 +256,18 @@ export default function TrackersPage() {
         onClose={() => setShowAddWalletModal(false)}
         onAddWallet={handleAddWallet}
       />
+      <ImportExportWalletModal
+        mode={'import'}
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={(imported) => { setWallets(imported); storeWallets(imported); }}
+        wallets={wallets}
+      />
+      {toast && (
+        <div className="fixed top-8 left-1/2 -translate-x-1/2 bg-neutral-900 text-white px-6 py-3 rounded-lg shadow-lg z-50 text-sm animate-fade-in">
+          {toast}
+        </div>
+      )}
 
       {/* Bottom Navigation/Footer */}
       <div className="fixed bottom-0 left-0 w-full bg-neutral-900/80 backdrop-blur-md border-t border-emerald-950/50 flex justify-between items-center px-6 py-3 text-xs z-40">
