@@ -53,7 +53,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
               <tr key={token.token_address} className="hover:bg-neutral-800/60">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2 cursor-pointer" onClick={() => handleTokenClick(token.token_address)}>
-                    <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded border border-yellow-400 bg-neutral-800">
+                    <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-yellow-400 bg-neutral-800">
                       <img
                         src={token.logo}
                         alt={token.name}

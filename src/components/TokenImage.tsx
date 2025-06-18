@@ -32,7 +32,7 @@ export default function TokenImage({ token, size = 32, className = '' }: TokenIm
       style={{ display: 'inline-block' }}
     >
       <div
-        className="flex h-8 w-8 items-center justify-center overflow-hidden rounded border border-yellow-400 bg-neutral-800 cursor-pointer"
+        className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-yellow-400 bg-neutral-800 cursor-pointer"
       >
         <img
           src={token.logo}

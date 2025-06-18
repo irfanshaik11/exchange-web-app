@@ -97,9 +97,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div>
       </div>
       {/* Trade Box */}
-      <div className="flex flex-col border-b border-emerald-950 pb-4 w-full shadow-lg">
+      <div className="flex flex-col border-b border-emerald-950 pb-4 w-full shadow-lg rounded-lg">
         {/* Toggle */}
-        <div className="flex border-b border-emerald-950 p-2 w-full">
+        <div className="flex border-b border-emerald-950 p-2 w-full rounded-t-lg">
           <button
             className={`px-6 py-2 text-sm font-bold transition-all w-full ${mode === "buy" ? "bg-emerald-500 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}
             onClick={() => setMode("buy")}
@@ -149,7 +149,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </button>
         </div>
         {/* Amount Row */}
-        <div className="mx-4 my-3 mb-2 bg-neutral-800 p-2 px-0 pb-0">
+        <div className="mx-4 my-3 mb-2 bg-neutral-800 p-2 px-0 pb-0 rounded-lg">
           <div className="mb-2 flex items-center justify-between px-2">
             <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">
               AMOUNT
@@ -181,7 +181,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </div>
         </div>
         {/* QuickBuy Settings Summary */}
-        <div className="mx-4 my-1 flex items-center gap-4 text-xs text-neutral-200">
+        <div className="mx-4 my-1 flex items-center gap-4 text-xs text-neutral-200 rounded-lg">
           <InterstateTooltip label="Max Slippage">
             <span className="flex items-center gap-1">
               <FaRunning /> {settings.maxSlippage * 100}%
@@ -231,13 +231,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div> */}
         {/* Action Button */}
         <button
-          className={`mx-4 mt-2 py-3 text-xs font-bold transition disabled:opacity-50 ${mode === "buy" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-500 text-white hover:bg-pink-700"}`}
+          className={`mx-4 mt-2 py-3 text-xs font-bold transition disabled:opacity-50 rounded-lg ${mode === "buy" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-500 text-white hover:bg-pink-700"}`}
           disabled={!amount}
         >
           {mode === "buy" ? `Buy ${token.symbol}` : `Sell ${token.symbol}`}
         </button>
       </div>
-      <div className="flex flex-row border-b border-emerald-950">
+      <div className="flex flex-row border-b border-emerald-950 rounded-lg">
         <div className="flex w-full flex-col items-center gap-2 border-r border-emerald-950 p-2 text-xs text-neutral-500">
           <span>Bought</span>
           <span className="text-sm text-emerald-300">$0</span>
@@ -262,38 +262,38 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
       {/* Token Info Box */}
       <div className="border-b border-emerald-950 p-4">
         <div className="mb-2 text-xs text-neutral-400">Token Info</div>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
+        <div className="grid grid-cols-2 gap-2 text-xs place-items-center">
+          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
             <span className="font-bold text-emerald-400">
               {token.total_holders ? ((token.total_holders / token.total_supply) * 100).toFixed(2) : "0"}%
             </span>
             <span className="text-neutral-400">Top 10 H.</span>
           </div>
-          <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
+          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
             <span className="font-bold text-neutral-400">
               {token.is_verified_contract ? "Yes" : "No"}
             </span>
             <span className="text-neutral-400">Dev H.</span>
           </div>
-          <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
+          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
             <span className="font-bold text-red-400">
               {token.total_snipers ? ((token.total_snipers / token.total_supply) * 100).toFixed(2) : "0"}%
             </span>
             <span className="text-neutral-400">Snipers H.</span>
           </div>
-          <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
+          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
             <span className="font-bold text-red-400">
               {token.possible_spam ? "Yes" : "No"}
             </span>
             <span className="text-neutral-400">Insiders</span>
           </div>
-          <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
+          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
             <span className="font-bold text-red-400">
               {token.total_liquidity_usd ? formatSmartNumber(token.total_liquidity_usd) : "0"}
             </span>
             <span className="text-neutral-400">Liquidity</span>
           </div>
-          <div className="flex flex-col items-center rounded bg-neutral-800 p-2">
+          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
             <span className="font-bold text-red-400">
               {token.bonding_curve_progress ? `${(Number(token.bonding_curve_progress) * 100).toFixed(2)}%` : "0%"}
             </span>

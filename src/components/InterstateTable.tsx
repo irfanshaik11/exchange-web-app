@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   FaUser,
   FaGlobe,
@@ -8,6 +8,7 @@ import {
   FaQuestionCircle,
 } from "react-icons/fa";
 import InterstateButton from "./InterstateButton";
+import InterstatePopout from "./InterstatePopout";
 import { useRouter } from "next/router";
 import type { Token } from "~/utils/db";
 import Link from "next/link";
@@ -46,6 +47,7 @@ function formatPercentChange(val: number): string {
 
 export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirection, setSort, selectedTimeframe, quickBuyAmount = 0.05 }: InterstateTableProps) {
   const router = useRouter();
+  const [hoveredToken, setHoveredToken] = useState<Token | null>(null);
   // Helper to get sortable value from token
   function getSortableValue(token: Token, key: string) {
     let val = token[key];
@@ -115,14 +117,18 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                 {/* Pair Info */}
                 <td className="w-auto px-3 py-2 align-middle">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded border border-yellow-400 bg-neutral-800">
-                      <img
-                        src={token.logo}
-                        alt={token.name}
-                        width={32}
-                        height={32}
-                        className="h-8 w-8 object-cover"
-                      />
+                    <div 
+                      className="relative group"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-yellow-400 bg-neutral-800">
+                        <img
+                          src={token.logo}
+                          alt={token.name}
+                          width={32}
+                          height={32}
+                          className="h-8 w-8 object-cover"
+                        />
+                      </div>
                     </div>
                     <div className="flex min-w-0 flex-col">
                       <div className="flex items-center gap-1">
