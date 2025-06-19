@@ -49,11 +49,16 @@ export default function InterstatePopout({
 
   if (!render) return null;
 
+  // Overlay classes for centering and background
+  const overlayBase = 'fixed inset-0 z-50';
+  const overlayCenter = 'flex items-center justify-center bg-black/40';
+  const overlayTopRight = 'flex items-start justify-end bg-black/40';
+
   return (
     <div
-      className={`interstate-overlay ${isVisible ? 'visible' : ''} ${overlayClassName} ${
-        align === 'top-right' ? 'align-top-right' : 'align-center'
-      }`}
+      className={
+        `${overlayBase} ${align === 'center' ? overlayCenter : overlayTopRight} ${isVisible ? 'visible' : ''} ${overlayClassName}`
+      }
     >
       <div
         ref={contentRef}

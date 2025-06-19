@@ -27,8 +27,9 @@ import toast from "react-hot-toast";
 import { formatSmartNumber } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
-import { useFilter } from '../components/FilterContext';
+import { FilterProvider, useFilter } from '../components/FilterContext';
 import InterstatePopout from '../components/InterstatePopout';
+import FilterPopout from '../components/FilterPopout';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -53,12 +54,15 @@ function shuffleArray<T extends NonNullable<unknown>>(array: T[]): T[] {
   return arr;
 }
 
+// Add this type extension after importing Token
+type TokenWithDexPaid = Token & { dexPaid?: boolean };
+
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [allTokens, setAllTokens] = useState<Token[]>([]);
-  const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
-  const [displayed, setDisplayed] = useState<Token[]>([]);
+  const [allTokens, setAllTokens] = useState<TokenWithDexPaid[]>([]);
+  const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
+  const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const [loadingTokens, setLoadingTokens] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const isDiscover = router.pathname === "/";
@@ -77,7 +81,12 @@ export default function Home() {
   const { quickBuySettings, presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
-  const { filter, setFilter } = useFilter();
+  const { filter, setFilter, resetFilter } = useFilter();
+
+  // Helper for min/max input change
+  const handleMinMaxChange = (key: keyof typeof filter, value: string | number) => {
+    setFilter({ ...filter, [key]: value });
+  };
 
   useEffect(() => {
     console.log(sortKey);
@@ -103,9 +112,9 @@ export default function Home() {
           setFilteredTokens([]);
           setDisplayed([]);
         } else {
-          setAllTokens(data.result);
-          setFilteredTokens(data.result);
-          setDisplayed(data.result.slice(0, 10));
+          setAllTokens(data.result as TokenWithDexPaid[]);
+          setFilteredTokens(data.result as TokenWithDexPaid[]);
+          setDisplayed(data.result.slice(0, 10) as TokenWithDexPaid[]);
         }
       })
       .catch((err) => {
@@ -131,8 +140,8 @@ export default function Home() {
             token.symbol?.toLowerCase().includes(search.toLowerCase()),
         )
       : [];
-    setFilteredTokens(results);
-    setDisplayed(results.slice(0, 10));
+    setFilteredTokens(results as TokenWithDexPaid[]);
+    setDisplayed(results.slice(0, 10) as TokenWithDexPaid[]);
   }, [search, allTokens]);
 
   const handleTimeframeClick = (tf: string) => {
@@ -151,7 +160,7 @@ export default function Home() {
           (b[`total_sell_volume_${tf}`] || 0);
         return bVol - aVol;
       });
-      setDisplayed(sorted);
+      setDisplayed(sorted as TokenWithDexPaid[]);
     }
   };
 
@@ -210,9 +219,9 @@ export default function Home() {
           return bVal - aVal;
         }
       });
-      setDisplayed(sortedTokens);
+      setDisplayed(sortedTokens as TokenWithDexPaid[]);
     } else {
-      setDisplayed(filteredTokens.slice(0, 10));
+      setDisplayed(filteredTokens.slice(0, 10) as TokenWithDexPaid[]);
     }
   }, [selectedTab, filteredTokens, sortKey, sortDirection]);
 
@@ -233,17 +242,6 @@ export default function Home() {
       // setQuickBuySettings(presets[activePreset].quickBuySettings);
     }
   }, [activePreset, presets]);
-
-  // Helper function to render Min/Max inputs
-  const renderMinMaxInputs = (label: string) => (
-    <div>
-      <h3 className="text-neutral-300 text-sm font-semibold mb-2">{label}</h3>
-      <div className="grid grid-cols-2 gap-4">
-        <input type="number" placeholder="Min" className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-        <input type="number" placeholder="Max" className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-      </div>
-    </div>
-  );
 
   return (
     <>
@@ -295,7 +293,7 @@ export default function Home() {
               <FaCog className="transition-transform duration-300 group-hover:rotate-90" />
             </button>
             <button
-              className="relative flex flex-row items-center rounded-full bg-neutral-900 px-4 py-1.5 shadow-inner border border-neutral-800 group mr-2"
+              className="relative flex flex-row items-center rounded-full bg-neutral-900 px-4 py-1.5 shadow-inner border border-neutral-800 group mr-2 cursor-pointer"
               onClick={() => setIsFilterPopoutOpen(true)}
             >
               <FaFilter className="text-lg mr-2 text-white" />
@@ -327,68 +325,10 @@ export default function Home() {
         </div>
 
         {/* Filter Popout */}
-        <InterstatePopout
+        <FilterPopout
           open={isFilterPopoutOpen}
           onClose={() => setIsFilterPopoutOpen(false)}
-          align="center"
-          className="bg-neutral-900 rounded-xl shadow-2xl w-full max-w-md p-6 relative text-neutral-100"
-        >
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Filters</h2>
-              <button onClick={() => setIsFilterPopoutOpen(false)} className="text-neutral-400 hover:text-white text-xl">×</button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-neutral-300 text-sm font-semibold mb-2">Protocols</h3>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" className="form-checkbox text-purple-600 rounded" defaultChecked /> Raydium
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" className="form-checkbox text-purple-600 rounded" defaultChecked /> Pump
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" className="form-checkbox text-purple-600 rounded" defaultChecked /> Moonit
-                  </label>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-neutral-300 text-sm font-semibold mb-1">Search Keywords</label>
-                  <input type="text" placeholder="keyword1, keyword2..." className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-                <div>
-                  <label className="block text-neutral-300 text-sm font-semibold mb-1">Exclude Keywords</label>
-                  <input type="text" placeholder="keyword1, keyword2..." className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2">
-                <input type="checkbox" className="form-checkbox text-purple-600 rounded" /> Dex Paid
-              </label>
-
-              {/* Min/Max Input Fields */}
-              {renderMinMaxInputs("Top 10 Holders %")}
-              {renderMinMaxInputs("Liquidity ($)")}
-              {renderMinMaxInputs("Volume ($)")}
-              {renderMinMaxInputs("Market Cap ($)")}
-              {renderMinMaxInputs("Txns")}
-
-            </div>
-            <div className="flex justify-between items-center mt-6">
-              <button onClick={() => { /* Reset logic here */ setIsFilterPopoutOpen(false); }} className="text-neutral-400 hover:text-white flex items-center gap-2">
-                <FaPowerOff /> Reset
-              </button>
-              <InterstateButton variant="primary" onClick={() => {
-                // Save filters to localStorage by updating the filter state
-                setFilter({ ...filter });
-                setIsFilterPopoutOpen(false);
-              }}>Apply all</InterstateButton>
-            </div>
-          </div>
-        </InterstatePopout>
+        />
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">

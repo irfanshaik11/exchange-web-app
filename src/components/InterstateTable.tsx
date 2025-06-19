@@ -10,9 +10,13 @@ import {
 import InterstateButton from "./InterstateButton";
 import InterstatePopout from "./InterstatePopout";
 import { useRouter } from "next/router";
-import type { Token } from "~/utils/db";
+import type { Token as BaseToken } from "~/utils/db";
 import Link from "next/link";
 import { formatSmartNumber } from '~/utils/db';
+import CustomCheckbox from './CustomCheckbox';
+
+// Extend Token type locally to include optional dexPaid
+type Token = BaseToken & { dexPaid?: boolean };
 
 export interface InterstateTableRow {
   token: Token;
@@ -132,7 +136,7 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                     </div>
                     <div className="flex min-w-0 flex-col">
                       <div className="flex items-center gap-1">
-                        <span className="truncate text-xs leading-tight font-bold text-white">
+                                            <span className="truncate text-xs leading-tight font-bold text-white">
                           {token.name}
                         </span>
                         <span className="truncate text-[11px] font-medium text-neutral-400">
@@ -210,15 +214,13 @@ export default function InterstateTable({ rows, onQuickBuy, sortKey, sortDirecti
                 {/* Audit Log */}
                 <td className="px-3 py-2 align-middle">
                   <div className="flex flex-col gap-0.5">
-                    {/* No top_holders_percentage or paid_audit in new Token type, so these are commented out or replaced with placeholders */}
-                    {/* <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-red-400">
-                      <FaUser className="text-xs text-red-400" />{" "}
-                      {token.top_holders_percentage}%
-                    </span> */}
-                    {/* <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-emerald-400">
-                      <FaCheckCircle className="text-xs text-emerald-400" />{" "}
-                      {token.paid_audit ? "Yes" : "No"}
-                    </span> */}
+                    {/* Dex Paid indicator */}
+                    {typeof token.dexPaid !== 'undefined' && (
+                      <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold">
+                        <CustomCheckbox checked={!!token.dexPaid} onChange={() => {}} disabled className="mr-1" /> Dex Paid
+                      </span>
+                    )}
+                    {/* Other audit info or placeholder */}
                     <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-sky-300">
                       <FaQuestionCircle className="text-xs text-sky-300" /> Off
                     </span>
