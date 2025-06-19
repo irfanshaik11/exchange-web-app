@@ -6,6 +6,7 @@ import type { PositionRow, Wallet } from '~/utils/functions';
 import AddWalletModal from '../components/AddWalletModal';
 import WalletRow from '../components/WalletRow';
 import ImportExportWalletModal from '../components/ImportExportWalletModal';
+import WalletScanPanel from '../components/WalletScanPanel';
 
 const TABS = ['Wallet Manager', 'Live Trades'];
 const EMOJIS = ['💰','🚀','🦄','🐉','🦊','🐸','🐼','🐧','🦁','🐵','🐻','🐨','🐯','🦕','🦖','🐙','🐳','🐬','🦋','🌟','🔥','🌈','🍀','🍕','🍔','🍣','🍩','🍦','🎲','🎯','🎮','🎸','🎹','🏆','🥇','🥈','🥉','⚡','💎','🧊','🪐','🌌','🌠','🛸','🛰️','🚁','🚢','✈️','🚗','🏎️','🚓','🚑','🚒','🚜','🚲','🛴','🛵','🏍️','🦽','🦼','🛹','🛶','⛵','🚤','🛥️','🚀'];
@@ -20,6 +21,7 @@ export default function TrackersPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [toast, setToast] = useState('');
+  const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
 
   useEffect(() => {
     // Load wallets from localStorage on component mount
@@ -187,7 +189,7 @@ export default function TrackersPage() {
                     <table className="w-full text-xs mt-2">
                       <tbody>
                         {filteredWallets.map((wallet) => (
-                          <WalletRow key={wallet.address} wallet={wallet} onRemove={handleRemoveWallet} />
+                          <WalletRow key={wallet.address} wallet={wallet} onRemove={handleRemoveWallet} onClick={setScannedWallet} />
                         ))}
                       </tbody>
                     </table>
@@ -267,6 +269,9 @@ export default function TrackersPage() {
         <div className="fixed top-8 left-1/2 -translate-x-1/2 bg-neutral-900 text-white px-6 py-3 rounded-lg shadow-lg z-50 text-sm animate-fade-in">
           {toast}
         </div>
+      )}
+      {scannedWallet && (
+        <WalletScanPanel wallet={scannedWallet} onClose={() => setScannedWallet(null)} />
       )}
 
       {/* Bottom Navigation/Footer */}

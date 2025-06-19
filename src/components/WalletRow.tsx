@@ -1,12 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import type { Wallet } from '~/utils/functions';
+import { FaBell, FaChartBar, FaTrash } from 'react-icons/fa';
 
 interface WalletRowProps {
   wallet: Wallet;
   onRemove: (address: string) => void;
+  onClick?: (wallet: Wallet) => void;
 }
 
-export default function WalletRow({ wallet, onRemove }: WalletRowProps) {
+function Tooltip({ children, label }: { children: React.ReactNode; label: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative flex flex-col items-center">
+      <span
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onFocus={() => setShow(true)}
+        onBlur={() => setShow(false)}
+        tabIndex={0}
+        className="focus:outline-none"
+      >
+        {children}
+      </span>
+      <span
+        className={`absolute -top-7 left-1/2 -translate-x-1/2 z-50 px-2 py-1 rounded-md bg-neutral-900 text-white text-sm font-normal shadow border border-neutral-700 whitespace-nowrap transition-all duration-200 ${show ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-1 pointer-events-none'}`}
+      >
+        {label}
+      </span>
+    </span>
+  );
+}
+
+export default function WalletRow({ wallet, onRemove, onClick }: WalletRowProps) {
   const [balance, setBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -46,10 +71,14 @@ export default function WalletRow({ wallet, onRemove }: WalletRowProps) {
   };
 
   return (
-    <tr key={wallet.address} className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200">
+    <tr
+      key={wallet.address}
+      className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200 cursor-pointer"
+      onClick={() => onClick && onClick(wallet)}
+    >
       <td className="w-24 px-1 py-1 text-neutral-400 text-[11px]">{formatCreated(wallet.createdAt)}</td>
       <td className="flex-1 px-1 py-1 font-mono text-neutral-200 text-[12px] flex items-center gap-1">
-        <span className="text-base mr-1">{wallet.emoji || '��'}</span>
+        <span className="text-base mr-1">{wallet.emoji || ''}</span>
         <span className="truncate max-w-[90px]">{wallet.name || 'N/A'}</span>
         <span className="text-neutral-500">|</span>
         <span className="truncate max-w-[90px] text-neutral-500">{wallet.address}</span>
@@ -62,20 +91,20 @@ export default function WalletRow({ wallet, onRemove }: WalletRowProps) {
         </button>
       </td>
       <td className="px-1 py-1 text-right flex items-center gap-2 justify-end">
-        {loading ? (
-          <span className="text-neutral-500 text-[11px] animate-pulse">...</span>
-        ) : (
-          <span className="text-emerald-400 text-[12px] font-medium">${balance?.toFixed(2)}</span>
-        )}
-        <button className="text-neutral-400 hover:text-white transition-colors duration-200 p-0.5">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.04 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
-        </button>
-        <button 
-          className="text-red-400 hover:text-red-300 transition-colors duration-200 p-0.5"
-          onClick={() => onRemove(wallet.address)}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.92c-1.01 0-1.85-.75-1.992-1.874L5.323 6.075m1.022-.165L5.754 5.105a1.125 1.125 0 011.992-.858L12 8.752l3.254-4.505a1.125 1.125 0 011.992.858z" /></svg>
-        </button>
+        {/* Action Icons Row */}
+        <div className="flex flex-row gap-2 items-center">
+          <button className="p-1 rounded-md hover:bg-neutral-800 transition-colors" title="Alert" onClick={e => e.stopPropagation()}>
+            <FaBell className="text-base text-emerald-300" />
+          </button>
+          <Tooltip label="Scan Address">
+            <button className="p-1 rounded-md hover:bg-neutral-800 transition-colors" title="Scan" onClick={e => e.stopPropagation()}>
+              <FaChartBar className="text-base text-blue-300" />
+            </button>
+          </Tooltip>
+          <button className="p-1 rounded-md hover:bg-neutral-800 transition-colors" title="Delete" onClick={e => { e.stopPropagation(); onRemove(wallet.address); }}>
+            <FaTrash className="text-base text-red-400" />
+          </button>
+        </div>
       </td>
     </tr>
   );
