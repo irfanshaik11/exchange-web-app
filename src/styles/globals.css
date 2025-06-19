@@ -30,6 +30,7 @@ body {
 .interstate-overlay.visible {
   opacity: 1;
   pointer-events: auto;
+  background-color: rgba(0, 0, 0, 0.6); /* Added for background dimming */
 }
 
 .interstate-overlay.align-center {
