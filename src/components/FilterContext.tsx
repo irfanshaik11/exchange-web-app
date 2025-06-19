@@ -43,17 +43,21 @@ const defaultFilter: FilterState = {
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
 
 export function FilterProvider({ children }: { children: React.ReactNode }) {
-  const [filter, setFilterState] = useState<FilterState>(() => {
+  const [filter, setFilterState] = useState<FilterState>(defaultFilter);
+
+  // On mount, update filter from localStorage if available (client-side only)
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('filters');
       if (saved) {
         try {
-          return { ...defaultFilter, ...JSON.parse(saved) };
-        } catch {}
+          setFilterState({ ...defaultFilter, ...JSON.parse(saved) });
+        } catch {
+          // Optionally log error
+        }
       }
     }
-    return defaultFilter;
-  });
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

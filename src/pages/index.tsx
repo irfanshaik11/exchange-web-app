@@ -27,7 +27,7 @@ import toast from "react-hot-toast";
 import { formatSmartNumber } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
-import { FilterProvider } from '../components/FilterContext';
+import { useFilter } from '../components/FilterContext';
 import InterstatePopout from '../components/InterstatePopout';
 
 const navLinks = [
@@ -77,6 +77,7 @@ export default function Home() {
   const { quickBuySettings, presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
+  const { filter, setFilter } = useFilter();
 
   useEffect(() => {
     console.log(sortKey);
@@ -245,7 +246,7 @@ export default function Home() {
   );
 
   return (
-    <FilterProvider>
+    <>
       <Head>
         <title>Interstate Memeboard | Discover</title>
         <meta name="description" content="Interstate dashboard" />
@@ -380,7 +381,11 @@ export default function Home() {
               <button onClick={() => { /* Reset logic here */ setIsFilterPopoutOpen(false); }} className="text-neutral-400 hover:text-white flex items-center gap-2">
                 <FaPowerOff /> Reset
               </button>
-              <InterstateButton variant="primary" onClick={() => setIsFilterPopoutOpen(false)}>Apply all</InterstateButton>
+              <InterstateButton variant="primary" onClick={() => {
+                // Save filters to localStorage by updating the filter state
+                setFilter({ ...filter });
+                setIsFilterPopoutOpen(false);
+              }}>Apply all</InterstateButton>
             </div>
           </div>
         </InterstatePopout>
@@ -411,6 +416,6 @@ export default function Home() {
         </main>
         <QuickBuySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </div>
-    </FilterProvider>
+    </>
   );
 }
