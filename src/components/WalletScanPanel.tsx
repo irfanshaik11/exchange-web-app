@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import type { Wallet } from '~/utils/functions';
 import InterstatePopout from './InterstatePopout';
-import { FaRegCopy, FaCheck, FaStar, FaSearch, FaRegChartBar } from 'react-icons/fa';
+import { FaRegCopy, FaCheck, FaStar, FaSearch, FaRegChartBar, FaBell, FaExternalLinkAlt, FaArrowUp, FaArrowDown, FaRegCalendar } from 'react-icons/fa';
 import { FiExternalLink } from 'react-icons/fi';
 import PriceChartWidget from './PriceChartWidget';
 import type { Token } from '~/utils/db';
+import { AiOutlineCalendar } from 'react-icons/ai';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -28,6 +31,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
   const [tokenBalanceLoading, setTokenBalanceLoading] = useState(true);
   const [tokenBalanceError, setTokenBalanceError] = useState<string | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [notify, setNotify] = useState(false);
+  const [selectedRange, setSelectedRange] = useState('Max');
+  const timeRanges = ['1d', '7d', '30d', 'Max'];
+  const [toast, setToast] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currency, setCurrency] = useState<'USD' | 'SOL'>('USD');
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
     if (!wallet?.address) return;
@@ -121,13 +132,21 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     }
   };
 
+  // Toast display logic
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
   return (
-    <InterstatePopout open={true} onClose={onClose} align="center" className="w-[calc(100vw-360px)] h-[calc(100vh-120px)] p-0 bg-transparent shadow-none" overlayClassName="z-50">
-      <div className="relative w-[calc(100vw-360px)] h-[calc(100vh-120px)] bg-neutral-900 border border-neutral-700 shadow-2xl flex flex-col">
+    <InterstatePopout open={true} onClose={onClose} align="center" className="w-[calc(100vw-600px)] h-[calc(100vh-120px)] p-0 bg-transparent shadow-none" overlayClassName="z-50">
+      <div className="relative w-[calc(100vw-600px)] h-[calc(100vh-120px)] bg-neutral-900 border border-neutral-700 shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-8 pt-6 pb-3 border-b border-neutral-800">
+        <div className="flex items-center justify-between px-8 pt-6 pb-3 border-b border-neutral-800 relative">
           <div className="flex items-center gap-4">
-            <span className="text-2xl font-bold text-pink-400">{wallet.name || 'Null'}</span>
+            <span className="text-lg font-bold text-pink-400">{wallet.name || 'Null'}</span>
             <span className="text-neutral-400 font-mono text-sm flex items-center gap-1">
               {typeof wallet.address === 'string' && wallet.address.length >= 10
                 ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
@@ -152,19 +171,40 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
                 <span className="text-red-400">No balance</span>
               )}
             </span>
-            <div className="flex items-center gap-2 ml-4">
-              {['1d', '7d', '30d', 'Max'].map((label) => (
-                <button
-                  key={label}
-                  className="px-2 py-1 rounded text-xs font-semibold text-neutral-400 hover:text-blue-400 hover:bg-neutral-800 transition-colors"
-                  onClick={() => { /* TODO: handle time range change */ }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
           </div>
-          <button onClick={onClose} className="text-neutral-400 hover:text-white text-2xl font-bold px-2 py-1 rounded transition-colors">×</button>
+          <div className="flex items-center gap-4 absolute right-16 top-1/2 -translate-y-1/2">
+            <FaStar
+              className={`text-base cursor-pointer transition-colors ${isFavorite ? 'text-yellow-400' : 'text-neutral-500 hover:text-yellow-400'}`}
+              title="Track Wallet"
+              onClick={() => { setIsFavorite(fav => !fav); setToast('Wallet updated successfully'); }}
+            />
+            <FaBell
+              className={`text-base cursor-pointer transition-colors ${notify ? 'text-blue-400' : 'text-neutral-500 hover:text-blue-400'}`}
+              title="Notify"
+              onClick={() => { setNotify(n => !n); setToast('Wallet updated successfully'); }}
+            />
+            <FaExternalLinkAlt
+              className="text-base text-neutral-500 hover:text-blue-400 cursor-pointer"
+              title="Open in Solscan"
+              onClick={() => { window.open(`https://solscan.io/account/${wallet.address}`, '_blank'); setToast('Wallet updated successfully'); }}
+            />
+            <FaSearch
+              className="text-base text-neutral-500 hover:text-blue-400 cursor-pointer"
+              title="Search on Solscan"
+              onClick={() => { window.open(`https://solscan.io/account/${wallet.address}`, '_blank'); setToast('Wallet updated successfully'); }}
+            />
+            <span className="mx-2 text-neutral-700">|</span>
+            {timeRanges.map((label) => (
+              <button
+                key={label}
+                className={`px-2 py-1 rounded text-xs font-semibold ${selectedRange === label ? 'text-blue-400' : 'text-neutral-400 hover:text-blue-400'} hover:bg-neutral-800 transition-colors`}
+                onClick={() => setSelectedRange(label)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose} className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white text-2xl font-bold px-2 py-1 rounded transition-colors">×</button>
         </div>
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -198,27 +238,82 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
               </div>
             </div>
             {/* PNL with TradingView Chart */}
-            <div className="flex-1 min-w-[180px] flex flex-col items-center justify-start">
-              <div className="w-full text-xs text-neutral-400 mb-1 mt-1 text-left pl-2">PNL</div>
+            <div className="flex-1 min-w-[180px] flex flex-col justify-between">
+              <div className="flex flex-row justify-between items-start w-full">
+                <div className="w-full text-xs text-neutral-400 mb-1 mt-1 text-left pl-2">PNL</div>
+                <div className="relative mt-1 mr-2">
+                  <button
+                    className="text-neutral-400 hover:text-blue-400 p-1 rounded transition-colors"
+                    title={selectedDate ? `Selected: ${selectedDate.toLocaleDateString()}` : 'Select date'}
+                    onClick={() => setShowDatePicker((v) => !v)}
+                  >
+                    <AiOutlineCalendar className="text-lg" />
+                  </button>
+                  {showDatePicker && (
+                    <div className="absolute right-0 top-8 z-50">
+                      <DatePicker
+                        selected={selectedDate}
+                        onChange={(date: Date | null) => { setSelectedDate(date); setShowDatePicker(false); }}
+                        inline
+                        showMonthDropdown
+                        showYearDropdown
+                        dropdownMode="select"
+                        calendarClassName="bg-neutral-900 text-white border border-neutral-700 rounded shadow-lg dark-datepicker"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <div className="text-4xl font-mono text-neutral-300 mb-2">$0</div>
+                <div className="w-2/3 h-1 bg-neutral-700 rounded-full" />
+              </div>
             </div>
             {/* Performance */}
             <div className="flex-1 min-w-[180px]">
-              <div className="text-xs text-neutral-400 mb-1">Performance</div>
+              <div className="text-xs text-neutral-400 mb-1 flex items-center gap-2">
+                Performance
+                <span className="text-[10px] text-neutral-500" title="Performance ranges show the number of positions with PNL in each range. Example: >500% means positions with more than 500% profit.">(?)</span>
+              </div>
               <div className="flex flex-row items-center justify-between mb-2">
-                <span className="text-xs text-neutral-400">Total PNL</span>
-                <span className="text-xs text-neutral-400">Total TXNS</span>
+                <span className="text-xs text-neutral-400">
+                  {selectedRange === 'Max' ? 'Total PNL' : `${selectedRange} PNL`}
+                </span>
+                <span className="text-xs text-neutral-400">
+                  {selectedRange === 'Max' ? 'Total TXNS' : `${selectedRange} TXNS`}
+                </span>
               </div>
               <div className="flex flex-row items-center justify-between mb-2">
                 <span className="text-white font-semibold">$0.00</span>
-                <span className="text-white font-semibold">{activity.length} / {activity.length}</span>
+                <span className="text-white font-semibold">0 / 0</span>
               </div>
               <div className="mt-2">
-                <div className="flex flex-row items-center gap-2 text-xs text-neutral-400 mb-1">
-                  <span className="w-16">&gt;500%</span><span>0</span>
-                  <span className="w-16">200%~500%</span><span>0</span>
-                  <span className="w-16">0%~200%</span><span>0</span>
-                  <span className="w-16">0%~-50%</span><span>0</span>
-                  <span className="w-16">&lt;-50%</span><span>0</span>
+                <div className="flex flex-col gap-1 mt-2 mb-2">
+                  <div className="flex items-center gap-2 text-xs text-neutral-400">
+                    <span className="w-3 h-3 rounded-full bg-green-900 inline-block" />
+                    <span>&gt;500%</span>
+                    <span className="ml-auto">0</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-neutral-400">
+                    <span className="w-3 h-3 rounded-full bg-green-700 inline-block" />
+                    <span>200% ~ 500%</span>
+                    <span className="ml-auto">0</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-neutral-400">
+                    <span className="w-3 h-3 rounded-full bg-green-500 inline-block" />
+                    <span>0% ~ 200%</span>
+                    <span className="ml-auto">0</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-neutral-400">
+                    <span className="w-3 h-3 rounded-full bg-rose-900 inline-block" />
+                    <span>0% ~ -50%</span>
+                    <span className="ml-auto">0</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-neutral-400">
+                    <span className="w-3 h-3 rounded-full bg-rose-700 inline-block" />
+                    <span>&lt;-50%</span>
+                    <span className="ml-auto">0</span>
+                  </div>
                 </div>
                 <div className="h-2 w-full bg-neutral-800 rounded-full mt-1">
                   <div className="h-2 rounded-full bg-pink-500" style={{ width: '20%' }} />
@@ -227,7 +322,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
             </div>
           </div>
           {/* Tabs */}
-          <div className="px-8 border-b border-neutral-800 mt-2">
+          <div className="px-8 border-b border-neutral-800 mt-2 flex items-center justify-between">
             <div className="flex flex-row gap-10 text-sm mt-2">
               {TABS.map((t) => (
                 <button
@@ -239,36 +334,66 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
                 </button>
               ))}
             </div>
-          </div>
-          {/* Table */}
-          <div className="flex-1 px-8 py-4 overflow-auto">
-            {error && (
-              <div className="text-center text-red-400 mb-4">{error}</div>
+            {tab !== 'Activity' && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Search..."
+                  className="px-2 py-1 rounded-full bg-neutral-800 text-xs text-white border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  style={{ minWidth: 120 }}
+                />
+                <button
+                  className={`px-3 py-1 text-xs font-semibold border border-neutral-700 ${currency === 'USD' ? 'bg-blue-500 text-white' : 'bg-neutral-800 text-neutral-300'} rounded-full transition-colors`}
+                  onClick={() => setCurrency(currency === 'USD' ? 'SOL' : 'USD')}
+                  style={{ minWidth: 56 }}
+                >
+                  {currency === 'USD' ? 'USD' : 'SOL'}
+                </button>
+              </div>
             )}
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-neutral-400 border-b border-neutral-800 h-10">
-                  <th className="px-2 py-2 text-left font-semibold">Type</th>
-                  <th className="px-2 py-2 text-left font-semibold">Token</th>
-                  <th className="px-2 py-2 text-left font-semibold">Amount</th>
-                  <th className="px-2 py-2 text-left font-semibold">Market Cap <FiExternalLink className="inline ml-1 text-[10px] align-text-top" /></th>
-                  <th className="px-2 py-2 text-left font-semibold">Age</th>
-                  <th className="px-2 py-2 text-left font-semibold">Explorer</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={6} className="text-center py-8 text-neutral-500">Loading...</td></tr>
-                ) : (
-                  <tr><td colSpan={6} className="text-center py-8 text-neutral-500">No activity found.</td></tr>
-                )}
-              </tbody>
-            </table>
           </div>
         </div>
       </div>
+      {toast && (
+        <div className="fixed left-1/2 top-12 z-50 -translate-x-1/2 px-4 py-2 rounded-md shadow-md text-sm font-semibold bg-neutral-800 text-white animate-fade-in">
+          {toast}
+        </div>
+      )}
+      <style jsx global>{`
+        .dark-datepicker,
+        .dark-datepicker .react-datepicker__header,
+        .dark-datepicker .react-datepicker__month,
+        .dark-datepicker .react-datepicker__day,
+        .dark-datepicker .react-datepicker__day-name,
+        .dark-datepicker .react-datepicker__current-month,
+        .dark-datepicker .react-datepicker__year-dropdown,
+        .dark-datepicker .react-datepicker__month-dropdown {
+          background: #18181b !important;
+          color: #fff !important;
+          border-color: #27272a !important;
+        }
+        .dark-datepicker .react-datepicker__day--selected,
+        .dark-datepicker .react-datepicker__day--keyboard-selected {
+          background: #2563eb !important;
+          color: #fff !important;
+        }
+        .dark-datepicker .react-datepicker__day:hover {
+          background: #334155 !important;
+          color: #fff !important;
+        }
+        .dark-datepicker .react-datepicker__month-dropdown,
+        .dark-datepicker .react-datepicker__year-dropdown {
+          background: #18181b !important;
+          color: #fff !important;
+        }
+        .dark-datepicker .react-datepicker__navigation-icon::before {
+          border-color: #fff !important;
+        }
+      `}</style>
     </InterstatePopout>
   );
 };
 
-export default WalletScanPanel; 
+export default WalletScanPanel;
