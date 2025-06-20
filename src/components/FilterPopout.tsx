@@ -56,9 +56,9 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({ open, onClose }) => {
       align="center"
       className="bg-neutral-900 rounded-xl shadow-2xl w-full sm:max-w-md p-3 sm:p-6 relative text-neutral-100 h-[80vh] max-h-[calc(100vh-40px)] flex flex-col"
     >
-      {/* Sticky header */}
-      <div className="flex items-center justify-between flex-shrink-0 bg-neutral-900 pb-2" style={{marginTop: '-1.5rem', marginLeft: '-1.5rem', marginRight: '-1.5rem', paddingLeft: '1.5rem', paddingRight: '1.5rem'}}>
-        <h2 className="text-xl font-semibold">Filters</h2>
+      {/* Header */}
+      <div className="flex items-center justify-between flex-shrink-0 pb-2" style={{marginTop: '-1.5rem', marginLeft: '-1.5rem', marginRight: '-1.5rem', paddingLeft: '1.5rem', paddingRight: '1.5rem'}}>
+        <h2 className="text-xl font-semibold mt-4">Filters</h2>
         <button onClick={onClose} className="text-neutral-400 hover:text-white text-xl" aria-label="Close">
           <FaTimes />
         </button>
@@ -95,8 +95,8 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({ open, onClose }) => {
         {renderMinMaxInputs("Market Cap ($)", 'marketCapMin', 'marketCapMax')}
         {renderMinMaxInputs("Txns", 'txnsMin', 'txnsMax')}
       </div>
-      {/* Sticky Footer */}
-      <div className="flex justify-between items-center flex-shrink-0 mt-6 bg-neutral-900 pt-4" style={{marginLeft: '-1.5rem', marginRight: '-1.5rem', paddingLeft: '1.5rem', paddingRight: '1.5rem'}}>
+      {/* Footer */}
+      <div className="flex justify-between items-center flex-shrink-0 mt-6 pt-4" style={{marginLeft: '-1.5rem', marginRight: '-1.5rem', paddingLeft: '1.5rem', paddingRight: '1.5rem'}}>
         <button onClick={() => { resetFilter(); onClose(); }} className="text-neutral-400 hover:text-white flex items-center gap-2">
           <FaPowerOff /> Reset
         </button>
