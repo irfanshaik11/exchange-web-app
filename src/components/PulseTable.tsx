@@ -24,7 +24,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast }: PulseTableP
             <div key={token.token_address + idx} className="flex flex-row py-3 border-b border-neutral-800 last:border-b-0 hover:bg-neutral-800/40 transition group items-center">
               {/* Profile Picture & Address */}
               <div className="flex flex-col items-center w-16 mr-3">
-                <div className="relative w-14 h-14 bg-neutral-800 rounded overflow-hidden flex items-center justify-center">
+                <div className="relative w-14 h-14 bg-neutral-800 rounded-full overflow-hidden flex items-center justify-center border border-neutral-700">
                   {token.logo ? (
                     <img src={token.logo} alt={token.symbol} className="w-12 h-12 object-contain" />
                   ) : (

@@ -26,17 +26,6 @@
   transform: scale(1);
 }
 
-/* Alignment styles */
-.interstate-overlay.align-center .interstate-content {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(0.95);
-}
-
-.interstate-overlay.align-center .interstate-content.visible {
-  transform: translate(-50%, -50%) scale(1);
-}
-
 .interstate-overlay.align-top-right .interstate-content {
   top: 0;
   right: 0;

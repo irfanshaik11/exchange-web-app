@@ -16,6 +16,7 @@ import LoginModal from '../components/LoginModal';
 import { env } from '../env';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
+import { FilterProvider } from '../components/FilterContext';
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
@@ -78,7 +79,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
               <TokenHandler />
               <QuickBuyProvider>
                 <WatchlistProvider>
-                  <Component {...pageProps} />
+                  <FilterProvider>
+                    <Component {...pageProps} />
+                  </FilterProvider>
                 </WatchlistProvider>
               </QuickBuyProvider>
               <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />

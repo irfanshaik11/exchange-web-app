@@ -67,14 +67,14 @@ const QuickBuy: React.FC<QuickBuyProps> = ({ hideActionButton = false, sideProp,
       : presets[activePreset].quickSellSettings;
 
   // Determine the wrapper className
-  const defaultClass = "flex flex-col gap-2 rounded-lg border border-neutral-700/90 bg-neutral-900 px-3 py-3 text-neutral-100";
+  const defaultClass = "flex flex-col gap-2 rounded-xl border border-neutral-700/90 bg-neutral-900 px-3 py-3 text-neutral-100";
   // If className disables border/bg/rounded, use only className, else merge
   const wrapperClass = className !== undefined ? `flex flex-col gap-2 px-3 py-3 ${className}` : defaultClass;
 
   return (
     <div className={wrapperClass}>
       {/* Presets */}
-      <div className="mb-4 flex gap-2 rounded-lg border border-neutral-700/90 px-1 py-1">
+      <div className="mb-4 flex gap-2 rounded-xl border border-neutral-700/90 px-1 py-1">
         {presetLabels.map((label, i) => (
           <button
             key={label}
@@ -92,7 +92,7 @@ const QuickBuy: React.FC<QuickBuyProps> = ({ hideActionButton = false, sideProp,
       {expanded && (
         <>
         {/* Buy/Sell Tabs */}
-        <div className="flex gap-2 rounded-lg border border-neutral-700/90 px-1 py-1">
+        <div className="flex gap-2 rounded-xl border border-neutral-700/90 px-1 py-1">
           <button
             className={`flex-1 rounded-md px-3 py-1.5 text-xs uppercase transition-colors ${side === "buy" ? "bg-emerald-400/20 text-emerald-200" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
             onClick={() => setSide("buy")}
