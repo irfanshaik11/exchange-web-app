@@ -58,6 +58,9 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
     if (enforceLogin && !userLoading && !user) {
       setLoginOpen(true);
     }
+    if (user && loginOpen) {
+      setLoginOpen(false);
+    }
   }, [user, userLoading, enforceLogin]);
   // Prevent closing if not logged in
   const handleLoginClose = () => {
