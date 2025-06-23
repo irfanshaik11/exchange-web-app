@@ -7,6 +7,7 @@ type InterstateTooltipProps = {
   xOffset?: string; // e.g., '-translate-x-1/2', 'ml-0', '-ml-8'
   width?: number; // New: direct width in pixels
   height?: number; // New: direct height in pixels
+  isDiv?: boolean
 };
 
 const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md', xOffset = '-translate-x-1/2', width, height }) => {

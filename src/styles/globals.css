@@ -77,11 +77,11 @@ body {
 /* Custom Scrollbar for PulseTable and other scrollable areas */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #14532d #0f2417; /* green thumb, dark green track */
+  scrollbar-color: #14532d transparent; /* green thumb, transparent track */
 }
 .custom-scrollbar::-webkit-scrollbar {
   width: 8px;
-  background: #0f2417; /* very dark green track */
+  background: transparent; /* transparent track */
   border-radius: 8px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
@@ -92,7 +92,7 @@ body {
   background: #166534; /* lighter green on hover */
 }
 .custom-scrollbar::-webkit-scrollbar-corner {
-  background: #0f2417;
+  background: transparent;
 }
 
 /* Optional: Hide scrollbar buttons/arrows for a cleaner look */

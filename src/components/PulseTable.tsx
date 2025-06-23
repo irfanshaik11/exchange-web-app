@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { Token } from '~/utils/db';
 import { formatSmartNumber } from '~/utils/db';
 import { FaUser, FaGlobe, FaSearch, FaCrown, FaRegCopy, FaBolt } from 'react-icons/fa';
+import InterstateTooltip from './InterstateTooltip';
 
 interface PulseTableProps {
   title: string;
@@ -12,13 +13,14 @@ interface PulseTableProps {
 }
 
 export default function PulseTable({ title, tokens, isFirstOrLast, loading = false, skeletonRowCount = 10 }: PulseTableProps) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   return (
     <div className={`shadow-lg flex-1 min-w-[340px] w-full flex flex-col ${isFirstOrLast === "first" ? "border-l border-r" : "border-r"} border-emerald-950`}>
       <div className="text-lg font-bold mb-2 text-white flex items-center justify-between border-t border-b border-emerald-950 p-2">
         {title}
         {/* Optionally add filter/sort controls here */}
       </div>
-      <div className="overflow-y-auto max-h-[70vh] custom-scrollbar">
+      <div className="overflow-y-scroll max-h-[70vh] custom-scrollbar">
         {loading ? (
           Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div key={idx} className="flex flex-row py-3 border-b border-neutral-800 last:border-b-0 items-center animate-pulse">
@@ -69,10 +71,29 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
           <div className="text-neutral-500 text-center py-8">No tokens found.</div>
         ) : (
           tokens.map((token, idx) => (
-            <div key={token.token_address + idx} className="flex flex-row py-3 border-b border-neutral-800 last:border-b-0 hover:bg-neutral-800/40 transition group items-center">
+            <div
+              key={token.token_address + idx}
+              className="relative cursor-pointer flex flex-row py-3 transition group items-center border-b border-neutral-800 hover:bg-neutral-800/40 w-full"
+            >
+              {/* Bonding popout on hover */}
+              {idx === 0 ? (
+                <span
+                  className="hidden group-hover:flex absolute left-1/2 top-full mt-2 -translate-x-1/2 px-3 py-1 bg-neutral-900 border border-emerald-700 shadow-xl text-emerald-400 text-sm z-20"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  Bonding: {typeof token.bonding_curve_progress === 'number' ? Math.round(token.bonding_curve_progress * 100) : (parseFloat(token.bonding_curve_progress) * 100).toFixed(0)}%
+                </span>
+              ) : (
+                <span
+                  className="hidden group-hover:flex absolute left-1/2 -top-7 -translate-x-1/2 px-3 py-1 bg-neutral-900 border border-emerald-700 shadow-xl text-emerald-400 text-sm z-20"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  Bonding: {typeof token.bonding_curve_progress === 'number' ? Math.round(token.bonding_curve_progress * 100) : (parseFloat(token.bonding_curve_progress) * 100).toFixed(0)}%
+                </span>
+              )}
               {/* Profile Picture & Address */}
               <div className="flex flex-col items-center w-16 mr-3">
-                <div className="relative w-14 h-14 bg-neutral-800 rounded-full overflow-hidden flex items-center justify-center border border-neutral-700">
+                <div className="relative w-14 h-14 bg-neutral-800 rounded-full overflow-x-hidden flex items-center justify-center border border-neutral-700">
                   {token.logo ? (
                     <img src={token.logo} alt={token.symbol} className="w-12 h-12 object-contain" />
                   ) : (
@@ -83,7 +104,6 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                 </div>
                 <span className="text-xs text-neutral-500 mt-1 font-mono truncate max-w-[60px]">{token.token_address.slice(0, 4)}...{token.token_address.slice(-4)}</span>
               </div>
-
               {/* Main Info Section */}
               <div className="flex-1 flex flex-col gap-2 min-w-0">
                 {/* Top Row */}
@@ -98,17 +118,15 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                       </button>
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-emerald-400">
-                      <span>{/* Time since creation */}
-                        {(() => {
-                          const created = new Date(token.created_at);
-                          const now = new Date();
-                          const diff = Math.floor((now.getTime() - created.getTime()) / 1000);
-                          if (diff < 60) return `${diff}s`;
-                          if (diff < 3600) return `${Math.floor(diff/60)}m`;
-                          if (diff < 86400) return `${Math.floor(diff/3600)}h`;
-                          return `${Math.floor(diff/86400)}d`;
-                        })()}
-                      </span>
+                      <span>{(() => {
+                        const created = new Date(token.created_at);
+                        const now = new Date();
+                        const diff = Math.floor((now.getTime() - created.getTime()) / 1000);
+                        if (diff < 60) return `${diff}s`;
+                        if (diff < 3600) return `${Math.floor(diff/60)}m`;
+                        if (diff < 86400) return `${Math.floor(diff/3600)}h`;
+                        return `${Math.floor(diff/86400)}d`;
+                      })()}</span>
                       {/* Socials */}
                       <a href={token.links ? (token.links as Record<string, string>)["website"] || '#' : '#'} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300"><FaGlobe title="Website" /></a>
                       <a href={token.links ? (token.links as Record<string, string>)["pumpfun"] || '#' : '#'} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300"><FaBolt title="Pump.fun" /></a>
@@ -122,7 +140,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                       <span className="text-neutral-400">V <span className="text-white font-bold">${formatSmartNumber(token[`total_buy_volume_24h`] + token[`total_sell_volume_24h`])}</span></span>
                     </div>
                     <div className="flex gap-3 text-xs items-center">
-                      <span className="text-neutral-400 flex items-center gap-1">F <span className="inline-block align-middle">{/* Solana SVG */}<svg width="12" height="12" viewBox="0 0 24 24"><defs><linearGradient id="solana-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#00FFA3"/><stop offset="100%" stopColor="#DC1FFF"/></linearGradient></defs><rect width="24" height="24" fill="url(#solana-gradient)" rx="4"/></svg></span> <span className="text-emerald-400 font-bold">0</span></span>
+                      <span className="text-neutral-400 flex items-center gap-1">F <span className="inline-block align-middle"><svg width="12" height="12" viewBox="0 0 24 24"><defs><linearGradient id="solana-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#00FFA3"/><stop offset="100%" stopColor="#DC1FFF"/></linearGradient></defs><rect width="24" height="24" fill="url(#solana-gradient)" rx="4"/></svg></span> <span className="text-emerald-400 font-bold">0</span></span>
                       <span className="text-neutral-400">TX <span className="text-white font-bold">{(token.total_buys_5m ?? 0) + (token.total_sells_5m ?? 0)}</span></span>
                     </div>
                   </div>
@@ -130,7 +148,6 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                 {/* Bottom Row: Badges & Buy Button */}
                 <div className="flex flex-row items-center justify-between gap-2 mt-1">
                   <div className="flex gap-1">
-                    {/* 5 Pill Badges */}
                     {[{icon: <FaUser size={10}/>, label: 'Top 10', value: 0},
                       {icon: <FaCrown size={10}/>, label: 'Dev', value: 0},
                       {icon: <FaSearch size={10}/>, label: 'Snipers', value: 0},
