@@ -333,9 +333,15 @@ export default function Home() {
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
           {loadingTokens ? (
-            <div className="py-10 text-center text-neutral-400">
-              Loading tokens...
-            </div>
+            <InterstateTable
+              rows={[]}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              setSort={handleSort}
+              selectedTimeframe={selectedTimeframe}
+              quickBuyAmount={quickBuyAmount}
+              skeletonRowCount={10}
+            />
           ) : tokenError ? (
             <div className="py-10 text-center text-red-400">{tokenError}</div>
           ) : displayed.length === 0 ? (
