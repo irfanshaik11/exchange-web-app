@@ -48,7 +48,11 @@ export default function PulsePage() {
         <div className="w-full p-4">
           <h1 className="text-2xl font-bold mb-6">Pulse</h1>
           {loading ? (
-            <div className="text-center text-neutral-400 py-10">Loading tokens...</div>
+            <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+              <PulseTable title="New Pairs" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="first" />
+              <PulseTable title="Final Stretch" tokens={[]} loading skeletonRowCount={10} />
+              <PulseTable title="Migrated" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="last" />
+            </div>
           ) : error ? (
             <div className="text-center text-red-400 py-10">{error}</div>
           ) : (

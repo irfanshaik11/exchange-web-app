@@ -7,9 +7,11 @@ interface PulseTableProps {
   title: string;
   tokens: Token[];
   isFirstOrLast?: "first" | "last";
+  loading?: boolean;
+  skeletonRowCount?: number;
 }
 
-export default function PulseTable({ title, tokens, isFirstOrLast }: PulseTableProps) {
+export default function PulseTable({ title, tokens, isFirstOrLast, loading = false, skeletonRowCount = 10 }: PulseTableProps) {
   return (
     <div className={`shadow-lg flex-1 min-w-[340px] w-full flex flex-col ${isFirstOrLast === "first" ? "border-l border-r" : "border-r"} border-emerald-950`}>
       <div className="text-lg font-bold mb-2 text-white flex items-center justify-between border-t border-b border-emerald-950 p-2">
@@ -17,7 +19,53 @@ export default function PulseTable({ title, tokens, isFirstOrLast }: PulseTableP
         {/* Optionally add filter/sort controls here */}
       </div>
       <div className="overflow-y-auto max-h-[70vh] custom-scrollbar">
-        {tokens.length === 0 ? (
+        {loading ? (
+          Array.from({ length: skeletonRowCount }).map((_, idx) => (
+            <div key={idx} className="flex flex-row py-3 border-b border-neutral-800 last:border-b-0 items-center animate-pulse">
+              {/* Profile Picture & Address skeleton */}
+              <div className="flex flex-col items-center w-16 mr-3">
+                <div className="relative w-14 h-14 bg-neutral-800 rounded-full" />
+                <div className="h-3 w-12 bg-neutral-800 rounded mt-1" />
+              </div>
+              {/* Main Info Section skeleton */}
+              <div className="flex-1 flex flex-col gap-2 min-w-0">
+                <div className="flex flex-row justify-between gap-2">
+                  <div className="flex flex-col min-w-0 gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="h-4 w-20 bg-neutral-800 rounded" />
+                      <div className="h-3 w-16 bg-neutral-800 rounded" />
+                      <div className="h-3 w-6 bg-neutral-800 rounded" />
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="h-3 w-8 bg-neutral-800 rounded" />
+                      <div className="h-3 w-6 bg-neutral-800 rounded" />
+                      <div className="h-3 w-6 bg-neutral-800 rounded" />
+                      <div className="h-3 w-6 bg-neutral-800 rounded" />
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 min-w-[120px]">
+                    <div className="flex gap-3 text-xs">
+                      <div className="h-3 w-12 bg-neutral-800 rounded" />
+                      <div className="h-3 w-12 bg-neutral-800 rounded" />
+                    </div>
+                    <div className="flex gap-3 text-xs items-center">
+                      <div className="h-3 w-8 bg-neutral-800 rounded" />
+                      <div className="h-3 w-8 bg-neutral-800 rounded" />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-row items-center justify-between gap-2 mt-1">
+                  <div className="flex gap-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className="h-4 w-10 bg-neutral-800 rounded-full" />
+                    ))}
+                  </div>
+                  <div className="h-7 w-20 bg-neutral-800 rounded-full" />
+                </div>
+              </div>
+            </div>
+          ))
+        ) : tokens.length === 0 ? (
           <div className="text-neutral-500 text-center py-8">No tokens found.</div>
         ) : (
           tokens.map((token, idx) => (
