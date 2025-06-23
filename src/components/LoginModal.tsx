@@ -74,11 +74,9 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
         await refreshUser();
         setSuccess('Login successful!');
         
-        // Trigger page reload to refresh user context
         setTimeout(() => {
           setSuccess(null);
           onClose();
-          window.location.reload();
         }, 1200);
       } else {
         setError(data.message || 'Login failed');
@@ -174,7 +172,6 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
         setTimeout(() => {
           setSuccess(null);
           onClose();
-          window.location.reload();
         }, 1200);
       } else {
         setError(data.message || 'Phantom login failed');
