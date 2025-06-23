@@ -27,15 +27,15 @@ export default function PulsePage() {
   // Segregate tokens
   const newPairs = tokens.filter(t => {
     const prog = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : t.bonding_curve_progress;
-    return prog < 0.1;
+    return prog < 0.6;
   });
   const finalStretch = tokens.filter(t => {
     const prog = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : t.bonding_curve_progress;
-    return prog > 0.8 && prog < 1;
+    return prog > 0.6 && prog < 0.85;
   });
   const migrated = tokens.filter(t => {
     const prog = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : t.bonding_curve_progress;
-    return prog >= 1;
+    return prog >= 0.85;
   });
 
   return (
@@ -45,17 +45,17 @@ export default function PulsePage() {
       </Head>
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         <Header />
-        <div className="p-8">
+        <div className="w-full p-4">
           <h1 className="text-2xl font-bold mb-6">Pulse</h1>
           {loading ? (
             <div className="text-center text-neutral-400 py-10">Loading tokens...</div>
           ) : error ? (
             <div className="text-center text-red-400 py-10">{error}</div>
           ) : (
-            <div className="flex flex-row gap-6 max-w-full overflow-x-auto">
-              <PulseTable title="New Pairs" tokens={newPairs} />
+            <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+              <PulseTable title="New Pairs" tokens={newPairs} isFirstOrLast="first" />
               <PulseTable title="Final Stretch" tokens={finalStretch} />
-              <PulseTable title="Migrated" tokens={migrated} />
+              <PulseTable title="Migrated" tokens={migrated} isFirstOrLast="last" />
             </div>
           )}
         </div>

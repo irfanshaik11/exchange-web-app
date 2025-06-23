@@ -14,6 +14,7 @@ import {
 } from "react-icons/fa";
 import InterstateTooltip from "./InterstateTooltip";
 import InterstateButton from "./InterstateButton";
+import CustomCheckbox from './CustomCheckbox';
 
 interface QuickBuySettingsModalProps {
   open: boolean;
@@ -148,12 +149,7 @@ export default function QuickBuySettingsModal({
             widthClass="w-52"
           >
             <span className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={settings.autoFee}
-                onChange={e => updateSetting('autoFee', e.target.checked)}
-                className="accent-emerald-500"
-              />
+              <CustomCheckbox checked={settings.autoFee} onChange={e => updateSetting('autoFee', e.target.checked)} className="mr-2" />
               <span className="text-xs font-bold text-neutral-300">
                 Auto Fee
               </span>

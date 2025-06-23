@@ -49,9 +49,22 @@ export function storeWallets(wallets: Wallet[]) {
 
 export async function getActivePositionsByUser(userId: string): Promise<PositionRow[]> {
   if (!userId) return [];
-  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}`);
-  const data = await res.json();
-  return Array.isArray(data) ? data : [];
+  if (!env.NEXT_PUBLIC_BACKEND_URL) {
+    console.error('NEXT_PUBLIC_BACKEND_URL is not set');
+    return [];
+  }
+  try {
+    const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}`);
+    if (!res.ok) {
+      console.error('Failed to fetch active positions:', res.status, res.statusText);
+      return [];
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.error('Error fetching active positions:', err);
+    return [];
+  }
 }
 
 export async function getTradeHistoryByTokenAddress(tokenAddress: string): Promise<TradeRow[]> {
@@ -73,3 +86,4 @@ export function formatSmartNumber(num: number): string {
     return (parseFloat((num / 1000000000).toFixed(2))).toLocaleString() + 'B';
   }
 } 
+

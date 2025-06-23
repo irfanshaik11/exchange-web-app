@@ -23,6 +23,7 @@ import { IoShareSocialOutline } from "react-icons/io5";
 import { formatSmartNumber } from '~/utils/db';
 import { useQuickBuy } from '../QuickBuyContext';
 import InterstateTooltip from '../InterstateTooltip';
+import { useWatchlist } from '../WatchlistContext';
 
 // Helper function to format age
 function getTokenAge(createdAt: string) {
@@ -77,7 +78,7 @@ const Tooltip: React.FC<{ label: string; children: React.ReactNode }> = ({
     >
       {children}
       {show && (
-        <span className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded bg-neutral-900 px-2 py-1 text-xs whitespace-nowrap text-white shadow-lg">
+        <span className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2 py-1 text-xs whitespace-nowrap text-white shadow-lg">
           {label}
         </span>
       )}
@@ -89,12 +90,12 @@ const QuickBuyPresetBar: React.FC = () => {
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   const settings = presets[activePreset]?.quickBuySettings;
   return (
-    <div className="mb-2 flex flex-col gap-2 rounded-lg bg-neutral-900/80 px-3 py-2">
+    <div className="mb-2 flex flex-col gap-2 rounded-xl bg-neutral-900/80 px-3 py-2">
       <div className="flex gap-2 mb-1">
         {[0, 1, 2].map((i) => (
           <button
             key={i}
-            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? 'bg-blue-700 text-white' : 'bg-neutral-800 text-blue-300 hover:bg-neutral-700'}`}
+            className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? 'bg-blue-700 text-white' : 'bg-neutral-800 text-blue-300 hover:bg-neutral-700'}`}
             onClick={() => setActivePreset(i)}
           >
             {`PRESET ${i + 1}`}
@@ -120,6 +121,17 @@ const QuickBuyPresetBar: React.FC = () => {
 };
 
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
+  const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
+  const isWatched = isInWatchlist(token.token_address);
+
+  const handleWatchlistClick = () => {
+    if (isWatched) {
+      removeFromWatchlist(token.token_address);
+    } else {
+      addToWatchlist(token);
+    }
+  };
+
   return (
     <>
       <div className="mb-2 flex w-full items-center gap-6 rounded-lg px-3 py-1.5">
@@ -131,7 +143,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
             alt={token.name}
             width={36}
             height={36}
-            className="min-h-[36px] min-w-[36px] rounded border border-neutral-800"
+            className="min-h-[36px] min-w-[36px] rounded-full border border-neutral-800"
           />
           {/* Symbol, Name, Clipboard, Age */}
           <div className="flex min-w-0 flex-col">
@@ -180,7 +192,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
             label={"Global Fees Paid"}
             value={
               <span className="flex items-center gap-2 text-blue-300">
-                <span className="font-bold">Ξ {10.2}</span>
+                <span className="font-bold">Ξ {formatSmartNumber(token.global_fees_paid)}</span>
               </span>
             }
           />
@@ -190,8 +202,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
           <Tooltip label="Share token pair">
             <IoShareSocialOutline className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />
           </Tooltip>
-          <Tooltip label="Add token to Watchlist">
-            <FaRegStar className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />
+          <Tooltip label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}>
+            <button
+              onClick={handleWatchlistClick}
+              className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400"
+            >
+              {isWatched ? <FaStar className="text-yellow-400" /> : <FaRegStar />}
+            </button>
           </Tooltip>
           <Tooltip label="Expand Chart">
             <FaExpand className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />

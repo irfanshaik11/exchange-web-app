@@ -13,6 +13,7 @@ import {
   FaTimes,
   FaCopy,
   FaCog,
+  FaFilter,
 } from "react-icons/fa";
 import Image from "next/image";
 import { useUser } from "../components/UserContext";
@@ -26,6 +27,9 @@ import toast from "react-hot-toast";
 import { formatSmartNumber } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
+import { FilterProvider, useFilter } from '../components/FilterContext';
+import InterstatePopout from '../components/InterstatePopout';
+import FilterPopout from '../components/FilterPopout';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -50,12 +54,15 @@ function shuffleArray<T extends NonNullable<unknown>>(array: T[]): T[] {
   return arr;
 }
 
+// Add this type extension after importing Token
+type TokenWithDexPaid = Token & { dexPaid?: boolean };
+
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [allTokens, setAllTokens] = useState<Token[]>([]);
-  const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
-  const [displayed, setDisplayed] = useState<Token[]>([]);
+  const [allTokens, setAllTokens] = useState<TokenWithDexPaid[]>([]);
+  const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
+  const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const [loadingTokens, setLoadingTokens] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const isDiscover = router.pathname === "/";
@@ -73,6 +80,13 @@ export default function Home() {
   const [quickBuyAmount, setQuickBuyAmount] = useState(0.05);
   const { quickBuySettings, presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
+  const { filter, setFilter, resetFilter } = useFilter();
+
+  // Helper for min/max input change
+  const handleMinMaxChange = (key: keyof typeof filter, value: string | number) => {
+    setFilter({ ...filter, [key]: value });
+  };
 
   useEffect(() => {
     console.log(sortKey);
@@ -98,9 +112,9 @@ export default function Home() {
           setFilteredTokens([]);
           setDisplayed([]);
         } else {
-          setAllTokens(data.result);
-          setFilteredTokens(data.result);
-          setDisplayed(data.result.slice(0, 10));
+          setAllTokens(data.result as TokenWithDexPaid[]);
+          setFilteredTokens(data.result as TokenWithDexPaid[]);
+          setDisplayed(data.result.slice(0, 10) as TokenWithDexPaid[]);
         }
       })
       .catch((err) => {
@@ -126,8 +140,8 @@ export default function Home() {
             token.symbol?.toLowerCase().includes(search.toLowerCase()),
         )
       : [];
-    setFilteredTokens(results);
-    setDisplayed(results.slice(0, 10));
+    setFilteredTokens(results as TokenWithDexPaid[]);
+    setDisplayed(results.slice(0, 10) as TokenWithDexPaid[]);
   }, [search, allTokens]);
 
   const handleTimeframeClick = (tf: string) => {
@@ -146,7 +160,7 @@ export default function Home() {
           (b[`total_sell_volume_${tf}`] || 0);
         return bVol - aVol;
       });
-      setDisplayed(sorted);
+      setDisplayed(sorted as TokenWithDexPaid[]);
     }
   };
 
@@ -205,9 +219,9 @@ export default function Home() {
           return bVal - aVal;
         }
       });
-      setDisplayed(sortedTokens);
+      setDisplayed(sortedTokens as TokenWithDexPaid[]);
     } else {
-      setDisplayed(filteredTokens.slice(0, 10));
+      setDisplayed(filteredTokens.slice(0, 10) as TokenWithDexPaid[]);
     }
   }, [selectedTab, filteredTokens, sortKey, sortDirection]);
 
@@ -278,6 +292,15 @@ export default function Home() {
             <button className="group cursor-pointer text-neutral-400 transition-colors hover:text-white" onClick={() => setSettingsOpen(true)}>
               <FaCog className="transition-transform duration-300 group-hover:rotate-90" />
             </button>
+            <button
+              className="relative flex flex-row items-center rounded-full bg-neutral-900 px-4 py-1.5 shadow-inner border border-neutral-800 group mr-2 cursor-pointer"
+              onClick={() => setIsFilterPopoutOpen(true)}
+            >
+              <FaFilter className="text-lg mr-2 text-white" />
+              <span className="font-semibold text-white text-base">Filters</span>
+              <svg className="ml-2 w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+              <span className="absolute left-3 top-1 w-2 h-2 bg-blue-400 rounded-full"></span>
+            </button>
             <div className="flex items-center flex-row rounded-full border border-neutral-800 px-4 py-1.5 shadow-inner">
               <span className="mr-2 text-sm text-neutral-400">
                 Quick Buy
@@ -301,6 +324,12 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Filter Popout */}
+        <FilterPopout
+          open={isFilterPopoutOpen}
+          onClose={() => setIsFilterPopoutOpen(false)}
+        />
+
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
           {loadingTokens ? (
@@ -321,6 +350,7 @@ export default function Home() {
               sortDirection={sortDirection}
               setSort={handleSort}
               selectedTimeframe={selectedTimeframe}
+              quickBuyAmount={quickBuyAmount}
             />
           )}
         </main>
