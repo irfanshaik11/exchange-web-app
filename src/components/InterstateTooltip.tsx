@@ -4,13 +4,22 @@ type InterstateTooltipProps = {
   label: string | React.ReactNode;
   children: React.ReactNode;
   widthClass?: string; // e.g. 'max-w-xs', 'max-w-md'
+  xOffset?: string; // e.g., '-translate-x-1/2', 'ml-0', '-ml-8'
+  width?: number; // New: direct width in pixels
+  height?: number; // New: direct height in pixels
 };
 
-const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md' }) => {
+const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md', xOffset = '-translate-x-1/2', width, height }) => {
   const [show, setShow] = React.useState(false);
+
+  const tooltipStyle = {
+    ...(width && { width: `${width}px` }),
+    ...(height && { height: `${height}px` }),
+  };
+
   return (
     <span
-      className="relative flex items-center"
+      className="relative inline-block"
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}
       onFocus={() => setShow(true)}
@@ -19,7 +28,10 @@ const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, 
     >
       {children}
       {show && (
-        <span className={`absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded bg-neutral-900 px-2 py-1 text-xs whitespace-pre-line text-white shadow-lg ${widthClass}`}>
+        <span
+          className={`absolute top-full left-0 z-50 mt-2 ${xOffset} rounded-lg bg-neutral-900/90 border border-emerald-700 shadow-2xl shadow-emerald-500/20 px-3 py-2 text-xs whitespace-pre-line text-white ${widthClass}`}
+          style={tooltipStyle}
+        >
           {typeof label === 'string' ? label : label}
         </span>
       )}
