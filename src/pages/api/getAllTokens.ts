@@ -9,7 +9,6 @@ const pool = new Pool({
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
-    console.log("Connection string: ",env.NEON_DB_API_KEY);
     // Get all data from the tokens table
     const { rows } = await pool.query('SELECT * FROM bonding_tokens');
     res.status(200).json({ result: rows });
