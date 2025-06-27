@@ -3,6 +3,7 @@ import type { Token } from '~/utils/db';
 import { formatSmartNumber } from '~/utils/db';
 import { FaUser, FaGlobe, FaSearch, FaCrown, FaRegCopy, FaBolt } from 'react-icons/fa';
 import InterstateTooltip from './InterstateTooltip';
+import { useRouter } from 'next/router';
 
 interface PulseTableProps {
   title: string;
@@ -14,6 +15,7 @@ interface PulseTableProps {
 
 export default function PulseTable({ title, tokens, isFirstOrLast, loading = false, skeletonRowCount = 10 }: PulseTableProps) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const router = useRouter();
   return (
     <div className={`shadow-lg flex-1 min-w-[340px] w-full flex flex-col ${isFirstOrLast === "first" ? "border-l border-r" : "border-r"} border-emerald-950`}>
       <div className="text-lg font-bold mb-2 text-white flex items-center justify-between border-t border-b border-emerald-950 p-2">
@@ -74,6 +76,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
             <div
               key={token.token_address + idx}
               className="relative cursor-pointer flex flex-row py-3 transition group items-center border-b border-neutral-800 hover:bg-neutral-800/40 w-full"
+              onClick={() => router.push(`/trade/${token.token_address}`)}
             >
               {/* Bonding popout on hover */}
               {idx === 0 ? (

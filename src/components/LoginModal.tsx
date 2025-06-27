@@ -170,7 +170,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       if (res.ok && data.token) {
         Cookies.set('token', data.token, { expires: 7, path: '/' });
         await refreshUser();
-        setSuccess('Phantom login successful!');
+        setSuccess('login successful!');
         setTimeout(() => {
           setSuccess(null);
           onClose();
