@@ -72,27 +72,76 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   );
 }
 
+function MobileBlocker({ children }: { children: React.ReactNode }) {
+  const [isMobile, setIsMobile] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 500);
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Show nothing during SSR/initial load to prevent hydration issues
+  if (!isClient) {
+    return null;
+  }
+
+  if (isMobile) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
+        <div className="text-center">
+          <div className="mb-6">
+            <img 
+              src="/logo.png" 
+              alt="Logo" 
+              className="w-24 h-24 mx-auto mb-6 object-contain"
+            />
+          </div>
+          <h1 className="text-2xl font-bold mb-2">We're Coming Soon on Mobile!</h1>
+          <p className="text-gray-400 mb-4">
+            Our mobile experience is currently in development.
+          </p>
+          <p className="text-sm text-gray-500">
+            Please visit us on desktop for the full experience.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 const MyApp: AppType = ({ Component, pageProps }) => {
   return (
     <div className={geist.className}>
-      <WagmiProvider config={config}>
-        <QueryClientProvider client={queryClient}>
-          <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
-            <UserProvider>
-              <TokenHandler />
-              <QuickBuyProvider>
-                <WatchlistProvider>
-                  <FilterProvider>
-                    <Component {...pageProps} />
-                  </FilterProvider>
-                </WatchlistProvider>
-              </QuickBuyProvider>
-              <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
-            </UserProvider>
-          </RainbowKitProvider>
-        </QueryClientProvider>
-      </WagmiProvider>
-      <Toaster position="top-right" />
+      <MobileBlocker>
+        <WagmiProvider config={config}>
+          <QueryClientProvider client={queryClient}>
+            <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
+              <UserProvider>
+                <TokenHandler />
+                <QuickBuyProvider>
+                  <WatchlistProvider>
+                    <FilterProvider>
+                      <Component {...pageProps} />
+                    </FilterProvider>
+                  </WatchlistProvider>
+                </QuickBuyProvider>
+                <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+              </UserProvider>
+            </RainbowKitProvider>
+          </QueryClientProvider>
+        </WagmiProvider>
+        <Toaster position="top-right" />
+      </MobileBlocker>
     </div>
   );
 };
