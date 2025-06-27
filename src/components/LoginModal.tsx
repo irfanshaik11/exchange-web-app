@@ -311,28 +311,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
             Continue with Google
           </span>
         </InterstateButton>
-        {/* EVM Wallets (MetaMask, WalletConnect, etc.) */}
-        {connectors && connectors.length > 0 && connectors.map((connector) => (
-          <InterstateButton
-            key={connector.id}
-            type="button"
-            fullWidth
-            variant="secondary"
-            className="mb-1"
-            onClick={() => handleEvmConnect(connector)}
-            disabled={connecting}
-          >
-            <span className="flex items-center justify-center gap-2 font-normal text-sm">
-              {/* Show MetaMask icon if MetaMask, else generic wallet icon */}
-              {connector.name.toLowerCase().includes('meta') ? (
-                <img src="https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg" alt="MetaMask" className="w-6 h-6" />
-              ) : (
-                <img src="https://img.icons8.com/ios-filled/50/000000/wallet-app.png" alt="Wallet" className="w-6 h-6" />
-              )}
-              Continue with {connector.name}
-            </span>
-          </InterstateButton>
-        ))}
+
         <InterstateButton
           type="button"
           fullWidth
@@ -342,7 +321,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
         >
           <span className="flex items-center justify-center gap-2 font-normal text-sm">
             <img src="https://docs.phantom.com/~gitbook/image?url=https%3A%2F%2F187760183-files.gitbook.io%2F%7E%2Ffiles%2Fv0%2Fb%2Fgitbook-x-prod.appspot.com%2Fo%2Fspaces%252F-MVOiF6Zqit57q_hxJYp%252Ficon%252FU7kNZ4ygz4QW1rUwOuTT%252FWhite%2520Ghost_docs_nu.svg%3Falt%3Dmedia%26token%3D447b91f6-db6d-4791-902d-35d75c19c3d1&width=48&height=48&sign=23b24c2a&sv=2" alt="Phantom" className="w-6 h-6 rounded-[100px]" />
-            Continue with Phantom Wallet
+            Continue with crypto wallet
           </span>
         </InterstateButton>
       </div>
