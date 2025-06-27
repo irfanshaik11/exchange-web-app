@@ -6,6 +6,7 @@ import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
 import bs58 from 'bs58';
 import { toast } from 'react-hot-toast';
+import { useWallet } from "./useWallet";
 
 interface LoginModalProps {
   open: boolean;
@@ -31,6 +32,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const [success, setSuccess] = useState<string | null>(null);
   const { refreshUser, user, loading: userLoading } = useUser();
   const [wiggle, setWiggle] = useState(false);
+  const { connectors, connectWith, connecting } = useWallet();
 
   useEffect(() => {
     if (open) {
@@ -144,7 +146,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
     setError(null);
     setSuccess(null);
     const provider = window.solana;
-    if (!provider || !provider.isPhantom) {
+    if (!provider) {
       alert('Phantom not found');
       setLoading(false);
       return;
@@ -185,6 +187,11 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
     } finally {
       setLoading(false);
     }
+  }
+
+  // Handler for MetaMask (or other EVM) wallet
+  function handleEvmConnect(connector: any) {
+    connectWith(connector);
   }
 
   // Handle close attempt
@@ -304,6 +311,28 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
             Continue with Google
           </span>
         </InterstateButton>
+        {/* EVM Wallets (MetaMask, WalletConnect, etc.) */}
+        {connectors && connectors.length > 0 && connectors.map((connector) => (
+          <InterstateButton
+            key={connector.id}
+            type="button"
+            fullWidth
+            variant="secondary"
+            className="mb-1"
+            onClick={() => handleEvmConnect(connector)}
+            disabled={connecting}
+          >
+            <span className="flex items-center justify-center gap-2 font-normal text-sm">
+              {/* Show MetaMask icon if MetaMask, else generic wallet icon */}
+              {connector.name.toLowerCase().includes('meta') ? (
+                <img src="https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg" alt="MetaMask" className="w-6 h-6" />
+              ) : (
+                <img src="https://img.icons8.com/ios-filled/50/000000/wallet-app.png" alt="Wallet" className="w-6 h-6" />
+              )}
+              Continue with {connector.name}
+            </span>
+          </InterstateButton>
+        ))}
         <InterstateButton
           type="button"
           fullWidth

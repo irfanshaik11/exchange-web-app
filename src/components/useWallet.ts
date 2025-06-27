@@ -14,11 +14,17 @@ export function useWallet() {
     }
   };
 
+  // Connect with a specific connector (e.g., MetaMask)
+  const connectWith = (connector: typeof connectors[0]) => {
+    connect({ connector });
+  };
+
   return {
     address,
     isConnected,
     connecting: isConnecting,
     connect: connectWallet,
+    connectWith,
     disconnect,
     error,
     connectors,
