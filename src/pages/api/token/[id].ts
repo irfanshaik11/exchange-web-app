@@ -72,6 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       price_percent_change_6h: row.price_percent_change_6h,
       price_percent_change_24h: row.price_percent_change_24h,
       usd_price: row.usd_price,
+      sol_price: row.sol_price,
       total_liquidity_usd: row.total_liquidity_usd,
       total_fully_diluted_valuation: row.total_fully_diluted_valuation,
       total_snipers: row.total_snipers,

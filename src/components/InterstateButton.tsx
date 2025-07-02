@@ -3,7 +3,7 @@ import React from 'react';
 export type InterstateButtonVariant = 'primary' | 'secondary' | 'danger' | 'icon';
 export type InterstateButtonSize = 'sm' | 'md' | 'lg';
 
-interface InterstateButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface InterstateButtonProps {
   variant?: InterstateButtonVariant;
   size?: InterstateButtonSize;
   icon?: React.ReactNode;
@@ -11,6 +11,9 @@ interface InterstateButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEle
   fullWidth?: boolean;
   children?: React.ReactNode;
   className?: string;
+  disabled?: boolean;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  type?: 'button' | 'submit' | 'reset';
 }
 
 const base = 'rounded-full font-semibold transition focus:outline-none flex items-center justify-center';
@@ -34,11 +37,13 @@ export default function InterstateButton({
   fullWidth = false,
   children,
   className = '',
-  disabled,
-  ...props
+  disabled = false,
+  onClick,
+  type = 'button',
 }: InterstateButtonProps) {
   return (
     <button
+      type={type}
       className={[
         base,
         variants[variant],
@@ -48,7 +53,7 @@ export default function InterstateButton({
         className,
       ].join(' ')}
       disabled={disabled || loading}
-      {...props}
+      onClick={onClick}
     >
       {icon && <span className={children ? 'mr-2 flex-shrink-0' : ''}>{icon}</span>}
       {loading ? <span>Loading...</span> : children}
