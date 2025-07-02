@@ -26,6 +26,7 @@ import TradeTabs from "../../components/trade/TradeTabs";
 import { formatSmartNumber } from "~/utils/db";
 import Trades from "../../components/trade/Trades";
 import Positions from "~/components/trade/Positions";
+import { useTokenWebSocket } from "../../hooks/useTokenWebSocket";
 
 export default function TradePage() {
   const router = useRouter();
@@ -48,17 +49,13 @@ export default function TradePage() {
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
   const [selectedTab, setSelectedTab] = useState("Trades");
 
+  const { data, isConnected: wsConnected, isReconnecting, error } = useTokenWebSocket(id as string);
+
   useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    fetch(`/api/token/${id}`)
-      .then((res) => res.json())
-      .then((data: { result: Token | null }) => {
-        setToken(data.result || null);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [id]);
+    if (data && !Array.isArray(data)) {
+      setToken(data);
+    }
+  }, [data]);
 
   useEffect(() => {
     function handleResize() {
@@ -104,7 +101,13 @@ export default function TradePage() {
   if (!token) {
     return (
       <div className="mt-20 text-center text-2xl text-red-400">
-        Token not found
+        {error || "Token not found"}
+        <button 
+          onClick={() => requestToken(id as string)}
+          className="ml-4 px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -125,6 +128,9 @@ export default function TradePage() {
           tokenAddress: token.token_address,
           amount: parseFloat(tradeAmount),
           mevProtection: 0,
+          solPrice: token.sol_price,
+          marketCap: token.total_fully_diluted_valuation,
+          tokenPrice: token.usd_price,
         }),
       });
       const data = await res.json();
@@ -165,6 +171,9 @@ export default function TradePage() {
         body: JSON.stringify({
           tokenAddress: token.token_address,
           percentageToSell: parseFloat(sellPercentage),
+          solPrice: token.sol_price,
+          marketCap: token.total_fully_diluted_valuation,
+          tokenPrice: token.usd_price,
         }),
       });
       const data = await res.json();
@@ -200,6 +209,9 @@ export default function TradePage() {
         body: JSON.stringify({
           tokenAddress: address,
           tokenAmount: parseFloat(tradeAmount),
+          solPrice: token?.sol_price,
+          marketCap: token?.total_fully_diluted_valuation,
+          tokenPrice: token?.usd_price,
         }),
       });
       const data = await res.json();
@@ -215,34 +227,86 @@ export default function TradePage() {
   return (
     <>
       <Head>
-        <title>{token?.name} | Trade</title>
+        <title>{token ? `${token.name} - Interstate UI` : "Loading..."}</title>
+        <meta name="description" content="Interstate UI" />
+        <link rel="icon" href="/favicon.ico" />
       </Head>
-      <Toaster position="top-right" />
-      <div className="min-h-screen w-screen bg-neutral-950 text-neutral-100">
-        {/* Header */}
-        <Header showSearch={false} />
-        {/* Main Layout */}
-        <div className="flex w-full flex-row gap-0">
-          {/* Left: Chart and Info */}
-          <div className="flex min-w-0 flex-1 flex-col pb-4 border-r border-emerald-950">
-            {/* Token Info Header */}
-            <TradeHeader token={token} />
-            {/* Chart */}
-            <div className="min-h-[500px]">
-              <PriceChartWidget token={token} />
-            </div>
-            <hr className="border-emerald-950" />
-            {/* Tabs (Positions, Trades, etc.) */}
-            <TradeTabs
-              selectedTab={selectedTab}
-              setSelectedTab={setSelectedTab}
-            />
-            {selectedTab === "Trades" && <Trades token={token} />}
-            {selectedTab === "Positions" && <Positions userId={user?.id} />}
+
+      <div className="min-h-screen bg-neutral-900">
+        <Header />
+
+        {loading ? (
+          <div className="mt-20 text-center text-2xl text-neutral-400">
+            Loading...
           </div>
-          {/* Right: Buy/Sell and Token Info */}
-          <TradeActionPanel token={token} />
-        </div>
+        ) : !token ? (
+          <div className="mt-20 text-center text-2xl text-red-400">
+            {error || "Token not found"}
+            <button 
+              onClick={() => requestToken(id as string)}
+              className="ml-4 px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            {/* Connection Status */}
+            <div className="flex items-center gap-2 mb-4">
+              <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-emerald-400' : 'bg-red-400'}`}></div>
+              <span className="text-xs text-neutral-400">
+                {wsConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+
+            {/* Trade Header */}
+            <TradeHeader token={token} />
+
+            {/* Main Content */}
+            <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
+              {/* Chart */}
+              <div className="lg:col-span-2">
+                <PriceChartWidget
+                  token={token}
+                  height={chartHeight}
+                  className="rounded-lg border border-neutral-800 bg-neutral-900/80"
+                />
+              </div>
+
+              {/* Trade Action Panel */}
+              <div>
+                <TradeActionPanel
+                  token={token}
+                  tradeMode={tradeMode}
+                  setTradeMode={setTradeMode}
+                  tradeAmount={tradeAmount}
+                  setTradeAmount={setTradeAmount}
+                  amountOptions={amountOptions}
+                  handleBuy={handleBuy}
+                  handleSellPercentage={handleSellPercentage}
+                  handleSellExactAmount={handleSellExactAmount}
+                  txLoading={txLoading}
+                  txStatus={txStatus}
+                  sellPercentage={sellPercentage}
+                  setSellPercentage={setSellPercentage}
+                />
+              </div>
+            </div>
+
+            {/* Trade Tabs */}
+            <div className="mt-8">
+              <TradeTabs
+                selectedTab={selectedTab}
+                setSelectedTab={setSelectedTab}
+              />
+              {selectedTab === "Trades" ? (
+                <Trades token={token} tradeHistory={tradeHistory} />
+              ) : (
+                <Positions token={token} />
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

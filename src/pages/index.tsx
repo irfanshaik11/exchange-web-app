@@ -2,7 +2,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   FaGlobe,
   FaUser,
@@ -30,6 +30,9 @@ import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { FilterProvider, useFilter } from '../components/FilterContext';
 import InterstatePopout from '../components/InterstatePopout';
 import FilterPopout from '../components/FilterPopout';
+import useTokenWebSocket from '../hooks/useTokenWebSocket';
+import { env } from '../env';
+import throttle from 'lodash.throttle';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -60,28 +63,50 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [allTokens, setAllTokens] = useState<TokenWithDexPaid[]>([]);
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
-  const [loadingTokens, setLoadingTokens] = useState(true);
-  const [tokenError, setTokenError] = useState<string | null>(null);
   const isDiscover = router.pathname === "/";
   const timeframes = ["5m", "1h", "6h", "24h"] as const;
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<(typeof timeframes)[number]>("24h");
   const { user, loading: userLoading, refreshUser } = useUser();
-  const [selectedTab, setSelectedTab] = useState<"dex" | "trending">(
-    "trending",
-  );
-  const [sortKey, setSortKey] = useState<
-    "market_cap_total" | "liquidity" | "volume" | "txns" | "name"
-  >("volume");
+  const [selectedTab, setSelectedTab] = useState<"dex" | "trending">("trending");
+  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [quickBuyAmount, setQuickBuyAmount] = useState(0.05);
   const { quickBuySettings, presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter, setFilter, resetFilter } = useFilter();
+
+  // WebSocket token service
+  const { 
+    tokens: allTokens, 
+    isConnected, 
+    error: tokenError, 
+    isLoading: loadingTokens,
+    requestAllTokens 
+  } = useTokenWebSocket({
+    url: env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:8765',
+    autoConnect: true
+  });
+
+  // Throttled setter for displayed tokens
+  const [throttledTokens, setThrottledTokens] = useState<TokenWithDexPaid[]>([]);
+
+  // Throttle updates to displayed tokens
+  const throttledSetTokens = useRef(
+    throttle((tokens: TokenWithDexPaid[]) => {
+      setThrottledTokens(tokens);
+    }, 200)
+  ).current;
+
+  // Update throttled tokens when allTokens changes
+  useEffect(() => {
+    if (Array.isArray(allTokens)) {
+      throttledSetTokens(allTokens as TokenWithDexPaid[]);
+    }
+  }, [allTokens, throttledSetTokens]);
 
   // Helper for min/max input change
   const handleMinMaxChange = (key: keyof typeof filter, value: string | number) => {
@@ -92,49 +117,15 @@ export default function Home() {
     console.log(sortKey);
   }, [sortKey]);
 
-  // Fetch tokens from API on mount
-  useEffect(() => {
-    setLoadingTokens(true);
-    setTokenError(null);
-    fetch("/api/getAllTokens")
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to fetch tokens");
-        return res.json();
-      })
-      .then((data: { result: Token[] }) => {
-        console.log(data);
-        if (
-          !data.result ||
-          !Array.isArray(data.result) ||
-          data.result.length === 0
-        ) {
-          setAllTokens([]);
-          setFilteredTokens([]);
-          setDisplayed([]);
-        } else {
-          setAllTokens(data.result as TokenWithDexPaid[]);
-          setFilteredTokens(data.result as TokenWithDexPaid[]);
-          setDisplayed(data.result.slice(0, 10) as TokenWithDexPaid[]);
-        }
-      })
-      .catch((err) => {
-        setTokenError("No tokens found or failed to load tokens.");
-        setAllTokens([]);
-        setFilteredTokens([]);
-        setDisplayed([]);
-      })
-      .finally(() => setLoadingTokens(false));
-  }, []);
-
   // Filter tokens when search changes
   useEffect(() => {
     if (!search) {
-      setFilteredTokens(allTokens);
-      setDisplayed(Array.isArray(allTokens) ? allTokens.slice(0, 10) : []);
+      setFilteredTokens(throttledTokens);
+      setDisplayed(Array.isArray(throttledTokens) ? throttledTokens.slice(0, 10) : []);
       return;
     }
-    const results = Array.isArray(allTokens)
-      ? allTokens.filter(
+    const results = Array.isArray(throttledTokens)
+      ? throttledTokens.filter(
           (token) =>
             token.name?.toLowerCase().includes(search.toLowerCase()) ||
             token.symbol?.toLowerCase().includes(search.toLowerCase()),
@@ -142,7 +133,7 @@ export default function Home() {
       : [];
     setFilteredTokens(results as TokenWithDexPaid[]);
     setDisplayed(results.slice(0, 10) as TokenWithDexPaid[]);
-  }, [search, allTokens]);
+  }, [search, throttledTokens]);
 
   const handleTimeframeClick = (tf: string) => {
     setSelectedTimeframe(tf as (typeof timeframes)[number]);
@@ -180,8 +171,11 @@ export default function Home() {
           },
           body: JSON.stringify({
             tokenAddress: token.token_address,
-            amount: 0.05,
-            mevProtection: 0,
+            amount: quickBuyAmount,
+            mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
+            solPrice: token.sol_price,
+            marketCap: token.total_fully_diluted_valuation,
+            tokenPrice: token.usd_price,
           }),
         },
       );
@@ -271,6 +265,13 @@ export default function Home() {
           </div>
           {/* Quick Buy pill UI */}
           <div className="flex flex-row items-center gap-4">
+            {/* Connection Status */}
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-400'}`}></div>
+              <span className="text-xs text-neutral-400">
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
             {/* Timeframes Row (for both tabs) */}
             <div className="flex max-w-7xl items-center gap-4 text-sm font-medium">
               {timeframes.map((tf) => (
@@ -328,6 +329,9 @@ export default function Home() {
         <FilterPopout
           open={isFilterPopoutOpen}
           onClose={() => setIsFilterPopoutOpen(false)}
+          filter={filter}
+          onMinMaxChange={handleMinMaxChange}
+          onReset={resetFilter}
         />
 
         {/* Main Content */}
@@ -335,6 +339,7 @@ export default function Home() {
           {loadingTokens ? (
             <InterstateTable
               rows={[]}
+              onQuickBuy={handleQuickBuy}
               sortKey={sortKey}
               sortDirection={sortDirection}
               setSort={handleSort}
@@ -343,7 +348,15 @@ export default function Home() {
               skeletonRowCount={10}
             />
           ) : tokenError ? (
-            <div className="py-10 text-center text-red-400">{tokenError}</div>
+            <div className="py-10 text-center text-red-400">
+              {tokenError}
+              <button 
+                onClick={requestAllTokens}
+                className="ml-4 px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700"
+              >
+                Retry
+              </button>
+            </div>
           ) : displayed.length === 0 ? (
             <div className="py-10 text-center text-neutral-400">
               No tokens found.
