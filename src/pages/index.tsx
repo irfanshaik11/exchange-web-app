@@ -81,32 +81,20 @@ export default function Home() {
 
   // WebSocket token service
   const { 
-    tokens: allTokens, 
+    data: allTokens, 
     isConnected, 
     error: tokenError, 
-    isLoading: loadingTokens,
-    requestAllTokens 
-  } = useTokenWebSocket({
-    url: env.NEXT_PUBLIC_WEBSOCKET_URL || 'ws://localhost:8765',
-    autoConnect: true
-  });
+    isReconnecting
+  } = useTokenWebSocket();
 
   // Throttled setter for displayed tokens
   const [throttledTokens, setThrottledTokens] = useState<TokenWithDexPaid[]>([]);
 
-  // Throttle updates to displayed tokens
-  const throttledSetTokens = useRef(
-    throttle((tokens: TokenWithDexPaid[]) => {
-      setThrottledTokens(tokens);
-    }, 200)
-  ).current;
-
-  // Update throttled tokens when allTokens changes
   useEffect(() => {
     if (Array.isArray(allTokens)) {
-      throttledSetTokens(allTokens as TokenWithDexPaid[]);
+      setThrottledTokens(allTokens as TokenWithDexPaid[]);
     }
-  }, [allTokens, throttledSetTokens]);
+  }, [allTokens]);
 
   // Helper for min/max input change
   const handleMinMaxChange = (key: keyof typeof filter, value: string | number) => {
@@ -329,14 +317,11 @@ export default function Home() {
         <FilterPopout
           open={isFilterPopoutOpen}
           onClose={() => setIsFilterPopoutOpen(false)}
-          filter={filter}
-          onMinMaxChange={handleMinMaxChange}
-          onReset={resetFilter}
         />
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
-          {loadingTokens ? (
+          {!allTokens ? (
             <InterstateTable
               rows={[]}
               onQuickBuy={handleQuickBuy}
@@ -350,12 +335,6 @@ export default function Home() {
           ) : tokenError ? (
             <div className="py-10 text-center text-red-400">
               {tokenError}
-              <button 
-                onClick={requestAllTokens}
-                className="ml-4 px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700"
-              >
-                Retry
-              </button>
             </div>
           ) : displayed.length === 0 ? (
             <div className="py-10 text-center text-neutral-400">
