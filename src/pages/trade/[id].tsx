@@ -228,64 +228,33 @@ export default function TradePage() {
   return (
     <>
       <Head>
-        <title>{token ? `${token.name} - Interstate UI` : "Loading..."}</title>
-        <meta name="description" content="Interstate UI" />
-        <link rel="icon" href="/favicon.ico" />
+        <title>{token?.name} | Trade</title>
       </Head>
-
-      <div className="min-h-screen bg-neutral-900">
-        <Header />
-
-        {loading ? (
-          <div className="mt-20 text-center text-2xl text-neutral-400">
-            Loading...
-          </div>
-        ) : !token ? (
-          <div className="mt-20 text-center text-2xl text-red-400">
-            Token not found
-            <button 
-              onClick={() => router.reload()}
-              className="ml-4 px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700"
-            >
-              Retry
-            </button>
-          </div>
-        ) : (
-          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            {/* Trade Header */}
+      <Toaster position="top-right" />
+      <div className="min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100">
+        {/* Header always at the top, full width */}
+        <Header showSearch={false} />
+        {/* Main content: flex row, fills the rest of the page */}
+        <div className="flex flex-1 flex-row w-full">
+          {/* Left: Chart and Info */}
+          <div className="flex-1 min-w-0 flex flex-col pb-4 border-r border-emerald-950">
             <TradeHeader token={token} />
-
-            {/* Main Content */}
-            <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-3">
-              {/* Chart */}
-              <div className="lg:col-span-2">
-                <PriceChartWidget
-                  token={token}
-                />
-              </div>
-
-              {/* Trade Action Panel */}
-              <div>
-                <TradeActionPanel
-                  token={token}
-                />
-              </div>
+            <div className="min-h-[500px] flex-1">
+              <PriceChartWidget token={token} />
             </div>
-
-            {/* Trade Tabs */}
-            <div className="mt-8">
-              <TradeTabs
-                selectedTab={selectedTab}
-                setSelectedTab={setSelectedTab}
-              />
-              {selectedTab === "Trades" ? (
-                <Trades token={token} />
-              ) : (
-                user?.id ? <Positions userId={user.id} /> : null
-              )}
-            </div>
+            <hr className="border-emerald-950" />
+            <TradeTabs
+              selectedTab={selectedTab}
+              setSelectedTab={setSelectedTab}
+            />
+            {selectedTab === "Trades" && <Trades token={token} />}
+            {selectedTab === "Positions" && <Positions userId={user?.id} />}
           </div>
-        )}
+          {/* Right: Buy/Sell and Token Info */}
+          <div className="w-full max-w-md flex-shrink-0">
+            <TradeActionPanel token={token} />
+          </div>
+        </div>
       </div>
     </>
   );
