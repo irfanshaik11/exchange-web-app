@@ -26,7 +26,7 @@ import TradeTabs from "../../components/trade/TradeTabs";
 import { formatSmartNumber } from "~/utils/db";
 import Trades from "../../components/trade/Trades";
 import Positions from "~/components/trade/Positions";
-import { useTokenWebSocket } from "../../hooks/useTokenWebSocket";
+import useTokenWebSocket from "../../hooks/useTokenWebSocket";
 
 export default function TradePage() {
   const router = useRouter();
@@ -49,13 +49,7 @@ export default function TradePage() {
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
   const [selectedTab, setSelectedTab] = useState("Trades");
 
-  const { data, isConnected: wsConnected, isReconnecting, error } = useTokenWebSocket(id as string);
-
-  useEffect(() => {
-    if (data && !Array.isArray(data)) {
-      setToken(data);
-    }
-  }, [data]);
+  useTokenWebSocket();
 
   useEffect(() => {
     function handleResize() {
@@ -101,9 +95,9 @@ export default function TradePage() {
   if (!token) {
     return (
       <div className="mt-20 text-center text-2xl text-red-400">
-        {error || "Token not found"}
+        Token not found
         <button 
-          onClick={() => requestToken(id as string)}
+          onClick={() => router.reload()}
           className="ml-4 px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700"
         >
           Retry
@@ -241,9 +235,9 @@ export default function TradePage() {
           </div>
         ) : !token ? (
           <div className="mt-20 text-center text-2xl text-red-400">
-            {error || "Token not found"}
+            Token not found
             <button 
-              onClick={() => requestToken(id as string)}
+              onClick={() => router.reload()}
               className="ml-4 px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700"
             >
               Retry
@@ -251,14 +245,6 @@ export default function TradePage() {
           </div>
         ) : (
           <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            {/* Connection Status */}
-            <div className="flex items-center gap-2 mb-4">
-              <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-emerald-400' : 'bg-red-400'}`}></div>
-              <span className="text-xs text-neutral-400">
-                {wsConnected ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
-
             {/* Trade Header */}
             <TradeHeader token={token} />
 
@@ -268,8 +254,6 @@ export default function TradePage() {
               <div className="lg:col-span-2">
                 <PriceChartWidget
                   token={token}
-                  height={chartHeight}
-                  className="rounded-lg border border-neutral-800 bg-neutral-900/80"
                 />
               </div>
 
@@ -277,18 +261,6 @@ export default function TradePage() {
               <div>
                 <TradeActionPanel
                   token={token}
-                  tradeMode={tradeMode}
-                  setTradeMode={setTradeMode}
-                  tradeAmount={tradeAmount}
-                  setTradeAmount={setTradeAmount}
-                  amountOptions={amountOptions}
-                  handleBuy={handleBuy}
-                  handleSellPercentage={handleSellPercentage}
-                  handleSellExactAmount={handleSellExactAmount}
-                  txLoading={txLoading}
-                  txStatus={txStatus}
-                  sellPercentage={sellPercentage}
-                  setSellPercentage={setSellPercentage}
                 />
               </div>
             </div>
@@ -300,9 +272,9 @@ export default function TradePage() {
                 setSelectedTab={setSelectedTab}
               />
               {selectedTab === "Trades" ? (
-                <Trades token={token} tradeHistory={tradeHistory} />
+                <Trades token={token} />
               ) : (
-                <Positions token={token} />
+                user?.id ? <Positions userId={user.id} /> : null
               )}
             </div>
           </div>

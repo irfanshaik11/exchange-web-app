@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import throttle from 'lodash.throttle';
-import { NEXT_PUBLIC_WEBSOCKET_URL } from '../env';
+import { env } from '../env';
 
 interface WebSocketState {
   isConnected: boolean;
@@ -8,7 +8,7 @@ interface WebSocketState {
   error: string | null;
 }
 
-export function useTokenWebSocket(tokenAddress?: string) {
+export default function useTokenWebSocket() {
   const [state, setState] = useState<WebSocketState>({
     isConnected: false,
     isReconnecting: false,
@@ -16,7 +16,7 @@ export function useTokenWebSocket(tokenAddress?: string) {
   });
   const [data, setData] = useState<any>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
 
@@ -33,19 +33,12 @@ export function useTokenWebSocket(tokenAddress?: string) {
       }
 
       try {
-        const ws = new WebSocket(NEXT_PUBLIC_WEBSOCKET_URL);
+        const ws = new WebSocket(env.NEXT_PUBLIC_WEBSOCKET_URL);
         wsRef.current = ws;
 
         ws.onopen = () => {
           setState(prev => ({ ...prev, isConnected: true, isReconnecting: false, error: null }));
           reconnectAttemptRef.current = 0;
-          
-          // Subscribe to token updates
-          if (tokenAddress) {
-            ws.send(JSON.stringify({ type: 'subscribe', token: tokenAddress }));
-          } else {
-            ws.send(JSON.stringify({ type: 'subscribe', all: true }));
-          }
         };
 
         ws.onmessage = (event) => {
@@ -106,7 +99,7 @@ export function useTokenWebSocket(tokenAddress?: string) {
       }
       throttledSetData.cancel();
     };
-  }, [tokenAddress, throttledSetData]);
+  }, [throttledSetData]);
 
   return {
     ...state,
