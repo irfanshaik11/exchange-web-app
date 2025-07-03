@@ -26,12 +26,11 @@ import TradeTabs from "../../components/trade/TradeTabs";
 import { formatSmartNumber } from "~/utils/db";
 import Trades from "../../components/trade/Trades";
 import Positions from "~/components/trade/Positions";
-import useTokenWebSocket from "../../hooks/useTokenWebSocket";
+import useSingleTokenWebSocket from "../../hooks/useSingleTokenWebSocket";
 
 export default function TradePage() {
   const router = useRouter();
   const { id } = router.query;
-  const [token, setToken] = useState<Token | null>(null);
   const [loading, setLoading] = useState(true);
   const [chartHeight, setChartHeight] = useState(600);
   const { address, isConnected } = useWallet();
@@ -49,15 +48,20 @@ export default function TradePage() {
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
   const [selectedTab, setSelectedTab] = useState("Trades");
 
-  // WebSocket token service
-  const { data: allTokens, isConnected: wsConnected, error: wsError } = useTokenWebSocket();
+  // WebSocket per-token service
+  const { data: token, isConnected: wsConnected, error: wsError } = useSingleTokenWebSocket(
+    typeof id === "string" ? id : undefined
+  );
 
   useEffect(() => {
-    if (!id || !Array.isArray(allTokens)) return;
-    const found = allTokens.find(t => t.token_address === id || t.mint === id);
-    setToken(found || null);
-    setLoading(false);
-  }, [id, allTokens]);
+    if (token || wsError) setLoading(false);
+  }, [token, wsError]);
+
+  useEffect(() => {
+    if (token) {
+      console.log('WebSocket token data:', token);
+    }
+  }, [token]);
 
   useEffect(() => {
     function handleResize() {
