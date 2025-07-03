@@ -49,7 +49,15 @@ export default function TradePage() {
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
   const [selectedTab, setSelectedTab] = useState("Trades");
 
-  useTokenWebSocket();
+  // WebSocket token service
+  const { data: allTokens, isConnected: wsConnected, error: wsError } = useTokenWebSocket();
+
+  useEffect(() => {
+    if (!id || !Array.isArray(allTokens)) return;
+    const found = allTokens.find(t => t.token_address === id || t.mint === id);
+    setToken(found || null);
+    setLoading(false);
+  }, [id, allTokens]);
 
   useEffect(() => {
     function handleResize() {
@@ -96,12 +104,11 @@ export default function TradePage() {
     return (
       <div className="mt-20 text-center text-2xl text-red-400">
         Token not found
-        <button 
-          onClick={() => router.reload()}
-          className="ml-4 px-4 py-2 bg-neutral-800 text-white rounded hover:bg-neutral-700"
-        >
-          Retry
-        </button>
+        {wsError && (
+          <div className="mt-4 text-sm text-neutral-400">
+            WebSocket Error: {wsError}
+          </div>
+        )}
       </div>
     );
   }
