@@ -407,14 +407,12 @@ export default function InterstateTable({
           100% { background: transparent; }
         }
       `}</style>
-      
       <table className="min-w-full divide-y divide-neutral-800 table-fixed">
         <TableHeader 
           sortKey={sortKey} 
           sortDirection={sortDirection} 
           onSort={setSort} 
         />
-        
         <tbody className="divide-y divide-neutral-800">
           {sortedRows.length === 0 ? (
             Array.from({ length: skeletonRowCount }).map((_, idx) => (

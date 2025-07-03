@@ -2,7 +2,7 @@ import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   FaGlobe,
   FaUser,
@@ -63,6 +63,7 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const isDiscover = router.pathname === "/";
@@ -87,12 +88,31 @@ export default function Home() {
     isReconnecting
   } = useTokenWebSocket();
 
-  // Throttled setter for displayed tokens
-  const [throttledTokens, setThrottledTokens] = useState<TokenWithDexPaid[]>([]);
-
+  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
   useEffect(() => {
     if (Array.isArray(allTokens)) {
-      setThrottledTokens(allTokens as TokenWithDexPaid[]);
+      let changed = false;
+      const map = tokenMapRef.current;
+      for (const token of allTokens as TokenWithDexPaid[]) {
+        const prev = map.get(token.token_address);
+        if (!prev || JSON.stringify(prev) !== JSON.stringify(token)) {
+          map.set(token.token_address, token);
+          changed = true;
+        }
+      }
+      // Optionally, remove tokens that are no longer present
+      const allAddresses = new Set((allTokens as TokenWithDexPaid[]).map(t => t.token_address));
+      for (const addr of Array.from(map.keys())) {
+        if (!allAddresses.has(addr)) {
+          map.delete(addr);
+          changed = true;
+        }
+      }
+      if (changed) {
+        // Create a stable array for downstream use
+        const arr = Array.from(map.values());
+        setFilteredTokens(arr);
+      }
     }
   }, [allTokens]);
 
@@ -107,40 +127,33 @@ export default function Home() {
 
   // Filter tokens when search changes
   useEffect(() => {
+    const arr = Array.from(tokenMapRef.current.values());
     if (!search) {
-      setFilteredTokens(throttledTokens);
-      setDisplayed(Array.isArray(throttledTokens) ? throttledTokens.slice(0, 10) : []);
+      setFilteredTokens(arr);
+      setDisplayed(arr.slice(0, 10));
       return;
     }
-    const results = Array.isArray(throttledTokens)
-      ? throttledTokens.filter(
-          (token) =>
-            token.name?.toLowerCase().includes(search.toLowerCase()) ||
-            token.symbol?.toLowerCase().includes(search.toLowerCase()),
-        )
-      : [];
-    setFilteredTokens(results as TokenWithDexPaid[]);
-    setDisplayed(results.slice(0, 10) as TokenWithDexPaid[]);
-  }, [search, throttledTokens]);
+    const results = arr.filter(
+      (token) =>
+        token.name?.toLowerCase().includes(search.toLowerCase()) ||
+        token.symbol?.toLowerCase().includes(search.toLowerCase())
+    );
+    setFilteredTokens(results);
+    setDisplayed(results.slice(0, 10));
+  }, [search]);
 
   const handleTimeframeClick = (tf: string) => {
     setSelectedTimeframe(tf as (typeof timeframes)[number]);
     setSortKey("volume");
     setSortDirection("desc");
     // Sort by volume for the new timeframe
-    if (Array.isArray(filteredTokens)) {
-      const sorted = [...filteredTokens].sort((a, b) => {
-        // Use the new timeframe's volume fields
-        const aVol =
-          (a[`total_buy_volume_${tf}`] || 0) +
-          (a[`total_sell_volume_${tf}`] || 0);
-        const bVol =
-          (b[`total_buy_volume_${tf}`] || 0) +
-          (b[`total_sell_volume_${tf}`] || 0);
-        return bVol - aVol;
-      });
-      setDisplayed(sorted as TokenWithDexPaid[]);
-    }
+    const arr = Array.from(tokenMapRef.current.values());
+    const sorted = [...arr].sort((a, b) => {
+      const aVol = (a[`total_buy_volume_${tf}`] || 0) + (a[`total_sell_volume_${tf}`] || 0);
+      const bVol = (b[`total_buy_volume_${tf}`] || 0) + (b[`total_sell_volume_${tf}`] || 0);
+      return bVol - aVol;
+    });
+    setDisplayed(sorted);
   };
 
   // QUICK BUY handler
@@ -189,9 +202,8 @@ export default function Home() {
 
   useEffect(() => {
     if (selectedTab === "trending") {
-      const sortedTokens = Array.isArray(filteredTokens)
-        ? [...filteredTokens]
-        : [];
+      const arr = Array.from(tokenMapRef.current.values());
+      const sortedTokens = [...arr];
       sortedTokens.sort((a, b) => {
         const aVal = Number(a[sortKey]) || 0;
         const bVal = Number(b[sortKey]) || 0;
@@ -201,9 +213,9 @@ export default function Home() {
           return bVal - aVal;
         }
       });
-      setDisplayed(sortedTokens as TokenWithDexPaid[]);
+      setDisplayed(sortedTokens);
     } else {
-      setDisplayed(filteredTokens.slice(0, 10) as TokenWithDexPaid[]);
+      setDisplayed(filteredTokens.slice(0, 10));
     }
   }, [selectedTab, filteredTokens, sortKey, sortDirection]);
 
