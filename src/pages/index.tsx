@@ -30,9 +30,9 @@ import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { FilterProvider, useFilter } from '../components/FilterContext';
 import InterstatePopout from '../components/InterstatePopout';
 import FilterPopout from '../components/FilterPopout';
-import useTokenWebSocket from '../hooks/useTokenWebSocket';
 import { env } from '../env';
 import throttle from 'lodash.throttle';
+import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -86,7 +86,7 @@ export default function Home() {
     isConnected, 
     error: tokenError, 
     isReconnecting
-  } = useTokenWebSocket();
+  } = usePaginatedTokensWebSocket();
 
   // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
   useEffect(() => {

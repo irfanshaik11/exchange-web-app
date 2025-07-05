@@ -2,38 +2,63 @@ import { useEffect, useRef, useState } from 'react';
 import throttle from 'lodash.throttle';
 import { env } from '../env';
 
+interface UsePaginatedTokensWebSocketParams {
+  filter?: 'marketcap' | 'volume_24h' | 'txs_24h';
+  order?: 'asc' | 'desc';
+  offset?: number;
+  limit?: number;
+}
+
 interface WebSocketState {
   isConnected: boolean;
   isReconnecting: boolean;
   error: string | null;
+  loading: boolean;
 }
 
-export default function useTokenWebSocket() {
+export default function usePaginatedTokensWebSocket({
+  filter = 'marketcap',
+  order = 'desc',
+  offset = 0,
+  limit = 20,
+}: UsePaginatedTokensWebSocketParams = {}) {
   const [state, setState] = useState<WebSocketState>({
     isConnected: false,
     isReconnecting: false,
-    error: null
+    error: null,
+    loading: true,
   });
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
 
   const throttledSetData = useRef(
-    throttle((newData: any) => {
+    throttle((newData: any[]) => {
       setData(newData);
+      setState(prev => ({ ...prev, loading: false }));
     }, 1000)
   ).current;
 
   useEffect(() => {
+    let url = env.NEXT_PUBLIC_WEBSOCKET_URL;
+    const params = new URLSearchParams({
+      filter,
+      order,
+      offset: String(offset),
+      limit: String(limit),
+    });
+    url += `?${params.toString()}`;
+
+    setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
+
     const connectWebSocket = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         return;
       }
-
       try {
-        const ws = new WebSocket(env.NEXT_PUBLIC_WEBSOCKET_URL);
+        const ws = new WebSocket(url);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -43,10 +68,12 @@ export default function useTokenWebSocket() {
 
         ws.onmessage = (event) => {
           try {
-            const data = JSON.parse(event.data);
-            throttledSetData(data);
+            const message = JSON.parse(event.data);
+            if (Array.isArray(message)) {
+              throttledSetData(message);
+            }
           } catch (err) {
-            console.error('Failed to parse WebSocket message:', err);
+            setState(prev => ({ ...prev, error: 'Failed to parse WebSocket message' }));
           }
         };
 
@@ -55,18 +82,12 @@ export default function useTokenWebSocket() {
           handleReconnect();
         };
 
-        ws.onerror = (error) => {
-          setState(prev => ({ 
-            ...prev, 
-            error: 'WebSocket connection error. Attempting to reconnect...' 
-          }));
+        ws.onerror = () => {
+          setState(prev => ({ ...prev, error: 'WebSocket connection error. Attempting to reconnect...' }));
           handleReconnect();
         };
       } catch (error) {
-        setState(prev => ({ 
-          ...prev, 
-          error: 'Failed to establish WebSocket connection' 
-        }));
+        setState(prev => ({ ...prev, error: 'Failed to establish WebSocket connection' }));
       }
     };
 
@@ -79,11 +100,8 @@ export default function useTokenWebSocket() {
         }));
         return;
       }
-
       setState(prev => ({ ...prev, isReconnecting: true }));
       reconnectAttemptRef.current += 1;
-
-      // Exponential backoff: 1s, 2s, 4s, 8s, 16s
       const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 16000);
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
     };
@@ -91,18 +109,15 @@ export default function useTokenWebSocket() {
     connectWebSocket();
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
+      if (wsRef.current) wsRef.current.close();
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       throttledSetData.cancel();
     };
-  }, [throttledSetData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, order, offset, limit, throttledSetData]);
 
   return {
     ...state,
-    data
+    data,
   };
 } 
