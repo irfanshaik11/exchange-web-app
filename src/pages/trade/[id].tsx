@@ -47,6 +47,7 @@ export default function TradePage() {
   const { user, loading: userLoading } = useUser();
   const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
   const [selectedTab, setSelectedTab] = useState("Trades");
+  const [search, setSearch] = useState("");
 
   // WebSocket per-token service
   const { data: token, isConnected: wsConnected, error: wsError } = useSingleTokenWebSocket(
@@ -237,7 +238,7 @@ export default function TradePage() {
       <Toaster position="top-right" />
       <div className="min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100">
         {/* Header always at the top, full width */}
-        <Header showSearch={false} />
+        <Header search={search} setSearch={setSearch} />
         {/* Main content: flex row, fills the rest of the page */}
         <div className="flex flex-1 flex-row w-full">
           {/* Left: Chart and Info */}
