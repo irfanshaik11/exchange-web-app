@@ -85,5 +85,28 @@ export function formatSmartNumber(num: number): string {
   } else {
     return (parseFloat((num / 1000000000).toFixed(2))).toLocaleString() + 'B';
   }
+}
+
+// Fetch and parse token metadata from a URI (IPFS or HTTP)
+export async function fetchTokenMetadata(uri: string | undefined): Promise<any | null> {
+  console.log(uri)
+  if (!uri) return null;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const resp = await fetch(uri, { signal: controller.signal });
+    clearTimeout(timeout);
+    let data = await resp.text();
+    try {
+      data = JSON.parse(data);
+    } catch (e) {
+      // Not valid JSON
+      return null;
+    }
+    return data;
+  } catch (err) {
+    // Handle fetch error
+    return null;
+  }
 } 
 

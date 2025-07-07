@@ -3,6 +3,7 @@ import InterstatePopout from './InterstatePopout';
 import { FaUser, FaGlobe, FaSearch, FaCopy } from 'react-icons/fa';
 import { formatSmartNumber } from '~/utils/db';
 import type { Token } from '~/utils/db';
+import { fetchTokenMetadata } from '~/utils/functions';
 
 interface TokenInfoModalProps {
   open: boolean;
@@ -17,14 +18,54 @@ function formatPercentChange(val: number): string {
   return sign + formatSmartNumber(val);
 }
 
+const tokenMetadataCache: Record<string, any> = {};
+function useTokenMetadata(uri?: string) {
+  const [meta, setMeta] = React.useState<any | null>(null);
+  const [loading, setLoading] = React.useState(!!uri);
+  const [showInitial, setShowInitial] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!uri) {
+      setMeta(null);
+      setLoading(false);
+      return;
+    }
+    if (tokenMetadataCache[uri]) {
+      setMeta(tokenMetadataCache[uri]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setShowInitial(false);
+    const timer = setTimeout(() => setShowInitial(true), 500);
+    fetchTokenMetadata(uri).then((data) => {
+      if (!cancelled) {
+        if (data) tokenMetadataCache[uri] = data;
+        setMeta(data);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [uri]);
+  return { meta, loading, showInitial };
+}
+
 const TokenInfoModal: React.FC<TokenInfoModalProps> = ({ open, onClose, token, similarTokens }) => {
   if (!token) return null;
+  const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   return (
     <InterstatePopout open={open} onClose={onClose} align="center" className="bg-neutral-900 rounded-xl shadow-2xl w-full max-w-md p-6 relative text-neutral-100">
       <button className="absolute top-3 right-3 text-neutral-400 hover:text-white text-xl" onClick={onClose} type="button">×</button>
       <div className="flex flex-col items-center">
         {/* Enlarged Picture */}
-        <img src={token.logo} alt={token.name} width={120} height={120} className="border border-neutral-700 mb-4" />
+        {loading && !showInitial ? (
+          <div className="w-20 h-20 border border-neutral-700 rounded-full animate-spin"></div>
+        ) : (
+          <img src={meta?.image || token.logo} alt={token.name} width={120} height={120} className="border border-neutral-700 mb-4" />
+        )}
         {/* Token Details */}
         <div className="text-center mb-4">
           <div className="text-xl font-bold text-white">{token.name}</div>

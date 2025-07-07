@@ -24,6 +24,7 @@ import { formatSmartNumber } from '~/utils/db';
 import { useQuickBuy } from '../QuickBuyContext';
 import InterstateTooltip from '../InterstateTooltip';
 import { useWatchlist } from '../WatchlistContext';
+import { fetchTokenMetadata } from '~/utils/functions';
 
 // Helper function to format age
 function getTokenAge(createdAt: string) {
@@ -120,6 +121,41 @@ const QuickBuyPresetBar: React.FC = () => {
   );
 };
 
+const tokenMetadataCache: Record<string, any> = {};
+function useTokenMetadata(uri?: string) {
+  const [meta, setMeta] = React.useState<any | null>(null);
+  const [loading, setLoading] = React.useState(!!uri);
+  const [showInitial, setShowInitial] = React.useState(false);
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!uri) {
+      setMeta(null);
+      setLoading(false);
+      return;
+    }
+    if (tokenMetadataCache[uri]) {
+      setMeta(tokenMetadataCache[uri]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setShowInitial(false);
+    const timer = setTimeout(() => setShowInitial(true), 500);
+    fetchTokenMetadata(uri).then((data) => {
+      if (!cancelled) {
+        if (data) tokenMetadataCache[uri] = data;
+        setMeta(data);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [uri]);
+  return { meta, loading, showInitial };
+}
+
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
   const isWatched = isInWatchlist(token.token_address);
@@ -132,19 +168,31 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
     }
   };
 
+  const { meta, loading, showInitial } = useTokenMetadata(token.uri);
+
   return (
     <>
       <div className="mb-2 flex w-full items-center gap-6 rounded-lg px-3 py-1.5">
         {/* Left: Logo, Symbol, Name, Clipboard, Age */}
         <div className="flex min-w-0 items-center gap-3">
           {/* Logo */}
-          <img
-            src={token.logo}
-            alt={token.name}
-            width={36}
-            height={36}
-            className="min-h-[36px] min-w-[36px] rounded-full border border-neutral-800"
-          />
+          {loading && !showInitial && (
+            <div className="h-10 w-10 animate-spin rounded-full border-2 border-t-4 border-b-4 border-blue-500"></div>
+          )}
+          {loading && showInitial && (
+            <div className="h-10 w-10 rounded-full border border-neutral-800 flex items-center justify-center">
+              {token.name.charAt(0)}
+            </div>
+          )}
+          {meta?.image && (
+            <img
+              src={meta.image}
+              alt={token.name}
+              width={36}
+              height={36}
+              className="min-h-[36px] min-w-[36px] rounded-full border border-neutral-800"
+            />
+          )}
           {/* Symbol, Name, Clipboard, Age */}
           <div className="flex min-w-0 flex-col">
             <div className="flex items-center gap-1.5">

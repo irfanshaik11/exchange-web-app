@@ -90,6 +90,7 @@ export type Token = {
   updated_at: string; // ISO timestamp
   bonding_curve_progress: number | string;
   global_fees_paid: number;
+  uri?: string; // IPFS metadata URI
 };
 
 /**

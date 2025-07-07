@@ -13,6 +13,7 @@ import { useRouter } from "next/router";
 import type { Token as BaseToken } from "~/utils/db";
 import { formatSmartNumber } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
+import { fetchTokenMetadata } from '~/utils/functions';
 
 // Extend Token type locally to include optional dexPaid
 type Token = BaseToken & { dexPaid?: boolean };
@@ -90,6 +91,44 @@ const TableHeader: React.FC<{
   );
 };
 
+// Add a simple in-memory cache for token metadata
+const tokenMetadataCache: Record<string, any> = {};
+
+function useTokenMetadata(uri?: string) {
+  const [meta, setMeta] = useState<any | null>(null);
+  const [loading, setLoading] = useState(!!uri);
+  const [showInitial, setShowInitial] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!uri) {
+      setMeta(null);
+      setLoading(false);
+      return;
+    }
+    if (tokenMetadataCache[uri]) {
+      setMeta(tokenMetadataCache[uri]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setShowInitial(false);
+    const timer = setTimeout(() => setShowInitial(true), 500);
+    fetchTokenMetadata(uri).then((data) => {
+      if (!cancelled) {
+        if (data) tokenMetadataCache[uri] = data;
+        setMeta(data);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [uri]);
+  return { meta, loading, showInitial };
+}
+
 // Token Info Component
 const TokenInfo: React.FC<{ token: Token; i: number; sortedRows: InterstateTableRow[] }> = ({ token, i, sortedRows }) => {
   const similarTokens = useMemo(() => 
@@ -102,16 +141,28 @@ const TokenInfo: React.FC<{ token: Token; i: number; sortedRows: InterstateTable
       })
       .slice(0, 2), [token, sortedRows]);
 
+  const { meta, loading, showInitial } = useTokenMetadata(token.uri);
+
   const tooltipContent = (
     <div className="p-2">
       <div className="mb-2 flex justify-center">
-        <img
-          src={token.logo}
-          alt={token.name}
-          width={200}
-          height={200}
-          className="border border-neutral-700"
-        />
+        {loading && !showInitial && (
+          <div className="w-12 h-12 border-4 border-t-4 border-b-4 border-yellow-400 rounded-full animate-spin"></div>
+        )}
+        {showInitial && (
+          <div className="w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center text-xl font-bold text-white">
+            {token.name.charAt(0)}
+          </div>
+        )}
+        {meta?.image && (
+          <img
+            src={meta.image}
+            alt={token.name}
+            width={200}
+            height={200}
+            className="border border-neutral-700"
+          />
+        )}
       </div>
       <div className="mb-2 text-center">
         <div className="text-xl font-bold text-white">{token.name}</div>
@@ -172,13 +223,23 @@ const TokenInfo: React.FC<{ token: Token; i: number; sortedRows: InterstateTable
         label={tooltipContent}
       >
         <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded border border-yellow-400 bg-neutral-800">
-          <img
-            src={token.logo}
-            alt={token.name}
-            width={48}
-            height={48}
-            className="h-12 w-12 object-cover"
-          />
+          {loading && !showInitial && (
+            <div className="w-12 h-12 border-4 border-t-4 border-b-4 border-yellow-400 rounded-full animate-spin"></div>
+          )}
+          {showInitial && (
+            <div className="w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center text-xl font-bold text-white">
+              {token.name.charAt(0)}
+            </div>
+          )}
+          {meta?.image && (
+            <img
+              src={meta.image}
+              alt={token.name}
+              width={48}
+              height={48}
+              className="h-12 w-12 object-cover"
+            />
+          )}
         </div>
       </InterstateTooltip>
       <div className="flex min-w-0 flex-col">
