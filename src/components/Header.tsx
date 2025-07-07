@@ -59,11 +59,11 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
       <header className="w-full border-b border-emerald-950 bg-neutral-950 backdrop-blur sticky top-0 z-20">
         <div className="max-w-full  border-b border-emerald-950 flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-4 min-w-0">
-            <span className="text-2xl tracking-tight text-white select-none flex items-center">
-              <img src="/logo.png" className="w-12 h-auto" />
+            <Link href="/" className="text-2xl tracking-tight text-white select-none flex items-center" title="Go to homepage">
+              <img src="/logo.png" alt="Interstate logo" className="w-12 h-auto" />
               <span className="rounded-full inline-block mr-1" />
               Interstate
-            </span>
+            </Link>
             <nav className="flex items-center gap-6 ml-8">
               {navLinks.map((link) => (
                 <Link

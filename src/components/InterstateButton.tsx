@@ -14,6 +14,7 @@ export interface InterstateButtonProps {
   disabled?: boolean;
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   type?: 'button' | 'submit' | 'reset';
+  title?: string;
 }
 
 const base = 'rounded-full font-semibold transition focus:outline-none flex items-center justify-center';
@@ -40,6 +41,7 @@ export default function InterstateButton({
   disabled = false,
   onClick,
   type = 'button',
+  title,
 }: InterstateButtonProps) {
   return (
     <button
@@ -54,6 +56,7 @@ export default function InterstateButton({
       ].join(' ')}
       disabled={disabled || loading}
       onClick={onClick}
+      title={title}
     >
       {icon && <span className={children ? 'mr-2 flex-shrink-0' : ''}>{icon}</span>}
       {loading ? <span>Loading...</span> : children}
