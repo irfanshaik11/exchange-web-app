@@ -2,7 +2,7 @@ import type { Token } from "~/utils/db";
 
 export const SEARCH_HISTORY_KEY = "searchHistory";
 
-export type SearchHistoryItem = Pick<Token, "token_address" | "symbol" | "name" | "logo" | "total_fully_diluted_valuation" | "total_buy_volume_24h" | "total_sell_volume_24h" | "total_liquidity_usd">;
+export type SearchHistoryItem = Pick<Token, "mint" | "symbol" | "name" | "logo" | "total_fully_diluted_valuation" | "total_buy_volume_24h" | "total_sell_volume_24h" | "total_liquidity_usd">;
 
 export function getHistory(): SearchHistoryItem[] {
   if (typeof window === "undefined") return [];
@@ -15,7 +15,7 @@ export function getHistory(): SearchHistoryItem[] {
 
 export function addToHistory(item: SearchHistoryItem, maxEntries = 20) {
   if (typeof window === "undefined") return;
-  const current = getHistory().filter((t) => t.token_address !== item.token_address);
+  const current = getHistory().filter((t) => t.mint !== item.mint);
   const updated = [item, ...current].slice(0, maxEntries);
   localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
 }

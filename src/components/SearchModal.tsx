@@ -249,7 +249,7 @@ const initialState: SearchState = {
 // Define dummy history data
 const dummyHistoryData: SearchHistoryItem[] = [
   {
-    token_address: "0x1234567890123456789012345678901234567890",
+    mint: "0x1234567890123456789012345678901234567890",
     symbol: "PEPE",
     name: "Pepe",
     logo: "https://s2.coinmarketcap.com/static/img/coins/64x64/24478.png",
@@ -259,7 +259,7 @@ const dummyHistoryData: SearchHistoryItem[] = [
     total_liquidity_usd: 15000000,
   },
   {
-    token_address: "0x2345678901234567890123456789012345678901",
+    mint: "0x2345678901234567890123456789012345678901",
     symbol: "DOGE",
     name: "Dogecoin",
     logo: "https://s2.coinmarketcap.com/static/img/coins/64x64/74.png",
@@ -269,7 +269,7 @@ const dummyHistoryData: SearchHistoryItem[] = [
     total_liquidity_usd: 35000000,
   },
   {
-    token_address: "0x3456789012345678901234567890123456789012",
+    mint: "0x3456789012345678901234567890123456789012",
     symbol: "SHIB",
     name: "Shiba Inu",
     logo: "https://s2.coinmarketcap.com/static/img/coins/64x64/5994.png",
@@ -311,8 +311,8 @@ export default function SearchModal({
     }, 300);
   };
 
-  const handleSubmit = (tokenAddress: string) => {
-    const trimmed = tokenAddress.trim();
+  const handleSubmit = (mint: string) => {
+    const trimmed = mint.trim();
     if (!trimmed) return;
     onSubmit?.(trimmed);
     onClose();
@@ -320,7 +320,7 @@ export default function SearchModal({
 
   const handleSelectToken = (token: Token) => {
     const historyItem: SearchHistoryItem = {
-      token_address: token.token_address,
+      mint: token.mint,
       symbol: token.symbol,
       name: token.name,
       logo: token.logo,
@@ -332,7 +332,7 @@ export default function SearchModal({
 
     addToHistory(historyItem);
     updateState({ history: getHistory() });
-    handleSubmit(token.token_address);
+    handleSubmit(token.mint);
   };
 
   const handleClearHistory = () => {
@@ -530,7 +530,7 @@ export default function SearchModal({
                 const liq = formatSmartNumber(t.total_liquidity_usd || 0);
                 return (
                   <li
-                    key={t.token_address}
+                    key={t.mint}
                     className="flex cursor-pointer items-center gap-3 rounded px-2 py-2 text-sm hover:bg-neutral-800"
                     onClick={() => handleSelectToken(t)}
                   >
@@ -609,9 +609,9 @@ export default function SearchModal({
                 const liq = formatSmartNumber(h.total_liquidity_usd || 0);
                 return (
                   <li
-                    key={h.token_address}
+                    key={h.mint}
                     className="flex cursor-pointer items-center justify-between gap-4 rounded px-3 py-3 text-sm transition-colors hover:bg-neutral-800/30"
-                    onClick={() => handleSubmit(h.token_address)}
+                    onClick={() => handleSubmit(h.mint)}
                   >
                     <div className="flex w-48 items-center gap-4">
                       {/* Avatar with border and overlay icon */}
@@ -648,7 +648,7 @@ export default function SearchModal({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigator.clipboard.writeText(h.token_address);
+                              navigator.clipboard.writeText(h.mint);
                             }}
                             className="flex-shrink-0 text-neutral-400 transition-colors hover:text-neutral-300"
                             title="Copy address"
@@ -700,7 +700,7 @@ export default function SearchModal({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleSubmit(h.token_address);
+                        handleSubmit(h.mint);
                       }}
                       className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white transition-colors hover:bg-blue-600"
                       title="Select token"
