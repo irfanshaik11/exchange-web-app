@@ -36,6 +36,10 @@ const NotificationDropdown = dynamic(() => import("./NotificationDropdown"), {
   ssr: false,
 });
 
+const SearchModal = dynamic(() => import("./SearchModal"), {
+  ssr: false,
+});
+
 export default function Header({ search = "", setSearch, showSearch = true }: HeaderProps) {
   const router = useRouter();
   const isDiscover = router.pathname === "/";
@@ -44,6 +48,7 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
   const [depositOpen, setDepositOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   // Handles opening the deposit modal
   const handleDepositClick = () => {
@@ -82,18 +87,17 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
           </div>
           <div className="flex items-center gap-2 min-w-0">
             {showSearch && (
-              <div className="relative flex items-center">
+              <button
+                onClick={() => setSearchModalOpen(true)}
+                className="relative flex items-center bg-neutral-950 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm transition w-64 hover:border-emerald-500 text-left"
+              >
                 <span className="absolute left-3 text-neutral-400">
                   <FaSearch size={16} />
                 </span>
-                <input
-                  type="text"
-                  placeholder="Search by token or CA..."
-                  value={search}
-                  onChange={e => setSearch && setSearch(e.target.value)}
-                  className="bg-neutral-950 border border-neutral-700 rounded-full pl-9 pr-3 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition w-64"
-                />
-              </div>
+                <span className={`truncate ${search ? "text-neutral-100" : "text-neutral-400"}`}>
+                  {search || "Search by token or CA..."}
+                </span>
+              </button>
             )}
             <InterstateButton
               onClick={handleDepositClick}
@@ -176,6 +180,14 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
       <WatchlistModal open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
       <NotificationDropdown open={notificationOpen} onClose={() => setNotificationOpen(false)} />
+      {/* Search Modal */}
+      <SearchModal
+        open={searchModalOpen}
+        onClose={() => setSearchModalOpen(false)}
+        onSubmit={(q) => {
+          if (setSearch) setSearch(q);
+        }}
+      />
     </>
   );
 } 
