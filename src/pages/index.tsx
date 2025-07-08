@@ -86,7 +86,9 @@ export default function Home() {
     isConnected, 
     error: tokenError, 
     isReconnecting
-  } = usePaginatedTokensWebSocket();
+  } = usePaginatedTokensWebSocket({
+    filter: selectedTab === 'dex' ? 'new' : undefined
+  });
 
   // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
   useEffect(() => {

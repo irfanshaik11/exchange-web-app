@@ -142,27 +142,26 @@ const TokenInfo: React.FC<{ token: Token; i: number; sortedRows: InterstateTable
       .slice(0, 2), [token, sortedRows]);
 
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
+  const initial = token.name?.charAt(0)?.toUpperCase() || '?';
 
   const tooltipContent = (
     <div className="p-2">
       <div className="mb-2 flex justify-center">
-        {loading && !showInitial && (
-          <div className="w-12 h-12 border-4 border-t-4 border-b-4 border-yellow-400 rounded-full animate-spin"></div>
-        )}
-        {showInitial && (
-          <div className="w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center text-xl font-bold text-white">
-            {token.name.charAt(0)}
-          </div>
-        )}
-        {meta?.image && (
-          <img
-            src={meta.image}
-            alt={token.name}
-            width={200}
-            height={200}
-            className="border border-neutral-700"
-          />
-        )}
+        <div className="w-20 h-20 flex items-center justify-center rounded-full bg-neutral-800 border border-neutral-700 overflow-hidden">
+          {loading && !showInitial ? (
+            <div className="w-10 h-10 border-4 border-t-4 border-b-4 border-yellow-400 rounded-full animate-spin"></div>
+          ) : meta?.image ? (
+            <img
+              src={meta.image}
+              alt={token.name}
+              width={80}
+              height={80}
+              className="object-cover w-20 h-20"
+            />
+          ) : (
+            <span className="text-3xl font-bold text-white">{initial}</span>
+          )}
+        </div>
       </div>
       <div className="mb-2 text-center">
         <div className="text-xl font-bold text-white">{token.name}</div>
@@ -223,23 +222,21 @@ const TokenInfo: React.FC<{ token: Token; i: number; sortedRows: InterstateTable
         label={tooltipContent}
       >
         <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded border border-yellow-400 bg-neutral-800">
-          {loading && !showInitial && (
-            <div className="w-12 h-12 border-4 border-t-4 border-b-4 border-yellow-400 rounded-full animate-spin"></div>
-          )}
-          {showInitial && (
-            <div className="w-12 h-12 bg-neutral-800 rounded-full flex items-center justify-center text-xl font-bold text-white">
-              {token.name.charAt(0)}
-            </div>
-          )}
-          {meta?.image && (
-            <img
-              src={meta.image}
-              alt={token.name}
-              width={48}
-              height={48}
-              className="h-12 w-12 object-cover"
-            />
-          )}
+          <div className="w-12 h-12 flex items-center justify-center rounded bg-neutral-800 overflow-hidden">
+            {loading && !showInitial ? (
+              <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
+            ) : meta?.image ? (
+              <img
+                src={meta.image}
+                alt={token.name}
+                width={48}
+                height={48}
+                className="h-12 w-12 object-cover"
+              />
+            ) : (
+              <span className="text-lg font-bold text-white">{initial}</span>
+            )}
+          </div>
         </div>
       </InterstateTooltip>
       <div className="flex min-w-0 flex-col">
