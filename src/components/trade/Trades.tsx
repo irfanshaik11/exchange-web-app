@@ -3,6 +3,7 @@ import { formatSmartNumber } from '~/utils/db';
 import { getTradeHistoryByTokenAddress } from '~/utils/functions';
 import type { TradeRow } from '~/utils/functions';
 import type { Token } from '~/utils/db';
+import useTradesWebSocket from '../../hooks/useTradesWebSocket';
 
 function getAge(ts: string | number) {
   const now = Date.now();
@@ -26,15 +27,8 @@ interface TradesProps {
 }
 
 const Trades: React.FC<TradesProps> = ({ token }) => {
-  const [trades, setTrades] = useState<TradeRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    if (!token?.token_address) return;
-    setLoading(true);
-    getTradeHistoryByTokenAddress(token.token_address)
-      .then(setTrades)
-      .finally(() => setLoading(false));
-  }, [token?.token_address]);
+  const { data: trades, isConnected, error } = useTradesWebSocket(token?.token_address);
+  const loading = !isConnected && !error;
 
   return (
     <div className="w-full">

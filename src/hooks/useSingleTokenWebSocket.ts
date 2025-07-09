@@ -27,7 +27,8 @@ export default function useSingleTokenWebSocket(tokenAddress: string | undefined
       }
 
       try {
-        const ws = new WebSocket(env.NEXT_PUBLIC_WEBSOCKET_URL!);
+        // Use /token?mint=tokenAddress endpoint
+        const ws = new WebSocket(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/token?mint=${tokenAddress}`);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -39,15 +40,9 @@ export default function useSingleTokenWebSocket(tokenAddress: string | undefined
         ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            // If the message is an array, find the token by address
-            if (Array.isArray(message)) {
-              const found = message.find((t) => t.token_address === tokenAddress || t.mint === tokenAddress);
-              if (found) throttledSetData(found);
-            } else if (message && typeof message === "object") {
-              // If the message is a single token update
-              if (message.token_address === tokenAddress || message.mint === tokenAddress) {
-                throttledSetData(message);
-              }
+            // Expect a single token object
+            if (message && typeof message === "object") {
+              throttledSetData(message);
             }
           } catch (err) {
             setError("Failed to parse WebSocket message");

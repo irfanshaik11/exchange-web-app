@@ -43,6 +43,8 @@ export default function usePaginatedTokensWebSocket({
 
   useEffect(() => {
     let url = env.NEXT_PUBLIC_WEBSOCKET_URL;
+    if (!url.endsWith('/')) url += '/';
+    url += 'tokens';
     const params = new URLSearchParams({
       filter,
       order,
