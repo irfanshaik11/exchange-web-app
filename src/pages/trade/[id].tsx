@@ -32,6 +32,7 @@ export default function TradePage() {
   const router = useRouter();
   const { id } = router.query;
   const [loading, setLoading] = useState(true);
+  const [showSkeleton, setShowSkeleton] = useState(true);
   const [chartHeight, setChartHeight] = useState(600);
   const { address, isConnected } = useWallet();
   const [sellPercentage, setSellPercentage] = useState("");
@@ -53,6 +54,13 @@ export default function TradePage() {
   const { data: token, isConnected: wsConnected, error: wsError } = useSingleTokenWebSocket(
     typeof id === "string" ? id : undefined
   );
+
+  useEffect(() => {
+    // Show skeleton for at least 1.5s
+    setShowSkeleton(true);
+    const timer = setTimeout(() => setShowSkeleton(false), 1500);
+    return () => clearTimeout(timer);
+  }, [id]);
 
   useEffect(() => {
     if (token || wsError) setLoading(false);
@@ -95,6 +103,34 @@ export default function TradePage() {
     } else {
       setUsdcAmount("");
     }
+  }
+
+  if (showSkeleton) {
+    return (
+      <div className="min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100">
+        <Header search={search} setSearch={setSearch} />
+        <div className="flex flex-1 flex-row w-full">
+          <div className="flex-1 min-w-0 flex flex-col pb-4 border-r border-emerald-950">
+            <div className="h-16 w-1/2 bg-neutral-800 animate-pulse rounded mb-4" />
+            <div className="min-h-[500px] w-full bg-neutral-800 animate-pulse rounded mb-4" />
+            <hr className="border-emerald-950" />
+            <div className="h-12 w-1/3 bg-neutral-800 animate-pulse rounded mb-4" />
+            <div className="space-y-2">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-8 w-full bg-neutral-800 animate-pulse rounded" />
+              ))}
+            </div>
+          </div>
+          <div className="w-full max-w-md flex-shrink-0">
+            <div className="space-y-2">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="h-8 w-full bg-neutral-800 animate-pulse rounded" />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (loading) {

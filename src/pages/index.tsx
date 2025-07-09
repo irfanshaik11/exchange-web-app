@@ -79,6 +79,7 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter, setFilter, resetFilter } = useFilter();
+  const [showSkeleton, setShowSkeleton] = useState(true);
 
   // WebSocket token service
   const { 
@@ -239,6 +240,12 @@ export default function Home() {
     }
   }, [activePreset, presets]);
 
+  useEffect(() => {
+    setShowSkeleton(true);
+    const timer = setTimeout(() => setShowSkeleton(false), 1500);
+    return () => clearTimeout(timer);
+  }, [selectedTab]);
+
   return (
     <>
       <Head>
@@ -335,7 +342,13 @@ export default function Home() {
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
-          {!allTokens ? (
+          {showSkeleton ? (
+            <div className="space-y-4">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="h-12 w-full bg-neutral-800 animate-pulse rounded" />
+              ))}
+            </div>
+          ) : !allTokens ? (
             <InterstateTable
               rows={[]}
               onQuickBuy={handleQuickBuy}
