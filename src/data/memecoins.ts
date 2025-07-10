@@ -1,3 +1,4 @@
+//ksnk
 export type MemeCoin = {
   icon: string;
   name: string;
