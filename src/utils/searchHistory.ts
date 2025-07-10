@@ -1,6 +1,10 @@
+import type { Token } from "~/utils/db";
+
 export const SEARCH_HISTORY_KEY = "searchHistory";
 
-export function getHistory(): string[] {
+export type SearchHistoryItem = Pick<Token, "token_address" | "symbol" | "name" | "logo" | "total_fully_diluted_valuation" | "total_buy_volume_24h" | "total_sell_volume_24h" | "total_liquidity_usd">;
+
+export function getHistory(): SearchHistoryItem[] {
   if (typeof window === "undefined") return [];
   try {
     return JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || "[]");
@@ -9,12 +13,10 @@ export function getHistory(): string[] {
   }
 }
 
-export function addToHistory(term: string, maxEntries = 20) {
+export function addToHistory(item: SearchHistoryItem, maxEntries = 20) {
   if (typeof window === "undefined") return;
-  const trimmed = term.trim();
-  if (!trimmed) return;
-  const current = getHistory().filter((t) => t !== trimmed);
-  const updated = [trimmed, ...current].slice(0, maxEntries);
+  const current = getHistory().filter((t) => t.token_address !== item.token_address);
+  const updated = [item, ...current].slice(0, maxEntries);
   localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(updated));
 }
 

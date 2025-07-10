@@ -63,6 +63,12 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  // Populate search state if we arrived with ?search= in the URL
+  useEffect(() => {
+    if (router.query.search && typeof router.query.search === "string") {
+      setSearch(router.query.search as string);
+    }
+  }, [router.query.search]);
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
@@ -129,20 +135,60 @@ export default function Home() {
   }, [sortKey]);
 
   // Filter tokens when search changes
+  // Fetch from backend /search endpoint when the search term changes
   useEffect(() => {
-    const arr = Array.from(tokenMapRef.current.values());
-    if (!search) {
+    const trimmed = search.trim();
+
+    // 1. Empty term ⇒ show everything we already have in memory
+    if (!trimmed) {
+      const arr = Array.from(tokenMapRef.current.values());
       setFilteredTokens(arr);
       setDisplayed(arr.slice(0, 10));
       return;
     }
-    const results = arr.filter(
-      (token) =>
-        token.name?.toLowerCase().includes(search.toLowerCase()) ||
-        token.symbol?.toLowerCase().includes(search.toLowerCase())
-    );
-    setFilteredTokens(results);
-    setDisplayed(results.slice(0, 10));
+
+    // 2. Decide if we search by name/symbol (<10 chars) or by address
+    const isAddress = trimmed.length >= 10;
+    const param = isAddress ? "tokenaddress" : "name";
+
+    // In local dev, use Next.js API proxy to avoid CORS; in prod, hit service directly
+    const isLocalhost = typeof window !== "undefined" && window.location.hostname === "localhost";
+    const baseURL = isLocalhost
+      ? "/api/token-search"
+      : env.NEXT_PUBLIC_TOKEN_SERVICE_URL || env.NEXT_PUBLIC_API_URL || env.NEXT_PUBLIC_BACKEND_URL || "";
+
+    if (!baseURL) {
+      console.error("Token service URL missing – check env variables.");
+      return;
+    }
+
+    const url = isLocalhost
+      ? `${baseURL}?${param}=${encodeURIComponent(trimmed)}`
+      : `${baseURL}/search?${param}=${encodeURIComponent(trimmed)}`;
+
+    const controller = new AbortController();
+
+    fetch(url, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Search failed: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        const list: TokenWithDexPaid[] = Array.isArray(data?.result)
+          ? data.result
+          : Array.isArray(data)
+          ? data
+          : [];
+        setFilteredTokens(list);
+        setDisplayed(list.slice(0, 10));
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          console.error(err);
+        }
+      });
+
+    return () => controller.abort();
   }, [search]);
 
   const handleTimeframeClick = (tf: string) => {

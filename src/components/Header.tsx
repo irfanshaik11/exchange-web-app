@@ -185,7 +185,41 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
         open={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
         onSubmit={(q) => {
-          if (setSearch) setSearch(q);
+          const trimmed = q.trim();
+          // If it's likely a token address navigate directly to trade page
+          if (trimmed.length >= 10) {
+            router.push(`/trade/${trimmed}`);
+            setSearch?.("");
+            return;
+          }
+
+          // Otherwise treat as name search and stay on Discover
+          if (setSearch) setSearch(trimmed);
+          if (router.pathname !== "/") {
+            router.push({ pathname: "/", query: { search: trimmed } });
+          } else {
+            router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
+          }
+        }}
+        onQueryChange={(q) => {
+          const trimmed = q.trim();
+
+          // Skip routing updates for short queries (<3 chars)
+          if (trimmed.length < 3) {
+            if (router.pathname === "/" && Object.keys(router.query).includes("search")) {
+              router.replace({ pathname: "/" }, undefined, { shallow: true });
+            }
+            if (setSearch) setSearch(trimmed);
+            return;
+          }
+
+          // Live updates for longer queries
+          if (router.pathname !== "/") {
+            router.push({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
+          } else {
+            router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
+          }
+          if (setSearch) setSearch(trimmed);
         }}
       />
     </>
