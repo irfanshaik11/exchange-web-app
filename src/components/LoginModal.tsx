@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { env } from '../env';
+import { login as apiLogin, register as apiRegister, phantomLogin as apiPhantomLogin, googleAuthUrl } from '../utils/api';
 import Cookies from 'js-cookie';
 import { useUser } from "./UserContext";
 import InterstatePopout from './InterstatePopout';
@@ -64,27 +64,17 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/users/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
+      const { token } = await apiLogin(email, password);
+      Cookies.set('token', token, { expires: 7, path: '/' });
+      await refreshUser();
+      setSuccess('Login successful!');
 
-      if (res.ok && data.token) {
-        Cookies.set('token', data.token, { expires: 7, path: '/' });
-        await refreshUser();
-        setSuccess('Login successful!');
-        
-        setTimeout(() => {
-          setSuccess(null);
-          onClose();
-        }, 1200);
-      } else {
-        setError(data.message || 'Login failed');
-      }
-    } catch (err) {
-      setError('Login failed');
+      setTimeout(() => {
+        setSuccess(null);
+        onClose();
+      }, 1200);
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -97,27 +87,20 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/users/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, name: username, password }),
-      });
-      const data = await res.json();
-      if (res.ok && data.user && data.user.token) {
-        Cookies.set('token', data.user.token, { expires: 7, path: '/' });
-        Cookies.set('username', username, { expires: 7, path: '/' });
-        Cookies.set('email', email, { expires: 7, path: '/' });
-        await refreshUser();
-        setSuccess('Registration successful!');
-        setTimeout(() => {
-          setMode('login');
-          setSuccess(null);
-        }, 1200);
-      } else {
-        setError(data.message || 'Registration failed');
+      const { user } = await apiRegister(email, username, password);
+      if (user?.token) {
+        Cookies.set('token', user.token, { expires: 7, path: '/' });
       }
-    } catch (err) {
-      setError('Registration failed');
+      Cookies.set('username', username, { expires: 7, path: '/' });
+      Cookies.set('email', email, { expires: 7, path: '/' });
+      await refreshUser();
+      setSuccess('Registration successful!');
+      setTimeout(() => {
+        setMode('login');
+        setSuccess(null);
+      }, 1200);
+    } catch (err: any) {
+      setError(err.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -130,8 +113,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
     setError(null);
     setSuccess(null);
     try {
-      const GOOGLE_AUTH_URL = `${env.NEXT_PUBLIC_BACKEND_URL}/api/users/auth/google`;
-      window.location.href = GOOGLE_AUTH_URL;
+      window.location.href = googleAuthUrl;
     } catch (err) {
       setError('Login failed');
     } finally {
@@ -161,14 +143,9 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       const signed = await provider.signMessage(encodedMessage);
       const publicKey = signed.publicKey.toBase58 ? signed.publicKey.toBase58() : signed.publicKey.toString();
       const signature = bs58.encode(signed.signature);
-      const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/users/phantom/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ publicKey, signature, message }),
-      });
-      const data = await res.json();
-      if (res.ok && data.token) {
-        Cookies.set('token', data.token, { expires: 7, path: '/' });
+      const { token } = await apiPhantomLogin(publicKey, signature, message);
+      if (token) {
+        Cookies.set('token', token, { expires: 7, path: '/' });
         await refreshUser();
         setSuccess('login successful!');
         setTimeout(() => {
@@ -176,7 +153,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
           onClose();
         }, 1200);
       } else {
-        setError(data.message || 'Phantom login failed');
+        setError('Phantom login failed');
       }
     } catch (error: any) {
       if (error && error.code === 4001) {

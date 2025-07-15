@@ -30,9 +30,9 @@ import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { FilterProvider, useFilter } from '../components/FilterContext';
 import InterstatePopout from '../components/InterstatePopout';
 import FilterPopout from '../components/FilterPopout';
-import { env } from '../env';
 import throttle from 'lodash.throttle';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
+import { tradeBuy } from "../utils/api";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -165,34 +165,19 @@ export default function Home() {
       return;
     }
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL || ""}/api/trade/buy`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${user.bearerToken}`,
-          },
-          body: JSON.stringify({
-            tokenAddress: token.token_address,
-            amount: quickBuyAmount,
-            mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
-            solPrice: token.sol_price,
-            marketCap: token.total_fully_diluted_valuation,
-            tokenPrice: token.usd_price,
-          }),
-        },
+      const data = await tradeBuy({
+        tokenAddress: token.token_address,
+        amount: quickBuyAmount,
+        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
+        solPrice: token.sol_price,
+        marketCap: token.total_fully_diluted_valuation,
+        tokenPrice: token.usd_price,
+      }, user.bearerToken);
+      toast.success(
+        `Quick Buy successful! Bought ${data.amount} ${token.symbol}`,
       );
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(
-          `Quick Buy successful! Bought ${data.amount} ${token.symbol}`,
-        );
-      } else {
-        toast.error(data?.error || "Quick Buy failed");
-      }
-    } catch (e) {
-      toast.error("Quick Buy failed");
+    } catch (e: any) {
+      toast.error(e.message || "Quick Buy failed");
     }
   }
 

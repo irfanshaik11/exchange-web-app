@@ -14,7 +14,6 @@ import {
 } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import { useWallet } from "../../components/useWallet";
-import { env } from "../../env";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import toast, { Toaster } from "react-hot-toast";
 import { useUser } from "../../components/UserContext";
@@ -24,6 +23,7 @@ import TradeHeader from "../../components/trade/TradeHeader";
 import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
 import { formatSmartNumber } from "~/utils/db";
+import { tradeBuy, tradeSellPercentage, tradeSellExactAmount } from "../../utils/api";
 import Trades from "../../components/trade/Trades";
 import Positions from "~/components/trade/Positions";
 import useSingleTokenWebSocket from "../../hooks/useSingleTokenWebSocket";
@@ -46,7 +46,6 @@ export default function TradePage() {
   const amountOptions = ["0.1", "1", "10"];
   const [tradeHistory, setTradeHistory] = useState<any[]>([]);
   const { user, loading: userLoading } = useUser();
-  const backendUrl = env.NEXT_PUBLIC_BACKEND_URL;
   const [selectedTab, setSelectedTab] = useState("Trades");
   const [search, setSearch] = useState("");
 
@@ -160,39 +159,29 @@ export default function TradePage() {
     setTxLoading(true);
     setTxStatus(null);
     try {
-      const res = await fetch(`${backendUrl}/api/trade/buy`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.bearerToken}`,
+      const data = await tradeBuy({
+        tokenAddress: token.token_address,
+        amount: parseFloat(tradeAmount),
+        mevProtection: 0,
+        solPrice: token.sol_price,
+        marketCap: token.total_fully_diluted_valuation,
+        tokenPrice: token.usd_price,
+      }, user.bearerToken);
+      setTxStatus("Buy transaction sent!");
+      toast.success(
+        `Buy order successful! Bought ${data.amount} ${token.symbol}`,
+      );
+      setTradeHistory((prev) => [
+        ...prev,
+        {
+          pair: token,
+          amount: data.amount,
+          hash: data.hash,
+          time: new Date().toLocaleTimeString(),
         },
-        body: JSON.stringify({
-          tokenAddress: token.token_address,
-          amount: parseFloat(tradeAmount),
-          mevProtection: 0,
-          solPrice: token.sol_price,
-          marketCap: token.total_fully_diluted_valuation,
-          tokenPrice: token.usd_price,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setTxStatus("Buy transaction sent!");
-        toast.success(
-          `Buy order successful! Bought ${data.amount} ${token.symbol}`,
-        );
-        setTradeHistory((prev) => [
-          ...prev,
-          {
-            pair: token,
-            amount: data.amount,
-            hash: data.hash,
-            time: new Date().toLocaleTimeString(),
-          },
-        ]);
-      } else setTxStatus(data?.error || "Buy failed");
-    } catch (e) {
-      setTxStatus("Buy failed");
+      ]);
+    } catch (e: any) {
+      setTxStatus(e.message || "Buy failed");
     } finally {
       setTxLoading(false);
     }
@@ -204,36 +193,26 @@ export default function TradePage() {
     setTxLoading(true);
     setTxStatus(null);
     try {
-      const res = await fetch(`${backendUrl}/api/trade/sell_percentage`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.bearerToken}`,
+      const data = await tradeSellPercentage({
+        tokenAddress: token.token_address,
+        percentageToSell: parseFloat(sellPercentage),
+        solPrice: token.sol_price,
+        marketCap: token.total_fully_diluted_valuation,
+        tokenPrice: token.usd_price,
+      }, user.bearerToken);
+      setTxStatus(data.message || "Sell (percentage) transaction sent!");
+      toast.success(data.message || "Sell order successful!");
+      setTradeHistory((prev) => [
+        ...prev,
+        {
+          pair: token,
+          amount: `${sellPercentage}%`,
+          hash: data.hash,
+          time: new Date().toLocaleTimeString(),
         },
-        body: JSON.stringify({
-          tokenAddress: token.token_address,
-          percentageToSell: parseFloat(sellPercentage),
-          solPrice: token.sol_price,
-          marketCap: token.total_fully_diluted_valuation,
-          tokenPrice: token.usd_price,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setTxStatus(data.message || "Sell (percentage) transaction sent!");
-        toast.success(data.message || "Sell order successful!");
-        setTradeHistory((prev) => [
-          ...prev,
-          {
-            pair: token,
-            amount: `${sellPercentage}%`,
-            hash: data.hash,
-            time: new Date().toLocaleTimeString(),
-          },
-        ]);
-      } else setTxStatus(data?.message || data?.error || "Sell failed");
-    } catch (e) {
-      setTxStatus("Sell failed");
+      ]);
+    } catch (e: any) {
+      setTxStatus(e.message || "Sell failed");
     } finally {
       setTxLoading(false);
     }
@@ -245,22 +224,16 @@ export default function TradePage() {
     setTxLoading(true);
     setTxStatus(null);
     try {
-      const res = await fetch(`${backendUrl}/api/trade/sell_exactAmount`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tokenAddress: address,
-          tokenAmount: parseFloat(tradeAmount),
-          solPrice: token?.sol_price,
-          marketCap: token?.total_fully_diluted_valuation,
-          tokenPrice: token?.usd_price,
-        }),
+      await tradeSellExactAmount({
+        tokenAddress: address,
+        tokenAmount: parseFloat(tradeAmount),
+        solPrice: token?.sol_price,
+        marketCap: token?.total_fully_diluted_valuation,
+        tokenPrice: token?.usd_price,
       });
-      const data = await res.json();
-      if (res.ok) setTxStatus("Sell (exact amount) transaction sent!");
-      else setTxStatus(data?.error || "Sell failed");
-    } catch (e) {
-      setTxStatus("Sell failed");
+      setTxStatus("Sell (exact amount) transaction sent!");
+    } catch (e: any) {
+      setTxStatus(e.message || "Sell failed");
     } finally {
       setTxLoading(false);
     }
