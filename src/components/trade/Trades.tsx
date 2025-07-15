@@ -22,13 +22,63 @@ function shortAddr(addr: string) {
   return addr.slice(0, 3) + '...' + addr.slice(-3);
 }
 
-interface TradesProps {
-  token: Token;
+function getAgeFromBlockTime(blockTime: string) {
+  if (!blockTime) return '';
+  const now = Date.now();
+  const t = new Date(blockTime).getTime();
+  const diffMs = now - t;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays > 0) return `${diffDays}d`;
+  if (diffHours > 0) return `${diffHours}h`;
+  return `${diffMins}m`;
 }
 
-const Trades: React.FC<TradesProps> = ({ token }) => {
-  const { data: trades, isConnected, error } = useTradesWebSocket(token?.token_address);
-  const loading = !isConnected && !error;
+function isBuy(trade: any) {
+  // If Sell.Currency.Symbol is WSOL, it's a Buy; if Buy.Currency.Symbol is WSOL, it's a Sell
+  return trade?.Trade?.Sell?.Currency?.Symbol === 'WSOL';
+}
+
+function getAmount(trade: any) {
+  // If Buy, show Buy.Amount; if Sell, show Sell.Amount
+  return isBuy(trade)
+    ? trade?.Trade?.Buy?.Amount
+    : trade?.Trade?.Sell?.Amount;
+}
+
+function getTotalUSD(trade: any) {
+  // If Buy, use Buy.PriceInUSD * Buy.Amount; if Sell, use Sell.PriceInUSD * Sell.Amount
+  if (isBuy(trade)) {
+    const amt = parseFloat(trade?.Trade?.Buy?.Amount || '0');
+    const price = parseFloat(trade?.Trade?.Buy?.PriceInUSD || '0');
+    return amt * price;
+  } else {
+    const amt = parseFloat(trade?.Trade?.Sell?.Amount || '0');
+    const price = parseFloat(trade?.Trade?.Sell?.PriceInUSD || '0');
+    return amt * price;
+  }
+}
+
+function getMarketCap(trade: any) {
+  // Not available in this schema, so return '-'
+  return '-';
+}
+
+function getTrader(trade: any) {
+  // Use Transaction.Signature
+  return trade?.Transaction?.Signature || '';
+}
+
+interface TradesProps {
+  token: Token;
+  trades?: any[];
+}
+
+const Trades: React.FC<TradesProps> = ({ token, trades }) => {
+  const { data: wsTrades, isConnected, error } = useTradesWebSocket(token?.pair_address);
+  const loading = !isConnected && !error && !trades;
+  const displayTrades = trades ?? wsTrades;
 
   return (
     <div className="w-full">
@@ -46,32 +96,35 @@ const Trades: React.FC<TradesProps> = ({ token }) => {
         <tbody>
           {loading ? (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">Loading...</td></tr>
-          ) : trades.length === 0 ? (
+          ) : !displayTrades || displayTrades.length === 0 ? (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No trades found.</td></tr>
           ) : (
-            trades.map((trade, idx) => (
-              <tr key={trade.transactionHash || idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
-                <td className="px-2 py-2">{getAge(trade.createdAt)}</td>
-                <td className={
-                  `px-2 py-2 font-semibold ${trade.type === 'Buy' ? 'text-emerald-400' : 'text-red-400'}`
-                }>{trade.type}</td>
-                <td className="px-2 py-2">${formatSmartNumber(trade.marketCap)}</td>
-                <td className="px-2 py-2">{formatSmartNumber(trade.tokenAmount)}</td>
-                <td className={
-                  `px-2 py-2 font-semibold ${trade.type === 'Buy' ? 'text-emerald-400' : 'text-red-400'}`
-                }>{trade.type === 'Buy' ? '+' : '-'}${formatSmartNumber(trade.usdValue)}</td>
-                <td className="px-2 py-2">
-                  <a
-                    href={`https://solscan.io/tx/${trade.transactionHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-300 hover:underline"
-                  >
-                    {shortAddr(trade.tokenAddress)}
-                  </a>
-                </td>
-              </tr>
-            ))
+            displayTrades.map((trade, idx) => {
+              const type = isBuy(trade) ? 'Buy' : 'Sell';
+              const amount = getAmount(trade);
+              const totalUSD = getTotalUSD(trade);
+              const age = getAgeFromBlockTime(trade?.Block?.Time);
+              const trader = getTrader(trade);
+              return (
+                <tr key={trader + idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
+                  <td className="px-2 py-2">{age}</td>
+                  <td className={`px-2 py-2 font-semibold ${type === 'Buy' ? 'text-emerald-400' : 'text-red-400'}`}>{type}</td>
+                  <td className="px-2 py-2">-</td>
+                  <td className="px-2 py-2">{formatSmartNumber(amount)}</td>
+                  <td className={`px-2 py-2 font-semibold ${type === 'Buy' ? 'text-emerald-400' : 'text-red-400'}`}>{type === 'Buy' ? '+' : '-'}${formatSmartNumber(totalUSD)}</td>
+                  <td className="px-2 py-2">
+                    <a
+                      href={`https://solscan.io/tx/${trader}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-300 hover:underline"
+                    >
+                      {shortAddr(trader)}
+                    </a>
+                  </td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>

@@ -487,7 +487,7 @@ export default function InterstateTable({
                 quickBuyAmount={quickBuyAmount}
                 animationState={animationState}
                 sortedRows={sortedRows}
-                onClick={() => router.push(`/trade/${token.token_address}`)}
+                onClick={() => router.push(`/trade/${token.pair_address}`)}
               />
             ))
           )}
