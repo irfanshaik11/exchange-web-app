@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import throttle from "lodash.throttle";
 import { env } from "../env";
 
-export default function useSingleTokenWebSocket(tokenAddress: string | undefined) {
-  const [data, setData] = useState<any>(null);
+export default function useSingleTokenWebSocket(pairAddress: string | undefined) {
+  const [token, setToken] = useState<any>(null);
+  const [trades, setTrades] = useState<any[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -12,14 +13,14 @@ export default function useSingleTokenWebSocket(tokenAddress: string | undefined
   const reconnectAttemptRef = useRef(0);
 
   // Throttle updates to avoid excessive renders
-  const throttledSetData = useRef(
+  const throttledSetToken = useRef(
     throttle((newData: any) => {
-      setData(newData);
+      setToken(newData);
     }, 1000)
   ).current;
 
   useEffect(() => {
-    if (!tokenAddress) return;
+    if (!pairAddress) return;
 
     const connectWebSocket = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -27,8 +28,8 @@ export default function useSingleTokenWebSocket(tokenAddress: string | undefined
       }
 
       try {
-        // Use /token?mint=tokenAddress endpoint
-        const ws = new WebSocket(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/token?mint=${tokenAddress}`);
+        // Use /token?pairaddress=pairAddress endpoint
+        const ws = new WebSocket(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/token?pairaddress=${pairAddress}`);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -40,9 +41,14 @@ export default function useSingleTokenWebSocket(tokenAddress: string | undefined
         ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
-            // Expect a single token object
+            // Expect { token, trades } object
             if (message && typeof message === "object") {
-              throttledSetData(message);
+              if (message.token && message.trades) {
+                throttledSetToken(message.token);
+                setTrades(message.trades);
+              } else {
+                throttledSetToken(message);
+              }
             }
           } catch (err) {
             setError("Failed to parse WebSocket message");
@@ -77,9 +83,9 @@ export default function useSingleTokenWebSocket(tokenAddress: string | undefined
     return () => {
       if (wsRef.current) wsRef.current.close();
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      throttledSetData.cancel();
+      throttledSetToken.cancel();
     };
-  }, [tokenAddress, throttledSetData]);
+  }, [pairAddress, throttledSetToken]);
 
-  return { data, isConnected, error };
+  return { token, trades, isConnected, error };
 } 

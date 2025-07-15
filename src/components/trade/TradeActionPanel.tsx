@@ -97,7 +97,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div>
       </div>
       {/* Trade Box */}
-      <div className="flex flex-col border-b border-emerald-950 pb-4 w-full shadow-lg rounded-lg">
+      <div className="flex flex-col border-b border-emerald-950 pb-4 w-full">
         {/* Toggle */}
         <div className="flex border-b border-emerald-950 p-2 w-full rounded-t-lg">
           <button
@@ -231,13 +231,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div> */}
         {/* Action Button */}
         <button
-          className={`mx-4 mt-2 py-3 text-xs font-bold transition disabled:opacity-50 rounded-lg ${mode === "buy" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-500 text-white hover:bg-pink-700"}`}
+          className={`mx-4 mt-2 py-3 text-xs font-bold transition disabled:opacity-50 ${mode === "buy" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-500 text-white hover:bg-pink-700"}`}
           disabled={!amount}
         >
           {mode === "buy" ? `Buy ${token.symbol}` : `Sell ${token.symbol}`}
         </button>
       </div>
-      <div className="flex flex-row border-b border-emerald-950 rounded-lg">
+      <div className="flex flex-row border-b border-emerald-950">
         <div className="flex w-full flex-col items-center gap-2 border-r border-emerald-950 p-2 text-xs text-neutral-500">
           <span>Bought</span>
           <span className="text-sm text-emerald-300">$0</span>
@@ -256,7 +256,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div>
       </div>
       {/* QuickBuy Preset Bar  FIX THE WIDTH THING */}
-      <div className="border-b border-emerald-950 w-[350px]">
+      <div className="border-b border-emerald-950 w-full">
         <QuickBuy hideActionButton className="bg-transparent border-none rounded-none" />
       </div>
       {/* Token Info Box */}

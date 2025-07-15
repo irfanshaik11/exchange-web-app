@@ -50,7 +50,7 @@ export default function TradePage() {
   const [search, setSearch] = useState("");
 
   // WebSocket per-token service
-  const { data: token, isConnected: wsConnected, error: wsError } = useSingleTokenWebSocket(
+  const { token, trades, isConnected: wsConnected, error: wsError } = useSingleTokenWebSocket(
     typeof id === "string" ? id : undefined
   );
 
@@ -261,7 +261,7 @@ export default function TradePage() {
               selectedTab={selectedTab}
               setSelectedTab={setSelectedTab}
             />
-            {selectedTab === "Trades" && <Trades token={token} />}
+            {selectedTab === "Trades" && <Trades token={token} trades={trades} />}
             {selectedTab === "Positions" && <Positions userId={user?.id} />}
           </div>
           {/* Right: Buy/Sell and Token Info */}
