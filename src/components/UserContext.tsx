@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import Cookies from 'js-cookie';
-import { env } from '../env';
+import { getUserById } from '../utils/api';
 
 export interface UserInfo {
   id: string;
@@ -34,21 +34,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/users/get_user_by_id`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      const data = await res.json();
-      console.log("data_id",data);
-      if (res.ok && data.user) {
-        setUser({ bearerToken: token, ...data.user});
+      const { user: fetchedUser } = await getUserById(token);
+      if (fetchedUser) {
+        setUser({ bearerToken: token, ...fetchedUser });
       } else {
         setUser(null);
         Cookies.remove('token');
       }
-    } catch (e) {
+    } catch (_) {
       setUser(null);
       Cookies.remove('token');
     } finally {
