@@ -24,7 +24,7 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
         (window as any).createMyWidget(PRICE_CHART_ID, {
           autoSize: true,
           chainId: "solana",
-          tokenAddress: token.token_address,
+          tokenAddress: token.mint,
           showHoldersChart: false,
           defaultInterval: "60",
           timeZone:
@@ -59,7 +59,7 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
     } else {
       loadWidget();
     }
-  }, [token.token_address]);
+  }, [token.mint]);
 
   // Calculate stats from token fields
   const buyVol = token.total_buy_volume_5m || 0;

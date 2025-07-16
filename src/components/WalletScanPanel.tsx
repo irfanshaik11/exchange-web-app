@@ -90,7 +90,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
 
   // Fetch SPL token balance
   useEffect(() => {
-    if (!wallet.address || !token || !token.token_address) return;
+    if (!wallet.address || !token || !token.mint) return;
     setTokenBalanceLoading(true);
     setTokenBalanceError(null);
     // 1. Get token accounts by owner
@@ -103,7 +103,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
         method: 'getTokenAccountsByOwner',
         params: [
           wallet.address,
-          { mint: token.token_address },
+          { mint: token.mint },
           { encoding: 'jsonParsed' }
         ]
       })
@@ -121,7 +121,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
       })
       .catch(() => setTokenBalanceError('Failed to fetch token balance'))
       .finally(() => setTokenBalanceLoading(false));
-  }, [wallet.address, token && token.token_address]);
+  }, [wallet.address, token && token.mint]);
 
   const handleCopy = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {

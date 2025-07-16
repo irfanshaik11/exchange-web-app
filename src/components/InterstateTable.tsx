@@ -133,7 +133,7 @@ function useTokenMetadata(uri?: string) {
 const TokenInfo: React.FC<{ token: Token; i: number; sortedRows: InterstateTableRow[] }> = ({ token, i, sortedRows }) => {
   const similarTokens = useMemo(() => 
     sortedRows
-      .filter(row => row.token.token_address !== token.token_address)
+      .filter(row => row.token.mint !== token.mint)
       .sort((a, b) => {
         const diffA = Math.abs(a.token.fully_diluted_value - token.fully_diluted_value);
         const diffB = Math.abs(b.token.fully_diluted_value - token.fully_diluted_value);
@@ -280,8 +280,8 @@ const TableRow: React.FC<{
   sortedRows: InterstateTableRow[];
   onClick: () => void;
 }> = React.memo(({ token, i, selectedTimeframe, onQuickBuy, quickBuyAmount, animationState, sortedRows, onClick }) => {
-  const priceKey = `${token.token_address}-usd_price`;
-  const percentFieldKey = `${token.token_address}-price_percent_change_${selectedTimeframe}`;
+  const priceKey = `${token.mint}-usd_price`;
+  const percentFieldKey = `${token.mint}-price_percent_change_${selectedTimeframe}`;
   
   const handleQuickBuy = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -412,7 +412,7 @@ export default function InterstateTable({
     
     rows.forEach(({ token }) => {
       // Price animation
-      const priceKey = `${token.token_address}-usd_price`;
+      const priceKey = `${token.mint}-usd_price`;
       const price = token.usd_price;
       if (priceKey in prevValuesRef.current) {
         if (price > prevValuesRef.current[priceKey]) {
@@ -424,7 +424,7 @@ export default function InterstateTable({
       newPrevValues[priceKey] = price;
 
       // Percent change animation
-      const percentFieldKey = `${token.token_address}-price_percent_change_${selectedTimeframe}`;
+      const percentFieldKey = `${token.mint}-price_percent_change_${selectedTimeframe}`;
       const percentValue = (token as any)[`price_percent_change_${selectedTimeframe}`] ?? 0;
       if (percentFieldKey in prevValuesRef.current) {
         if (percentValue > prevValuesRef.current[percentFieldKey]) {
@@ -479,7 +479,7 @@ export default function InterstateTable({
           ) : (
             sortedRows.map(({ token, i }) => (
               <TableRow
-                key={token.token_address}
+                key={token.mint}
                 token={token}
                 i={i}
                 selectedTimeframe={selectedTimeframe}

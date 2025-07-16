@@ -160,7 +160,7 @@ export default function TradePage() {
     setTxStatus(null);
     try {
       const data = await tradeBuy({
-        tokenAddress: token.token_address,
+        tokenAddress: token.mint,
         amount: parseFloat(tradeAmount),
         mevProtection: 0,
         solPrice: token.sol_price,
@@ -194,7 +194,7 @@ export default function TradePage() {
     setTxStatus(null);
     try {
       const data = await tradeSellPercentage({
-        tokenAddress: token.token_address,
+        tokenAddress: token.mint,
         percentageToSell: parseFloat(sellPercentage),
         solPrice: token.sol_price,
         marketCap: token.total_fully_diluted_valuation,

@@ -97,14 +97,14 @@ export default function Home() {
       let changed = false;
       const map = tokenMapRef.current;
       for (const token of allTokens as TokenWithDexPaid[]) {
-        const prev = map.get(token.token_address);
+        const prev = map.get(token.mint);
         if (!prev || JSON.stringify(prev) !== JSON.stringify(token)) {
-          map.set(token.token_address, token);
+          map.set(token.mint, token);
           changed = true;
         }
       }
       // Optionally, remove tokens that are no longer present
-      const allAddresses = new Set((allTokens as TokenWithDexPaid[]).map(t => t.token_address));
+      const allAddresses = new Set((allTokens as TokenWithDexPaid[]).map(t => t.mint));
       for (const addr of Array.from(map.keys())) {
         if (!allAddresses.has(addr)) {
           map.delete(addr);
@@ -166,7 +166,7 @@ export default function Home() {
     }
     try {
       const data = await tradeBuy({
-        tokenAddress: token.token_address,
+        tokenAddress: token.mint,
         amount: quickBuyAmount,
         mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
         solPrice: token.sol_price,
