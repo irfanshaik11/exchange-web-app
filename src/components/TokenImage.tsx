@@ -13,12 +13,12 @@ interface TokenImageProps {
 export default function TokenImage({ token, size = 32, className = '' }: TokenImageProps) {
   const [isHovered, setIsHovered] = useState(false);
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
-  const isWatched = isInWatchlist(token.token_address);
+  const isWatched = isInWatchlist(token.mint);
 
   const handleWatchlistClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent parent click events
     if (isWatched) {
-      removeFromWatchlist(token.token_address);
+      removeFromWatchlist(token.mint);
     } else {
       addToWatchlist(token);
     }

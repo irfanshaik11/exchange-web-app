@@ -74,9 +74,9 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
         ) : (
           tokens.map((token, idx) => (
             <div
-              key={token.token_address + idx}
+              key={token.mint + idx}
               className="relative cursor-pointer flex flex-row py-3 transition group items-center border-b border-neutral-800 hover:bg-neutral-800/40 w-full"
-              onClick={() => router.push(`/trade/${token.token_address}`)}
+              onClick={() => router.push(`/trade/${token.mint}`)}
             >
               {/* Bonding popout on hover */}
               {idx === 0 ? (
@@ -105,7 +105,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                   {/* Status indicator */}
                   <span className="absolute bottom-1 right-1 w-3 h-3 bg-green-500 border-2 border-neutral-900 rounded-full" />
                 </div>
-                <span className="text-xs text-neutral-500 mt-1 font-mono truncate max-w-[60px]">{token.token_address.slice(0, 4)}...{token.token_address.slice(-4)}</span>
+                <span className="text-xs text-neutral-500 mt-1 font-mono truncate max-w-[60px]">{token.mint.slice(0, 4)}...{token.mint.slice(-4)}</span>
               </div>
               {/* Main Info Section */}
               <div className="flex-1 flex flex-col gap-2 min-w-0">

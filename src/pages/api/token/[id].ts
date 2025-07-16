@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM bonding_tokens WHERE token_address = $1 LIMIT 1`,
+      `SELECT * FROM bonding_tokens WHERE mint = $1 LIMIT 1`,
       [id]
     );
 
@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const row = rows[0];
     const result: Token = {
       id: row.id,
-      token_address: row.token_address,
+      mint: row.mint,
       mint: row.mint,
       standard: row.standard,
       name: row.name,

@@ -12,14 +12,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get all tokens
     const { rows } = await pool.query(`
       SELECT 
-        token_address, name, symbol, logo, decimals, price_native, price_usd, liquidity, fully_diluted_valuation, bonding_curve_progress
+        mint, name, symbol, logo, decimals, price_native, price_usd, liquidity, fully_diluted_valuation, bonding_curve_progress
       FROM tokens
       ORDER BY liquidity DESC NULLS LAST
       LIMIT 100
     `);
 
     const result: Token[] = rows.map((row: any) => ({
-      tokenAddress: row.token_address,
+      tokenAddress: row.mint,
       name: row.name,
       symbol: row.symbol,
       logo: row.logo,
