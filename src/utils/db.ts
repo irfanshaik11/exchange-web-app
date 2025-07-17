@@ -33,7 +33,6 @@ export interface DexPairsResponse {
 export type Token = {
   id: number;
   mint: string;
-  mint: string;
   standard: string;
   name: string;
   symbol: string;

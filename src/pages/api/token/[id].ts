@@ -25,7 +25,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const result: Token = {
       id: row.id,
       mint: row.mint,
-      mint: row.mint,
       standard: row.standard,
       name: row.name,
       symbol: row.symbol,
