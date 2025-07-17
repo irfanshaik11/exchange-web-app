@@ -33,7 +33,7 @@ export default function TableRow({
 }: TableRowProps) {
   return (
     <tr
-      className={`cursor-pointer transition hover:bg-neutral-800/60 ${animationState[token.token_address] || ''}`}
+      className={`cursor-pointer transition hover:bg-neutral-800/60 ${animationState[token.pair_address] || ''}`}
       onClick={onClick}
     >
       {/* Pair Info */}
