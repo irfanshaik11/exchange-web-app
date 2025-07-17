@@ -76,7 +76,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
             <div
               key={token.mint + idx}
               className="relative cursor-pointer flex flex-row py-3 transition group items-center border-b border-neutral-800 hover:bg-neutral-800/40 w-full"
-              onClick={() => router.push(`/trade/${token.mint}`)}
+              onClick={() => router.push(`/trade/${token.pair_address}`)}
             >
               {/* Bonding popout on hover */}
               {idx === 0 ? (
