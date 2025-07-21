@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Token } from '~/utils/db';
 import { formatSmartNumber } from '~/utils/db';
 import { FaUser, FaGlobe, FaSearch, FaCrown, FaRegCopy, FaBolt } from 'react-icons/fa';
 import InterstateTooltip from './InterstateTooltip';
 import { useRouter } from 'next/router';
+import { fetchTokenMetadata } from '~/utils/functions';
 
 interface PulseTableProps {
   title: string;
@@ -11,6 +12,57 @@ interface PulseTableProps {
   isFirstOrLast?: "first" | "last";
   loading?: boolean;
   skeletonRowCount?: number;
+}
+
+// Add a simple in-memory cache for token metadata
+const tokenMetadataCache: Record<string, any> = {};
+
+function useTokenMetadata(uri?: string) {
+  const [meta, setMeta] = useState<any | null>(null);
+  const [loading, setLoading] = useState(!!uri);
+  const [showInitial, setShowInitial] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!uri) {
+      setMeta(null);
+      setLoading(false);
+      return;
+    }
+    if (tokenMetadataCache[uri]) {
+      setMeta(tokenMetadataCache[uri]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setShowInitial(false);
+    const timer = setTimeout(() => setShowInitial(true), 500);
+    fetchTokenMetadata(uri).then((data) => {
+      if (!cancelled) {
+        if (data) tokenMetadataCache[uri] = data;
+        setMeta(data);
+        setLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [uri]);
+  return { meta, loading, showInitial };
+}
+
+function TokenImage({ token }: { token: Token }) {
+  const { meta, loading, showInitial } = useTokenMetadata(token.uri);
+  if (loading && !showInitial) {
+    return <div className="w-8 h-8 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin" />;
+  } else if (meta?.image) {
+    return <img src={meta.image} alt={token.symbol} className="w-12 h-12 object-contain" />;
+  } else if (token.logo) {
+    return <img src={token.logo} alt={token.symbol} className="w-12 h-12 object-contain" />;
+  } else {
+    return <span className="text-2xl font-bold text-neutral-400">{token.symbol?.[0] || '?'}</span>;
+  }
 }
 
 export default function PulseTable({ title, tokens, isFirstOrLast, loading = false, skeletonRowCount = 10 }: PulseTableProps) {
@@ -97,11 +149,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
               {/* Profile Picture & Address */}
               <div className="flex flex-col items-center w-16 mr-3">
                 <div className="relative w-14 h-14 bg-neutral-800 rounded-full overflow-x-hidden flex items-center justify-center border border-neutral-700">
-                  {token.logo ? (
-                    <img src={token.logo} alt={token.symbol} className="w-12 h-12 object-contain" />
-                  ) : (
-                    <span className="text-2xl font-bold text-neutral-400">{token.symbol?.[0] || '?'}</span>
-                  )}
+                  <TokenImage token={token} />
                   {/* Status indicator */}
                   <span className="absolute bottom-1 right-1 w-3 h-3 bg-green-500 border-2 border-neutral-900 rounded-full" />
                 </div>
