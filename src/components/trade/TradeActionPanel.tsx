@@ -6,6 +6,8 @@ import InterstateTooltip from "../InterstateTooltip";
 import { QuickBuyPresetBar } from "./TradeHeader";
 import QuickBuy from "../QuickBuy";
 import CustomCheckbox from '../CustomCheckbox';
+import { createLimitOrder } from "~/utils/api";
+import { useUser } from "~/components/UserContext";
 
 interface TradeActionPanelProps {
   token: Token;
@@ -22,7 +24,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
   const [mode, setMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
   const [tab, setTab] = useState<"market" | "limit" | "adv">("market");
+  const [targetMC, setTargetMC] = useState("");
+  const [direction, setDirection] = useState<"Above" | "Below">("Above");
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   const { presets, activePreset } = useQuickBuy();
+  const { user } = useUser();
   const settings =
     mode === "buy"
       ? presets[activePreset].quickBuySettings
@@ -180,6 +188,57 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
             />
           </div>
         </div>
+        {tab === "limit" && (
+          <>
+            <div className="mx-4 my-3 mb-2 bg-neutral-800 p-2 px-0 pb-0 rounded-lg">
+              <div className="mb-2 flex items-center justify-between px-2">
+                <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">
+                  TARGET MARKET CAP
+                </span>
+                <span className="text-xs font-bold text-white">
+                  {targetMC || "-"}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  className="w-full border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs font-semibold text-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  placeholder="0.0"
+                  value={targetMC}
+                  onChange={(e) => setTargetMC(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="mx-4 my-3 mb-2 bg-neutral-800 p-2 px-0 pb-0 rounded-lg">
+              <div className="mb-2 flex items-center justify-between px-2">
+                <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">
+                  DIRECTION
+                </span>
+                <span className="text-xs font-bold text-white">
+                  {direction}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center">
+                <button
+                  className={`w-full cursor-pointer border border-neutral-800 bg-neutral-950 px-4 py-1 text-xs font-semibold text-white transition-all hover:bg-neutral-800 ${direction === "Above" ? (mode === "buy" ? "bg-emerald-600" : "bg-red-500") : ""}`}
+                  onClick={() => setDirection("Above")}
+                  type="button"
+                >
+                  Above
+                </button>
+                <button
+                  className={`w-full cursor-pointer border border-neutral-800 bg-neutral-950 px-4 py-1 text-xs font-semibold text-white transition-all hover:bg-neutral-800 ${direction === "Below" ? (mode === "buy" ? "bg-emerald-600" : "bg-red-500") : ""}`}
+                  onClick={() => setDirection("Below")}
+                  type="button"
+                >
+                  Below
+                </button>
+              </div>
+            </div>
+          </>
+        )}
         {/* QuickBuy Settings Summary */}
         <div className="mx-4 my-1 flex items-center gap-4 text-xs text-neutral-200 rounded-lg">
           <InterstateTooltip label="Max Slippage">
@@ -230,11 +289,52 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </label>
         </div> */}
         {/* Action Button */}
+        {message && (
+          <div className={`mx-4 mt-2 p-2 text-center text-xs font-bold rounded ${message.type === "success" ? "bg-emerald-600" : "bg-red-500"} text-white`}>
+            {message.text}
+          </div>
+        )}
         <button
           className={`mx-4 mt-2 py-3 text-xs font-bold transition disabled:opacity-50 ${mode === "buy" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-500 text-white hover:bg-pink-700"}`}
-          disabled={!amount}
+          disabled={!amount || isLoading || (tab === "limit" && !targetMC)}
+          onClick={async () => {
+            if (tab === "limit") {
+              if (!user?.token) {
+                setMessage({ type: "error", text: "Authentication required to create limit orders." });
+                return;
+              }
+              if (!amount || !targetMC) {
+                setMessage({ type: "error", text: "Amount and Target Market Cap are required for limit orders." });
+                return;
+              }
+              setIsLoading(true);
+              setMessage(null);
+              try {
+                await createLimitOrder({
+                  tokenAddress: token.token_address,
+                  amount: Number(amount),
+                  type: mode === "buy" ? "Buy" : "Sell",
+                  direction: direction,
+                  targetMC: Number(targetMC),
+                }, user.token);
+                setMessage({ type: "success", text: "Limit order created successfully!" });
+                setAmount("");
+                setTargetMC("");
+              } catch (error: any) {
+                setMessage({ type: "error", text: `Failed to create limit order: ${error.message}` });
+              } finally {
+                setIsLoading(false);
+              }
+            } else {
+              // Existing market order logic (not implemented in this snippet)
+              // This part would call the tradeBuy or tradeSellPercentage/tradeSellExactAmount functions
+              // For now, it just logs a message.
+              console.log(`Executing ${mode} market order for ${amount} of ${token.symbol}`);
+              setMessage({ type: "success", text: `Market order for ${token.symbol} would be executed.` });
+            }
+          }}
         >
-          {mode === "buy" ? `Buy ${token.symbol}` : `Sell ${token.symbol}`}
+          {isLoading ? "Processing..." : (mode === "buy" ? `Buy ${token.symbol}` : `Sell ${token.symbol}`)}
         </button>
       </div>
       <div className="flex flex-row border-b border-emerald-950">

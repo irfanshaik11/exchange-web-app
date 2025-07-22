@@ -47,6 +47,24 @@ export function storeWallets(wallets: Wallet[]) {
   localStorage.setItem('wallets', JSON.stringify(wallets));
 }
 
+export async function getPrice(tokenAddress: string): Promise<{ price: number }> {
+  if (!tokenAddress) throw new Error('tokenAddress is required');
+  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_price?tokenAddress=${tokenAddress}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch price: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function getPumpSwapPool(tokenAddress: string): Promise<any> {
+  if (!tokenAddress) throw new Error('tokenAddress is required');
+  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_pump_swap_pool?tokenAddress=${tokenAddress}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch pump swap pool: ${res.statusText}`);
+  }
+  return res.json();
+}
+
 export async function getActivePositionsByUser(userId: string): Promise<PositionRow[]> {
   if (!userId) return [];
   if (!env.NEXT_PUBLIC_BACKEND_URL) {
@@ -73,6 +91,24 @@ export async function getTradeHistoryByTokenAddress(tokenAddress: string): Promi
   const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_tokenaddress?tokenAddress=${tokenAddress}`);
   const data = await res.json();
   return Array.isArray(data) ? data : [];
+}
+
+export async function getTradeHistoryByUser(userId: string): Promise<any[]> {
+  if (!userId) throw new Error('userId is required');
+  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch trade history by user: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function getTradeActivityByUser(userId: string): Promise<any[]> {
+  if (!userId) throw new Error('userId is required');
+  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch trade activity by user: ${res.statusText}`);
+  }
+  return res.json();
 }
 
 export function formatSmartNumber(num: number): string {
