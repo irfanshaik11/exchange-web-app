@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Header from '../components/Header';
 import Positions from '../components/trade/Positions';
+import TradeTable from '../components/trade/TradeTable';
 import { useUser } from '../components/UserContext';
 import InterstateTooltip from '~/components/InterstateTooltip';
 import CustomCheckbox from '../components/CustomCheckbox';
+import { getTradeHistoryByUser, getTradeActivityByUser } from '~/utils/functions';
+import type { TradeRow } from '~/utils/functions';
 
 const spotTabs = ['Active Positions', 'History', 'Top 100'];
 const activityTabs = ['Activity'];
@@ -15,6 +18,45 @@ export default function PortfolioPage() {
   const [activeActivityTab, setActiveActivityTab] = useState(0);
   const { user, loading: userLoading } = useUser();
   const [walletChecked, setWalletChecked] = useState(false);
+  const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
+  const [loadingTradeHistory, setLoadingTradeHistory] = useState(true);
+  const [tradeActivity, setTradeActivity] = useState<TradeRow[]>([]);
+  const [loadingTradeActivity, setLoadingTradeActivity] = useState(true);
+
+  useEffect(() => {
+    const fetchTradeHistory = async () => {
+      if (user?.id && activeSpotTab === 1) {
+        setLoadingTradeHistory(true);
+        try {
+          const history = await getTradeHistoryByUser(user.id);
+          setTradeHistory(history);
+        } catch (error) {
+          console.error("Failed to fetch trade history:", error);
+          setTradeHistory([]);
+        } finally {
+          setLoadingTradeHistory(false);
+        }
+      }
+    };
+
+    const fetchTradeActivity = async () => {
+      if (user?.id && activeActivityTab === 0) {
+        setLoadingTradeActivity(true);
+        try {
+          const activity = await getTradeActivityByUser(user.id);
+          setTradeActivity(activity);
+        } catch (error) {
+          console.error("Failed to fetch trade activity:", error);
+          setTradeActivity([]);
+        } finally {
+          setLoadingTradeActivity(false);
+        }
+      }
+    };
+
+    fetchTradeHistory();
+    fetchTradeActivity();
+  }, [user?.id, activeSpotTab, activeActivityTab]);
 
   return (
     <>
@@ -125,8 +167,14 @@ export default function PortfolioPage() {
                     )
                   )}
                   {activeSpotTab === 1 && (
-                    <div className="text-neutral-500 py-8 text-center">No history.</div>
-                  )}
+                    userLoading || loadingTradeHistory ? (
+                      <div className="text-neutral-500 py-8 text-center">Loading...</div>
+                    ) : !user?.id ? (
+                      <div className="text-neutral-500 py-8 text-center">Please log in to view your trade history.</div>
+                    ) : (
+                      <TradeTable trades={tradeHistory} loading={loadingTradeHistory} />
+                    )
+                  )}}
                   {activeSpotTab === 2 && (
                     <div className="text-neutral-500 py-8 text-center">No data.</div>
                   )}
@@ -147,29 +195,13 @@ export default function PortfolioPage() {
                   ))}
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-neutral-400 border-b border-neutral-800">
-                        <th className="py-2 px-2 text-left">Type</th>
-                        <th className="py-2 px-2 text-left">Token</th>
-                        <th className="py-2 px-2 text-left">Amount</th>
-                        <th className="py-2 px-2 text-left">Market Cap</th>
-                        <th className="py-2 px-2 text-left">Age</th>
-                        <th className="py-2 px-2 text-left">Event</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Placeholder row */}
-                      <tr className="text-neutral-500">
-                        <td className="py-3 px-2">-</td>
-                        <td className="py-3 px-2">-</td>
-                        <td className="py-3 px-2">-</td>
-                        <td className="py-3 px-2">-</td>
-                        <td className="py-3 px-2">-</td>
-                        <td className="py-3 px-2">-</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  {userLoading || loadingTradeActivity ? (
+                    <div className="text-neutral-500 py-8 text-center">Loading...</div>
+                  ) : !user?.id ? (
+                    <div className="text-neutral-500 py-8 text-center">Please log in to view your trade activity.</div>
+                  ) : (
+                    <TradeTable trades={tradeActivity} loading={loadingTradeActivity} />
+                  )}
                 </div>
               </div>
             </div>

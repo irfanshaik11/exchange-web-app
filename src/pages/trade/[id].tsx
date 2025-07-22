@@ -44,7 +44,7 @@ export default function TradePage() {
   const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
   const [tradeAmount, setTradeAmount] = useState<string>("");
   const amountOptions = ["0.1", "1", "10"];
-  const [tradeHistory, setTradeHistory] = useState<any[]>([]);
+  
   const { user, loading: userLoading } = useUser();
   const [selectedTab, setSelectedTab] = useState("Trades");
   const [search, setSearch] = useState("");
@@ -171,15 +171,6 @@ export default function TradePage() {
       toast.success(
         `Buy order successful! Bought ${data.amount} ${token.symbol}`,
       );
-      setTradeHistory((prev) => [
-        ...prev,
-        {
-          pair: token,
-          amount: data.amount,
-          hash: data.hash,
-          time: new Date().toLocaleTimeString(),
-        },
-      ]);
     } catch (e: any) {
       setTxStatus(e.message || "Buy failed");
     } finally {
@@ -202,15 +193,6 @@ export default function TradePage() {
       }, user.bearerToken);
       setTxStatus(data.message || "Sell (percentage) transaction sent!");
       toast.success(data.message || "Sell order successful!");
-      setTradeHistory((prev) => [
-        ...prev,
-        {
-          pair: token,
-          amount: `${sellPercentage}%`,
-          hash: data.hash,
-          time: new Date().toLocaleTimeString(),
-        },
-      ]);
     } catch (e: any) {
       setTxStatus(e.message || "Sell failed");
     } finally {

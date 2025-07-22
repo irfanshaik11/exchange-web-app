@@ -71,6 +71,55 @@ export const phantomLogin = (publicKey: string, signature: string, message: stri
 export const googleAuthUrl = `${env.NEXT_PUBLIC_BACKEND_URL}/api/users/auth/google`;
 
 /* -------------------------------------------------------------------------- */
+/*                              Limit Order endpoints                         */
+/* -------------------------------------------------------------------------- */
+
+interface CreateLimitOrderParams {
+  tokenAddress: string;
+  amount: number;
+  type: "Buy" | "Sell";
+  direction: "Above" | "Below";
+  targetMC: number;
+}
+
+interface LimitOrder {
+  id: string;
+  tokenAddress: string;
+  type: "Buy" | "Sell";
+  direction: "Above" | "Below";
+  targetMC: number;
+  solAmount: number;
+  tokenAmount: number;
+  status: "Active" | "Cancelled" | "Completed";
+  createdAt?: string; // Only present in my_orders response
+}
+
+interface UpdateLimitOrderParams {
+  orderId: string;
+  status: "Cancelled" | "Completed"; // Assuming only these statuses can be set by client
+}
+
+export const createLimitOrder = (params: CreateLimitOrderParams, authToken: string) =>
+  apiFetch<{ message: string; order: LimitOrder }>('/api/limit/create_order', {
+    method: 'POST',
+    body: params,
+    authToken,
+  });
+
+export const getMyLimitOrders = (authToken: string) =>
+  apiFetch<{ orders: LimitOrder[] }>('/api/limit/my_orders', {
+    method: 'GET',
+    authToken,
+  });
+
+export const updateLimitOrder = (params: UpdateLimitOrderParams, authToken: string) =>
+  apiFetch<{ message: string; order: Pick<LimitOrder, 'id' | 'status'> }>('/api/limit/update_order', {
+    method: 'POST',
+    body: params,
+    authToken,
+  });
+
+/* -------------------------------------------------------------------------- */
 /*                               Trade endpoints                              */
 /* -------------------------------------------------------------------------- */
 
