@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { AmmList } from '~/utils/amms';
 
 export interface FilterState {
   protocols: string[]; // e.g. ['Raydium', 'Pump', 'Moonit']
+  amms: string[]; // List of active AMM IDs
   searchKeywords: string;
   excludeKeywords: string;
   dexPaid: boolean;
@@ -25,6 +27,7 @@ interface FilterContextType {
 
 const defaultFilter: FilterState = {
   protocols: ['Raydium', 'Pump', 'Moonit'],
+  amms: AmmList.map(amm => amm.id),
   searchKeywords: '',
   excludeKeywords: '',
   dexPaid: false,
@@ -51,7 +54,12 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
       const saved = localStorage.getItem('filters');
       if (saved) {
         try {
-          setFilterState({ ...defaultFilter, ...JSON.parse(saved) });
+          const savedFilters = JSON.parse(saved);
+          // Ensure 'amms' exists, if not, set to default
+          if (!savedFilters.amms) {
+            savedFilters.amms = defaultFilter.amms;
+          }
+          setFilterState({ ...defaultFilter, ...savedFilters });
         } catch {
           // Optionally log error
         }

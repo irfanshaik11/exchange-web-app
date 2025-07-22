@@ -14,9 +14,12 @@ import type { Token as BaseToken } from "~/utils/db";
 import { formatSmartNumber } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
+import { useFilter } from "./FilterContext"; // Import the useFilter hook
 
-// Extend Token type locally to include optional dexPaid
-type Token = BaseToken & { dexPaid?: boolean };
+import { getAmm } from "~/utils/amms";
+
+// Extend Token type locally to include optional dexPaid and amm
+type Token = BaseToken & { dexPaid?: boolean; amm?: string };
 
 export interface InterstateTableRow {
   token: Token;
@@ -143,24 +146,28 @@ const TokenInfo: React.FC<{ token: Token; i: number; sortedRows: InterstateTable
 
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const initial = token.name?.charAt(0)?.toUpperCase() || '?';
+  const amm = token.amm ? getAmm(token.amm) : undefined;
+  const borderColorClass = amm ? `bg-gradient-to-br ${amm.borderColor}` : 'border-2 border-yellow-400';
 
   const tooltipContent = (
     <div className="p-2">
       <div className="mb-2 flex justify-center">
-        <div className="w-20 h-20 flex items-center justify-center rounded-full bg-neutral-800 border border-neutral-700 overflow-hidden">
-          {loading && !showInitial ? (
-            <div className="w-10 h-10 border-4 border-t-4 border-b-4 border-yellow-400 rounded-full animate-spin"></div>
-          ) : meta?.image ? (
-            <img
-              src={meta.image}
-              alt={token.name}
-              width={80}
-              height={80}
-              className="object-cover w-20 h-20"
-            />
-          ) : (
-            <span className="text-3xl font-bold text-white">{initial}</span>
-          )}
+        <div className={`w-20 h-20 rounded-full p-0.5 ${borderColorClass}`}>
+          <div className="w-full h-full rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden">
+            {loading && !showInitial ? (
+              <div className="w-10 h-10 border-4 border-t-4 border-b-4 border-yellow-400 rounded-full animate-spin"></div>
+            ) : meta?.image ? (
+              <img
+                src={meta.image}
+                alt={token.name}
+                width={80}
+                height={80}
+                className="object-cover w-20 h-20"
+              />
+            ) : (
+              <span className="text-3xl font-bold text-white">{initial}</span>
+            )}
+          </div>
         </div>
       </div>
       <div className="mb-2 text-center">
@@ -221,8 +228,8 @@ const TokenInfo: React.FC<{ token: Token; i: number; sortedRows: InterstateTable
         xOffset="ml-0"
         label={tooltipContent}
       >
-        <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded border border-yellow-400 bg-neutral-800">
-          <div className="w-12 h-12 flex items-center justify-center rounded bg-neutral-800 overflow-hidden">
+        <div className={`h-12 w-12 rounded-full p-0.5 ${borderColorClass}`}>
+          <div className="w-full h-full rounded-full bg-neutral-800 flex items-center justify-center overflow-hidden">
             {loading && !showInitial ? (
               <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
             ) : meta?.image ? (
@@ -392,18 +399,24 @@ export default function InterstateTable({
   skeletonRowCount = 6 
 }: InterstateTableProps) {
   const router = useRouter();
+  const { filter } = useFilter(); // Use the filter context
   const [animationState, setAnimationState] = useState<Record<string, 'up' | 'down' | null>>({});
   const prevValuesRef = useRef<Record<string, number>>({});
 
-  // Memoize sorted rows
+  // Memoize sorted and filtered rows
   const sortedRows = useMemo(() => {
-    if (!sortKey) return rows;
-    return [...rows].sort((a, b) => {
+    const filteredRows = rows.filter(({ token }) => 
+      token.amm && filter.amms.includes(token.amm)
+    );
+
+    if (!sortKey) return filteredRows;
+    
+    return [...filteredRows].sort((a, b) => {
       const aVal = getSortableValue(a.token, sortKey);
       const bVal = getSortableValue(b.token, sortKey);
       return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [rows, sortKey, sortDirection]);
+  }, [rows, sortKey, sortDirection, filter.amms]);
 
   // Animation effect
   useEffect(() => {
