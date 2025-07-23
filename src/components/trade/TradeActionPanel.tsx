@@ -310,18 +310,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
               });
               return;
             }
-            if (!amount || !targetMC) {
-              setMessage({
-                type: "error",
-                text: "Amount and Target Market Cap are required for limit orders.",
-              });
-              return;
-            }
 
             setIsLoading(true);
             setMessage(null);
 
             if (tab === "limit") {
+              if (!amount || !targetMC) {
+                setMessage({
+                  type: "error",
+                  text: "Amount and Target Market Cap are required for limit orders.",
+                });
+                return;
+              }
               try {
                 await createLimitOrder(
                   {

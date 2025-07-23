@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { tradeSellPercentage } from '~/utils/api';
 import { formatSmartNumber } from '~/utils/db';
 import { getActivePositionsByUser } from '~/utils/functions';
 import type { PositionRow } from '~/utils/functions';
 
 interface PositionsProps {
   userId: string;
+  bearerToken: string;
 }
 
 function shortAddr(addr: string) {
@@ -12,7 +14,7 @@ function shortAddr(addr: string) {
   return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
-const Positions: React.FC<PositionsProps> = ({ userId }) => {
+const Positions: React.FC<PositionsProps> = ({ userId, bearerToken }) => {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,11 +62,16 @@ const Positions: React.FC<PositionsProps> = ({ userId }) => {
                 </td>
                 <td className={`px-2 py-2 font-semibold ${pos.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
                   {pos.pnl >= 0 ? '+' : ''}{formatSmartNumber(pos.pnl)}
-                  <span className="ml-1 text-xs">({(pos.pnlPercentage * 100).toFixed(2)}%)</span>
+                  <span className="ml-1 text-xs">({(pos.pnlPercentage).toFixed(2)}%)</span>
                 </td>
                 <td className="px-2 py-2">
                   {pos.actions === 'sell' && (
-                    <button className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 transition">Sell</button>
+                    <button onClick={() => {
+                      tradeSellPercentage({
+                        tokenAddress: pos.tokenAddress,
+                        percentageToSell: 100,
+                      }, bearerToken)
+                    }} className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 transition">Sell</button>
                   )}
                 </td>
               </tr>
