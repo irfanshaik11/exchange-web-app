@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { env } from "../env";
 
-export default function useTradesWebSocket(pair: string | undefined) {
+export default function useTradesWebSocket(mint: string | undefined) {
   const [data, setData] = useState<any[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!pair) return;
-    const ws = new WebSocket(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/trades?address=${pair}`);
+    if (!mint) return;
+    const ws = new WebSocket(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/trades?mint=${mint}`);
     wsRef.current = ws;
     ws.onopen = () => setIsConnected(true);
     ws.onmessage = (event) => {
@@ -22,7 +22,7 @@ export default function useTradesWebSocket(pair: string | undefined) {
     ws.onerror = () => setError("WebSocket error");
     ws.onclose = () => setIsConnected(false);
     return () => ws.close();
-  }, [pair]);
+  }, [mint]);
 
   return { data, isConnected, error };
 } 

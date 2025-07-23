@@ -9,9 +9,10 @@ import TradeTable from './TradeTable';
 
 interface TradesProps {
   token: Token;
+  trades: any[];
 }
 
-const Trades: React.FC<TradesProps> = ({ token }) => {
+const Trades: React.FC<TradesProps> = ({ token, trades }) => {
   const { user } = useUser();
   const [apiTrades, setApiTrades] = useState<any[]>([]);
   const [loadingApiTrades, setLoadingApiTrades] = useState(true);
@@ -23,8 +24,6 @@ const Trades: React.FC<TradesProps> = ({ token }) => {
         let fetchedData;
         if (user?.id) {
           fetchedData = await getTradeActivityByUser(user.id);
-        } else {
-          fetchedData = await getTradeHistoryByTokenAddress(token.token_address);
         }
         setApiTrades(fetchedData);
       } catch (err) {
@@ -36,14 +35,14 @@ const Trades: React.FC<TradesProps> = ({ token }) => {
     };
 
     fetchTrades();
-  }, [user?.id, token.token_address]);
+  }, [user?.id, token.mint]);
 
-  const { data: wsTrades, isConnected, error } = useTradesWebSocket(token?.pair_address);
+  const { data: wsTrades, isConnected, error } = useTradesWebSocket(token?.mint);
   const displayTrades = wsTrades.length > 0 ? wsTrades : apiTrades;
   const loading = loadingApiTrades && !isConnected;
 
   return (
-    <TradeTable trades={displayTrades} loading={loading} />
+    <TradeTable trades={trades} loading={loading} />
   );
 };
 

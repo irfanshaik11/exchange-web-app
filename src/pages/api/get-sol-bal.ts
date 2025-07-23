@@ -6,7 +6,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const balance = await getSolBalance(addr);
-    console.log(balance);
     res.status(200).json({ data: { balance }})
   } catch (e) {
     console.error(e);
