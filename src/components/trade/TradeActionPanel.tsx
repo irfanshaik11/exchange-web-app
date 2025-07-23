@@ -299,7 +299,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           disabled={!amount || isLoading || (tab === "limit" && !targetMC)}
           onClick={async () => {
             if (tab === "limit") {
-              if (!user?.token) {
+              if (!user?.bearerToken) {
                 setMessage({ type: "error", text: "Authentication required to create limit orders." });
                 return;
               }
@@ -311,12 +311,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
               setMessage(null);
               try {
                 await createLimitOrder({
-                  tokenAddress: token.token_address,
+                  tokenAddress: token.mint,
                   amount: Number(amount),
                   type: mode === "buy" ? "Buy" : "Sell",
                   direction: direction,
                   targetMC: Number(targetMC),
-                }, user.token);
+                }, user.bearerToken);
                 setMessage({ type: "success", text: "Limit order created successfully!" });
                 setAmount("");
                 setTargetMC("");
@@ -395,7 +395,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </div>
           <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
             <span className="font-bold text-red-400">
-              {token.bonding_curve_progress ? `${(Number(token.bonding_curve_progress) * 100).toFixed(2)}%` : "0%"}
+              {token.bonding_curve_progress ? `${(Number(token.bonding_curve_progress)).toFixed(2)}%` : "0%"}
             </span>
             <span className="text-neutral-400">Progress</span>
           </div>

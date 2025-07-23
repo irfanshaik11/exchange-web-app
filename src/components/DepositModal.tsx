@@ -7,6 +7,7 @@ import QRCode from "qrcode";
 import { useUser } from "./UserContext";
 import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
+import { getSolBalance } from "~/utils/functions";
 
 interface DepositModalProps {
   open: boolean;
@@ -18,6 +19,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [solBalance, setSolBalance] = useState(0);
 
   useEffect(() => {
     if (open) {
@@ -44,10 +46,19 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
         .catch((err) => {
           setQrCodeDataUrl("");
         });
+
+      balanceFetcher(user.publicKey)
     } else {
       setQrCodeDataUrl("");
     }
   }, [user?.publicKey]);
+
+  const balanceFetcher = async (address: string) => {
+    const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(address)}`);
+    const data = await response.json();
+
+    setSolBalance(data.data.balance);
+  }
 
   const copyToClipboard = (text: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -95,7 +106,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
               </div>
               <div className="flex h-10 w-full flex-row items-center justify-between gap-2 rounded border border-neutral-600 p-2 text-sm">
                 <span className="text-neutral-500">Balance: </span>
-                <span className="">0 SOL</span>
+                <span className="">{solBalance.toFixed(2)} SOL</span>
               </div>
             </div>
             <label className="mb-3 block text-sm text-neutral-400">Only deposit SOL through the Solana Network for this address.</label>
