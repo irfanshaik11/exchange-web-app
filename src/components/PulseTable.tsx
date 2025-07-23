@@ -136,7 +136,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                   className="hidden group-hover:flex absolute left-1/2 top-full mt-2 -translate-x-1/2 px-3 py-1 bg-neutral-900 border border-emerald-700 shadow-xl text-emerald-400 text-sm z-20"
                   style={{ pointerEvents: 'none' }}
                 >
-                  Bonding: {typeof token.bonding_curve_progress === 'number' ? Math.round(token.bonding_curve_progress * 100) : (parseFloat(token.bonding_curve_progress) * 100).toFixed(0)}%
+                  Bonding: {typeof token.bonding_curve_progress === 'number' ? Math.round(token.bonding_curve_progress) : (parseFloat(token.bonding_curve_progress)).toFixed(0)}%
                 </span>
               ) : (
                 <span

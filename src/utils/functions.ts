@@ -1,4 +1,5 @@
 import { env } from '../env';
+import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
 
 export interface PositionRow {
   tokenAddress: string;
@@ -145,4 +146,21 @@ export async function fetchTokenMetadata(uri: string | undefined): Promise<any |
     return null;
   }
 } 
+
+
+export async function getSolBalance(address: string) {
+  try {
+    const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
+    console.log("Address: ", address)
+    const publicKey = new PublicKey(address);
+    const lamports = await connection.getBalance(publicKey);
+    console.log(lamports)
+    const sol = lamports / 1e9;
+    return sol;
+  } catch (error) {
+    console.error('Failed to fetch balance:', error);
+    return null;
+  }
+}
+
 
