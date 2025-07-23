@@ -152,7 +152,7 @@ export default function TradePage() {
               setSelectedTab={setSelectedTab}
             />
             {selectedTab === "Trades" && <Trades token={token} trades={trades} />}
-            {selectedTab === "Positions" && <Positions userId={user?.id} />}
+            {selectedTab === "Positions" && <Positions userId={user?.id} bearerToken={user.bearerToken} />}
           </div>
           {/* Right: Buy/Sell and Token Info */}
           <div className="w-full max-w-md flex-shrink-0">

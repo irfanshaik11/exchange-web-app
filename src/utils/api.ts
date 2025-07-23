@@ -156,9 +156,6 @@ export const tradeBuy = (params: BuyParams, authToken: string) =>
 type SellPercentageParams = {
   tokenAddress: string;
   percentageToSell: number;
-  solPrice: number;
-  marketCap: number;
-  tokenPrice: number;
 };
 
 export const tradeSellPercentage = (
