@@ -151,10 +151,8 @@ export async function fetchTokenMetadata(uri: string | undefined): Promise<any |
 export async function getSolBalance(address: string) {
   try {
     const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
-    console.log("Address: ", address)
     const publicKey = new PublicKey(address);
     const lamports = await connection.getBalance(publicKey);
-    console.log(lamports)
     const sol = lamports / 1e9;
     return sol;
   } catch (error) {

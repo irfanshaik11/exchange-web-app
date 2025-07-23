@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FaCheckCircle, FaCopy, FaTimes } from "react-icons/fa";
+import { FaCopy, FaTimes } from "react-icons/fa";
 import Cookies from "js-cookie";
 import QRCode from "qrcode";
 import { useUser } from "./UserContext";
 import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
-import { getSolBalance } from "~/utils/functions";
 
 interface DepositModalProps {
   open: boolean;
@@ -15,11 +14,10 @@ interface DepositModalProps {
 }
 
 const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
-  const { user, loading: userLoading, refreshUser } = useUser();
+  const { user, loading: userLoading, refreshUser, solBalance } = useUser();
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [solBalance, setSolBalance] = useState(0);
 
   useEffect(() => {
     if (open) {
@@ -46,19 +44,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
         .catch((err) => {
           setQrCodeDataUrl("");
         });
-
-      balanceFetcher(user.publicKey)
     } else {
       setQrCodeDataUrl("");
     }
   }, [user?.publicKey]);
-
-  const balanceFetcher = async (address: string) => {
-    const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(address)}`);
-    const data = await response.json();
-
-    setSolBalance(data.data.balance);
-  }
 
   const copyToClipboard = (text: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {

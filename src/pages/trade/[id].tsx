@@ -80,30 +80,6 @@ export default function TradePage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // When USDC changes, update memeAmount
-  function handleUsdcChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value;
-    setUsdcAmount(val);
-    const num = parseFloat(val);
-    if (!isNaN(num) && memePrice) {
-      setMemeAmount((num / memePrice).toFixed(4));
-    } else {
-      setMemeAmount("");
-    }
-  }
-
-  // When memeAmount changes, update USDC
-  function handleMemeChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value;
-    setMemeAmount(val);
-    const num = parseFloat(val);
-    if (!isNaN(num) && memePrice) {
-      setUsdcAmount((num * memePrice).toFixed(4));
-    } else {
-      setUsdcAmount("");
-    }
-  }
-
   if (showSkeleton) {
     return (
       <div className="min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100">
@@ -151,74 +127,6 @@ export default function TradePage() {
         )}
       </div>
     );
-  }
-
-  // Buy handler (update as needed for your backend)
-  async function handleBuy() {
-    if (!user || !tradeAmount) return;
-    setTxLoading(true);
-    setTxStatus(null);
-    try {
-      const data = await tradeBuy({
-        tokenAddress: token.mint,
-        amount: parseFloat(tradeAmount),
-        mevProtection: 0,
-        solPrice: token.sol_price,
-        marketCap: token.total_fully_diluted_valuation,
-        tokenPrice: token.usd_price,
-      }, user.bearerToken);
-      setTxStatus("Buy transaction sent!");
-      toast.success(
-        `Buy order successful! Bought ${data.amount} ${token.symbol}`,
-      );
-    } catch (e: any) {
-      setTxStatus(e.message || "Buy failed");
-    } finally {
-      setTxLoading(false);
-    }
-  }
-
-  // Sell by percentage handler (with auth, like buy)
-  async function handleSellPercentage() {
-    if (!sellPercentage || !user) return;
-    setTxLoading(true);
-    setTxStatus(null);
-    try {
-      const data = await tradeSellPercentage({
-        tokenAddress: token.mint,
-        percentageToSell: parseFloat(sellPercentage),
-        solPrice: token.sol_price,
-        marketCap: token.total_fully_diluted_valuation,
-        tokenPrice: token.usd_price,
-      }, user.bearerToken);
-      setTxStatus(data.message || "Sell (percentage) transaction sent!");
-      toast.success(data.message || "Sell order successful!");
-    } catch (e: any) {
-      setTxStatus(e.message || "Sell failed");
-    } finally {
-      setTxLoading(false);
-    }
-  }
-
-  // Sell by exact amount handler
-  async function handleSellExactAmount() {
-    if (!isConnected || !address || !tradeAmount) return;
-    setTxLoading(true);
-    setTxStatus(null);
-    try {
-      await tradeSellExactAmount({
-        tokenAddress: address,
-        tokenAmount: parseFloat(tradeAmount),
-        solPrice: token?.sol_price,
-        marketCap: token?.total_fully_diluted_valuation,
-        tokenPrice: token?.usd_price,
-      });
-      setTxStatus("Sell (exact amount) transaction sent!");
-    } catch (e: any) {
-      setTxStatus(e.message || "Sell failed");
-    } finally {
-      setTxLoading(false);
-    }
   }
 
   return (

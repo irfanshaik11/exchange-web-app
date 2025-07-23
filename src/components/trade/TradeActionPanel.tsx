@@ -5,8 +5,8 @@ import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import { QuickBuyPresetBar } from "./TradeHeader";
 import QuickBuy from "../QuickBuy";
-import CustomCheckbox from '../CustomCheckbox';
-import { createLimitOrder } from "~/utils/api";
+import CustomCheckbox from "../CustomCheckbox";
+import { createLimitOrder, tradeBuy } from "~/utils/api";
 import { useUser } from "~/components/UserContext";
 
 interface TradeActionPanelProps {
@@ -27,10 +27,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
   const [targetMC, setTargetMC] = useState("");
   const [direction, setDirection] = useState<"Above" | "Below">("Above");
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const { presets, activePreset } = useQuickBuy();
-  const { user } = useUser();
+  const { user, solBalance } = useUser();
   const settings =
     mode === "buy"
       ? presets[activePreset].quickBuySettings
@@ -105,18 +108,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div>
       </div>
       {/* Trade Box */}
-      <div className="flex flex-col border-b border-emerald-950 pb-4 w-full">
+      <div className="flex w-full flex-col border-b border-emerald-950 pb-4">
         {/* Toggle */}
-        <div className="flex border-b border-emerald-950 p-2 w-full rounded-t-lg">
+        <div className="flex w-full rounded-t-lg border-b border-emerald-950 p-2">
           <button
-            className={`px-6 py-2 text-sm font-bold transition-all w-full ${mode === "buy" ? "bg-emerald-500 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}
+            className={`w-full px-6 py-2 text-sm font-bold transition-all ${mode === "buy" ? "bg-emerald-500 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}
             onClick={() => setMode("buy")}
             type="button"
           >
             Buy
           </button>
           <button
-            className={`px-6 py-2 text-sm font-bold transition-all w-full ${mode === "sell" ? "bg-red-500 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}
+            className={`w-full px-6 py-2 text-sm font-bold transition-all ${mode === "sell" ? "bg-red-500 text-white" : "bg-neutral-900 text-neutral-400 hover:bg-neutral-800"}`}
             onClick={() => setMode("sell")}
             type="button"
           >
@@ -157,7 +160,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </button>
         </div>
         {/* Amount Row */}
-        <div className="mx-4 my-3 mb-2 bg-neutral-800 p-2 px-0 pb-0 rounded-lg">
+        <div className="mx-4 my-3 mb-2 rounded-lg bg-neutral-800 p-2 px-0 pb-0">
           <div className="mb-2 flex items-center justify-between px-2">
             <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">
               AMOUNT
@@ -190,7 +193,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div>
         {tab === "limit" && (
           <>
-            <div className="mx-4 my-3 mb-2 bg-neutral-800 p-2 px-0 pb-0 rounded-lg">
+            <div className="mx-4 my-3 mb-2 rounded-lg bg-neutral-800 p-2 px-0 pb-0">
               <div className="mb-2 flex items-center justify-between px-2">
                 <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">
                   TARGET MARKET CAP
@@ -211,7 +214,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
                 />
               </div>
             </div>
-            <div className="mx-4 my-3 mb-2 bg-neutral-800 p-2 px-0 pb-0 rounded-lg">
+            <div className="mx-4 my-3 mb-2 rounded-lg bg-neutral-800 p-2 px-0 pb-0">
               <div className="mb-2 flex items-center justify-between px-2">
                 <span className="flex items-center gap-1 text-xs font-semibold text-neutral-400">
                   DIRECTION
@@ -240,7 +243,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           </>
         )}
         {/* QuickBuy Settings Summary */}
-        <div className="mx-4 my-1 flex items-center gap-4 text-xs text-neutral-200 rounded-lg">
+        <div className="mx-4 my-1 flex items-center gap-4 rounded-lg text-xs text-neutral-200">
           <InterstateTooltip label="Max Slippage">
             <span className="flex items-center gap-1">
               <FaRunning /> {settings.maxSlippage * 100}%
@@ -290,7 +293,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div> */}
         {/* Action Button */}
         {message && (
-          <div className={`mx-4 mt-2 p-2 text-center text-xs font-bold rounded ${message.type === "success" ? "bg-emerald-600" : "bg-red-500"} text-white`}>
+          <div
+            className={`mx-4 mt-2 rounded p-2 text-center text-xs font-bold ${message.type === "success" ? "bg-emerald-600" : "bg-red-500"} text-white`}
+          >
             {message.text}
           </div>
         )}
@@ -298,43 +303,77 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           className={`mx-4 mt-2 py-3 text-xs font-bold transition disabled:opacity-50 ${mode === "buy" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-red-500 text-white hover:bg-pink-700"}`}
           disabled={!amount || isLoading || (tab === "limit" && !targetMC)}
           onClick={async () => {
+            if (!user?.bearerToken) {
+              setMessage({
+                type: "error",
+                text: "Authentication required to create limit orders.",
+              });
+              return;
+            }
+            if (!amount || !targetMC) {
+              setMessage({
+                type: "error",
+                text: "Amount and Target Market Cap are required for limit orders.",
+              });
+              return;
+            }
+
+            setIsLoading(true);
+            setMessage(null);
+
             if (tab === "limit") {
-              if (!user?.bearerToken) {
-                setMessage({ type: "error", text: "Authentication required to create limit orders." });
-                return;
-              }
-              if (!amount || !targetMC) {
-                setMessage({ type: "error", text: "Amount and Target Market Cap are required for limit orders." });
-                return;
-              }
-              setIsLoading(true);
-              setMessage(null);
               try {
-                await createLimitOrder({
-                  tokenAddress: token.mint,
-                  amount: Number(amount),
-                  type: mode === "buy" ? "Buy" : "Sell",
-                  direction: direction,
-                  targetMC: Number(targetMC),
-                }, user.bearerToken);
-                setMessage({ type: "success", text: "Limit order created successfully!" });
+                await createLimitOrder(
+                  {
+                    tokenAddress: token.mint,
+                    amount: Number(amount),
+                    type: mode === "buy" ? "Buy" : "Sell",
+                    direction: direction,
+                    targetMC: Number(targetMC),
+                  },
+                  user.bearerToken,
+                );
+                setMessage({
+                  type: "success",
+                  text: `Limit order for ${token.symbol} created successfully!`,
+                });
                 setAmount("");
                 setTargetMC("");
               } catch (error: any) {
-                setMessage({ type: "error", text: `Failed to create limit order: ${error.message}` });
+                setMessage({
+                  type: "error",
+                  text: `Failed to create limit order: ${error.message}`,
+                });
               } finally {
                 setIsLoading(false);
               }
-            } else {
-              // Existing market order logic (not implemented in this snippet)
-              // This part would call the tradeBuy or tradeSellPercentage/tradeSellExactAmount functions
-              // For now, it just logs a message.
-              console.log(`Executing ${mode} market order for ${amount} of ${token.symbol}`);
-              setMessage({ type: "success", text: `Market order for ${token.symbol} would be executed.` });
+            } else if (tab === "market") {
+              const tr = await tradeBuy(
+                {
+                  amount: Number(amount),
+                  tokenAddress: token.mint,
+                  mevProtection: settings.mevMode == "off" ? 0 : 1,
+                },
+                user.bearerToken,
+              );
+
+              console.log(tr);
+
+              console.log(
+                `Executing ${mode} market order for ${amount} of ${token.symbol}`,
+              );
+              setMessage({
+                type: "success",
+                text: `Market order for ${token.symbol} would be executed.`,
+              });
             }
           }}
         >
-          {isLoading ? "Processing..." : (mode === "buy" ? `Buy ${token.symbol}` : `Sell ${token.symbol}`)}
+          {isLoading
+            ? "Processing..."
+            : mode === "buy"
+              ? `Buy ${token.symbol}`
+              : `Sell ${token.symbol}`}
         </button>
       </div>
       <div className="flex flex-row border-b border-emerald-950">
@@ -356,46 +395,59 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
         </div>
       </div>
       {/* QuickBuy Preset Bar  FIX THE WIDTH THING */}
-      <div className="border-b border-emerald-950 w-full">
-        <QuickBuy hideActionButton className="bg-transparent border-none rounded-none" />
+      <div className="w-full border-b border-emerald-950">
+        <QuickBuy
+          hideActionButton
+          className="rounded-none border-none bg-transparent"
+        />
       </div>
       {/* Token Info Box */}
       <div className="border-b border-emerald-950 p-4">
         <div className="mb-2 text-xs text-neutral-400">Token Info</div>
-        <div className="grid grid-cols-2 gap-2 text-xs place-items-center">
-          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
+        <div className="grid grid-cols-2 place-items-center gap-2 text-xs">
+          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-full bg-neutral-800 p-1">
             <span className="font-bold text-emerald-400">
-              {token.total_holders ? ((token.total_holders / token.total_supply) * 100).toFixed(2) : "0"}%
+              {token.total_holders
+                ? ((token.total_holders / token.total_supply) * 100).toFixed(2)
+                : "0"}
+              %
             </span>
             <span className="text-neutral-400">Top 10 H.</span>
           </div>
-          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
+          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-full bg-neutral-800 p-1">
             <span className="font-bold text-neutral-400">
               {token.is_verified_contract ? "Yes" : "No"}
             </span>
             <span className="text-neutral-400">Dev H.</span>
           </div>
-          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
+          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-full bg-neutral-800 p-1">
             <span className="font-bold text-red-400">
-              {token.total_snipers ? ((token.total_snipers / token.total_supply) * 100).toFixed(2) : "0"}%
+              {token.total_snipers
+                ? ((token.total_snipers / token.total_supply) * 100).toFixed(2)
+                : "0"}
+              %
             </span>
             <span className="text-neutral-400">Snipers H.</span>
           </div>
-          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
+          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-full bg-neutral-800 p-1">
             <span className="font-bold text-red-400">
               {token.possible_spam ? "Yes" : "No"}
             </span>
             <span className="text-neutral-400">Insiders</span>
           </div>
-          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
+          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-full bg-neutral-800 p-1">
             <span className="font-bold text-red-400">
-              {token.total_liquidity_usd ? formatSmartNumber(token.total_liquidity_usd) : "0"}
+              {token.total_liquidity_usd
+                ? formatSmartNumber(token.total_liquidity_usd)
+                : "0"}
             </span>
             <span className="text-neutral-400">Liquidity</span>
           </div>
-          <div className="flex flex-col items-center justify-center rounded-full bg-neutral-800 p-1 w-20 h-20 overflow-hidden">
+          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-full bg-neutral-800 p-1">
             <span className="font-bold text-red-400">
-              {token.bonding_curve_progress ? `${(Number(token.bonding_curve_progress)).toFixed(2)}%` : "0%"}
+              {token.bonding_curve_progress
+                ? `${Number(token.bonding_curve_progress).toFixed(2)}%`
+                : "0%"}
             </span>
             <span className="text-neutral-400">Progress</span>
           </div>

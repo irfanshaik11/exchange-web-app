@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import throttle from "lodash.throttle";
 import { env } from "../env";
 
-export default function useSingleTokenWebSocket(pairAddress: string | undefined) {
+export default function useSingleTokenWebSocket(mint: string | undefined) {
   const [token, setToken] = useState<any>(null);
   const [trades, setTrades] = useState<any[]>([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -20,7 +20,7 @@ export default function useSingleTokenWebSocket(pairAddress: string | undefined)
   ).current;
 
   useEffect(() => {
-    if (!pairAddress) return;
+    if (!mint) return;
 
     const connectWebSocket = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -28,8 +28,8 @@ export default function useSingleTokenWebSocket(pairAddress: string | undefined)
       }
 
       try {
-        // Use /token?pairaddress=pairAddress endpoint
-        const ws = new WebSocket(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/token?pairaddress=${pairAddress}`);
+        // Use /token?pairaddress=mint endpoint
+        const ws = new WebSocket(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/token?mint=${mint}`);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -85,7 +85,7 @@ export default function useSingleTokenWebSocket(pairAddress: string | undefined)
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       throttledSetToken.cancel();
     };
-  }, [pairAddress, throttledSetToken]);
+  }, [mint, throttledSetToken]);
 
   return { token, trades, isConnected, error };
 } 

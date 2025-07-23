@@ -1,5 +1,5 @@
 // Centralized API client for backend calls related to authentication and trading
-import { env } from '../env';
+import { env } from "../env";
 
 interface RequestOptions extends RequestInit {
   /** JSON body that will be automatically stringified */
@@ -15,12 +15,15 @@ interface RequestOptions extends RequestInit {
  *  – Adds `Authorization` header when `authToken` provided
  *  – Parses JSON response and throws for non-2xx statuses
  */
-async function apiFetch<T = unknown>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+async function apiFetch<T = unknown>(
+  endpoint: string,
+  options: RequestOptions = {},
+): Promise<T> {
   const { authToken, body, headers, ...rest } = options;
 
   const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}${endpoint}`, {
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...(headers || {}),
     },
@@ -32,7 +35,8 @@ async function apiFetch<T = unknown>(endpoint: string, options: RequestOptions =
   const data = await res.json().catch(() => undefined);
 
   if (!res.ok) {
-    const message = (data as any)?.message || (data as any)?.error || res.statusText;
+    const message =
+      (data as any)?.message || (data as any)?.error || res.statusText;
     throw new Error(message);
   }
 
@@ -44,26 +48,30 @@ async function apiFetch<T = unknown>(endpoint: string, options: RequestOptions =
 /* -------------------------------------------------------------------------- */
 
 export const getUserById = (token: string) =>
-  apiFetch<{ user: any }>('/api/users/get_user_by_id', {
+  apiFetch<{ user: any }>("/api/users/get_user_by_id", {
     authToken: token,
-    method: 'GET',
+    method: "GET",
   });
 
 export const login = (email: string, password: string) =>
-  apiFetch<{ token: string }>('/api/users/login', {
-    method: 'POST',
+  apiFetch<{ token: string }>("/api/users/login", {
+    method: "POST",
     body: { email, password },
   });
 
 export const register = (email: string, name: string, password: string) =>
-  apiFetch<{ user: any }>('/api/users/register', {
-    method: 'POST',
+  apiFetch<{ user: any }>("/api/users/register", {
+    method: "POST",
     body: { email, name, password },
   });
 
-export const phantomLogin = (publicKey: string, signature: string, message: string) =>
-  apiFetch<{ token: string }>('/api/users/phantom/login', {
-    method: 'POST',
+export const phantomLogin = (
+  publicKey: string,
+  signature: string,
+  message: string,
+) =>
+  apiFetch<{ token: string }>("/api/users/phantom/login", {
+    method: "POST",
     body: { publicKey, signature, message },
   });
 
@@ -99,25 +107,34 @@ interface UpdateLimitOrderParams {
   status: "Cancelled" | "Completed"; // Assuming only these statuses can be set by client
 }
 
-export const createLimitOrder = (params: CreateLimitOrderParams, authToken: string) =>
-  apiFetch<{ message: string; order: LimitOrder }>('/api/limit/create_order', {
-    method: 'POST',
+export const createLimitOrder = (
+  params: CreateLimitOrderParams,
+  authToken: string,
+) =>
+  apiFetch<{ message: string; order: LimitOrder }>("/api/limit/create_order", {
+    method: "POST",
     body: params,
     authToken,
   });
 
 export const getMyLimitOrders = (authToken: string) =>
-  apiFetch<{ orders: LimitOrder[] }>('/api/limit/my_orders', {
-    method: 'GET',
+  apiFetch<{ orders: LimitOrder[] }>("/api/limit/my_orders", {
+    method: "GET",
     authToken,
   });
 
-export const updateLimitOrder = (params: UpdateLimitOrderParams, authToken: string) =>
-  apiFetch<{ message: string; order: Pick<LimitOrder, 'id' | 'status'> }>('/api/limit/update_order', {
-    method: 'POST',
-    body: params,
-    authToken,
-  });
+export const updateLimitOrder = (
+  params: UpdateLimitOrderParams,
+  authToken: string,
+) =>
+  apiFetch<{ message: string; order: Pick<LimitOrder, "id" | "status"> }>(
+    "/api/limit/update_order",
+    {
+      method: "POST",
+      body: params,
+      authToken,
+    },
+  );
 
 /* -------------------------------------------------------------------------- */
 /*                               Trade endpoints                              */
@@ -127,14 +144,11 @@ type BuyParams = {
   tokenAddress: string;
   amount: number;
   mevProtection: number;
-  solPrice: number;
-  marketCap: number;
-  tokenPrice: number;
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) =>
-  apiFetch<{ amount: number; hash: string }>('/api/trade/buy', {
-    method: 'POST',
+  apiFetch<{ amount: number; hash: string }>("/api/trade/buy", {
+    method: "POST",
     body: params,
     authToken,
   });
@@ -147,9 +161,12 @@ type SellPercentageParams = {
   tokenPrice: number;
 };
 
-export const tradeSellPercentage = (params: SellPercentageParams, authToken: string) =>
-  apiFetch<{ message?: string; hash?: string }>('/api/trade/sell_percentage', {
-    method: 'POST',
+export const tradeSellPercentage = (
+  params: SellPercentageParams,
+  authToken: string,
+) =>
+  apiFetch<{ message?: string; hash?: string }>("/api/trade/sell_percentage", {
+    method: "POST",
     body: params,
     authToken,
   });
@@ -163,9 +180,9 @@ type SellExactAmountParams = {
 };
 
 export const tradeSellExactAmount = (params: SellExactAmountParams) =>
-  apiFetch('/api/trade/sell_exactAmount', {
-    method: 'POST',
+  apiFetch("/api/trade/sell_exactAmount", {
+    method: "POST",
     body: params,
   });
 
-export { apiFetch }; 
+export { apiFetch };
