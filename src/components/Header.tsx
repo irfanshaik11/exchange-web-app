@@ -3,9 +3,9 @@ import { useRouter } from "next/router";
 import { useState } from "react";
 import { FaSearch, FaStar, FaBell } from "react-icons/fa";
 import { useUser } from "./UserContext";
-import Cookies from 'js-cookie';
+import Cookies from "js-cookie";
 import dynamic from "next/dynamic";
-import InterstateButton from './InterstateButton';
+import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiStar } from "react-icons/fi";
 
 const navLinks = [
@@ -25,7 +25,7 @@ interface HeaderProps {
 }
 
 const DepositModal = dynamic(() => import("./DepositModal"), {
-  ssr: false, // NO SSR PLEASE 
+  ssr: false, // NO SSR PLEASE
 });
 
 const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
@@ -52,7 +52,7 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
 
   // Handles opening the deposit modal
   const handleDepositClick = () => {
-    const token = Cookies.get('token');
+    const token = Cookies.get("token");
     if (token && !user && !userLoading) {
       // Optionally, refresh user here if needed
     }
@@ -61,22 +61,34 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
 
   return (
     <>
-      <header className="w-full border-b border-emerald-950 bg-neutral-950 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-full  border-b border-emerald-950 flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-4 min-w-0">
-            <Link href="/" className="text-2xl tracking-tight text-white select-none flex items-center" title="Go to homepage">
-              <img src="/logo.png" alt="Interstate logo" className="w-12 h-auto" />
-              <span className="rounded-full inline-block mr-1" />
+      <header className="sticky top-0 z-20 w-full border-b border-emerald-950 bg-neutral-950 backdrop-blur">
+        <div className="w-full bg-green-400 text-center text-black p-0.5 text-sm">
+          [ This terminal is still under development and not ready for production,&nbsp;
+          <b>use at your own risk!</b> ]
+        </div>
+        <div className="flex max-w-full items-center justify-between border-b border-emerald-950 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-4">
+            <Link
+              href="/"
+              className="flex items-center text-2xl tracking-tight text-white select-none"
+              title="Go to homepage"
+            >
+              <img
+                src="/logo.png"
+                alt="Interstate logo"
+                className="h-auto w-12"
+              />
+              <span className="mr-1 inline-block rounded-full" />
               Interstate
             </Link>
-            <nav className="flex items-center gap-6 ml-8">
+            <nav className="ml-8 flex items-center gap-6">
               {navLinks.map((link) => (
                 <Link
                   key={link.name}
                   href={link.href}
-                  className={`px-1.5 py-0.5 font-medium transition-colors text-sm ${
+                  className={`px-1.5 py-0.5 text-sm font-medium transition-colors ${
                     link.name === "Discover" && isDiscover
-                      ? "text-emerald-400 border-emerald-400"
+                      ? "border-emerald-400 text-emerald-400"
                       : "text-neutral-200 hover:text-emerald-400"
                   }`}
                 >
@@ -85,7 +97,7 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
             {showSearch && (
               <button
                 onClick={() => setSearchModalOpen(true)}
@@ -124,26 +136,31 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
               title="Notifications"
             />
             {user && !userLoading ? (
-              <div className="relative group flex items-center gap-2 cursor-pointer">
+              <div className="group relative flex cursor-pointer items-center gap-2">
                 {/* Circular profile picture (placeholder) */}
-                <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-lg select-none">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-lg font-bold text-white select-none">
                   {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                 </div>
-                <span className="text-white text-sm truncate max-w-[100px]">{user.name}</span>
+                <span className="max-w-[100px] truncate text-sm text-white">
+                  {user.name}
+                </span>
                 {/* Dropdown for logout */}
-                <div className="absolute right-0 top-10 bg-neutral-900 border border-neutral-800 rounded shadow-lg py-2 px-4 min-w-[120px] opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                <div className="absolute top-10 right-0 z-50 min-w-[120px] rounded border border-neutral-800 bg-neutral-900 px-4 py-2 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                   <InterstateButton
                     variant="danger"
                     size="sm"
-                    className="text-xs font-semibold w-full text-left hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto"
+                    className="h-auto w-full border-none bg-transparent px-0 py-0 text-left text-xs font-semibold shadow-none hover:underline"
                     onClick={() => {
-                      if (typeof window !== 'undefined') {
-                        document.cookie = 'token=; Max-Age=0; path=/;';
+                      if (typeof window !== "undefined") {
+                        document.cookie = "token=; Max-Age=0; path=/;";
                       }
-                      if (typeof window !== 'undefined' && window.localStorage) {
-                        window.localStorage.removeItem('token');
+                      if (
+                        typeof window !== "undefined" &&
+                        window.localStorage
+                      ) {
+                        window.localStorage.removeItem("token");
                       }
-                      if (typeof window !== 'undefined') {
+                      if (typeof window !== "undefined") {
                         window.location.reload();
                       }
                     }}
@@ -152,29 +169,34 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
                   </InterstateButton>
                 </div>
               </div>
-            ) : !userLoading && (
-              <InterstateButton
-                className="ml-2"
-                variant="primary"
-                size="md"
-                onClick={() => {
-                  const event = new CustomEvent('open-login-modal');
-                  window.dispatchEvent(event);
-                }}
-              >
-                Login
-              </InterstateButton>
+            ) : (
+              !userLoading && (
+                <InterstateButton
+                  className="ml-2"
+                  variant="primary"
+                  size="md"
+                  onClick={() => {
+                    const event = new CustomEvent("open-login-modal");
+                    window.dispatchEvent(event);
+                  }}
+                >
+                  Login
+                </InterstateButton>
+              )
             )}
           </div>
         </div>
-        <div className="flex items-center px-4 gap-1 py-1">
-          <button onClick={() => setWatchlistOpen(true)} className="p-1 hover:bg-emerald-950/90 hover:brightness-110 duration-150 ease-in-out rounded cursor-pointer">
+        <div className="flex items-center gap-1 px-4 py-1">
+          <button
+            onClick={() => setWatchlistOpen(true)}
+            className="cursor-pointer rounded p-1 duration-150 ease-in-out hover:bg-emerald-950/90 hover:brightness-110"
+          >
             <FiStar />
           </button>
-          <button className="p-1 hover:bg-emerald-950/90 hover:brightness-110 duration-150 ease-in-out rounded cursor-pointer">
+          <button className="cursor-pointer rounded p-1 duration-150 ease-in-out hover:bg-emerald-950/90 hover:brightness-110">
             <FiBarChart />
           </button>
-          <div className="border-r border-emerald-950 h-5"> </div>
+          <div className="h-5 border-r border-emerald-950"> </div>
         </div>
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
@@ -224,4 +246,4 @@ export default function Header({ search = "", setSearch, showSearch = true }: He
       />
     </>
   );
-} 
+}
