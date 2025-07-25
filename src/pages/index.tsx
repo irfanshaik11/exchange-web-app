@@ -264,7 +264,7 @@ export default function Home() {
   useEffect(() => {
     if (presets && presets[activePreset]) {
       // Optionally, update quickBuySettings globally if needed
-      setQuickBuySettings(presets[activePreset].quickBuySettings);
+      // setQuickBuySettings(presets[activePreset].quickBuySettings);
     }
   }, [activePreset, presets]);
 
