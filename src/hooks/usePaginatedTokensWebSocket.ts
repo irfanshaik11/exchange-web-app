@@ -52,6 +52,7 @@ export default function usePaginatedTokensWebSocket({
       limit: String(limit),
     });
     url += `?${params.toString()}`;
+    console.log('Connecting to WebSocket:', url);
 
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
 
@@ -64,31 +65,37 @@ export default function usePaginatedTokensWebSocket({
         wsRef.current = ws;
 
         ws.onopen = () => {
+          console.log('WebSocket connection opened');
           setState(prev => ({ ...prev, isConnected: true, isReconnecting: false, error: null }));
           reconnectAttemptRef.current = 0;
         };
 
         ws.onmessage = (event) => {
+          console.log('WebSocket message received:', event.data);
           try {
             const message = JSON.parse(event.data);
             if (Array.isArray(message)) {
               throttledSetData(message);
             }
           } catch (err) {
+            console.error('Failed to parse WebSocket message:', err);
             setState(prev => ({ ...prev, error: 'Failed to parse WebSocket message' }));
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
+          console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
           setState(prev => ({ ...prev, isConnected: false }));
           handleReconnect();
         };
 
-        ws.onerror = () => {
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
           setState(prev => ({ ...prev, error: 'WebSocket connection error. Attempting to reconnect...' }));
           handleReconnect();
         };
       } catch (error) {
+        console.error('Failed to establish WebSocket connection:', error);
         setState(prev => ({ ...prev, error: 'Failed to establish WebSocket connection' }));
       }
     };
