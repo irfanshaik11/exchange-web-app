@@ -3,7 +3,7 @@ import throttle from 'lodash.throttle';
 import { env } from '../env';
 
 interface UsePaginatedTokensWebSocketParams {
-  filter?: 'marketcap' | 'volume_24h' | 'txs_24h' | 'new';
+  filter?: 'marketcap' | 'volume_24h' | 'txs_24h' | 'new' | 'newmarketcap' | 'trending';
   order?: 'asc' | 'desc';
   offset?: number;
   limit?: number;
@@ -52,7 +52,6 @@ export default function usePaginatedTokensWebSocket({
       limit: String(limit),
     });
     url += `?${params.toString()}`;
-    console.log('Connecting to WebSocket:', url);
 
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
 
@@ -65,13 +64,11 @@ export default function usePaginatedTokensWebSocket({
         wsRef.current = ws;
 
         ws.onopen = () => {
-          console.log('WebSocket connection opened');
           setState(prev => ({ ...prev, isConnected: true, isReconnecting: false, error: null }));
           reconnectAttemptRef.current = 0;
         };
 
         ws.onmessage = (event) => {
-          console.log('WebSocket message received:', event.data);
           try {
             const message = JSON.parse(event.data);
             if (Array.isArray(message)) {

@@ -94,7 +94,7 @@ export default function Home() {
     error: tokenError, 
     isReconnecting
   } = usePaginatedTokensWebSocket({
-    filter: selectedTab === 'dex' ? 'new' : undefined
+    filter: selectedTab === 'dex' ? 'new' : 'trending'
   });
 
   // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
