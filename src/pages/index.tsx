@@ -168,10 +168,7 @@ export default function Home() {
       const data = await tradeBuy({
         tokenAddress: token.mint,
         amount: quickBuyAmount,
-        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
-        solPrice: token.sol_price,
-        marketCap: token.total_fully_diluted_valuation,
-        tokenPrice: token.usd_price,
+        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1
       }, user.bearerToken);
       toast.success(
         `Quick Buy successful! Bought ${data.amount} ${token.symbol}`,
