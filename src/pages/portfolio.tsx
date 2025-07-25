@@ -163,7 +163,7 @@ export default function PortfolioPage() {
                     ) : !user?.id ? (
                       <div className="text-neutral-500 py-8 text-center">Please log in to view your positions.</div>
                     ) : (
-                      <Positions userId={user.id} />
+                      <Positions userId={user.id} bearerToken={user.bearerToken} />
                     )
                   )}
                   {activeSpotTab === 1 && (
@@ -174,7 +174,7 @@ export default function PortfolioPage() {
                     ) : (
                       <TradeTable trades={tradeHistory} loading={loadingTradeHistory} />
                     )
-                  )}}
+                  )}
                   {activeSpotTab === 2 && (
                     <div className="text-neutral-500 py-8 text-center">No data.</div>
                   )}
