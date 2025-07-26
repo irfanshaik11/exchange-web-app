@@ -675,7 +675,7 @@ export default function SearchModal({
                     </div>
 
                     {/* Financial metrics */}
-                    <div className="flex h-full  items-center gap-6 text-xs whitespace-nowrap">
+                    <div className="flex h-full items-center gap-6 text-xs whitespace-nowrap">
                       <span className="text-neutral-400">
                         MC{" "}
                         <span className="text-lg font-medium text-white">

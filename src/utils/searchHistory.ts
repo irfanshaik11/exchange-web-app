@@ -23,4 +23,4 @@ export function addToHistory(item: SearchHistoryItem, maxEntries = 20) {
 export function clearHistory() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(SEARCH_HISTORY_KEY);
-} 
+}
