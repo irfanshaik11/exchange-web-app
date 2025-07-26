@@ -7,6 +7,7 @@ import { useUser } from '../components/UserContext';
 import InterstateTooltip from '~/components/InterstateTooltip';
 import CustomCheckbox from '../components/CustomCheckbox';
 import { getTradeHistoryByUser, getTradeActivityByUser } from '~/utils/functions';
+import { formatSmartNumber } from '~/utils/db';
 import type { TradeRow } from '~/utils/functions';
 
 const spotTabs = ['Active Positions', 'History', 'Top 100'];
@@ -16,12 +17,13 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<'spot' | 'wallet'>('spot');
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activeActivityTab, setActiveActivityTab] = useState(0);
-  const { user, loading: userLoading } = useUser();
+  const { user, loading: userLoading, solBalance } = useUser();
   const [walletChecked, setWalletChecked] = useState(false);
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [loadingTradeHistory, setLoadingTradeHistory] = useState(true);
   const [tradeActivity, setTradeActivity] = useState<TradeRow[]>([]);
   const [loadingTradeActivity, setLoadingTradeActivity] = useState(true);
+  const [unrealizedPnl, setUnrealizedPnl] = useState(0);
 
   useEffect(() => {
     const fetchTradeHistory = async () => {
@@ -92,17 +94,17 @@ export default function PortfolioPage() {
 
           {/* Spot Section */}
           {activeSection === 'spot' && (
-            <div className="border border-emerald-950 p-4">
+            <div className="border border-emerald-950">
               {/* Top Panels */}
-              <div className="flex flex-row w-full border-b border-emerald-950 mb-0 ">
+              <div className="flex flex-row w-full border-b border-emerald-950 mb-0">
 
                 {/* Balance */}
-                <div className="flex-1 flex flex-col min-h-[180px] border-r border-emerald-950">
+                <div className="flex-1 flex flex-col border-r border-emerald-950 p-4">
                   <div className="text-base font-semibold mb-2">Balance</div>
-                  <div className="flex-1 flex flex-col justify-between">
+                  <div className="flex-1 flex flex-col gap-2">
                     <div>
                       <div className="text-xs text-neutral-400">Total Value</div>
-                      <div className="text-2xl font-bold">$0</div>
+                      <div className="text-xl font-bold">{formatSmartNumber(solBalance)} SOL</div>
                     </div>
                     <div>
                       <div className="text-xs text-neutral-400">Unrealized PNL</div>
@@ -163,7 +165,7 @@ export default function PortfolioPage() {
                     ) : !user?.id ? (
                       <div className="text-neutral-500 py-8 text-center">Please log in to view your positions.</div>
                     ) : (
-                      <Positions userId={user.id} />
+                      <Positions bearerToken={user.bearerToken} userId={user.id} />
                     )
                   )}
                   {activeSpotTab === 1 && (
@@ -174,7 +176,7 @@ export default function PortfolioPage() {
                     ) : (
                       <TradeTable trades={tradeHistory} loading={loadingTradeHistory} />
                     )
-                  )}}
+                  )}
                   {activeSpotTab === 2 && (
                     <div className="text-neutral-500 py-8 text-center">No data.</div>
                   )}
