@@ -244,7 +244,6 @@ export default function PortfolioPage() {
                         Please log in to view your positions.
                       </div>
                     ) : (
-<<<<<<< HEAD
                       <Positions
                         bearerToken={user.bearerToken}
                         userId={user.id}
@@ -256,30 +255,16 @@ export default function PortfolioPage() {
                       <div className="py-8 text-center text-neutral-500">
                         Loading...
                       </div>
-=======
-                      <Positions userId={user.id} bearerToken={user.bearerToken} />
-                    )
-                  )}
-                  {activeSpotTab === 1 && (
-                    userLoading || loadingTradeHistory ? (
-                      <div className="text-neutral-500 py-8 text-center">Loading...</div>
->>>>>>> 11d6952df4f20f06f3067063cce4205d29bf8cef
                     ) : !user?.id ? (
                       <div className="py-8 text-center text-neutral-500">
                         Please log in to view your trade history.
                       </div>
                     ) : (
-<<<<<<< HEAD
                       <TradeTable
                         trades={tradeHistory}
                         loading={loadingTradeHistory}
                       />
                     ))}
-=======
-                      <TradeTable trades={tradeHistory} loading={loadingTradeHistory} />
-                    )
-                  )}
->>>>>>> 11d6952df4f20f06f3067063cce4205d29bf8cef
                   {activeSpotTab === 2 && (
                     <div className="py-8 text-center text-neutral-500">
                       No data.
