@@ -24,6 +24,7 @@ export default function PortfolioPage() {
   const [tradeActivity, setTradeActivity] = useState<TradeRow[]>([]);
   const [loadingTradeActivity, setLoadingTradeActivity] = useState(true);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
+  const [positions, setPositions] = useState<PositionRow[]>([]);
 
   useEffect(() => {
     const fetchTradeHistory = async () => {
@@ -59,6 +60,13 @@ export default function PortfolioPage() {
     fetchTradeHistory();
     fetchTradeActivity();
   }, [user?.id, activeSpotTab, activeActivityTab]);
+
+  useEffect(() => {
+    if (positions.length > 0) {
+      const totalPnl = positions.reduce((acc, pos) => acc + pos.pnl, 0);
+      setUnrealizedPnl(totalPnl);
+    }
+  }, [positions]);
 
   return (
     <>
@@ -108,7 +116,7 @@ export default function PortfolioPage() {
                     </div>
                     <div>
                       <div className="text-xs text-neutral-400">Unrealized PNL</div>
-                      <div className="text-lg font-bold">$0</div>
+                      <div className="text-lg font-bold">${unrealizedPnl.toFixed(2)}</div>
                     </div>
                   </div>
                   <div className="mt-4">
@@ -165,7 +173,7 @@ export default function PortfolioPage() {
                     ) : !user?.id ? (
                       <div className="text-neutral-500 py-8 text-center">Please log in to view your positions.</div>
                     ) : (
-                      <Positions bearerToken={user.bearerToken} userId={user.id} />
+                      <Positions bearerToken={user.bearerToken} userId={user.id} onPositionsChange={setPositions} />
                     )
                   )}
                   {activeSpotTab === 1 && (

@@ -7,6 +7,7 @@ import type { PositionRow } from '~/utils/functions';
 interface PositionsProps {
   userId: string;
   bearerToken: string;
+  onPositionsChange: (positions: PositionRow[]) => void;
 }
 
 function shortAddr(addr: string) {
@@ -14,7 +15,7 @@ function shortAddr(addr: string) {
   return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
-const Positions: React.FC<PositionsProps> = ({ userId, bearerToken }) => {
+const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsChange }) => {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -22,9 +23,12 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken }) => {
     if (!userId) return;
     setLoading(true);
     getActivePositionsByUser(userId)
-      .then(setPositions)
+      .then(positions => {
+        setPositions(positions);
+        onPositionsChange(positions);
+      })
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [userId, onPositionsChange]);
 
   return (
     <div className=" w-full">
