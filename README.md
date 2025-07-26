@@ -1,5 +1,1 @@
-memecoin ui  
-   
-   
- 
- 
+memecoin ui
