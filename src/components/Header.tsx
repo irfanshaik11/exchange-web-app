@@ -7,6 +7,7 @@ import Cookies from "js-cookie";
 import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiStar } from "react-icons/fi";
+import SearchModal from "./SearchModal";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -48,6 +49,7 @@ export default function Header({
   const [depositOpen, setDepositOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   // Handles opening the deposit modal
   const handleDepositClick = () => {
@@ -98,8 +100,8 @@ export default function Header({
           </div>
           <div className="flex min-w-0 items-center gap-2">
             {showSearch && (
-              <div className="relative flex items-center">
-                <span className="absolute left-3 text-neutral-400">
+              <div className="relative w-64">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400 pointer-events-none z-10">
                   <FaSearch size={16} />
                 </span>
                 <input
@@ -107,7 +109,8 @@ export default function Header({
                   placeholder="Search by token or CA..."
                   value={search}
                   onChange={(e) => setSearch && setSearch(e.target.value)}
-                  className="w-64 rounded-full border border-neutral-700 bg-neutral-950 py-1.5 pr-3 pl-9 text-sm text-neutral-100 transition placeholder:text-neutral-400 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  onFocus={() => setSearchModalOpen(true)}
+                  className="w-full rounded-full border border-neutral-700 bg-neutral-950 py-2 pr-3 pl-9 text-sm text-neutral-100 transition placeholder:text-neutral-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:outline-none hover:border-neutral-600"
                 />
               </div>
             )}
@@ -200,13 +203,49 @@ export default function Header({
         </div>
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
-      <WatchlistModal
-        open={watchlistOpen}
-        onClose={() => setWatchlistOpen(false)}
-      />
-      <NotificationDropdown
-        open={notificationOpen}
-        onClose={() => setNotificationOpen(false)}
+      <WatchlistModal open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
+      <NotificationDropdown open={notificationOpen} onClose={() => setNotificationOpen(false)} />
+      {/* Search Modal */}
+      <SearchModal
+        open={searchModalOpen}
+        onClose={() => setSearchModalOpen(false)}
+        onSubmit={(q) => {
+          const trimmed = q.trim();
+          // If it's likely a token address navigate directly to trade page
+          if (trimmed.length >= 10) {
+            router.push(`/trade/${trimmed}`);
+            setSearch?.("");
+            return;
+          }
+
+          // Otherwise treat as name search and stay on Discover
+          if (setSearch) setSearch(trimmed);
+          if (router.pathname !== "/") {
+            router.push({ pathname: "/", query: { search: trimmed } });
+          } else {
+            router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
+          }
+        }}
+        onQueryChange={(q) => {
+          const trimmed = q.trim();
+
+          // Skip routing updates for short queries (<3 chars)
+          if (trimmed.length < 3) {
+            if (router.pathname === "/" && Object.keys(router.query).includes("search")) {
+              router.replace({ pathname: "/" }, undefined, { shallow: true });
+            }
+            if (setSearch) setSearch(trimmed);
+            return;
+          }
+
+          // Live updates for longer queries
+          if (router.pathname !== "/") {
+            router.push({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
+          } else {
+            router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
+          }
+          if (setSearch) setSearch(trimmed);
+        }}
       />
     </>
   );
