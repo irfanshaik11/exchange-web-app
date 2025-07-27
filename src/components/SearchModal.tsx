@@ -24,6 +24,7 @@ import {
 import { LuChartNoAxesColumn } from "react-icons/lu";
 import { TbDropletHalf2Filled } from "react-icons/tb";
 import { CiUser, CiGlobe } from "react-icons/ci";
+import { env } from "../env";
 
 // Define types locally
 export type SortOption = "time" | "market_cap" | "volume_1h" | "liquidity";
@@ -130,8 +131,8 @@ const searchTokens = async (
     if (filters.isOg) urlParams.set("og", "true");
     if (filters.onlyBonded) urlParams.set("bonded", "true");
 
-    // Use the working API directly
-    const url = `http://localhost:8000/api/token-search?${urlParams.toString()}`;
+    // Use the backend URL from environment variable
+    const url = `${env.NEXT_PUBLIC_BACKEND_URL}/api/token-search?${urlParams.toString()}`;
 
     const response = await fetch(url, {
       signal: controller.signal,
@@ -333,7 +334,11 @@ export default function SearchModal({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
+      // Only close modal if there are no search results and we're not in the middle of searching
+      if (state.results.length === 0 && !state.loading && state.query.trim().length >= 3) {
       handleSubmit(state.query);
+      }
+      // If there are results, don't close the modal - let user interact with results
     } else if (e.key === "Escape") {
       e.preventDefault();
       onClose();
