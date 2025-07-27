@@ -344,6 +344,9 @@ export default function SearchModal({
     if (e.key === "Enter") {
       e.preventDefault();
       handleSubmit(state.query);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
     }
   };
 
@@ -368,6 +371,24 @@ export default function SearchModal({
       updateState(initialState);
     }
   }, [open]);
+
+  // Global ESC key handler
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && open) {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    if (open) {
+      document.addEventListener("keydown", handleGlobalKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [open, onClose]);
 
   useEffect(() => {
     if (!open || state.query.trim().length < 3) {
