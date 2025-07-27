@@ -1,14 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { name, tokenaddress } = req.query;
-
-  // Build remote URL based on query param rules
-  const base = process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL || "";
-  if (!base) {
-    res.status(500).json({ error: "Token service URL not configured" });
-    return;
-  }
+  const { name, tokenaddress, sort, pump, bonk, og, bonded } = req.query;
 
   const paramKey = tokenaddress ? "tokenaddress" : "name";
   const paramVal = (tokenaddress || name) as string | undefined;
@@ -17,14 +10,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const targetUrl = `${base}/search?${paramKey}=${encodeURIComponent(paramVal)}`;
+  // Use the working API endpoint
+  const baseURL = "http://localhost:8000";
+  const urlParams = new URLSearchParams();
+  urlParams.set(paramKey, paramVal);
+
+  // Add additional query parameters if provided
+  if (sort) urlParams.set("sort", sort as string);
+  if (pump) urlParams.set("pump", pump as string);
+  if (bonk) urlParams.set("bonk", bonk as string);
+  if (og) urlParams.set("og", og as string);
+  if (bonded) urlParams.set("bonded", bonded as string);
+
+  const targetUrl = `${baseURL}/api/token-search?${urlParams.toString()}`;
 
   try {
     const upstream = await fetch(targetUrl);
-    const body = await upstream.text(); // keep as text then pass
-    res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/json");
-    res.status(upstream.status).send(body);
+    const data = await upstream.json();
+    
+    if (!upstream.ok) {
+      res.status(upstream.status).json({ error: "Upstream error", detail: data });
+      return;
+    }
+
+    res.status(200).json(data);
   } catch (e: any) {
+    console.error("Token search proxy error:", e);
     res.status(500).json({ error: "Proxy error", detail: e.message });
   }
 } 

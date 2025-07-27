@@ -117,19 +117,7 @@ const searchTokens = async (
       trimmedQuery.length >= 32 && /^[a-zA-Z0-9]+$/.test(trimmedQuery);
     const searchParam = isAddress ? "tokenaddress" : "name";
 
-    const isLocalhost =
-      typeof window !== "undefined" && window.location.hostname === "localhost";
-    const baseURL = isLocalhost
-      ? "/api/token-search"
-      : process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL ||
-        process.env.NEXT_PUBLIC_API_URL ||
-        process.env.NEXT_PUBLIC_BACKEND_URL ||
-        "";
-
-    if (!baseURL) {
-      throw new Error("No API base URL configured");
-    }
-
+    // Build URL parameters
     const urlParams = new URLSearchParams();
     urlParams.set(searchParam, trimmedQuery);
 
@@ -142,8 +130,8 @@ const searchTokens = async (
     if (filters.isOg) urlParams.set("og", "true");
     if (filters.onlyBonded) urlParams.set("bonded", "true");
 
-    const endpoint = isLocalhost ? baseURL : `${baseURL}/search`;
-    const url = `${endpoint}?${urlParams.toString()}`;
+    // Use the working API directly
+    const url = `http://localhost:8000/api/token-search?${urlParams.toString()}`;
 
     const response = await fetch(url, {
       signal: controller.signal,
@@ -159,7 +147,9 @@ const searchTokens = async (
     const data = await response.json();
 
     let tokens: Token[] = [];
-    if (Array.isArray(data?.result)) {
+    if (Array.isArray(data?.results)) {
+      tokens = data.results;
+    } else if (Array.isArray(data?.result)) {
       tokens = data.result;
     } else if (Array.isArray(data)) {
       tokens = data;
