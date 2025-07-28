@@ -2,12 +2,13 @@
 
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { formatSmartNumber } from "~/utils/db";
-import { FaBolt, FaClock, FaChartLine } from "react-icons/fa";
+import { FaBolt, FaClock, FaChartLine, FaTelegramPlane } from "react-icons/fa";
 import usePaginatedTokensWebSocket from "~/hooks/usePaginatedTokensWebSocket";
 import { FaRocket, FaFire, FaCrown, FaGraduationCap } from "react-icons/fa";
 import InterstatePopout from "./InterstatePopout";
 import { LuChartNoAxesColumn } from "react-icons/lu";
 import { TbDropletHalf2Filled } from "react-icons/tb";
+import { CiUser, CiGlobe } from "react-icons/ci";
 import { fetchTokenMetadata } from "~/utils/functions";
 
 // Updated Token type based on the provided object structure
@@ -86,11 +87,11 @@ export function TokenLogo({ token }: { token: any }) {
     <img
       src={logoUrl}
       alt={token.symbol}
-      className="h-8 w-8 rounded-full border border-neutral-700 object-contain"
+      className="h-16 w-16 rounded-lg border border-neutral-700 object-contain"
       onError={handleImageError}
     />
   ) : (
-    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-700 bg-neutral-800">
+    <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-neutral-700 bg-neutral-800">
       <span className="text-sm font-bold text-neutral-400">
         {token.symbol?.charAt(0) || "?"}
       </span>
@@ -139,7 +140,7 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
       if (response.ok) {
         const token = await response.json();
         // API returns single token object, convert to array for consistency
-        setSearchResults(Array.isArray(token) ? token : [token]);
+        setSearchResults(Array.isArray(token.results) ? token.results : [token.results]);
       } else if (response.status === 404) {
         setSearchResults([]);
       } else {
@@ -178,23 +179,9 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
       }
     };
   }, [query, searchTokens]);
-  const sortToFilterMap = useMemo(() => ({
-    "market_cap": 'marketcap' as const,
-    "volume_1h": 'volume_24h' as const,
-    "liquidity": 'txs_24h' as const,
-    "time": 'new' as const,
-  }), []);
-
-  // Update filter when sortBy changes - separate effect to avoid render-time state updates
-  useEffect(() => {
-    const newFilter = sortToFilterMap[sortBy];
-    if (newFilter !== allTokensFilter) {
-      setAllTokensFilter(newFilter);
-    }
-  }, [sortBy, sortToFilterMap, allTokensFilter]);
-
+  
   const { data: allTokens } = usePaginatedTokensWebSocket({
-    filter: allTokensFilter,
+    filter: 'txs_24h',
     limit: 5,
     order: 'desc'
   });
@@ -280,7 +267,7 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
       onClose={onClose}
       align="center"
       overlayClassName="bg-[#090909]/80 backdrop-blur-[2px]"
-      className="relative mx-4 min-h-[600px] w-full max-w-2xl -translate-y-8 rounded-md border border-neutral-700 bg-neutral-950 text-neutral-100 shadow-2xl"
+      className="relative mx-4 pb-4 w-full max-w-2xl -translate-y-8 rounded-md border border-neutral-700 bg-neutral-950 text-neutral-100 shadow-2xl"
     >
       {/* Filter and Sort Controls */}
       <div className="flex items-center justify-between px-3 pt-3 text-xs font-medium">
@@ -351,10 +338,10 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
       </div>
 
       {/* Token List */}
-      <div className="flex-1 overflow-hidden p-4">
+      <div className="flex-1 overflow-hidden px-4 pt-2 h-[550px]">
         <div className="mb-2">
           <span className="text-sm tracking-wider text-neutral-400">
-            {isSearching ? "Search Results" : "All Tokens"} ({displayTokens.length})
+            {isSearching ? "Search Results" : "History"} ({displayTokens.length})
             {isSearchLoading && (
               <span className="ml-2 text-xs text-blue-400">Searching...</span>
             )}
@@ -370,7 +357,7 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
             }
           </p>
         ) : (
-          <ul className="max-h-96 divide-y divide-neutral-800 overflow-y-auto">
+          <ul className="flex flex-col gap-4 h-full overflow-y-auto">
             {displayTokens.map((token) => {
               const mc = formatSmartNumber(token.fully_diluted_value || 0);
               const vol = formatSmartNumber((token.total_buy_volume_1h || 0) + (token.total_sell_volume_1h || 0));
@@ -394,7 +381,7 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
   );
 }
 
-// Separate component to prevent unnecessary re-renders of individual items
+// Separate component with new design - matches the history item design
 const TokenListItem = React.memo(({ 
   token, 
   mc, 
@@ -414,30 +401,88 @@ const TokenListItem = React.memo(({
 
   return (
     <li
-      className="flex cursor-pointer items-center gap-3 rounded px-2 py-2 text-sm hover:bg-neutral-800"
+      className="flex cursor-pointer items-center justify-between gap-4 rounded text-sm transition-colors hover:bg-neutral-700/50 px-2 py-2"
       onClick={handleClick}
     >
-      {token.uri ? <TokenLogo token={token} /> : ''} 
-      <div className="min-w-0 flex-1">
-        <span className="block max-w-full truncate font-semibold text-neutral-100">
-          {token.symbol}{" "}
-          <span className="font-normal text-neutral-400">
-            {token.name}
+      <div className="flex w-48 items-center gap-4">
+        {/* Avatar with border and overlay icon */}
+        <div className="relative flex-shrink-0">
+          <TokenLogo token={token} />
+          {/* Overlay icon */}
+          <div className="absolute -right-1 -bottom-1 flex h-5 w-5 items-center justify-center rounded-full border border-teal-400 bg-neutral-900">
+            <span className="text-[9px] font-bold text-white">
+              R
+            </span>
+          </div>
+        </div>
+        {/* Text content */}
+        <div className="max-w-[200px] min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="block truncate font-medium text-white">
+              {token.symbol} {token.name}
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(token.mint);
+              }}
+              className="flex-shrink-0 text-neutral-400 transition-colors hover:text-neutral-300"
+              title="Copy address"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+              </svg>
+            </button>
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-xs font-medium text-teal-400">
+              3mo
+            </span>
+            <CiUser className="size-4" />
+            <CiGlobe className="size-4" />
+            <FaTelegramPlane className="size-4" />
+          </div>
+        </div>
+      </div>
+
+      {/* Financial metrics */}
+      <div className="flex h-full items-center gap-6 text-xs whitespace-nowrap">
+        <span className="text-neutral-400">
+          MC{" "}
+          <span className="text-lg font-medium text-white">
+            ${mc}
+          </span>
+        </span>
+        <span className="text-neutral-400">
+          V{" "}
+          <span className="text-lg font-medium text-white">
+            ${vol}
+          </span>
+        </span>
+        <span className="text-neutral-400">
+          L{" "}
+          <span className="text-lg font-medium text-white">
+            ${liq}
           </span>
         </span>
       </div>
-      <div className="flex items-center gap-4 text-xs whitespace-nowrap">
-        <span className="text-neutral-400">
-          MC <span className="font-bold text-blue-400">${mc}</span>
-        </span>
-        <span className="text-neutral-400">
-          V <span className="font-bold text-white">${vol}</span>
-        </span>
-        <span className="text-neutral-400">
-          L <span className="font-bold text-white">${liq}</span>
-        </span>
-        <FaBolt className="ml-2 text-emerald-400" />
-      </div>
+
+      {/* Action button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect(token);
+        }}
+        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white transition-colors hover:bg-blue-600"
+        title="Select token"
+      >
+        <FaBolt className="h-4 w-4" />
+      </button>
     </li>
   );
 });
