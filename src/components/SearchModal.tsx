@@ -125,7 +125,7 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
     setIsSearchLoading(true);
     
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL?.replace('/ws', '') || '';
+      const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL|| '';
       const trimmedQuery = searchQuery.trim();
       
       // Use tokenaddress for queries 10+ characters, name for 3-9 characters
