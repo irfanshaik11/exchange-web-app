@@ -126,7 +126,6 @@ export function formatSmartNumber(num: number): string {
 
 // Fetch and parse token metadata from a URI (IPFS or HTTP)
 export async function fetchTokenMetadata(uri: string | undefined): Promise<any | null> {
-  console.log(uri)
   if (!uri) return null;
   try {
     const controller = new AbortController();

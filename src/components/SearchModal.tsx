@@ -13,6 +13,7 @@ import {
   FaWater,
   FaTelegramPlane,
 } from "react-icons/fa";
+import usePaginatedTokensWebSocket from "~/hooks/usePaginatedTokensWebSocket";
 import { FaRocket, FaFire, FaCrown, FaGraduationCap } from "react-icons/fa";
 import InterstatePopout from "./InterstatePopout";
 import {
@@ -277,6 +278,16 @@ export default function SearchModal({
   onSubmit,
   onQueryChange,
 }: SearchModalProps) {
+  const {
+    data: allTokens,
+    isConnected,
+    error: tokenError,
+    isReconnecting,
+  } = usePaginatedTokensWebSocket({
+    filter: 'volume_24h',
+    limit: 5,
+    order: 'desc'
+  });
   const [state, setState] = useState<SearchState>(initialState);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -335,8 +346,12 @@ export default function SearchModal({
     if (e.key === "Enter") {
       e.preventDefault();
       // Only close modal if there are no search results and we're not in the middle of searching
-      if (state.results.length === 0 && !state.loading && state.query.trim().length >= 3) {
-      handleSubmit(state.query);
+      if (
+        state.results.length === 0 &&
+        !state.loading &&
+        state.query.trim().length >= 3
+      ) {
+        handleSubmit(state.query);
       }
       // If there are results, don't close the modal - let user interact with results
     } else if (e.key === "Escape") {
@@ -352,10 +367,12 @@ export default function SearchModal({
   // Effects
   useEffect(() => {
     if (open) {
+
+      console.log(allTokens)
       const existingHistory = getHistory();
       // If no history exists, add dummy data
       if (existingHistory.length === 0) {
-        dummyHistoryData.forEach((item) => addToHistory(item));
+        console.log(allTokens)
       }
       updateState({
         ...initialState,
