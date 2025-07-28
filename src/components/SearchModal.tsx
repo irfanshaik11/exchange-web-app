@@ -108,10 +108,76 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
     isOg: false,
     onlyBonded: false,
   });
+  const [searchResults, setSearchResults] = useState<Token[]>([]);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Map sortBy to filter - moved outside of render cycle
+  // Search API function
+  const searchTokens = useCallback(async (searchQuery: string) => {
+    if (searchQuery.trim().length < 3) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearchLoading(true);
+    
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL?.replace('/ws', '') || '';
+      const trimmedQuery = searchQuery.trim();
+      
+      // Use tokenaddress for queries 10+ characters, name for 3-9 characters
+      const searchParam = trimmedQuery.length >= 10 
+        ? `tokenaddress=${encodeURIComponent(trimmedQuery)}`
+        : `name=${encodeURIComponent(trimmedQuery)}`;
+      
+      const response = await fetch(`${baseUrl}/search?${searchParam}`);
+
+      console.log(response)
+      
+      if (response.ok) {
+        const token = await response.json();
+        // API returns single token object, convert to array for consistency
+        setSearchResults(Array.isArray(token) ? token : [token]);
+      } else if (response.status === 404) {
+        setSearchResults([]);
+      } else {
+        console.error('Search API error:', response.status);
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearchLoading(false);
+    }
+  }, []);
+
+  // Debounced search effect
+  useEffect(() => {
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Set new timeout for search
+    if (query.trim().length >= 3) {
+      searchTimeoutRef.current = setTimeout(() => {
+        searchTokens(query);
+      }, 350);
+    } else {
+      setSearchResults([]);
+      setIsSearchLoading(false);
+    }
+
+    // Cleanup function
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [query, searchTokens]);
   const sortToFilterMap = useMemo(() => ({
     "market_cap": 'marketcap' as const,
     "volume_1h": 'volume_24h' as const,
@@ -160,10 +226,8 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
 
   const handleQueryChange = useCallback((newQuery: string) => {
     setQuery(newQuery);
-    if (newQuery.trim().length >= 3) {
-      onSearch?.(newQuery, sortBy, filters);
-    }
-  }, [onSearch, sortBy, filters]);
+    // Remove the old onSearch call since we're handling it with the API now
+  }, []);
 
   const updateFilter = useCallback((filterName: keyof SearchFilters) => {
     setFilters(prev => ({ ...prev, [filterName]: !prev[filterName] }));
@@ -179,6 +243,8 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
   useEffect(() => {
     if (open) {
       setQuery("");
+      setSearchResults([]);
+      setIsSearchLoading(false);
       const timer = setTimeout(() => inputRef.current?.focus(), 0);
       return () => clearTimeout(timer);
     }
@@ -199,7 +265,12 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
 
   // Memoize display state
   const isSearching = useMemo(() => query.trim().length >= 3, [query]);
-  const displayTokens = isSearching ? [] : filteredTokens; // You might want to add search logic here
+  const displayTokens = useMemo(() => {
+    if (isSearching) {
+      return searchResults;
+    }
+    return filteredTokens;
+  }, [isSearching, searchResults, filteredTokens]);
 
   if (!open) return null;
 
@@ -284,11 +355,19 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
         <div className="mb-2">
           <span className="text-sm tracking-wider text-neutral-400">
             {isSearching ? "Search Results" : "All Tokens"} ({displayTokens.length})
+            {isSearchLoading && (
+              <span className="ml-2 text-xs text-blue-400">Searching...</span>
+            )}
           </span>
         </div>
         {displayTokens.length === 0 ? (
           <p className="text-sm text-neutral-500">
-            {isSearching ? "No search results found." : "No tokens available."}
+            {isSearchLoading 
+              ? "Searching..." 
+              : isSearching 
+                ? "No search results found." 
+                : "No tokens available."
+            }
           </p>
         ) : (
           <ul className="max-h-96 divide-y divide-neutral-800 overflow-y-auto">
