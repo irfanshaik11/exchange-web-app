@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { formatSmartNumber } from "~/utils/db";
 import { FaBolt, FaClock, FaChartLine } from "react-icons/fa";
 import usePaginatedTokensWebSocket from "~/hooks/usePaginatedTokensWebSocket";
@@ -24,6 +24,7 @@ export interface Token {
   created_at: string;
   bonding_curve_progress: string;
   amm: string;
+  uri: string;
 }
 
 export type SortOption = "time" | "market_cap" | "volume_1h" | "liquidity";
@@ -67,24 +68,26 @@ export function TokenLogo({ token }: { token: any }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(token.logo || null);
 
   useEffect(() => {
-    if (token.uri) {
+    if (token.uri && !logoUrl) {
       fetchTokenMetadata(token.uri).then((data) => {
         if (data?.image) {
           setLogoUrl(data.image);
         }
       });
     }
-  }, [token.uri]);
+  }, [token.uri, logoUrl]);
+
+  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.style.display = 'none';
+    setLogoUrl(null);
+  }, []);
 
   return logoUrl ? (
     <img
       src={logoUrl}
       alt={token.symbol}
       className="h-8 w-8 rounded-full border border-neutral-700 object-contain"
-      onError={(e) => {
-        e.currentTarget.style.display = 'none';
-        setLogoUrl(null);
-      }}
+      onError={handleImageError}
     />
   ) : (
     <div className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-700 bg-neutral-800">
@@ -96,13 +99,7 @@ export function TokenLogo({ token }: { token: any }) {
 }
 
 export default function SearchModal({ open, onClose, onSubmit, onSearch }: SearchModalProps) {
-  const [allTokensFilter, setAllTokensFilter] = useState<'volume_24h' | 'new' | 'txs_24h' | 'marketcap'>('volume_24h')
-  const { data: allTokens } = usePaginatedTokensWebSocket({
-    filter: allTokensFilter,
-    limit: 5,
-    order: 'desc'
-  });
-
+  const [allTokensFilter, setAllTokensFilter] = useState<'volume_24h' | 'new' | 'txs_24h' | 'marketcap'>('volume_24h');
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("time");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -114,7 +111,30 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const getFilteredTokens = () => {
+  // Map sortBy to filter - moved outside of render cycle
+  const sortToFilterMap = useMemo(() => ({
+    "market_cap": 'marketcap' as const,
+    "volume_1h": 'volume_24h' as const,
+    "liquidity": 'txs_24h' as const,
+    "time": 'new' as const,
+  }), []);
+
+  // Update filter when sortBy changes - separate effect to avoid render-time state updates
+  useEffect(() => {
+    const newFilter = sortToFilterMap[sortBy];
+    if (newFilter !== allTokensFilter) {
+      setAllTokensFilter(newFilter);
+    }
+  }, [sortBy, sortToFilterMap, allTokensFilter]);
+
+  const { data: allTokens } = usePaginatedTokensWebSocket({
+    filter: allTokensFilter,
+    limit: 5,
+    order: 'desc'
+  });
+
+  // Memoize filtered tokens to prevent unnecessary recalculations
+  const filteredTokens = useMemo(() => {
     if (!allTokens?.length) return [];
     
     let filtered = [...allTokens];
@@ -129,61 +149,59 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
       );
     }
 
-    // Sort
-    switch (sortBy) {
-      case "market_cap":
-        setAllTokensFilter('marketcap')
-        break;
-      case "volume_1h":
-        setAllTokensFilter('volume_24h') 
-        break;
-      case "liquidity":
-        setAllTokensFilter('txs_24h') 
-        break;
-      case "time":
-        setAllTokensFilter('new') 
-        break;
-    }
-
     return filtered;
-  };
+  }, [allTokens, filters.isPumpSearch, filters.onlyBonded]);
 
-  const handleSelectToken = (token: Token) => {
+  // Memoize callbacks to prevent child re-renders
+  const handleSelectToken = useCallback((token: Token) => {
     onSubmit?.(token.mint);
     onClose();
-  };
+  }, [onSubmit, onClose]);
 
-  const handleQueryChange = (newQuery: string) => {
+  const handleQueryChange = useCallback((newQuery: string) => {
     setQuery(newQuery);
     if (newQuery.trim().length >= 3) {
       onSearch?.(newQuery, sortBy, filters);
     }
-  };
+  }, [onSearch, sortBy, filters]);
 
-  const updateFilter = (filterName: keyof SearchFilters) => {
+  const updateFilter = useCallback((filterName: keyof SearchFilters) => {
     setFilters(prev => ({ ...prev, [filterName]: !prev[filterName] }));
-  };
+  }, []);
+
+  const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      onClose();
+    }
+  }, [onClose]);
 
   // Effects
   useEffect(() => {
     if (open) {
       setQuery("");
-      setTimeout(() => inputRef.current?.focus(), 0);
+      const timer = setTimeout(() => inputRef.current?.focus(), 0);
+      return () => clearTimeout(timer);
     }
   }, [open]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) onClose();
+      if (e.key === "Escape" && open) {
+        onClose();
+      }
     };
-    if (open) document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
+    
+    if (open) {
+      document.addEventListener("keydown", handleEscape);
+      return () => document.removeEventListener("keydown", handleEscape);
+    }
   }, [open, onClose]);
 
-  if (!open) return null;
+  // Memoize display state
+  const isSearching = useMemo(() => query.trim().length >= 3, [query]);
+  const displayTokens = isSearching ? [] : filteredTokens; // You might want to add search logic here
 
-  const displayTokens = getFilteredTokens();
-  const isSearching = query.trim().length >= 3;
+  if (!open) return null;
 
   return (
     <InterstatePopout
@@ -252,7 +270,7 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
           type="text"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
-          onKeyDown={(e) => e.key === "Escape" && onClose()}
+          onKeyDown={handleInputKeyDown}
           placeholder="Search by name, ticker, or CA…"
           className="w-full bg-transparent text-[20px] outline-none placeholder:text-neutral-500"
         />
@@ -280,33 +298,14 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
               const liq = formatSmartNumber(token.total_liquidity_usd || 0);
               
               return (
-                <li
+                <TokenListItem 
                   key={token.mint}
-                  className="flex cursor-pointer items-center gap-3 rounded px-2 py-2 text-sm hover:bg-neutral-800"
-                  onClick={() => handleSelectToken(token)}
-                >
-                  {token.uri ? <TokenLogo token={token} /> : ''} 
-                  <div className="min-w-0 flex-1">
-                    <span className="block max-w-full truncate font-semibold text-neutral-100">
-                      {token.symbol}{" "}
-                      <span className="font-normal text-neutral-400">
-                        {token.name}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-4 text-xs whitespace-nowrap">
-                    <span className="text-neutral-400">
-                      MC <span className="font-bold text-blue-400">${mc}</span>
-                    </span>
-                    <span className="text-neutral-400">
-                      V <span className="font-bold text-white">${vol}</span>
-                    </span>
-                    <span className="text-neutral-400">
-                      L <span className="font-bold text-white">${liq}</span>
-                    </span>
-                    <FaBolt className="ml-2 text-emerald-400" />
-                  </div>
-                </li>
+                  token={token}
+                  mc={mc}
+                  vol={vol}
+                  liq={liq}
+                  onSelect={handleSelectToken}
+                />
               );
             })}
           </ul>
@@ -315,3 +314,51 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
     </InterstatePopout>
   );
 }
+
+// Separate component to prevent unnecessary re-renders of individual items
+const TokenListItem = React.memo(({ 
+  token, 
+  mc, 
+  vol, 
+  liq, 
+  onSelect 
+}: { 
+  token: Token; 
+  mc: string; 
+  vol: string; 
+  liq: string; 
+  onSelect: (token: Token) => void;
+}) => {
+  const handleClick = useCallback(() => {
+    onSelect(token);
+  }, [onSelect, token]);
+
+  return (
+    <li
+      className="flex cursor-pointer items-center gap-3 rounded px-2 py-2 text-sm hover:bg-neutral-800"
+      onClick={handleClick}
+    >
+      {token.uri ? <TokenLogo token={token} /> : ''} 
+      <div className="min-w-0 flex-1">
+        <span className="block max-w-full truncate font-semibold text-neutral-100">
+          {token.symbol}{" "}
+          <span className="font-normal text-neutral-400">
+            {token.name}
+          </span>
+        </span>
+      </div>
+      <div className="flex items-center gap-4 text-xs whitespace-nowrap">
+        <span className="text-neutral-400">
+          MC <span className="font-bold text-blue-400">${mc}</span>
+        </span>
+        <span className="text-neutral-400">
+          V <span className="font-bold text-white">${vol}</span>
+        </span>
+        <span className="text-neutral-400">
+          L <span className="font-bold text-white">${liq}</span>
+        </span>
+        <FaBolt className="ml-2 text-emerald-400" />
+      </div>
+    </li>
+  );
+});
