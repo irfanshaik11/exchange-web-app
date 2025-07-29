@@ -226,7 +226,7 @@ export default function Header({
             router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
           }
         }}
-        onQueryChange={(q) => {
+        /* onQueryChange={(q) => {
           const trimmed = q.trim();
 
           // Skip routing updates for short queries (<3 chars)
@@ -245,7 +245,7 @@ export default function Header({
             router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
           }
           if (setSearch) setSearch(trimmed);
-        }}
+        }} */
       />
     </>
   );
