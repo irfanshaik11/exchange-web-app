@@ -20,7 +20,7 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activeActivityTab, setActiveActivityTab] = useState(0);
-  const { user, loading: userLoading, solBalance } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance } = useUser();
   const [walletChecked, setWalletChecked] = useState(false);
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [loadingTradeHistory, setLoadingTradeHistory] = useState(true);
@@ -159,7 +159,7 @@ export default function PortfolioPage() {
                       Available Balance
                     </div>
                     <div className="text-lg font-bold">
-                      {formatSmartNumber(solBalance)} SOL
+                      {formatSmartNumber(solBalance)} SOL (${formatSmartNumber(usdcBalance)})
                     </div>
                   </div>
                 </div>

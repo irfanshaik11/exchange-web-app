@@ -16,6 +16,7 @@ interface UserContextType {
   user: UserInfo | null;
   loading: boolean;
   solBalance: number;
+  usdcBalance: number;
   refreshUser: () => Promise<void>;
   refreshBalance: () => Promise<void>;
   setUser: (user: UserInfo | null) => void;
@@ -28,12 +29,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [solBalance, setSolBalance] = useState(0);
+  const [usdcBalance, setUsdcBalance] = useState(0);
 
   const refreshBalance = async () => {
     if (user?.publicKey) {
       const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(user.publicKey)}`);
       const data = await response.json();
       setSolBalance(data.data.balance);
+      setUsdcBalance(data.data.usdBalance);
     }
   };
 
@@ -78,7 +81,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   return (
-    <UserContext.Provider value={{ user, loading, solBalance, refreshUser, refreshBalance, setUser, logout }}>
+    <UserContext.Provider value={{ user, loading, solBalance, refreshUser, refreshBalance, setUser, logout, usdcBalance }}>
       {children}
     </UserContext.Provider>
   );
