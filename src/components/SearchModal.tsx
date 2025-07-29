@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+} from "react";
 import { formatSmartNumber } from "~/utils/db";
 import { FaBolt, FaClock, FaChartLine, FaTelegramPlane } from "react-icons/fa";
 import usePaginatedTokensWebSocket from "~/hooks/usePaginatedTokensWebSocket";
@@ -62,7 +68,7 @@ interface SearchModalProps {
   open: boolean;
   onClose: () => void;
   onSubmit?: (query: string) => void;
-  onSearch?: (query: string, sortBy: SortOption, filters: SearchFilters) => void;
+  onQueryChange?: (query: string) => void;
 }
 
 export function TokenLogo({ token }: { token: any }) {
@@ -78,10 +84,13 @@ export function TokenLogo({ token }: { token: any }) {
     }
   }, [token.uri, logoUrl]);
 
-  const handleImageError = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
-    e.currentTarget.style.display = 'none';
-    setLogoUrl(null);
-  }, []);
+  const handleImageError = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      e.currentTarget.style.display = "none";
+      setLogoUrl(null);
+    },
+    [],
+  );
 
   return logoUrl ? (
     <img
@@ -99,8 +108,15 @@ export function TokenLogo({ token }: { token: any }) {
   );
 }
 
-export default function SearchModal({ open, onClose, onSubmit, onSearch }: SearchModalProps) {
-  const [allTokensFilter, setAllTokensFilter] = useState<'volume_24h' | 'new' | 'txs_24h' | 'marketcap'>('volume_24h');
+export default function SearchModal({
+  open,
+  onClose,
+  onSubmit,
+  onQueryChange,
+}: SearchModalProps) {
+  const [allTokensFilter, setAllTokensFilter] = useState<
+    "volume_24h" | "new" | "txs_24h" | "marketcap"
+  >("volume_24h");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("time");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -123,32 +139,35 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
     }
 
     setIsSearchLoading(true);
-    
+
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL|| '';
+      const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "";
       const trimmedQuery = searchQuery.trim();
-      
+
       // Use tokenaddress for queries 10+ characters, name for 3-9 characters
-      const searchParam = trimmedQuery.length >= 10 
-        ? `tokenaddress=${encodeURIComponent(trimmedQuery)}`
-        : `name=${encodeURIComponent(trimmedQuery)}`;
-      
+      const searchParam =
+        trimmedQuery.length >= 10
+          ? `tokenaddress=${encodeURIComponent(trimmedQuery)}`
+          : `name=${encodeURIComponent(trimmedQuery)}`;
+
       const response = await fetch(`${baseUrl}/search?${searchParam}`);
 
-      console.log(response)
-      
+      console.log(response);
+
       if (response.ok) {
         const token = await response.json();
         // API returns single token object, convert to array for consistency
-        setSearchResults(Array.isArray(token.results) ? token.results : [token.results]);
+        setSearchResults(
+          Array.isArray(token.results) ? token.results : [token.results],
+        );
       } else if (response.status === 404) {
         setSearchResults([]);
       } else {
-        console.error('Search API error:', response.status);
+        console.error("Search API error:", response.status);
         setSearchResults([]);
       }
     } catch (error) {
-      console.error('Search error:', error);
+      console.error("Search error:", error);
       setSearchResults([]);
     } finally {
       setIsSearchLoading(false);
@@ -179,26 +198,28 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
       }
     };
   }, [query, searchTokens]);
-  
+
   const { data: allTokens } = usePaginatedTokensWebSocket({
-    filter: 'txs_24h',
+    filter: "txs_24h",
     limit: 5,
-    order: 'desc'
+    order: "desc",
   });
 
   // Memoize filtered tokens to prevent unnecessary recalculations
   const filteredTokens = useMemo(() => {
     if (!allTokens?.length) return [];
-    
+
     let filtered = [...allTokens];
 
     // Apply filters
     if (filters.isPumpSearch) {
-      filtered = filtered.filter(token => token.amm === 'pump_amm');
+      filtered = filtered.filter((token) => token.amm === "pump_amm");
     }
     if (filters.onlyBonded) {
-      filtered = filtered.filter(token => 
-        parseFloat(token.bonding_curve_progress?.replace('%', '') || '0') >= 100
+      filtered = filtered.filter(
+        (token) =>
+          parseFloat(token.bonding_curve_progress?.replace("%", "") || "0") >=
+          100,
       );
     }
 
@@ -206,25 +227,31 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
   }, [allTokens, filters.isPumpSearch, filters.onlyBonded]);
 
   // Memoize callbacks to prevent child re-renders
-  const handleSelectToken = useCallback((token: Token) => {
-    onSubmit?.(token.mint);
-    onClose();
-  }, [onSubmit, onClose]);
+  const handleSelectToken = useCallback(
+    (token: Token) => {
+      onSubmit?.(token.mint);
+      onClose();
+    },
+    [onSubmit, onClose],
+  );
 
   const handleQueryChange = useCallback((newQuery: string) => {
     setQuery(newQuery);
-    // Remove the old onSearch call since we're handling it with the API now
+    onQueryChange?.(newQuery);
   }, []);
 
   const updateFilter = useCallback((filterName: keyof SearchFilters) => {
-    setFilters(prev => ({ ...prev, [filterName]: !prev[filterName] }));
+    setFilters((prev) => ({ ...prev, [filterName]: !prev[filterName] }));
   }, []);
 
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      onClose();
-    }
-  }, [onClose]);
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    },
+    [onClose],
+  );
 
   // Effects
   useEffect(() => {
@@ -243,7 +270,7 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
         onClose();
       }
     };
-    
+
     if (open) {
       document.addEventListener("keydown", handleEscape);
       return () => document.removeEventListener("keydown", handleEscape);
@@ -267,24 +294,30 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
       onClose={onClose}
       align="center"
       overlayClassName="bg-[#090909]/80 backdrop-blur-[2px]"
-      className="relative mx-4 pb-4 w-full max-w-2xl -translate-y-8 rounded-md border border-neutral-700 bg-neutral-950 text-neutral-100 shadow-2xl"
+      className="relative mx-4 w-full max-w-2xl -translate-y-8 rounded-md border border-neutral-700 bg-neutral-950 pb-4 text-neutral-100 shadow-2xl"
     >
       {/* Filter and Sort Controls */}
       <div className="flex items-center justify-between px-3 pt-3 text-xs font-medium">
         <div className="flex items-center gap-2">
           {sortingOptions.map((option) => {
             const IconComponent = option.icon;
-            const isActive = 
-              option.name === "Pump" ? filters.isPumpSearch :
-              option.name === "Bonk" ? filters.isBonkSearch :
-              option.name === "OG Mode" ? filters.isOg :
-              filters.onlyBonded;
+            const isActive =
+              option.name === "Pump"
+                ? filters.isPumpSearch
+                : option.name === "Bonk"
+                  ? filters.isBonkSearch
+                  : option.name === "OG Mode"
+                    ? filters.isOg
+                    : filters.onlyBonded;
 
-            const filterKey = 
-              option.name === "Pump" ? "isPumpSearch" :
-              option.name === "Bonk" ? "isBonkSearch" :
-              option.name === "OG Mode" ? "isOg" :
-              "onlyBonded";
+            const filterKey =
+              option.name === "Pump"
+                ? "isPumpSearch"
+                : option.name === "Bonk"
+                  ? "isBonkSearch"
+                  : option.name === "OG Mode"
+                    ? "isOg"
+                    : "onlyBonded";
 
             return (
               <button
@@ -338,10 +371,11 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
       </div>
 
       {/* Token List */}
-      <div className="flex-1 overflow-hidden px-4 pt-2 h-[550px]">
+      <div className="h-[550px] flex-1 overflow-hidden px-4 pt-2">
         <div className="mb-2">
           <span className="text-sm tracking-wider text-neutral-400">
-            {isSearching ? "Search Results" : "History"} ({displayTokens.length})
+            {isSearching ? "Search Results" : "History"} ({displayTokens.length}
+            )
             {isSearchLoading && (
               <span className="ml-2 text-xs text-blue-400">Searching...</span>
             )}
@@ -349,22 +383,24 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
         </div>
         {displayTokens.length === 0 ? (
           <p className="text-sm text-neutral-500">
-            {isSearchLoading 
-              ? "Searching..." 
-              : isSearching 
-                ? "No search results found." 
-                : "No tokens available."
-            }
+            {isSearchLoading
+              ? "Searching..."
+              : isSearching
+                ? "No search results found."
+                : "No tokens available."}
           </p>
         ) : (
-          <ul className="flex flex-col gap-4 h-full overflow-y-auto">
+          <ul className="flex h-full flex-col gap-4 overflow-y-auto">
             {displayTokens.map((token) => {
               const mc = formatSmartNumber(token.fully_diluted_value || 0);
-              const vol = formatSmartNumber((token.total_buy_volume_1h || 0) + (token.total_sell_volume_1h || 0));
+              const vol = formatSmartNumber(
+                (token.total_buy_volume_1h || 0) +
+                  (token.total_sell_volume_1h || 0),
+              );
               const liq = formatSmartNumber(token.total_liquidity_usd || 0);
-              
+
               return (
-                <TokenListItem 
+                <TokenListItem
                   key={token.mint}
                   token={token}
                   mc={mc}
@@ -382,107 +418,96 @@ export default function SearchModal({ open, onClose, onSubmit, onSearch }: Searc
 }
 
 // Separate component with new design - matches the history item design
-const TokenListItem = React.memo(({ 
-  token, 
-  mc, 
-  vol, 
-  liq, 
-  onSelect 
-}: { 
-  token: Token; 
-  mc: string; 
-  vol: string; 
-  liq: string; 
-  onSelect: (token: Token) => void;
-}) => {
-  const handleClick = useCallback(() => {
-    onSelect(token);
-  }, [onSelect, token]);
+const TokenListItem = React.memo(
+  ({
+    token,
+    mc,
+    vol,
+    liq,
+    onSelect,
+  }: {
+    token: Token;
+    mc: string;
+    vol: string;
+    liq: string;
+    onSelect: (token: Token) => void;
+  }) => {
+    const handleClick = useCallback(() => {
+      onSelect(token);
+    }, [onSelect, token]);
 
-  return (
-    <li
-      className="flex cursor-pointer items-center justify-between gap-4 rounded text-sm transition-colors hover:bg-neutral-700/50 px-2 py-2"
-      onClick={handleClick}
-    >
-      <div className="flex w-48 items-center gap-4">
-        {/* Avatar with border and overlay icon */}
-        <div className="relative flex-shrink-0">
-          <TokenLogo token={token} />
-          {/* Overlay icon */}
-          <div className="absolute -right-1 -bottom-1 flex h-5 w-5 items-center justify-center rounded-full border border-teal-400 bg-neutral-900">
-            <span className="text-[9px] font-bold text-white">
-              R
-            </span>
-          </div>
-        </div>
-        {/* Text content */}
-        <div className="max-w-[200px] min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="block truncate font-medium text-white">
-              {token.symbol} {token.name}
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                navigator.clipboard.writeText(token.mint);
-              }}
-              className="flex-shrink-0 text-neutral-400 transition-colors hover:text-neutral-300"
-              title="Copy address"
-            >
-              <svg
-                className="h-4 w-4"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
-              </svg>
-            </button>
-          </div>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-xs font-medium text-teal-400">
-              3mo
-            </span>
-            <CiUser className="size-4" />
-            <CiGlobe className="size-4" />
-            <FaTelegramPlane className="size-4" />
-          </div>
-        </div>
-      </div>
-
-      {/* Financial metrics */}
-      <div className="flex h-full items-center gap-6 text-xs whitespace-nowrap">
-        <span className="text-neutral-400">
-          MC{" "}
-          <span className="text-lg font-medium text-white">
-            ${mc}
-          </span>
-        </span>
-        <span className="text-neutral-400">
-          V{" "}
-          <span className="text-lg font-medium text-white">
-            ${vol}
-          </span>
-        </span>
-        <span className="text-neutral-400">
-          L{" "}
-          <span className="text-lg font-medium text-white">
-            ${liq}
-          </span>
-        </span>
-      </div>
-
-      {/* Action button */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelect(token);
-        }}
-        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white transition-colors hover:bg-blue-600"
-        title="Select token"
+    return (
+      <li
+        className="flex cursor-pointer items-center justify-between gap-4 rounded px-2 py-2 text-sm transition-colors hover:bg-neutral-700/50"
+        onClick={handleClick}
       >
-        <FaBolt className="h-4 w-4" />
-      </button>
-    </li>
-  );
-});
+        <div className="flex w-48 items-center gap-4">
+          {/* Avatar with border and overlay icon */}
+          <div className="relative flex-shrink-0">
+            <TokenLogo token={token} />
+            {/* Overlay icon */}
+            <div className="absolute -right-1 -bottom-1 flex h-5 w-5 items-center justify-center rounded-full border border-teal-400 bg-neutral-900">
+              <span className="text-[9px] font-bold text-white">R</span>
+            </div>
+          </div>
+          {/* Text content */}
+          <div className="max-w-[200px] min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="block truncate font-medium text-white">
+                {token.symbol} {token.name}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigator.clipboard.writeText(token.mint);
+                }}
+                className="flex-shrink-0 text-neutral-400 transition-colors hover:text-neutral-300"
+                title="Copy address"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+                </svg>
+              </button>
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-xs font-medium text-teal-400">3mo</span>
+              <CiUser className="size-4" />
+              <CiGlobe className="size-4" />
+              <FaTelegramPlane className="size-4" />
+            </div>
+          </div>
+        </div>
+
+        {/* Financial metrics */}
+        <div className="flex h-full items-center gap-6 text-xs whitespace-nowrap">
+          <span className="text-neutral-400">
+            MC <span className="text-lg font-medium text-white">${mc}</span>
+          </span>
+          <span className="text-neutral-400">
+            V <span className="text-lg font-medium text-white">${vol}</span>
+          </span>
+          <span className="text-neutral-400">
+            L <span className="text-lg font-medium text-white">${liq}</span>
+          </span>
+        </div>
+
+        {/* Action button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(token);
+          }}
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white transition-colors hover:bg-blue-600"
+          title="Select token"
+        >
+          <FaBolt className="h-4 w-4" />
+        </button>
+      </li>
+    );
+  },
+);

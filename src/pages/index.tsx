@@ -137,7 +137,7 @@ export default function Home() {
 
   // Filter tokens when search changes
   // Fetch from backend /search endpoint when the search term changes
-  useEffect(() => {
+/*   useEffect(() => {
     const trimmed = search.trim();
 
     // 1. Empty term ⇒ show everything we already have in memory
@@ -154,18 +154,14 @@ export default function Home() {
 
     // In local dev, use Next.js API proxy to avoid CORS; in prod, hit service directly
     const isLocalhost = typeof window !== "undefined" && window.location.hostname === "localhost";
-    const baseURL = isLocalhost
-      ? "/api/token-search"
-      : env.NEXT_PUBLIC_TOKEN_SERVICE_URL || env.NEXT_PUBLIC_API_URL || env.NEXT_PUBLIC_BACKEND_URL || "";
+    const baseURL = env.NEXT_PUBLIC_WEBSOCKET_URL;
 
     if (!baseURL) {
       console.error("Token service URL missing – check env variables.");
       return;
     }
 
-    const url = isLocalhost
-      ? `${baseURL}?${param}=${encodeURIComponent(trimmed)}`
-      : `${baseURL}/search?${param}=${encodeURIComponent(trimmed)}`;
+    const url = `${baseURL}/search?${param}=${encodeURIComponent(trimmed)}`;
 
     const controller = new AbortController();
 
@@ -190,7 +186,7 @@ export default function Home() {
       });
 
     return () => controller.abort();
-  }, [search]);
+  }, [search]); */
 
   const handleTimeframeClick = (tf: string) => {
     setSelectedTimeframe(tf as (typeof timeframes)[number]);
