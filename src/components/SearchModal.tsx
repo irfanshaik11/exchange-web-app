@@ -158,7 +158,7 @@ export default function SearchModal({
         const token = await response.json();
         // API returns single token object, convert to array for consistency
         setSearchResults(
-          Array.isArray(token.results) ? token.results : [token.results],
+          Array.isArray(token.results) ? token.results : [token],
         );
       } else if (response.status === 404) {
         setSearchResults([]);
