@@ -8,6 +8,7 @@ import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiStar } from "react-icons/fi";
 import SearchModal from "./SearchModal";
+import type { Timeframe } from "../pages/index";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -23,6 +24,7 @@ interface HeaderProps {
   search?: string;
   setSearch?: (val: string) => void;
   showSearch?: boolean;
+  selectedTimeframe?: Timeframe;
 }
 
 const DepositModal = dynamic(() => import("./DepositModal"), {
@@ -41,6 +43,7 @@ export default function Header({
   search = "",
   setSearch,
   showSearch = true,
+  selectedTimeframe = "24h",
 }: HeaderProps) {
   const router = useRouter();
   const isDiscover = router.pathname === "/";
@@ -209,6 +212,7 @@ export default function Header({
       <SearchModal
         open={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
+        selectedTimeframe={selectedTimeframe}
         onSubmit={(q) => {
           const trimmed = q.trim();
           // If it's likely a token address navigate directly to trade page

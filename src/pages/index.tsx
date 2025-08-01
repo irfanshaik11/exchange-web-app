@@ -61,6 +61,8 @@ function shuffleArray<T extends NonNullable<unknown>>(array: T[]): T[] {
 // Add this type extension after importing Token
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
+export type Timeframe = "5m" | "1h" | "6h" | "24h";
+
 export default function Home() {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -74,9 +76,9 @@ export default function Home() {
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const isDiscover = router.pathname === "/";
-  const timeframes = ["5m", "1h", "6h", "24h"] as const;
+  const timeframes = ["5m", "1h", "6h", "24h"] as Timeframe[];
   const [selectedTimeframe, setSelectedTimeframe] =
-    useState<(typeof timeframes)[number]>("24h");
+    useState<Timeframe>("24h");
   const { user, loading: userLoading, refreshUser } = useUser();
   const [selectedTab, setSelectedTab] = useState<"dex" | "trending">("trending");
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
@@ -189,7 +191,7 @@ export default function Home() {
   }, [search]); */
 
   const handleTimeframeClick = (tf: string) => {
-    setSelectedTimeframe(tf as (typeof timeframes)[number]);
+    setSelectedTimeframe(tf as Timeframe);
     setSortKey("volume");
     setSortDirection("desc");
     // Sort by volume for the new timeframe
@@ -280,7 +282,7 @@ export default function Home() {
       </Head>
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         {/* Header */}
-        <Header search={search} setSearch={setSearch} />
+        <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
         {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-20">
           <div className="flex max-w-7xl items-center gap-6">
@@ -308,7 +310,7 @@ export default function Home() {
             </div>
             {/* Timeframes Row (for both tabs) */}
             <div className="flex max-w-7xl items-center gap-4 text-sm font-medium">
-              {timeframes.map((tf) => (
+              {timeframes.map((tf: Timeframe) => (
                 <button
                   key={tf}
                   className={
