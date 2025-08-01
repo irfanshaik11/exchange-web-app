@@ -177,15 +177,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
         {/* Left: Logo, Symbol, Name, Clipboard, Age */}
         <div className="flex min-w-0 items-center gap-3">
           {/* Logo */}
-          {loading && !showInitial && (
+          {loading && !showInitial ? (
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-t-4 border-b-4 border-blue-500"></div>
-          )}
-          {loading && showInitial && (
-            <div className="h-10 w-10 rounded-full border border-neutral-800 flex items-center justify-center">
-              {token.name.charAt(0)}
-            </div>
-          )}
-          {meta?.image && (
+          ) : meta?.image ? (
             <img
               src={meta.image}
               alt={token.name}
@@ -193,7 +187,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
               height={36}
               className="min-h-[36px] min-w-[36px] rounded-full border border-neutral-800"
             />
-          )}
+          ) : <div className="h-10 w-10 rounded-full border border-neutral-800 flex items-center justify-center">
+            {token.name.charAt(0)}
+          </div>}
           {/* Symbol, Name, Clipboard, Age */}
           <div className="flex min-w-0 flex-col">
             <div className="flex items-center gap-1.5">
