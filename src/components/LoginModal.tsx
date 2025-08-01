@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { login as apiLogin, register as apiRegister, phantomLogin as apiPhantomLogin, googleAuthUrl } from '../utils/api';
+import { login as apiLogin, register as apiRegister, phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, googleAuthUrl } from '../utils/api';
 import Cookies from 'js-cookie';
 import { useUser } from "./UserContext";
 import InterstatePopout from './InterstatePopout';
@@ -18,6 +18,7 @@ interface LoginModalProps {
 declare global {
   interface Window {
     solana?: any;
+    ethereum?: any;
   }
 }
 
@@ -29,10 +30,12 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const { refreshUser, user, loading: userLoading } = useUser();
   const [wiggle, setWiggle] = useState(false);
   const { connectors, connectWith, connecting } = useWallet();
+  const [walletStep, setWalletStep] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -122,10 +125,10 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   }
 
   // Phantom Wallet Login handler
-  async function handlePhantomLogin(e: React.FormEvent) {
-    e.preventDefault();
+  async function handlePhantomLogin() {
     setLoading(true);
     setError(null);
+    setWalletError(null);
     setSuccess(null);
     const provider = window.solana;
     if (!provider) {
@@ -157,9 +160,90 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       }
     } catch (error: any) {
       if (error && error.code === 4001) {
-        setError('You must approve the request in Phantom.');
+        setWalletError('You must approve the request in Phantom.');
       } else {
-        setError(error?.message || 'Phantom login failed');
+        setWalletError(error?.message || 'Phantom login failed');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // MetaMask Wallet Login handler
+  async function handleMetamaskLogin() {
+    
+    setLoading(true);
+    setError(null);
+    setWalletError(null);
+    setSuccess(null);
+    
+    // Get the specific MetaMask provider
+    let metamaskProvider = null;
+    
+    // Check if we have multiple providers
+    if (window.ethereum?.providers) {
+      metamaskProvider = window.ethereum.providers.find(provider => provider.isMetaMask);
+      if (!metamaskProvider) {
+        alert('MetaMask wallet not found! Please install MetaMask extension.');
+        setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
+        setLoading(false);
+        return;
+      }
+    } else if (window.ethereum?.isMetaMask) {
+      // Single provider that is MetaMask
+      console.log('Single MetaMask provider detected');
+      metamaskProvider = window.ethereum;
+    } else {
+      console.log('No MetaMask provider found');
+      alert('MetaMask wallet not found! Please install MetaMask extension');
+      setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
+      setLoading(false);
+      return;
+    }
+    
+    
+    try {
+      console.log('Requesting MetaMask accounts...');
+      
+      // Request accounts from MetaMask specifically
+      const accounts = await metamaskProvider.request({ method: 'eth_requestAccounts' });
+      const address = accounts[0];
+      
+      if (!address) {
+        setLoading(false);
+        return;
+      }
+     
+      const message = `Login to Interstate with nonce: ${Date.now()}`;
+      
+      const signature = await metamaskProvider.request({
+        method: 'personal_sign',
+        params: [message, address]
+      });
+      
+   
+      const { token } = await apiMetamaskLogin(address, signature, message);
+      
+      if (token) {
+        Cookies.set('token', token, { expires: 7, path: '/' });
+        await refreshUser();
+        setSuccess('MetaMask login successful!');
+        setTimeout(() => {
+          setSuccess(null);
+          onClose();
+        }, 1200);
+      } else {
+        setWalletError('MetaMask login failed - no token received');
+      }
+    } catch (error: any) {
+      if (error && error.code === 4001) {
+        setWalletError('You must approve the request in MetaMask.');
+      } else if (error?.code === -32002) {
+        setWalletError('Please check MetaMask - request is pending.');
+      } else if (error?.message) {
+        setWalletError(error.message);
+      } else {
+        setWalletError('MetaMask login failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -191,117 +275,178 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       >
         ×
       </button>
-      {mode === 'login' ? (
+      {walletStep ? (
         <>
-          <div className="text-xl font-bold mb-4 text-center">Login</div>
-          <form onSubmit={handleLogin}>
-            <div className="mb-3">
-              <label className="block text-xs mb-1">Email</label>
-              <input
-                type="email"
-                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="Enter email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-              />
-              <label className="block text-xs mb-1">Password</label>
-              <input
-                type="password"
-                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="Enter password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
-              <div className="flex justify-end mb-2">
-                <InterstateButton variant="secondary" size="sm" type="button" className="text-xs text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto">Forgot password?</InterstateButton>
-              </div>
-            </div>
-            {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
-            {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
-            <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Login</InterstateButton>
-          </form>
-          <div className="text-center flex flex-row items-center w-full text-xs mt-3 text-neutral-400 gap-1 justify-center">
-            Don't have an account?{' '}
-            <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('signup')}>Sign up</button>
+          <div className="flex items-center mb-4">
+            <button onClick={() => {
+              setWalletStep(false);
+              setWalletError(null);
+            }} className="absolute top-3 text-neutral-400 hover:text-white text-xl">
+              ←
+            </button>
+            <div className="text-xl font-bold text-center flex-1">Select Wallet</div>
+          </div>
+          {walletError && <div className="text-xs text-red-400 mb-2 text-center">{walletError}</div>}
+          <div className="flex flex-col gap-3 mt-6">
+                         <InterstateButton
+               type="button"
+               fullWidth
+               variant="secondary"
+               className="flex items-center gap-2"
+               onClick={() => {
+                 handleMetamaskLogin();
+               }}
+               disabled={loading}
+             >
+               <span className="flex items-center gap-2 font-normal text-sm">
+                 <span role="img" aria-label="MetaMask">🦊</span>
+                 MetaMask
+               </span>
+             </InterstateButton>
+            <InterstateButton
+              type="button"
+              fullWidth
+              variant="secondary"
+              className="flex items-center gap-2"
+              onClick={() => {/* TODO: implement Rainbow connect */ alert('Connect Rainbow (to be implemented)'); }}
+            >
+              <span className="flex items-center gap-2 font-normal text-sm">
+                <span role="img" aria-label="Rainbow">🌈</span>
+                Rainbow
+              </span>
+            </InterstateButton>
+                         <InterstateButton
+               type="button"
+               fullWidth
+               variant="secondary"
+               className="flex items-center gap-2"
+               onClick={() => {
+                 handlePhantomLogin();
+               }}
+               disabled={loading}
+             >
+              <span className="flex items-center gap-2 font-normal text-sm">
+                <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-6 h-6 rounded-[100px]" />
+                Phantom
+              </span>
+            </InterstateButton>
           </div>
         </>
       ) : (
-        <form onSubmit={handleRegister}>
-          <div className="text-xl font-bold mb-4 text-center">Sign Up</div>
-          <div className="mb-3">
-            <label className="block text-xs mb-1">Username</label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="Enter username"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              required
-            />
-            <label className="block text-xs mb-1">Email</label>
-            <input
-              type="email"
-              className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="Enter email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
-            <label className="block text-xs mb-1">Password</label>
-            <input
-              type="password"
-              className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="Enter password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
-          {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
-          <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Sign Up</InterstateButton>
-          <div className="text-center text-xs mt-3 text-neutral-400">
-            Already have an account?{' '}
-            <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('login')}>Login</button>
-          </div>
-          <div className="text-xs text-neutral-500 mt-4 text-center">
-            By creating an account, you agree to Interstate's{' '}
-            <a href="#" className="underline">Privacy Policy</a> and{' '}
-            <a href="#" className="underline">Terms of Service</a>.
-          </div>
-        </form>
-      )}
-      <hr  className="mt-4 border-neutral-600"/>
-      <div className="flex flex-col gap-2 mt-4">
-        <InterstateButton
-          type="button"
-          fullWidth
-          variant="secondary"
-          className="mb-1"
-          onClick={handleGoogleLogin}
-          disabled={loading}
-        >
-          <span className="flex items-center justify-center gap-2 font-normal text-sm">
-            <img src="https://img.icons8.com/color/512/google-logo.png" alt="Google" className="w-6 h-6" />
-            Continue with Google
-          </span>
-        </InterstateButton>
+        <>
+          {mode === 'login' ? (
+            <>
+              <div className="text-xl font-bold mb-4 text-center">Login</div>
+              <form onSubmit={handleLogin}>
+                <div className="mb-3">
+                  <label className="block text-xs mb-1">Email</label>
+                  <input
+                    type="email"
+                    className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Enter email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    required
+                  />
+                  <label className="block text-xs mb-1">Password</label>
+                  <input
+                    type="password"
+                    className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    placeholder="Enter password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    required
+                  />
+                  <div className="flex justify-end mb-2">
+                    <InterstateButton variant="secondary" size="sm" type="button" className="text-xs text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto">Forgot password?</InterstateButton>
+                  </div>
+                </div>
+                {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
+                {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
+                <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Login</InterstateButton>
+              </form>
+              <div className="text-center flex flex-row items-center w-full text-xs mt-3 text-neutral-400 gap-1 justify-center">
+                Don't have an account?{' '}
+                <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('signup')}>Sign up</button>
+              </div>
+            </>
+          ) : (
+            <form onSubmit={handleRegister}>
+              <div className="text-xl font-bold mb-4 text-center">Sign Up</div>
+              <div className="mb-3">
+                <label className="block text-xs mb-1">Username</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Enter username"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  required
+                />
+                <label className="block text-xs mb-1">Email</label>
+                <input
+                  type="email"
+                  className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Enter email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                />
+                <label className="block text-xs mb-1">Password</label>
+                <input
+                  type="password"
+                  className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="Enter password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
+              {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
+              <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Sign Up</InterstateButton>
+              <div className="text-center text-xs mt-3 text-neutral-400">
+                Already have an account?{' '}
+                <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('login')}>Login</button>
+              </div>
+              <div className="text-xs text-neutral-500 mt-4 text-center">
+                By creating an account, you agree to Interstate's{' '}
+                <a href="#" className="underline">Privacy Policy</a> and{' '}
+                <a href="#" className="underline">Terms of Service</a>.
+              </div>
+            </form>
+          )}
+          <hr  className="mt-4 border-neutral-600"/>
+          <div className="flex flex-col gap-2 mt-4">
+            <InterstateButton
+              type="button"
+              fullWidth
+              variant="secondary"
+              className="mb-1"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+            >
+              <span className="flex items-center justify-center gap-2 font-normal text-sm">
+                <img src="https://img.icons8.com/color/512/google-logo.png" alt="Google" className="w-6 h-6" />
+                Continue with Google
+              </span>
+            </InterstateButton>
 
-        <InterstateButton
-          type="button"
-          fullWidth
-          variant="secondary"
-          onClick={handlePhantomLogin}
-          disabled={loading}
-        >
-          <span className="flex items-center justify-center gap-2 font-normal text-sm">
-            <img src="https://docs.phantom.com/~gitbook/image?url=https%3A%2F%2F187760183-files.gitbook.io%2F%7E%2Ffiles%2Fv0%2Fb%2Fgitbook-x-prod.appspot.com%2Fo%2Fspaces%252F-MVOiF6Zqit57q_hxJYp%252Ficon%252FU7kNZ4ygz4QW1rUwOuTT%252FWhite%2520Ghost_docs_nu.svg%3Falt%3Dmedia%26token%3D447b91f6-db6d-4791-902d-35d75c19c3d1&width=48&height=48&sign=23b24c2a&sv=2" alt="Phantom" className="w-6 h-6 rounded-[100px]" />
-            Continue with crypto wallet
-          </span>
-        </InterstateButton>
-      </div>
+            <InterstateButton
+              type="button"
+              fullWidth
+              variant="secondary"
+              onClick={() => setWalletStep(true)}
+              disabled={loading}
+            >
+              <span className="flex items-center justify-center gap-2 font-normal text-sm">
+                <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-6 h-6 rounded-[100px]" />
+                Continue with crypto wallet
+              </span>
+            </InterstateButton>
+          </div>
+        </>
+      )}
     </InterstatePopout>
   );
 } 

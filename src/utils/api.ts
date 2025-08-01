@@ -75,6 +75,18 @@ export const phantomLogin = (
     body: { publicKey, signature, message },
   });
 
+export const metamaskLogin = (
+  address: string,
+  signature: string,
+  message: string,
+) => {
+
+  return apiFetch<{ token: string }>("/api/users/metamask/login", {
+    method: "POST",
+    body: { address, signature, message },
+  });
+};
+
 /** Returns the Google OAuth redirect URL (client will navigate to it) */
 export const googleAuthUrl = `${env.NEXT_PUBLIC_BACKEND_URL}/api/users/auth/google`;
 
