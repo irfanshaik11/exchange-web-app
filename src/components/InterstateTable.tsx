@@ -183,17 +183,17 @@ const TokenInfo: React.FC<{
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
 
-  const similarTokens = useMemo(() => 
-    sortedRows
-      .filter(row => row.token.mint !== token.mint)
-      .sort((a, b) => {
-        const diffA = Math.abs(a.token.fully_diluted_value - token.fully_diluted_value);
-        const diffB = Math.abs(b.token.fully_diluted_value - token.fully_diluted_value);
-        return diffA - diffB;
-      })
-      .slice(0, 2), 
-    [token, sortedRows]
-  );
+  // const similarTokens = useMemo(() => 
+  //   sortedRows
+  //     .filter(row => row.token.mint !== token.mint)
+  //     .sort((a, b) => {
+  //       const diffA = Math.abs(a.token.fully_diluted_value - token.fully_diluted_value);
+  //       const diffB = Math.abs(b.token.fully_diluted_value - token.fully_diluted_value);
+  //       return diffA - diffB;
+  //     })
+  //     .slice(0, 2), 
+  //   [token, sortedRows]
+  // );
 
   const tooltipContent = (
     <div className="p-3 min-w-[280px]">
@@ -210,7 +210,7 @@ const TokenInfo: React.FC<{
           </span>
         </p>
       </div>
-      {similarTokens.length > 0 && (
+      {/* {similarTokens.length > 0 && (
         <div className="border-t border-neutral-700 pt-2">
           <p className="mb-2 text-xs font-semibold text-neutral-300">Similar Tokens:</p>
           <div className="space-y-1">
@@ -229,17 +229,18 @@ const TokenInfo: React.FC<{
             ))}
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 
   return (
     <div className="flex items-center gap-3">
       <InterstateTooltip
-        width={300}
+        width={260}
         height={undefined}
         xOffset="ml-0"
         label={tooltipContent}
+        className="bg-neutral-900/100"
       >
         <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} />
       </InterstateTooltip>
