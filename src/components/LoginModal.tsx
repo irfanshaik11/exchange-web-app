@@ -35,7 +35,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const { refreshUser, user, loading: userLoading } = useUser();
   const [wiggle, setWiggle] = useState(false);
   const { connectors, connectWith, connecting } = useWallet();
-  const [walletStep, setWalletStep] = useState(false);
+  const [showWalletOptions, setShowWalletOptions] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -275,177 +275,175 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       >
         ×
       </button>
-      {walletStep ? (
+      
+      {mode === 'login' ? (
         <>
-          <div className="flex items-center mb-4">
-            <button onClick={() => {
-              setWalletStep(false);
-              setWalletError(null);
-            }} className="absolute top-3 text-neutral-400 hover:text-white text-xl">
-              ←
-            </button>
-            <div className="text-xl font-bold text-center flex-1">Select Wallet</div>
-          </div>
-          {walletError && <div className="text-xs text-red-400 mb-2 text-center">{walletError}</div>}
-          <div className="flex flex-col gap-3 mt-6">
-                         <InterstateButton
-               type="button"
-               fullWidth
-               variant="secondary"
-               className="flex items-center gap-2"
-               onClick={() => {
-                 handleMetamaskLogin();
-               }}
-               disabled={loading}
-             >
-               <span className="flex items-center gap-2 font-normal text-sm">
-                 <span role="img" aria-label="MetaMask">🦊</span>
-                 MetaMask
-               </span>
-             </InterstateButton>
-            <InterstateButton
-              type="button"
-              fullWidth
-              variant="secondary"
-              className="flex items-center gap-2"
-              onClick={() => {/* TODO: implement Rainbow connect */ alert('Connect Rainbow (to be implemented)'); }}
-            >
-              <span className="flex items-center gap-2 font-normal text-sm">
-                <span role="img" aria-label="Rainbow">🌈</span>
-                Rainbow
-              </span>
-            </InterstateButton>
-                         <InterstateButton
-               type="button"
-               fullWidth
-               variant="secondary"
-               className="flex items-center gap-2"
-               onClick={() => {
-                 handlePhantomLogin();
-               }}
-               disabled={loading}
-             >
-              <span className="flex items-center gap-2 font-normal text-sm">
-                <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-6 h-6 rounded-[100px]" />
-                Phantom
-              </span>
-            </InterstateButton>
+          <div className="text-xl font-bold mb-4 text-center">Login</div>
+          <form onSubmit={handleLogin}>
+            <div className="mb-3">
+              <label className="block text-xs mb-1">Email</label>
+              <input
+                type="email"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+              <label className="block text-xs mb-1">Password</label>
+              <input
+                type="password"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+              <div className="flex justify-end mb-2">
+                <InterstateButton variant="secondary" size="sm" type="button" className="text-xs text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto">Forgot password?</InterstateButton>
+              </div>
+            </div>
+            {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
+            {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
+            <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Login</InterstateButton>
+          </form>
+          <div className="text-center flex flex-row items-center w-full text-xs mt-3 text-neutral-400 gap-1 justify-center">
+            Don't have an account?{' '}
+            <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('signup')}>Sign up</button>
           </div>
         </>
       ) : (
-        <>
-          {mode === 'login' ? (
-            <>
-              <div className="text-xl font-bold mb-4 text-center">Login</div>
-              <form onSubmit={handleLogin}>
-                <div className="mb-3">
-                  <label className="block text-xs mb-1">Email</label>
-                  <input
-                    type="email"
-                    className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Enter email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    required
-                  />
-                  <label className="block text-xs mb-1">Password</label>
-                  <input
-                    type="password"
-                    className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Enter password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    required
-                  />
-                  <div className="flex justify-end mb-2">
-                    <InterstateButton variant="secondary" size="sm" type="button" className="text-xs text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto">Forgot password?</InterstateButton>
-                  </div>
-                </div>
-                {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
-                {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
-                <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Login</InterstateButton>
-              </form>
-              <div className="text-center flex flex-row items-center w-full text-xs mt-3 text-neutral-400 gap-1 justify-center">
-                Don't have an account?{' '}
-                <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('signup')}>Sign up</button>
-              </div>
-            </>
-          ) : (
-            <form onSubmit={handleRegister}>
-              <div className="text-xl font-bold mb-4 text-center">Sign Up</div>
-              <div className="mb-3">
-                <label className="block text-xs mb-1">Username</label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Enter username"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  required
-                />
-                <label className="block text-xs mb-1">Email</label>
-                <input
-                  type="email"
-                  className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Enter email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                />
-                <label className="block text-xs mb-1">Password</label>
-                <input
-                  type="password"
-                  className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  placeholder="Enter password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
-              {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
-              <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Sign Up</InterstateButton>
-              <div className="text-center text-xs mt-3 text-neutral-400">
-                Already have an account?{' '}
-                <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('login')}>Login</button>
-              </div>
-              <div className="text-xs text-neutral-500 mt-4 text-center">
-                By creating an account, you agree to Interstate's{' '}
-                <a href="#" className="underline">Privacy Policy</a> and{' '}
-                <a href="#" className="underline">Terms of Service</a>.
-              </div>
-            </form>
-          )}
-          <hr  className="mt-4 border-neutral-600"/>
-          <div className="flex flex-col gap-2 mt-4">
-            <InterstateButton
-              type="button"
-              fullWidth
-              variant="secondary"
-              className="mb-1"
-              onClick={handleGoogleLogin}
-              disabled={loading}
-            >
-              <span className="flex items-center justify-center gap-2 font-normal text-sm">
-                <img src="https://img.icons8.com/color/512/google-logo.png" alt="Google" className="w-6 h-6" />
-                Continue with Google
-              </span>
-            </InterstateButton>
-
-            <InterstateButton
-              type="button"
-              fullWidth
-              variant="secondary"
-              onClick={() => setWalletStep(true)}
-              disabled={loading}
-            >
-              <span className="flex items-center justify-center gap-2 font-normal text-sm">
-                <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-6 h-6 rounded-[100px]" />
-                Continue with crypto wallet
-              </span>
-            </InterstateButton>
+        <form onSubmit={handleRegister}>
+          <div className="text-xl font-bold mb-4 text-center">Sign Up</div>
+          <div className="mb-3">
+            <label className="block text-xs mb-1">Username</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="Enter username"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              required
+            />
+            <label className="block text-xs mb-1">Email</label>
+            <input
+              type="email"
+              className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="Enter email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
+            <label className="block text-xs mb-1">Password</label>
+            <input
+              type="password"
+              className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="Enter password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+            />
           </div>
-        </>
+          {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
+          {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
+          <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Sign Up</InterstateButton>
+          <div className="text-center text-xs mt-3 text-neutral-400">
+            Already have an account?{' '}
+            <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('login')}>Login</button>
+          </div>
+          <div className="text-xs text-neutral-500 mt-4 text-center">
+            By creating an account, you agree to Interstate's{' '}
+            <a href="#" className="underline">Privacy Policy</a> and{' '}
+            <a href="#" className="underline">Terms of Service</a>.
+          </div>
+        </form>
+      )}
+      <hr  className="mt-4 border-neutral-600"/>
+      <div className="flex flex-col gap-2 mt-4">
+        <InterstateButton
+          type="button"
+          fullWidth
+          variant="secondary"
+          className="mb-1"
+          onClick={handleGoogleLogin}
+          disabled={loading}
+        >
+          <span className="flex items-center justify-center gap-2 font-normal text-sm">
+            <img src="https://img.icons8.com/color/512/google-logo.png" alt="Google" className="w-6 h-6" />
+            Continue with Google
+          </span>
+        </InterstateButton>
+
+        <InterstateButton
+          type="button"
+          fullWidth
+          variant="secondary"
+          onClick={() => setShowWalletOptions(!showWalletOptions)}
+          disabled={loading}
+          className="flex items-center justify-between hover:bg-neutral-800 transition-colors"
+        >
+          <span className="flex items-center gap-2 font-normal text-sm">
+            <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-6 h-6 rounded-[100px]" />
+            Continue with crypto wallet 
+          </span>
+          <div className={`flex items-center justify-center transform transition-transform duration-200 ${showWalletOptions ? 'rotate-180' : ''}`}>
+            <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </InterstateButton>
+      </div>
+      
+      {walletError && <div className="text-xs text-red-400 mt-4 text-center">{walletError}</div>}
+
+
+      {/* Wallet Options with Better Design */}
+      {showWalletOptions && (
+        <div className="mt-4 overflow-hidden transition-all duration-300 ease-in-out">
+          <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50">
+            <div className="text-xs text-neutral-400 mb-3 font-medium">Choose your wallet</div>
+            <div className="space-y-2">
+              {/* MetaMask */}
+              <button
+                type="button"
+                className="w-full flex items-center justify-between p-3 rounded-lg bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 transition-all duration-200"
+                onClick={handleMetamaskLogin}
+                disabled={loading}
+              >
+                <div className="flex items-center gap-3">
+                  <img src="/MetaMask-icon-fox.svg" alt="MetaMask" className="w-5 h-5" />
+                  <span className="font-medium text-sm">MetaMask</span>
+                </div>
+              </button>
+
+              {/* Phantom */}
+              <button
+                type="button"
+                className="w-full flex items-center justify-between p-3 rounded-lg bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 transition-all duration-200"
+                onClick={handlePhantomLogin}
+                disabled={loading}
+              >
+                <div className="flex items-center gap-3">
+                  <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-5 h-5 rounded-full" />
+                  <span className="font-medium text-sm">Phantom</span>
+                </div>
+              </button>
+
+              {/* Rainbow Wallet */}
+              <button
+                type="button"
+                className="w-full flex items-center justify-between p-3 rounded-lg bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 transition-all duration-200"
+                onClick={() => {/* TODO: implement Rainbow connect */ alert('Connect Rainbow (to be implemented)'); }}
+                disabled={loading}
+              >
+                <div className="flex items-center gap-3">
+                  <img src="/Rainbow_wallet_logo.png" alt="Rainbow" className="w-5 h-5 rounded-full" />
+                  <span className="font-medium text-sm">Rainbow</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </InterstatePopout>
   );
