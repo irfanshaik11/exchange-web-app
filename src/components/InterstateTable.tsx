@@ -16,6 +16,7 @@ import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
 import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
+import { copyToClipboard } from "~/utils/clipboard";
 
 // Types
 type Token = BaseToken & { dexPaid?: boolean; amm?: string };
@@ -289,7 +290,14 @@ const TokenInfo: React.FC<{
             <FaUser className="text-xs" />
             <FaGlobe className="text-xs" />
             <FaSearch className="text-xs" />
-            <FaCopy className="text-xs cursor-pointer hover:text-sky-300 transition-colors" />
+            <FaCopy 
+              className="text-xs cursor-pointer hover:text-sky-300 transition-colors" 
+              onClick={(e) => {
+                e.stopPropagation();
+                copyToClipboard(token.mint, "Token address copied to clipboard!");
+              }}
+              title="Copy token address"
+            />
           </div>
           {i === 1 && (
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-red-600">
