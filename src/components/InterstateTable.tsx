@@ -196,7 +196,7 @@ const TokenInfo: React.FC<{
   // );
 
   const tooltipContent = (
-    <div className="p-3 min-w-[280px]">
+    <div className="p-3 min-w-[240px]">
       <div className="mb-3 flex justify-center">
         <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} />
       </div>
@@ -236,7 +236,7 @@ const TokenInfo: React.FC<{
   return (
     <div className="flex items-center gap-3">
       <InterstateTooltip
-        width={260}
+        width={undefined}
         height={undefined}
         xOffset="ml-0"
         label={tooltipContent}
