@@ -204,7 +204,7 @@ const TokenInfo: React.FC<{
         <div className="text-lg font-bold text-white mb-1">{token.name}</div>
         <div className="text-sm font-medium text-neutral-400 mb-2">({token.symbol})</div>
         <p className="text-base font-semibold text-white">
-          ${formatSmartNumber(token.usd_price)}{' '}
+          $<SubscriptNumber value={token.usd_price} />{' '}
           <span className={`text-sm ${token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {formatPercentChange(token.price_percent_change_1h)}%
           </span>
