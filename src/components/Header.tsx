@@ -220,9 +220,9 @@ export default function Header({
 
           // Otherwise treat as name search and stay on Discover
           if (setSearch) setSearch(trimmed);
-          if (router.pathname !== "/") {
+          if (router.pathname !== "/" && !router.pathname.startsWith("/trade/")) {
             router.push({ pathname: "/", query: { search: trimmed } });
-          } else {
+          } else if (router.pathname === "/") {
             router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
           }
         }}
@@ -238,10 +238,10 @@ export default function Header({
             return;
           }
 
-          // Live updates for longer queries
-          if (router.pathname !== "/") {
+          // Live updates for longer queries - only redirect to home if not on a trade page
+          if (router.pathname !== "/" && !router.pathname.startsWith("/trade/")) {
             router.push({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
-          } else {
+          } else if (router.pathname === "/") {
             router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
           }
           if (setSearch) setSearch(trimmed);
