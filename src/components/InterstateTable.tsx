@@ -16,6 +16,7 @@ import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
 import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
+import { copyToClipboard } from "~/utils/clipboard";
 
 // Types
 type Token = BaseToken & { dexPaid?: boolean; amm?: string };
@@ -68,7 +69,34 @@ const formatPercentChange = (val: number): string => {
   return (val > 0 ? '+' : '') + formatSmartNumber(val);
 };
 
-const getSortableValue = (token: Token, key: string): number => {
+const getSortableValue = (token: Token, key: string, selectedTimeframe?: string): number => {
+  // Handle volume calculation for sorting
+  if (key === 'volume' && selectedTimeframe) {
+    const buyVolume = getTokenStat(token, 'total_buy_volume', selectedTimeframe);
+    const sellVolume = getTokenStat(token, 'total_sell_volume', selectedTimeframe);
+    return buyVolume + sellVolume;
+  }
+  
+  // Handle TXNS calculation for sorting
+  if (key === 'txns' && selectedTimeframe) {
+    const buys = getTokenStat(token, 'total_buys', selectedTimeframe);
+    const sells = getTokenStat(token, 'total_sells', selectedTimeframe);
+    return buys + sells;
+  }
+  
+  // Handle Market Cap sorting - use fully_diluted_value if available, otherwise fallback to usd_price
+  if (key === 'fully_diluted_value') {
+    let val = (token as any).fully_diluted_value;
+    if (val === undefined || val === null) {
+      val = token.usd_price; // fallback to price if market cap not available
+    }
+    if (typeof val === 'string') {
+      val = val.replace(/[$,\s]/g, '');
+    }
+    const num = parseFloat(val);
+    return isNaN(num) ? -Infinity : num;
+  }
+  
   let val = (token as any)[key];
   if (typeof val === 'string') {
     val = val.replace(/[$,\s]/g, '');
@@ -263,7 +291,14 @@ const TokenInfo: React.FC<{
             <FaUser className="text-xs" />
             <FaGlobe className="text-xs" />
             <FaSearch className="text-xs" />
-            <FaCopy className="text-xs cursor-pointer hover:text-sky-300 transition-colors" />
+            <FaCopy 
+              className="text-xs cursor-pointer hover:text-sky-300 transition-colors" 
+              onClick={(e) => {
+                e.stopPropagation();
+                copyToClipboard(token.mint, "Token address copied to clipboard!");
+              }}
+              title="Copy token address"
+            />
           </div>
           {i === 1 && (
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-red-600">
@@ -524,11 +559,11 @@ export default function InterstateTable({
     if (!sortKey) return filteredRows;
     
     return [...filteredRows].sort((a, b) => {
-      const aVal = getSortableValue(a.token, sortKey);
-      const bVal = getSortableValue(b.token, sortKey);
+      const aVal = getSortableValue(a.token, sortKey, selectedTimeframe);
+      const bVal = getSortableValue(b.token, sortKey, selectedTimeframe);
       return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [rows, sortKey, sortDirection, filter.amms]);
+  }, [rows, sortKey, sortDirection, filter.amms, selectedTimeframe]);
 
   // Price animation effect
   useEffect(() => {
