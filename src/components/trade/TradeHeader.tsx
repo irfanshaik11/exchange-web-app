@@ -25,6 +25,7 @@ import { useQuickBuy } from '../QuickBuyContext';
 import InterstateTooltip from '../InterstateTooltip';
 import { useWatchlist } from '../WatchlistContext';
 import { fetchTokenMetadata } from '~/utils/functions';
+import { SubscriptNumber } from "../InterstateTable";
 
 // Helper function to format age
 function getTokenAge(createdAt: string) {
@@ -49,15 +50,15 @@ interface TradeHeaderProps {
 
 const HeaderColumnSection = ({
   label,
-  value,
+  children
 }: {
   label: string;
-  value: React.ReactNode;
+  children: React.ReactNode;
 }) => {
   return (
     <div className="flex flex-col items-start gap-1">
       <span className="text-xs leading-none text-neutral-400">{label}</span>
-      <span className="mt-0.5 text-sm leading-none text-white">{value}</span>
+      <span className="mt-0.5 text-sm leading-none text-white">{children}</span>
     </div>
   );
 };
@@ -176,15 +177,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
         {/* Left: Logo, Symbol, Name, Clipboard, Age */}
         <div className="flex min-w-0 items-center gap-3">
           {/* Logo */}
-          {loading && !showInitial && (
+          {loading && !showInitial ? (
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-t-4 border-b-4 border-blue-500"></div>
-          )}
-          {loading && showInitial && (
-            <div className="h-10 w-10 rounded-full border border-neutral-800 flex items-center justify-center">
-              {token.name.charAt(0)}
-            </div>
-          )}
-          {meta?.image && (
+          ) : meta?.image ? (
             <img
               src={meta.image}
               alt={token.name}
@@ -192,7 +187,9 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
               height={36}
               className="min-h-[36px] min-w-[36px] rounded-full border border-neutral-800"
             />
-          )}
+          ) : <div className="h-10 w-10 rounded-full border border-neutral-800 flex items-center justify-center">
+            {token.name.charAt(0)}
+          </div>}
           {/* Symbol, Name, Clipboard, Age */}
           <div className="flex min-w-0 flex-col">
             <div className="flex items-center gap-1.5">
@@ -225,25 +222,23 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
           </div>
           {/* Price */}
           <HeaderColumnSection
-            label={"Price"}
-            value={`$${formatSmartNumber(token.usd_price)}`}
-          />
+            label={"Price"}>
+              ${<SubscriptNumber value={token.usd_price} />}
+            </HeaderColumnSection>
           <HeaderColumnSection
-            label={"Liquidity"}
-            value={`$${formatSmartNumber(token.total_liquidity_usd)}`}
-          />
+            label={"Liquidity"}>
+              ${formatSmartNumber(token.total_liquidity_usd)}
+            </HeaderColumnSection>
           <HeaderColumnSection
-            label={"Supply"}
-            value={formatSmartNumber(token.total_supply)}
-          />
+            label={"Supply"}>
+              {formatSmartNumber(token.total_supply)}
+            </HeaderColumnSection>
           <HeaderColumnSection
-            label={"Global Fees Paid"}
-            value={
+            label={"Global Fees Paid"}>
               <span className="flex items-center gap-2 text-blue-300">
                 <span className="font-bold">Ξ {formatSmartNumber(token.global_fees_paid)}</span>
               </span>
-            }
-          />
+            </HeaderColumnSection>
         </div>
         {/* Right: Action Icons */}
         <div className="mr-0 ml-auto flex items-center gap-4 pr-1 text-lg text-neutral-300">

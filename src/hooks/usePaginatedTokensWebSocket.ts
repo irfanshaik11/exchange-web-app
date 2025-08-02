@@ -3,7 +3,7 @@ import throttle from 'lodash.throttle';
 import { env } from '../env';
 
 interface UsePaginatedTokensWebSocketParams {
-  filter?: 'marketcap' | 'volume_24h' | 'txs_24h' | 'new' | 'newmarketcap' | 'trending';
+  filter?: 'marketcap' | 'volume_24h' | 'txs_24h' | 'txs_5m' | 'txs_1h' | 'txs_6h' | 'new' | 'newmarketcap' | 'trending';
   order?: 'asc' | 'desc';
   offset?: number;
   limit?: number;

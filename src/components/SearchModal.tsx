@@ -16,6 +16,7 @@ import { LuChartNoAxesColumn } from "react-icons/lu";
 import { TbDropletHalf2Filled } from "react-icons/tb";
 import { CiUser, CiGlobe } from "react-icons/ci";
 import { fetchTokenMetadata } from "~/utils/functions";
+import type { Timeframe } from "../pages/index";
 
 // Updated Token type based on the provided object structure
 export interface Token {
@@ -69,6 +70,7 @@ interface SearchModalProps {
   onClose: () => void;
   onSubmit?: (query: string) => void;
   onQueryChange?: (query: string) => void;
+  selectedTimeframe?: Timeframe;
 }
 
 export function TokenLogo({ token }: { token: any }) {
@@ -113,6 +115,7 @@ export default function SearchModal({
   onClose,
   onSubmit,
   onQueryChange,
+  selectedTimeframe,
 }: SearchModalProps) {
   const [allTokensFilter, setAllTokensFilter] = useState<
     "volume_24h" | "new" | "txs_24h" | "marketcap"
@@ -200,7 +203,7 @@ export default function SearchModal({
   }, [query, searchTokens]);
 
   const { data: allTokens } = usePaginatedTokensWebSocket({
-    filter: "txs_24h",
+    filter: `txs_${selectedTimeframe}`,
     limit: 5,
     order: "desc",
   });

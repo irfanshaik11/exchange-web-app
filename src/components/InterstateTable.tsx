@@ -183,20 +183,20 @@ const TokenInfo: React.FC<{
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
 
-  const similarTokens = useMemo(() => 
-    sortedRows
-      .filter(row => row.token.mint !== token.mint)
-      .sort((a, b) => {
-        const diffA = Math.abs(a.token.fully_diluted_value - token.fully_diluted_value);
-        const diffB = Math.abs(b.token.fully_diluted_value - token.fully_diluted_value);
-        return diffA - diffB;
-      })
-      .slice(0, 2), 
-    [token, sortedRows]
-  );
+  // const similarTokens = useMemo(() => 
+  //   sortedRows
+  //     .filter(row => row.token.mint !== token.mint)
+  //     .sort((a, b) => {
+  //       const diffA = Math.abs(a.token.fully_diluted_value - token.fully_diluted_value);
+  //       const diffB = Math.abs(b.token.fully_diluted_value - token.fully_diluted_value);
+  //       return diffA - diffB;
+  //     })
+  //     .slice(0, 2), 
+  //   [token, sortedRows]
+  // );
 
   const tooltipContent = (
-    <div className="p-3 min-w-[280px]">
+    <div className="p-3 min-w-[240px]">
       <div className="mb-3 flex justify-center">
         <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} />
       </div>
@@ -204,13 +204,13 @@ const TokenInfo: React.FC<{
         <div className="text-lg font-bold text-white mb-1">{token.name}</div>
         <div className="text-sm font-medium text-neutral-400 mb-2">({token.symbol})</div>
         <p className="text-base font-semibold text-white">
-          ${formatSmartNumber(token.usd_price)}{' '}
+          $<SubscriptNumber value={token.usd_price} />{' '}
           <span className={`text-sm ${token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {formatPercentChange(token.price_percent_change_1h)}%
           </span>
         </p>
       </div>
-      {similarTokens.length > 0 && (
+      {/* {similarTokens.length > 0 && (
         <div className="border-t border-neutral-700 pt-2">
           <p className="mb-2 text-xs font-semibold text-neutral-300">Similar Tokens:</p>
           <div className="space-y-1">
@@ -229,17 +229,18 @@ const TokenInfo: React.FC<{
             ))}
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 
   return (
     <div className="flex items-center gap-3">
       <InterstateTooltip
-        width={300}
+        width={undefined}
         height={undefined}
         xOffset="ml-0"
         label={tooltipContent}
+        className="bg-neutral-900/100"
       >
         <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} />
       </InterstateTooltip>
@@ -275,6 +276,66 @@ const TokenInfo: React.FC<{
   );
 };
 
+interface SubscriptNumberProps {
+  value: number;
+  className?: string;
+}
+
+export const SubscriptNumber: React.FC<SubscriptNumberProps> = ({ value, className }) => {
+
+  const MAX_ZEROES = 2
+
+  const formatNumber = (num: number) => {
+    const numStr = num.toFixed(20);
+    const [integerPart, decimalPart] = numStr.split('.');
+    const leadingZeros = decimalPart?.match(/^0*/)?.[0] || '';
+    const originalZeroCount = leadingZeros.length;
+    const zeroCount = Math.max(0, originalZeroCount - 1); // Subtract 1 from zero count
+    const sigDigitsStart = leadingZeros.length;
+    
+    const firstDigit = decimalPart[sigDigitsStart] || '0';
+    const secondDigit = decimalPart[sigDigitsStart + 1] || '0';
+    const roundingDigit = decimalPart[sigDigitsStart + 2] || '0';
+    
+    const roundedSecondDigit = parseInt(roundingDigit) >= 5
+      ? (parseInt(secondDigit) + 1).toString()
+      : secondDigit;
+
+    let finalDigits;
+    if (roundedSecondDigit === '10') {
+      finalDigits = (parseInt(firstDigit) + 1).toString() + '0';
+    } else {
+      finalDigits = firstDigit + roundedSecondDigit;
+    }
+
+    // Formatting logic with new rules:
+    if (originalZeroCount > MAX_ZEROES) {
+      return (
+        <span className={className}>
+          0.0<sub>{zeroCount}</sub>{finalDigits}
+        </span>
+      );
+    } else if (originalZeroCount > 0) {
+      // 1-MAX_ZEROES zeros: show all zeros without subscript
+      const zeros = '0'.repeat(originalZeroCount);
+      return (
+        <span className={className}>
+          0.{zeros}{finalDigits}
+        </span>
+      );
+    } else {
+      // No leading zeros
+      return (
+        <span className={className}>
+          {integerPart}.{decimalPart.substring(0, 2)}
+        </span>
+      );
+    }
+  };
+
+  return formatNumber(value);
+};
+
 // Market Cap Cell Component
 const MarketCapCell: React.FC<{
   token: Token;
@@ -288,7 +349,7 @@ const MarketCapCell: React.FC<{
   return (
     <div className="text-right">
       <div className="text-sm font-semibold text-white mb-1">
-        ${formatSmartNumber(token.usd_price)}
+        $<SubscriptNumber value={token.usd_price} />
       </div>
       <div
         className={`text-xs font-semibold ${
