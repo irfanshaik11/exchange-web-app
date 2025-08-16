@@ -644,7 +644,7 @@ export default function InterstateTable({
           ) : (
             sortedRows.map(({ token, i }) => (
               <TableRow
-                key={token.mint}
+                key={token.pair_address}
                 token={token}
                 i={i}
                 selectedTimeframe={selectedTimeframe}
@@ -652,7 +652,7 @@ export default function InterstateTable({
                 quickBuyAmount={quickBuyAmount}
                 animationState={animationState}
                 sortedRows={sortedRows}
-                onClick={() => router.push(`/trade/${token.mint}`)}
+                onClick={() => router.push(`/trade/${token.pair_address}`)}
               />
             ))
           )}
