@@ -325,7 +325,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
               try {
                 await createLimitOrder(
                   {
-                    tokenAddress: token.mint,
+                    tokenAddress: token.pair_address,
                     amount: Number(amount),
                     type: mode === "buy" ? "Buy" : "Sell",
                     direction: direction,
@@ -351,7 +351,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
               const tr = await tradeBuy(
                 {
                   amount: Number(amount),
-                  tokenAddress: token.mint,
+                  tokenAddress: token.pair_address,
                   mevProtection: settings.mevMode == "off" ? 0 : 1,
                 },
                 user.bearerToken,

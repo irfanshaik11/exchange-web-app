@@ -126,9 +126,9 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
         ) : (
           tokens.map((token, idx) => (
             <div
-              key={token.mint + idx}
+              key={token.pair_address + idx}
               className="relative cursor-pointer flex flex-row py-3 transition group items-center border-b border-neutral-800 hover:bg-neutral-800/40 w-full"
-              onClick={() => router.push(`/trade/${token.mint}`)}
+              onClick={() => router.push(`/trade/${token.pair_address}`)}
             >
               {/* Bonding popout on hover */}
               {idx === 0 ? (
@@ -143,7 +143,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                   className="hidden group-hover:flex absolute left-1/2 -top-7 -translate-x-1/2 px-3 py-1 bg-neutral-900 border border-emerald-700 shadow-xl text-emerald-400 text-sm z-20"
                   style={{ pointerEvents: 'none' }}
                 >
-                  Bonding: {typeof token.bonding_curve_progress === 'number' ? Math.round(token.bonding_curve_progress * 100) : (parseFloat(token.bonding_curve_progress) * 100).toFixed(0)}%
+                  Bonding: {typeof token.bonding_curve_progress === 'number' ? Math.round(token.bonding_curve_progress * 100) : (parseFloat(token.bonding_curve_progress || '0') * 100).toFixed(0)}%
                 </span>
               )}
               {/* Profile Picture & Address */}
@@ -153,7 +153,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                   {/* Status indicator */}
                   <span className="absolute bottom-1 right-1 w-3 h-3 bg-green-500 border-2 border-neutral-900 rounded-full" />
                 </div>
-                <span className="text-xs text-neutral-500 mt-1 font-mono truncate max-w-[60px]">{token.mint.slice(0, 4)}...{token.mint.slice(-4)}</span>
+                                <span className="text-xs text-neutral-500 mt-1 font-mono truncate max-w-[60px]">{token.pair_address.slice(0, 4)}...{token.pair_address.slice(-4)}</span>
               </div>
               {/* Main Info Section */}
               <div className="flex-1 flex flex-col gap-2 min-w-0">

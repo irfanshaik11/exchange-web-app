@@ -232,7 +232,7 @@ export default function SearchModal({
   // Memoize callbacks to prevent child re-renders
   const handleSelectToken = useCallback(
     (token: Token) => {
-      onSubmit?.(token.mint);
+      onSubmit?.(token.pair_address_address);
       onClose();
     },
     [onSubmit, onClose],
@@ -404,7 +404,7 @@ export default function SearchModal({
 
               return (
                 <TokenListItem
-                  key={token.mint}
+                  key={token.pair_address_address}
                   token={token}
                   mc={mc}
                   vol={vol}
@@ -462,7 +462,7 @@ const TokenListItem = React.memo(
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigator.clipboard.writeText(token.mint);
+                  navigator.clipboard.writeText(token.pair_address_address);
                 }}
                 className="flex-shrink-0 text-neutral-400 transition-colors hover:text-neutral-300"
                 title="Copy address"

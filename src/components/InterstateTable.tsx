@@ -213,7 +213,7 @@ const TokenInfo: React.FC<{
 
   // const similarTokens = useMemo(() => 
   //   sortedRows
-  //     .filter(row => row.token.mint !== token.mint)
+  //     .filter(row => row.token.pair_address !== token.pair_address)
   //     .sort((a, b) => {
   //       const diffA = Math.abs(a.token.fully_diluted_value - token.fully_diluted_value);
   //       const diffB = Math.abs(b.token.fully_diluted_value - token.fully_diluted_value);
@@ -295,7 +295,7 @@ const TokenInfo: React.FC<{
               className="text-xs cursor-pointer hover:text-sky-300 transition-colors" 
               onClick={(e) => {
                 e.stopPropagation();
-                copyToClipboard(token.mint, "Token address copied to clipboard!");
+                copyToClipboard(token.pair_address, "Token address copied to clipboard!");
               }}
               title="Copy token address"
             />
@@ -378,7 +378,7 @@ const MarketCapCell: React.FC<{
   animationState: Record<string, 'up' | 'down' | null>;
 }> = ({ token, selectedTimeframe, animationState }) => {
   const percentChange = getTokenStat(token, 'price_percent_change', selectedTimeframe);
-  const percentFieldKey = `${token.mint}-price_percent_change_${selectedTimeframe}`;
+  const percentFieldKey = `${token.pair_address}-price_percent_change_${selectedTimeframe}`;
   const isPositive = percentChange >= 0;
 
   return (
@@ -571,7 +571,7 @@ export default function InterstateTable({
     const newPrevValues = { ...prevValuesRef.current };
     
     rows.forEach(({ token }) => {
-      const priceKey = `${token.mint}-usd_price`;
+      const priceKey = `${token.pair_address}-usd_price`;
       const price = token.usd_price;
       
       if (priceKey in prevValuesRef.current) {
@@ -583,7 +583,7 @@ export default function InterstateTable({
       }
       newPrevValues[priceKey] = price;
 
-      const percentFieldKey = `${token.mint}-price_percent_change_${selectedTimeframe}`;
+      const percentFieldKey = `${token.pair_address}-price_percent_change_${selectedTimeframe}`;
       const percentValue = (token as any)[`price_percent_change_${selectedTimeframe}`] ?? 0;
       
       if (percentFieldKey in prevValuesRef.current) {

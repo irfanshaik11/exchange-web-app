@@ -42,25 +42,19 @@ export default function usePaginatedTokensWebSocket({
   ).current;
 
   useEffect(() => {
-    let url = env.NEXT_PUBLIC_WEBSOCKET_URL;
-    if (!url.endsWith('/')) url += '/';
-    url += 'tokens';
-    const params = new URLSearchParams({
-      filter,
-      order,
-      offset: String(offset),
-      limit: String(limit),
-    });
-    url += `?${params.toString()}`;
-
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
 
     const connectWebSocket = () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        return;
-      }
       try {
-        const ws = new WebSocket(url);
+        // The backend uses the URL to determine the subscription
+        const queryParams = new URLSearchParams({
+          filter: filter || 'marketcap',
+          order: order || 'desc',
+          offset: (offset || 0).toString(),
+          limit: (limit || 20).toString(),
+        });
+        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/ws/tokens?${queryParams}`;
+        const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -70,10 +64,9 @@ export default function usePaginatedTokensWebSocket({
 
         ws.onmessage = (event) => {
           try {
+            // The backend sends the array of tokens directly
             const message = JSON.parse(event.data);
-            if (Array.isArray(message)) {
-              throttledSetData(message);
-            }
+            throttledSetData(message);
           } catch (err) {
             console.error('Failed to parse WebSocket message:', err);
             setState(prev => ({ ...prev, error: 'Failed to parse WebSocket message' }));
@@ -83,13 +76,15 @@ export default function usePaginatedTokensWebSocket({
         ws.onclose = (event) => {
           console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
           setState(prev => ({ ...prev, isConnected: false }));
-          handleReconnect();
+          // Don't reconnect if the component is unmounted or the close was intentional
+          if (wsRef.current) {
+            handleReconnect();
+          }
         };
 
         ws.onerror = (error) => {
           console.error('WebSocket error:', error);
           setState(prev => ({ ...prev, error: 'WebSocket connection error. Attempting to reconnect...' }));
-          handleReconnect();
         };
       } catch (error) {
         console.error('Failed to establish WebSocket connection:', error);
@@ -115,11 +110,15 @@ export default function usePaginatedTokensWebSocket({
     connectWebSocket();
 
     return () => {
-      if (wsRef.current) wsRef.current.close();
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current) {
+        const ws = wsRef.current;
+        wsRef.current = null; // Prevent reconnection on intentional close
+        ws.close();
+      }
       throttledSetData.cancel();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // The connection must be re-established if the filter parameters change
   }, [filter, order, offset, limit, throttledSetData]);
 
   return {

@@ -11,25 +11,28 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
+  const pairAddressRef = useRef(pair_address);
+  pairAddressRef.current = pair_address;
 
-  // Throttle updates to avoid excessive renders
   const throttledSetToken = useRef(
     throttle((newData: any) => {
       setToken(newData);
     }, 1000)
   ).current;
 
+  // Effect for managing WebSocket connection
   useEffect(() => {
-    if (!pair_address) return;
+    if (!pair_address) {
+      setToken(null);
+      setTrades([]);
+      setIsConnected(false);
+      return;
+    }
 
     const connectWebSocket = () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        return;
-      }
-
       try {
-        // Use /token?pairaddress=mint endpoint
-        const ws = new WebSocket(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/token?pair_address=${pair_address}`);
+        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/ws/token?pair_address=${pair_address}`;
+        const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -40,15 +43,13 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
 
         ws.onmessage = (event) => {
           try {
+            // The backend sends an object with token and trades properties directly
             const message = JSON.parse(event.data);
-            // Expect { token, trades } object
-            if (message && typeof message === "object") {
-              if (message.token && message.trades) {
-                throttledSetToken(message.token);
-                setTrades(message.trades);
-              } else {
-                throttledSetToken(message);
-              }
+            if (message.token) {
+              throttledSetToken(message.token);
+            }
+            if (message.trades) {
+              setTrades(message.trades);
             }
           } catch (err) {
             setError("Failed to parse WebSocket message");
@@ -57,12 +58,14 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
 
         ws.onclose = () => {
           setIsConnected(false);
-          handleReconnect();
+          // Don't reconnect if the component is unmounted or the close was intentional
+          if (wsRef.current) {
+            handleReconnect();
+          }
         };
 
         ws.onerror = () => {
           setError("WebSocket error");
-          handleReconnect();
         };
       } catch (error) {
         setError("Failed to establish WebSocket connection");
@@ -75,16 +78,24 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
         return;
       }
       reconnectAttemptRef.current += 1;
-      setTimeout(connectWebSocket, Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 16000));
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 16000);
+      reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
     };
 
     connectWebSocket();
 
     return () => {
-      if (wsRef.current) wsRef.current.close();
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
       throttledSetToken.cancel();
+      if (wsRef.current) {
+        const ws = wsRef.current;
+        wsRef.current = null; // Prevent reconnection on intentional close
+        ws.close();
+      }
     };
+    // The connection must be re-established if the pair_address changes
   }, [pair_address, throttledSetToken]);
 
   return { token, trades, isConnected, error };
