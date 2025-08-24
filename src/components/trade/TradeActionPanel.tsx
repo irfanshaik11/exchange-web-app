@@ -348,11 +348,26 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
                 setIsLoading(false);
               }
             } else if (tab === "market") {
+              let poolType: "PumpAmm" | "Raydium CPMM" | "" = "";
+              switch ((token as any).amm_id) {
+                case "pump_amm":
+                  poolType = "PumpAmm";
+                  break;
+                case "raydium_cpmm":
+                  poolType = "Raydium CPMM";
+                  break;
+                default:
+                  poolType = "";
+              }
+
               const tr = await tradeBuy(
                 {
                   amount: Number(amount),
-                  tokenAddress: token.pair_address,
+                  poolAddress: token.pair_address,
+                  baseMint: (token as any).base_mint,
+                  quoteMint: (token as any).quote_mint,
                   mevProtection: settings.mevMode == "off" ? 0 : 1,
+                  poolType,
                 },
                 user.bearerToken,
               );

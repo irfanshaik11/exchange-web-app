@@ -31,7 +31,6 @@ import useSingleTokenWebSocket from "../../hooks/useSingleTokenWebSocket";
 export default function TradePage() {
   const router = useRouter();
   const { id } = router.query;
-  const [loading, setLoading] = useState(true);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const [chartHeight, setChartHeight] = useState(600);
   const { address, isConnected } = useWallet();
@@ -50,7 +49,14 @@ export default function TradePage() {
   const [search, setSearch] = useState("");
 
   // WebSocket per-token service
-  const { token, trades, isConnected: wsConnected, error: wsError } = useSingleTokenWebSocket(
+  const { 
+    token, 
+    trades, 
+    isConnected: wsConnected, 
+    error: wsError, 
+    loading: wsLoading, 
+    isReconnecting 
+  } = useSingleTokenWebSocket(
     typeof id === "string" ? id : undefined
   );
 
@@ -62,14 +68,16 @@ export default function TradePage() {
   }, [id]);
 
   useEffect(() => {
-    if (token || wsError) setLoading(false);
-  }, [token, wsError]);
-
-  useEffect(() => {
     if (token) {
       console.log('WebSocket token data:', token);
     }
   }, [token]);
+
+  useEffect(() => {
+    if (token?.usd_price) {
+      console.log(`Price changed: ${token.price}`);
+    }
+  }, [token?.usd_price]);
 
   useEffect(() => {
     function handleResize() {
@@ -108,7 +116,7 @@ export default function TradePage() {
     );
   }
 
-  if (loading) {
+  if (wsLoading) {
     return (
       <div className="mt-20 text-center text-2xl text-neutral-400">
         Loading...
@@ -138,6 +146,7 @@ export default function TradePage() {
       <div className="min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100">
         {/* Header always at the top, full width */}
         <Header search={search} setSearch={setSearch} />
+        {isReconnecting && <div className="text-center text-yellow-500 p-2 bg-yellow-900/50">Connection lost, reconnecting...</div>}
         {/* Main content: flex row, fills the rest of the page */}
         <div className="flex flex-1 flex-row w-full">
           {/* Left: Chart and Info */}

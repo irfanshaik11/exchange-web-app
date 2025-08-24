@@ -4,8 +4,10 @@ import { getSolBalance } from "~/utils/functions";
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const addr = decodeURIComponent(req.query.address as string);
 
+
+  // DEVNET _ TRUE
   try {
-    const balance = await getSolBalance(addr);
+    const balance = await getSolBalance(addr, false);
     const ratio = await getSolPriceInUSDC();
     console.log(ratio)
     res.status(200).json({ data: { balance, usdBalance: ratio * balance }})

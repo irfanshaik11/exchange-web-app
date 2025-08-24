@@ -18,7 +18,7 @@ import { CiUser, CiGlobe } from "react-icons/ci";
 import { fetchTokenMetadata } from "~/utils/functions";
 import type { Timeframe } from "../pages/index";
 
-// Updated Token type based on the provided object structure
+// Token type
 export interface Token {
   id: number;
   mint: string;
@@ -33,6 +33,7 @@ export interface Token {
   bonding_curve_progress: string;
   amm: string;
   uri: string;
+  pair_address: string; // Added for consistency
 }
 
 export type SortOption = "time" | "market_cap" | "volume_1h" | "liquidity";
@@ -110,16 +111,14 @@ export function TokenLogo({ token }: { token: any }) {
   );
 }
 
-export default function SearchModal({
+// The new inner component that contains the actual modal content and logic
+function SearchModalContent({
   open,
   onClose,
   onSubmit,
   onQueryChange,
   selectedTimeframe,
 }: SearchModalProps) {
-  const [allTokensFilter, setAllTokensFilter] = useState<
-    "volume_24h" | "new" | "txs_24h" | "marketcap"
-  >("volume_24h");
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("time");
   const [filters, setFilters] = useState<SearchFilters>({
@@ -134,35 +133,35 @@ export default function SearchModal({
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Search API function
+  // This hook will now only be called when SearchModalContent is rendered
+  const { data: allTokens } = usePaginatedTokensWebSocket({
+    filter: `txs_${selectedTimeframe}`,
+    limit: 5,
+    order: "desc",
+  });
+
   const searchTokens = useCallback(async (searchQuery: string) => {
     if (searchQuery.trim().length < 3) {
       setSearchResults([]);
       return;
     }
-
     setIsSearchLoading(true);
-
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "";
+      // Assuming NEXT_PUBLIC_BACKEND_URL is the correct env var for the base URL
+      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "";
       const trimmedQuery = searchQuery.trim();
-
-      // Use tokenaddress for queries 10+ characters, name for 3-9 characters
       const searchParam =
         trimmedQuery.length >= 10
           ? `tokenaddress=${encodeURIComponent(trimmedQuery)}`
           : `name=${encodeURIComponent(trimmedQuery)}`;
-
-      const response = await fetch(`${baseUrl}/search?${searchParam}`);
-
-      console.log(response);
+      
+      // Note: The original code used NEXT_PUBLIC_WEBSOCKET_URL, which might be incorrect for an HTTP search endpoint.
+      // Using NEXT_PUBLIC_BACKEND_URL and assuming an endpoint like /api/search
+      const response = await fetch(`${baseUrl}/api/token-search?${searchParam}`);
 
       if (response.ok) {
-        const token = await response.json();
-        // API returns single token object, convert to array for consistency
-        setSearchResults(
-          Array.isArray(token.results) ? token.results : [token],
-        );
+        const data = await response.json();
+        setSearchResults(Array.isArray(data.tokens) ? data.tokens : []);
       } else if (response.status === 404) {
         setSearchResults([]);
       } else {
@@ -177,14 +176,10 @@ export default function SearchModal({
     }
   }, []);
 
-  // Debounced search effect
   useEffect(() => {
-    // Clear existing timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-
-    // Set new timeout for search
     if (query.trim().length >= 3) {
       searchTimeoutRef.current = setTimeout(() => {
         searchTokens(query);
@@ -193,8 +188,6 @@ export default function SearchModal({
       setSearchResults([]);
       setIsSearchLoading(false);
     }
-
-    // Cleanup function
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
@@ -202,19 +195,9 @@ export default function SearchModal({
     };
   }, [query, searchTokens]);
 
-  const { data: allTokens } = usePaginatedTokensWebSocket({
-    filter: `txs_${selectedTimeframe}`,
-    limit: 5,
-    order: "desc",
-  });
-
-  // Memoize filtered tokens to prevent unnecessary recalculations
   const filteredTokens = useMemo(() => {
     if (!allTokens?.length) return [];
-
     let filtered = [...allTokens];
-
-    // Apply filters
     if (filters.isPumpSearch) {
       filtered = filtered.filter((token) => token.amm === "pump_amm");
     }
@@ -225,14 +208,12 @@ export default function SearchModal({
           100,
       );
     }
-
     return filtered;
   }, [allTokens, filters.isPumpSearch, filters.onlyBonded]);
 
-  // Memoize callbacks to prevent child re-renders
   const handleSelectToken = useCallback(
     (token: Token) => {
-      onSubmit?.(token.pair_address_address);
+      onSubmit?.(token.pair_address);
       onClose();
     },
     [onSubmit, onClose],
@@ -241,7 +222,7 @@ export default function SearchModal({
   const handleQueryChange = useCallback((newQuery: string) => {
     setQuery(newQuery);
     onQueryChange?.(newQuery);
-  }, []);
+  }, [onQueryChange]);
 
   const updateFilter = useCallback((filterName: keyof SearchFilters) => {
     setFilters((prev) => ({ ...prev, [filterName]: !prev[filterName] }));
@@ -256,7 +237,6 @@ export default function SearchModal({
     [onClose],
   );
 
-  // Effects
   useEffect(() => {
     if (open) {
       setQuery("");
@@ -267,29 +247,10 @@ export default function SearchModal({
     }
   }, [open]);
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) {
-        onClose();
-      }
-    };
-
-    if (open) {
-      document.addEventListener("keydown", handleEscape);
-      return () => document.removeEventListener("keydown", handleEscape);
-    }
-  }, [open, onClose]);
-
-  // Memoize display state
   const isSearching = useMemo(() => query.trim().length >= 3, [query]);
   const displayTokens = useMemo(() => {
-    if (isSearching) {
-      return searchResults;
-    }
-    return filteredTokens;
+    return isSearching ? searchResults : filteredTokens;
   }, [isSearching, searchResults, filteredTokens]);
-
-  if (!open) return null;
 
   return (
     <InterstatePopout
@@ -377,8 +338,7 @@ export default function SearchModal({
       <div className="h-[550px] flex-1 overflow-hidden px-4 pt-2">
         <div className="mb-2">
           <span className="text-sm tracking-wider text-neutral-400">
-            {isSearching ? "Search Results" : "History"} ({displayTokens.length}
-            )
+            {isSearching ? "Search Results" : "Trending"} ({displayTokens.length})
             {isSearchLoading && (
               <span className="ml-2 text-xs text-blue-400">Searching...</span>
             )}
@@ -404,7 +364,7 @@ export default function SearchModal({
 
               return (
                 <TokenListItem
-                  key={token.pair_address_address}
+                  key={token.pair_address}
                   token={token}
                   mc={mc}
                   vol={vol}
@@ -420,7 +380,17 @@ export default function SearchModal({
   );
 }
 
-// Separate component with new design - matches the history item design
+// Main component that controls rendering of the modal content
+export default function SearchModal(props: SearchModalProps) {
+  // Render the content only when the modal is open
+  if (!props.open) {
+    return null;
+  }
+
+  return <SearchModalContent {...props} />;
+}
+
+// Separate component with new design
 const TokenListItem = React.memo(
   ({
     token,
@@ -445,15 +415,12 @@ const TokenListItem = React.memo(
         onClick={handleClick}
       >
         <div className="flex w-48 items-center gap-4">
-          {/* Avatar with border and overlay icon */}
           <div className="relative flex-shrink-0">
             <TokenLogo token={token} />
-            {/* Overlay icon */}
             <div className="absolute -right-1 -bottom-1 flex h-5 w-5 items-center justify-center rounded-full border border-teal-400 bg-neutral-900">
               <span className="text-[9px] font-bold text-white">R</span>
             </div>
           </div>
-          {/* Text content */}
           <div className="max-w-[200px] min-w-0">
             <div className="flex items-center gap-2">
               <span className="block truncate font-medium text-white">
@@ -462,7 +429,7 @@ const TokenListItem = React.memo(
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigator.clipboard.writeText(token.pair_address_address);
+                  navigator.clipboard.writeText(token.pair_address);
                 }}
                 className="flex-shrink-0 text-neutral-400 transition-colors hover:text-neutral-300"
                 title="Copy address"
@@ -486,7 +453,6 @@ const TokenListItem = React.memo(
           </div>
         </div>
 
-        {/* Financial metrics */}
         <div className="flex h-full items-center gap-6 text-xs whitespace-nowrap">
           <span className="text-neutral-400">
             MC <span className="text-lg font-medium text-white">${mc}</span>
@@ -499,7 +465,6 @@ const TokenListItem = React.memo(
           </span>
         </div>
 
-        {/* Action button */}
         <button
           onClick={(e) => {
             e.stopPropagation();

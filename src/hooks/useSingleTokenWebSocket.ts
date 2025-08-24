@@ -1,33 +1,49 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import throttle from "lodash.throttle";
 import { env } from "../env";
+
+interface WebSocketState {
+  isConnected: boolean;
+  isReconnecting: boolean;
+  error: string | null;
+  loading: boolean;
+}
 
 export default function useSingleTokenWebSocket(pair_address: string | undefined) {
   const [token, setToken] = useState<any>(null);
   const [trades, setTrades] = useState<any[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<WebSocketState>({
+    isConnected: false,
+    isReconnecting: false,
+    error: null,
+    loading: true,
+  });
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
   const pairAddressRef = useRef(pair_address);
   pairAddressRef.current = pair_address;
+  const [count, setCount] = useState(0);
 
-  const throttledSetToken = useRef(
+  const throttledSetToken = useCallback(
     throttle((newData: any) => {
       setToken(newData);
-    }, 1000)
-  ).current;
+      setState(prev => ({ ...prev, loading: false }));
+    }, 1000),
+    []
+  );
 
   // Effect for managing WebSocket connection
   useEffect(() => {
     if (!pair_address) {
       setToken(null);
       setTrades([]);
-      setIsConnected(false);
+      setState({ isConnected: false, isReconnecting: false, error: null, loading: false });
       return;
     }
+
+    setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
 
     const connectWebSocket = () => {
       try {
@@ -36,14 +52,15 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
         wsRef.current = ws;
 
         ws.onopen = () => {
-          setIsConnected(true);
-          setError(null);
+          setState(prev => ({ ...prev, isConnected: true, isReconnecting: false, error: null }));
           reconnectAttemptRef.current = 0;
         };
 
         ws.onmessage = (event) => {
           try {
             // The backend sends an object with token and trades properties directly
+            console.log(`Got MESSAGE ${count} times`);
+            setCount(t => t+1)
             const message = JSON.parse(event.data);
             if (message.token) {
               throttledSetToken(message.token);
@@ -52,31 +69,40 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
               setTrades(message.trades);
             }
           } catch (err) {
-            setError("Failed to parse WebSocket message");
+            console.error('Failed to parse WebSocket message:', err);
+            setState(prev => ({ ...prev, error: 'Failed to parse WebSocket message' }));
           }
         };
 
-        ws.onclose = () => {
-          setIsConnected(false);
+        ws.onclose = (event) => {
+          console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
+          setState(prev => ({ ...prev, isConnected: false }));
           // Don't reconnect if the component is unmounted or the close was intentional
           if (wsRef.current) {
             handleReconnect();
           }
         };
 
-        ws.onerror = () => {
-          setError("WebSocket error");
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+          setState(prev => ({ ...prev, error: 'WebSocket connection error. Attempting to reconnect...' }));
         };
       } catch (error) {
-        setError("Failed to establish WebSocket connection");
+        console.error('Failed to establish WebSocket connection:', error);
+        setState(prev => ({ ...prev, error: 'Failed to establish WebSocket connection' }));
       }
     };
 
     const handleReconnect = () => {
       if (reconnectAttemptRef.current >= maxReconnectAttempts) {
-        setError("Maximum reconnection attempts reached. Please refresh the page.");
+        setState(prev => ({
+          ...prev,
+          isReconnecting: false,
+          error: 'Maximum reconnection attempts reached. Please refresh the page.'
+        }));
         return;
       }
+      setState(prev => ({ ...prev, isReconnecting: true }));
       reconnectAttemptRef.current += 1;
       const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 16000);
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
@@ -98,5 +124,5 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
     // The connection must be re-established if the pair_address changes
   }, [pair_address, throttledSetToken]);
 
-  return { token, trades, isConnected, error };
+  return { ...state, token, trades };
 } 

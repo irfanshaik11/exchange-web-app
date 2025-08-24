@@ -147,9 +147,10 @@ export async function fetchTokenMetadata(uri: string | undefined): Promise<any |
 } 
 
 
-export async function getSolBalance(address: string) {
+export async function getSolBalance(address: string, isDevnet = false) {
+  const clusterApiUrlString = isDevnet ? 'devnet' : 'mainnet-beta'; 
   try {
-    const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
+    const connection = new Connection(clusterApiUrl(clusterApiUrlString), 'confirmed');
     const publicKey = new PublicKey(address);
     const lamports = await connection.getBalance(publicKey);
     const sol = lamports / 1e9;

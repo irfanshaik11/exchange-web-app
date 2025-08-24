@@ -153,9 +153,12 @@ export const updateLimitOrder = (
 /* -------------------------------------------------------------------------- */
 
 type BuyParams = {
-  tokenAddress: string;
+  poolAddress: string;
+  baseMint: string;
+  quoteMint: string;
   amount: number;
-  mevProtection: number;
+  mevProtection?: 0 | 1;
+  poolType: "PumpAmm" | "Raydium CPMM" | "";
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) =>
