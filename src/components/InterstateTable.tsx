@@ -384,7 +384,7 @@ const MarketCapCell: React.FC<{
   return (
     <div className="text-right">
       <div className="text-sm font-semibold text-white mb-1">
-        $<SubscriptNumber value={token.usd_price} />
+        ${formatSmartNumber(token.fully_diluted_value)}
       </div>
       <div
         className={`text-xs font-semibold ${
