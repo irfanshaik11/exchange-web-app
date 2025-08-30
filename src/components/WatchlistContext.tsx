@@ -32,7 +32,7 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
 
   const addToWatchlist = (token: Token) => {
     setWatchlist(prev => {
-      if (!prev.some(t => t.pair_addrtoken.pair_addressken.pair_address)) {
+      if (!prev.some(t => t.pair_address === token.pair_address)) {
         return [...prev, token];
       }
       return prev;
@@ -40,11 +40,11 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   };
 
   const removeFromWatchlist = (tokenAddress: string) => {
-    setWatchlist(prev => prev.filter(token => token.pair_address_address !== tokenAddress));
+    setWatchlist(prev => prev.filter(token => token.pair_address !== tokenAddress));
   };
 
   const isInWatchlist = (tokenAddress: string) => {
-    return watchlist.some(token => token.pair_address_address === tokenAddress);
+    return watchlist.some(token => token.pair_address === tokenAddress);
   };
 
   return (
