@@ -211,9 +211,12 @@ export default function Home() {
     }
     try {
       const data = await tradeBuy({
-        tokenAddress: token.pair_address,
+        poolAddress: token.pair_address,
+        baseMint: token.mint, // Use token.mint as baseMint
+        quoteMint: "So11111111111111111111111111111111111111112", // SOL mint address
         amount: quickBuyAmount,
-        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1
+        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
+        poolType: "PumpAmm" // Assuming this is a PumpAmm pool
       }, user.bearerToken);
       toast.success(
         `Quick Buy successful! Bought ${data.amount} ${token.symbol}`,

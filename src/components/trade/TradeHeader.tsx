@@ -159,11 +159,11 @@ function useTokenMetadata(uri?: string) {
 
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
-  const isWatched = isInWatchlist(token.pair_address_address);
+  const isWatched = isInWatchlist(token.pair_address);
 
   const handleWatchlistClick = () => {
     if (isWatched) {
-      removeFromWatchlist(token.pair_address_address);
+      removeFromWatchlist(token.pair_address);
     } else {
       addToWatchlist(token);
     }

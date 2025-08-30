@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FaStar, FaRegStar } from 'react-icons/fa';
-import type { Token } from "../utils/db";
+import type { Token } from "./SearchModal";
 import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
 import { useWatchlist } from './WatchlistContext';
@@ -50,9 +50,9 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           </thead>
           <tbody className="divide-y divide-neutral-800">
             {watchlist.map((token) => (
-              <tr key={token.pair_address_address} className="hover:bg-neutral-800/60">
+              <tr key={token.pair_address} className="hover:bg-neutral-800/60">
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 cursor-pointer" onClick={() => handleTokenClick(token.pair_address_address)}>
+                  <div className="flex items-center gap-2 cursor-pointer" onClick={() => handleTokenClick(token.pair_address)}>
                     <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-yellow-400 bg-neutral-800">
                       <img
                         src={token.logo}
@@ -73,7 +73,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                 <td className="px-4 py-3 text-sm">${formatSmartNumber(token.total_liquidity_usd)}</td>
                 <td className="px-4 py-3">
                   <button
-                    onClick={() => removeFromWatchlist(token.pair_address_address)}
+                    onClick={() => removeFromWatchlist(token.pair_address)}
                     className="text-neutral-400 hover:text-yellow-400 transition-colors"
                   >
                     <FaStar className="text-lg" />
