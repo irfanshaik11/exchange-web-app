@@ -429,18 +429,6 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
                 </div>
               </button>
 
-              {/* Rainbow Wallet */}
-              <button
-                type="button"
-                className="w-full flex items-center justify-between p-3 rounded-lg bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 transition-all duration-200"
-                onClick={() => {/* TODO: implement Rainbow connect */ alert('Connect Rainbow (to be implemented)'); }}
-                disabled={loading}
-              >
-                <div className="flex items-center gap-3">
-                  <img src="/Rainbow_wallet_logo.png" alt="Rainbow" className="w-5 h-5 rounded-full" />
-                  <span className="font-medium text-sm">Rainbow</span>
-                </div>
-              </button>
             </div>
           </div>
         </div>
