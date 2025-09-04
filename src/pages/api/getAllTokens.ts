@@ -2,8 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { Pool } from 'pg';
 
 const pool = new Pool({
-  // Connect to your local Docker PostgreSQL instead of Neon
-  connectionString: 'postgresql://postgres:password@localhost:5432/tokenservice'
+  // Connect to Kubernetes PostgreSQL service
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:password@postgres:5432/tokenservice'
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

@@ -128,10 +128,20 @@ export function formatSmartNumber(num: number): string {
 export async function fetchTokenMetadata(uri: string | undefined): Promise<any | null> {
   if (!uri) return null;
   try {
+    // Use backend proxy to avoid CORS issues
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://staging-backend.interstate.so';
+    const proxyUrl = `${backendUrl}/api/metadata/proxy?url=${encodeURIComponent(uri)}`;
+    
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
-    const resp = await fetch(uri, { signal: controller.signal });
+    const resp = await fetch(proxyUrl, { signal: controller.signal });
     clearTimeout(timeout);
+    
+    if (!resp.ok) {
+      console.error(`Failed to fetch metadata via proxy: ${resp.status} ${resp.statusText}`);
+      return null;
+    }
+    
     let data = await resp.text();
     try {
       data = JSON.parse(data);
@@ -141,7 +151,7 @@ export async function fetchTokenMetadata(uri: string | undefined): Promise<any |
     }
     return data;
   } catch (err) {
-    // Handle fetch error
+    console.error('Error fetching token metadata:', err);
     return null;
   }
 } 

@@ -3,10 +3,7 @@ import { Pool } from "pg";
 
 // Create a connection pool
 const pool = new Pool({
-  connectionString: process.env.NEON_DB_API_KEY,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:password@postgres:5432/tokenservice',
 });
 
 export interface BondingToken {

@@ -4,6 +4,7 @@ import PulseTable from '../components/PulseTable';
 import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
+import { env } from '../env';
 
 export default function PulsePage() {
   const [tokens, setTokens] = useState<Token[]>([]);
@@ -16,7 +17,7 @@ export default function PulsePage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch('/api/getAllTokens')
+    fetch(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/api/getAllTokens`)
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch tokens');
         return res.json();

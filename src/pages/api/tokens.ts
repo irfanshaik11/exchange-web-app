@@ -4,7 +4,7 @@ import { env } from '../../env';
 import type { Token } from '~/utils/db';
 
 const pool = new Pool({
-  connectionString: env.NEON_DB_API_KEY,
+  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:password@postgres:5432/tokenservice',
 });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

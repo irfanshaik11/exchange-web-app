@@ -31,7 +31,7 @@ import { FilterProvider, useFilter } from '../components/FilterContext';
 import InterstatePopout from '../components/InterstatePopout';
 import FilterPopout from '../components/FilterPopout';
 import throttle from 'lodash.throttle';
-import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
+import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import { tradeBuy } from "../utils/api";
 import { env } from "../env";
 
@@ -91,16 +91,15 @@ export default function Home() {
   const [showSkeleton, setShowSkeleton] = useState(true);
 
   // WebSocket token service
-  const { 
+  const {
     data: allTokens, 
     isConnected, 
     error: tokenError, 
-    isReconnecting
-  } = usePaginatedTokensWebSocket({
+    isReconnecting,
+    usingFallback
+  } = usePaginatedTokensWithFallback({
     filter: selectedTab === 'dex' ? 'new' : 'trending'
-  });
-
-  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
+  });  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
   useEffect(() => {
     if (Array.isArray(allTokens)) {
       let changed = false;
@@ -306,9 +305,9 @@ export default function Home() {
           <div className="flex flex-row items-center gap-4">
             {/* Connection Status */}
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-400'}`}></div>
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
               <span className="text-xs text-neutral-400">
-                {isConnected ? 'Connected' : 'Disconnected'}
+                {isConnected ? 'Live' : usingFallback ? 'Polling' : 'Disconnected'}
               </span>
             </div>
             {/* Timeframes Row (for both tabs) */}

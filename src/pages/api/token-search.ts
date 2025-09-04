@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Use the working API endpoint
-  const baseURL = "http://localhost:8000";
+  const baseURL = "https://staging-backend.interstate.so";
   const urlParams = new URLSearchParams();
   urlParams.set(paramKey, paramVal);
 

@@ -20,7 +20,7 @@ import { FilterProvider } from '../components/FilterContext';
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
-  projectId: "YOUR_PROJECT_ID", // TODO: Replace with your WalletConnect projectId
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "YOUR_PROJECT_ID", // TODO: Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in your environment
   chains: [mainnet],
   ssr: true,
 });
