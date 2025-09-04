@@ -12,10 +12,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - app.interstate.so
+    - staging-app.narrative.trade
     secretName: meme-cointrading-ui-tls
   rules:
-  - host: app.interstate.so
+  - host: staging-app.narrative.trade
     http:
       paths:
       - path: /
