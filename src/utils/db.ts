@@ -106,7 +106,9 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
 
   const num = typeof val === "string" ? parseFloat(val) : val;
 
-  if (isNaN(num) || !isFinite(num)) return "-";
+  if (isNaN(num) || !isFinite(num)) {
+    return "-";
+  }
 
   const abs = Math.abs(num);
 

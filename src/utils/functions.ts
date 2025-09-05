@@ -132,10 +132,24 @@ export async function fetchTokenMetadata(uri: string | undefined): Promise<any |
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://staging-backend.interstate.so';
     const proxyUrl = `${backendUrl}/api/metadata/proxy?url=${encodeURIComponent(uri)}`;
     
+    console.log('fetchTokenMetadata: Attempting to fetch from:', proxyUrl);
+    console.log('fetchTokenMetadata: Backend URL from env:', process.env.NEXT_PUBLIC_BACKEND_URL);
+    
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const resp = await fetch(proxyUrl, { signal: controller.signal });
+    const timeout = setTimeout(() => {
+      console.warn('fetchTokenMetadata: Request timed out after 8 seconds for:', uri);
+      controller.abort();
+    }, 8000); // Reduced to 8 seconds
+    
+    const resp = await fetch(proxyUrl, { 
+      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json',
+      }
+    });
     clearTimeout(timeout);
+    
+    console.log('fetchTokenMetadata: Response status:', resp.status, resp.statusText);
     
     if (!resp.ok) {
       console.error(`Failed to fetch metadata via proxy: ${resp.status} ${resp.statusText}`);
@@ -151,8 +165,15 @@ export async function fetchTokenMetadata(uri: string | undefined): Promise<any |
     }
     return data;
   } catch (err) {
-    console.error('Error fetching token metadata:', err);
-    return null;
+    // Handle AbortError specifically (timeout)
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      console.warn('fetchTokenMetadata: Request was aborted (timeout) for:', uri);
+      return null; // Return null instead of throwing
+    }
+    
+    // Handle other errors
+    console.warn('fetchTokenMetadata: Error fetching metadata for:', uri, 'Error:', err instanceof Error ? err.message : 'Unknown error');
+    return null; // Always return null instead of throwing
   }
 } 
 

@@ -44,6 +44,15 @@ export default function usePaginatedTokensWithFallback({
 
   const throttledSetData = useCallback(
     throttle((newData: any[]) => {
+      console.log('🔧 Setting data in hook:', newData?.length, 'tokens');
+      console.log('🔧 First token data RAW from API:', newData?.[0] ? {
+        name: newData[0].name,
+        symbol: newData[0].symbol,
+        usd_price: newData[0].usd_price,
+        fully_diluted_value: newData[0].fully_diluted_value,
+        total_liquidity_usd: newData[0].total_liquidity_usd,
+        keys: Object.keys(newData[0])
+      } : 'No data');
       setState(prev => ({ ...prev, data: newData, loading: false }));
     }, 1000),
     []
@@ -65,6 +74,7 @@ export default function usePaginatedTokensWithFallback({
         
         const url = `${env.NEXT_PUBLIC_WEBSOCKET_URL}/api/getAllTokens?${queryParams}`;
         console.log('📡 Polling URL:', url);
+        console.log('📡 Environment WEBSOCKET_URL:', env.NEXT_PUBLIC_WEBSOCKET_URL);
         
         const response = await fetch(url);
         console.log('📡 Polling response status:', response.status, response.ok);
@@ -72,6 +82,20 @@ export default function usePaginatedTokensWithFallback({
         if (response.ok) {
           const data = await response.json();
           console.log('📡 Polling data received:', data?.result?.length, 'tokens');
+          
+          // Debug: Check the first token's price data
+          if (data.result && Array.isArray(data.result) && data.result[0]) {
+            console.log('📡 First token price debug:', {
+              name: data.result[0].name,
+              symbol: data.result[0].symbol,
+              usd_price: data.result[0].usd_price,
+              fully_diluted_value: data.result[0].fully_diluted_value,
+              total_liquidity_usd: data.result[0].total_liquidity_usd,
+              typeof_usd_price: typeof data.result[0].usd_price,
+              typeof_fdv: typeof data.result[0].fully_diluted_value
+            });
+          }
+          
           if (data.result && Array.isArray(data.result)) {
             throttledSetData(data.result);
             setState(prev => ({ ...prev, error: null }));
@@ -138,6 +162,19 @@ export default function usePaginatedTokensWithFallback({
         ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
+            console.log('🔌 WebSocket message received:', {
+              messageType: typeof message,
+              isArray: Array.isArray(message),
+              length: Array.isArray(message) ? message.length : 'not array',
+              firstItem: Array.isArray(message) && message[0] ? {
+                name: message[0].name,
+                symbol: message[0].symbol,
+                usd_price: message[0].usd_price,
+                fully_diluted_value: message[0].fully_diluted_value,
+                total_liquidity_usd: message[0].total_liquidity_usd
+              } : 'no first item',
+              rawMessage: message
+            });
             throttledSetData(message);
           } catch (err) {
             console.error('Failed to parse WebSocket message:', err);

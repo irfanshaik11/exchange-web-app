@@ -398,7 +398,21 @@ export default function Home() {
             </div>
           ) : (
             <InterstateTable
-              rows={displayed.map((token, i) => ({ token, i }))}
+              rows={displayed.map((token, i) => {
+                // Debug: Check what token data looks like before passing to table
+                if (i === 0) {
+                  console.log('🔧 First token being passed to table FULL OBJECT:', JSON.stringify(token, null, 2));
+                  console.log('🔧 First token being passed to table:', {
+                    name: token.name,
+                    symbol: token.symbol,
+                    usd_price: token.usd_price,
+                    fully_diluted_value: token.fully_diluted_value,
+                    total_liquidity_usd: token.total_liquidity_usd,
+                    keys: Object.keys(token)
+                  });
+                }
+                return { token, i };
+              })}
               onQuickBuy={handleQuickBuy}
               sortKey={sortKey}
               sortDirection={sortDirection}

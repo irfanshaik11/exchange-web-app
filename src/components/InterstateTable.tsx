@@ -61,12 +61,26 @@ const TIME_LABELS = ['2h', '1d', '3d', '1h', '6h'];
 const getTokenStat = (token: Token, stat: string, timeframe: string): number => {
   const key = `${stat}_${timeframe}`;
   const val = (token as any)[key];
-  return typeof val === 'number' ? val : parseFloat(val) || 0;
+  const result = typeof val === 'number' ? val : parseFloat(val) || 0;
+  
+  // Debug when returning 0
+  if (result === 0) {
+    console.log('getTokenStat returning 0:', {
+      stat,
+      timeframe,
+      key,
+      rawValue: val,
+      rawValueType: typeof val,
+      tokenName: token.name
+    });
+  }
+  
+  return result;
 };
 
 const formatPercentChange = (val: number): string => {
   if (val === 0) return '0.00';
-  return (val > 0 ? '+' : '') + formatSmartNumber(val);
+  return (val > 0 ? '+' : '') + formatSmartNumber(Math.abs(val));
 };
 
 const getSortableValue = (token: Token, key: string, selectedTimeframe?: string): number => {
@@ -133,6 +147,13 @@ function useTokenMetadata(uri?: string) {
         if (data) tokenMetadataCache[uri] = data;
         setMeta(data);
         setLoading(false);
+      }
+    }).catch((error) => {
+      // Silently handle errors to prevent runtime crashes
+      console.warn('Failed to fetch token metadata:', error.message);
+      if (!cancelled) {
+        setLoading(false);
+        setMeta(null);
       }
     });
     return () => {
@@ -381,10 +402,23 @@ const MarketCapCell: React.FC<{
   const percentFieldKey = `${token.pair_address}-price_percent_change_${selectedTimeframe}`;
   const isPositive = percentChange >= 0;
 
+  // Debug logging for MarketCapCell
+  console.log('MarketCapCell Debug:', {
+    tokenName: token.name,
+    fullyDilutedValue: token.fully_diluted_value,
+    fullyDilutedValueType: typeof token.fully_diluted_value,
+    usdPrice: token.usd_price,
+    usdPriceType: typeof token.usd_price,
+    token: token
+  });
+
   return (
     <div className="text-right">
       <div className="text-sm font-semibold text-white mb-1">
-        ${formatSmartNumber(token.fully_diluted_value)}
+        {(() => {
+          console.log('MarketCapCell formatSmartNumber call with:', token.fully_diluted_value);
+          return `$${formatSmartNumber(token.fully_diluted_value)}`;
+        })()}
       </div>
       <div
         className={`text-xs font-semibold ${
@@ -478,8 +512,22 @@ const TableRow: React.FC<{
     }
   }, [onQuickBuy, token, onClick]);
 
-  const volume = getTokenStat(token, 'total_buy_volume', selectedTimeframe) +
-                getTokenStat(token, 'total_sell_volume', selectedTimeframe);
+  const buyVolume = getTokenStat(token, 'total_buy_volume', selectedTimeframe);
+  const sellVolume = getTokenStat(token, 'total_sell_volume', selectedTimeframe);
+  const volume = buyVolume + sellVolume;
+  
+  // Debug volume calculation
+  console.log('Volume calculation debug:', {
+    tokenName: token.name,
+    selectedTimeframe,
+    buyVolume,
+    sellVolume,
+    totalVolume: volume,
+    buyVolumeField: `total_buy_volume_${selectedTimeframe}`,
+    sellVolumeField: `total_sell_volume_${selectedTimeframe}`,
+    buyVolumeRaw: (token as any)[`total_buy_volume_${selectedTimeframe}`],
+    sellVolumeRaw: (token as any)[`total_sell_volume_${selectedTimeframe}`]
+  });
 
   return (
     <tr 
@@ -499,6 +547,14 @@ const TableRow: React.FC<{
       </td>
       
       <td className="w-28 px-4 py-4 align-middle text-right">
+        {(() => {
+          console.log('Liquidity Debug:', {
+            tokenName: token.name,
+            totalLiquidityUsd: token.total_liquidity_usd,
+            totalLiquidityUsdType: typeof token.total_liquidity_usd
+          });
+          return null;
+        })()}
         <div className="text-sm text-neutral-100 font-medium">
           ${formatSmartNumber(token.total_liquidity_usd)}
         </div>
@@ -506,7 +562,8 @@ const TableRow: React.FC<{
       
       <td className="w-28 px-4 py-4 align-middle text-right">
         <div className="text-sm text-neutral-100 font-medium">
-          ${formatSmartNumber(volume)}
+          {/* Show "-" when volume data is not available instead of $0.00 */}
+          {volume === 0 ? "-" : `$${formatSmartNumber(volume)}`}
         </div>
       </td>
       
