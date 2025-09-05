@@ -36,12 +36,16 @@ export default function PulsePage() {
   });
   const finalStretch = tokens.filter(t => {
     const prog = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : t.bonding_curve_progress;
-    return prog > 0.6 && prog < 0.85;
+    return prog >= 0.6 && prog < 0.85;
   });
   const migrated = tokens.filter(t => {
     const prog = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : t.bonding_curve_progress;
     return prog >= 0.85;
   });
+
+  // Debug logging
+  console.log('Total tokens:', tokens.length);
+  console.log('Final Stretch tokens:', finalStretch.length, finalStretch.map(t => ({symbol: t.symbol, prog: t.bonding_curve_progress})));
 
   return (
     <>
