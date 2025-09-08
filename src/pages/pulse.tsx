@@ -17,7 +17,9 @@ export default function PulsePage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`${env.NEXT_PUBLIC_WEBSOCKET_URL}/api/getAllTokens`)
+    // Use same-origin proxy to avoid mixed-content/TLS issues
+    const url = `/api/token-service/getAllTokens?filter=trending&order=desc&limit=200`;
+    fetch(url)
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch tokens');
         return res.json();
@@ -56,17 +58,17 @@ export default function PulsePage() {
         <Header />
         <div className="w-full p-4">
           <h1 className="text-2xl font-bold mb-6">Pulse</h1>
-          {(loading || wsLoading) ? (
+          {(loading && wsLoading) ? (
             <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
               <PulseTable title="New Pairs" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="first" />
               <PulseTable title="Final Stretch" tokens={[]} loading skeletonRowCount={10} />
               <PulseTable title="Migrated" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="last" />
             </div>
-          ) : (error || wsError) ? (
-            <div className="text-center text-red-400 py-10">{error || wsError}</div>
+          ) : (error && !tokens.length) ? (
+            <div className="text-center text-red-400 py-10">{error}</div>
           ) : (
             <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
-              <PulseTable title="New Pairs" tokens={newPairsTokens} isFirstOrLast="first" />
+              <PulseTable title="New Pairs" tokens={(newPairsTokens && (newPairsTokens as any[]).length ? (newPairsTokens as any) : newPairs)} isFirstOrLast="first" />
               <PulseTable title="Final Stretch" tokens={finalStretch} />
               <PulseTable title="Migrated" tokens={migrated} isFirstOrLast="last" />
             </div>

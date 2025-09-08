@@ -1,4 +1,7 @@
 import React from 'react';
+import Image from 'next/image';
+import { withImageFallback } from '../utils/images';
+import AvatarImage from './AvatarImage';
 import InterstatePopout from './InterstatePopout';
 import type { Token } from '../utils/db';
 
@@ -18,9 +21,12 @@ export default function TokenPopout({ token, open, onClose }: TokenPopoutProps) 
     >
       <div className="space-y-3">
         <div className="flex items-center space-x-3">
-          <img
+          <AvatarImage
             src={token.logo}
-            alt={token.name}
+            name={token.name}
+            symbol={token.symbol}
+            width={32}
+            height={32}
             className="w-8 h-8 rounded-full"
           />
           <div>

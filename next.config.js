@@ -8,6 +8,19 @@ import "./src/env.js";
 const config = {
   reactStrictMode: true,
   output: 'standalone',
+  images: {
+    unoptimized: true,
+    remotePatterns: [
+      { protocol: 'https', hostname: 'arweave.net' },
+      { protocol: 'https', hostname: 'ipfs.io' },
+      { protocol: 'https', hostname: 'cloudflare-ipfs.com' },
+      { protocol: 'https', hostname: 'gateway.pinata.cloud' },
+      { protocol: 'https', hostname: 'pump.fun' },
+      { protocol: 'https', hostname: 'cdn.pump.fun' },
+      { protocol: 'https', hostname: 'moonitcdn.io' },
+      { protocol: 'https', hostname: 'metadata.pumployer.fun' },
+    ],
+  },
 
   /**
    * If you are using `appDir` then you must comment the below `i18n` config out.

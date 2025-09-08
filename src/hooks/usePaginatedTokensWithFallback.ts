@@ -25,6 +25,10 @@ export default function usePaginatedTokensWithFallback({
   limit = 20,
 }: UsePaginatedTokensParams = {}) {
   console.log('🔧 usePaginatedTokensWithFallback hook called with:', { filter, order, offset, limit });
+  console.log('🔧 Environment check:', {
+    WEBSOCKET_URL: env.NEXT_PUBLIC_WEBSOCKET_URL,
+    BACKEND_URL: env.NEXT_PUBLIC_BACKEND_URL
+  });
   
   const [state, setState] = useState<TokensState>({
     data: [],
@@ -43,7 +47,7 @@ export default function usePaginatedTokensWithFallback({
   const wsConnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const throttledSetData = useCallback(
-    throttle((newData: any[]) => {
+    (newData: any[]) => {
       console.log('🔧 Setting data in hook:', newData?.length, 'tokens');
       console.log('🔧 First token data RAW from API:', newData?.[0] ? {
         name: newData[0].name,
@@ -54,7 +58,7 @@ export default function usePaginatedTokensWithFallback({
         keys: Object.keys(newData[0])
       } : 'No data');
       setState(prev => ({ ...prev, data: newData, loading: false }));
-    }, 1000),
+    },
     []
   );
 
@@ -72,9 +76,11 @@ export default function usePaginatedTokensWithFallback({
           limit: (limit || 20).toString(),
         });
         
-        const url = `${env.NEXT_PUBLIC_WEBSOCKET_URL}/api/getAllTokens?${queryParams}`;
+        // If env is ws(s)://..., convert to http(s):// for REST polling
+        // Always use same-origin proxy to avoid mixed-content/TLS issues
+        const url = `/api/token-service/getAllTokens?${queryParams}`;
         console.log('📡 Polling URL:', url);
-        console.log('📡 Environment WEBSOCKET_URL:', env.NEXT_PUBLIC_WEBSOCKET_URL);
+        console.log('📡 Environment WEBSOCKET_URL (for WS only):', env.NEXT_PUBLIC_WEBSOCKET_URL);
         
         const response = await fetch(url);
         console.log('📡 Polling response status:', response.status, response.ok);
@@ -110,8 +116,8 @@ export default function usePaginatedTokensWithFallback({
     // Initial poll
     poll();
 
-    // Set up polling interval (every 3 seconds for better responsiveness)
-    pollIntervalRef.current = setInterval(poll, 3000);
+    // Set up polling interval (faster for responsiveness)
+    pollIntervalRef.current = setInterval(poll, 1000);
   }, [filter, order, offset, limit, throttledSetData]);
 
   // Clear polling
@@ -242,7 +248,7 @@ export default function usePaginatedTokensWithFallback({
       if (wsConnectionTimeoutRef.current) {
         clearTimeout(wsConnectionTimeoutRef.current);
       }
-      throttledSetData.cancel();
+      // throttledSetData.cancel(); // Removed since we removed throttling
       if (wsRef.current) {
         const ws = wsRef.current;
         wsRef.current = null; // Prevent reconnection on intentional close

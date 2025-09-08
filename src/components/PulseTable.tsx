@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
+import AvatarImage from '~/components/AvatarImage';
 import type { Token } from '~/utils/db';
 import { formatSmartNumber } from '~/utils/db';
 import { FaUser, FaGlobe, FaSearch, FaCrown, FaRegCopy, FaBolt } from 'react-icons/fa';
 import InterstateTooltip from './InterstateTooltip';
 import { useRouter } from 'next/router';
 import { fetchTokenMetadata } from '~/utils/functions';
+import { withImageFallback, extractMetaImage } from '~/utils/images';
 
 interface PulseTableProps {
   title: string;
@@ -36,7 +39,7 @@ function useTokenMetadata(uri?: string) {
     }
     setLoading(true);
     setShowInitial(false);
-    const timer = setTimeout(() => setShowInitial(true), 500);
+    const timer = setTimeout(() => setShowInitial(true), 150);
     fetchTokenMetadata(uri).then((data) => {
       if (!cancelled) {
         if (data) tokenMetadataCache[uri] = data;
@@ -56,10 +59,19 @@ function TokenImage({ token }: { token: Token }) {
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   if (loading && !showInitial) {
     return <div className="w-8 h-8 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin" />;
-  } else if (meta?.image) {
-    return <img src={meta.image} alt={token.symbol} className="w-12 h-12 object-contain" />;
-  } else if (token.logo) {
-    return <img src={token.logo} alt={token.symbol} className="w-12 h-12 object-contain" />;
+  } else if (meta || token.logo) {
+    const metaImg = extractMetaImage(meta);
+    return (
+      <AvatarImage
+        src={metaImg || undefined}
+        fallbackSrc={token.logo || undefined}
+        name={token.name}
+        symbol={token.symbol}
+        width={48}
+        height={48}
+        className="w-12 h-12 object-contain rounded"
+      />
+    );
   } else {
     return <span className="text-2xl font-bold text-neutral-400">{token.symbol?.[0] || '?'}</span>;
   }

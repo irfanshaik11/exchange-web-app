@@ -10,8 +10,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  // Use the working API endpoint
-  const baseURL = "https://staging-backend.interstate.so";
+  // Use the backend URL from environment
+  const baseURL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://backend-service.narrative.trade";
   const urlParams = new URLSearchParams();
   urlParams.set(paramKey, paramVal);
 

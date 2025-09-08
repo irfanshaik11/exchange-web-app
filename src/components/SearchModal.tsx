@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import Image from 'next/image';
 import { formatSmartNumber } from "~/utils/db";
 import { FaBolt, FaClock, FaChartLine, FaTelegramPlane } from "react-icons/fa";
 import usePaginatedTokensWebSocket from "~/hooks/usePaginatedTokensWebSocket";
@@ -16,6 +17,8 @@ import { LuChartNoAxesColumn } from "react-icons/lu";
 import { TbDropletHalf2Filled } from "react-icons/tb";
 import { CiUser, CiGlobe } from "react-icons/ci";
 import { fetchTokenMetadata } from "~/utils/functions";
+import { withImageFallback, normalizeImageUrl, extractMetaImage } from "~/utils/images";
+import AvatarImage from '~/components/AvatarImage';
 import type { Timeframe } from "../pages/index";
 
 // Token type
@@ -80,8 +83,9 @@ export function TokenLogo({ token }: { token: any }) {
   useEffect(() => {
     if (token.uri && !logoUrl) {
       fetchTokenMetadata(token.uri).then((data) => {
-        if (data?.image) {
-          setLogoUrl(data.image);
+        const img = extractMetaImage(data);
+        if (img) {
+          setLogoUrl(img);
         }
       });
     }
@@ -95,19 +99,15 @@ export function TokenLogo({ token }: { token: any }) {
     [],
   );
 
-  return logoUrl ? (
-    <img
-      src={logoUrl}
-      alt={token.symbol}
+  return (
+    <AvatarImage
+      src={logoUrl || undefined}
+      name={token.name}
+      symbol={token.symbol}
+      width={64}
+      height={64}
       className="h-16 w-16 rounded-lg border border-neutral-700 object-contain"
-      onError={handleImageError}
     />
-  ) : (
-    <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-neutral-700 bg-neutral-800">
-      <span className="text-sm font-bold text-neutral-400">
-        {token.symbol?.charAt(0) || "?"}
-      </span>
-    </div>
   );
 }
 

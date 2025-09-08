@@ -128,54 +128,40 @@ export function formatSmartNumber(num: number): string {
 export async function fetchTokenMetadata(uri: string | undefined): Promise<any | null> {
   if (!uri) return null;
   try {
-    // Use backend proxy to avoid CORS issues
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://staging-backend.interstate.so';
-    const proxyUrl = `${backendUrl}/api/metadata/proxy?url=${encodeURIComponent(uri)}`;
-    
-    console.log('fetchTokenMetadata: Attempting to fetch from:', proxyUrl);
-    console.log('fetchTokenMetadata: Backend URL from env:', process.env.NEXT_PUBLIC_BACKEND_URL);
-    
+    // Prefer same-origin proxy to avoid mixed content/TLS/CORS
+    const proxyUrl = `/api/metadata/proxy?url=${encodeURIComponent(uri)}`;
+
     const controller = new AbortController();
     const timeout = setTimeout(() => {
-      console.warn('fetchTokenMetadata: Request timed out after 8 seconds for:', uri);
+      console.warn('fetchTokenMetadata: Request timed out after 6 seconds for:', uri);
       controller.abort();
-    }, 8000); // Reduced to 8 seconds
-    
-    const resp = await fetch(proxyUrl, { 
+    }, 6000);
+
+    const resp = await fetch(proxyUrl, {
       signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
-      }
+      headers: { 'Accept': 'application/json' },
+      cache: 'force-cache',
     });
     clearTimeout(timeout);
-    
-    console.log('fetchTokenMetadata: Response status:', resp.status, resp.statusText);
-    
+
     if (!resp.ok) {
-      console.error(`Failed to fetch metadata via proxy: ${resp.status} ${resp.statusText}`);
+      console.error(`Failed to fetch metadata via local proxy: ${resp.status} ${resp.statusText}`);
       return null;
     }
-    
-    let data = await resp.text();
+    const text = await resp.text();
     try {
-      data = JSON.parse(data);
-    } catch (e) {
-      // Not valid JSON
+      return JSON.parse(text);
+    } catch {
       return null;
     }
-    return data;
   } catch (err) {
-    // Handle AbortError specifically (timeout)
     if (err instanceof DOMException && err.name === 'AbortError') {
-      console.warn('fetchTokenMetadata: Request was aborted (timeout) for:', uri);
-      return null; // Return null instead of throwing
+      return null;
     }
-    
-    // Handle other errors
-    console.warn('fetchTokenMetadata: Error fetching metadata for:', uri, 'Error:', err instanceof Error ? err.message : 'Unknown error');
-    return null; // Always return null instead of throwing
+    console.warn('fetchTokenMetadata: Error fetching metadata for:', uri, 'Error:', (err as any)?.message || err);
+    return null;
   }
-} 
+}
 
 
 export async function getSolBalance(address: string, isDevnet = false) {
@@ -191,5 +177,4 @@ export async function getSolBalance(address: string, isDevnet = false) {
     return null;
   }
 }
-
 

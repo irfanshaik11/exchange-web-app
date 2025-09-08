@@ -7,6 +7,7 @@ import {
   FaQuestionCircle,
 } from "react-icons/fa";
 import InterstateButton from "./InterstateButton";
+import Image from 'next/image';
 import InterstateTooltip from './InterstateTooltip';
 import CustomCheckbox from './CustomCheckbox';
 import { useRouter } from "next/router";
@@ -14,6 +15,8 @@ import type { Token as BaseToken } from "~/utils/db";
 import { formatSmartNumber } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
+import { withImageFallback, extractMetaImage } from '~/utils/images';
+import AvatarImage from '~/components/AvatarImage';
 import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
 import { copyToClipboard } from "~/utils/clipboard";
@@ -141,7 +144,7 @@ function useTokenMetadata(uri?: string) {
     }
     setLoading(true);
     setShowInitial(false);
-    const timer = setTimeout(() => setShowInitial(true), 500);
+    const timer = setTimeout(() => setShowInitial(true), 150);
     fetchTokenMetadata(uri).then((data) => {
       if (!cancelled) {
         if (data) tokenMetadataCache[uri] = data;
@@ -207,10 +210,12 @@ const TokenAvatar: React.FC<{
       <div className="w-full h-full rounded-lg bg-neutral-800 flex items-center justify-center overflow-hidden">
         {loading && !showInitial ? (
           <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
-        ) : meta?.image ? (
-          <img
-            src={meta.image}
-            alt={token.name}
+        ) : meta || token.logo ? (
+          <AvatarImage
+            src={extractMetaImage(meta) || undefined}
+            fallbackSrc={token.logo}
+            name={token.name}
+            symbol={token.symbol}
             width={48}
             height={48}
             className="h-12 w-12 object-cover rounded-lg"

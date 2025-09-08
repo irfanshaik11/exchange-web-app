@@ -1,4 +1,7 @@
 import React from 'react';
+import Image from 'next/image';
+import { withImageFallback } from '~/utils/images';
+import AvatarImage from '~/components/AvatarImage';
 import type { Token } from '~/utils/db';
 import { formatSmartNumber } from '~/utils/functions';
 import InterstateButton from '../InterstateButton';
@@ -47,12 +50,13 @@ export default function TableRow({
               <div className="p-2">
                 {/* Enlarged Picture (top, centered) */}
                 <div className="mb-2 flex justify-center">
-                  <img
+                  <AvatarImage
                     src={token.logo}
-                    alt={token.name}
+                    name={token.name}
+                    symbol={token.symbol}
                     width={200}
                     height={200}
-                    className="border border-neutral-700"
+                    className="border border-neutral-700 rounded"
                   />
                 </div>
 
@@ -71,9 +75,10 @@ export default function TableRow({
               </div>
             }
           >
-            <img
+            <AvatarImage
               src={token.logo}
-              alt={token.name}
+              name={token.name}
+              symbol={token.symbol}
               width={48}
               height={48}
               className="rounded"
@@ -93,7 +98,7 @@ export default function TableRow({
       {/* Market Cap */}
       <td className="px-3 py-2">
         <div className="font-medium text-white">
-          ${formatSmartNumber(token.total_fully_diluted_valuation)}
+          ${formatSmartNumber((token as any).fully_diluted_value ?? (token as any).total_fully_diluted_valuation)}
         </div>
         <div className={`text-sm ${token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
           {formatPercentChange(token.price_percent_change_1h)}%

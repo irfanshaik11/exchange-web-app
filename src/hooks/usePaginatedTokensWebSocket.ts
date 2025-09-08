@@ -34,11 +34,12 @@ export default function usePaginatedTokensWebSocket({
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
 
+  // Lower throttle for faster UI updates (was 1000ms)
   const throttledSetData = useRef(
     throttle((newData: any[]) => {
       setData(newData);
       setState(prev => ({ ...prev, loading: false }));
-    }, 1000)
+    }, 150, { leading: true, trailing: true })
   ).current;
 
   useEffect(() => {

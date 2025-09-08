@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import Image from 'next/image';
+import { withImageFallback } from '../utils/images';
+import AvatarImage from './AvatarImage';
 import { FaStar, FaRegStar } from 'react-icons/fa';
 import { useWatchlist } from './WatchlistContext';
 import type { Token } from '../utils/db';
@@ -34,9 +37,10 @@ export default function TokenImage({ token, size = 32, className = '' }: TokenIm
       <div
         className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-yellow-400 bg-neutral-800 cursor-pointer"
       >
-        <img
+        <AvatarImage
           src={token.logo}
-          alt={token.name}
+          name={token.name}
+          symbol={token.symbol}
           width={size}
           height={size}
           className="h-8 w-8 object-cover"
@@ -66,9 +70,12 @@ export default function TokenImage({ token, size = 32, className = '' }: TokenIm
         overlayClassName="bg-green-400 z-[99999]"
       >
         <div className="w-48 h-48 rounded-lg overflow-hidden bg-neutral-800 flex items-center justify-center border-2 border-neutral-700">
-          <img
+          <AvatarImage
             src={token.logo}
-            alt={token.name}
+            name={token.name}
+            symbol={token.symbol}
+            width={192}
+            height={192}
             className="w-full h-full object-contain"
           />
         </div>

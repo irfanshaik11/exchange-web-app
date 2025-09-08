@@ -92,11 +92,12 @@ export default function Home() {
 
   // WebSocket token service
   const {
-    data: allTokens, 
-    isConnected, 
-    error: tokenError, 
+    data: allTokens,
+    loading: tokensLoading,
+    isConnected,
+    error: tokenError,
     isReconnecting,
-    usingFallback
+    usingFallback,
   } = usePaginatedTokensWithFallback({
     filter: selectedTab === 'dex' ? 'new' : 'trending'
   });  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
@@ -235,6 +236,7 @@ export default function Home() {
   useEffect(() => {
     if (selectedTab === "trending") {
       const arr = Array.from(tokenMapRef.current.values());
+      console.log('🔧 Setting displayed tokens for trending tab. TokenMapRef size:', tokenMapRef.current.size, 'arr length:', arr.length);
       const sortedTokens = [...arr];
       sortedTokens.sort((a, b) => {
         const aVal = Number(a[sortKey]) || 0;
@@ -246,7 +248,9 @@ export default function Home() {
         }
       });
       setDisplayed(sortedTokens);
+      console.log('🔧 Set displayed to:', sortedTokens.length, 'tokens');
     } else {
+      console.log('🔧 Setting displayed tokens for dex tab. FilteredTokens length:', filteredTokens.length);
       setDisplayed(filteredTokens.slice(0, 10));
     }
   }, [selectedTab, filteredTokens, sortKey, sortDirection]);
@@ -271,9 +275,23 @@ export default function Home() {
 
   useEffect(() => {
     setShowSkeleton(true);
-    const timer = setTimeout(() => setShowSkeleton(false), 1500);
+    const timer = setTimeout(() => setShowSkeleton(false), 800);
     return () => clearTimeout(timer);
   }, [selectedTab]);
+
+  // Tie skeleton to hook loading state to avoid getting stuck
+  useEffect(() => {
+    if (tokensLoading === false) {
+      setShowSkeleton(false);
+    }
+  }, [tokensLoading]);
+
+  // Hide skeleton when we have data
+  useEffect(() => {
+    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
+      setShowSkeleton(false);
+    }
+  }, [allTokens]);
 
   return (
     <>
