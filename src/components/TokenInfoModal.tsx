@@ -91,7 +91,7 @@ const TokenInfoModal: React.FC<TokenInfoModalProps> = ({ open, onClose, token, s
                 <img src={similarToken.logo} alt={similarToken.name} width={32} height={32} className="border border-neutral-700" />
                 <span className="text-neutral-300 truncate max-w-[80px]">{similarToken.name}</span>
                 <span className="text-[10px] text-neutral-500">{similarToken.created_at ? `${Math.floor((new Date().getTime() - new Date(similarToken.created_at).getTime()) / (1000 * 60 * 60 * 24))}d` : '-'}</span>
-                <span className="text-[10px] text-neutral-500">TX: {formatSmartNumber((similarToken.total_buy_volume_1h || 0) + (similarToken.total_sell_volume_1h || 0))}</span>
+                <span className="text-[10px] text-neutral-500">TX: {formatSmartNumber((similarToken as any).volume_1h || 0)}</span>
               </li>
             ))}
           </ul>

@@ -356,10 +356,7 @@ function SearchModalContent({
           <ul className="flex h-full flex-col gap-4 overflow-y-auto">
             {displayTokens.map((token) => {
               const mc = formatSmartNumber(token.fully_diluted_value || 0);
-              const vol = formatSmartNumber(
-                (token.total_buy_volume_1h || 0) +
-                  (token.total_sell_volume_1h || 0),
-              );
+              const vol = formatSmartNumber((token as any).volume_1h || 0);
               const liq = formatSmartNumber(token.total_liquidity_usd || 0);
 
               return (

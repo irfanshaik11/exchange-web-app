@@ -200,7 +200,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                   <div className="flex flex-col items-end gap-1 min-w-[120px]">
                     <div className="flex gap-3 text-xs">
                       <span className="text-neutral-400">MC <span className="text-blue-400 font-bold">${formatSmartNumber(token.fully_diluted_value)}</span></span>
-                      <span className="text-neutral-400">V <span className="text-white font-bold">${formatSmartNumber(token[`total_buy_volume_24h`] + token[`total_sell_volume_24h`])}</span></span>
+                      <span className="text-neutral-400">V <span className="text-white font-bold">${formatSmartNumber((token as any).volume_24h || 0)}</span></span>
                     </div>
                     <div className="flex gap-3 text-xs items-center">
                       <span className="text-neutral-400 flex items-center gap-1">F <span className="inline-block align-middle"><svg width="12" height="12" viewBox="0 0 24 24"><defs><linearGradient id="solana-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#00FFA3"/><stop offset="100%" stopColor="#DC1FFF"/></linearGradient></defs><rect width="24" height="24" fill="url(#solana-gradient)" rx="4"/></svg></span> <span className="text-emerald-400 font-bold">0</span></span>

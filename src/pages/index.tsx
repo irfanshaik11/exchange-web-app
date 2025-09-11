@@ -91,6 +91,11 @@ export default function Home() {
   const [showSkeleton, setShowSkeleton] = useState(true);
 
   // WebSocket token service
+  console.log('🔧 About to call usePaginatedTokensWithFallback with:', { 
+    filter: selectedTab === 'dex' ? 'new' : 'trending', 
+    timeframe: selectedTimeframe 
+  });
+  console.log('🔧 selectedTimeframe value:', selectedTimeframe, 'type:', typeof selectedTimeframe);
   const {
     data: allTokens,
     loading: tokensLoading,
@@ -99,30 +104,79 @@ export default function Home() {
     isReconnecting,
     usingFallback,
   } = usePaginatedTokensWithFallback({
-    filter: selectedTab === 'dex' ? 'new' : 'trending'
+    filter: selectedTab === 'dex' ? 'new' : 'trending',
+    timeframe: selectedTimeframe
   });  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
   useEffect(() => {
+    console.log('🔧 allTokens changed:', { allTokens, isArray: Array.isArray(allTokens), length: Array.isArray(allTokens) ? allTokens.length : 'not array' });
     if (Array.isArray(allTokens)) {
+      // Check for duplicates
+      const uniqueTokens = new Map();
+      allTokens.forEach((token, index) => {
+        if (uniqueTokens.has(token.pair_address)) {
+          console.log('🔧 DUPLICATE FOUND:', { 
+            index, 
+            pair_address: token.pair_address, 
+            name: token.name,
+            firstOccurrence: uniqueTokens.get(token.pair_address)
+          });
+        } else {
+          uniqueTokens.set(token.pair_address, { index, name: token.name });
+        }
+      });
+      console.log('🔧 Unique tokens count:', uniqueTokens.size, 'out of', allTokens.length);
       let changed = false;
       const map = tokenMapRef.current;
-      for (const token of allTokens as TokenWithDexPaid[]) {
+      console.log('🔧 Processing tokens:', allTokens.length, 'tokens');
+      console.log('🔧 All tokens raw data:', allTokens.map((t, i) => ({ 
+        index: i,
+        name: t.name, 
+        symbol: t.symbol, 
+        pair_address: t.pair_address 
+      })));
+      for (let i = 0; i < allTokens.length; i++) {
+        const token = allTokens[i] as TokenWithDexPaid;
+        console.log(`🔧 Processing token ${i + 1}/${allTokens.length}:`, { 
+          name: token.name, 
+          symbol: token.symbol, 
+          pair_address: token.pair_address,
+          hasName: 'name' in token,
+          hasSymbol: 'symbol' in token,
+          hasPairAddress: 'pair_address' in token,
+          keys: Object.keys(token)
+        });
         const prev = map.get(token.pair_address);
         if (!prev || JSON.stringify(prev) !== JSON.stringify(token)) {
           map.set(token.pair_address, token);
           changed = true;
+          console.log('🔧 Added/updated token:', token.name);
+        } else {
+          console.log('🔧 Skipped token (no changes):', token.name);
         }
       }
-      // Optionally, remove tokens that are no longer present
+      // Optionally, remove tokens that are no longer present, but only when incoming list is reasonably sized
       const allAddresses = new Set((allTokens as TokenWithDexPaid[]).map(t => t.pair_address));
-      for (const addr of Array.from(map.keys())) {
-        if (!allAddresses.has(addr)) {
-          map.delete(addr);
-          changed = true;
+      const incomingLen = allTokens.length;
+      const minCount = Math.max(8, Math.floor(Math.min(map.size || 20, 20) * 0.6));
+      if (incomingLen >= minCount) {
+        for (const addr of Array.from(map.keys())) {
+          if (!allAddresses.has(addr)) {
+            map.delete(addr);
+            changed = true;
+          }
         }
+      } else {
+        console.log('🛡️ Skipping deletions to keep table stable (incoming too small):', { incomingLen, minCount, currentSize: map.size });
       }
       if (changed) {
         // Create a stable array for downstream use
         const arr = Array.from(map.values());
+        console.log('🔧 Setting filteredTokens:', arr.length, 'tokens');
+        console.log('🔧 FilteredTokens data:', arr.map(t => ({ 
+          name: t.name, 
+          symbol: t.symbol, 
+          pair_address: t.pair_address 
+        })));
         setFilteredTokens(arr);
       }
     }
@@ -191,17 +245,14 @@ export default function Home() {
   }, [search]); */
 
   const handleTimeframeClick = (tf: string) => {
+    console.log('🔧 Timeframe clicked:', tf);
+    console.log('🔧 Current selectedTimeframe before change:', selectedTimeframe);
     setSelectedTimeframe(tf as Timeframe);
     setSortKey("volume");
     setSortDirection("desc");
-    // Sort by volume for the new timeframe
-    const arr = Array.from(tokenMapRef.current.values());
-    const sorted = [...arr].sort((a, b) => {
-      const aVol = (a[`total_buy_volume_${tf}`] || 0) + (a[`total_sell_volume_${tf}`] || 0);
-      const bVol = (b[`total_buy_volume_${tf}`] || 0) + (b[`total_sell_volume_${tf}`] || 0);
-      return bVol - aVol;
-    });
-    setDisplayed(sorted);
+    console.log('🔧 selectedTimeframe state updated to:', tf);
+    console.log('🔧 State update scheduled, hook should re-run soon');
+    // Let the hook handle data fetching and sorting
   };
 
   // QUICK BUY handler
@@ -226,6 +277,20 @@ export default function Home() {
     }
   }
 
+  // Helper to compute volume by timeframe for sorting in trending view
+  const getVolumeForTimeframe = useCallback((t: any, tf: Timeframe) => {
+    const v = t?.[`volume_${tf}`];
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = parseFloat(v);
+      return isNaN(n) ? 0 : n;
+    }
+    // simple fallbacks
+    if (tf === '6h' || tf === '24h') return Number(t?.volume_1h) || 0;
+    if (tf === '1h') return Number(t?.volume_5m) || 0;
+    return 0;
+  }, []);
+
   useEffect(() => {
     if (selectedTab === "trending") {
       setSortKey("volume");
@@ -237,23 +302,42 @@ export default function Home() {
     if (selectedTab === "trending") {
       const arr = Array.from(tokenMapRef.current.values());
       console.log('🔧 Setting displayed tokens for trending tab. TokenMapRef size:', tokenMapRef.current.size, 'arr length:', arr.length);
+      console.log('🔧 TokenMapRef contents:', arr.map(t => ({ name: t.name, symbol: t.symbol, pair_address: t.pair_address })));
       const sortedTokens = [...arr];
       sortedTokens.sort((a, b) => {
-        const aVal = Number(a[sortKey]) || 0;
-        const bVal = Number(b[sortKey]) || 0;
-        if (sortDirection === "asc") {
-          return aVal - bVal;
+        let aVal = 0, bVal = 0;
+        if (sortKey === 'volume') {
+          aVal = getVolumeForTimeframe(a, selectedTimeframe);
+          bVal = getVolumeForTimeframe(b, selectedTimeframe);
+        } else if (sortKey === 'liquidity') {
+          aVal = Number(a.total_liquidity_usd) || 0;
+          bVal = Number(b.total_liquidity_usd) || 0;
+        } else if (sortKey === 'market_cap_total' || sortKey === 'fully_diluted_value') {
+          aVal = Number(a.fully_diluted_value) || 0;
+          bVal = Number(b.fully_diluted_value) || 0;
         } else {
-          return bVal - aVal;
+          aVal = Number((a as any)[sortKey]) || 0;
+          bVal = Number((b as any)[sortKey]) || 0;
         }
+        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
       });
       setDisplayed(sortedTokens);
       console.log('🔧 Set displayed to:', sortedTokens.length, 'tokens');
+      console.log('🔧 Displayed tokens:', sortedTokens.map(t => ({ 
+        name: t.name, 
+        symbol: t.symbol, 
+        pair_address: t.pair_address,
+        hasName: 'name' in t,
+        hasSymbol: 'symbol' in t,
+        hasPairAddress: 'pair_address' in t,
+        keys: Object.keys(t)
+      })));
+      console.log('🔧 Displayed state updated, should trigger re-render');
     } else {
       console.log('🔧 Setting displayed tokens for dex tab. FilteredTokens length:', filteredTokens.length);
       setDisplayed(filteredTokens.slice(0, 10));
     }
-  }, [selectedTab, filteredTokens, sortKey, sortDirection]);
+  }, [selectedTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, getVolumeForTimeframe]);
 
   // Sorting handler for table headers
   const handleSort = (key: typeof sortKey) => {
@@ -279,19 +363,19 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [selectedTab]);
 
-  // Tie skeleton to hook loading state to avoid getting stuck
+  // Hide skeleton when we have data or when loading is complete
   useEffect(() => {
-    if (tokensLoading === false) {
+    console.log('🔧 Skeleton effect triggered:', {
+      allTokens: !!allTokens,
+      allTokensLength: Array.isArray(allTokens) ? allTokens.length : 'not array',
+      tokensLoading,
+      shouldHideSkeleton: (allTokens && Array.isArray(allTokens) && allTokens.length > 0) || tokensLoading === false
+    });
+    if ((allTokens && Array.isArray(allTokens) && allTokens.length > 0) || tokensLoading === false) {
+      console.log('🔧 Hiding skeleton');
       setShowSkeleton(false);
     }
-  }, [tokensLoading]);
-
-  // Hide skeleton when we have data
-  useEffect(() => {
-    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
-      setShowSkeleton(false);
-    }
-  }, [allTokens]);
+  }, [allTokens, tokensLoading]);
 
   return (
     <>
@@ -389,23 +473,28 @@ export default function Home() {
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
-          {showSkeleton ? (
+          {(() => {
+            console.log('🔧 Render conditions:', {
+              showSkeleton,
+              allTokens: !!allTokens,
+              allTokensLength: Array.isArray(allTokens) ? allTokens.length : 'not array',
+              tokenError,
+              displayedLength: displayed.length,
+              tokensLoading,
+              displayedTokens: displayed.map(t => ({ 
+                name: t.name, 
+                symbol: t.symbol, 
+                pair_address: t.pair_address 
+              }))
+            });
+            return null;
+          })()}
+          {(showSkeleton || tokensLoading) ? (
             <div className="space-y-4">
               {Array.from({ length: 10 }).map((_, i) => (
                 <div key={i} className="h-12 w-full bg-neutral-800 animate-pulse rounded" />
               ))}
             </div>
-          ) : !allTokens ? (
-            <InterstateTable
-              rows={[]}
-              onQuickBuy={handleQuickBuy}
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              setSort={handleSort}
-              selectedTimeframe={selectedTimeframe}
-              quickBuyAmount={quickBuyAmount}
-              skeletonRowCount={10}
-            />
           ) : tokenError ? (
             <div className="py-10 text-center text-red-400">
               {tokenError}
@@ -418,6 +507,11 @@ export default function Home() {
             <InterstateTable
               rows={displayed.map((token, i) => {
                 // Debug: Check what token data looks like before passing to table
+                console.log(`🔧 Mapping token ${i + 1}/${displayed.length} for table:`, { 
+                  name: token.name, 
+                  symbol: token.symbol, 
+                  pair_address: token.pair_address 
+                });
                 if (i === 0) {
                   console.log('🔧 First token being passed to table FULL OBJECT:', JSON.stringify(token, null, 2));
                   console.log('🔧 First token being passed to table:', {

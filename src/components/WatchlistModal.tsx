@@ -69,7 +69,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm">${formatSmartNumber(token.fully_diluted_value)}</td>
-                <td className="px-4 py-3 text-sm">${formatSmartNumber(token.total_buy_volume_1h + token.total_sell_volume_1h)}</td>
+                <td className="px-4 py-3 text-sm">${formatSmartNumber((token as any).volume_1h || 0)}</td>
                 <td className="px-4 py-3 text-sm">${formatSmartNumber(token.total_liquidity_usd)}</td>
                 <td className="px-4 py-3">
                   <button

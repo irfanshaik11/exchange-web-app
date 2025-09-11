@@ -115,7 +115,7 @@ export default function TableRow({
       {/* Volume */}
       <td className="px-3 py-2">
         <div className="font-medium text-white">
-          ${formatSmartNumber(token.total_buy_volume_24h + token.total_sell_volume_24h)}
+          ${formatSmartNumber((token as any).volume_24h || 0)}
         </div>
       </td>
 

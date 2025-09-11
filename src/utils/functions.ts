@@ -128,8 +128,11 @@ export function formatSmartNumber(num: number): string {
 export async function fetchTokenMetadata(uri: string | undefined): Promise<any | null> {
   if (!uri) return null;
   try {
+    // Normalize to https if ipfs://, prefer Cloudflare IPFS
+    const { normalizeImageUrl } = await import('./images');
+    const normalized = normalizeImageUrl(uri) || uri;
     // Prefer same-origin proxy to avoid mixed content/TLS/CORS
-    const proxyUrl = `/api/metadata/proxy?url=${encodeURIComponent(uri)}`;
+    const proxyUrl = `/api/metadata/proxy?url=${encodeURIComponent(normalized)}`;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => {
@@ -177,4 +180,3 @@ export async function getSolBalance(address: string, isDevnet = false) {
     return null;
   }
 }
-

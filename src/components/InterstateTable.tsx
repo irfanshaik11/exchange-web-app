@@ -63,11 +63,17 @@ const TIME_LABELS = ['2h', '1d', '3d', '1h', '6h'];
 // Utility Functions
 const getTokenStat = (token: Token, stat: string, timeframe: string): number => {
   const key = `${stat}_${timeframe}`;
-  const val = (token as any)[key];
-  const result = typeof val === 'number' ? val : parseFloat(val) || 0;
-  
-  // Debug when returning 0
-  if (result === 0) {
+  let val = (token as any)[key];
+
+  // Fallbacks for alternate backend naming (price_change_* instead of price_percent_change_*)
+  if ((val === undefined || val === null) && stat === 'price_percent_change') {
+    const altKey = `price_change_${timeframe}`;
+    val = (token as any)[altKey];
+  }
+
+  const num = typeof val === 'number' ? val : parseFloat(val) || 0;
+
+  if (num === 0) {
     console.log('getTokenStat returning 0:', {
       stat,
       timeframe,
@@ -77,8 +83,45 @@ const getTokenStat = (token: Token, stat: string, timeframe: string): number => 
       tokenName: token.name
     });
   }
+
+  return num;
+};
+
+// Fallback helpers to accommodate different backend shapes
+const getNumber = (obj: any, key: string): number => {
+  const v = obj?.[key];
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = parseFloat(v);
+    return isNaN(n) ? 0 : n;
+  }
+  return 0;
+};
+
+const getVolume = (token: Token, timeframe: string): number => {
+  // Use the volume fields that backend provides: volume_5m, volume_1h, volume_6h, volume_24h
+  let volume = getNumber(token as any, `volume_${timeframe}`);
   
-  return result;
+  // Fallback for missing timeframes - use available data
+  if (volume === 0) {
+    if (timeframe === '6h' || timeframe === '24h') {
+      // For 6h and 24h, fallback to 1h data if available
+      volume = getNumber(token as any, 'volume_1h');
+    } else if (timeframe === '1h') {
+      // For 1h, fallback to 5m data if available
+      volume = getNumber(token as any, 'volume_5m');
+    }
+  }
+  
+  return volume;
+};
+
+const getTxns = (token: Token, timeframe: string): { total: number; buys: number; sells: number } => {
+  const buys = getNumber(token as any, `total_buys_${timeframe}`);
+  const sells = getNumber(token as any, `total_sells_${timeframe}`);
+  if (buys > 0 || sells > 0) return { total: buys + sells, buys, sells };
+  // If separate counts are not available, return zeros; UI will render "-" appropriately
+  return { total: 0, buys: 0, sells: 0 };
 };
 
 const formatPercentChange = (val: number): string => {
@@ -89,9 +132,7 @@ const formatPercentChange = (val: number): string => {
 const getSortableValue = (token: Token, key: string, selectedTimeframe?: string): number => {
   // Handle volume calculation for sorting
   if (key === 'volume' && selectedTimeframe) {
-    const buyVolume = getTokenStat(token, 'total_buy_volume', selectedTimeframe);
-    const sellVolume = getTokenStat(token, 'total_sell_volume', selectedTimeframe);
-    return buyVolume + sellVolume;
+    return getVolume(token, selectedTimeframe);
   }
   
   // Handle TXNS calculation for sorting
@@ -444,20 +485,17 @@ const TxnsCell: React.FC<{
   token: Token;
   selectedTimeframe: string;
 }> = ({ token, selectedTimeframe }) => {
-  const totalTxns = getTokenStat(token, 'total_buys', selectedTimeframe) + 
-                   getTokenStat(token, 'total_sells', selectedTimeframe);
-  const buys = getTokenStat(token, 'total_buys', selectedTimeframe);
-  const sells = getTokenStat(token, 'total_sells', selectedTimeframe);
+  const { total, buys, sells } = getTxns(token, selectedTimeframe);
 
   return (
     <div className="text-right">
       <div className="text-sm text-neutral-100 font-medium mb-1">
-        {formatSmartNumber(totalTxns)}
+        {total === 0 ? '-' : formatSmartNumber(total)}
       </div>
       <div className="text-xs font-medium">
-        <span className="text-emerald-400">{formatSmartNumber(buys)}</span>
+        <span className="text-emerald-400">{buys === 0 ? '-' : formatSmartNumber(buys)}</span>
         <span className="text-neutral-500 mx-1">/</span>
-        <span className="text-red-400">{formatSmartNumber(sells)}</span>
+        <span className="text-red-400">{sells === 0 ? '-' : formatSmartNumber(sells)}</span>
       </div>
     </div>
   );
@@ -517,21 +555,18 @@ const TableRow: React.FC<{
     }
   }, [onQuickBuy, token, onClick]);
 
-  const buyVolume = getTokenStat(token, 'total_buy_volume', selectedTimeframe);
-  const sellVolume = getTokenStat(token, 'total_sell_volume', selectedTimeframe);
-  const volume = buyVolume + sellVolume;
+  const volume = getVolume(token, selectedTimeframe);
   
   // Debug volume calculation
   console.log('Volume calculation debug:', {
     tokenName: token.name,
     selectedTimeframe,
-    buyVolume,
-    sellVolume,
     totalVolume: volume,
-    buyVolumeField: `total_buy_volume_${selectedTimeframe}`,
-    sellVolumeField: `total_sell_volume_${selectedTimeframe}`,
-    buyVolumeRaw: (token as any)[`total_buy_volume_${selectedTimeframe}`],
-    sellVolumeRaw: (token as any)[`total_sell_volume_${selectedTimeframe}`]
+    preferredBuySell: {
+      buy: (token as any)[`total_buy_volume_${selectedTimeframe}`],
+      sell: (token as any)[`total_sell_volume_${selectedTimeframe}`],
+    },
+    fallbackAggregated: (token as any)[`volume_${selectedTimeframe}`],
   });
 
   return (
@@ -614,16 +649,34 @@ export default function InterstateTable({
 
   // Memoized filtered and sorted rows
   const sortedRows = useMemo(() => {
+    console.log('🔧 InterstateTable sortedRows useMemo:', {
+      totalRows: rows.length,
+      filterAmms: filter.amms,
+      tokensWithAmm: rows.filter(({ token }) => token.amm).length,
+      tokensWithoutAmm: rows.filter(({ token }) => !token.amm).length
+    });
+    
     const filteredRows = rows.filter(({ token }) => 
-      token.amm && filter.amms.includes(token.amm)
+      !token.amm || filter.amms.includes(token.amm)
     );
+    
+    console.log('🔧 Filtered rows:', {
+      before: rows.length,
+      after: filteredRows.length,
+      filteredOut: rows.length - filteredRows.length
+    });
 
     if (!sortKey) return filteredRows;
     
     return [...filteredRows].sort((a, b) => {
       const aVal = getSortableValue(a.token, sortKey, selectedTimeframe);
       const bVal = getSortableValue(b.token, sortKey, selectedTimeframe);
-      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      const diff = aVal - bVal;
+      if (diff === 0) {
+        // Stable tiebreaker to reduce jitter between polls
+        return a.token.pair_address.localeCompare(b.token.pair_address);
+      }
+      return sortDirection === 'asc' ? diff : -diff;
     });
   }, [rows, sortKey, sortDirection, filter.amms, selectedTimeframe]);
 

@@ -9,6 +9,9 @@ const ALLOWED = [
   'cf-ipfs.com',
   'mypinata.cloud',
   'arweave.net',
+  'arweave.dev',
+  'shdw-drive.genesysgo.net',
+  'shdw.link',
   'cdn.moonshot.com',
   'meta.huma.finance',
   'cdn.kamino.finance',
@@ -20,6 +23,9 @@ const ALLOWED = [
   'moonitcdn.io',
   'metadata.pumployer.fun',
   'wormhole.com',
+  'raw.githubusercontent.com',
+  'githubusercontent.com',
+  'cdn.discordapp.com',
 ];
 
 function isAllowedHost(host: string) {

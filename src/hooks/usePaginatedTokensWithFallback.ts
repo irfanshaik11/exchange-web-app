@@ -7,6 +7,7 @@ interface UsePaginatedTokensParams {
   order?: string;
   offset?: number;
   limit?: number;
+  timeframe?: string;
 }
 
 interface TokensState {
@@ -23,8 +24,9 @@ export default function usePaginatedTokensWithFallback({
   order = 'desc',
   offset = 0,
   limit = 20,
+  timeframe,
 }: UsePaginatedTokensParams = {}) {
-  console.log('🔧 usePaginatedTokensWithFallback hook called with:', { filter, order, offset, limit });
+  console.log('🔧 usePaginatedTokensWithFallback hook called with:', { filter, order, offset, limit, timeframe });
   console.log('🔧 Environment check:', {
     WEBSOCKET_URL: env.NEXT_PUBLIC_WEBSOCKET_URL,
     BACKEND_URL: env.NEXT_PUBLIC_BACKEND_URL
@@ -39,35 +41,112 @@ export default function usePaginatedTokensWithFallback({
     usingFallback: false,
   });
 
+  console.log('🔧 Current state:', { dataLength: state.data.length, loading: state.loading, usingFallback: state.usingFallback });
+
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const maxReconnectAttempts = 1; // Quickly fall back to polling
+  const isPollingRef = useRef<boolean>(false);
+  // Fail fast to polling to avoid empty UI states when returning to Discover
+  const maxReconnectAttempts = 0; // 0 = try once, then fall back immediately
   const reconnectAttemptRef = useRef(0);
   const wsConnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const throttledSetData = useCallback(
-    (newData: any[]) => {
-      console.log('🔧 Setting data in hook:', newData?.length, 'tokens');
-      console.log('🔧 First token data RAW from API:', newData?.[0] ? {
-        name: newData[0].name,
-        symbol: newData[0].symbol,
-        usd_price: newData[0].usd_price,
-        fully_diluted_value: newData[0].fully_diluted_value,
-        total_liquidity_usd: newData[0].total_liquidity_usd,
-        keys: Object.keys(newData[0])
-      } : 'No data');
-      setState(prev => ({ ...prev, data: newData, loading: false }));
-    },
-    []
-  );
+  const lastStableDataRef = useRef<any[] | null>(null);
+  const lastTimeframeRef = useRef<string | undefined>(timeframe);
+
+  // Stabilize incoming lists to avoid jarring dips (e.g., 2 items on 5m)
+  const stabilizeList = useCallback((incoming: any[]): any[] => {
+    try {
+      const lim = (limit || 20);
+      const prev = lastStableDataRef.current;
+      const minCount = Math.max(8, Math.floor(lim * 0.6));
+
+      // Reset stability baseline if timeframe changed
+      if (lastTimeframeRef.current !== timeframe) {
+        console.log('⏱️ Timeframe changed from', lastTimeframeRef.current, 'to', timeframe, '- keeping previous list stable initially');
+        lastTimeframeRef.current = timeframe;
+      }
+
+      if (!Array.isArray(incoming)) return prev || [];
+
+      // If we don't have a baseline yet, adopt incoming as baseline
+      if (!prev || prev.length === 0) {
+        lastStableDataRef.current = incoming;
+        return incoming;
+      }
+
+      // If incoming is too small (e.g., MV not fully refreshed), merge into previous order
+      if (incoming.length < minCount && prev.length >= incoming.length) {
+        console.log('🛡️ Stabilizing list: incoming length', incoming.length, '< minCount', minCount);
+        const byAddr = new Map<string, any>();
+        for (const t of prev) byAddr.set(t.pair_address, t);
+        for (const t of incoming) byAddr.set(t.pair_address, t); // overlay updates
+
+        const prevOrder = prev.map(t => t.pair_address);
+        const prevSet = new Set(prevOrder);
+        const result: any[] = [];
+        // Keep previous order, updated with any new fields
+        for (const addr of prevOrder) {
+          const item = byAddr.get(addr);
+          if (item) {
+            result.push(item);
+            if (result.length >= lim) break;
+          }
+        }
+        // Append any brand-new tokens not in previous list, up to limit
+        if (result.length < lim) {
+          for (const t of incoming) {
+            if (!prevSet.has(t.pair_address)) {
+              result.push(t);
+              if (result.length >= lim) break;
+            }
+          }
+        }
+        lastStableDataRef.current = result;
+        return result;
+      }
+
+      // Stable enough: adopt incoming
+      lastStableDataRef.current = incoming;
+      return incoming;
+    } catch (e) {
+      console.warn('stabilizeList error:', e);
+      return incoming;
+    }
+  }, [limit, timeframe]);
+
+  const throttledSetData = useCallback((newData: any[]) => {
+    console.log('🔧 Setting data in hook (raw):', newData?.length, 'tokens');
+    const stable = stabilizeList(newData);
+    console.log('🔧 After stabilization:', stable?.length, 'tokens');
+    if (stable?.[0]) {
+      console.log('🔧 First token data (stable):', {
+        name: stable[0].name,
+        symbol: stable[0].symbol,
+        usd_price: stable[0].usd_price,
+        fully_diluted_value: stable[0].fully_diluted_value,
+        total_liquidity_usd: stable[0].total_liquidity_usd,
+        volume_5m: stable[0].volume_5m,
+        volume_1h: stable[0].volume_1h,
+        volume_6h: stable[0].volume_6h,
+        volume_24h: stable[0].volume_24h,
+      });
+    }
+    setState(prev => ({ ...prev, data: stable, loading: false }));
+  }, [stabilizeList]);
 
   // Polling fallback function
   const startPolling = useCallback(() => {
-    console.log('🔄 Starting polling fallback');
+    console.log('🔄 Starting polling fallback with timeframe:', timeframe);
     setState(prev => ({ ...prev, usingFallback: true, isReconnecting: false }));
     
     const poll = async () => {
+      if (isPollingRef.current) {
+        // Skip overlapping poll to avoid piling up requests when upstream stalls
+        return;
+      }
+      isPollingRef.current = true;
       try {
         const queryParams = new URLSearchParams({
           filter: filter || 'marketcap',
@@ -76,40 +155,73 @@ export default function usePaginatedTokensWithFallback({
           limit: (limit || 20).toString(),
         });
         
+        if (timeframe) {
+          queryParams.set('timeframe', timeframe);
+        }
+        
         // If env is ws(s)://..., convert to http(s):// for REST polling
         // Always use same-origin proxy to avoid mixed-content/TLS issues
         const url = `/api/token-service/getAllTokens?${queryParams}`;
         console.log('📡 Polling URL:', url);
+        console.log('📡 Query params:', Object.fromEntries(queryParams.entries()));
         console.log('📡 Environment WEBSOCKET_URL (for WS only):', env.NEXT_PUBLIC_WEBSOCKET_URL);
         
         const response = await fetch(url);
         console.log('📡 Polling response status:', response.status, response.ok);
         
+        // Treat 304 Not Modified as a successful no-op: keep current list stable
+        if (response.status === 304) {
+          console.log('📡 Upstream returned 304 (Not Modified) — keeping existing data');
+          setState(prev => ({ ...prev, loading: false, error: null }));
+          return;
+        }
+
         if (response.ok) {
           const data = await response.json();
-          console.log('📡 Polling data received:', data?.result?.length, 'tokens');
+          console.log('📡 Polling data received:', data?.result?.length || data?.length, 'tokens');
+          
+          // Handle both wrapped and direct array responses
+          const tokens = data.result || data;
           
           // Debug: Check the first token's price data
-          if (data.result && Array.isArray(data.result) && data.result[0]) {
+          if (tokens && Array.isArray(tokens) && tokens[0]) {
             console.log('📡 First token price debug:', {
-              name: data.result[0].name,
-              symbol: data.result[0].symbol,
-              usd_price: data.result[0].usd_price,
-              fully_diluted_value: data.result[0].fully_diluted_value,
-              total_liquidity_usd: data.result[0].total_liquidity_usd,
-              typeof_usd_price: typeof data.result[0].usd_price,
-              typeof_fdv: typeof data.result[0].fully_diluted_value
+              name: tokens[0].name,
+              symbol: tokens[0].symbol,
+              usd_price: tokens[0].usd_price,
+              fully_diluted_value: tokens[0].fully_diluted_value,
+              total_liquidity_usd: tokens[0].total_liquidity_usd,
+              typeof_usd_price: typeof tokens[0].usd_price,
+              typeof_fdv: typeof tokens[0].fully_diluted_value
             });
           }
           
-          if (data.result && Array.isArray(data.result)) {
-            throttledSetData(data.result);
-            setState(prev => ({ ...prev, error: null }));
+          if (tokens && Array.isArray(tokens)) {
+            console.log('🔧 Setting tokens data:', tokens.length, 'tokens');
+            console.log('🔧 First token:', tokens[0] ? { 
+              name: tokens[0].name, 
+              symbol: tokens[0].symbol,
+              volume_5m: tokens[0].volume_5m,
+              volume_1h: tokens[0].volume_1h,
+              volume_6h: tokens[0].volume_6h,
+              volume_24h: tokens[0].volume_24h
+            } : 'No tokens');
+            throttledSetData(tokens);
+            setState(prev => ({ ...prev, error: null, loading: false }));
+          } else {
+            console.log('🔧 No valid tokens data received:', { tokens, isArray: Array.isArray(tokens) });
+            setState(prev => ({ ...prev, loading: false, error: 'Invalid data from token service' }));
           }
+        } else {
+          // Non-OK response; surface error and stop loading so UI can render
+          console.warn('📡 Non-OK response from token service:', response.status);
+          setState(prev => ({ ...prev, loading: false, error: `Upstream error (${response.status})` }));
         }
       } catch (error) {
         console.error('❌ Polling error:', error);
-        setState(prev => ({ ...prev, error: 'Failed to fetch data' }));
+        setState(prev => ({ ...prev, error: 'Failed to fetch data', loading: false }));
+      } finally {
+        isPollingRef.current = false;
       }
     };
 
@@ -126,10 +238,15 @@ export default function usePaginatedTokensWithFallback({
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
+    isPollingRef.current = false;
   }, []);
 
   // Effect for managing connection (WebSocket + fallback)
   useEffect(() => {
+    console.log('🔄 Hook useEffect triggered with params:', { filter, order, offset, limit, timeframe });
+    console.log('🔄 Previous state:', { dataLength: state.data.length, loading: state.loading });
+    console.log('🔄 Starting fresh data fetch for timeframe:', timeframe);
+    console.log('🔄 Timeframe type:', typeof timeframe, 'value:', JSON.stringify(timeframe));
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null, usingFallback: false }));
 
     const connectWebSocket = () => {
@@ -142,6 +259,10 @@ export default function usePaginatedTokensWithFallback({
           offset: (offset || 0).toString(),
           limit: (limit || 20).toString(),
         });
+        // Include timeframe in WS connection so server returns correct window
+        if (timeframe) {
+          queryParams.set('timeframe', timeframe);
+        }
         const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/ws/tokens?${queryParams}`;
         console.log('🔌 Attempting WebSocket connection to:', wsUrl);
         const ws = new WebSocket(wsUrl);
@@ -154,7 +275,7 @@ export default function usePaginatedTokensWithFallback({
             ws.close();
             handleReconnect();
           }
-        }, 3000); // 3 second timeout
+        }, 1000); // 1 second timeout for faster fallback
 
         ws.onopen = () => {
           if (wsConnectionTimeoutRef.current) {
@@ -255,7 +376,7 @@ export default function usePaginatedTokensWithFallback({
         ws.close();
       }
     };
-  }, [filter, order, offset, limit, throttledSetData, startPolling, clearPolling]);
+  }, [filter, order, offset, limit, timeframe, throttledSetData, startPolling, clearPolling]);
 
   return state;
 }

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 const ALLOWED = [
   'arweave.net',
+  'arweave.dev',
   'ipfs.io',
   'gateway.pinata.cloud',
   'cloudflare-ipfs.com',
@@ -11,6 +12,8 @@ const ALLOWED = [
   'infura-ipfs.io',
   'ipfs.infura.io',
   'gateway.ipfs.io',
+  'shdw-drive.genesysgo.net',
+  'shdw.link',
   'cdn.moonshot.com',
   'meta.huma.finance',
   'cdn.kamino.finance',
