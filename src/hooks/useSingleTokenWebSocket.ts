@@ -47,7 +47,7 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
 
     const connectWebSocket = () => {
       try {
-        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/ws/token?pair_address=${pair_address}`;
+        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/token?pair_address=${pair_address}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 

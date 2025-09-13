@@ -54,7 +54,7 @@ export default function usePaginatedTokensWebSocket({
           offset: (offset || 0).toString(),
           limit: (limit || 20).toString(),
         });
-        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/ws/tokens?${queryParams}`;
+        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/tokens?${queryParams}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 

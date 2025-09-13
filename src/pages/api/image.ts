@@ -26,6 +26,7 @@ const ALLOWED = [
   'raw.githubusercontent.com',
   'githubusercontent.com',
   'cdn.discordapp.com',
+  'token-media.defined.fi',
 ];
 
 function isAllowedHost(host: string) {

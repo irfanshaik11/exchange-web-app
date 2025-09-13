@@ -13,6 +13,7 @@ import type { Timeframe } from "../pages/index";
 const navLinks = [
   { name: "Discover", href: "/" },
   { name: "Pulse", href: "/pulse" },
+  { name: "Launchpad", href: "/launchpad" },
   { name: "Trackers", href: "/trackers" },
   //{ name: "Perpetuals", href: "#" },
   //{ name: "Yield", href: "#" },
