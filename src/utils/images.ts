@@ -1,6 +1,18 @@
 export function normalizeImageUrl(src?: string | null): string | null {
   if (!src) return null;
   try {
+    // Unwrap Next.js image proxy URLs (e.g., pump.fun/_next/image?url=...)
+    try {
+      const u = new URL(src);
+      if (u.pathname.startsWith('/_next/image') && u.searchParams.get('url')) {
+        src = u.searchParams.get('url') || src;
+      }
+    } catch {}
+
+    // Force https for http URLs (most hosts support TLS)
+    if (src.startsWith('http://')) {
+      src = src.replace(/^http:\/\//i, 'https://');
+    }
     // Handle ipfs://CID or ipfs://ipfs/CID
     if (src.startsWith('ipfs://')) {
       const cid = src.replace('ipfs://', '').replace(/^ipfs\//, '');

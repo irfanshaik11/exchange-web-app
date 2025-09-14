@@ -21,20 +21,25 @@ export default function AvatarImage({
   className = '',
 }: AvatarImageProps) {
   const normalizedSrc = useMemo(() => withImageFallback(src, fallbackSrc), [src, fallbackSrc]);
-  const [showImage, setShowImage] = useState<boolean>(!!normalizedSrc);
+  const seed = useMemo(() => (symbol || name || '').trim(), [symbol, name]);
+  const fallbackAvatar = useMemo(() => {
+    return seed ? `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(seed)}` : null;
+  }, [seed]);
+  const finalSrc = normalizedSrc || fallbackAvatar;
+  const [showImage, setShowImage] = useState<boolean>(!!finalSrc);
 
   useEffect(() => {
-    setShowImage(!!normalizedSrc);
-  }, [normalizedSrc]);
+    setShowImage(!!finalSrc);
+  }, [finalSrc]);
 
   const initial = (symbol?.charAt(0) || name?.charAt(0) || '?').toUpperCase();
 
-  if (showImage && normalizedSrc) {
-    const proxied = `/api/image?url=${encodeURIComponent(normalizedSrc)}`;
+  if (showImage && finalSrc) {
+    const directSchemes = finalSrc.startsWith('data:') || finalSrc.startsWith('blob:');
+    const srcUrl = directSchemes ? finalSrc : `/api/image?url=${encodeURIComponent(finalSrc)}`;
     return (
-      // Use plain <img> to avoid Next domain allow-list issues for many gateways
       <img
-        src={proxied}
+        src={srcUrl}
         alt={name || symbol || ''}
         width={width}
         height={height}

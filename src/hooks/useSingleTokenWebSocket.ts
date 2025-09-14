@@ -57,20 +57,84 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
         };
 
         ws.onmessage = (event) => {
-          try {
+          // Normalize various WebSocket payload types (string, Blob, ArrayBuffer)
+          const handleText = (text: string) => {
+            try {
+              setCount((t) => t + 1);
+              const trimmed = text.trim();
+              if (!trimmed) return;
+
+              // Ignore keepalive/ping frames if any
+              if (trimmed === 'ping' || trimmed === 'pong' || trimmed === 'ok') return;
+
+              // First try to parse as a single JSON object
+              try {
+                const msg = JSON.parse(trimmed);
+                processMessage(msg);
+                return;
+              } catch (_) {
+                // Fall through to NDJSON/multi-JSON handling
+              }
+
+              // Handle concatenated or newline-delimited JSON messages
+              const fixed = trimmed
+                .replace(/}\s*{/g, '}\n{')
+                .replace(/]\s*\[/g, ']\n[');
+              const parts = fixed.split(/\r?\n+/);
+              for (const part of parts) {
+                const p = part.trim();
+                if (!p || p === 'ping' || p === 'pong' || p === 'ok') continue;
+                try {
+                  const msg = JSON.parse(p);
+                  processMessage(msg);
+                } catch (e) {
+                  // Skip non-JSON chunks silently; server may interleave logs/keepalives
+                  console.warn('Skipping non-JSON WS chunk:', p.slice(0, 120));
+                }
+              }
+            } catch (err) {
+              console.error('Failed to handle WebSocket text payload:', err);
+            }
+          };
+
+          const processMessage = (message: any) => {
             // The backend sends an object with token and trades properties directly
-            console.log(`Got MESSAGE ${count} times`);
-            setCount(t => t+1)
-            const message = JSON.parse(event.data);
-            if (message.token) {
-              throttledSetToken(message.token);
+            if (Array.isArray(message)) {
+              // In case the server batches messages, iterate
+              for (const m of message) processMessage(m);
+              return;
             }
-            if (message.trades) {
-              setTrades(message.trades);
+            if (message && typeof message === 'object') {
+              if (message.token) {
+                throttledSetToken(message.token);
+              }
+              if (message.trades) {
+                setTrades(message.trades);
+              }
             }
-          } catch (err) {
-            console.error('Failed to parse WebSocket message:', err);
-            setState(prev => ({ ...prev, error: 'Failed to parse WebSocket message' }));
+          };
+
+          const data = (event as MessageEvent).data;
+          if (typeof data === 'string') {
+            handleText(data);
+          } else if (typeof Blob !== 'undefined' && data instanceof Blob) {
+            data.text().then(handleText).catch((err: any) => {
+              console.error('Failed to read WebSocket Blob data:', err);
+            });
+          } else if (data instanceof ArrayBuffer) {
+            try {
+              const text = new TextDecoder().decode(data);
+              handleText(text);
+            } catch (err) {
+              console.error('Failed to decode WebSocket ArrayBuffer data:', err);
+            }
+          } else {
+            // Fallback: attempt string conversion
+            try {
+              handleText(String(data));
+            } catch (err) {
+              console.error('Failed to stringify WebSocket data:', err);
+            }
           }
         };
 

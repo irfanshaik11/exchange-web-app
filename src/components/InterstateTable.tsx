@@ -379,26 +379,36 @@ const TokenInfo: React.FC<{
 };
 
 interface SubscriptNumberProps {
-  value: number;
+  value: number | string | null | undefined;
   className?: string;
 }
 
 export const SubscriptNumber: React.FC<SubscriptNumberProps> = ({ value, className }) => {
+  const MAX_ZEROES = 2;
 
-  const MAX_ZEROES = 2
+  const toNumber = (val: number | string | null | undefined): number | null => {
+    if (val === null || val === undefined) return null;
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const cleaned = val.replace(/[$,\s]/g, '');
+      const parsed = parseFloat(cleaned);
+      return isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  };
 
   const formatNumber = (num: number) => {
     const numStr = num.toFixed(20);
-    const [integerPart, decimalPart] = numStr.split('.');
-    const leadingZeros = decimalPart?.match(/^0*/)?.[0] || '';
+    const [integerPart, decimalPart = ''] = numStr.split('.');
+    const leadingZeros = decimalPart.match(/^0*/)?.[0] || '';
     const originalZeroCount = leadingZeros.length;
     const zeroCount = Math.max(0, originalZeroCount - 1); // Subtract 1 from zero count
     const sigDigitsStart = leadingZeros.length;
-    
+
     const firstDigit = decimalPart[sigDigitsStart] || '0';
     const secondDigit = decimalPart[sigDigitsStart + 1] || '0';
     const roundingDigit = decimalPart[sigDigitsStart + 2] || '0';
-    
+
     const roundedSecondDigit = parseInt(roundingDigit) >= 5
       ? (parseInt(secondDigit) + 1).toString()
       : secondDigit;
@@ -435,7 +445,15 @@ export const SubscriptNumber: React.FC<SubscriptNumberProps> = ({ value, classNa
     }
   };
 
-  return formatNumber(value);
+  const num = toNumber(value);
+  if (num === null || !isFinite(num)) {
+    return <span className={className}>-</span>;
+  }
+  if (num === 0) {
+    return <span className={className}>0.00</span>;
+  }
+
+  return formatNumber(num);
 };
 
 // Market Cap Cell Component

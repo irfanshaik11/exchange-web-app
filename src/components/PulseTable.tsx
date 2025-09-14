@@ -56,30 +56,76 @@ function useTokenMetadata(uri?: string) {
 }
 
 function TokenImage({ token }: { token: Token }) {
-  const { meta, loading, showInitial } = useTokenMetadata(token.uri);
-  if (loading && !showInitial) {
-    return <div className="w-8 h-8 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin" />;
-  } else if (meta || token.logo) {
-    const metaImg = extractMetaImage(meta);
-    return (
-      <AvatarImage
-        src={metaImg || undefined}
-        fallbackSrc={token.logo || undefined}
-        name={token.name}
-        symbol={token.symbol}
-        width={48}
-        height={48}
-        className="w-12 h-12 object-contain rounded"
-      />
-    );
-  } else {
-    return <span className="text-2xl font-bold text-neutral-400">{token.symbol?.[0] || '?'}</span>;
-  }
+  // Strictly prefer DB image (launchpad_token_state.image), then token.logo
+  const dbImage = (token as any).image as string | undefined;
+  return (
+    <AvatarImage
+      src={dbImage}
+      fallbackSrc={token.logo || undefined}
+      name={token.name}
+      symbol={token.symbol}
+      width={48}
+      height={48}
+      className="w-12 h-12 object-contain rounded"
+    />
+  );
 }
 
 export default function PulseTable({ title, tokens, isFirstOrLast, loading = false, skeletonRowCount = 10 }: PulseTableProps) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const router = useRouter();
+  
+  const shortAddr = (token: any): string => {
+    try {
+      const a = token?.pair_address || token?.mint || token?.address || '';
+      if (typeof a !== 'string' || a.length < 8) return a || '-';
+      return `${a.slice(0, 4)}...${a.slice(-4)}`;
+    } catch { return '-'; }
+  };
+  
+  const getAgeLabel = (token: any): string => {
+    try {
+      // Accept multiple possible fields and formats
+      let v: any = (
+        token?.created_at ?? token?.createdAt ?? token?.listedAt ?? token?.mintedAt ??
+        token?.pair_created_at ?? token?.pairCreatedAt ?? token?.pool_created_at ?? token?.poolCreatedAt ??
+        token?.exchange_created_at ?? token?.exchangeCreatedAt ?? token?.firstSeen ?? token?.first_seen ??
+        token?.launch_time ?? token?.launchTime ??
+        token?.timestamp ?? token?.ts ?? token?.block_time ?? token?.blockTime ?? null
+      );
+      if (v === null || v === undefined) return '-';
+      if (typeof v === 'object') {
+        if ('Time' in v && typeof (v as any).Time === 'string') v = (v as any).Time;
+        else if ('time' in v && typeof (v as any).time === 'string') v = (v as any).time;
+        else if ('seconds' in v && typeof (v as any).seconds === 'number') v = Number((v as any).seconds) * 1000;
+        else if ('millis' in v && typeof (v as any).millis === 'number') v = Number((v as any).millis);
+      }
+      let ts: number | null = null;
+      if (typeof v === 'number') {
+        // Heuristic: treat 13-digit as ms, 10-digit as seconds
+        if (v > 1e12) ts = v; else if (v > 1e9) ts = v * 1000; else ts = null;
+      } else if (typeof v === 'string') {
+        const num = Number(v);
+        if (!Number.isNaN(num) && num > 0) {
+          if (num > 1e12) ts = num; else if (num > 1e9) ts = num * 1000;
+        }
+        if (ts === null) {
+          const d = Date.parse(v);
+          if (!Number.isNaN(d)) ts = d;
+        }
+      } else if (v instanceof Date) {
+        ts = v.getTime();
+      }
+      if (ts === null) return '-';
+      const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+      if (diffSec < 60) return `${diffSec}s`;
+      if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m`;
+      if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h`;
+      return `${Math.floor(diffSec / 86400)}d`;
+    } catch {
+      return '-';
+    }
+  };
   return (
     <div className={`shadow-lg flex-1 min-w-[340px] w-full flex flex-col ${isFirstOrLast === "first" ? "border-l border-r" : "border-r"} border-emerald-950`}>
       <div className="text-lg font-bold mb-2 text-white flex items-center justify-between border-t border-b border-emerald-950 p-2">
@@ -87,7 +133,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
         {/* Optionally add filter/sort controls here */}
       </div>
       <div className="overflow-y-scroll max-h-[70vh] custom-scrollbar">
-        {loading ? (
+        {loading && tokens.length === 0 ? (
           Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div key={idx} className="flex flex-row py-3 border-b border-neutral-800 last:border-b-0 items-center animate-pulse">
               {/* Profile Picture & Address skeleton */}
@@ -136,11 +182,13 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
         ) : tokens.length === 0 ? (
           <div className="text-neutral-500 text-center py-8">No tokens found.</div>
         ) : (
-          tokens.map((token, idx) => (
+          tokens.map((token, idx) => {
+            const addr = (token as any)?.pair_address || (token as any)?.mint || null;
+            return (
             <div
-              key={token.pair_address + idx}
+              key={`${addr || 'noaddr'}-${idx}`}
               className="relative cursor-pointer flex flex-row py-3 transition group items-center border-b border-neutral-800 hover:bg-neutral-800/40 w-full"
-              onClick={() => router.push(`/trade/${token.pair_address}`)}
+              onClick={() => { if (addr) router.push(`/trade/${addr}`); }}
             >
               {/* Bonding popout on hover */}
               {idx === 0 ? (
@@ -165,7 +213,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                   {/* Status indicator */}
                   <span className="absolute bottom-1 right-1 w-3 h-3 bg-green-500 border-2 border-neutral-900 rounded-full" />
                 </div>
-                                <span className="text-xs text-neutral-500 mt-1 font-mono truncate max-w-[60px]">{token.pair_address.slice(0, 4)}...{token.pair_address.slice(-4)}</span>
+                <span className="text-xs text-neutral-500 mt-1 font-mono truncate max-w-[60px]">{shortAddr(token)}</span>
               </div>
               {/* Main Info Section */}
               <div className="flex-1 flex flex-col gap-2 min-w-0">
@@ -181,15 +229,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                       </button>
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-xs text-emerald-400">
-                      <span>{(() => {
-                        const created = new Date(token.created_at);
-                        const now = new Date();
-                        const diff = Math.floor((now.getTime() - created.getTime()) / 1000);
-                        if (diff < 60) return `${diff}s`;
-                        if (diff < 3600) return `${Math.floor(diff/60)}m`;
-                        if (diff < 86400) return `${Math.floor(diff/3600)}h`;
-                        return `${Math.floor(diff/86400)}d`;
-                      })()}</span>
+                      <span>{getAgeLabel(token)}</span>
                       {/* Socials */}
                       <a href={token.links ? (token.links as Record<string, string>)["website"] || '#' : '#'} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300"><FaGlobe title="Website" /></a>
                       <a href={token.links ? (token.links as Record<string, string>)["pumpfun"] || '#' : '#'} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300"><FaBolt title="Pump.fun" /></a>
@@ -228,7 +268,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                 </div>
               </div>
             </div>
-          ))
+          )})
         )}
       </div>
     </div>

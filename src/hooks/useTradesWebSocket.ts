@@ -31,14 +31,58 @@ export default function useTradesWebSocket(pair_address: string | undefined) {
         };
 
         ws.onmessage = (event) => {
-          try {
-            // The backend sends the array of trades directly
-            const message = JSON.parse(event.data);
-            if (Array.isArray(message)) {
-              setData(message);
+          const handleText = (text: string) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            if (trimmed === 'ping' || trimmed === 'pong' || trimmed === 'ok') return;
+
+            const deliver = (payload: any) => {
+              if (Array.isArray(payload)) {
+                setData(payload);
+              } else if (payload && typeof payload === 'object' && Array.isArray(payload.trades)) {
+                setData(payload.trades);
+              }
+              setError(null);
+            };
+
+            try {
+              const message = JSON.parse(trimmed);
+              return deliver(message);
+            } catch (_) {}
+
+            const fixed = trimmed
+              .replace(/}\s*{/g, '}\n{')
+              .replace(/]\s*\[/g, ']\n[');
+            const parts = fixed.split(/\r?\n+/);
+            for (const part of parts) {
+              const p = part.trim();
+              if (!p || p === 'ping' || p === 'pong' || p === 'ok') continue;
+              try {
+                const msg = JSON.parse(p);
+                deliver(msg);
+              } catch (err) {
+                console.warn('Skipping non-JSON WS chunk:', p.slice(0, 120));
+              }
             }
-          } catch (err) {
-            setError("Failed to parse WebSocket message");
+          };
+
+          const data = (event as MessageEvent).data;
+          if (typeof data === 'string') {
+            handleText(data);
+          } else if (typeof Blob !== 'undefined' && data instanceof Blob) {
+            data.text().then(handleText).catch(() => setError('Failed to read WS Blob'));
+          } else if (data instanceof ArrayBuffer) {
+            try {
+              handleText(new TextDecoder().decode(data));
+            } catch (err) {
+              setError('Failed to decode WS ArrayBuffer');
+            }
+          } else {
+            try {
+              handleText(String(data));
+            } catch (err) {
+              setError('Failed to stringify WS data');
+            }
           }
         };
 

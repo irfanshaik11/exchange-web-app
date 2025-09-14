@@ -27,6 +27,19 @@ const ALLOWED = [
   'githubusercontent.com',
   'cdn.discordapp.com',
   'token-media.defined.fi',
+  // Common CDN/hosts seen in token logos
+  'digitaloceanspaces.com',
+  'amazonaws.com',
+  'cloudfront.net',
+  'twimg.com',
+  'pbs.twimg.com',
+  'googleusercontent.com',
+  'googleapis.com',
+  'assets.coingecko.com',
+  'coingecko.com',
+  'solscan.io',
+  'raydium.io',
+  'api.dicebear.com',
 ];
 
 function isAllowedHost(host: string) {

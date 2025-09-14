@@ -29,18 +29,95 @@ export default function usePaginatedTokensWebSocket({
     loading: true,
   });
   const [data, setData] = useState<any[]>([]);
+  // Keep a mutable reference of the current list so we can efficiently
+  // merge incremental WS updates for the 'new' stream without losing items.
+  const dataRef = useRef<any[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
+  // Use v1 path consistently to match the new service
+  const pathModeRef = useRef<'v1'>('v1');
+  // Track first-seen timestamps per token for 'new' stream
+  const firstSeenRef = useRef<Map<string, number>>(new Map());
 
-  // Lower throttle for faster UI updates (was 1000ms)
-  const throttledSetData = useRef(
-    throttle((newData: any[]) => {
-      setData(newData);
-      setState(prev => ({ ...prev, loading: false }));
-    }, 150, { leading: true, trailing: true })
-  ).current;
+  // Aggressive real-time for 'new' filter; light throttle for others
+  const throttledSetData = useRef<((d: any[]) => void) | null>(null);
+  if (throttledSetData.current === null) {
+    if (filter === 'new') {
+      // For 'new' stream, the backend may send individual objects
+      // after an initial array snapshot. Normalize to an array and
+      // merge into our existing list instead of replacing it.
+      throttledSetData.current = (incoming: any) => {
+        try {
+          const arr: any[] = Array.isArray(incoming) ? incoming : (incoming ? [incoming] : []);
+          if (arr.length === 0) return;
+
+          const map = new Map<string, any>();
+          // Seed with current data first (preserve order later)
+          for (const t of dataRef.current) {
+            const k = (t?.pair_address || t?.mint) as string | undefined;
+            if (k) map.set(k, t);
+          }
+          // Merge/overwrite with incoming updates
+          for (const t of arr) {
+            const k = (t?.pair_address || t?.mint) as string | undefined;
+            if (!k) continue;
+            map.set(k, t);
+          }
+
+          // Convert to array and sort by best-effort timestamp desc
+          const list = Array.from(map.values());
+          const getTs = (v: any): number => {
+            let x: any = (
+              v?.launch_time ?? v?.launchTime ??
+              v?.created_at ?? v?.createdAt ??
+              v?.firstSeen ?? v?.first_seen ??
+              v?.pair_created_at ?? v?.pairCreatedAt ??
+              v?.timestamp ?? v?.ts ?? null
+            );
+            if (x && typeof x === 'object') {
+              if ('Time' in x && typeof x.Time === 'string') x = x.Time;
+              else if ('time' in x && typeof x.time === 'string') x = x.time;
+              else if ('seconds' in x && typeof x.seconds === 'number') {
+                const sec = Number(x.seconds);
+                return sec > 1e12 ? sec : sec > 1e9 ? sec * 1000 : 0;
+              } else if ('millis' in x && typeof x.millis === 'number') {
+                const ms = Number(x.millis);
+                return ms > 0 ? ms : 0;
+              }
+            }
+            if (!x) return 0;
+            if (typeof x === 'number') return x > 1e12 ? x : x > 1e9 ? x * 1000 : 0;
+            if (typeof x === 'string') {
+              const n = Number(x);
+              if (!Number.isNaN(n) && n > 0) return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
+              const d = Date.parse(x);
+              return Number.isNaN(d) ? 0 : d;
+            }
+            if (x instanceof Date) return x.getTime();
+            return 0;
+          };
+          list.sort((a, b) => getTs(b) - getTs(a));
+          // Cap to a reasonable size (use requested limit if provided)
+          const capped = list.slice(0, Math.max(20, limit || 20));
+          dataRef.current = capped;
+          setData(capped);
+          setState(prev => ({ ...prev, loading: false }));
+        } catch {
+          // If anything goes wrong, avoid breaking the UI
+          setState(prev => ({ ...prev, loading: false }));
+        }
+      };
+    } else {
+      throttledSetData.current = throttle((newData: any[]) => {
+        const arr = Array.isArray(newData) ? newData : (newData ? [newData] : []);
+        dataRef.current = arr;
+        setData(arr);
+        setState(prev => ({ ...prev, loading: false }));
+      }, 120, { leading: true, trailing: true });
+    }
+  }
 
   useEffect(() => {
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
@@ -54,7 +131,9 @@ export default function usePaginatedTokensWebSocket({
           offset: (offset || 0).toString(),
           limit: (limit || 20).toString(),
         });
-        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/tokens?${queryParams}`;
+        const base = env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws');
+        const path = '/v1/ws/tokens';
+        const wsUrl = `${base}${path}?${queryParams}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
@@ -64,19 +143,79 @@ export default function usePaginatedTokensWebSocket({
         };
 
         ws.onmessage = (event) => {
-          try {
-            // The backend sends the array of tokens directly
-            const message = JSON.parse(event.data);
-            throttledSetData(message);
-          } catch (err) {
-            console.error('Failed to parse WebSocket message:', err);
-            setState(prev => ({ ...prev, error: 'Failed to parse WebSocket message' }));
+          const handleText = (text: string) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            if (trimmed === 'ping' || trimmed === 'pong' || trimmed === 'ok') return;
+
+            const deliver = (payload: any) => {
+              // Backend usually sends an array of tokens
+              if (filter === 'new') {
+                try {
+                  const arr: any[] = Array.isArray(payload) ? payload : (payload ? [payload] : []);
+                  for (const t of arr) {
+                    const a = (t && (t.pair_address || t.mint)) as string | undefined;
+                    if (!a) continue;
+                    if (!firstSeenRef.current.has(a)) {
+                      firstSeenRef.current.set(a, Date.now());
+                    }
+                    if (!('firstSeen' in t) || !t.firstSeen) {
+                      t.firstSeen = firstSeenRef.current.get(a);
+                    }
+                  }
+                } catch (_) {}
+              }
+              throttledSetData.current!(payload);
+              setState(prev => ({ ...prev, error: null }));
+            };
+
+            // Try single JSON first
+            try {
+              const message = JSON.parse(trimmed);
+              return deliver(message);
+            } catch (_) {}
+
+            // Handle concatenated/newline-delimited JSON
+            const fixed = trimmed
+              .replace(/}\s*{/g, '}\n{')
+              .replace(/]\s*\[/g, ']\n[');
+            const parts = fixed.split(/\r?\n+/);
+            for (const part of parts) {
+              const p = part.trim();
+              if (!p || p === 'ping' || p === 'pong' || p === 'ok') continue;
+              try {
+                const msg = JSON.parse(p);
+                deliver(msg);
+              } catch (err) {
+                // Skip silently to avoid noisy UI errors when keepalives interleave
+                console.warn('Skipping non-JSON WS chunk:', p.slice(0, 120));
+              }
+            }
+          };
+
+          const data = (event as MessageEvent).data;
+          if (typeof data === 'string') {
+            handleText(data);
+          } else if (typeof Blob !== 'undefined' && data instanceof Blob) {
+            data.text().then(handleText).catch(err => console.error('Failed to read WS Blob:', err));
+          } else if (data instanceof ArrayBuffer) {
+            try {
+              handleText(new TextDecoder().decode(data));
+            } catch (err) {
+              console.error('Failed to decode WS ArrayBuffer:', err);
+            }
+          } else {
+            try {
+              handleText(String(data));
+            } catch (err) {
+              console.error('Failed to stringify WS data:', err);
+            }
           }
         };
 
         ws.onclose = (event) => {
           console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
-          setState(prev => ({ ...prev, isConnected: false }));
+          setState(prev => ({ ...prev, isConnected: false, loading: false }));
           // Don't reconnect if the component is unmounted or the close was intentional
           if (wsRef.current) {
             handleReconnect();
@@ -85,7 +224,7 @@ export default function usePaginatedTokensWebSocket({
 
         ws.onerror = (error) => {
           console.error('WebSocket error:', error);
-          setState(prev => ({ ...prev, error: 'WebSocket connection error. Attempting to reconnect...' }));
+          setState(prev => ({ ...prev, error: 'WebSocket connection error. Attempting to reconnect...', loading: false }));
         };
       } catch (error) {
         console.error('Failed to establish WebSocket connection:', error);
@@ -104,7 +243,9 @@ export default function usePaginatedTokensWebSocket({
       }
       setState(prev => ({ ...prev, isReconnecting: true }));
       reconnectAttemptRef.current += 1;
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 16000);
+      const base = filter === 'new' ? 250 : 1000;
+      const cap = filter === 'new' ? 4000 : 16000;
+      const delay = Math.min(base * Math.pow(2, reconnectAttemptRef.current - 1), cap);
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
     };
 
@@ -117,10 +258,15 @@ export default function usePaginatedTokensWebSocket({
         wsRef.current = null; // Prevent reconnection on intentional close
         ws.close();
       }
-      throttledSetData.cancel();
+      if (filter !== 'new' && throttledSetData.current && 'cancel' in throttledSetData.current) {
+        // @ts-ignore
+        throttledSetData.current.cancel?.();
+      }
+      // Reset refs to avoid stale data across re-mounts with different params
+      dataRef.current = [];
     };
     // The connection must be re-established if the filter parameters change
-  }, [filter, order, offset, limit, throttledSetData]);
+  }, [filter, order, offset, limit]);
 
   return {
     ...state,

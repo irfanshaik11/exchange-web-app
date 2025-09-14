@@ -27,6 +27,13 @@ const ALLOWED = [
   'static-create.jup.ag',
   'static.jup.ag',
   'chintai.io',
+  // Add broader CDNs used for hosting metadata
+  'digitaloceanspaces.com',
+  'amazonaws.com',
+  'cloudfront.net',
+  'googleusercontent.com',
+  'googleapis.com',
+  'githubusercontent.com',
 ];
 
 function isAllowedHost(host: string) {

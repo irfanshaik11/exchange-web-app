@@ -287,24 +287,67 @@ export default function usePaginatedTokensWithFallback({
         };
 
         ws.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            console.log('🔌 WebSocket message received:', {
-              messageType: typeof message,
-              isArray: Array.isArray(message),
-              length: Array.isArray(message) ? message.length : 'not array',
-              firstItem: Array.isArray(message) && message[0] ? {
-                name: message[0].name,
-                symbol: message[0].symbol,
-                usd_price: message[0].usd_price,
-                fully_diluted_value: message[0].fully_diluted_value,
-                total_liquidity_usd: message[0].total_liquidity_usd
-              } : 'no first item',
-              rawMessage: message
-            });
-            throttledSetData(message);
-          } catch (err) {
-            console.error('Failed to parse WebSocket message:', err);
+          const handleText = (text: string) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            if (trimmed === 'ping' || trimmed === 'pong' || trimmed === 'ok') return;
+
+            const deliver = (payload: any) => {
+              console.log('🔌 WebSocket message received:', {
+                messageType: typeof payload,
+                isArray: Array.isArray(payload),
+                length: Array.isArray(payload) ? payload.length : 'not array',
+                firstItem: Array.isArray(payload) && payload[0] ? {
+                  name: payload[0].name,
+                  symbol: payload[0].symbol,
+                  usd_price: payload[0].usd_price,
+                  fully_diluted_value: payload[0].fully_diluted_value,
+                  total_liquidity_usd: payload[0].total_liquidity_usd
+                } : 'no first item'
+              });
+              throttledSetData(payload);
+            };
+
+            // Try parse as single JSON first
+            try {
+              const message = JSON.parse(trimmed);
+              return deliver(message);
+            } catch (_) {}
+
+            // Handle concatenated/newline-delimited JSON
+            const fixed = trimmed
+              .replace(/}\s*{/g, '}\n{')
+              .replace(/]\s*\[/g, ']\n[');
+            const parts = fixed.split(/\r?\n+/);
+            for (const part of parts) {
+              const p = part.trim();
+              if (!p || p === 'ping' || p === 'pong' || p === 'ok') continue;
+              try {
+                const msg = JSON.parse(p);
+                deliver(msg);
+              } catch (err) {
+                console.warn('Skipping non-JSON WS chunk:', p.slice(0, 120));
+              }
+            }
+          };
+
+          const data = (event as MessageEvent).data;
+          if (typeof data === 'string') {
+            handleText(data);
+          } else if (typeof Blob !== 'undefined' && data instanceof Blob) {
+            data.text().then(handleText).catch(err => console.error('Failed to read WS Blob:', err));
+          } else if (data instanceof ArrayBuffer) {
+            try {
+              handleText(new TextDecoder().decode(data));
+            } catch (err) {
+              console.error('Failed to decode WS ArrayBuffer:', err);
+            }
+          } else {
+            try {
+              handleText(String(data));
+            } catch (err) {
+              console.error('Failed to stringify WS data:', err);
+            }
           }
         };
 
