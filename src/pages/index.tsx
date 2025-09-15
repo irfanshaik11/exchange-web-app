@@ -314,7 +314,7 @@ export default function Home() {
         } else if (sortKey === 'liquidity') {
           aVal = Number(a.total_liquidity_usd) || 0;
           bVal = Number(b.total_liquidity_usd) || 0;
-        } else if (sortKey === 'market_cap_total' || sortKey === 'fully_diluted_value') {
+        } else if (sortKey === 'market_cap_total') {
           aVal = Number(a.fully_diluted_value) || 0;
           bVal = Number(b.fully_diluted_value) || 0;
         } else {

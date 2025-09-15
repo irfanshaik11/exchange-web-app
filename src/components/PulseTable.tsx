@@ -237,9 +237,10 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                     </div>
                   </div>
                   {/* Right: MC, V, F, TX */}
-                  <div className="flex flex-col items-end gap-1 min-w-[120px]">
+                  <div className="flex flex-col items-end gap-1 min-w-[160px]">
                     <div className="flex gap-3 text-xs">
-                      <span className="text-neutral-400">MC <span className="text-blue-400 font-bold">${formatSmartNumber(token.fully_diluted_value)}</span></span>
+                      <span className="text-neutral-400">MC <span className="text-blue-400 font-bold">${formatSmartNumber((token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0)}</span></span>
+                      <span className="text-neutral-400">P <span className="text-white font-bold">${formatSmartNumber((token as any).price_usd ?? (token as any).usd_price ?? 0)}</span></span>
                       <span className="text-neutral-400">V <span className="text-white font-bold">${formatSmartNumber((token as any).volume_24h || 0)}</span></span>
                     </div>
                     <div className="flex gap-3 text-xs items-center">

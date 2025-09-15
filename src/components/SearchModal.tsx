@@ -133,9 +133,23 @@ function SearchModalContent({
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Map timeframes to valid filters
+  const getFilterForTimeframe = (timeframe: string) => {
+    switch (timeframe) {
+      case "1m":
+      case "5m":
+        return "txs_5m";
+      case "30m":
+      case "1h":
+        return "txs_1h";
+      default:
+        return "txs_5m";
+    }
+  };
+
   // This hook will now only be called when SearchModalContent is rendered
   const { data: allTokens } = usePaginatedTokensWebSocket({
-    filter: `txs_${selectedTimeframe}`,
+    filter: getFilterForTimeframe(selectedTimeframe),
     limit: 5,
     order: "desc",
   });

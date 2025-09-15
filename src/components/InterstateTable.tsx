@@ -35,7 +35,7 @@ interface InterstateTableProps {
   sortKey?: string;
   sortDirection?: 'asc' | 'desc';
   setSort?: (key: string) => void;
-  selectedTimeframe: '5m' | '1h' | '6h' | '24h';
+  selectedTimeframe: '1m' | '5m' | '30m' | '1h';
   quickBuyAmount?: number | string;
   skeletonRowCount?: number;
 }

@@ -17,7 +17,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:9000';
+  const primaryBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+  const fallbackBase = process.env.NEXT_PUBLIC_GO_FALLBACK_URL || 'http://localhost:9000';
 
   const fetchWithTimeout = async (url: string, timeoutMs = 2000) => {
     const ctrl = new AbortController();
@@ -57,10 +58,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   try {
-    const goURL = `${goBase}/v1/pulse/migrated?${params.toString()}`;
-    console.log('[Proxy:pulse-migrated] Using Go service:', goURL);
-    const upstream = await fetchWithTimeout(goURL, 3000);
-    return await tryParseAndSend(upstream);
+    const tryGo = async (base: string) => {
+      const url = `${base}/v1/pulse/migrated?${params.toString()}`;
+      console.log('[Proxy:pulse-migrated] Using Go service:', url);
+      const upstream = await fetchWithTimeout(url, 3000);
+      return await tryParseAndSend(upstream);
+    };
+    try {
+      return await tryGo(primaryBase);
+    } catch (e1: any) {
+      console.error('[Proxy:pulse-migrated] Primary failed, trying fallback:', e1?.message || e1);
+      return await tryGo(fallbackBase);
+    }
   } catch (err: any) {
     console.error('[Proxy:pulse-migrated] Go service fetch failed:', err?.message || err);
     return res.status(502).json({ error: 'Bad gateway to Go token service' });

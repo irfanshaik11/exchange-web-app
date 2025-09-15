@@ -43,7 +43,7 @@ export default function Header({
   search = "",
   setSearch,
   showSearch = true,
-  selectedTimeframe = "24h",
+  selectedTimeframe = "1h",
 }: HeaderProps) {
   const router = useRouter();
   const isDiscover = router.pathname === "/";

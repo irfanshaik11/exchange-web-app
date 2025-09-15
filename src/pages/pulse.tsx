@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import Head from 'next/head';
 import PulseTable from '../components/PulseTable';
 import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
+import { useRealtimeMarketData } from '../hooks/useRealtimeMarketData';
 
 interface LaunchpadToken {
   mint: string;
@@ -35,6 +36,8 @@ export default function PulsePage() {
   const [error, setError] = useState<string | null>(null);
   const [httpNew, setHttpNew] = useState<any[]>([]);
   const [httpNewTick, setHttpNewTick] = useState(0);
+  const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
+  const [httpFinalStretchTick, setHttpFinalStretchTick] = useState(0);
   const [httpMigrated, setHttpMigrated] = useState<any[]>([]);
   const [httpMigratedTick, setHttpMigratedTick] = useState(0);
 
@@ -91,7 +94,7 @@ export default function PulsePage() {
     let alive = true;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/token-service/pulse-new?limit=50`);
+        const res = await fetch(`/api/token-service/pulse-new?limit=50&t=${Date.now()}`);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
@@ -110,12 +113,36 @@ export default function PulsePage() {
     return () => { alive = false; clearInterval(id); };
   }, []);
 
+  // Fast polling fallback for Final Stretch tokens (cache-bypass)
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`);
+        if (!alive) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            // Only replace when we have non-empty fresh data to avoid flicker
+            if (data.length > 0) {
+              setHttpFinalStretch(data as any[]);
+              setHttpFinalStretchTick((t) => t + 1);
+            }
+          }
+        }
+      } catch {}
+    };
+    poll();
+    const id = setInterval(poll, 2000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
   // Fast polling fallback for Migrated tokens (cache-bypass)
   useEffect(() => {
     let alive = true;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/token-service/pulse-migrated?limit=50`);
+        const res = await fetch(`/api/token-service/pulse-migrated?limit=50&t=${Date.now()}`);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
@@ -135,7 +162,7 @@ export default function PulsePage() {
   }, []);
 
   // Convert launchpad tokens to Token format for PulseTable
-  const convertLaunchpadToToken = (launchpadToken: LaunchpadToken): Token => ({
+  const convertLaunchpadToToken = useCallback((launchpadToken: LaunchpadToken): Token => ({
     id: 0,
     mint: launchpadToken.mint,
     standard: 'SPL',
@@ -197,32 +224,32 @@ export default function PulsePage() {
     uri: null,
     // extra field used by PulseTable TokenImage for DB logos
     image: launchpadToken.image,
-  } as any);
+  } as any), []);
 
-  // Segregate regular tokens
-  const newPairs = tokens.filter(t => {
+  // Segregate regular tokens (stable refs)
+  const newPairs = useMemo(() => tokens.filter(t => {
     const v = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : (t.bonding_curve_progress as number);
     const prog = isFinite(v as number) ? Number(v) : 0;
     return prog < 0.6;
-  });
-  const finalStretch = tokens.filter(t => {
+  }), [tokens]);
+  const finalStretch = useMemo(() => tokens.filter(t => {
     const v = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : (t.bonding_curve_progress as number);
     const prog = isFinite(v as number) ? Number(v) : 0;
     return prog >= 0.6 && prog < 0.85;
-  });
-  const migrated = tokens.filter(t => {
+  }), [tokens]);
+  const migrated = useMemo(() => tokens.filter(t => {
     const v = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : (t.bonding_curve_progress as number);
     const prog = isFinite(v as number) ? Number(v) : 0;
     return prog >= 0.85;
-  });
+  }), [tokens]);
 
-  // Convert and combine launchpad tokens
-  const launchpadNewPairs = launchpadData.new.map(convertLaunchpadToToken);
-  const launchpadFinalStretch = launchpadData.completing.map(convertLaunchpadToToken);
-  const launchpadMigrated = launchpadData.completed.map(convertLaunchpadToToken);
+  // Convert and combine launchpad tokens (stable refs)
+  const launchpadNewPairs = useMemo(() => launchpadData.new.map(convertLaunchpadToToken), [launchpadData.new, convertLaunchpadToToken]);
+  const launchpadFinalStretch = useMemo(() => launchpadData.completing.map(convertLaunchpadToToken), [launchpadData.completing, convertLaunchpadToToken]);
+  const launchpadMigrated = useMemo(() => launchpadData.completed.map(convertLaunchpadToToken), [launchpadData.completed, convertLaunchpadToToken]);
 
-  // Convert HTTP migrated tokens to Token format
-  const httpMigratedTokens = httpMigrated.map((token: any) => ({
+  // Convert HTTP migrated tokens to Token format (stable ref)
+  const httpMigratedTokens = useMemo(() => httpMigrated.map((token: any) => ({
     id: 0,
     mint: token.mint,
     standard: 'SPL',
@@ -254,36 +281,73 @@ export default function PulsePage() {
     bonding_curve_progress: token.bonding_pct || 100,
     created_at: token.launch_time || new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  } as Token));
+  } as any)), [httpMigrated]);
 
-  // Combine regular tokens with launchpad tokens and HTTP migrated tokens
-  const combinedNewPairs = [...newPairs, ...launchpadNewPairs];
-  const combinedFinalStretch = [...finalStretch, ...launchpadFinalStretch];
-  const combinedMigrated = [...httpMigratedTokens, ...launchpadMigrated];
+  // Convert HTTP final stretch tokens to Token format (stable ref)
+  const httpFinalStretchTokens = useMemo(() => httpFinalStretch.map((token: any) => ({
+    id: 0,
+    mint: token.mint,
+    standard: 'SPL',
+    name: token.name || 'Unknown',
+    symbol: token.symbol || 'UNK',
+    logo: token.image || token.uri || '',
+    decimals: 6,
+    metaplex: null,
+    fully_diluted_value: token.market_cap_usd || 0,
+    total_supply: 0,
+    total_supply_formatted: 0,
+    links: null,
+    description: '',
+    is_verified_contract: false,
+    possible_spam: false,
+    total_buy_volume_5m: 0,
+    total_buy_volume_1h: 0,
+    total_buy_volume_6h: 0,
+    total_buy_volume_24h: token.volume_24h || 0,
+    total_sell_volume_5m: 0,
+    total_sell_volume_1h: 0,
+    total_sell_volume_6h: 0,
+    total_sell_volume_24h: 0,
+    price_usd: token.price_usd || 0,
+    price_change_1h: token.price_change_24h || 0,
+    price_change_6h: 0,
+    price_change_24h: 0,
+    market_cap_usd: token.market_cap_usd || 0,
+    bonding_curve_progress: token.bonding_pct || 100,
+    created_at: token.launch_time || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  } as any)), [httpFinalStretch]);
+
+  // Combine regular tokens with launchpad tokens and HTTP tokens (stable refs)
+  const combinedNewPairs = useMemo(() => [...newPairs, ...launchpadNewPairs], [newPairs, launchpadNewPairs]);
+  const combinedFinalStretch = useMemo(() => [...httpFinalStretchTokens, ...launchpadFinalStretch], [httpFinalStretchTokens, launchpadFinalStretch]);
+  const combinedMigrated = useMemo(() => [...httpMigratedTokens, ...launchpadMigrated], [httpMigratedTokens, launchpadMigrated]);
 
   const isLoading = (loading && wsLoading) || launchpadLoading;
   const hasError = launchpadError && !launchpadData.new.length && !launchpadData.completing.length && !launchpadData.completed.length;
 
   // Enrich WS new pairs with created_at/image from known sources when available
-  const byAddr = new Map<string, any>();
-  const pushMap = (arr: any[]) => arr.forEach(t => { const a = (t as any)?.pair_address || (t as any)?.mint; if (a && !byAddr.has(a)) byAddr.set(a, t); });
-  pushMap(tokens as any[]);
-  pushMap(launchpadNewPairs as any[]);
-  pushMap(launchpadFinalStretch as any[]);
-  pushMap(launchpadMigrated as any[]);
   const wsNewRaw: any[] = Array.isArray(newPairsTokens) ? (newPairsTokens as any[]) : [];
-  const wsNewEnriched = wsNewRaw.map((t) => {
-    const a = (t as any)?.pair_address || (t as any)?.mint;
-    const src = a ? byAddr.get(a) : undefined;
-    return {
-      ...t,
-      // Prefer existing created fields on WS object, else borrow from source maps
-      created_at: (t as any).created_at || (t as any).createdAt || src?.created_at || src?.createdAt || (t as any).timestamp || undefined,
-      launch_time: (t as any).launch_time || (t as any).launchTime || src?.launch_time || src?.launchTime || undefined,
-      image: (t as any).image || (t as any).logo || src?.image || src?.logo || undefined,
-      logo: (t as any).logo || src?.logo || undefined,
-    };
-  });
+  const wsNewEnriched = useMemo(() => {
+    const byAddr = new Map<string, any>();
+    const pushMap = (arr: any[]) => arr.forEach(t => { const a = (t as any)?.pair_address || (t as any)?.mint; if (a && !byAddr.has(a)) byAddr.set(a, t); });
+    pushMap(tokens as any[]);
+    pushMap(launchpadNewPairs as any[]);
+    pushMap(launchpadFinalStretch as any[]);
+    pushMap(launchpadMigrated as any[]);
+    return wsNewRaw.map((t) => {
+      const a = (t as any)?.pair_address || (t as any)?.mint;
+      const src = a ? byAddr.get(a) : undefined;
+      return {
+        ...t,
+        // Prefer existing created fields on WS object, else borrow from source maps
+        created_at: (t as any).created_at || (t as any).createdAt || src?.created_at || src?.createdAt || (t as any).timestamp || undefined,
+        launch_time: (t as any).launch_time || (t as any).launchTime || src?.launch_time || src?.launchTime || undefined,
+        image: (t as any).image || (t as any).logo || src?.image || src?.logo || undefined,
+        logo: (t as any).logo || src?.logo || undefined,
+      };
+    });
+  }, [wsNewRaw, tokens, launchpadNewPairs, launchpadFinalStretch, launchpadMigrated]);
 
   // Build New Pairs dataset with recency sort and de-dup
   const getTs = (t: any): number => {
@@ -354,16 +418,28 @@ export default function PulsePage() {
     return result.length > 0 ? result : combinedNewPairs;
   };
 
-  const newPairsData = buildNewPairs();
-  // Keep last non-empty list to prevent flicker when WS/HTTP blips
+  const newPairsData = useMemo(() => buildNewPairs(), [httpNewTick, wsNewEnriched, combinedNewPairs]);
+  // Keep last non-empty list to prevent flicker when WS/HTTP blips (guard against needless updates)
   const [lastNonEmptyNewPairs, setLastNonEmptyNewPairs] = useState<any[]>([]);
   const hasSeededRef = useRef(false);
   useEffect(() => {
+    const sameList = (a: any[], b: any[]) => {
+      if (a === b) return true;
+      if (!a || !b) return false;
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        const ka = (a[i]?.pair_address || a[i]?.mint) as string | undefined;
+        const kb = (b[i]?.pair_address || b[i]?.mint) as string | undefined;
+        if (ka !== kb) return false;
+      }
+      return true;
+    };
+
     if (newPairsData && newPairsData.length > 0) {
-      setLastNonEmptyNewPairs(newPairsData);
+      setLastNonEmptyNewPairs((prev) => (sameList(prev, newPairsData) ? prev : newPairsData));
     } else if (!hasSeededRef.current && combinedNewPairs.length > 0) {
       // Seed with combined list once if nothing else is available
-      setLastNonEmptyNewPairs(combinedNewPairs);
+      setLastNonEmptyNewPairs((prev) => (sameList(prev, combinedNewPairs) ? prev : combinedNewPairs));
       hasSeededRef.current = true;
     }
   }, [newPairsData, combinedNewPairs]);
@@ -384,6 +460,59 @@ export default function PulsePage() {
   const newPairsFallback = newPairsData;
   // Show loading until at least one source has tried and no data yet
   const newPairsLoading = (httpNewTick === 0 && wsLoading && newPairsData.length === 0);
+
+  // Build a unified list of addresses to fetch realtime market data for (cap 200)
+  const realtimeAddrs = useMemo(() => {
+    const src: any[] = [
+      ...(newPairsToShow as any[] || []),
+      ...(combinedFinalStretch as any[] || []),
+      ...(combinedMigrated as any[] || []),
+    ];
+    const uniq = new Set<string>();
+    for (const t of src) {
+      const mint = (t as any)?.mint;
+      const pair = (t as any)?.pair_address;
+      if (mint && typeof mint === 'string') uniq.add(mint);
+      if (pair && typeof pair === 'string') uniq.add(pair);
+      if (uniq.size >= 200) break;
+    }
+    return Array.from(uniq);
+  }, [newPairsToShow, combinedFinalStretch, combinedMigrated]);
+
+  const { marketData, refetch: refetchMarket } = useRealtimeMarketData(realtimeAddrs, { intervalMs: 5000 });
+
+  const enrichWithMarketData = useCallback((arr: any[]): any[] => {
+    return (arr || []).map((t: any) => {
+      const mintKey = t?.mint as string | undefined;
+      const pairKey = t?.pair_address as string | undefined;
+      const md = (mintKey && marketData[mintKey]) || (pairKey && marketData[pairKey]);
+      if (!md) return t;
+      const patched: any = { ...t };
+      // Always prefer realtime market data regardless of DB values
+      patched.price_usd = md.price_usd;
+      patched.usd_price = md.price_usd;
+      patched.market_cap_usd = md.market_cap_usd;
+      patched.fully_diluted_value = md.market_cap_usd;
+      patched.total_fully_diluted_valuation = md.market_cap_usd;
+      if ((md as any).volume_usd !== undefined) {
+        patched.volume_24h = (md as any).volume_usd;
+      }
+      return patched;
+    });
+  }, [marketData]);
+
+  const enrichedNewPairsToShow = useMemo(() => enrichWithMarketData(newPairsToShow as any), [enrichWithMarketData, newPairsToShow]);
+  const enrichedFinalStretch = useMemo(() => enrichWithMarketData(combinedFinalStretch as any), [enrichWithMarketData, combinedFinalStretch]);
+  const enrichedMigrated = useMemo(() => enrichWithMarketData(combinedMigrated as any), [enrichWithMarketData, combinedMigrated]);
+
+  if (typeof window !== 'undefined') {
+    try {
+      // Lightweight dev diagnostics
+      if ((window as any).__DEBUG_PULSE__){
+        console.log(`[Pulse] poll addrs=${realtimeAddrs.length} marketKeys=${Object.keys(marketData||{}).length}`);
+      }
+    } catch {}
+  }
 
   return (
     <>
@@ -423,9 +552,9 @@ export default function PulsePage() {
             </div>
           ) : (
             <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
-              <PulseTable title="New Pairs" tokens={newPairsToShow as any} loading={newPairsLoading} isFirstOrLast="first" />
-              <PulseTable title="Final Stretch" tokens={combinedFinalStretch} />
-              <PulseTable title="Migrated" tokens={combinedMigrated} isFirstOrLast="last" />
+              <PulseTable title="New Pairs" tokens={enrichedNewPairsToShow as any} loading={newPairsLoading} isFirstOrLast="first" />
+              <PulseTable title="Final Stretch" tokens={enrichedFinalStretch as any} />
+              <PulseTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" />
             </div>
           )}
         </div>
