@@ -60,7 +60,7 @@ export default function usePaginatedTokensWithFallback({
     try {
       const lim = (limit || 20);
       const prev = lastStableDataRef.current;
-      const minCount = Math.max(8, Math.floor(lim * 0.6));
+      const minCount = Math.max(5, Math.floor(lim * 0.4));
 
       // Reset stability baseline if timeframe changed
       if (lastTimeframeRef.current !== timeframe) {
@@ -133,7 +133,13 @@ export default function usePaginatedTokensWithFallback({
         volume_24h: stable[0].volume_24h,
       });
     }
-    setState(prev => ({ ...prev, data: stable, loading: false }));
+    setState(prev => {
+      // Only update if data actually changed to prevent flickering
+      if (JSON.stringify(prev.data) === JSON.stringify(stable)) {
+        return prev;
+      }
+      return { ...prev, data: stable, loading: false };
+    });
   }, [stabilizeList]);
 
   // Polling fallback function
@@ -228,8 +234,8 @@ export default function usePaginatedTokensWithFallback({
     // Initial poll
     poll();
 
-    // Set up polling interval (faster for responsiveness)
-    pollIntervalRef.current = setInterval(poll, 1000);
+    // Set up polling interval (reduced frequency to prevent flickering)
+    pollIntervalRef.current = setInterval(poll, 3000);
   }, [filter, order, offset, limit, throttledSetData]);
 
   // Clear polling
@@ -275,7 +281,7 @@ export default function usePaginatedTokensWithFallback({
             ws.close();
             handleReconnect();
           }
-        }, 1000); // 1 second timeout for faster fallback
+        }, 500); // 500ms timeout for faster fallback
 
         ws.onopen = () => {
           if (wsConnectionTimeoutRef.current) {

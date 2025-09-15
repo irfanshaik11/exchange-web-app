@@ -5,8 +5,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+  // Best-effort to avoid etag-induced 304s
   try { res.removeHeader('ETag'); } catch {}
-  
   // Preserve query parameters
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(req.query)) {
@@ -17,9 +17,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:9000';
 
-  const fetchWithTimeout = async (url: string, timeoutMs = 5000) => {
+  const fetchWithTimeout = async (url: string, timeoutMs = 2000) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -41,36 +41,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const data = JSON.parse(text);
       
       // Map the response to ensure image field is properly set
-      if (data && typeof data === 'object') {
-        if (Array.isArray(data)) {
-          // If it's an array of tokens
-          data.forEach((token: any) => {
-            if (token && typeof token === 'object') {
-              token.image = token.uri || token.image || null;
-            }
-          });
-        } else if (data.new && Array.isArray(data.new)) {
-          // If it's the launchpad data structure
-          data.new.forEach((token: any) => {
-            if (token && typeof token === 'object') {
-              token.image = token.uri || token.image || null;
-            }
-          });
-        }
-        if (data.completing && Array.isArray(data.completing)) {
-          data.completing.forEach((token: any) => {
-            if (token && typeof token === 'object') {
-              token.image = token.uri || token.image || null;
-            }
-          });
-        }
-        if (data.completed && Array.isArray(data.completed)) {
-          data.completed.forEach((token: any) => {
-            if (token && typeof token === 'object') {
-              token.image = token.uri || token.image || null;
-            }
-          });
-        }
+      if (data && Array.isArray(data)) {
+        data.forEach((token: any) => {
+          if (token && typeof token === 'object') {
+            token.image = token.uri || token.image || null;
+          }
+        });
       }
       
       res.json(data);
@@ -81,11 +57,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   try {
-    const goURL = `${goBase}/v1/launchpad/tokens/all?${params.toString()}`;
-    const upstream = await fetchWithTimeout(goURL, 5000);
+    const goURL = `${goBase}/v1/pulse/migrated?${params.toString()}`;
+    console.log('[Proxy:pulse-migrated] Using Go service:', goURL);
+    const upstream = await fetchWithTimeout(goURL, 3000);
     return await tryParseAndSend(upstream);
   } catch (err: any) {
+    console.error('[Proxy:pulse-migrated] Go service fetch failed:', err?.message || err);
     return res.status(502).json({ error: 'Bad gateway to Go token service' });
   }
 }
-

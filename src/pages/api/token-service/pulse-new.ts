@@ -54,8 +54,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           created_at: r.launch_time || r.created_at || null,
           launch_time: r.launch_time || null,
           // Optional extra fields used by the UI
-          logo: r.image || null,
-          image: r.image || null,
+          logo: r.uri || r.image || null,
+          image: r.uri || r.image || null,
         }));
         return res.json(mapped);
       }

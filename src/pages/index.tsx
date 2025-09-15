@@ -61,7 +61,7 @@ function shuffleArray<T extends NonNullable<unknown>>(array: T[]): T[] {
 // Add this type extension after importing Token
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
-export type Timeframe = "5m" | "1h" | "6h" | "24h";
+export type Timeframe = "1m" | "5m" | "30m" | "1h";
 
 export default function Home() {
   const router = useRouter();
@@ -76,9 +76,9 @@ export default function Home() {
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const isDiscover = router.pathname === "/";
-  const timeframes = ["5m", "1h", "6h", "24h"] as Timeframe[];
+  const timeframes = ["1m", "5m", "30m", "1h"] as Timeframe[];
   const [selectedTimeframe, setSelectedTimeframe] =
-    useState<Timeframe>("24h");
+    useState<Timeframe>("1h");
   const { user, loading: userLoading, refreshUser } = useUser();
   const [selectedTab, setSelectedTab] = useState<"dex" | "trending">("trending");
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
@@ -286,8 +286,10 @@ export default function Home() {
       return isNaN(n) ? 0 : n;
     }
     // simple fallbacks
-    if (tf === '6h' || tf === '24h') return Number(t?.volume_1h) || 0;
     if (tf === '1h') return Number(t?.volume_5m) || 0;
+    if (tf === '30m') return Number(t?.volume_5m) || 0;
+    if (tf === '5m') return Number(t?.volume_5m) || 0;
+    if (tf === '1m') return Number(t?.volume_5m) || 0;
     return 0;
   }, []);
 

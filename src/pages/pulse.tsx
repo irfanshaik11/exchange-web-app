@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import PulseTable from '../components/PulseTable';
 import type { Token } from '~/utils/db';
@@ -35,6 +35,8 @@ export default function PulsePage() {
   const [error, setError] = useState<string | null>(null);
   const [httpNew, setHttpNew] = useState<any[]>([]);
   const [httpNewTick, setHttpNewTick] = useState(0);
+  const [httpMigrated, setHttpMigrated] = useState<any[]>([]);
+  const [httpMigratedTick, setHttpMigratedTick] = useState(0);
 
   // Launchpad data state
   const [launchpadData, setLaunchpadData] = useState<LaunchpadData>({
@@ -98,6 +100,30 @@ export default function PulsePage() {
             if (data.length > 0) {
               setHttpNew(data as any[]);
               setHttpNewTick((t) => t + 1);
+            }
+          }
+        }
+      } catch {}
+    };
+    poll();
+    const id = setInterval(poll, 2000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  // Fast polling fallback for Migrated tokens (cache-bypass)
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/token-service/pulse-migrated?limit=50`);
+        if (!alive) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            // Only replace when we have non-empty fresh data to avoid flicker
+            if (data.length > 0) {
+              setHttpMigrated(data as any[]);
+              setHttpMigratedTick((t) => t + 1);
             }
           }
         }
@@ -195,10 +221,45 @@ export default function PulsePage() {
   const launchpadFinalStretch = launchpadData.completing.map(convertLaunchpadToToken);
   const launchpadMigrated = launchpadData.completed.map(convertLaunchpadToToken);
 
-  // Combine regular tokens with launchpad tokens
+  // Convert HTTP migrated tokens to Token format
+  const httpMigratedTokens = httpMigrated.map((token: any) => ({
+    id: 0,
+    mint: token.mint,
+    standard: 'SPL',
+    name: token.name || 'Unknown',
+    symbol: token.symbol || 'UNK',
+    logo: token.image || token.uri || '',
+    decimals: 6,
+    metaplex: null,
+    fully_diluted_value: token.market_cap_usd || 0,
+    total_supply: 0,
+    total_supply_formatted: 0,
+    links: null,
+    description: '',
+    is_verified_contract: false,
+    possible_spam: false,
+    total_buy_volume_5m: 0,
+    total_buy_volume_1h: 0,
+    total_buy_volume_6h: 0,
+    total_buy_volume_24h: token.volume_24h || 0,
+    total_sell_volume_5m: 0,
+    total_sell_volume_1h: 0,
+    total_sell_volume_6h: 0,
+    total_sell_volume_24h: 0,
+    price_usd: token.price_usd || 0,
+    price_change_1h: token.price_change_24h || 0,
+    price_change_6h: 0,
+    price_change_24h: 0,
+    market_cap_usd: token.market_cap_usd || 0,
+    bonding_curve_progress: token.bonding_pct || 100,
+    created_at: token.launch_time || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  } as Token));
+
+  // Combine regular tokens with launchpad tokens and HTTP migrated tokens
   const combinedNewPairs = [...newPairs, ...launchpadNewPairs];
   const combinedFinalStretch = [...finalStretch, ...launchpadFinalStretch];
-  const combinedMigrated = [...migrated, ...launchpadMigrated];
+  const combinedMigrated = [...httpMigratedTokens, ...launchpadMigrated];
 
   const isLoading = (loading && wsLoading) || launchpadLoading;
   const hasError = launchpadError && !launchpadData.new.length && !launchpadData.completing.length && !launchpadData.completed.length;
@@ -296,12 +357,14 @@ export default function PulsePage() {
   const newPairsData = buildNewPairs();
   // Keep last non-empty list to prevent flicker when WS/HTTP blips
   const [lastNonEmptyNewPairs, setLastNonEmptyNewPairs] = useState<any[]>([]);
+  const hasSeededRef = useRef(false);
   useEffect(() => {
     if (newPairsData && newPairsData.length > 0) {
       setLastNonEmptyNewPairs(newPairsData);
-    } else if (lastNonEmptyNewPairs.length === 0 && combinedNewPairs.length > 0) {
+    } else if (!hasSeededRef.current && combinedNewPairs.length > 0) {
       // Seed with combined list once if nothing else is available
       setLastNonEmptyNewPairs(combinedNewPairs);
+      hasSeededRef.current = true;
     }
   }, [newPairsData, combinedNewPairs]);
   const newPairsToShow = lastNonEmptyNewPairs.length > 0 ? lastNonEmptyNewPairs : newPairsData;
