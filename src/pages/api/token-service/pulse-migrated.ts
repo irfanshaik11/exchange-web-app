@@ -41,10 +41,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const data = JSON.parse(text);
       
-      // Map the response to ensure image field is properly set
+      // Map the response to match the expected field names
       if (data && Array.isArray(data)) {
         data.forEach((token: any) => {
           if (token && typeof token === 'object') {
+            // Map field names to match what the frontend expects
+            token.usd_price = token.price_usd ?? 0;
+            token.fully_diluted_value = token.market_cap_usd ?? 0;
+            token.bonding_curve_progress = parseFloat(token.bonding_pct ?? 0); // bonding_pct is already a percentage
             token.image = token.uri || token.image || null;
           }
         });

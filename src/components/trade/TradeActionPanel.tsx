@@ -461,7 +461,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
           <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-full bg-neutral-800 p-1">
             <span className="font-bold text-red-400">
               {token.bonding_curve_progress
-                ? `${Number(token.bonding_curve_progress).toFixed(2)}%`
+                ? `${Math.round(Number(token.bonding_curve_progress))}%`
                 : "0%"}
             </span>
             <span className="text-neutral-400">Progress</span>

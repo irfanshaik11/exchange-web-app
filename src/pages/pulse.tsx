@@ -74,7 +74,7 @@ export default function PulsePage() {
       setLaunchpadLoading(true);
       setLaunchpadError(null);
       try {
-        const response = await fetch(`/api/launchpad/tokens?limit=50`);
+        const response = await fetch(`/api/launchpad/tokens?limit=30`);
         if (!response.ok) throw new Error('Failed to fetch launchpad data');
         const data: LaunchpadData = await response.json();
         setLaunchpadData(data);
@@ -94,7 +94,7 @@ export default function PulsePage() {
     let alive = true;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/token-service/pulse-new?limit=50&t=${Date.now()}`);
+        const res = await fetch(`/api/token-service/pulse-new?limit=30&t=${Date.now()}`);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
@@ -118,7 +118,7 @@ export default function PulsePage() {
     let alive = true;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`);
+        const res = await fetch(`/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
@@ -142,7 +142,7 @@ export default function PulsePage() {
     let alive = true;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/token-service/pulse-migrated?limit=50&t=${Date.now()}`);
+        const res = await fetch(`/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
@@ -219,7 +219,7 @@ export default function PulsePage() {
     total_holders: 0,
     created_at: launchpadToken.createdAt,
     updated_at: launchpadToken.createdAt,
-    bonding_curve_progress: (launchpadToken.graduationPercent / 100).toString(),
+    bonding_curve_progress: launchpadToken.graduationPercent, // Already in percentage format
     global_fees_paid: 0,
     uri: null,
     // extra field used by PulseTable TokenImage for DB logos
@@ -247,81 +247,13 @@ export default function PulsePage() {
   const launchpadNewPairs = useMemo(() => launchpadData.new.map(convertLaunchpadToToken), [launchpadData.new, convertLaunchpadToToken]);
   const launchpadFinalStretch = useMemo(() => launchpadData.completing.map(convertLaunchpadToToken), [launchpadData.completing, convertLaunchpadToToken]);
   const launchpadMigrated = useMemo(() => launchpadData.completed.map(convertLaunchpadToToken), [launchpadData.completed, convertLaunchpadToToken]);
+  
 
-  // Convert HTTP migrated tokens to Token format (stable ref)
-  const httpMigratedTokens = useMemo(() => httpMigrated.map((token: any) => ({
-    id: 0,
-    mint: token.mint,
-    standard: 'SPL',
-    name: token.name || 'Unknown',
-    symbol: token.symbol || 'UNK',
-    logo: token.image || token.uri || '',
-    decimals: 6,
-    metaplex: null,
-    fully_diluted_value: token.market_cap_usd || 0,
-    total_supply: 0,
-    total_supply_formatted: 0,
-    links: null,
-    description: '',
-    is_verified_contract: false,
-    possible_spam: false,
-    total_buy_volume_5m: 0,
-    total_buy_volume_1h: 0,
-    total_buy_volume_6h: 0,
-    total_buy_volume_24h: token.volume_24h || 0,
-    total_sell_volume_5m: 0,
-    total_sell_volume_1h: 0,
-    total_sell_volume_6h: 0,
-    total_sell_volume_24h: 0,
-    price_usd: token.price_usd || 0,
-    price_change_1h: token.price_change_24h || 0,
-    price_change_6h: 0,
-    price_change_24h: 0,
-    market_cap_usd: token.market_cap_usd || 0,
-    bonding_curve_progress: token.bonding_pct || 100,
-    created_at: token.launch_time || new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  } as any)), [httpMigrated]);
-
-  // Convert HTTP final stretch tokens to Token format (stable ref)
-  const httpFinalStretchTokens = useMemo(() => httpFinalStretch.map((token: any) => ({
-    id: 0,
-    mint: token.mint,
-    standard: 'SPL',
-    name: token.name || 'Unknown',
-    symbol: token.symbol || 'UNK',
-    logo: token.image || token.uri || '',
-    decimals: 6,
-    metaplex: null,
-    fully_diluted_value: token.market_cap_usd || 0,
-    total_supply: 0,
-    total_supply_formatted: 0,
-    links: null,
-    description: '',
-    is_verified_contract: false,
-    possible_spam: false,
-    total_buy_volume_5m: 0,
-    total_buy_volume_1h: 0,
-    total_buy_volume_6h: 0,
-    total_buy_volume_24h: token.volume_24h || 0,
-    total_sell_volume_5m: 0,
-    total_sell_volume_1h: 0,
-    total_sell_volume_6h: 0,
-    total_sell_volume_24h: 0,
-    price_usd: token.price_usd || 0,
-    price_change_1h: token.price_change_24h || 0,
-    price_change_6h: 0,
-    price_change_24h: 0,
-    market_cap_usd: token.market_cap_usd || 0,
-    bonding_curve_progress: token.bonding_pct || 100,
-    created_at: token.launch_time || new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  } as any)), [httpFinalStretch]);
 
   // Combine regular tokens with launchpad tokens and HTTP tokens (stable refs)
   const combinedNewPairs = useMemo(() => [...newPairs, ...launchpadNewPairs], [newPairs, launchpadNewPairs]);
-  const combinedFinalStretch = useMemo(() => [...httpFinalStretchTokens, ...launchpadFinalStretch], [httpFinalStretchTokens, launchpadFinalStretch]);
-  const combinedMigrated = useMemo(() => [...httpMigratedTokens, ...launchpadMigrated], [httpMigratedTokens, launchpadMigrated]);
+  const combinedFinalStretch = useMemo(() => [...httpFinalStretch, ...launchpadFinalStretch], [httpFinalStretch, launchpadFinalStretch]);
+  const combinedMigrated = useMemo(() => [...httpMigrated, ...launchpadMigrated], [httpMigrated, launchpadMigrated]);
 
   const isLoading = (loading && wsLoading) || launchpadLoading;
   const hasError = launchpadError && !launchpadData.new.length && !launchpadData.completing.length && !launchpadData.completed.length;

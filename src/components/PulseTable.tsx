@@ -191,21 +191,17 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
               onClick={() => { if (addr) router.push(`/trade/${addr}`); }}
             >
               {/* Bonding popout on hover */}
-              {idx === 0 ? (
-                <span
-                  className="hidden group-hover:flex absolute left-1/2 top-full mt-2 -translate-x-1/2 px-3 py-1 bg-neutral-900 border border-emerald-700 shadow-xl text-emerald-400 text-sm z-20"
-                  style={{ pointerEvents: 'none' }}
-                >
-                  Bonding: {typeof token.bonding_curve_progress === 'number' ? Math.round(token.bonding_curve_progress) : (parseFloat(token.bonding_curve_progress)).toFixed(0)}%
-                </span>
-              ) : (
-                <span
-                  className="hidden group-hover:flex absolute left-1/2 -top-7 -translate-x-1/2 px-3 py-1 bg-neutral-900 border border-emerald-700 shadow-xl text-emerald-400 text-sm z-20"
-                  style={{ pointerEvents: 'none' }}
-                >
-                  Bonding: {typeof token.bonding_curve_progress === 'number' ? Math.round(token.bonding_curve_progress * 100) : (parseFloat(token.bonding_curve_progress || '0') * 100).toFixed(0)}%
-                </span>
-              )}
+              <span
+                className={`hidden group-hover:flex absolute left-1/2 -translate-x-1/2 px-3 py-1 bg-neutral-900 border border-emerald-700 shadow-xl text-emerald-400 text-sm z-20 ${
+                  idx === 0 ? 'top-full mt-2' : '-top-7'
+                }`}
+                style={{ pointerEvents: 'none' }}
+              >
+                Bonding: {typeof token.bonding_curve_progress === 'number' 
+                  ? Math.round(token.bonding_curve_progress) 
+                  : Math.round(parseFloat(token.bonding_curve_progress || '0'))
+                }%
+              </span>
               {/* Profile Picture & Address */}
               <div className="flex flex-col items-center w-16 mr-3">
                 <div className="relative w-14 h-14 bg-neutral-800 rounded-full overflow-x-hidden flex items-center justify-center border border-neutral-700">

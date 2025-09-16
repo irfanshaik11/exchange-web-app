@@ -50,7 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           fully_diluted_value: r.market_cap_usd ?? 0,
           volume_24h: r.volume_24h ?? 0,
           price_percent_change_1h: r.price_change_1h ?? 0,
-          bonding_curve_progress: r.bonding_pct ?? 0,
+          bonding_curve_progress: parseFloat(r.bonding_pct ?? 0), // bonding_pct is already a percentage
           created_at: r.launch_time || r.created_at || null,
           launch_time: r.launch_time || null,
           // Optional extra fields used by the UI
