@@ -183,7 +183,7 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
           <div className="text-neutral-500 text-center py-8">No tokens found.</div>
         ) : (
           tokens.map((token, idx) => {
-            const addr = (token as any)?.pair_address || (token as any)?.mint || null;
+            const addr = (token as any)?.mint || (token as any)?.pair_address || null;
             return (
             <div
               key={`${addr || 'noaddr'}-${idx}`}

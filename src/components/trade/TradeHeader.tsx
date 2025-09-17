@@ -218,7 +218,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
         {/* Center: Price, Liquidity, Supply, Global Fees Paid */}
         <div className="flex items-center justify-center gap-4">
           <div className="text-base leading-tight font-medium text-white">
-            ${formatSmartNumber(token.fully_diluted_value).toLocaleString()}
+            ${formatSmartNumber(token.market_cap_usd || 0).toLocaleString()}
           </div>
           {/* Price */}
           <HeaderColumnSection

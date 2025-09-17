@@ -80,6 +80,7 @@ export type Token = {
   price_percent_change_24h: number;
   sol_price: number;
   usd_price: number;
+  market_cap_usd: number;
   total_liquidity_usd: number;
   total_fully_diluted_valuation: number;
   total_snipers: number;
