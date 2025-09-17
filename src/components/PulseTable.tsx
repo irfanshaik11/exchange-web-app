@@ -242,20 +242,26 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
                     <div className="flex gap-3 text-xs items-center">
                       <span className="text-neutral-400 flex items-center gap-1">F <span className="inline-block align-middle"><svg width="12" height="12" viewBox="0 0 24 24"><defs><linearGradient id="solana-gradient" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#00FFA3"/><stop offset="100%" stopColor="#DC1FFF"/></linearGradient></defs><rect width="24" height="24" fill="url(#solana-gradient)" rx="4"/></svg></span> <span className="text-emerald-400 font-bold">0</span></span>
                       <span className="text-neutral-400">TX <span className="text-white font-bold">{(token.total_buys_5m ?? 0) + (token.total_sells_5m ?? 0)}</span></span>
+                      <span className="text-neutral-400">V5m <span className="text-green-400 font-bold">${formatSmartNumber((token.total_buy_volume_5m ?? 0) + (token.total_sell_volume_5m ?? 0))}</span></span>
+                    </div>
+                    <div className="flex gap-3 text-xs items-center">
+                      <span className="text-neutral-400">W5m <span className="text-blue-400 font-bold">{token.unique_wallets_5m ?? 0}</span></span>
+                      <span className="text-neutral-400">B/S <span className="text-yellow-400 font-bold">{token.total_buys_5m ?? 0}/{token.total_sells_5m ?? 0}</span></span>
                     </div>
                   </div>
                 </div>
                 {/* Bottom Row: Badges & Buy Button */}
                 <div className="flex flex-row items-center justify-between gap-2 mt-1">
                   <div className="flex gap-1">
-                    {[{icon: <FaUser size={10}/>, label: 'Top 10', value: 0},
-                      {icon: <FaCrown size={10}/>, label: 'Dev', value: 0},
-                      {icon: <FaSearch size={10}/>, label: 'Snipers', value: 0},
-                      {icon: <FaUser size={10}/>, label: 'Insiders', value: 0},
-                      {icon: <FaUser size={10}/>, label: 'Bundle', value: 0}
+                    {[
+                      {icon: <FaUser size={10}/>, label: 'Buyers', value: token.total_buyers_5m ?? 0, color: 'text-green-400'},
+                      {icon: <FaCrown size={10}/>, label: 'Sellers', value: token.total_sellers_5m ?? 0, color: 'text-red-400'},
+                      {icon: <FaSearch size={10}/>, label: 'Wallets', value: token.unique_wallets_5m ?? 0, color: 'text-blue-400'},
+                      {icon: <FaUser size={10}/>, label: '24h TX', value: (token.total_buys_24h ?? 0) + (token.total_sells_24h ?? 0), color: 'text-yellow-400'},
+                      {icon: <FaUser size={10}/>, label: 'Vol 24h', value: Math.round((token.total_buy_volume_24h ?? 0) + (token.total_sell_volume_24h ?? 0)), color: 'text-purple-400'}
                     ].map((b, i) => (
-                      <span key={i} className="flex items-center gap-1 bg-neutral-800 text-green-400 text-[10px] px-2 py-0.5 rounded-full border border-neutral-700">
-                        {b.icon} {b.value}%
+                      <span key={i} className={`flex items-center gap-1 bg-neutral-800 ${b.color} text-[10px] px-2 py-0.5 rounded-full border border-neutral-700`}>
+                        {b.icon} {b.value}
                       </span>
                     ))}
                   </div>

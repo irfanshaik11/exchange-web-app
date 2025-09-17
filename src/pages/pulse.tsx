@@ -4,7 +4,7 @@ import PulseTable from '../components/PulseTable';
 import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
-import { useRealtimeMarketData } from '../hooks/useRealtimeMarketData';
+import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 
 interface LaunchpadToken {
   mint: string;
@@ -411,7 +411,13 @@ export default function PulsePage() {
     return Array.from(uniq);
   }, [newPairsToShow, combinedFinalStretch, combinedMigrated]);
 
-  const { marketData, refetch: refetchMarket } = useRealtimeMarketData(realtimeAddrs, { intervalMs: 5000 });
+  const { marketData, connected: wsConnected, error: wsError } = useRealtimeWebSocket(realtimeAddrs, {
+    url: process.env.NODE_ENV === 'production' 
+      ? 'wss://api.yourdomain.com/v1/ws/market-data'
+      : 'ws://localhost:8080/v1/ws/market-data',
+    reconnectInterval: 3000,
+    maxReconnectAttempts: 5
+  });
 
   const enrichWithMarketData = useCallback((arr: any[]): any[] => {
     return (arr || []).map((t: any) => {
@@ -434,8 +440,64 @@ export default function PulsePage() {
   }, [marketData]);
 
   const enrichedNewPairsToShow = useMemo(() => enrichWithMarketData(newPairsToShow as any), [enrichWithMarketData, newPairsToShow]);
-  const enrichedFinalStretch = useMemo(() => enrichWithMarketData(combinedFinalStretch as any), [enrichWithMarketData, combinedFinalStretch]);
-  const enrichedMigrated = useMemo(() => enrichWithMarketData(combinedMigrated as any), [enrichWithMarketData, combinedMigrated]);
+  
+  // Apply same limiting logic as new pairs to final stretch and migrated
+  const finalStretchToShow = useMemo(() => {
+    const source = httpFinalStretch.length ? httpFinalStretch : combinedFinalStretch;
+    const uniq = new Map<string, any>();
+    for (const t of source as any[]) {
+      const key = (t?.pair_address || t?.mint) as string | undefined;
+      if (!key) continue;
+      if (!uniq.has(key)) uniq.set(key, t);
+    }
+    const vals = Array.from(uniq.values());
+    const withTs: any[] = [];
+    const withoutTs: any[] = [];
+    for (const t of vals) {
+      const ts = getTs(t);
+      if (ts > 0) withTs.push(t); else withoutTs.push(t);
+    }
+    withTs.sort((a, b) => getTs(b) - getTs(a));
+    withoutTs.sort((a, b) => {
+      const fdvA = Number((a as any).fully_diluted_value) || 0;
+      const fdvB = Number((b as any).fully_diluted_value) || 0;
+      if (fdvB !== fdvA) return fdvB - fdvA;
+      return String((a as any).symbol || (a as any).name || '').localeCompare(String((b as any).symbol || (b as any).name || ''));
+    });
+    const result = withTs.concat(withoutTs);
+    // Limit to 30 tokens like new pairs
+    return result.slice(0, 30);
+  }, [httpFinalStretch, combinedFinalStretch, getTs]);
+
+  const migratedToShow = useMemo(() => {
+    const source = httpMigrated.length ? httpMigrated : combinedMigrated;
+    const uniq = new Map<string, any>();
+    for (const t of source as any[]) {
+      const key = (t?.pair_address || t?.mint) as string | undefined;
+      if (!key) continue;
+      if (!uniq.has(key)) uniq.set(key, t);
+    }
+    const vals = Array.from(uniq.values());
+    const withTs: any[] = [];
+    const withoutTs: any[] = [];
+    for (const t of vals) {
+      const ts = getTs(t);
+      if (ts > 0) withTs.push(t); else withoutTs.push(t);
+    }
+    withTs.sort((a, b) => getTs(b) - getTs(a));
+    withoutTs.sort((a, b) => {
+      const fdvA = Number((a as any).fully_diluted_value) || 0;
+      const fdvB = Number((b as any).fully_diluted_value) || 0;
+      if (fdvB !== fdvA) return fdvB - fdvA;
+      return String((a as any).symbol || (a as any).name || '').localeCompare(String((b as any).symbol || (b as any).name || ''));
+    });
+    const result = withTs.concat(withoutTs);
+    // Limit to 30 tokens like new pairs
+    return result.slice(0, 30);
+  }, [httpMigrated, combinedMigrated, getTs]);
+
+  const enrichedFinalStretch = useMemo(() => enrichWithMarketData(finalStretchToShow as any), [enrichWithMarketData, finalStretchToShow]);
+  const enrichedMigrated = useMemo(() => enrichWithMarketData(migratedToShow as any), [enrichWithMarketData, migratedToShow]);
 
   if (typeof window !== 'undefined') {
     try {
@@ -466,6 +528,13 @@ export default function PulsePage() {
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${launchpadData.new.length + launchpadData.completing.length + launchpadData.completed.length > 0 ? 'bg-green-500' : 'bg-gray-500'}`}></div>
                 <span className="text-neutral-400">Launchpad: {launchpadData.new.length + launchpadData.completing.length + launchpadData.completed.length} tokens</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                <span className="text-neutral-400">
+                  Real-time Data: {wsConnected ? 'Connected' : 'Disconnected'}
+                  {wsError && ` (${wsError})`}
+                </span>
               </div>
             </div>
           </div>

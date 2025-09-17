@@ -16,6 +16,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       params.append(key, value);
     }
   }
+  // Only set default limit if no limit is provided
+  if (!params.get('limit')) params.set('limit', '30');
 
   const primaryBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
   const fallbackBase = process.env.NEXT_PUBLIC_GO_FALLBACK_URL || 'http://localhost:9000';
@@ -50,6 +52,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             token.fully_diluted_value = token.market_cap_usd ?? 0;
             token.bonding_curve_progress = parseFloat(token.bonding_pct ?? 0); // bonding_pct is already a percentage
             token.image = token.uri || token.image || null;
+            
+            // Ensure TX data fields are available (they should come from backend)
+            token.total_buy_volume_5m = token.total_buy_volume_5m ?? 0;
+            token.total_buy_volume_1h = token.total_buy_volume_1h ?? 0;
+            token.total_buy_volume_6h = token.total_buy_volume_6h ?? 0;
+            token.total_buy_volume_24h = token.total_buy_volume_24h ?? 0;
+            token.total_sell_volume_5m = token.total_sell_volume_5m ?? 0;
+            token.total_sell_volume_1h = token.total_sell_volume_1h ?? 0;
+            token.total_sell_volume_6h = token.total_sell_volume_6h ?? 0;
+            token.total_sell_volume_24h = token.total_sell_volume_24h ?? 0;
+            token.total_buyers_5m = token.total_buyers_5m ?? 0;
+            token.total_buyers_1h = token.total_buyers_1h ?? 0;
+            token.total_buyers_6h = token.total_buyers_6h ?? 0;
+            token.total_buyers_24h = token.total_buyers_24h ?? 0;
+            token.total_sellers_5m = token.total_sellers_5m ?? 0;
+            token.total_sellers_1h = token.total_sellers_1h ?? 0;
+            token.total_sellers_6h = token.total_sellers_6h ?? 0;
+            token.total_sellers_24h = token.total_sellers_24h ?? 0;
+            token.total_buys_5m = token.total_buys_5m ?? 0;
+            token.total_buys_1h = token.total_buys_1h ?? 0;
+            token.total_buys_6h = token.total_buys_6h ?? 0;
+            token.total_buys_24h = token.total_buys_24h ?? 0;
+            token.total_sells_5m = token.total_sells_5m ?? 0;
+            token.total_sells_1h = token.total_sells_1h ?? 0;
+            token.total_sells_6h = token.total_sells_6h ?? 0;
+            token.total_sells_24h = token.total_sells_24h ?? 0;
+            token.unique_wallets_5m = token.unique_wallets_5m ?? 0;
+            token.unique_wallets_1h = token.unique_wallets_1h ?? 0;
+            token.unique_wallets_6h = token.unique_wallets_6h ?? 0;
+            token.unique_wallets_24h = token.unique_wallets_24h ?? 0;
+            token.price_percent_change_5m = token.price_percent_change_5m ?? 0;
+            token.price_percent_change_1h = token.price_percent_change_1h ?? 0;
+            token.price_percent_change_6h = token.price_percent_change_6h ?? 0;
+            token.price_percent_change_24h = token.price_percent_change_24h ?? 0;
+            token.links = token.links || null;
           }
         });
       }

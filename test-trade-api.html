@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trade API Test</title>
+</head>
+<body>
+    <h1>Trade API Test</h1>
+    <button onclick="testAPI()">Test Trade API</button>
+    <div id="result"></div>
+
+    <script>
+        async function testAPI() {
+            const pairAddress = 'sample_pair_1';
+            const url = `http://localhost:8080/v1/trade/view?pair_address=${pairAddress}`;
+            
+            try {
+                console.log('Testing URL:', url);
+                const response = await fetch(url);
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                document.getElementById('result').innerHTML = `
+                    <h2>Success!</h2>
+                    <p><strong>Token Name:</strong> ${data.token.name}</p>
+                    <p><strong>Symbol:</strong> ${data.token.symbol}</p>
+                    <p><strong>Recent Trades:</strong> ${data.recentTrades.length}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = `
+                    <h2>Error!</h2>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

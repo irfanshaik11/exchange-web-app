@@ -26,7 +26,7 @@ import { formatSmartNumber } from "~/utils/db";
 import { tradeBuy, tradeSellPercentage, tradeSellExactAmount } from "../../utils/api";
 import Trades from "../../components/trade/Trades";
 import Positions from "~/components/trade/Positions";
-import useSingleTokenWebSocket from "../../hooks/useSingleTokenWebSocket";
+import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
 
 export default function TradePage() {
   const router = useRouter();
@@ -48,15 +48,15 @@ export default function TradePage() {
   const [selectedTab, setSelectedTab] = useState("Trades");
   const [search, setSearch] = useState("");
 
-  // WebSocket per-token service
+  // Polling per-token service (every 3 seconds)
   const { 
     token, 
     trades, 
-    isConnected: wsConnected, 
-    error: wsError, 
-    loading: wsLoading, 
-    isReconnecting 
-  } = useSingleTokenWebSocket(
+    isPolling, 
+    error: pollingError, 
+    loading: pollingLoading,
+    refresh
+  } = useSingleTokenPolling(
     typeof id === "string" ? id : undefined
   );
 
@@ -69,7 +69,7 @@ export default function TradePage() {
 
   useEffect(() => {
     if (token) {
-      console.log('WebSocket token data:', token);
+      console.log('Polling token data:', token);
     }
   }, [token]);
 
@@ -116,7 +116,7 @@ export default function TradePage() {
     );
   }
 
-  if (wsLoading) {
+  if (pollingLoading) {
     return (
       <div className="mt-20 text-center text-2xl text-neutral-400">
         Loading...
@@ -128,9 +128,9 @@ export default function TradePage() {
     return (
       <div className="mt-20 text-center text-2xl text-red-400">
         Token not found
-        {wsError && (
+        {pollingError && (
           <div className="mt-4 text-sm text-neutral-400">
-            WebSocket Error: {wsError}
+            API Error: {pollingError}
           </div>
         )}
       </div>
@@ -146,7 +146,7 @@ export default function TradePage() {
       <div className="min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100">
         {/* Header always at the top, full width */}
         <Header search={search} setSearch={setSearch} />
-        {isReconnecting && <div className="text-center text-yellow-500 p-2 bg-yellow-900/50">Connection lost, reconnecting...</div>}
+        {isPolling && <div className="text-center text-blue-500 p-2 bg-blue-900/50">Live data updating every 3 seconds...</div>}
         {/* Main content: flex row, fills the rest of the page */}
         <div className="flex flex-1 flex-row w-full">
           {/* Left: Chart and Info */}

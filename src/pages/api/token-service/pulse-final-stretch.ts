@@ -14,7 +14,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   // Always request fresh cache-bypass
   params.set('fresh', '1');
-  if (!params.get('limit')) params.set('limit', '50');
+  // Only set default limit if no limit is provided
+  if (!params.get('limit')) params.set('limit', '30');
 
   const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
 
@@ -56,6 +57,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           // Optional extra fields used by the UI
           logo: r.uri || r.image || null,
           image: r.uri || r.image || null,
+          // TX data fields from Codex API
+          total_buy_volume_5m: r.total_buy_volume_5m ?? 0,
+          total_buy_volume_1h: r.total_buy_volume_1h ?? 0,
+          total_buy_volume_6h: r.total_buy_volume_6h ?? 0,
+          total_buy_volume_24h: r.total_buy_volume_24h ?? 0,
+          total_sell_volume_5m: r.total_sell_volume_5m ?? 0,
+          total_sell_volume_1h: r.total_sell_volume_1h ?? 0,
+          total_sell_volume_6h: r.total_sell_volume_6h ?? 0,
+          total_sell_volume_24h: r.total_sell_volume_24h ?? 0,
+          total_buyers_5m: r.total_buyers_5m ?? 0,
+          total_buyers_1h: r.total_buyers_1h ?? 0,
+          total_buyers_6h: r.total_buyers_6h ?? 0,
+          total_buyers_24h: r.total_buyers_24h ?? 0,
+          total_sellers_5m: r.total_sellers_5m ?? 0,
+          total_sellers_1h: r.total_sellers_1h ?? 0,
+          total_sellers_6h: r.total_sellers_6h ?? 0,
+          total_sellers_24h: r.total_sellers_24h ?? 0,
+          total_buys_5m: r.total_buys_5m ?? 0,
+          total_buys_1h: r.total_buys_1h ?? 0,
+          total_buys_6h: r.total_buys_6h ?? 0,
+          total_buys_24h: r.total_buys_24h ?? 0,
+          total_sells_5m: r.total_sells_5m ?? 0,
+          total_sells_1h: r.total_sells_1h ?? 0,
+          total_sells_6h: r.total_sells_6h ?? 0,
+          total_sells_24h: r.total_sells_24h ?? 0,
+          unique_wallets_5m: r.unique_wallets_5m ?? 0,
+          unique_wallets_1h: r.unique_wallets_1h ?? 0,
+          unique_wallets_6h: r.unique_wallets_6h ?? 0,
+          unique_wallets_24h: r.unique_wallets_24h ?? 0,
+          price_percent_change_5m: r.price_percent_change_5m ?? 0,
+          price_percent_change_1h: r.price_percent_change_1h ?? 0,
+          price_percent_change_6h: r.price_percent_change_6h ?? 0,
+          price_percent_change_24h: r.price_percent_change_24h ?? 0,
+          // Social links
+          links: r.links || null,
         }));
         return res.json(mapped);
       }

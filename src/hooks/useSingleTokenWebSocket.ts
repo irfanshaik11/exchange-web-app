@@ -28,11 +28,59 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
 
   const throttledSetToken = useCallback(
     throttle((newData: any) => {
+      console.log('Setting token data:', newData);
+      console.log('Token name:', newData?.name);
+      console.log('Token symbol:', newData?.symbol);
+      console.log('Token uri:', newData?.uri);
       setToken(newData);
       setState(prev => ({ ...prev, loading: false }));
     }, 1000),
     []
   );
+
+  // Load initial data
+  const loadInitialData = useCallback(async () => {
+    if (!pair_address) return;
+    
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      
+      console.log('Loading initial data for pair_address:', pair_address);
+      const url = `/api/token-service/trade-view?mint_address=${pair_address}`;
+      console.log('API URL:', url);
+      
+      const response = await fetch(url);
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Response:', errorText);
+        throw new Error(`Failed to load initial data: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Initial data received:', data);
+      
+      // Set initial data
+      if (data.token) {
+        console.log('Setting initial token data:', data.token);
+        console.log('Initial token name:', data.token.name);
+        console.log('Initial token symbol:', data.token.symbol);
+        console.log('Initial token uri:', data.token.uri);
+        throttledSetToken(data.token);
+      }
+      if (data.recentTrades) {
+        console.log('Setting initial trades data:', data.recentTrades);
+        setTrades(data.recentTrades);
+      }
+      
+    } catch (err: any) {
+      console.error('Failed to load initial data:', err);
+      setState(prev => ({ ...prev, error: err.message || 'Failed to load initial data' }));
+    } finally {
+      setState(prev => ({ ...prev, loading: false }));
+    }
+  }, [pair_address, throttledSetToken]);
 
   // Effect for managing WebSocket connection
   useEffect(() => {
@@ -43,12 +91,15 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
       return;
     }
 
+    // Load initial data first
+    loadInitialData();
+
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
 
     const connectWebSocket = () => {
-      try {
-        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/token?pair_address=${pair_address}`;
-        const ws = new WebSocket(wsUrl);
+        try {
+          const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/trade?mint_address=${pair_address}&token_data=true&market_data=true&trades=true&live_stats=true`;
+          const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -97,22 +148,54 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
             }
           };
 
-          const processMessage = (message: any) => {
-            // The backend sends an object with token and trades properties directly
-            if (Array.isArray(message)) {
-              // In case the server batches messages, iterate
-              for (const m of message) processMessage(m);
-              return;
-            }
-            if (message && typeof message === 'object') {
-              if (message.token) {
-                throttledSetToken(message.token);
+            const processMessage = (message: any) => {
+              console.log('WebSocket message received:', message);
+              // Handle our new trade page WebSocket message format
+              if (Array.isArray(message)) {
+                // In case the server batches messages, iterate
+                for (const m of message) processMessage(m);
+                return;
               }
-              if (message.trades) {
-                setTrades(message.trades);
+              if (message && typeof message === 'object') {
+                // Handle different message types from our trade WebSocket
+                switch (message.type) {
+                  case 'token_data':
+                    console.log('Processing token_data:', message.data);
+                    throttledSetToken(message.data);
+                    break;
+                  case 'trades':
+                    console.log('Processing trades:', message.data);
+                    setTrades(message.data);
+                    break;
+                  case 'market_data':
+                    console.log('Processing market_data:', message.data);
+                    // Update token with market data
+                    if (message.data) {
+                      throttledSetToken((prev: any) => ({
+                        ...prev,
+                        usd_price: message.data.priceUSD,
+                        market_cap_usd: message.data.marketCapUSD,
+                        volume_24h: message.data.volumeUSD
+                      }));
+                    }
+                    break;
+                  case 'live_stats':
+                    // Update live stats if needed
+                    console.log('Live stats update:', message.data);
+                    break;
+                  default:
+                    // Fallback to old format for compatibility
+                    if (message.token) {
+                      console.log('Processing fallback token:', message.token);
+                      throttledSetToken(message.token);
+                    }
+                    if (message.trades) {
+                      console.log('Processing fallback trades:', message.trades);
+                      setTrades(message.trades);
+                    }
+                }
               }
-            }
-          };
+            };
 
           const data = (event as MessageEvent).data;
           if (typeof data === 'string') {
@@ -186,7 +269,7 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
       }
     };
     // The connection must be re-established if the pair_address changes
-  }, [pair_address, throttledSetToken]);
+  }, [pair_address, throttledSetToken, loadInitialData]);
 
   return { ...state, token, trades };
 } 
