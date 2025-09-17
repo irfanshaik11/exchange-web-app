@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import type { Token } from "~/utils/db";
 
 const PRICE_CHART_ID = "price-chart-widget-container";
@@ -47,27 +47,34 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
     if (typeof window === "undefined") return;
     setShowFallback(false);
 
+    // Calculate pair address once for the entire effect
+    const pairAddress = token.pair_address && token.pair_address !== 'null' && token.pair_address.length >= 32 
+      ? token.pair_address 
+      : token.mint;
+
     const loadWidget = () => {
       try {
-        // Always use token address for charts
-        const addressConfig = { tokenAddress: token.mint };
-        const addrValue = token.mint;
+        const addressConfig = { 
+          pairAddress: pairAddress,
+          tokenAddress: token.mint 
+        };
+        const addrValue = pairAddress;
 
-        console.log('Chart Address Config:', addressConfig, 'Value:', addrValue);
+        console.log('Chart Address Config:', addressConfig, 'Value:', addrValue, 'Using pair address:', !!token.pair_address);
 
-        // If we don't have a valid mint address, bail out to fallback
-        if (!token.mint || token.mint.length < 32) {
-          console.warn('No valid mint address found for chart');
+        // If we don't have a valid address, bail out to fallback
+        if (!pairAddress || pairAddress.length < 32) {
+          console.warn('No valid address found for chart');
           setShowFallback(true);
           return;
         }
         if (typeof (window as any).createMyWidget === "function") {
-          (window as any).createMyWidget(PRICE_CHART_ID, {
+          // Configure chart based on whether we have pair address or just mint address
+          const chartConfig = {
             autoSize: true,
             chainId: "solana",
-            tokenAddress: token.mint,
             showHoldersChart: false,
-            defaultInterval: "60",
+            defaultInterval: "5", // 5-minute intervals for more dynamic data
             timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Etc/UTC",
             theme: "custom",
             locale: "en",
@@ -83,22 +90,37 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
             showVolume: true,
             showPrice: true,
             showTimeframe: true,
-            // Force refresh data
-            refreshInterval: 0,
+            // Enable real-time updates every 1 second
+            refreshInterval: 1000,
             // Ensure we get the latest data
-            dataSource: "moralis"
-          });
+            dataSource: "moralis",
+            // Enable live updates
+            liveUpdates: true,
+            // Enable auto-refresh
+            autoRefresh: true
+          };
+
+          // Use pair address if available, otherwise use token address
+          if (token.pair_address && token.pair_address !== 'null' && token.pair_address.length >= 32) {
+            chartConfig.pairAddress = pairAddress;
+            console.log('Using pair address for chart:', pairAddress);
+          } else {
+            chartConfig.tokenAddress = token.mint;
+            console.log('Using token address for chart:', token.mint);
+          }
+
+          (window as any).createMyWidget(PRICE_CHART_ID, chartConfig);
         } else {
           console.error("createMyWidget function is not defined. Retrying in 1 second...");
           // Retry after a short delay in case the script is still loading
           setTimeout(() => {
             if (typeof (window as any).createMyWidget === "function") {
-              (window as any).createMyWidget(PRICE_CHART_ID, {
+              // Use the same configuration logic as above
+              const chartConfig = {
                 autoSize: true,
                 chainId: "solana",
-                tokenAddress: token.mint,
                 showHoldersChart: false,
-                defaultInterval: "60",
+                defaultInterval: "5",
                 timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Etc/UTC",
                 theme: "custom",
                 locale: "en",
@@ -110,15 +132,22 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
                 hideLeftToolbar: false,
                 hideTopToolbar: false,
                 hideBottomToolbar: true,
-                // Additional parameters for better data loading
                 showVolume: true,
                 showPrice: true,
                 showTimeframe: true,
-                // Force refresh data
-                refreshInterval: 0,
-                // Ensure we get the latest data
-                dataSource: "moralis"
-              });
+                refreshInterval: 30000,
+                dataSource: "moralis",
+                liveUpdates: true,
+                autoRefresh: true
+              };
+
+              if (token.pair_address && token.pair_address !== 'null' && token.pair_address.length >= 32) {
+                chartConfig.pairAddress = pairAddress;
+              } else {
+                chartConfig.tokenAddress = token.mint;
+              }
+
+              (window as any).createMyWidget(PRICE_CHART_ID, chartConfig);
             } else {
               console.error("createMyWidget still not available after retry");
               setShowFallback(true);
@@ -146,6 +175,16 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
     } else {
       loadWidget();
     }
+
+    // Set up light periodic refresh for real-time updates
+    const refreshInterval = setInterval(() => {
+      // Light refresh - just reload the widget to get latest data
+      if (typeof (window as any).createMyWidget === "function") {
+        console.log('Refreshing chart for real-time updates...');
+        loadWidget(); // Reuse the existing loadWidget function
+      }
+    }, 60000); // Refresh every 60 seconds (light refresh)
+
     // If the widget fails to render anything, try alternative configurations
     const verifyTimer = window.setTimeout(() => {
       if (containerRef.current && containerRef.current.childNodes.length === 0) {
@@ -197,8 +236,9 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
 
     return () => {
       window.clearTimeout(verifyTimer);
+      if (refreshInterval) clearInterval(refreshInterval);
     };
-  }, [normalizedPair, token.mint, useTokenAddress, retryAttempt, rawPair]);
+  }, [normalizedPair, token.mint, token.pair_address, useTokenAddress, retryAttempt, rawPair]);
 
   // Calculate stats from token fields
   const buyVol = token.total_buy_volume_5m || 0;
@@ -215,46 +255,25 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
 
   return (
     <div style={{ width: "100%", height: "100%" }}>
-      {showFallback ? (
-        <div className="w-full h-full flex flex-col items-center justify-center text-neutral-400 bg-neutral-900/40 rounded p-4">
+      <div
+        id={PRICE_CHART_ID}
+        ref={containerRef}
+        style={{ width: "100%", height: "100%" }}
+      />
+      {showFallback && (
+        <div className="flex h-full w-full items-center justify-center bg-neutral-900 text-neutral-400">
           <div className="text-center">
-            <div className="text-lg mb-2">Chart temporarily unavailable</div>
-            <div className="text-sm text-neutral-500 mb-2">
-              Token Address: {token.mint || 'N/A'}
+            <div className="mb-2 text-lg font-semibold">Chart Unavailable</div>
+            <div className="text-sm">
+              Price data for {token.symbol} is not available at the moment.
             </div>
-            <div className="text-sm text-neutral-500">
-              Using token address for chart
-            </div>
-            <div className="flex gap-2 mt-3">
-              <button 
-                onClick={() => {
-                  setShowFallback(false);
-                  setRetryAttempt(0);
-                  // Trigger a re-render by updating the effect dependencies
-                  window.location.reload();
-                }}
-                className="px-3 py-1 bg-neutral-700 hover:bg-neutral-600 rounded text-sm"
-              >
-                Retry
-              </button>
-              <button 
-                onClick={() => {
-                  // Open Moralis website with the token address
-                  window.open(`https://moralis.io/charts?tokenAddress=${token.mint}`, '_blank');
-                }}
-                className="px-3 py-1 bg-blue-700 hover:bg-blue-600 rounded text-sm"
-              >
-                View on Moralis
-              </button>
+            <div className="mt-2 text-xs">
+              <div>Price: ${formatK(token.usd_price || 0)}</div>
+              <div>Volume 5m: ${formatK(vol5m)}</div>
+              <div>Buys: {buysCount} | Sells: {sellsCount}</div>
             </div>
           </div>
         </div>
-      ) : (
-        <div
-          id={PRICE_CHART_ID}
-          ref={containerRef}
-          style={{ width: "100%", height: "100%" }}
-        />
       )}
     </div>
   );

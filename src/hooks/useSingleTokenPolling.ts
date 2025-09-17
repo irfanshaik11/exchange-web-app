@@ -144,3 +144,4 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
     refresh: loadData,
   };
 }
+

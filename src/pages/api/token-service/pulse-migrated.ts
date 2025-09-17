@@ -51,6 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             token.usd_price = token.price_usd ?? 0;
             token.fully_diluted_value = token.market_cap_usd ?? 0;
             token.bonding_curve_progress = parseFloat(token.bonding_pct ?? 0); // bonding_pct is already a percentage
+            token.graduation_percent = parseFloat(token.graduation_percent ?? 0); // graduation_percent for hover display
             token.image = token.uri || token.image || null;
             
             // Ensure TX data fields are available (they should come from backend)

@@ -52,6 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           volume_24h: r.volume_24h ?? 0,
           price_percent_change_1h: r.price_change_1h ?? 0,
           bonding_curve_progress: parseFloat(r.bonding_pct ?? 0), // bonding_pct is already a percentage
+          graduation_percent: parseFloat(r.graduation_percent ?? 0), // graduation_percent for hover display
           created_at: r.launch_time || r.created_at || null,
           launch_time: r.launch_time || null,
           // Optional extra fields used by the UI

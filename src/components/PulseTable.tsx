@@ -190,17 +190,55 @@ export default function PulseTable({ title, tokens, isFirstOrLast, loading = fal
               className="relative cursor-pointer flex flex-row py-3 transition group items-center border-b border-neutral-800 hover:bg-neutral-800/40 w-full"
               onClick={() => { if (addr) router.push(`/trade/${addr}`); }}
             >
-              {/* Bonding popout on hover */}
+              {/* Status popout on hover */}
               <span
-                className={`hidden group-hover:flex absolute left-1/2 -translate-x-1/2 px-3 py-1 bg-neutral-900 border border-emerald-700 shadow-xl text-emerald-400 text-sm z-20 ${
+                className={`hidden group-hover:flex absolute left-1/2 -translate-x-1/2 px-3 py-1 bg-neutral-900 border shadow-xl text-sm z-20 ${
                   idx === 0 ? 'top-full mt-2' : '-top-7'
                 }`}
                 style={{ pointerEvents: 'none' }}
               >
-                Bonding: {typeof token.bonding_curve_progress === 'number' 
-                  ? Math.round(token.bonding_curve_progress) 
-                  : Math.round(parseFloat(token.bonding_curve_progress || '0'))
-                }%
+                {(() => {
+                  // Determine token status based on title and token data
+                  const isNewPairs = title.toLowerCase().includes('new');
+                  const isFinalStretch = title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch');
+                  const isMigrated = title.toLowerCase().includes('migrated');
+                  
+                  if (isNewPairs) {
+                    // Show graduation percentage for new pairs
+                    const graduationPercent = typeof token.graduation_percent === 'number' 
+                      ? Math.round(token.graduation_percent) 
+                      : Math.round(parseFloat(token.graduation_percent || '0'));
+                    return (
+                      <span className="text-emerald-400 border-emerald-700">
+                        Graduation: {graduationPercent}%
+                      </span>
+                    );
+                  } else if (isFinalStretch) {
+                    // Show "migrating" for final stretch
+                    return (
+                      <span className="text-yellow-400 border-yellow-700">
+                        Migrating
+                      </span>
+                    );
+                  } else if (isMigrated) {
+                    // Show "migrated" for migrated tokens
+                    return (
+                      <span className="text-blue-400 border-blue-700">
+                        Migrated
+                      </span>
+                    );
+                  } else {
+                    // Fallback to bonding curve progress
+                    const bondingProgress = typeof token.bonding_curve_progress === 'number' 
+                      ? Math.round(token.bonding_curve_progress) 
+                      : Math.round(parseFloat(token.bonding_curve_progress || '0'));
+                    return (
+                      <span className="text-emerald-400 border-emerald-700">
+                        Bonding: {bondingProgress}%
+                      </span>
+                    );
+                  }
+                })()}
               </span>
               {/* Profile Picture & Address */}
               <div className="flex flex-col items-center w-16 mr-3">
