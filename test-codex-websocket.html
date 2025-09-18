@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codex WebSocket Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a1a; color: #fff; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #065f46; }
+        .disconnected { background: #7f1d1d; }
+        .trade { padding: 10px; margin: 5px 0; background: #2a2a2a; border-radius: 5px; }
+        .buy { border-left: 3px solid #10b981; }
+        .sell { border-left: 3px solid #ef4444; }
+        .add { border-left: 3px solid #3b82f6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Codex WebSocket Test</h1>
+        <div id="status" class="status disconnected">Disconnected</div>
+        <div id="trades"></div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const tradesEl = document.getElementById('trades');
+        const tokenAddress = '5sGMvzLVdQw1be6g7RfRo8LvDkKGEaNAbWAhhQaLg77z'; // Example token address
+        const apiKey = 'be8415920c79893686c07a30954bb43cb1dc2bc1'; // Example API key from env.example
+        
+        let ws = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+
+        function connect() {
+            try {
+                ws = new WebSocket('wss://graph.codex.io/graphql', 'graphql-transport-ws');
+                
+                ws.onopen = () => {
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'status connected';
+                    reconnectAttempts = 0;
+                    
+                    // Send connection init with API key
+                    ws.send(JSON.stringify({
+                        type: 'connection_init',
+                        payload: {
+                            Authorization: apiKey,
+                            headers: {
+                                Authorization: apiKey,
+                            },
+                        }
+                    }));
+                };
+
+                ws.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    
+                    if (message.type === 'connection_ack') {
+                        // Subscribe to trade events
+                        const subscription = {
+                            id: 'trades_1',
+                            type: 'subscribe',
+                            payload: {
+                                query: `
+                                    subscription onTokenEventsCreated($input: OnTokenEventsCreatedInput!) {
+                                        onTokenEventsCreated(input: $input) {
+                                            events {
+                                                eventDisplayType
+                                                maker
+                                                timestamp
+                                                token0SwapValueUsd
+                                                token1SwapValueUsd
+                                                transactionHash
+                                                data {
+                                                    ... on SwapEventData {
+                                                        amount0
+                                                        amount1
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                `,
+                                variables: {
+                                    input: {
+                                        tokenAddress: tokenAddress,
+                                        networkId: 1399811149
+                                    }
+                                },
+                                extensions: {},
+                                operationName: 'onTokenEventsCreated'
+                            }
+                        };
+                        
+                        ws.send(JSON.stringify(subscription));
+                    } else if (message.type === 'data' || message.type === 'next') {
+                        const response = message.payload;
+                        if (response?.data?.onTokenEventsCreated?.events) {
+                            const events = response.data.onTokenEventsCreated.events;
+                            events.forEach(event => {
+                                addTrade(event);
+                            });
+                        }
+                    }
+                };
+
+                ws.onclose = () => {
+                    statusEl.textContent = 'Disconnected';
+                    statusEl.className = 'status disconnected';
+                    
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 16000);
+                        setTimeout(connect, delay);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                };
+            } catch (error) {
+                console.error('Failed to connect:', error);
+            }
+        }
+
+        function addTrade(trade) {
+            const tradeEl = document.createElement('div');
+            tradeEl.className = `trade ${trade.eventDisplayType.toLowerCase()}`;
+            
+            const age = getAge(trade.timestamp);
+            const amount = getAmount(trade.data, trade.eventDisplayType);
+            const totalUSD = getTotalUSD(trade.token0SwapValueUsd, trade.token1SwapValueUsd, trade.eventDisplayType);
+            const trader = shortAddr(trade.maker);
+            
+            tradeEl.innerHTML = `
+                <div><strong>${trade.eventDisplayType}</strong> - ${age}</div>
+                <div>Amount: ${formatNumber(amount)}</div>
+                <div>Total USD: $${formatNumber(totalUSD)}</div>
+                <div>Trader: ${trader}</div>
+                <div>TX: ${trade.transactionHash.slice(0, 8)}...</div>
+            `;
+            
+            tradesEl.insertBefore(tradeEl, tradesEl.firstChild);
+            
+            // Keep only last 20 trades
+            while (tradesEl.children.length > 20) {
+                tradesEl.removeChild(tradesEl.lastChild);
+            }
+        }
+
+        function getAge(timestamp) {
+            const now = Date.now() / 1000;
+            const diffSeconds = now - timestamp;
+            const diffMins = Math.floor(diffSeconds / 60);
+            const diffHours = Math.floor(diffSeconds / 3600);
+            const diffDays = Math.floor(diffSeconds / 86400);
+            
+            if (diffDays > 0) return `${diffDays}d`;
+            if (diffHours > 0) return `${diffHours}h`;
+            return `${diffMins}m`;
+        }
+
+        function shortAddr(addr) {
+            if (!addr) return '';
+            return addr.slice(0, 3) + '...' + addr.slice(-3);
+        }
+
+        function getAmount(data, eventDisplayType) {
+            const amount0 = parseFloat(data.amount0);
+            return Math.abs(amount0);
+        }
+
+        function getTotalUSD(token0SwapValueUsd, token1SwapValueUsd, eventDisplayType) {
+            const token1Value = parseFloat(token1SwapValueUsd);
+            return token1Value;
+        }
+
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(2) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(2) + 'K';
+            } else {
+                return num.toFixed(2);
+            }
+        }
+
+        // Start connection
+        connect();
+    </script>
+</body>
+</html>

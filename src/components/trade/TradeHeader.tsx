@@ -233,12 +233,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
             label={"Supply"}>
               {formatSmartNumber(token.total_supply)}
             </HeaderColumnSection>
-          <HeaderColumnSection
-            label={"Global Fees Paid"}>
-              <span className="flex items-center gap-2 text-blue-300">
-                <span className="font-bold">Ξ {formatSmartNumber(token.global_fees_paid)}</span>
-              </span>
-            </HeaderColumnSection>
         </div>
         {/* Right: Action Icons */}
         <div className="mr-0 ml-auto flex items-center gap-4 pr-1 text-lg text-neutral-300">

@@ -53,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           price_percent_change_1h: r.price_change_1h ?? 0,
           bonding_curve_progress: parseFloat(r.bonding_pct ?? 0), // bonding_pct is already a percentage
           graduation_percent: parseFloat(r.graduation_percent ?? 0), // graduation_percent for hover display
+          bonding_pct: parseFloat(r.bonding_pct ?? 0), // Also include raw bonding_pct for fallback
           created_at: r.launch_time || r.created_at || null,
           launch_time: r.launch_time || null,
           // Optional extra fields used by the UI
@@ -88,7 +89,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           unique_wallets_6h: r.unique_wallets_6h ?? 0,
           unique_wallets_24h: r.unique_wallets_24h ?? 0,
           price_percent_change_5m: r.price_percent_change_5m ?? 0,
-          price_percent_change_1h: r.price_percent_change_1h ?? 0,
           price_percent_change_6h: r.price_percent_change_6h ?? 0,
           price_percent_change_24h: r.price_percent_change_24h ?? 0,
           // Social links

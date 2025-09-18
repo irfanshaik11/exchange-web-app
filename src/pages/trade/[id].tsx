@@ -25,6 +25,10 @@ import TradeTabs from "../../components/trade/TradeTabs";
 import { formatSmartNumber } from "~/utils/db";
 import { tradeBuy, tradeSellPercentage, tradeSellExactAmount } from "../../utils/api";
 import Trades from "../../components/trade/Trades";
+import CodexTrades from "../../components/trade/CodexTrades";
+import CodexTopTraders from "../../components/trade/CodexTopTraders";
+import CodexDevTokens from "../../components/trade/CodexDevTokens";
+import CodexHolders from "../../components/trade/CodexHolders";
 import Positions from "~/components/trade/Positions";
 import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
 
@@ -55,6 +59,7 @@ export default function TradePage() {
     isPolling, 
     error: pollingError, 
     loading: pollingLoading,
+    isHydrating,
     refresh
   } = useSingleTokenPolling(
     typeof id === "string" ? id : undefined
@@ -147,6 +152,7 @@ export default function TradePage() {
         {/* Header always at the top, full width */}
         <Header search={search} setSearch={setSearch} />
         {isPolling && <div className="text-center text-blue-500 p-2 bg-blue-900/50">Live data updating every 3 seconds...</div>}
+        {isHydrating && <div className="text-center text-yellow-500 p-2 bg-yellow-900/50">Finding trading pair for this token...</div>}
         {/* Main content: flex row, fills the rest of the page */}
         <div className="flex flex-1 flex-row w-full">
           {/* Left: Chart and Info */}
@@ -160,7 +166,10 @@ export default function TradePage() {
               selectedTab={selectedTab}
               setSelectedTab={setSelectedTab}
             />
-            {selectedTab === "Trades" && <Trades token={token} trades={trades} />}
+            {selectedTab === "Trades" && <CodexTrades token={token} />}
+            {selectedTab === "Top Traders" && <CodexTopTraders token={token} />}
+            {selectedTab === "Holders" && <CodexHolders token={token} />}
+            {selectedTab === "Dev Tokens" && <CodexDevTokens token={token} />}
             {selectedTab === "Positions" && <Positions userId={user?.id} bearerToken={user.bearerToken} onPositionsChange={() => {}} />}
           </div>
           {/* Right: Buy/Sell and Token Info */}

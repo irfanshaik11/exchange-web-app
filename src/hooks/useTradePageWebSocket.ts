@@ -22,7 +22,6 @@ export interface TokenData {
   fully_diluted_value: number;
   total_liquidity_usd: number;
   total_supply: number;
-  global_fees_paid: number;
   
   // Transaction Statistics (24h)
   total_buy_volume_24h: number;

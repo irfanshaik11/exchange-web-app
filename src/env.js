@@ -24,6 +24,7 @@ export const env = createEnv({
       (val) => val === "true" || val === true,
       z.boolean(),
     ),
+    NEXT_PUBLIC_CODEX_API_KEY: z.string().optional(),
 
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
@@ -40,6 +41,7 @@ export const env = createEnv({
     NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL,
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED:
       process.env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED,
+    NEXT_PUBLIC_CODEX_API_KEY: process.env.NEXT_PUBLIC_CODEX_API_KEY,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**

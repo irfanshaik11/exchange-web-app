@@ -30,6 +30,7 @@ interface LaunchpadData {
   completed: LaunchpadToken[];
 }
 
+// FEATURE FLAG: To re-enable the 5 bubble metrics, change showBubbleMetrics={false} to showBubbleMetrics={true} in all PulseTable components below
 export default function PulsePage() {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(true);
@@ -220,7 +221,6 @@ export default function PulsePage() {
     created_at: launchpadToken.createdAt,
     updated_at: launchpadToken.createdAt,
     bonding_curve_progress: launchpadToken.graduationPercent, // Already in percentage format
-    global_fees_paid: 0,
     uri: null,
     // extra field used by PulseTable TokenImage for DB logos
     image: launchpadToken.image,
@@ -415,16 +415,57 @@ export default function PulsePage() {
     url: process.env.NODE_ENV === 'production' 
       ? 'wss://api.yourdomain.com/v1/ws/market-data'
       : 'ws://localhost:8080/v1/ws/market-data',
-    reconnectInterval: 3000,
-    maxReconnectAttempts: 5
+    reconnectInterval: 2000,
+    maxReconnectAttempts: 10
   });
 
+  // Additional polling for more frequent updates
+  useEffect(() => {
+    if (realtimeAddrs.length === 0) return;
+
+    const pollMarketData = async () => {
+      try {
+        const response = await fetch('/api/token-service/realtime-market-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mints: realtimeAddrs.slice(0, 200) })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          // This will trigger the enrichWithMarketData to update
+          // The data will be picked up by the existing marketData state
+        }
+      } catch (error) {
+        console.log('Polling market data failed:', error);
+      }
+    };
+
+    // Poll every 2 seconds for additional updates
+    const interval = setInterval(pollMarketData, 2000);
+    return () => clearInterval(interval);
+  }, [realtimeAddrs]);
+
   const enrichWithMarketData = useCallback((arr: any[]): any[] => {
-    return (arr || []).map((t: any) => {
+    if (!arr || arr.length === 0) return arr;
+    
+    return arr.map((t: any) => {
       const mintKey = t?.mint as string | undefined;
       const pairKey = t?.pair_address as string | undefined;
       const md = (mintKey && marketData[mintKey]) || (pairKey && marketData[pairKey]);
+      
       if (!md) return t;
+      
+      // Only create new object if market data has actually changed
+      const hasChanges = 
+        t.price_usd !== md.price_usd ||
+        t.usd_price !== md.price_usd ||
+        t.market_cap_usd !== md.market_cap_usd ||
+        t.fully_diluted_value !== md.market_cap_usd ||
+        t.volume_24h !== (md as any).volume_usd;
+        
+      if (!hasChanges) return t;
+      
       const patched: any = { ...t };
       // Always prefer realtime market data regardless of DB values
       patched.price_usd = md.price_usd;
@@ -541,9 +582,9 @@ export default function PulsePage() {
 
           {isLoading ? (
             <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
-              <PulseTable title="New Pairs" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="first" />
-              <PulseTable title="Final Stretch" tokens={[]} loading skeletonRowCount={10} />
-              <PulseTable title="Migrated" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="last" />
+              <PulseTable title="New Pairs" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="first" showBubbleMetrics={false} />
+              <PulseTable title="Final Stretch" tokens={[]} loading skeletonRowCount={10} showBubbleMetrics={false} />
+              <PulseTable title="Migrated" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="last" showBubbleMetrics={false} />
             </div>
           ) : hasError ? (
             <div className="text-center text-red-400 py-10">
@@ -553,9 +594,9 @@ export default function PulsePage() {
             </div>
           ) : (
             <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
-              <PulseTable title="New Pairs" tokens={enrichedNewPairsToShow as any} loading={newPairsLoading} isFirstOrLast="first" />
-              <PulseTable title="Final Stretch" tokens={enrichedFinalStretch as any} />
-              <PulseTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" />
+              <PulseTable title="New Pairs" tokens={enrichedNewPairsToShow as any} loading={newPairsLoading} isFirstOrLast="first" showBubbleMetrics={false} />
+              <PulseTable title="Final Stretch" tokens={enrichedFinalStretch as any} showBubbleMetrics={false} />
+              <PulseTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" showBubbleMetrics={false} />
             </div>
           )}
         </div>

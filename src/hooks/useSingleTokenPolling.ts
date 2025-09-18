@@ -15,6 +15,7 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
     error: null,
     loading: true,
   });
+  const [isHydrating, setIsHydrating] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const pairAddressRef = useRef(pair_address);
   pairAddressRef.current = pair_address;
@@ -31,6 +32,33 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
     []
   );
 
+  // Hydrate token pair address
+  const hydrateToken = useCallback(async (mintAddress: string) => {
+    setIsHydrating(true);
+    try {
+      console.log('Hydrating pair address for token:', mintAddress);
+      const response = await fetch('/api/token-service/hydrate-pair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mint: mintAddress })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Successfully hydrated token:', data);
+        return data.pair_address;
+      } else {
+        console.error('Failed to hydrate token:', response.status);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error hydrating token:', error);
+      return null;
+    } finally {
+      setIsHydrating(false);
+    }
+  }, []);
+
   // Load data from API
   const loadData = useCallback(async () => {
     if (!pair_address) return;
@@ -44,6 +72,17 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
       console.log('Response status:', response.status);
       
       if (!response.ok) {
+        // If token not found or no pair_address, try to hydrate
+        if (response.status === 404) {
+          console.log('Token not found, attempting to hydrate...');
+          const hydratedPairAddress = await hydrateToken(pair_address);
+          if (hydratedPairAddress) {
+            console.log('Token hydrated, retrying with new pair address...');
+            // Retry with the hydrated pair address
+            return loadData();
+          }
+        }
+        
         const errorText = await response.text();
         console.error('API Error Response:', errorText);
         throw new Error(`Failed to load data: ${response.status} - ${errorText}`);
@@ -51,6 +90,17 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
       
       const data = await response.json();
       console.log('Data received:', data);
+      
+      // Check if token has pair_address, if not try to hydrate
+      if (data.token && (!data.token.pair_address || data.token.pair_address === '')) {
+        console.log('Token has no pair_address, attempting to hydrate...');
+        const hydratedPairAddress = await hydrateToken(pair_address);
+        if (hydratedPairAddress) {
+          console.log('Token hydrated, retrying...');
+          // Retry loading data
+          return loadData();
+        }
+      }
       
       // Set token data
       if (data.token) {
@@ -78,7 +128,7 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
         loading: false 
       }));
     }
-  }, [pair_address, throttledSetToken]);
+  }, [pair_address, throttledSetToken, hydrateToken]);
 
   // Start polling
   const startPolling = useCallback(() => {
@@ -140,6 +190,7 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
     isPolling: state.isPolling,
     loading: state.loading,
     error: state.error,
+    isHydrating,
     // Expose manual refresh function
     refresh: loadData,
   };

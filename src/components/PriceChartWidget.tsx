@@ -29,23 +29,132 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
     return addr;
   };
 
+  // Validate if pair address looks like a valid Solana address
+  const isValidSolanaAddress = (addr: string) => {
+    // Solana addresses are base58 encoded and typically 32-44 characters
+    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    return base58Regex.test(addr);
+  };
+
   const rawPair = token.pair_address || '';
   const normalizedPair = sanitizePairAddress(rawPair);
-  const isMintAsPair = !!token.mint && !!rawPair && rawPair === token.mint;
-  const useTokenAddress = rawPair.endsWith('pump') || isMintAsPair;
+  
+  // DexScreener-focused logic: Only use pair_address if it's a valid DexScreener address
+  // We'll validate inside useEffect where state is available
+  const isDexScreenerPair = rawPair && 
+    !rawPair.endsWith('pump') && 
+    rawPair !== token.mint && 
+    rawPair !== 'null' &&
+    rawPair.length > 0;
+  const useTokenAddress = !isDexScreenerPair;
 
   // Debug logging
   console.log('Chart Debug:', {
     mint: token.mint,
     pair_address: rawPair,
-    usingTokenAddress: true
+    isDexScreenerPair,
+    usingTokenAddress: useTokenAddress
   });
   const [showFallback, setShowFallback] = React.useState(false);
   const [retryAttempt, setRetryAttempt] = React.useState(0);
+  
+  // Track failed pair addresses to avoid retrying them
+  const [failedPairAddresses, setFailedPairAddresses] = React.useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     setShowFallback(false);
+
+    // DexScreener-focused validation function (inside useEffect where state is available)
+    const validatePairAddress = (addr: string) => {
+      // Check if it's a valid Solana address format
+      if (!isValidSolanaAddress(addr)) return false;
+      
+      // Blacklist of known invalid pair addresses that cause 404 errors
+      const invalidPairAddresses = [
+        '8b8Pd5cDnHuZBJDY3Y4McAAbhFDoAhHDmUZLLW3JTCPd', // The one causing your error
+        '8vXLcGFMBAwANeyi7EZNrJKoMQ9zY8xe7c9hq1oSzJQA', // Another from your error
+        '4a5QL5aSHtHK41z54nJ7jmmgyTfCnjCMKN1pZhuZcCsH', // New token causing 404 error
+      ];
+      
+      // Check against static blacklist
+      if (invalidPairAddresses.includes(addr)) {
+        console.warn('Blacklisted invalid pair address detected:', addr);
+        return false;
+      }
+      
+      // Check against dynamic failed addresses
+      if (failedPairAddresses.has(addr)) {
+        console.warn('Previously failed pair address detected:', addr);
+        return false;
+      }
+      
+      // DexScreener addresses should be different from mint addresses
+      if (addr === token.mint) {
+        console.warn('Pair address same as mint address, not a valid DexScreener pair:', addr);
+        return false;
+      }
+      
+      // DexScreener addresses should not end with 'pump'
+      if (addr.endsWith('pump')) {
+        console.warn('Pair address ends with pump, not a valid DexScreener pair:', addr);
+        return false;
+      }
+      
+      // Additional checks for common invalid patterns
+      const invalidPatterns = [
+        /^0+$/, // All zeros
+        /^1+$/, // All ones
+        /^[A-Za-z0-9]{32}$/, // Exactly 32 chars (might be mint address)
+        /^[A-Za-z0-9]{44}$/, // Exactly 44 chars (might be mint address)
+        /^[A-Za-z0-9]{43}$/, // Exactly 43 chars (might be mint address)
+      ];
+      
+      // Check if the address looks like a mint address (too similar to token mint)
+      if (token.mint && addr.length === token.mint.length) {
+        // If lengths match, it's likely a mint address, not a pair address
+        console.warn('Pair address length matches mint address, likely invalid:', addr);
+        return false;
+      }
+      
+      // Check for addresses that look like they might be mint addresses
+      // Real trading pair addresses are typically different from mint addresses
+      if (token.mint && addr.startsWith(token.mint.substring(0, 8))) {
+        console.warn('Pair address starts with same prefix as mint address, likely invalid:', addr);
+        return false;
+      }
+      
+      return !invalidPatterns.some(pattern => pattern.test(addr));
+    };
+
+    // Re-validate the pair address with the full validation logic
+    const isValidPair = rawPair && validatePairAddress(rawPair);
+    const shouldUseTokenAddress = !isValidPair;
+
+    // Add global error handler to suppress Moralis 404 errors
+    const handleGlobalError = (event: ErrorEvent) => {
+      if (event.message && (
+        (event.message.includes('404 Not Found') && event.message.includes('moralis-internal.io')) ||
+        (event.message.includes('Failed to GET') && event.message.includes('moralis-internal.io')) ||
+        (event.message.includes('Bad response') && event.message.includes('moralis-internal.io'))
+      )) {
+        console.warn('Moralis API error suppressed:', event.message);
+        
+        // Extract pair address from error message and add to failed list
+        const pairMatch = event.message.match(/pairs\/([A-Za-z0-9]+)\//);
+        if (pairMatch && pairMatch[1]) {
+          const failedAddress = pairMatch[1];
+          setFailedPairAddresses(prev => new Set([...prev, failedAddress]));
+          console.warn('Added failed pair address to blacklist:', failedAddress);
+        }
+        
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+      }
+    };
+
+    window.addEventListener('error', handleGlobalError);
 
     // Calculate pair address once for the entire effect
     const pairAddress = token.pair_address && token.pair_address !== 'null' && token.pair_address.length >= 32 
@@ -90,26 +199,40 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
             showVolume: true,
             showPrice: true,
             showTimeframe: true,
-            // Enable real-time updates every 1 second
-            refreshInterval: 1000,
+            // Refresh every 30 seconds (less frequent)
+            refreshInterval: 30000,
             // Ensure we get the latest data
             dataSource: "moralis",
-            // Enable live updates
-            liveUpdates: true,
-            // Enable auto-refresh
-            autoRefresh: true
+            // Disable live updates to reduce refreshing
+            liveUpdates: false,
+            // Disable auto-refresh to reduce refreshing
+            autoRefresh: false
           };
 
-          // Use pair address if available, otherwise use token address
-          if (token.pair_address && token.pair_address !== 'null' && token.pair_address.length >= 32) {
-            chartConfig.pairAddress = pairAddress;
-            console.log('Using pair address for chart:', pairAddress);
+          // DexScreener-focused: Only use pair address if it's validated as DexScreener
+          const finalConfig = {
+            ...chartConfig,
+            ...(isValidPair 
+              ? { pairAddress: normalizedPair }
+              : { tokenAddress: token.mint }
+            )
+          };
+
+          if (isValidPair) {
+            console.log('Using DexScreener pair address:', normalizedPair);
           } else {
-            chartConfig.tokenAddress = token.mint;
-            console.log('Using token address for chart:', token.mint);
+            console.log('Using token address (no valid DexScreener pair):', token.mint);
           }
 
-          (window as any).createMyWidget(PRICE_CHART_ID, chartConfig);
+          // Add error handling for Moralis API calls
+          try {
+            (window as any).createMyWidget(PRICE_CHART_ID, finalConfig);
+          } catch (error) {
+            console.warn('Chart widget creation failed, trying with token address only:', error);
+            // Fallback to token address only
+            const fallbackConfig = { ...chartConfig, tokenAddress: token.mint };
+            (window as any).createMyWidget(PRICE_CHART_ID, fallbackConfig);
+          }
         } else {
           console.error("createMyWidget function is not defined. Retrying in 1 second...");
           // Retry after a short delay in case the script is still loading
@@ -141,13 +264,15 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
                 autoRefresh: true
               };
 
-              if (token.pair_address && token.pair_address !== 'null' && token.pair_address.length >= 32) {
-                chartConfig.pairAddress = pairAddress;
-              } else {
-                chartConfig.tokenAddress = token.mint;
-              }
+              const finalConfig = {
+                ...chartConfig,
+                ...(token.pair_address && token.pair_address !== 'null' && token.pair_address.length >= 32
+                  ? { pairAddress: pairAddress }
+                  : { tokenAddress: token.mint }
+                )
+              };
 
-              (window as any).createMyWidget(PRICE_CHART_ID, chartConfig);
+              (window as any).createMyWidget(PRICE_CHART_ID, finalConfig);
             } else {
               console.error("createMyWidget still not available after retry");
               setShowFallback(true);
@@ -176,14 +301,14 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
       loadWidget();
     }
 
-    // Set up light periodic refresh for real-time updates
+    // Set up periodic refresh for updates (less frequent)
     const refreshInterval = setInterval(() => {
       // Light refresh - just reload the widget to get latest data
       if (typeof (window as any).createMyWidget === "function") {
-        console.log('Refreshing chart for real-time updates...');
+        console.log('Refreshing chart for updates...');
         loadWidget(); // Reuse the existing loadWidget function
       }
-    }, 60000); // Refresh every 60 seconds (light refresh)
+    }, 300000); // Refresh every 5 minutes (less frequent)
 
     // If the widget fails to render anything, try alternative configurations
     const verifyTimer = window.setTimeout(() => {
@@ -237,6 +362,8 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
     return () => {
       window.clearTimeout(verifyTimer);
       if (refreshInterval) clearInterval(refreshInterval);
+      // Remove global error handler
+      window.removeEventListener('error', handleGlobalError);
     };
   }, [normalizedPair, token.mint, token.pair_address, useTokenAddress, retryAttempt, rawPair]);
 

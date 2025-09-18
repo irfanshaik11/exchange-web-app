@@ -72,6 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       price_percent_change_24h: row.price_percent_change_24h,
       usd_price: row.usd_price,
       sol_price: row.sol_price,
+      market_cap_usd: row.market_cap_usd || 0,
       total_liquidity_usd: row.total_liquidity_usd,
       total_fully_diluted_valuation: row.total_fully_diluted_valuation,
       total_snipers: row.total_snipers,
@@ -80,7 +81,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       created_at: row.created_at,
       updated_at: row.updated_at,
       bonding_curve_progress: row.bonding_curve_progress,
-      global_fees_paid: row.global_fees_paid,
     };
     res.status(200).json({ result });
   } catch (error) {
