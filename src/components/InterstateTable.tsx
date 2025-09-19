@@ -775,19 +775,55 @@ export default function InterstateTable({
               <SkeletonRow key={idx} />
             ))
           ) : (
-            sortedRows.map(({ token, i }) => (
-              <TableRow
-                key={token.pair_address}
-                token={token}
-                i={i}
-                selectedTimeframe={selectedTimeframe}
-                onQuickBuy={onQuickBuy}
-                quickBuyAmount={quickBuyAmount}
-                animationState={animationState}
-                sortedRows={sortedRows}
-                onClick={() => router.push(`/trade/${token.pair_address}`)}
-              />
-            ))
+            sortedRows.map(({ token, i }) => {
+              const handleTokenClick = async () => {
+                // If we have pair_address, navigate directly
+                if (token.pair_address) {
+                  router.push(`/trade/${token.pair_address}`);
+                  return;
+                }
+                
+                // If we only have mint_address, fetch pair_address first
+                if (token.mint) {
+                  try {
+                    console.log('Fetching pair address for mint:', token.mint);
+                    const response = await fetch('/api/token-service/hydrate-pair', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ mint: token.mint })
+                    });
+                    
+                    if (response.ok) {
+                      const data = await response.json();
+                      if (data.pair_address) {
+                        console.log('Got pair address:', data.pair_address);
+                        router.push(`/trade/${data.pair_address}`);
+                      } else {
+                        console.error('No pair address found for mint:', token.mint);
+                      }
+                    } else {
+                      console.error('Failed to fetch pair address for mint:', token.mint);
+                    }
+                  } catch (error) {
+                    console.error('Error fetching pair address:', error);
+                  }
+                }
+              };
+              
+              return (
+                <TableRow
+                  key={token.pair_address || token.mint}
+                  token={token}
+                  i={i}
+                  selectedTimeframe={selectedTimeframe}
+                  onQuickBuy={onQuickBuy}
+                  quickBuyAmount={quickBuyAmount}
+                  animationState={animationState}
+                  sortedRows={sortedRows}
+                  onClick={handleTokenClick}
+                />
+              );
+            })
           )}
         </tbody>
       </table>

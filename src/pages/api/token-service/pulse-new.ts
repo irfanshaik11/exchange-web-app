@@ -43,8 +43,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (Array.isArray(raw)) {
         // Normalize into the minimal Token-like shape the UI expects
         const mapped = raw.map((r: any) => ({
-          mint: r.mint_address || r.mint || r.Mint || null,
-          pair_address: r.mint_address || r.mint || null,
+          mint: r.mint || r.mint_address || r.Mint || null,
+          pair_address: r.pair_address || null,
           name: r.name || r.token_name || '',
           symbol: r.symbol || r.token_symbol || '',
           usd_price: r.price_usd ?? 0,

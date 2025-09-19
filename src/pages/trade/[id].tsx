@@ -159,7 +159,7 @@ export default function TradePage() {
           <div className="flex-1 min-w-0 flex flex-col pb-4 border-r border-emerald-950">
             <TradeHeader token={token} />
             <div className="min-h-[500px] flex-1">
-              <PriceChartWidget token={token} />
+              <PriceChartWidget token={token} pairAddress={typeof id === "string" ? id : undefined} />
             </div>
             <hr className="border-emerald-950" />
             <TradeTabs

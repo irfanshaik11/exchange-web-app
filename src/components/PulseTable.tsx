@@ -252,12 +252,48 @@ const PulseTable = React.memo(function PulseTable({ title, tokens, isFirstOrLast
           <div className="text-neutral-500 text-center py-8">No tokens found.</div>
         ) : (
           memoizedTokens.map((token, idx) => {
-            const addr = (token as any)?.mint || (token as any)?.pair_address || null;
+            const pairAddress = (token as any)?.pair_address;
+            const mintAddress = (token as any)?.mint;
+            
+            const handleTokenClick = async () => {
+              // If we have pair_address, navigate directly
+              if (pairAddress) {
+                router.push(`/trade/${pairAddress}`);
+                return;
+              }
+              
+              // If we only have mint_address, fetch pair_address first
+              if (mintAddress) {
+                try {
+                  console.log('Fetching pair address for mint:', mintAddress);
+                  const response = await fetch('/api/token-service/hydrate-pair', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mint: mintAddress })
+                  });
+                  
+                  if (response.ok) {
+                    const data = await response.json();
+                    if (data.pair_address) {
+                      console.log('Got pair address:', data.pair_address);
+                      router.push(`/trade/${data.pair_address}`);
+                    } else {
+                      console.error('No pair address found for mint:', mintAddress);
+                    }
+                  } else {
+                    console.error('Failed to fetch pair address for mint:', mintAddress);
+                  }
+                } catch (error) {
+                  console.error('Error fetching pair address:', error);
+                }
+              }
+            };
+            
             return (
             <div
-              key={`${addr || 'noaddr'}-${idx}`}
+              key={`${pairAddress || mintAddress || 'noaddr'}-${idx}`}
               className="relative cursor-pointer flex flex-row py-3 transition group items-center border-b border-neutral-800 hover:bg-neutral-800/40 w-full"
-              onClick={() => { if (addr) router.push(`/trade/${addr}`); }}
+              onClick={handleTokenClick}
             >
               {/* Status popout on hover */}
               <span

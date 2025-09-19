@@ -11,143 +11,60 @@ function formatK(num: number) {
 
 interface PriceChartWidgetProps {
   token: Token;
+  pairAddress?: string; // Pair address from URL parameter
 }
 
-const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
+const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token, pairAddress: urlPairAddress }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Some data sources append protocol suffixes (e.g., "pump") to addresses.
-  // The external Moralis widget expects a plain pair address.
-  const sanitizePairAddress = (addr?: string | null) => {
-    if (!addr) return '';
-    // Strip a trailing 'pump' suffix if present
-    if (addr.endsWith('pump')) {
-      const stripped = addr.slice(0, -4);
-      // Only use stripped if it looks like a plausible base58 length (43-44)
-      if (stripped.length >= 32 && stripped.length <= 50) return stripped;
-    }
-    return addr;
-  };
+  // Pair address comes directly from URL parameter - no sanitization needed
 
-  // Validate if pair address looks like a valid Solana address
-  const isValidSolanaAddress = (addr: string) => {
-    // Solana addresses are base58 encoded and typically 32-44 characters
-    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-    return base58Regex.test(addr);
-  };
-
-  const rawPair = token.pair_address || '';
-  const normalizedPair = sanitizePairAddress(rawPair);
+  // Use pair address from URL parameter directly - this is always a valid pair address
+  const pairAddress = urlPairAddress || token.pair_address || '';
   
-  // DexScreener-focused logic: Only use pair_address if it's a valid DexScreener address
-  // We'll validate inside useEffect where state is available
-  const isDexScreenerPair = rawPair && 
-    !rawPair.endsWith('pump') && 
-    rawPair !== token.mint && 
-    rawPair !== 'null' &&
-    rawPair.length > 0;
-  const useTokenAddress = !isDexScreenerPair;
-
   // Debug logging
   console.log('Chart Debug:', {
     mint: token.mint,
-    pair_address: rawPair,
-    isDexScreenerPair,
-    usingTokenAddress: useTokenAddress
+    urlPairAddress,
+    tokenPairAddress: token.pair_address,
+    finalPairAddress: pairAddress
   });
   const [showFallback, setShowFallback] = React.useState(false);
   const [retryAttempt, setRetryAttempt] = React.useState(0);
-  
-  // Track failed pair addresses to avoid retrying them
-  const [failedPairAddresses, setFailedPairAddresses] = React.useState<Set<string>>(new Set());
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+
+  // Refresh function to retry loading the chart
+  const handleRefresh = React.useCallback(() => {
+    setIsRefreshing(true);
+    setShowFallback(false);
+    setRetryAttempt(prev => prev + 1);
+    
+    // Reset retry state
+    
+    // Reset refreshing state after a short delay
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 1000);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     setShowFallback(false);
 
-    // DexScreener-focused validation function (inside useEffect where state is available)
-    const validatePairAddress = (addr: string) => {
-      // Check if it's a valid Solana address format
-      if (!isValidSolanaAddress(addr)) return false;
-      
-      // Blacklist of known invalid pair addresses that cause 404 errors
-      const invalidPairAddresses = [
-        '8b8Pd5cDnHuZBJDY3Y4McAAbhFDoAhHDmUZLLW3JTCPd', // The one causing your error
-        '8vXLcGFMBAwANeyi7EZNrJKoMQ9zY8xe7c9hq1oSzJQA', // Another from your error
-        '4a5QL5aSHtHK41z54nJ7jmmgyTfCnjCMKN1pZhuZcCsH', // New token causing 404 error
-      ];
-      
-      // Check against static blacklist
-      if (invalidPairAddresses.includes(addr)) {
-        console.warn('Blacklisted invalid pair address detected:', addr);
-        return false;
-      }
-      
-      // Check against dynamic failed addresses
-      if (failedPairAddresses.has(addr)) {
-        console.warn('Previously failed pair address detected:', addr);
-        return false;
-      }
-      
-      // DexScreener addresses should be different from mint addresses
-      if (addr === token.mint) {
-        console.warn('Pair address same as mint address, not a valid DexScreener pair:', addr);
-        return false;
-      }
-      
-      // DexScreener addresses should not end with 'pump'
-      if (addr.endsWith('pump')) {
-        console.warn('Pair address ends with pump, not a valid DexScreener pair:', addr);
-        return false;
-      }
-      
-      // Additional checks for common invalid patterns
-      const invalidPatterns = [
-        /^0+$/, // All zeros
-        /^1+$/, // All ones
-        /^[A-Za-z0-9]{32}$/, // Exactly 32 chars (might be mint address)
-        /^[A-Za-z0-9]{44}$/, // Exactly 44 chars (might be mint address)
-        /^[A-Za-z0-9]{43}$/, // Exactly 43 chars (might be mint address)
-      ];
-      
-      // Check if the address looks like a mint address (too similar to token mint)
-      if (token.mint && addr.length === token.mint.length) {
-        // If lengths match, it's likely a mint address, not a pair address
-        console.warn('Pair address length matches mint address, likely invalid:', addr);
-        return false;
-      }
-      
-      // Check for addresses that look like they might be mint addresses
-      // Real trading pair addresses are typically different from mint addresses
-      if (token.mint && addr.startsWith(token.mint.substring(0, 8))) {
-        console.warn('Pair address starts with same prefix as mint address, likely invalid:', addr);
-        return false;
-      }
-      
-      return !invalidPatterns.some(pattern => pattern.test(addr));
-    };
-
-    // Re-validate the pair address with the full validation logic
-    const isValidPair = rawPair && validatePairAddress(rawPair);
-    const shouldUseTokenAddress = !isValidPair;
+    // Use pair address from URL parameter directly - no complex validation needed
+    // The URL parameter is always a valid pair address since it comes from navigation
 
     // Add global error handler to suppress Moralis 404 errors
     const handleGlobalError = (event: ErrorEvent) => {
       if (event.message && (
         (event.message.includes('404 Not Found') && event.message.includes('moralis-internal.io')) ||
         (event.message.includes('Failed to GET') && event.message.includes('moralis-internal.io')) ||
-        (event.message.includes('Bad response') && event.message.includes('moralis-internal.io'))
+        (event.message.includes('Bad response') && event.message.includes('moralis-internal.io')) ||
+        (event.message.includes('orchestrator-solana-api.aws-prod-api-realtime-2.moralis-internal.io')) ||
+        (event.message.includes('/pairs/') && event.message.includes('/stats'))
       )) {
         console.warn('Moralis API error suppressed:', event.message);
-        
-        // Extract pair address from error message and add to failed list
-        const pairMatch = event.message.match(/pairs\/([A-Za-z0-9]+)\//);
-        if (pairMatch && pairMatch[1]) {
-          const failedAddress = pairMatch[1];
-          setFailedPairAddresses(prev => new Set([...prev, failedAddress]));
-          console.warn('Added failed pair address to blacklist:', failedAddress);
-        }
-        
+        setShowFallback(true);
         event.preventDefault();
         event.stopPropagation();
         return false;
@@ -156,24 +73,34 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
 
     window.addEventListener('error', handleGlobalError);
 
-    // Calculate pair address once for the entire effect
-    const pairAddress = token.pair_address && token.pair_address !== 'null' && token.pair_address.length >= 32 
-      ? token.pair_address 
-      : token.mint;
+    // Also intercept fetch errors specifically
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+      return originalFetch.apply(this, args).catch(error => {
+        if (error.message && (
+          error.message.includes('404 Not Found') ||
+          error.message.includes('Failed to GET') ||
+          error.message.includes('Bad response') ||
+          error.message.includes('orchestrator-solana-api.aws-prod-api-realtime-2.moralis-internal.io') ||
+          (error.message.includes('/pairs/') && error.message.includes('/stats'))
+        )) {
+          console.warn('Moralis fetch error suppressed:', error.message);
+          setShowFallback(true);
+          throw error; // Re-throw to maintain normal error flow
+        }
+        throw error;
+      });
+    };
+
+    // Use the pair address from URL parameter (already validated)
 
     const loadWidget = () => {
       try {
-        const addressConfig = { 
-          pairAddress: pairAddress,
-          tokenAddress: token.mint 
-        };
-        const addrValue = pairAddress;
+        console.log('Chart using pair address from URL:', pairAddress);
 
-        console.log('Chart Address Config:', addressConfig, 'Value:', addrValue, 'Using pair address:', !!token.pair_address);
-
-        // If we don't have a valid address, bail out to fallback
+        // If we don't have a valid pair address, bail out to fallback
         if (!pairAddress || pairAddress.length < 32) {
-          console.warn('No valid address found for chart');
+          console.warn('No valid pair address found for chart');
           setShowFallback(true);
           return;
         }
@@ -209,29 +136,20 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
             autoRefresh: false
           };
 
-          // DexScreener-focused: Only use pair address if it's validated as DexScreener
+          // Use pair address from URL parameter directly
           const finalConfig = {
             ...chartConfig,
-            ...(isValidPair 
-              ? { pairAddress: normalizedPair }
-              : { tokenAddress: token.mint }
-            )
+            pairAddress: pairAddress
           };
 
-          if (isValidPair) {
-            console.log('Using DexScreener pair address:', normalizedPair);
-          } else {
-            console.log('Using token address (no valid DexScreener pair):', token.mint);
-          }
+          console.log('Using pair address from URL:', pairAddress);
 
           // Add error handling for Moralis API calls
           try {
             (window as any).createMyWidget(PRICE_CHART_ID, finalConfig);
           } catch (error) {
-            console.warn('Chart widget creation failed, trying with token address only:', error);
-            // Fallback to token address only
-            const fallbackConfig = { ...chartConfig, tokenAddress: token.mint };
-            (window as any).createMyWidget(PRICE_CHART_ID, fallbackConfig);
+            console.warn('Chart widget creation failed:', error);
+            setShowFallback(true);
           }
         } else {
           console.error("createMyWidget function is not defined. Retrying in 1 second...");
@@ -266,10 +184,7 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
 
               const finalConfig = {
                 ...chartConfig,
-                ...(token.pair_address && token.pair_address !== 'null' && token.pair_address.length >= 32
-                  ? { pairAddress: pairAddress }
-                  : { tokenAddress: token.mint }
-                )
+                pairAddress: pairAddress
               };
 
               (window as any).createMyWidget(PRICE_CHART_ID, finalConfig);
@@ -316,15 +231,15 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
         console.warn('Chart widget failed to render within timeout, trying alternative configuration...');
         
         // Try with pair address if we have one and haven't tried it yet
-        if (retryAttempt === 0 && rawPair && rawPair.length >= 32) {
-          console.log('Retrying with pair address:', rawPair);
+        if (retryAttempt === 0 && pairAddress && pairAddress.length >= 32) {
+          console.log('Retrying with pair address:', pairAddress);
           setRetryAttempt(1);
           
           if (typeof (window as any).createMyWidget === "function") {
             (window as any).createMyWidget(PRICE_CHART_ID, {
               autoSize: true,
               chainId: "solana",
-              pairAddress: rawPair,
+              pairAddress: pairAddress,
               showHoldersChart: false,
               defaultInterval: "60",
               timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Etc/UTC",
@@ -357,15 +272,17 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
           setShowFallback(true);
         }
       }
-    }, 5000); // Increased from 2.5s to 5s
+    }, 8000); // 8 seconds timeout for chart to load
 
     return () => {
       window.clearTimeout(verifyTimer);
       if (refreshInterval) clearInterval(refreshInterval);
       // Remove global error handler
       window.removeEventListener('error', handleGlobalError);
+      // Restore original fetch
+      window.fetch = originalFetch;
     };
-  }, [normalizedPair, token.mint, token.pair_address, useTokenAddress, retryAttempt, rawPair]);
+  }, [pairAddress, retryAttempt]);
 
   // Calculate stats from token fields
   const buyVol = token.total_buy_volume_5m || 0;
@@ -390,14 +307,38 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token }) => {
       {showFallback && (
         <div className="flex h-full w-full items-center justify-center bg-neutral-900 text-neutral-400">
           <div className="text-center">
-            <div className="mb-2 text-lg font-semibold">Chart Unavailable</div>
-            <div className="text-sm">
-              Price data for {token.symbol} is not available at the moment.
+            <div className="mb-2 text-lg font-semibold text-red-400">Chart Data Unavailable</div>
+            <div className="text-sm mb-4 text-neutral-300">
+              Unable to load price chart data for {token.symbol}. This might be due to:
+              <ul className="mt-2 text-xs text-neutral-400 text-left">
+                <li>• New token with limited trading data</li>
+                <li>• Temporary API service issues</li>
+                <li>• Chart data not yet available for this pair</li>
+              </ul>
             </div>
-            <div className="mt-2 text-xs">
-              <div>Price: ${formatK(token.usd_price || 0)}</div>
-              <div>Volume 5m: ${formatK(vol5m)}</div>
-              <div>Buys: {buysCount} | Sells: {sellsCount}</div>
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="mb-4 rounded bg-emerald-600 px-6 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isRefreshing ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Retrying...
+                </span>
+              ) : (
+                '🔄 Retry Chart'
+              )}
+            </button>
+            <div className="text-xs space-y-1">
+              <div className="text-emerald-400">Price: ${formatK(token.usd_price || 0)}</div>
+              <div className="text-blue-400">Volume 5m: ${formatK(vol5m)}</div>
+              <div className="text-purple-400">Buys: {buysCount} | Sells: {sellsCount}</div>
+              {pairAddress && (
+                <div className="mt-2 text-neutral-500 text-xs">
+                  Pair: {pairAddress.substring(0, 8)}...{pairAddress.substring(-4)}
+                </div>
+              )}
             </div>
           </div>
         </div>

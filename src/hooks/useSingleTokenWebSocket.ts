@@ -9,7 +9,7 @@ interface WebSocketState {
   loading: boolean;
 }
 
-export default function useSingleTokenWebSocket(pair_address: string | undefined) {
+export default function useSingleTokenWebSocket(address: string | undefined) {
   const [token, setToken] = useState<any>(null);
   const [trades, setTrades] = useState<any[]>([]);
   const [state, setState] = useState<WebSocketState>({
@@ -22,9 +22,11 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
-  const pairAddressRef = useRef(pair_address);
-  pairAddressRef.current = pair_address;
+  const addressRef = useRef(address);
+  addressRef.current = address;
   const [count, setCount] = useState(0);
+  const [resolvedPairAddress, setResolvedPairAddress] = useState<string | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
 
   const throttledSetToken = useCallback(
     throttle((newData: any) => {
@@ -38,15 +40,53 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
     []
   );
 
+  // Check if address is a mint address (ends with 'pump')
+  const isMintAddress = useCallback((addr: string) => {
+    return addr.endsWith('pump');
+  }, []);
+
+  // Resolve address to pair address
+  const resolveAddress = useCallback(async (addr: string) => {
+    // If it's already a pair address, return it
+    if (!isMintAddress(addr)) {
+      return addr;
+    }
+
+    // If it's a mint address, hydrate it
+    setIsResolving(true);
+    try {
+      console.log('Resolving mint address to pair address:', addr);
+      const response = await fetch('/api/token-service/hydrate-pair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mint: addr })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Successfully resolved address:', data);
+        return data.pair_address;
+      } else {
+        console.error('Failed to resolve address:', response.status);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error resolving address:', error);
+      return null;
+    } finally {
+      setIsResolving(false);
+    }
+  }, [isMintAddress]);
+
   // Load initial data
   const loadInitialData = useCallback(async () => {
-    if (!pair_address) return;
+    if (!resolvedPairAddress) return;
     
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
       
-      console.log('Loading initial data for pair_address:', pair_address);
-      const url = `/api/token-service/trade-view?mint_address=${pair_address}`;
+      console.log('Loading initial data for pair_address:', resolvedPairAddress);
+      const url = `/api/token-service/trade-view?pair_address=${resolvedPairAddress}`;
       console.log('API URL:', url);
       
       const response = await fetch(url);
@@ -80,14 +120,34 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
     } finally {
       setState(prev => ({ ...prev, loading: false }));
     }
-  }, [pair_address, throttledSetToken]);
+  }, [resolvedPairAddress, throttledSetToken]);
 
-  // Effect for managing WebSocket connection
+  // Effect to resolve address first
   useEffect(() => {
-    if (!pair_address) {
+    if (address) {
+      // Resolve address first
+      resolveAddress(address).then((resolved) => {
+        if (resolved) {
+          setResolvedPairAddress(resolved);
+        } else {
+          setState(prev => ({ 
+            ...prev, 
+            error: 'Failed to resolve address to pair address',
+            loading: false 
+          }));
+        }
+      });
+    } else {
       setToken(null);
       setTrades([]);
       setState({ isConnected: false, isReconnecting: false, error: null, loading: false });
+      setResolvedPairAddress(null);
+    }
+  }, [address, resolveAddress]);
+
+  // Effect for managing WebSocket connection
+  useEffect(() => {
+    if (!resolvedPairAddress) {
       return;
     }
 
@@ -98,7 +158,7 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
 
     const connectWebSocket = () => {
         try {
-          const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/trade?mint_address=${pair_address}&token_data=true&market_data=true&trades=true&live_stats=true`;
+          const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/trade?pair_address=${resolvedPairAddress}&token_data=true&market_data=true&trades=true&live_stats=true`;
           const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
@@ -268,8 +328,8 @@ export default function useSingleTokenWebSocket(pair_address: string | undefined
         ws.close();
       }
     };
-    // The connection must be re-established if the pair_address changes
-  }, [pair_address, throttledSetToken, loadInitialData]);
+    // The connection must be re-established if the resolved pair address changes
+  }, [resolvedPairAddress, throttledSetToken, loadInitialData]);
 
-  return { ...state, token, trades };
+  return { ...state, token, trades, isResolving };
 } 

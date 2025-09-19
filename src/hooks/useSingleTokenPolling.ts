@@ -7,7 +7,7 @@ interface PollingState {
   loading: boolean;
 }
 
-export default function useSingleTokenPolling(pair_address: string | undefined) {
+export default function useSingleTokenPolling(address: string | undefined) {
   const [token, setToken] = useState<any>(null);
   const [trades, setTrades] = useState<any[]>([]);
   const [state, setState] = useState<PollingState>({
@@ -16,9 +16,10 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
     loading: true,
   });
   const [isHydrating, setIsHydrating] = useState(false);
+  const [resolvedPairAddress, setResolvedPairAddress] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const pairAddressRef = useRef(pair_address);
-  pairAddressRef.current = pair_address;
+  const addressRef = useRef(address);
+  addressRef.current = address;
 
   const throttledSetToken = useCallback(
     throttle((newData: any) => {
@@ -32,57 +33,57 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
     []
   );
 
-  // Hydrate token pair address
-  const hydrateToken = useCallback(async (mintAddress: string) => {
+  // Check if address is a mint address (ends with 'pump')
+  const isMintAddress = useCallback((addr: string) => {
+    return addr.endsWith('pump');
+  }, []);
+
+  // Resolve address to pair address
+  const resolveAddress = useCallback(async (addr: string) => {
+    // If it's already a pair address, return it
+    if (!isMintAddress(addr)) {
+      return addr;
+    }
+
+    // If it's a mint address, hydrate it
     setIsHydrating(true);
     try {
-      console.log('Hydrating pair address for token:', mintAddress);
+      console.log('Resolving mint address to pair address:', addr);
       const response = await fetch('/api/token-service/hydrate-pair', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mint: mintAddress })
+        body: JSON.stringify({ mint: addr })
       });
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Successfully hydrated token:', data);
+        console.log('Successfully resolved address:', data);
         return data.pair_address;
       } else {
-        console.error('Failed to hydrate token:', response.status);
+        console.error('Failed to resolve address:', response.status);
         return null;
       }
     } catch (error) {
-      console.error('Error hydrating token:', error);
+      console.error('Error resolving address:', error);
       return null;
     } finally {
       setIsHydrating(false);
     }
-  }, []);
+  }, [isMintAddress]);
 
   // Load data from API
   const loadData = useCallback(async () => {
-    if (!pair_address) return;
+    if (!resolvedPairAddress) return;
     
     try {
-      console.log('Loading data for pair_address:', pair_address);
-      const url = `/api/token-service/trade-view?mint_address=${pair_address}`;
+      console.log('Loading data for pair_address:', resolvedPairAddress);
+      const url = `/api/token-service/trade-view?pair_address=${resolvedPairAddress}`;
       console.log('API URL:', url);
       
       const response = await fetch(url);
       console.log('Response status:', response.status);
       
       if (!response.ok) {
-        // If token not found or no pair_address, try to hydrate
-        if (response.status === 404) {
-          console.log('Token not found, attempting to hydrate...');
-          const hydratedPairAddress = await hydrateToken(pair_address);
-          if (hydratedPairAddress) {
-            console.log('Token hydrated, retrying with new pair address...');
-            // Retry with the hydrated pair address
-            return loadData();
-          }
-        }
-        
         const errorText = await response.text();
         console.error('API Error Response:', errorText);
         throw new Error(`Failed to load data: ${response.status} - ${errorText}`);
@@ -90,17 +91,6 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
       
       const data = await response.json();
       console.log('Data received:', data);
-      
-      // Check if token has pair_address, if not try to hydrate
-      if (data.token && (!data.token.pair_address || data.token.pair_address === '')) {
-        console.log('Token has no pair_address, attempting to hydrate...');
-        const hydratedPairAddress = await hydrateToken(pair_address);
-        if (hydratedPairAddress) {
-          console.log('Token hydrated, retrying...');
-          // Retry loading data
-          return loadData();
-        }
-      }
       
       // Set token data
       if (data.token) {
@@ -128,7 +118,7 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
         loading: false 
       }));
     }
-  }, [pair_address, throttledSetToken, hydrateToken]);
+  }, [resolvedPairAddress, throttledSetToken]);
 
   // Start polling
   const startPolling = useCallback(() => {
@@ -136,7 +126,7 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
       clearInterval(intervalRef.current);
     }
     
-    console.log('Starting polling for:', pair_address);
+    console.log('Starting polling for resolved pair address:', resolvedPairAddress);
     setState(prev => ({ ...prev, isPolling: true, loading: true }));
     
     // Load initial data immediately
@@ -147,7 +137,7 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
       console.log('Polling data...');
       loadData();
     }, 3000);
-  }, [pair_address, loadData]);
+  }, [resolvedPairAddress, loadData]);
 
   // Stop polling
   const stopPolling = useCallback(() => {
@@ -159,21 +149,42 @@ export default function useSingleTokenPolling(pair_address: string | undefined) 
     setState(prev => ({ ...prev, isPolling: false }));
   }, []);
 
-  // Effect to manage polling lifecycle
+  // Effect to resolve address and manage polling lifecycle
   useEffect(() => {
-    if (pair_address) {
-      startPolling();
+    if (address) {
+      // Resolve address first
+      resolveAddress(address).then((resolved) => {
+        if (resolved) {
+          setResolvedPairAddress(resolved);
+        } else {
+          setState(prev => ({ 
+            ...prev, 
+            error: 'Failed to resolve address to pair address',
+            loading: false 
+          }));
+        }
+      });
     } else {
       stopPolling();
       setToken(null);
       setTrades([]);
+      setResolvedPairAddress(null);
     }
 
-    // Cleanup on unmount or pair_address change
+    // Cleanup on unmount or address change
     return () => {
       stopPolling();
     };
-  }, [pair_address, startPolling, stopPolling]);
+  }, [address, resolveAddress, stopPolling]);
+
+  // Effect to start polling when we have a resolved pair address
+  useEffect(() => {
+    if (resolvedPairAddress) {
+      startPolling();
+    } else {
+      stopPolling();
+    }
+  }, [resolvedPairAddress, startPolling, stopPolling]);
 
   // Cleanup on unmount
   useEffect(() => {
