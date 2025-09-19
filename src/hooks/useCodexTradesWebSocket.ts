@@ -199,8 +199,8 @@ export default function useCodexTradesWebSocket(tokenAddress: string | undefined
                   const unique = combined.filter((trade, index, self) => 
                     index === self.findIndex(t => t.transactionHash === trade.transactionHash)
                   );
-                  // Keep only the last 100 trades to prevent memory issues
-                  return unique.slice(0, 100);
+                  // Keep only the last 10 trades to show recent activity
+                  return unique.slice(0, 10);
                 });
               }
             } else if (message.type === "complete") {

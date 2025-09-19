@@ -309,22 +309,11 @@ const PulseTable = React.memo(function PulseTable({ title, tokens, isFirstOrLast
                   const isMigrated = title.toLowerCase().includes('migrated');
                   
                   if (isNewPairs) {
-                    // Show bonding curve progress for new pairs
-                    // Use bonding_curve_progress if available, otherwise calculate from bonding_pct
-                    let bondingProgress = 0;
-                    if (token.bonding_curve_progress !== undefined) {
-                      bondingProgress = typeof token.bonding_curve_progress === 'number' 
-                        ? Math.round(token.bonding_curve_progress) 
-                        : Math.round(parseFloat(token.bonding_curve_progress || '0'));
-                    } else if (token.bonding_pct !== undefined) {
-                      // Convert bonding_pct to percentage (it's already in percentage form)
-                      bondingProgress = typeof token.bonding_pct === 'number' 
-                        ? Math.round(token.bonding_pct) 
-                        : Math.round(parseFloat(token.bonding_pct || '0'));
-                    }
-                    
-                    // Cap bonding progress at 100% (bonding curve cannot exceed 100%)
-                    bondingProgress = Math.min(bondingProgress, 100);
+        // Show bonding curve progress for new pairs
+        // bonding_pct is already in 0-100 range from backend (percentages)
+        const bondingProgress = typeof token.bonding_pct === 'number'
+          ? Math.round(token.bonding_pct)
+          : Math.round(parseFloat(token.bonding_pct || '0'));
                     
                     return (
                       <span className="text-emerald-400 border-emerald-700">
