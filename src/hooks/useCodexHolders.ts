@@ -37,6 +37,22 @@ interface HoldersUpdatedResponse {
   };
 }
 
+interface TokenEventsResponse {
+  data: {
+    onTokenEventsCreated: {
+      events: Array<{
+        eventDisplayType: string;
+        maker: string;
+        taker: string;
+        amount: string;
+        price: string;
+        timestamp: string;
+        token0SwapValueUsd: string;
+      }>;
+    };
+  };
+}
+
 export default function useCodexHolders(tokenAddress: string | undefined) {
   const [holders, setHolders] = useState<CodexHolder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -201,9 +217,9 @@ export default function useCodexHolders(tokenAddress: string | undefined) {
               ws.send(JSON.stringify(tradeSubscription));
             } else if (message.type === "data" || message.type === "next") {
               // Handle holders balance updates
-              const response: HoldersUpdatedResponse = message.payload;
-              if (response?.data?.onHoldersUpdated?.balances) {
-                const balanceUpdates = response.data.onHoldersUpdated.balances;
+              const holdersResponse: HoldersUpdatedResponse = message.payload;
+              if (holdersResponse?.data?.onHoldersUpdated?.balances) {
+                const balanceUpdates = holdersResponse.data.onHoldersUpdated.balances;
                 
                 // Update holders with new balance data
                 setHolders(prevHolders => {
@@ -223,8 +239,9 @@ export default function useCodexHolders(tokenAddress: string | undefined) {
               }
               
               // Handle trade events for real-time bought/sold updates
-              if (response?.data?.onTokenEventsCreated?.events) {
-                const tradeEvents = response.data.onTokenEventsCreated.events;
+              const eventsResponse: TokenEventsResponse = message.payload;
+              if (eventsResponse?.data?.onTokenEventsCreated?.events) {
+                const tradeEvents = eventsResponse.data.onTokenEventsCreated.events;
                 
                 // Update holders with new trade data
                 setHolders(prevHolders => {
