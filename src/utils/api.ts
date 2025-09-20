@@ -1,6 +1,9 @@
 // Centralized API client for backend calls related to authentication and trading
 import { env } from "../env";
 
+// Constants
+export const SOL_MINT_ADDRESS = "So11111111111111111111111111111111111111112";
+
 interface RequestOptions extends RequestInit {
   /** JSON body that will be automatically stringified */
   body?: any;
@@ -162,7 +165,17 @@ type BuyParams = {
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) =>
-  apiFetch<{ amount: number; hash: string }>("/api/trade/buy", {
+  apiFetch<{ 
+    message: string; 
+    txid: string; 
+    tokenAddress: string; 
+    amount: number; 
+    walletPublickey: string; 
+    trade: any;
+    // Also support the expected format for backward compatibility
+    hash?: string;
+    tokenAmount?: number;
+  }>("/api/trade/buy", {
     method: "POST",
     body: params,
     authToken,

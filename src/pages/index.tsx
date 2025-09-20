@@ -32,7 +32,7 @@ import InterstatePopout from '../components/InterstatePopout';
 import FilterPopout from '../components/FilterPopout';
 import throttle from 'lodash.throttle';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
-import { tradeBuy } from "../utils/api";
+import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
 import { env } from "../env";
 
 const navLinks = [
@@ -264,16 +264,28 @@ export default function Home() {
       const data = await tradeBuy({
         poolAddress: token.pair_address,
         baseMint: token.mint, // Use token.mint as baseMint
-        quoteMint: "So11111111111111111111111111111111111111112", // SOL mint address
+        quoteMint: SOL_MINT_ADDRESS, // Always SOL
         amount: quickBuyAmount,
         mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
         poolType: "PumpAmm" // Assuming this is a PumpAmm pool
       }, user.bearerToken);
-      toast.success(
-        `Quick Buy successful! Bought ${data.amount} ${token.symbol}`,
-      );
+      
+      // Handle different response formats from backend
+      const txHash = data?.hash || data?.txid;
+      const tokenAmount = data?.amount || data?.tokenAmount;
+
+      if (data && txHash) {
+        console.log(`✅ Quick Buy successful! Hash: ${txHash}`);
+        toast.success(
+          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`,
+        );
+      } else {
+        console.log('❌ Quick Buy failed - no transaction hash returned');
+        toast.error("❌ Quick Buy failed - no transaction hash returned");
+      }
     } catch (e: any) {
-      toast.error(e.message || "Quick Buy failed");
+      console.error('Quick Buy error:', e);
+      toast.error(`❌ Quick Buy failed: ${e.message || "Unknown error"}`);
     }
   }
 

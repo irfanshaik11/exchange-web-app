@@ -6,7 +6,8 @@ import InterstateTooltip from "../InterstateTooltip";
 import { QuickBuyPresetBar } from "./TradeHeader";
 import QuickBuy from "../QuickBuy";
 import CustomCheckbox from "../CustomCheckbox";
-import { createLimitOrder, tradeBuy } from "~/utils/api";
+import { createLimitOrder, tradeBuy, SOL_MINT_ADDRESS } from "~/utils/api";
+import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 
 interface TradeActionPanelProps {
@@ -348,7 +349,35 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
                 setIsLoading(false);
               }
             } else if (tab === "market") {
+              // Client-side balance guard for buys
+              if (mode === "buy") {
+                const requested = Number(amount || 0);
+                // Minimal safety buffer to cover fees/tips (adjust as needed)
+                const safetyBuffer = 0.003; // ~0.003 SOL
+                const required = requested + safetyBuffer;
+
+                if (!requested || requested <= 0) {
+                  setIsLoading(false);
+                  setMessage({ type: "error", text: "Enter a valid amount." });
+                  toast.error("Enter a valid amount");
+                  return;
+                }
+
+                if (solBalance < required) {
+                  setIsLoading(false);
+                  const need = Math.max(required - solBalance, 0);
+                  const msg = `Less balance: need ~${required.toFixed(3)} SOL (missing ${need.toFixed(3)} SOL).`;
+                  setMessage({ type: "error", text: msg });
+                  toast.error("Less balance. Please fund your wallet.");
+                  return;
+                }
+              }
               let poolType: "PumpAmm" | "Raydium CPMM" | "" = "";
+              
+              // Debug logging
+              console.log('Token object:', token);
+              console.log('Token amm_id:', (token as any).amm_id);
+              
               switch ((token as any).amm_id) {
                 case "pump_amm":
                   poolType = "PumpAmm";
@@ -357,30 +386,70 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
                   poolType = "Raydium CPMM";
                   break;
                 default:
-                  poolType = "";
+                  // Default to PumpAmm for most tokens
+                  poolType = "PumpAmm";
+                  console.log('Using default PumpAmm pool type');
               }
 
-              const tr = await tradeBuy(
-                {
+              try {
+                const tradeParams = {
                   amount: Number(amount),
                   poolAddress: token.pair_address,
-                  baseMint: (token as any).base_mint,
-                  quoteMint: (token as any).quote_mint,
+                  baseMint: token.mint, // Always use token.mint as baseMint
+                  quoteMint: SOL_MINT_ADDRESS, // Always SOL
                   mevProtection: settings.mevMode == "off" ? 0 : 1,
                   poolType,
-                },
-                user.bearerToken,
-              );
+                };
+                
+                console.log('Sending trade request with params:', tradeParams);
+                
+                const tr = await tradeBuy(tradeParams, user.bearerToken);
 
-              console.log(tr);
+                console.log('Trade result:', tr);
 
-              console.log(
-                `Executing ${mode} market order for ${amount} of ${token.symbol}`,
-              );
-              setMessage({
-                type: "success",
-                text: `Market order for ${token.symbol} would be executed.`,
-              });
+                // Handle different response formats from backend
+                const txHash = tr?.hash || tr?.txid;
+                const tokenAmount = tr?.amount || tr?.tokenAmount;
+
+                if (tr && txHash) {
+                  console.log(`✅ Trade successful! Hash: ${txHash}`);
+                  setMessage({
+                    type: "success",
+                    text: `✅ Trade successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`,
+                  });
+                } else {
+                  console.log('❌ Trade failed - no transaction hash returned');
+                  setMessage({
+                    type: "error",
+                    text: `❌ Trade failed. Please try again.`,
+                  });
+                }
+              } catch (error: any) {
+                console.error('Trade error:', error);
+                
+                // Handle specific error types
+                let errorMessage = error.message || 'Unknown error';
+                
+                if (error.message?.includes('Insufficient SOL balance') || error.message?.includes('INSUFFICIENT_BALANCE')) {
+                  errorMessage = `💰 Insufficient SOL balance. Please add at least 0.01 SOL to your wallet to complete this transaction.`;
+                } else if (error.message?.includes('insufficient funds')) {
+                  errorMessage = `💰 Insufficient funds. Please add SOL to your wallet and try again.`;
+                } else if (error.message?.includes('Invalid account discriminator') || error.message?.includes('INVALID_POOL_ADDRESS')) {
+                  errorMessage = `❌ Invalid pool address. Please check the token and try again.`;
+                } else if (error.message?.includes('TokenAccountNotFoundError')) {
+                  errorMessage = `❌ Token account not found. Please ensure you have sufficient SOL for transaction fees.`;
+                } else if (error.message?.includes('Invalid pool address')) {
+                  errorMessage = `❌ Invalid pool address. The provided pool address is not a valid pump.fun pool.`;
+                }
+                
+                setMessage({
+                  type: "error",
+                  text: errorMessage,
+                });
+              } finally {
+                // Always reset loading state
+                setIsLoading(false);
+              }
             }
           }}
         >
