@@ -39,7 +39,6 @@ const ALLOWED = [
   'coingecko.com',
   'solscan.io',
   'raydium.io',
-  'api.dicebear.com',
 ];
 
 function isAllowedHost(host: string) {
@@ -82,22 +81,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let upstream: Response | null = null;
     let lastErr: any = null;
-    for (const tryUrl of candidates) {
+    
+    // Try all candidates in parallel with shorter timeouts for faster response
+    const promises = candidates.map(async (tryUrl) => {
       try {
         const controller = new AbortController();
-        const t = setTimeout(() => controller.abort(), 7000);
-        upstream = await fetch(tryUrl, {
+        const t = setTimeout(() => controller.abort(), 2000); // Reduced from 7s to 2s
+        const response = await fetch(tryUrl, {
           headers: { 'Accept': 'image/*,*/*;q=0.8', 'User-Agent': 'Interstate-ImageProxy/1.0' },
           signal: controller.signal,
           cache: 'force-cache',
         });
         clearTimeout(t);
-        if (upstream.ok) break;
-        lastErr = new Error(`HTTP ${upstream.status} ${upstream.statusText}`);
+        if (response.ok) {
+          return response;
+        }
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
       } catch (e: any) {
-        lastErr = e;
+        throw e;
       }
-      upstream = null;
+    });
+
+    // Wait for the first successful response
+    try {
+      upstream = await Promise.any(promises);
+    } catch (e: any) {
+      lastErr = e;
     }
 
     if (!upstream) {

@@ -112,7 +112,7 @@ export function TokenLogo({ token }: { token: any }) {
 }
 
 // The new inner component that contains the actual modal content and logic
-function SearchModalContent({
+const SearchModalContent = React.memo(function SearchModalContent({
   open,
   onClose,
   onSubmit,
@@ -128,7 +128,6 @@ function SearchModalContent({
     onlyBonded: false,
   });
   const [searchResults, setSearchResults] = useState<Token[]>([]);
-  const [isSearchLoading, setIsSearchLoading] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -147,83 +146,111 @@ function SearchModalContent({
     }
   };
 
-  // This hook will now only be called when SearchModalContent is rendered
-  const { data: allTokens } = usePaginatedTokensWebSocket({
-    filter: getFilterForTimeframe(selectedTimeframe),
-    limit: 5,
-    order: "desc",
-  });
+  // Search state
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  // No need for filteredTokens since we're searching via API
+  const filteredTokens: Token[] = [];
 
   const searchTokens = useCallback(async (searchQuery: string) => {
-    if (searchQuery.trim().length < 3) {
+    if (searchQuery.trim().length < 1) {
       setSearchResults([]);
       return;
     }
-    setIsSearchLoading(true);
+    
+    setSearchLoading(true);
     try {
-      // Assuming NEXT_PUBLIC_BACKEND_URL is the correct env var for the base URL
-      const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "";
-      const trimmedQuery = searchQuery.trim();
-      const searchParam =
-        trimmedQuery.length >= 10
-          ? `tokenaddress=${encodeURIComponent(trimmedQuery)}`
-          : `name=${encodeURIComponent(trimmedQuery)}`;
+      // Use GraphQL query directly to Codex API
+      const apiKey = process.env.NEXT_PUBLIC_CODEX_API_KEY;
       
-      // Note: The original code used NEXT_PUBLIC_WEBSOCKET_URL, which might be incorrect for an HTTP search endpoint.
-      // Using NEXT_PUBLIC_BACKEND_URL and assuming an endpoint like /api/search
-      const response = await fetch(`${baseUrl}/api/token-search?${searchParam}`);
-
+      const response = await fetch('https://graph.codex.io/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': apiKey || '',
+        },
+        body: JSON.stringify({
+          query: `
+            query {
+              filterTokens(
+                phrase: "${searchQuery.trim()}"
+                filters: {
+                  network: [1399811149]
+                  liquidity: { gt: 10000 }
+                }
+                rankings: {
+                  attribute: trendingScore24
+                  direction: DESC
+                }
+                limit: 20
+              ) {
+                results {
+                  token {
+                    name
+                    symbol
+                    address
+                    info {
+                      imageThumbUrl
+                      imageSmallUrl
+                      imageLargeUrl
+                    }
+                  }
+                  marketCap
+                  liquidity
+                }
+              }
+            }
+          `
+        })
+      });
+      
       if (response.ok) {
         const data = await response.json();
-        setSearchResults(Array.isArray(data.tokens) ? data.tokens : []);
-      } else if (response.status === 404) {
-        setSearchResults([]);
+        
+        if (data.errors) {
+          console.error("GraphQL errors:", data.errors);
+          setSearchResults([]);
+          return;
+        }
+        
+        // Convert GraphQL response to Token format
+        const tokens: Token[] = (data.data?.filterTokens?.results || []).map((result: any) => {
+          // Get the best available image URL (prioritize small, then thumb, then large)
+          const imageUrl = result.token.info?.imageSmallUrl || 
+                          result.token.info?.imageThumbUrl || 
+                          result.token.info?.imageLargeUrl || 
+                          null;
+          
+          return {
+            id: 0,
+            mint: result.token.address,
+            name: result.token.name || "",
+            symbol: result.token.symbol || "",
+            logo: imageUrl,
+            fully_diluted_value: result.marketCap || 0,
+            total_liquidity_usd: result.liquidity || 0,
+            total_buy_volume_1h: 0,
+            total_sell_volume_1h: 0,
+            created_at: "",
+            bonding_curve_progress: "0%",
+            amm: "pump_amm",
+            uri: imageUrl,
+            pair_address: result.token.address
+          };
+        });
+        
+        setSearchResults(tokens);
       } else {
-        console.error("Search API error:", response.status);
+        console.error("GraphQL API error:", response.status);
         setSearchResults([]);
       }
     } catch (error) {
       console.error("Search error:", error);
       setSearchResults([]);
     } finally {
-      setIsSearchLoading(false);
+      setSearchLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-    if (query.trim().length >= 3) {
-      searchTimeoutRef.current = setTimeout(() => {
-        searchTokens(query);
-      }, 350);
-    } else {
-      setSearchResults([]);
-      setIsSearchLoading(false);
-    }
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, [query, searchTokens]);
-
-  const filteredTokens = useMemo(() => {
-    if (!allTokens?.length) return [];
-    let filtered = [...allTokens];
-    if (filters.isPumpSearch) {
-      filtered = filtered.filter((token) => token.amm === "pump_amm");
-    }
-    if (filters.onlyBonded) {
-      filtered = filtered.filter(
-        (token) =>
-          parseFloat(token.bonding_curve_progress?.replace("%", "") || "0") >=
-          100,
-      );
-    }
-    return filtered;
-  }, [allTokens, filters.isPumpSearch, filters.onlyBonded]);
 
   const handleSelectToken = useCallback(
     (token: Token) => {
@@ -235,8 +262,9 @@ function SearchModalContent({
 
   const handleQueryChange = useCallback((newQuery: string) => {
     setQuery(newQuery);
-    onQueryChange?.(newQuery);
-  }, [onQueryChange]);
+    // Don't call onQueryChange automatically - only search on Enter
+    // onQueryChange?.(newQuery);
+  }, []);
 
   const updateFilter = useCallback((filterName: keyof SearchFilters) => {
     setFilters((prev) => ({ ...prev, [filterName]: !prev[filterName] }));
@@ -246,25 +274,29 @@ function SearchModalContent({
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
+      } else if (e.key === "Enter") {
+        // Search only when Enter is pressed
+        e.preventDefault();
+        searchTokens(query);
+        // Don't call onQueryChange - we want to show results in modal, not redirect
       }
     },
-    [onClose],
+    [onClose, searchTokens, query],
   );
 
   useEffect(() => {
     if (open) {
       setQuery("");
       setSearchResults([]);
-      setIsSearchLoading(false);
       const timer = setTimeout(() => inputRef.current?.focus(), 0);
       return () => clearTimeout(timer);
     }
   }, [open]);
 
-  const isSearching = useMemo(() => query.trim().length >= 3, [query]);
+  const isSearching = useMemo(() => query.trim().length > 0, [query]);
   const displayTokens = useMemo(() => {
-    return isSearching ? searchResults : filteredTokens;
-  }, [isSearching, searchResults, filteredTokens]);
+    return isSearching ? searchResults : [];
+  }, [isSearching, searchResults]);
 
   return (
     <InterstatePopout
@@ -344,7 +376,7 @@ function SearchModalContent({
           className="w-full bg-transparent text-[20px] outline-none placeholder:text-neutral-500"
         />
         <span className="absolute top-1/2 right-4 -translate-y-1/2 rounded bg-neutral-900 px-2 py-0.5 text-[10px] text-neutral-300">
-          Esc
+          Enter to search
         </span>
       </div>
 
@@ -352,19 +384,19 @@ function SearchModalContent({
       <div className="h-[550px] flex-1 overflow-hidden px-4 pt-2">
         <div className="mb-2">
           <span className="text-sm tracking-wider text-neutral-400">
-            {isSearching ? "Search Results" : "Trending"} ({displayTokens.length})
-            {isSearchLoading && (
-              <span className="ml-2 text-xs text-blue-400">Searching...</span>
-            )}
+            {isSearching ? "Search Results" : "Search"} ({displayTokens.length})
           </span>
         </div>
-        {displayTokens.length === 0 ? (
+        {searchLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
+            <span className="ml-2 text-sm text-neutral-400">Searching...</span>
+          </div>
+        ) : displayTokens.length === 0 ? (
           <p className="text-sm text-neutral-500">
-            {isSearchLoading
-              ? "Searching..."
-              : isSearching
-                ? "No search results found."
-                : "No tokens available."}
+            {isSearching
+              ? "No search results found."
+              : "Type a token name and press Enter to search."}
           </p>
         ) : (
           <ul className="flex h-full flex-col gap-4 overflow-y-auto">
@@ -389,7 +421,7 @@ function SearchModalContent({
       </div>
     </InterstatePopout>
   );
-}
+});
 
 // Main component that controls rendering of the modal content
 export default function SearchModal(props: SearchModalProps) {

@@ -36,7 +36,7 @@ function getHolderIcon(index: number, address: string) {
     <FaStar className="text-pink-400" />,
     <FaBullseye className="text-red-400" />,
     <FaLeaf className="text-green-400" />,
-    <FaLink className="text-purple-400" />,
+    <FaLink className="text-gray-400" />,
   ];
   return icons[index % icons.length];
 }

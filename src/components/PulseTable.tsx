@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Image from 'next/image';
 import AvatarImage from '~/components/AvatarImage';
+import FastImage from '~/components/FastImage';
 import type { Token } from '~/utils/db';
 import { formatSmartNumber } from '~/utils/db';
 import { FaUser, FaGlobe, FaSearch, FaCrown, FaRegCopy, FaBolt } from 'react-icons/fa';
@@ -121,18 +122,21 @@ function useTokenMetadata(uri?: string) {
   return { meta, loading, showInitial };
 }
 
-function TokenImage({ token }: { token: Token }) {
+function TokenImage({ token, priority = false }: { token: Token; priority?: boolean }) {
   // Strictly prefer DB image (launchpad_token_state.image), then token.logo
   const dbImage = (token as any).image as string | undefined;
+  
   return (
-    <AvatarImage
+    <FastImage
       src={dbImage}
       fallbackSrc={token.logo || undefined}
-      name={token.name}
-      symbol={token.symbol}
+      alt={token.name || token.symbol || ''}
       width={48}
       height={48}
       className="w-12 h-12 object-contain rounded"
+      priority={priority}
+      symbol={token.symbol}
+      name={token.name}
     />
   );
 }
@@ -350,7 +354,7 @@ const PulseTable = React.memo(function PulseTable({ title, tokens, isFirstOrLast
               {/* Profile Picture & Address */}
               <div className="flex flex-col items-center w-16 mr-3">
                 <div className="relative w-14 h-14 bg-neutral-800 rounded-full overflow-x-hidden flex items-center justify-center border border-neutral-700">
-                  <TokenImage token={token} />
+                  <TokenImage token={token} priority={title === 'New Pairs'} />
                   {/* Status indicator */}
                   <span className="absolute bottom-1 right-1 w-3 h-3 bg-green-500 border-2 border-neutral-900 rounded-full" />
                 </div>
@@ -445,7 +449,7 @@ const PulseTable = React.memo(function PulseTable({ title, tokens, isFirstOrLast
                         {icon: <FaCrown size={10}/>, label: 'Sellers', value: token.total_sellers_5m ?? 0, color: 'text-red-400'},
                         {icon: <FaSearch size={10}/>, label: 'Wallets', value: token.unique_wallets_5m ?? 0, color: 'text-blue-400'},
                         {icon: <FaUser size={10}/>, label: '24h TX', value: (token.total_buys_24h ?? 0) + (token.total_sells_24h ?? 0), color: 'text-yellow-400'},
-                        {icon: <FaUser size={10}/>, label: 'Vol 24h', value: Math.round((token.total_buy_volume_24h ?? 0) + (token.total_sell_volume_24h ?? 0)), color: 'text-purple-400'}
+                        {icon: <FaUser size={10}/>, label: 'Vol 24h', value: Math.round((token.total_buy_volume_24h ?? 0) + (token.total_sell_volume_24h ?? 0)), color: 'text-gray-400'}
                       ].map((b, i) => (
                         <span key={i} className={`flex items-center gap-1 bg-neutral-800 ${b.color} text-[10px] px-2 py-0.5 rounded-full border border-neutral-700`}>
                           {b.icon} <SmoothNumber value={b.value} duration={300} />

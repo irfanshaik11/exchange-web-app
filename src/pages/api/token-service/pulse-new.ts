@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { ImageSearchService } from '~/utils/imageSearch';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Disable caching for realtime freshness
@@ -57,8 +58,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           created_at: r.launch_time || r.created_at || null,
           launch_time: r.launch_time || null,
           // Optional extra fields used by the UI
-          logo: r.uri || r.image || null,
-          image: r.uri || r.image || null,
+          logo: r.logo || r.uri || r.image || null,
+          image: r.image || r.uri || r.logo || null,
           // TX data fields from Codex API
           total_buy_volume_5m: r.total_buy_volume_5m ?? 0,
           total_buy_volume_1h: r.total_buy_volume_1h ?? 0,

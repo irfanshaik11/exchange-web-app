@@ -397,7 +397,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
                   poolAddress: token.pair_address,
                   baseMint: token.mint, // Always use token.mint as baseMint
                   quoteMint: SOL_MINT_ADDRESS, // Always SOL
-                  mevProtection: settings.mevMode == "off" ? 0 : 1,
+                  mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
                   poolType,
                 };
                 

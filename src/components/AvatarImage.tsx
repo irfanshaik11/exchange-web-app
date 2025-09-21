@@ -21,11 +21,7 @@ export default function AvatarImage({
   className = '',
 }: AvatarImageProps) {
   const normalizedSrc = useMemo(() => withImageFallback(src, fallbackSrc), [src, fallbackSrc]);
-  const seed = useMemo(() => (symbol || name || '').trim(), [symbol, name]);
-  const fallbackAvatar = useMemo(() => {
-    return seed ? `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(seed)}` : null;
-  }, [seed]);
-  const finalSrc = normalizedSrc || fallbackAvatar;
+  const finalSrc = normalizedSrc; // Only use the normalized source, no random avatar fallback
   const [showImage, setShowImage] = useState<boolean>(!!finalSrc);
 
   useEffect(() => {
@@ -51,10 +47,10 @@ export default function AvatarImage({
 
   return (
     <div
-      className={className + ' flex items-center justify-center bg-neutral-800 text-neutral-300 font-bold'}
+      className={className + ' flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold rounded-full shadow-lg'}
       style={{ width, height }}
     >
-      <span>{initial}</span>
+      <span className="text-lg">{initial}</span>
     </div>
   );
 }

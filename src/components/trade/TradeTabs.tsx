@@ -2,8 +2,6 @@ import React from 'react';
 
 const tabs = [
   'Trades',
-  'Positions',
-  'Orders',
   'Holders',
   'Top Traders',
   'Dev Tokens',

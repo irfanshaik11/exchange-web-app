@@ -21,8 +21,8 @@ export const AmmList: Amm[] = [
     name: "raydium_amm",
     displayName: "Raydium",
     image: "/ray.svg",
-    borderColor: "from-purple-500 to-violet-600",
-    textColor: "text-purple-400"
+    borderColor: "from-gray-700 to-black",
+    textColor: "text-gray-300"
   },
   {
     id: "pump",
@@ -45,8 +45,8 @@ export const AmmList: Amm[] = [
     name: "amm_v3",
     displayName: "Raydium CLMM",
     image: "/ray.svg",
-    borderColor: "from-purple-500 to-violet-600",
-    textColor: "text-purple-400"
+    borderColor: "from-gray-700 to-black",
+    textColor: "text-gray-300"
   },
   {
     id: "lb_clmm",

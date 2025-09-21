@@ -31,7 +31,7 @@ function getTraderIcon(index: number) {
     <FaStar className="text-pink-400" />,
     <FaBullseye className="text-blue-400" />,
     <FaLeaf className="text-green-400" />,
-    <FaLink className="text-purple-400" />,
+    <FaLink className="text-gray-400" />,
   ];
   return icons[index % icons.length];
 }

@@ -1,0 +1,97 @@
+import React, { useState } from 'react';
+
+interface FastImageProps {
+  src?: string | null;
+  fallbackSrc?: string | null;
+  alt?: string;
+  width?: number;
+  height?: number;
+  className?: string;
+  priority?: boolean; // For new pairs tokens
+  symbol?: string; // Token symbol for fallback letter
+  name?: string; // Token name for fallback letter
+}
+
+// Direct image loading - no proxy or domain checking needed
+
+export default function FastImage({
+  src,
+  fallbackSrc,
+  alt = '',
+  width = 48,
+  height = 48,
+  className = '',
+  priority = false,
+  symbol,
+  name,
+}: FastImageProps) {
+  // Load images directly from URI - no optimization needed for speed
+  const finalSrc = src || fallbackSrc;
+  
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
+
+  // Load directly from URI - no proxy needed for speed
+  const imageUrl = finalSrc;
+
+  const handleLoad = () => {
+    setImageLoaded(true);
+    setImageError(false);
+  };
+
+  const handleError = () => {
+    setImageError(true);
+    setImageLoaded(false);
+  };
+
+  // Get the first letter for fallback display
+  const getFirstLetter = () => {
+    if (symbol && symbol.length > 0) {
+      return symbol.charAt(0).toUpperCase();
+    }
+    if (name && name.length > 0) {
+      return name.charAt(0).toUpperCase();
+    }
+    if (alt && alt.length > 0) {
+      return alt.charAt(0).toUpperCase();
+    }
+    return '?';
+  };
+
+  if (!imageUrl || imageError) {
+    return (
+      <div
+        className={`${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold rounded-full shadow-lg`}
+        style={{ width, height }}
+      >
+        <span className="text-lg">{getFirstLetter()}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative ${className}`} style={{ width, height }}>
+      {/* Loading skeleton */}
+      {!imageLoaded && (
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold rounded-full shadow-lg animate-pulse"
+        >
+          <span className="text-lg">{getFirstLetter()}</span>
+        </div>
+      )}
+      
+      {/* Actual image */}
+      <img
+        src={imageUrl}
+        alt={alt}
+        width={width}
+        height={height}
+        className={`rounded-full transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+        onLoad={handleLoad}
+        onError={handleError}
+        loading={priority ? 'eager' : 'lazy'} // Eager loading for priority images
+        decoding="async"
+      />
+    </div>
+  );
+}

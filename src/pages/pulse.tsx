@@ -5,6 +5,8 @@ import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
+import { PriorityImageSearcher } from '../utils/imageSearch';
+import { useImagePreloader } from '../hooks/useImagePreloader';
 
 interface LaunchpadToken {
   mint: string;
@@ -351,6 +353,46 @@ export default function PulsePage() {
   };
 
   const newPairsData = useMemo(() => buildNewPairs(), [httpNewTick, wsNewEnriched, combinedNewPairs]);
+  
+  // Priority image search for new pairs tokens
+  const priorityImageSearcher = useRef(new PriorityImageSearcher());
+  const { preloadImages } = useImagePreloader();
+  
+  useEffect(() => {
+    if (newPairsData && newPairsData.length > 0) {
+      // Filter tokens that need images (no image or logo)
+      const tokensNeedingImages = newPairsData
+        .filter((token: any) => {
+          const hasImage = token.image || token.logo || token.uri;
+          return !hasImage && token.mint && token.symbol;
+        })
+        .map((token: any) => ({
+          mint: token.mint,
+          name: token.name || '',
+          symbol: token.symbol || '',
+          currentLogo: token.logo || null,
+          uri: token.uri || null,
+        }))
+        .slice(0, 10); // Limit to first 10 tokens for priority processing
+
+      if (tokensNeedingImages.length > 0) {
+        console.log(`🚀 Starting priority image search for ${tokensNeedingImages.length} new pairs tokens`);
+        priorityImageSearcher.current.searchNewPairsImages(tokensNeedingImages);
+      }
+
+      // Preload images for new pairs tokens (priority loading)
+      const imageSources = newPairsData
+        .slice(0, 20) // Preload first 20 tokens
+        .map((token: any) => token.image || token.logo || token.uri)
+        .filter(Boolean);
+
+      if (imageSources.length > 0) {
+        console.log(`🖼️ Preloading ${imageSources.length} new pairs images`);
+        preloadImages(imageSources, { priority: true, timeout: 2000 });
+      }
+    }
+  }, [newPairsData, preloadImages]);
+
   // Keep last non-empty list to prevent flicker when WS/HTTP blips (guard against needless updates)
   const [lastNonEmptyNewPairs, setLastNonEmptyNewPairs] = useState<any[]>([]);
   const hasSeededRef = useRef(false);

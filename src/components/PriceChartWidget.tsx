@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import type { Token } from "~/utils/db";
 
 const PRICE_CHART_ID = "price-chart-widget-container";
@@ -16,10 +16,11 @@ interface PriceChartWidgetProps {
 
 const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token, pairAddress: urlPairAddress }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [showFallback, setShowFallback] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Pair address comes directly from URL parameter - no sanitization needed
-
-  // Use pair address from URL parameter directly - this is always a valid pair address
+  // Use pair address from URL parameter or token
   const pairAddress = urlPairAddress || token.pair_address || '';
   
   // Debug logging
@@ -29,9 +30,6 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token, pairAddress:
     tokenPairAddress: token.pair_address,
     finalPairAddress: pairAddress
   });
-  const [showFallback, setShowFallback] = React.useState(false);
-  const [retryAttempt, setRetryAttempt] = React.useState(0);
-  const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   // Refresh function to retry loading the chart
   const handleRefresh = React.useCallback(() => {
@@ -55,8 +53,98 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token, pairAddress:
     if (typeof window === "undefined") return;
     setShowFallback(false);
 
-    // Use pair address from URL parameter directly - no complex validation needed
-    // The URL parameter is always a valid pair address since it comes from navigation
+    // Define loadWidget function
+    const loadWidget = () => {
+      try {
+        console.log('📈 Chart using pair address from URL:', pairAddress);
+
+        // If we don't have a valid pair address, bail out to fallback
+        if (!pairAddress || pairAddress.length < 32) {
+          console.warn('No valid pair address found for chart');
+          setShowFallback(true);
+          return;
+        }
+        
+        if (typeof (window as any).createMyWidget === "function") {
+          // Configure chart with clean, working configuration
+          const chartConfig = {
+            autoSize: true,
+            chainId: "solana",
+            pairAddress: pairAddress,
+            showHoldersChart: false,
+            defaultInterval: "1", // 1-minute intervals
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Etc/UTC",
+            theme: "moralis", // Use default Moralis theme for better compatibility
+            locale: "en",
+            showCurrencyToggle: true,
+            hideLeftToolbar: false,
+            hideTopToolbar: false,
+            hideBottomToolbar: false
+          };
+
+          console.log('📊 Chart Configuration:', chartConfig);
+          console.log('Using pair address from URL:', pairAddress);
+
+          // Add error handling for Moralis API calls
+          try {
+            console.log('🚀 Creating Moralis chart widget...');
+            (window as any).createMyWidget(PRICE_CHART_ID, chartConfig);
+            console.log('✅ Moralis chart widget created successfully');
+            
+            // Set up a mutation observer to detect when chart actually renders
+            const observer = new MutationObserver((mutations) => {
+              mutations.forEach((mutation) => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                  console.log('✅ Chart widget rendered successfully');
+                  observer.disconnect(); // Stop observing once we detect content
+                }
+              });
+            });
+            
+            if (containerRef.current) {
+              observer.observe(containerRef.current, { childList: true, subtree: true });
+            }
+            
+            // Clean up observer after 10 seconds
+            setTimeout(() => observer.disconnect(), 10000);
+            
+          } catch (error) {
+            console.warn('Chart widget creation failed:', error);
+            setShowFallback(true);
+          }
+        } else {
+          console.error("createMyWidget function is not defined. Retrying in 1 second...");
+          // Retry after a short delay in case the script is still loading
+          setTimeout(() => {
+            if (typeof (window as any).createMyWidget === "function") {
+              // Use the same clean configuration logic
+              const chartConfig = {
+                autoSize: true,
+                chainId: "solana",
+                pairAddress: pairAddress,
+                showHoldersChart: false,
+                defaultInterval: "1",
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Etc/UTC",
+                theme: "moralis",
+                locale: "en",
+                showCurrencyToggle: true,
+                hideLeftToolbar: false,
+                hideTopToolbar: false,
+                hideBottomToolbar: false
+              };
+
+              (window as any).createMyWidget(PRICE_CHART_ID, chartConfig);
+            } else {
+              console.error("createMyWidget still not available after retry");
+              setShowFallback(true);
+            }
+          }, 1000);
+        }
+      } catch (err) {
+        console.error('Failed to initialize chart widget:', err);
+        setShowFallback(true);
+      }
+    };
 
     // Add global error handler to catch Moralis 404 errors
     const handleGlobalError = (event: ErrorEvent) => {
@@ -107,268 +195,7 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token, pairAddress:
     
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
-    // Also intercept console.error, console.warn, and console.log to catch Moralis errors that might be logged there
-    const originalConsoleError = console.error;
-    const originalConsoleWarn = console.warn;
-    const originalConsoleLog = console.log;
-    
-    const checkForMoralisError = (message: string) => {
-      return (
-        message.includes('404 Not Found') ||
-        message.includes('Failed to GET') ||
-        message.includes('Bad response') ||
-        message.includes('orchestrator-solana-api.aws-prod-api-realtime-2.moralis-internal.io') ||
-        message.includes('moralis-internal.io') ||
-        message.includes('orchestrator-solana-api') ||
-        (message.includes('/pairs/') && message.includes('/stats')) ||
-        message.includes('token/mainnet/pairs/')
-      );
-    };
-    
-    console.error = function(...args) {
-      const errorMessage = args.join(' ');
-      
-      if (checkForMoralisError(errorMessage)) {
-        console.warn('🚨 Moralis console error detected:', errorMessage);
-        setShowFallback(true);
-        return; // Don't log the original error
-      }
-      
-      // Call original console.error for non-Moralis errors
-      originalConsoleError.apply(console, args);
-    };
-    
-    console.warn = function(...args) {
-      const warnMessage = args.join(' ');
-      
-      if (checkForMoralisError(warnMessage)) {
-        console.warn('🚨 Moralis console warning detected:', warnMessage);
-        setShowFallback(true);
-        return; // Don't log the original warning
-      }
-      
-      // Call original console.warn for non-Moralis warnings
-      originalConsoleWarn.apply(console, args);
-    };
-    
-    console.log = function(...args) {
-      const logMessage = args.join(' ');
-      
-      if (checkForMoralisError(logMessage)) {
-        console.warn('🚨 Moralis console log detected:', logMessage);
-        setShowFallback(true);
-        return; // Don't log the original message
-      }
-      
-      // Call original console.log for non-Moralis messages
-      originalConsoleLog.apply(console, args);
-    };
-
-    // Intercept XMLHttpRequest to catch network errors
-    const originalXHROpen = XMLHttpRequest.prototype.open;
-    const originalXHRSend = XMLHttpRequest.prototype.send;
-    
-    XMLHttpRequest.prototype.open = function(method, url, ...args) {
-      this._url = url;
-      return originalXHROpen.call(this, method, url, ...args);
-    };
-    
-    XMLHttpRequest.prototype.send = function(...args) {
-      const xhr = this;
-      const originalOnError = xhr.onerror;
-      const originalOnLoad = xhr.onload;
-      
-      xhr.onerror = function(event) {
-        const url = xhr._url || '';
-        const isMoralisError = (
-          url.includes('orchestrator-solana-api') ||
-          url.includes('moralis-internal.io') ||
-          (url.includes('/pairs/') && url.includes('/stats'))
-        );
-        
-        if (isMoralisError) {
-          console.warn('🚨 Moralis XHR error detected:', url);
-          setShowFallback(true);
-          return;
-        }
-        
-        if (originalOnError) {
-          originalOnError.call(this, event);
-        }
-      };
-      
-      xhr.onload = function(event) {
-        const url = xhr._url || '';
-        if (xhr.status === 404 && (
-          url.includes('orchestrator-solana-api') ||
-          url.includes('moralis-internal.io') ||
-          (url.includes('/pairs/') && url.includes('/stats'))
-        )) {
-          console.warn('🚨 Moralis 404 error detected:', url);
-          setShowFallback(true);
-          return;
-        }
-        
-        if (originalOnLoad) {
-          originalOnLoad.call(this, event);
-        }
-      };
-      
-      return originalXHRSend.call(this, ...args);
-    };
-
-    // Also intercept fetch errors specifically
-    const originalFetch = window.fetch;
-    window.fetch = function(...args) {
-      return originalFetch.apply(this, args).catch(error => {
-        const errorMessage = error.message || '';
-        const isMoralisError = (
-          errorMessage.includes('404 Not Found') ||
-          errorMessage.includes('Failed to GET') ||
-          errorMessage.includes('Bad response') ||
-          errorMessage.includes('orchestrator-solana-api.aws-prod-api-realtime-2.moralis-internal.io') ||
-          errorMessage.includes('moralis-internal.io') ||
-          errorMessage.includes('orchestrator-solana-api') ||
-          (errorMessage.includes('/pairs/') && errorMessage.includes('/stats')) ||
-          errorMessage.includes('token/mainnet/pairs/')
-        );
-        
-        if (isMoralisError) {
-          console.warn('🚨 Moralis fetch error detected:', errorMessage);
-          setShowFallback(true);
-          // Don't re-throw to prevent console errors
-          return Promise.reject(new Error('Chart data unavailable'));
-        }
-        throw error;
-      });
-    };
-
-    // Use the pair address from URL parameter (already validated)
-
-    const loadWidget = () => {
-      try {
-        console.log('📈 Chart using pair address from URL:', pairAddress);
-
-        // If we don't have a valid pair address, bail out to fallback
-        if (!pairAddress || pairAddress.length < 32) {
-          console.warn('No valid pair address found for chart');
-          setShowFallback(true);
-          return;
-        }
-        if (typeof (window as any).createMyWidget === "function") {
-          // Configure chart based on whether we have pair address or just mint address
-          const chartConfig = {
-            autoSize: true,
-            chainId: "solana",
-            showHoldersChart: false,
-            defaultInterval: "1", // 1-minute intervals for more dynamic data
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Etc/UTC",
-            theme: "custom",
-            locale: "en",
-            backgroundColor: '#0A0A0A',
-            gridColor: '#131813',
-            textColor: "#68738D",
-            candleUpColor: "#4CE666",
-            candleDownColor: "#E64C4C",
-            hideLeftToolbar: false,
-            hideTopToolbar: false,
-            hideBottomToolbar: true,
-            // Additional parameters for better data loading
-            showVolume: true,
-            showPrice: true,
-            showTimeframe: true,
-            // Refresh every 10 seconds for better responsiveness
-            refreshInterval: 10000,
-            // Ensure we get the latest data
-            dataSource: "moralis",
-            // Enable live updates for real-time data
-            liveUpdates: true,
-            // Enable auto-refresh for better performance
-            autoRefresh: true
-          };
-
-          // Use pair address from URL parameter directly
-          const finalConfig = {
-            ...chartConfig,
-            pairAddress: pairAddress
-          };
-
-          console.log('Using pair address from URL:', pairAddress);
-
-          // Add error handling for Moralis API calls
-          try {
-            (window as any).createMyWidget(PRICE_CHART_ID, finalConfig);
-            
-            // Set up a mutation observer to detect when chart actually renders
-            const observer = new MutationObserver((mutations) => {
-              mutations.forEach((mutation) => {
-                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                  console.log('✅ Chart widget rendered successfully');
-                  observer.disconnect(); // Stop observing once we detect content
-                }
-              });
-            });
-            
-            if (containerRef.current) {
-              observer.observe(containerRef.current, { childList: true, subtree: true });
-            }
-            
-            // Clean up observer after 10 seconds
-            setTimeout(() => observer.disconnect(), 10000);
-            
-          } catch (error) {
-            console.warn('Chart widget creation failed:', error);
-            setShowFallback(true);
-          }
-        } else {
-          console.error("createMyWidget function is not defined. Retrying in 1 second...");
-          // Retry after a short delay in case the script is still loading
-          setTimeout(() => {
-            if (typeof (window as any).createMyWidget === "function") {
-              // Use the same configuration logic as above
-              const chartConfig = {
-                autoSize: true,
-                chainId: "solana",
-                showHoldersChart: false,
-                defaultInterval: "1",
-                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Etc/UTC",
-                theme: "custom",
-                locale: "en",
-                backgroundColor: '#0A0A0A',
-                gridColor: '#131813',
-                textColor: "#68738D",
-                candleUpColor: "#4CE666",
-                candleDownColor: "#E64C4C",
-                hideLeftToolbar: false,
-                hideTopToolbar: false,
-                hideBottomToolbar: true,
-                showVolume: true,
-                showPrice: true,
-                showTimeframe: true,
-                refreshInterval: 10000,
-                dataSource: "moralis",
-                liveUpdates: true,
-                autoRefresh: true
-              };
-
-              const finalConfig = {
-                ...chartConfig,
-                pairAddress: pairAddress
-              };
-
-              (window as any).createMyWidget(PRICE_CHART_ID, finalConfig);
-            } else {
-              console.error("createMyWidget still not available after retry");
-              setShowFallback(true);
-            }
-          }, 1000);
-        }
-      } catch (err) {
-        console.error('Failed to initialize chart widget:', err);
-        setShowFallback(true);
-      }
-    };
-
+    // Load Moralis script if not already loaded
     if (!document.getElementById("moralis-chart-widget")) {
       const script = document.createElement("script");
       script.id = "moralis-chart-widget";
@@ -385,14 +212,7 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token, pairAddress:
       loadWidget();
     }
 
-    // Set up periodic refresh for updates (more frequent)
-    const refreshInterval = setInterval(() => {
-      // Light refresh - just reload the widget to get latest data
-      if (typeof (window as any).createMyWidget === "function") {
-        console.log('Refreshing chart for updates...');
-        loadWidget(); // Reuse the existing loadWidget function
-      }
-    }, 30000); // Refresh every 30 seconds for better responsiveness
+    // Chart updates are handled by Moralis automatically
 
     // If the widget fails to render anything, show retry button
     const verifyTimer = window.setTimeout(() => {
@@ -413,17 +233,9 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token, pairAddress:
     return () => {
       window.clearTimeout(verifyTimer);
       window.clearTimeout(quickFallbackTimer);
-      if (refreshInterval) clearInterval(refreshInterval);
       // Remove global error handlers
       window.removeEventListener('error', handleGlobalError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-      // Restore original functions
-      window.fetch = originalFetch;
-      console.error = originalConsoleError;
-      console.warn = originalConsoleWarn;
-      console.log = originalConsoleLog;
-      XMLHttpRequest.prototype.open = originalXHROpen;
-      XMLHttpRequest.prototype.send = originalXHRSend;
     };
   }, [pairAddress, retryAttempt]);
 
@@ -432,9 +244,7 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token, pairAddress:
   const sellVol = token.total_sell_volume_5m || 0;
   const vol5m = buyVol + sellVol;
   const buysCount = token.total_buys_5m || 0;
-  const buysValue = buyVol;
   const sellsCount = token.total_sells_5m || 0;
-  const sellsValue = sellVol;
   const netVol = buyVol - sellVol;
   const totalValue = buyVol + sellVol;
   const buyPct = totalValue ? (buyVol / totalValue) * 100 : 50;
@@ -482,7 +292,7 @@ const PriceChartWidget: React.FC<PriceChartWidgetProps> = ({ token, pairAddress:
             <div className="text-xs space-y-2 bg-neutral-800 rounded-lg p-4">
               <div className="text-emerald-400 font-medium">Price: ${formatK(token.usd_price || 0)}</div>
               <div className="text-blue-400">Volume 5m: ${formatK(vol5m)}</div>
-              <div className="text-purple-400">Buys: {buysCount} | Sells: {sellsCount}</div>
+              <div className="text-gray-400">Buys: {buysCount} | Sells: {sellsCount}</div>
               {pairAddress && (
                 <div className="mt-3 text-neutral-500 text-xs break-all">
                   Pair: {pairAddress}

@@ -283,7 +283,7 @@ export default function TrackersPage() {
           <button className="flex items-center gap-2 text-sky-400 hover:text-sky-300 font-semibold transition-colors duration-300">
             <span className="text-lg">🐦</span> Twitter Tracker
           </button>
-          <button className="flex items-center gap-2 text-purple-400 hover:text-purple-300 font-semibold transition-colors duration-300">
+          <button className="flex items-center gap-2 text-gray-400 hover:text-gray-300 font-semibold transition-colors duration-300">
             <span className="text-lg">📈</span> PnL Tracker
           </button>
         </div>

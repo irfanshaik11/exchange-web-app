@@ -29,7 +29,6 @@ import CodexTrades from "../../components/trade/CodexTrades";
 import CodexTopTraders from "../../components/trade/CodexTopTraders";
 import CodexDevTokens from "../../components/trade/CodexDevTokens";
 import CodexHolders from "../../components/trade/CodexHolders";
-import Positions from "~/components/trade/Positions";
 import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
 
 export default function TradePage() {
@@ -170,7 +169,6 @@ export default function TradePage() {
             {selectedTab === "Top Traders" && <CodexTopTraders token={token} />}
             {selectedTab === "Holders" && <CodexHolders token={token} />}
             {selectedTab === "Dev Tokens" && <CodexDevTokens token={token} />}
-            {selectedTab === "Positions" && <Positions userId={user?.id} bearerToken={user.bearerToken} onPositionsChange={() => {}} />}
           </div>
           {/* Right: Buy/Sell and Token Info */}
           <div className="w-full max-w-md flex-shrink-0">
