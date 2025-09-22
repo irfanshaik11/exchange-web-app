@@ -153,6 +153,32 @@ const SearchModalContent = React.memo(function SearchModalContent({
   // No need for filteredTokens since we're searching via API
   const filteredTokens: Token[] = [];
 
+  // Helper function to sort tokens on the frontend
+  const sortTokens = (tokens: Token[], sortBy: SortOption): Token[] => {
+    const sortedTokens = [...tokens];
+    
+    switch (sortBy) {
+      case "time":
+        return sortedTokens.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+      case "market_cap":
+        return sortedTokens.sort((a, b) => 
+          (b.fully_diluted_value || 0) - (a.fully_diluted_value || 0)
+        );
+      case "volume_1h":
+        return sortedTokens.sort((a, b) => 
+          (b.volume_1h || 0) - (a.volume_1h || 0)
+        );
+      case "liquidity":
+        return sortedTokens.sort((a, b) => 
+          (b.total_liquidity_usd || 0) - (a.total_liquidity_usd || 0)
+        );
+      default:
+        return sortedTokens;
+    }
+  };
+
   const searchTokens = useCallback(async (searchQuery: string) => {
     if (searchQuery.trim().length < 1) {
       setSearchResults([]);
@@ -161,8 +187,13 @@ const SearchModalContent = React.memo(function SearchModalContent({
     
     setSearchLoading(true);
     try {
-      // Use GraphQL query directly to Codex API
+      // Use GraphQL query directly to Codex API (without sorting - we'll sort on frontend)
       const apiKey = process.env.NEXT_PUBLIC_CODEX_API_KEY;
+      
+      console.log('🔍 Real search with GraphQL API:', {
+        query: searchQuery.trim(),
+        apiKey: apiKey ? 'Present' : 'Missing'
+      });
       
       const response = await fetch('https://graph.codex.io/graphql', {
         method: 'POST',
@@ -177,7 +208,6 @@ const SearchModalContent = React.memo(function SearchModalContent({
                 phrase: "${searchQuery.trim()}"
                 rankings: {attribute: volume1, direction: DESC}
                 filters: {
-                  liquidity: {gt: 10000}
                   network: 1399811149
                   launchpadProtocol: "Pump"
                 }
@@ -207,7 +237,6 @@ const SearchModalContent = React.memo(function SearchModalContent({
                 phrase: "${searchQuery.trim()}"
                 rankings: {attribute: volume1, direction: DESC}
                 filters: {
-                  liquidity: {gt: 10000}
                   network: 1399811149
                   launchpadProtocol: "RaydiumLaunchpad"
                 }
@@ -237,7 +266,6 @@ const SearchModalContent = React.memo(function SearchModalContent({
                 phrase: "${searchQuery.trim()}"
                 rankings: {attribute: volume1, direction: DESC}
                 filters: {
-                  liquidity: {gt: 10000}
                   network: 1399811149
                   launchpadProtocol: "MeteoraDBC"
                 }
@@ -283,35 +311,20 @@ const SearchModalContent = React.memo(function SearchModalContent({
           ...(data.data?.meteoraTokens?.results || [])
         ];
         
-        // Filter out very old tokens (older than 30 days)
-        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-        console.log('🔍 Search Debug:', {
+        console.log('🔍 Real search results:', {
           totalResults: allResults.length,
-          thirtyDaysAgo: new Date(thirtyDaysAgo).toISOString(),
+          pumpTokens: data.data?.pumpTokens?.results?.length || 0,
+          raydiumTokens: data.data?.raydiumTokens?.results?.length || 0,
+          meteoraTokens: data.data?.meteoraTokens?.results?.length || 0,
           sampleToken: allResults[0] ? {
             name: allResults[0].token?.name,
-            createdAt: allResults[0].token?.createdAt,
-            createdDate: allResults[0].token?.createdAt ? new Date(allResults[0].token.createdAt * 1000).toISOString() : 'No createdAt'
+            symbol: allResults[0].token?.symbol,
+            address: allResults[0].token?.address
           } : 'No results'
         });
         
-        const recentResults = allResults.filter((result: any) => {
-          // If the token has a createdAt timestamp, check if it's recent
-          if (result.token?.createdAt) {
-            const createdAt = new Date(result.token.createdAt).getTime();
-            return createdAt > thirtyDaysAgo;
-          }
-          // If no createdAt, include it (better to show than hide)
-          return true;
-        });
-        
-        console.log('🔍 Filtered Results:', {
-          recentCount: recentResults.length,
-          filteredOut: allResults.length - recentResults.length
-        });
-        
         // Convert GraphQL response to Token format
-        const tokens: Token[] = recentResults.map((result: any) => {
+        const tokens: Token[] = allResults.map((result: any) => {
           // Get the best available image URL (prioritize small, then thumb, then large)
           const imageUrl = result.token.info?.imageSmallUrl || 
                           result.token.info?.imageThumbUrl || 
@@ -319,7 +332,6 @@ const SearchModalContent = React.memo(function SearchModalContent({
                           null;
           
           // Determine AMM type based on which protocol the token came from
-          // We need to check the original arrays to determine the source
           let amm = "pump_amm"; // default
           if (data.data?.raydiumTokens?.results?.some((r: any) => r.token.address === result.token.address)) {
             amm = "raydium_cpmm";
@@ -337,8 +349,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
             total_liquidity_usd: result.liquidity || 0,
             total_buy_volume_1h: result.volume1 || 0,
             total_sell_volume_1h: 0,
-            volume_1h: result.volume1 || 0, // Add this for UI display
-            created_at: "",
+            volume_1h: result.volume1 || 0,
+            created_at: result.token.createdAt ? new Date(result.token.createdAt * 1000).toISOString() : "",
             bonding_curve_progress: "0%",
             amm: amm,
             uri: imageUrl,
@@ -346,19 +358,21 @@ const SearchModalContent = React.memo(function SearchModalContent({
           };
         });
         
-        console.log('🔍 Final Tokens:', {
+        console.log('🔍 Final converted tokens:', {
           tokenCount: tokens.length,
           sampleToken: tokens[0] ? {
             name: tokens[0].name,
             symbol: tokens[0].symbol,
-            volume_1h: tokens[0].volume_1h,
+            mint: tokens[0].mint,
             amm: tokens[0].amm
           } : 'No tokens'
         });
         
         setSearchResults(tokens);
       } else {
-        console.error("GraphQL API error:", response.status);
+        console.error("GraphQL API error:", response.status, response.statusText);
+        const errorText = await response.text();
+        console.error("Error response:", errorText);
         setSearchResults([]);
       }
     } catch (error) {
@@ -367,7 +381,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
     } finally {
       setSearchLoading(false);
     }
-  }, []);
+  }, []); // Remove sortBy dependency
 
   const handleSelectToken = useCallback(
     async (token: Token) => {
@@ -443,10 +457,13 @@ const SearchModalContent = React.memo(function SearchModalContent({
     }
   }, [open]);
 
+  // No need to re-run search when sort changes - we sort on the frontend now
+
   const isSearching = useMemo(() => query.trim().length > 0, [query]);
   const displayTokens = useMemo(() => {
-    return isSearching ? searchResults : [];
-  }, [isSearching, searchResults]);
+    if (!isSearching) return [];
+    return sortTokens(searchResults, sortBy);
+  }, [isSearching, searchResults, sortBy]);
 
   return (
     <InterstatePopout
@@ -583,6 +600,24 @@ export default function SearchModal(props: SearchModalProps) {
   return <SearchModalContent {...props} />;
 }
 
+// Helper function to format age
+function getTokenAge(createdAt: string) {
+  if (!createdAt) return "?";
+  const createdDate = new Date(createdAt);
+  const now = new Date();
+  const diffMs = now.getTime() - createdDate.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays > 0) {
+    return `${diffDays}d`;
+  } else if (diffHours > 0) {
+    return `${diffHours}h`;
+  } else {
+    return `${diffMins}m`;
+  }
+}
+
 // Separate component with new design
 const TokenListItem = React.memo(
   ({
@@ -638,7 +673,7 @@ const TokenListItem = React.memo(
               </button>
             </div>
             <div className="mt-1 flex items-center gap-2">
-              <span className="text-xs font-medium text-teal-400">3mo</span>
+              <span className="text-xs font-medium text-teal-400">{getTokenAge(token.created_at)}</span>
               <CiUser className="size-4" />
               <CiGlobe className="size-4" />
               <FaTelegramPlane className="size-4" />
