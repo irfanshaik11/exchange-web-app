@@ -15,6 +15,7 @@ import { fetchTokenMetadata } from "~/utils/functions";
 import { LuPill, LuSearch } from "react-icons/lu";
 import Link from "next/link";
 import { CiSearch } from "react-icons/ci";
+import FastImage from "./FastImage";
 
 interface PulseTableProps {
   title: string;
@@ -141,10 +142,15 @@ function TokenImage({
   const imageUrl = (token as any).uri || (token as any).image || token.logo;
 
   return (
-    <img
+    <FastImage
       src={imageUrl}
       alt={token.name || token.symbol || ""}
+      symbol={token.symbol}
+      name={token.name}
+      width={56}
+      height={56}
       className="rounded-sm object-contain p-0.5"
+      priority={priority}
     />
   );
 }
@@ -415,7 +421,7 @@ const PulseTable = React.memo(function PulseTable({
                 </span>
                 {/* Profile Picture & Address */}
                 <div className="flex flex-col items-center">
-                  <div className="relative flex h-auto w-20 items-center justify-center overflow-hidden rounded-sm border border-1 border-purple-400">
+                  <div className="relative flex h-auto w-20 items-center justify-center overflow-hidden rounded-sm border border-purple-400">
                     <TokenImage
                       token={token}
                       priority={title === "New Pairs"}

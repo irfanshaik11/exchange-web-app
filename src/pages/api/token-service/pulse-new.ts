@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { ImageSearchService } from '~/utils/imageSearch';
+// import { ImageSearchService } from '~/utils/imageSearch'; // REMOVED - not used
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Disable caching for realtime freshness

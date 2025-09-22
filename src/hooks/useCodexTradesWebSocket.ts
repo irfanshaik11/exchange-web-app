@@ -111,6 +111,13 @@ export default function useCodexTradesWebSocket(tokenAddress: string | undefined
     // First fetch initial data using query
     fetchInitialTrades(tokenAddress);
 
+    // DISABLED: External Codex WebSocket - using only backend data
+    console.log('🚫 Codex WebSocket disabled - using only backend trade data');
+    setIsConnected(false);
+    setError('External WebSocket disabled - using backend data only');
+    setIsLoading(false);
+    return;
+
     const connectWebSocket = () => {
       try {
         // Codex GraphQL WebSocket endpoint

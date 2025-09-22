@@ -20,7 +20,7 @@ interface TokensState {
 }
 
 export default function usePaginatedTokensWithFallback({
-  filter = 'marketcap',
+  filter = 'new',
   order = 'desc',
   offset = 0,
   limit = 20,
@@ -155,7 +155,7 @@ export default function usePaginatedTokensWithFallback({
       isPollingRef.current = true;
       try {
         const queryParams = new URLSearchParams({
-          filter: filter || 'marketcap',
+          filter: filter || 'new',
           order: order || 'desc',
           offset: (offset || 0).toString(),
           limit: (limit || 20).toString(),
@@ -255,12 +255,14 @@ export default function usePaginatedTokensWithFallback({
     console.log('🔄 Timeframe type:', typeof timeframe, 'value:', JSON.stringify(timeframe));
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null, usingFallback: false }));
 
+    let pingInterval: NodeJS.Timeout | null = null;
+
     const connectWebSocket = () => {
       try {
         clearPolling(); // Stop polling when attempting WebSocket
 
         const queryParams = new URLSearchParams({
-          filter: filter || 'marketcap',
+          filter: filter || 'new',
           order: order || 'desc',
           offset: (offset || 0).toString(),
           limit: (limit || 20).toString(),
@@ -269,7 +271,7 @@ export default function usePaginatedTokensWithFallback({
         if (timeframe) {
           queryParams.set('timeframe', timeframe);
         }
-        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/ws/tokens?${queryParams}`;
+        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/tokens?${queryParams}`;
         console.log('🔌 Attempting WebSocket connection to:', wsUrl);
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -281,15 +283,33 @@ export default function usePaginatedTokensWithFallback({
             ws.close();
             handleReconnect();
           }
-        }, 500); // 500ms timeout for faster fallback
+        }, 5000); // 5 second timeout for WebSocket connection
 
         ws.onopen = () => {
           if (wsConnectionTimeoutRef.current) {
             clearTimeout(wsConnectionTimeoutRef.current);
             wsConnectionTimeoutRef.current = null;
           }
+          console.log('✅ WebSocket connected successfully!');
           setState(prev => ({ ...prev, isConnected: true, isReconnecting: false, error: null, usingFallback: false }));
           reconnectAttemptRef.current = 0;
+          
+          // Send a ping to request data
+          try {
+            ws.send('ping');
+            console.log('📤 Sent ping to WebSocket server');
+          } catch (error) {
+            console.error('Failed to send ping:', error);
+          }
+          
+          // Set a timeout to detect if no data is received
+          setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN && state.data.length === 0) {
+              console.log('⏰ No data received from WebSocket after 3 seconds, falling back to polling');
+              ws.close();
+              startPolling();
+            }
+          }, 3000);
         };
 
         ws.onmessage = (event) => {
@@ -362,14 +382,39 @@ export default function usePaginatedTokensWithFallback({
             clearTimeout(wsConnectionTimeoutRef.current);
             wsConnectionTimeoutRef.current = null;
           }
+          if (pingInterval) {
+            clearInterval(pingInterval);
+          }
           console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
           setState(prev => ({ ...prev, isConnected: false }));
+          
+          // If connection closed abnormally (1006), fall back to polling immediately
+          if (event.code === 1006) {
+            console.log('🚨 WebSocket closed abnormally (1006), falling back to polling');
+            startPolling();
+            return;
+          }
           
           // Don't reconnect if the component is unmounted or the close was intentional
           if (wsRef.current) {
             handleReconnect();
           }
         };
+
+        // Set up periodic ping to keep connection alive
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send('ping');
+              console.log('📤 Sent periodic ping to WebSocket server');
+            } catch (error) {
+              console.error('Failed to send periodic ping:', error);
+              clearInterval(pingInterval);
+            }
+          } else {
+            clearInterval(pingInterval);
+          }
+        }, 30000); // Ping every 30 seconds
 
         ws.onerror = (error) => {
           if (wsConnectionTimeoutRef.current) {
@@ -412,6 +457,9 @@ export default function usePaginatedTokensWithFallback({
 
     return () => {
       clearPolling();
+      if (pingInterval) {
+        clearInterval(pingInterval);
+      }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }

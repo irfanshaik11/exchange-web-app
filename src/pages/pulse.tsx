@@ -5,7 +5,7 @@ import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
-import { PriorityImageSearcher } from '../utils/imageSearch';
+// import { PriorityImageSearcher } from '../utils/imageSearch'; // DISABLED - no external image searches
 import { useImagePreloader } from '../hooks/useImagePreloader';
 import { env } from '~/env';
 
@@ -66,8 +66,8 @@ export default function PulsePage() {
       ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
       : env.NEXT_PUBLIC_GO_SERVICE_URL;
     const url = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-      ? `${baseUrl}/v1/tokens?filter=trending&order=desc&limit=200`
-      : `/api/token-service/getAllTokens?filter=trending&order=desc&limit=200`;
+      ? `${baseUrl}/v1/pulse/new?limit=200`
+      : `/api/token-service/getAllTokens?filter=new&order=desc&limit=200`;
 
     fetch(url)
       .then(res => res.ok ? res.json() : { result: [] })
@@ -411,31 +411,13 @@ export default function PulsePage() {
 
   const newPairsData = useMemo(() => buildNewPairs(), [httpNewTick, wsNewEnriched, combinedNewPairs]);
   
-  // Priority image search for new pairs tokens
-  const priorityImageSearcher = useRef(new PriorityImageSearcher());
+  // DISABLED: Image search - images should only come from JSON response
+  // const priorityImageSearcher = useRef(new PriorityImageSearcher());
   const { preloadImages } = useImagePreloader();
   
   useEffect(() => {
     if (newPairsData && newPairsData.length > 0) {
-      // Filter tokens that need images (no image or logo)
-      const tokensNeedingImages = newPairsData
-        .filter((token: any) => {
-          const hasImage = token.uri || token.image || token.logo;
-          return !hasImage && token.mint && token.symbol;
-        })
-        .map((token: any) => ({
-          mint: token.mint,
-          name: token.name || '',
-          symbol: token.symbol || '',
-          currentLogo: token.uri || token.logo || null,
-          uri: token.uri || null,
-        }))
-        .slice(0, 10); // Limit to first 10 tokens for priority processing
-
-      if (tokensNeedingImages.length > 0) {
-        console.log(`🚀 Starting priority image search for ${tokensNeedingImages.length} new pairs tokens`);
-        priorityImageSearcher.current.searchNewPairsImages(tokensNeedingImages);
-      }
+      console.log(`✅ Using only backend-provided images for ${newPairsData.length} tokens - no external searches`);
 
       // Preload images for new pairs tokens (priority loading)
       const imageSources = newPairsData
@@ -444,7 +426,7 @@ export default function PulsePage() {
         .filter(Boolean);
 
       if (imageSources.length > 0) {
-        console.log(`🖼️ Preloading ${imageSources.length} new pairs images`);
+        console.log(`🖼️ Preloading ${imageSources.length} new pairs images from backend`);
         preloadImages(imageSources, { priority: true, timeout: 2000 });
       }
     }
@@ -511,7 +493,7 @@ export default function PulsePage() {
   }, [newPairsToShow, combinedFinalStretch, combinedMigrated]);
 
   const { marketData, connected: wsConnected, error: wsError } = useRealtimeWebSocket(realtimeAddrs, {
-    url: 'wss://demo-token-golang.interstate.so/v1/ws/market-data',
+    url: `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/market-data`,
     reconnectInterval: 2000,
     maxReconnectAttempts: 10
   });

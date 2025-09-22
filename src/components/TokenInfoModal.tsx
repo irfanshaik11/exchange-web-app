@@ -4,6 +4,7 @@ import { FaUser, FaGlobe, FaSearch, FaCopy } from 'react-icons/fa';
 import { formatSmartNumber } from '~/utils/db';
 import type { Token } from '~/utils/db';
 import { fetchTokenMetadata } from '~/utils/functions';
+import FastImage from './FastImage';
 
 interface TokenInfoModalProps {
   open: boolean;
@@ -64,7 +65,15 @@ const TokenInfoModal: React.FC<TokenInfoModalProps> = ({ open, onClose, token, s
         {loading && !showInitial ? (
           <div className="w-20 h-20 border border-neutral-700 rounded-full animate-spin"></div>
         ) : (
-          <img src={meta?.image || token.logo} alt={token.name} width={120} height={120} className="border border-neutral-700 mb-4" />
+          <FastImage 
+            src={meta?.image || token.logo} 
+            alt={token.name} 
+            symbol={token.symbol}
+            name={token.name}
+            width={120} 
+            height={120} 
+            className="border border-neutral-700 mb-4" 
+          />
         )}
         {/* Token Details */}
         <div className="text-center mb-4">
@@ -88,7 +97,15 @@ const TokenInfoModal: React.FC<TokenInfoModalProps> = ({ open, onClose, token, s
           <ul className="text-xs text-neutral-500 space-y-1">
             {similarTokens.map((similarToken, idx) => (
               <li key={idx} className="flex items-center gap-2">
-                <img src={similarToken.logo} alt={similarToken.name} width={32} height={32} className="border border-neutral-700" />
+                <FastImage 
+                  src={similarToken.logo} 
+                  alt={similarToken.name} 
+                  symbol={similarToken.symbol}
+                  name={similarToken.name}
+                  width={32} 
+                  height={32} 
+                  className="border border-neutral-700" 
+                />
                 <span className="text-neutral-300 truncate max-w-[80px]">{similarToken.name}</span>
                 <span className="text-[10px] text-neutral-500">{similarToken.created_at ? `${Math.floor((new Date().getTime() - new Date(similarToken.created_at).getTime()) / (1000 * 60 * 60 * 24))}d` : '-'}</span>
                 <span className="text-[10px] text-neutral-500">TX: {formatSmartNumber((similarToken as any).volume_1h || 0)}</span>

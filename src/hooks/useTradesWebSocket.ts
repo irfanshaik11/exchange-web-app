@@ -20,7 +20,7 @@ export default function useTradesWebSocket(pair_address: string | undefined) {
 
     const connectWebSocket = () => {
       try {
-        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/ws/trades?pair_address=${pair_address}`;
+        const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/trades?pair_address=${pair_address}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
