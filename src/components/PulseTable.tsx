@@ -123,13 +123,13 @@ function useTokenMetadata(uri?: string) {
 }
 
 function TokenImage({ token, priority = false }: { token: Token; priority?: boolean }) {
-  // Strictly prefer DB image (launchpad_token_state.image), then token.logo
-  const dbImage = (token as any).image as string | undefined;
+  // Use uri field from deployed service, fallback to image field, then token.logo
+  const imageUrl = (token as any).uri || (token as any).image || token.logo;
   
   return (
     <FastImage
-      src={dbImage}
-      fallbackSrc={token.logo || undefined}
+      src={imageUrl}
+      fallbackSrc={undefined}
       alt={token.name || token.symbol || ''}
       width={48}
       height={48}

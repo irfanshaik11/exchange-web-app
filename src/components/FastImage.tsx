@@ -31,8 +31,10 @@ export default function FastImage({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
-  // Load directly from URI - no proxy needed for speed
-  const imageUrl = finalSrc;
+  // Use proxy for defined.fi URLs to avoid CORS issues
+  const imageUrl = finalSrc?.includes('token-media.defined.fi') 
+    ? `/api/image?url=${encodeURIComponent(finalSrc)}`
+    : finalSrc;
 
   const handleLoad = () => {
     setImageLoaded(true);

@@ -31,7 +31,7 @@ export default function ImageSearchWidget({ className = '' }: ImageSearchWidgetP
             mint: token.mint,
             name: token.name,
             symbol: token.symbol,
-            currentLogo: token.logo,
+            currentLogo: token.uri || token.logo,
             uri: token.uri,
           });
 

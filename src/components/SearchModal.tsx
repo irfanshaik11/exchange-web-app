@@ -32,6 +32,7 @@ export interface Token {
   total_liquidity_usd: number;
   total_buy_volume_1h: number;
   total_sell_volume_1h: number;
+  volume_1h?: number; // Added for search results
   created_at: string;
   bonding_curve_progress: string;
   amm: string;
@@ -78,7 +79,7 @@ interface SearchModalProps {
 }
 
 export function TokenLogo({ token }: { token: any }) {
-  const [logoUrl, setLogoUrl] = useState<string | null>(token.logo || null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(token.uri || token.logo || null);
 
   useEffect(() => {
     if (token.uri && !logoUrl) {
@@ -172,31 +173,93 @@ const SearchModalContent = React.memo(function SearchModalContent({
         body: JSON.stringify({
           query: `
             query {
-              filterTokens(
+              pumpTokens: filterTokens(
                 phrase: "${searchQuery.trim()}"
+                rankings: {attribute: volume1, direction: DESC}
                 filters: {
-                  network: [1399811149]
-                  liquidity: { gt: 10000 }
+                  liquidity: {gt: 10000}
+                  network: 1399811149
+                  launchpadProtocol: "Pump"
                 }
-                rankings: {
-                  attribute: trendingScore24
-                  direction: DESC
-                }
-                limit: 20
               ) {
                 results {
                   token {
                     name
                     symbol
                     address
+                    createdAt
                     info {
                       imageThumbUrl
                       imageSmallUrl
                       imageLargeUrl
                     }
                   }
+                  pair {
+                    address
+                  }
                   marketCap
                   liquidity
+                  volume1
+                }
+              }
+              
+              raydiumTokens: filterTokens(
+                phrase: "${searchQuery.trim()}"
+                rankings: {attribute: volume1, direction: DESC}
+                filters: {
+                  liquidity: {gt: 10000}
+                  network: 1399811149
+                  launchpadProtocol: "RaydiumLaunchpad"
+                }
+              ) {
+                results {
+                  token {
+                    name
+                    symbol
+                    address
+                    createdAt
+                    info {
+                      imageThumbUrl
+                      imageSmallUrl
+                      imageLargeUrl
+                    }
+                  }
+                  pair {
+                    address
+                  }
+                  marketCap
+                  liquidity
+                  volume1
+                }
+              }
+              
+              meteoraTokens: filterTokens(
+                phrase: "${searchQuery.trim()}"
+                rankings: {attribute: volume1, direction: DESC}
+                filters: {
+                  liquidity: {gt: 10000}
+                  network: 1399811149
+                  launchpadProtocol: "MeteoraDBC"
+                }
+              ) {
+                results {
+                  token {
+                    name
+                    symbol
+                    address
+                    createdAt
+                    info {
+                      imageThumbUrl
+                      imageSmallUrl
+                      imageLargeUrl
+                    }
+                  }
+                  pair {
+                    address
+                  }
+                  marketCap
+                  liquidity
+                  volume1
                 }
               }
             }
@@ -213,13 +276,56 @@ const SearchModalContent = React.memo(function SearchModalContent({
           return;
         }
         
+        // Combine results from all protocols
+        const allResults = [
+          ...(data.data?.pumpTokens?.results || []),
+          ...(data.data?.raydiumTokens?.results || []),
+          ...(data.data?.meteoraTokens?.results || [])
+        ];
+        
+        // Filter out very old tokens (older than 30 days)
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        console.log('🔍 Search Debug:', {
+          totalResults: allResults.length,
+          thirtyDaysAgo: new Date(thirtyDaysAgo).toISOString(),
+          sampleToken: allResults[0] ? {
+            name: allResults[0].token?.name,
+            createdAt: allResults[0].token?.createdAt,
+            createdDate: allResults[0].token?.createdAt ? new Date(allResults[0].token.createdAt * 1000).toISOString() : 'No createdAt'
+          } : 'No results'
+        });
+        
+        const recentResults = allResults.filter((result: any) => {
+          // If the token has a createdAt timestamp, check if it's recent
+          if (result.token?.createdAt) {
+            const createdAt = new Date(result.token.createdAt).getTime();
+            return createdAt > thirtyDaysAgo;
+          }
+          // If no createdAt, include it (better to show than hide)
+          return true;
+        });
+        
+        console.log('🔍 Filtered Results:', {
+          recentCount: recentResults.length,
+          filteredOut: allResults.length - recentResults.length
+        });
+        
         // Convert GraphQL response to Token format
-        const tokens: Token[] = (data.data?.filterTokens?.results || []).map((result: any) => {
+        const tokens: Token[] = recentResults.map((result: any) => {
           // Get the best available image URL (prioritize small, then thumb, then large)
           const imageUrl = result.token.info?.imageSmallUrl || 
                           result.token.info?.imageThumbUrl || 
                           result.token.info?.imageLargeUrl || 
                           null;
+          
+          // Determine AMM type based on which protocol the token came from
+          // We need to check the original arrays to determine the source
+          let amm = "pump_amm"; // default
+          if (data.data?.raydiumTokens?.results?.some((r: any) => r.token.address === result.token.address)) {
+            amm = "raydium_cpmm";
+          } else if (data.data?.meteoraTokens?.results?.some((r: any) => r.token.address === result.token.address)) {
+            amm = "pump_amm"; // Meteora uses same logic as pump.fun
+          }
           
           return {
             id: 0,
@@ -229,14 +335,25 @@ const SearchModalContent = React.memo(function SearchModalContent({
             logo: imageUrl,
             fully_diluted_value: result.marketCap || 0,
             total_liquidity_usd: result.liquidity || 0,
-            total_buy_volume_1h: 0,
+            total_buy_volume_1h: result.volume1 || 0,
             total_sell_volume_1h: 0,
+            volume_1h: result.volume1 || 0, // Add this for UI display
             created_at: "",
             bonding_curve_progress: "0%",
-            amm: "pump_amm",
+            amm: amm,
             uri: imageUrl,
-            pair_address: result.token.address
+            pair_address: result.pair?.address || result.token.address
           };
+        });
+        
+        console.log('🔍 Final Tokens:', {
+          tokenCount: tokens.length,
+          sampleToken: tokens[0] ? {
+            name: tokens[0].name,
+            symbol: tokens[0].symbol,
+            volume_1h: tokens[0].volume_1h,
+            amm: tokens[0].amm
+          } : 'No tokens'
         });
         
         setSearchResults(tokens);
@@ -253,9 +370,42 @@ const SearchModalContent = React.memo(function SearchModalContent({
   }, []);
 
   const handleSelectToken = useCallback(
-    (token: Token) => {
-      onSubmit?.(token.pair_address);
-      onClose();
+    async (token: Token) => {
+      try {
+        // First, backfill the token to the database
+        console.log('🔄 Backfilling token:', token);
+        
+        const backfillResponse = await fetch('/api/token-service/backfill-token', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            mint: token.mint,
+            name: token.name,
+            symbol: token.symbol,
+            uri: token.uri,
+            market_cap_usd: token.fully_diluted_value,
+            liquidity_usd: token.total_liquidity_usd,
+            pair_address: token.pair_address
+          })
+        });
+
+        if (backfillResponse.ok) {
+          console.log('✅ Token backfilled successfully');
+        } else {
+          console.warn('⚠️ Token backfill failed, but continuing with navigation');
+        }
+
+        // Navigate to trade page
+        onSubmit?.(token.pair_address);
+        onClose();
+      } catch (error) {
+        console.error('❌ Error backfilling token:', error);
+        // Still navigate even if backfill fails
+        onSubmit?.(token.pair_address);
+        onClose();
+      }
     },
     [onSubmit, onClose],
   );

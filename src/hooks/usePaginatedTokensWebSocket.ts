@@ -122,6 +122,65 @@ export default function usePaginatedTokensWebSocket({
   useEffect(() => {
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
 
+    // If using deployed service, disable WebSocket and use HTTP polling fallback
+    if (env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED) {
+      console.log('🚫 WebSocket disabled for deployed service, using HTTP polling fallback');
+      
+      const pollData = async () => {
+        try {
+          const queryParams = new URLSearchParams({
+            filter: filter || 'marketcap',
+            order: order || 'desc',
+            offset: (offset || 0).toString(),
+            limit: (limit || 20).toString(),
+          });
+          
+          const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
+            ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+            : env.NEXT_PUBLIC_GO_SERVICE_URL;
+          const url = `${baseUrl}/v1/tokens?${queryParams}`;
+          const response = await fetch(url);
+          
+          if (response.ok) {
+            const result = await response.json();
+            const tokens = result.tokens || result;
+            setData(Array.isArray(tokens) ? tokens : []);
+            setState(prev => ({ 
+              ...prev, 
+              loading: false, 
+              isConnected: true, 
+              error: null 
+            }));
+          } else {
+            setState(prev => ({ 
+              ...prev, 
+              loading: false, 
+              isConnected: false, 
+              error: 'Failed to fetch data from deployed service' 
+            }));
+          }
+        } catch (error) {
+          console.error('HTTP polling failed:', error);
+          setState(prev => ({ 
+            ...prev, 
+            loading: false, 
+            isConnected: false, 
+            error: 'HTTP polling failed' 
+          }));
+        }
+      };
+      
+      // Initial fetch
+      pollData();
+      
+      // Set up polling interval
+      const interval = setInterval(pollData, 5000); // Poll every 5 seconds
+      
+      return () => {
+        clearInterval(interval);
+      };
+    }
+
     const connectWebSocket = () => {
       try {
         // The backend uses the URL to determine the subscription

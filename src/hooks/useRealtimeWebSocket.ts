@@ -54,6 +54,15 @@ export function useRealtimeWebSocket(
       return;
     }
 
+    // If using deployed service, disable WebSocket and use HTTP polling fallback
+    if (process.env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED === 'true') {
+      console.log('🚫 WebSocket disabled for deployed service, using HTTP polling fallback');
+      setLoading(false);
+      setConnected(false);
+      setError('WebSocket not available on deployed service - using HTTP polling');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);

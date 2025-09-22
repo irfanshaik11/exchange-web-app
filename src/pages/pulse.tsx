@@ -7,6 +7,7 @@ import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 import { PriorityImageSearcher } from '../utils/imageSearch';
 import { useImagePreloader } from '../hooks/useImagePreloader';
+import { env } from '~/env';
 
 interface LaunchpadToken {
   mint: string;
@@ -60,7 +61,14 @@ export default function PulsePage() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    const url = `/api/token-service/getAllTokens?filter=trending&order=desc&limit=200`;
+    // Use deployed service directly when backend is deployed
+    const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
+      ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+      : env.NEXT_PUBLIC_GO_SERVICE_URL;
+    const url = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
+      ? `${baseUrl}/v1/tokens?filter=trending&order=desc&limit=200`
+      : `/api/token-service/getAllTokens?filter=trending&order=desc&limit=200`;
+
     fetch(url)
       .then(res => res.ok ? res.json() : { result: [] })
       .then((data: { result: Token[] } | Token[]) => {
@@ -77,7 +85,15 @@ export default function PulsePage() {
       setLaunchpadLoading(true);
       setLaunchpadError(null);
       try {
-        const response = await fetch(`/api/launchpad/tokens?limit=30`);
+        // Use deployed service directly when backend is deployed
+        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
+          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+          : env.NEXT_PUBLIC_GO_SERVICE_URL;
+        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
+          ? `${baseUrl}/v1/launchpad/tokens?limit=30`
+          : `/api/launchpad/tokens?limit=30`;
+
+        const response = await fetch(apiUrl);
         if (!response.ok) throw new Error('Failed to fetch launchpad data');
         const data: LaunchpadData = await response.json();
         setLaunchpadData(data);
@@ -97,7 +113,15 @@ export default function PulsePage() {
     let alive = true;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/token-service/pulse-new?limit=30&t=${Date.now()}`);
+        // Use deployed service directly when backend is deployed
+        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
+          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+          : env.NEXT_PUBLIC_GO_SERVICE_URL;
+        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
+          ? `${baseUrl}/v1/pulse/new?limit=30&t=${Date.now()}`
+          : `/api/token-service/pulse-new?limit=30&t=${Date.now()}`;
+
+        const res = await fetch(apiUrl);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
@@ -121,7 +145,15 @@ export default function PulsePage() {
     let alive = true;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`);
+        // Use deployed service directly when backend is deployed
+        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
+          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+          : env.NEXT_PUBLIC_GO_SERVICE_URL;
+        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
+          ? `${baseUrl}/v1/pulse/final-stretch?limit=30&t=${Date.now()}`
+          : `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+
+        const res = await fetch(apiUrl);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
@@ -145,7 +177,15 @@ export default function PulsePage() {
     let alive = true;
     const poll = async () => {
       try {
-        const res = await fetch(`/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`);
+        // Use deployed service directly when backend is deployed
+        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
+          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+          : env.NEXT_PUBLIC_GO_SERVICE_URL;
+        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
+          ? `${baseUrl}/v1/pulse/migrated?limit=30&t=${Date.now()}`
+          : `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
+
+        const res = await fetch(apiUrl);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
@@ -246,9 +286,18 @@ export default function PulsePage() {
   }), [tokens]);
 
   // Convert and combine launchpad tokens (stable refs)
-  const launchpadNewPairs = useMemo(() => launchpadData.new.map(convertLaunchpadToToken), [launchpadData.new, convertLaunchpadToToken]);
-  const launchpadFinalStretch = useMemo(() => launchpadData.completing.map(convertLaunchpadToToken), [launchpadData.completing, convertLaunchpadToToken]);
-  const launchpadMigrated = useMemo(() => launchpadData.completed.map(convertLaunchpadToToken), [launchpadData.completed, convertLaunchpadToToken]);
+  const launchpadNewPairs = useMemo(() => 
+    launchpadData?.new?.map(convertLaunchpadToToken) || [], 
+    [launchpadData?.new, convertLaunchpadToToken]
+  );
+  const launchpadFinalStretch = useMemo(() => 
+    launchpadData?.completing?.map(convertLaunchpadToToken) || [], 
+    [launchpadData?.completing, convertLaunchpadToToken]
+  );
+  const launchpadMigrated = useMemo(() => 
+    launchpadData?.completed?.map(convertLaunchpadToToken) || [], 
+    [launchpadData?.completed, convertLaunchpadToToken]
+  );
   
 
 
@@ -258,7 +307,7 @@ export default function PulsePage() {
   const combinedMigrated = useMemo(() => [...httpMigrated, ...launchpadMigrated], [httpMigrated, launchpadMigrated]);
 
   const isLoading = (loading && wsLoading) || launchpadLoading;
-  const hasError = launchpadError && !launchpadData.new.length && !launchpadData.completing.length && !launchpadData.completed.length;
+  const hasError = launchpadError && !(launchpadData?.new?.length || 0) && !(launchpadData?.completing?.length || 0) && !(launchpadData?.completed?.length || 0);
 
   // Enrich WS new pairs with created_at/image from known sources when available
   const wsNewRaw: any[] = Array.isArray(newPairsTokens) ? (newPairsTokens as any[]) : [];
@@ -322,7 +371,15 @@ export default function PulsePage() {
     if (typeof window !== 'undefined') {
       try {
         const srcName = httpNew.length ? 'http' : (wsNewEnriched.length ? 'ws' : 'combined');
-        // console.log(`[Pulse] new-pairs source=${srcName} sizes http=${httpNew.length} ws=${wsNewEnriched.length} combined=${combinedNewPairs.length}`);
+        console.log(`[Pulse] new-pairs source=${srcName} sizes http=${httpNew.length} ws=${wsNewEnriched.length} combined=${combinedNewPairs.length}`);
+        if (httpNew.length > 0) {
+          console.log(`[Pulse] httpNew sample:`, httpNew.slice(0, 3).map(t => ({ 
+            name: t.name, 
+            symbol: t.symbol, 
+            bonding_curve_progress: t.bonding_curve_progress,
+            bonding_pct: t.bonding_pct 
+          })));
+        }
       } catch {}
     }
     const uniq = new Map<string, any>();
@@ -363,14 +420,14 @@ export default function PulsePage() {
       // Filter tokens that need images (no image or logo)
       const tokensNeedingImages = newPairsData
         .filter((token: any) => {
-          const hasImage = token.image || token.logo || token.uri;
+          const hasImage = token.uri || token.image || token.logo;
           return !hasImage && token.mint && token.symbol;
         })
         .map((token: any) => ({
           mint: token.mint,
           name: token.name || '',
           symbol: token.symbol || '',
-          currentLogo: token.logo || null,
+          currentLogo: token.uri || token.logo || null,
           uri: token.uri || null,
         }))
         .slice(0, 10); // Limit to first 10 tokens for priority processing
@@ -383,7 +440,7 @@ export default function PulsePage() {
       // Preload images for new pairs tokens (priority loading)
       const imageSources = newPairsData
         .slice(0, 20) // Preload first 20 tokens
-        .map((token: any) => token.image || token.logo || token.uri)
+        .map((token: any) => token.uri || token.image || token.logo)
         .filter(Boolean);
 
       if (imageSources.length > 0) {
@@ -454,9 +511,7 @@ export default function PulsePage() {
   }, [newPairsToShow, combinedFinalStretch, combinedMigrated]);
 
   const { marketData, connected: wsConnected, error: wsError } = useRealtimeWebSocket(realtimeAddrs, {
-    url: process.env.NODE_ENV === 'production' 
-      ? 'wss://api.yourdomain.com/v1/ws/market-data'
-      : 'ws://localhost:8080/v1/ws/market-data',
+    url: 'wss://demo-token-golang.interstate.so/v1/ws/market-data',
     reconnectInterval: 2000,
     maxReconnectAttempts: 10
   });
@@ -467,12 +522,20 @@ export default function PulsePage() {
 
     const pollMarketData = async () => {
       try {
-        const response = await fetch('/api/token-service/realtime-market-data', {
+        // Use deployed service directly when backend is deployed
+        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
+          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+          : env.NEXT_PUBLIC_GO_SERVICE_URL;
+        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
+          ? `${baseUrl}/v1/market-data`
+          : '/api/token-service/realtime-market-data';
+
+        const response = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ mints: realtimeAddrs.slice(0, 200) })
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           // This will trigger the enrichWithMarketData to update
@@ -609,8 +672,8 @@ export default function PulsePage() {
                 <span className="text-neutral-400">Regular Tokens: {tokens.length > 0 ? `${tokens.length} tokens` : 'Unavailable'}</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${launchpadData.new.length + launchpadData.completing.length + launchpadData.completed.length > 0 ? 'bg-green-500' : 'bg-gray-500'}`}></div>
-                <span className="text-neutral-400">Launchpad: {launchpadData.new.length + launchpadData.completing.length + launchpadData.completed.length} tokens</span>
+                <div className={`w-2 h-2 rounded-full ${(launchpadData?.new?.length || 0) + (launchpadData?.completing?.length || 0) + (launchpadData?.completed?.length || 0) > 0 ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+                <span className="text-neutral-400">Launchpad: {(launchpadData?.new?.length || 0) + (launchpadData?.completing?.length || 0) + (launchpadData?.completed?.length || 0)} tokens</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>

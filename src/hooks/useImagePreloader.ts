@@ -11,8 +11,13 @@ export function useImagePreloader() {
   const preloadImage = async (src: string | null, options: PreloadImageOptions = {}): Promise<boolean> => {
     if (!src) return false;
 
+    // Use proxy for defined.fi URLs to avoid CORS issues
+    const imageUrl = src.includes('token-media.defined.fi') 
+      ? `/api/image?url=${encodeURIComponent(src)}`
+      : src;
+
     // Check if already preloaded
-    if (preloadedImages.current.has(src)) {
+    if (preloadedImages.current.has(imageUrl)) {
       return true;
     }
 
@@ -33,22 +38,25 @@ export function useImagePreloader() {
 
       img.onload = () => {
         cleanup();
-        preloadedImages.current.add(src);
-        console.log(`✅ Preloaded image: ${src}`);
+        preloadedImages.current.add(imageUrl);
+        console.log(`✅ Preloaded image: ${imageUrl}`);
         resolve(true);
       };
 
       img.onerror = () => {
         cleanup();
-        console.log(`❌ Failed to preload: ${src}`);
+        console.log(`❌ Failed to preload: ${imageUrl}`);
         resolve(false);
       };
 
-      // Set crossOrigin for CORS
-      img.crossOrigin = 'anonymous';
+      // Set crossOrigin for CORS (only needed for direct URLs)
+      if (!imageUrl.startsWith('/api/image')) {
+        img.crossOrigin = 'anonymous';
+      }
       img.loading = options.priority ? 'eager' : 'lazy';
       
-      img.src = src;
+      // Load from proxy or direct URI
+      img.src = imageUrl;
     });
   };
 

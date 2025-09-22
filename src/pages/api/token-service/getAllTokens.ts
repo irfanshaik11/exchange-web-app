@@ -47,12 +47,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   };
 
-  // Prefer Go service only to ensure names from trending_<timeframe>.
+  // Use pulse endpoints from deployed service
   try {
-    const goURL = `${goBase}/api/getAllTokens?${params.toString()}`;
-    console.log('[Proxy:getAllTokens] Using Go service:', goURL);
+    const filter = req.query.filter as string || 'marketcap';
+    const order = req.query.order as string || 'desc';
+    const limit = parseInt(req.query.limit as string || '20');
+    const offset = parseInt(req.query.offset as string || '0');
+    
+    // Map frontend filters to pulse endpoints
+    let pulseEndpoint = '/v1/pulse/new'; // default
+    if (filter === 'migrated') {
+      pulseEndpoint = '/v1/pulse/migrated';
+    } else if (filter === 'final-stretch') {
+      pulseEndpoint = '/v1/pulse/final-stretch';
+    } else if (filter === 'new') {
+      pulseEndpoint = '/v1/pulse/new';
+    } else if (filter === 'trending') {
+      // For trending, combine all pulse endpoints
+      pulseEndpoint = '/v1/pulse/new';
+    }
+    
+    const goURL = `${goBase}${pulseEndpoint}?limit=${limit}`;
+    console.log('[Proxy:getAllTokens] Using Go service pulse endpoint:', goURL);
     const upstream = await fetchWithTimeout(goURL, 3000);
-    return await tryParseAndSend(upstream);
+    
+    if (upstream.ok) {
+      const data = await upstream.json();
+      // Apply offset and ordering if needed
+      let result = Array.isArray(data) ? data : [];
+      
+      // Apply offset
+      if (offset > 0) {
+        result = result.slice(offset);
+      }
+      
+      // Apply ordering (the pulse endpoints already return ordered data)
+      if (order === 'asc') {
+        result = result.reverse();
+      }
+      
+      return res.json(result);
+    } else {
+      console.error('[Proxy:getAllTokens] Go service returned error:', upstream.status);
+      return res.status(upstream.status).json({ error: 'Go service error' });
+    }
   } catch (err: any) {
     console.error('[Proxy:getAllTokens] Go service fetch failed:', err?.message || err);
     return res.status(502).json({ error: 'Bad gateway to Go token service' });
