@@ -101,16 +101,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Trades</h3>
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-400'}`}></div>
-          <span className="text-xs text-neutral-400">
-            {isConnected ? 'Live' : 'Disconnected'}
-          </span>
-        </div>
-      </div>
-      
       {error && (
         <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
           <p className="text-red-400 text-sm">{error}</p>
@@ -142,7 +132,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
               </td>
             </tr>
           ) : (
-            trades.map((trade, idx) => {
+            trades.slice(10).map((trade, idx) => {
               const { type, color } = getTradeType(trade.eventDisplayType);
               const amount = getAmount(trade.data, trade.eventDisplayType);
               const totalUSD = getTotalUSD(trade.token0SwapValueUsd, trade.token1SwapValueUsd, trade.eventDisplayType);
