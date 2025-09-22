@@ -63,7 +63,7 @@ export default function FastImage({
   if (!imageUrl || imageError) {
     return (
       <div
-        className={`${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold rounded-full shadow-lg`}
+        className={`${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg`}
         style={{ width, height }}
       >
         <span className="text-lg">{getFirstLetter()}</span>
@@ -76,7 +76,7 @@ export default function FastImage({
       {/* Loading skeleton */}
       {!imageLoaded && (
         <div
-          className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold rounded-full shadow-lg animate-pulse"
+          className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg animate-pulse"
         >
           <span className="text-lg">{getFirstLetter()}</span>
         </div>
@@ -88,7 +88,7 @@ export default function FastImage({
         alt={alt}
         width={width}
         height={height}
-        className={`rounded-full transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+        className={`transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
         onLoad={handleLoad}
         onError={handleError}
         loading={priority ? 'eager' : 'lazy'} // Eager loading for priority images
