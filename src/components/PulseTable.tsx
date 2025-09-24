@@ -155,6 +155,7 @@ function TokenImage({
   );
 }
 
+
 const PulseTable = React.memo(function PulseTable({
   title,
   tokens,
@@ -242,6 +243,7 @@ const PulseTable = React.memo(function PulseTable({
       return "-";
     }
   };
+
   return (
     <div
       className={`flex w-full min-w-[340px] flex-1 flex-col shadow-lg ${isFirstOrLast === "first" ? "border-r border-l" : "border-r"} border-emerald-950`}
@@ -650,3 +652,4 @@ const PulseTable = React.memo(function PulseTable({
 });
 
 export default PulseTable;
+
