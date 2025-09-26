@@ -1,4 +1,7 @@
-import React, { useState } from "react";
+"use client";
+
+import React, { useState, useEffect, useMemo } from "react";
+import { LuPencil, LuCheck } from "react-icons/lu";
 import { formatSmartNumber, type Token } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
@@ -7,667 +10,700 @@ import QuickBuy from "../QuickBuy";
 import { createLimitOrder, tradeBuy, SOL_MINT_ADDRESS } from "~/utils/api";
 import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
+import { SiSolana } from "react-icons/si";
 
-//---helpers---
+type TimeRange = "1m" | "5m" | "1h" | "6h" | "24h";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+/* ---- Axiom palette ---- */
+const AX = {
+  bg: "#101114",
+  surface: "#1E1F26",
+  surface2: "#17191E",
+  border: "#2A2B33",
+  text: "#E6E7EA",
+  muted: "#9CA3AF",
+  mint: "#70E0B0",
+  mintHover: "#58B890",
+  sell: "#FF4D7F",
+};
+
 const baseBtn =
-  "inline-flex items-center justify-center font-semibold transition-all " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ring-offset-neutral-950 " +
-  "disabled:opacity-50 disabled:cursor-not-allowed select-none";
-
-const chipBtn =
-  "px-3 h-8 text-[11px] rounded-full border border-neutral-700 bg-neutral-900 hover:bg-neutral-800";
-
-const segBtn =
-  "h-10 px-5 text-sm rounded-full transition-all focus-visible:ring-2 focus-visible:ring-emerald-500";
+  "inline-flex items-center justify-center font-semibold rounded-full transition-colors " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:rgb(112_224_176_/_0.4)]";
 
 const tabBtn =
-  "pb-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded";
+  "pb-1.5 text-[11px] tracking-wide uppercase font-semibold text-[#9CA3AF] " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:rgb(112_224_176_/_0.3)]";
+
+/* helpers */
+const num = (v: any) => (typeof v === "number" ? v : 0);
+const allowDecimal = (v: string) => /^\d*([.]\d{0,9})?$/.test(v);
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
+  const s = side;
+  const count =
+    window === "1m"
+      ? num(t[`total_${s}s_1m`]) || num(t[`total_${s}s_60s`])
+      : window === "5m"
+      ? num(t[`total_${s}s_5m`])
+      : window === "1h"
+      ? num(t[`total_${s}s_1h`]) || num(t[`total_${s}s_60m`])
+      : window === "6h"
+      ? num(t[`total_${s}s_6h`]) || num(t[`total_${s}s_360m`])
+      : num(t[`total_${s}s_24h`]);
+
+  const vol =
+    window === "1m"
+      ? num(t[`total_${s}_volume_1m`]) || num(t[`total_${s}_volume_60s`])
+      : window === "5m"
+      ? num(t[`total_${s}_volume_5m`])
+      : window === "1h"
+      ? num(t[`total_${s}_volume_1h`]) || num(t[`total_${s}_volume_60m`])
+      : window === "6h"
+      ? num(t[`total_${s}_volume_6h`]) || num(t[`total_${s}_volume_360m`])
+      : num(t[`total_${s}_volume_24h`]);
+
+  return { count, vol };
+}
+
+const prettyAmt = (s: string) => {
+  if (!s || s === ".") return "";
+  const n = Number(s);
+  if (!Number.isFinite(n)) return "";
+  return Number(n.toFixed(6)).toString();
+};
 
 interface TradeActionPanelProps {
   token: Token;
 }
 
-const presetLabels = ["PRESET 1", "PRESET 2", "PRESET 3"];
-const mevModes = [
-  { label: "Off", value: "off" },
-  { label: "Reduced", value: "reduced" },
-  { label: "Secure", value: "on" },
-];
-
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
   const [mode, setMode] = useState<"buy" | "sell">("buy");
-  const [amount, setAmount] = useState("");
   const [tab, setTab] = useState<"market" | "limit" | "adv">("market");
-  const [targetMC, setTargetMC] = useState("");
+  const [timeRange, setTimeRange] = useState<TimeRange>("5m");
+  const [amount, setAmount] = useState("");
+  const [targetMC, setTargetMC] = useState("");              // USD MKT CAP we’re targeting
   const [direction, setDirection] = useState<"Above" | "Below">("Above");
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  const { presets, activePreset } = useQuickBuy();
+  const { presets: qbPresets, activePreset } = useQuickBuy();
   const { user, solBalance } = useUser();
   const settings =
     mode === "buy"
-      ? presets[activePreset].quickBuySettings
-      : presets[activePreset].quickSellSettings;
+      ? qbPresets[activePreset].quickBuySettings
+      : qbPresets[activePreset].quickSellSettings;
 
-  // Calculate stats from token fields
-  const buyVol = token.total_buy_volume_5m || 0;
-  const sellVol = token.total_sell_volume_5m || 0;
-  const vol5m = buyVol + sellVol;
-  const buysCount = token.total_buys_5m || 0;
-  const buysValue = buyVol;
-  const sellsCount = token.total_sells_5m || 0;
-  const sellsValue = sellVol;
-  const netVol = Number(buyVol) - Number(sellVol);
-  const totalValue = Number(buyVol) + Number(sellVol);
-  const buyPct = Number(totalValue) ? (Number(buyVol) / Number(totalValue)) * 100 : 50;
-  const sellPct = Number(totalValue) ? (Number(sellVol) / Number(totalValue)) * 100 : 50;
-// safe getters that try multiple common key names
-const num = (v: any) => (typeof v === "number" ? v : 0);
+  // Best-effort current market cap to anchor the slider
+  const baseMarketCap: number = useMemo(() => {
+    const t: any = token || {};
+    return Number(
+      t.market_cap_usd ??
+        t.marketcap_usd ??
+        t.market_cap ??
+        t.marketcap ??
+        t.fdv_usd ??
+        t.fdv ??
+        0
+    ) || 0;
+  }, [token]);
 
-function getCountsAndVol(
-  t: any,
-  side: "buy" | "sell",
-  window: "5m" | "1h" | "6h" | "24h"
-) {
-  const sideCap = side === "buy" ? "buy" : "sell";
-  // try common field name variants (adjust if your API uses different keys)
-  const count =
-    window === "5m"
-      ? num(t[`total_${sideCap}s_5m`])
-      : window === "1h"
-      ? num(t[`total_${sideCap}s_1h`]) || num(t[`total_${sideCap}s_60m`])
-      : window === "6h"
-      ? num(t[`total_${sideCap}s_6h`]) || num(t[`total_${sideCap}s_360m`])
-      : num(t[`total_${sideCap}s_24h`]);
+  // Derive % change from base MC -> targetMC (used to display slider value)
+  const derivedPct: number = useMemo(() => {
+    const t = Number(targetMC);
+    if (!baseMarketCap || !Number.isFinite(t) || t <= 0) return 0;
+    return clamp(Math.round(((t - baseMarketCap) / baseMarketCap) * 100), -100, 100);
+  }, [targetMC, baseMarketCap]);
 
-  const vol =
-    window === "5m"
-      ? num(t[`total_${sideCap}_volume_5m`])
-      : window === "1h"
-      ? num(t[`total_${sideCap}_volume_1h`]) || num(t[`total_${sideCap}_volume_60m`])
-      : window === "6h"
-      ? num(t[`total_${sideCap}_volume_6h`]) || num(t[`total_${sideCap}_volume_360m`])
-      : num(t[`total_${sideCap}_volume_24h`]);
+  // chart stats
+  const buyStats = getCountsAndVol(token as any, "buy", timeRange);
+  const sellStats = getCountsAndVol(token as any, "sell", timeRange);
+  const totalVol = (buyStats.vol ?? 0) + (sellStats.vol ?? 0);
+  const buyPct = totalVol ? (buyStats.vol / totalVol) * 100 : 50;
+  const sellPct = 100 - buyPct;
+  const netVol = (buyStats.vol ?? 0) - (sellStats.vol ?? 0);
 
-  return { count, vol };
-}
+  // amount presets
+  const [amountPresets, setAmountPresets] = useState<number[]>([0.01, 0.1, 0.5, 1]);
+  const [editingPresets, setEditingPresets] = useState(false);
+  const [presetDrafts, setPresetDrafts] = useState<string[]>([0.01, 0.1, 0.5, 1].map(String));
+  useEffect(() => setPresetDrafts(amountPresets.map(String)), [amountPresets]);
 
-const GlassTip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div
-    className="
-      pointer-events-none absolute left-1/2 -translate-x-1/2
-      -top-1.5 translate-y-[-100%] opacity-0
-      group-hover:opacity-100 group-hover:translate-y-[-102%]
-      transition-all duration-150 ease-out z-50
-    "
-  >
-    <div
-      className="
-        relative rounded-lg px-3 py-1.5 text-[11px] leading-4 text-neutral-100
-        bg-neutral-900/35 backdrop-blur-lg
-        border border-white/8 ring-1 ring-white/10
-        shadow-[0_6px_20px_rgba(0,0,0,0.35)]
-        max-w-[min(90vw,560px)]
-      "
-    >
-      {children}
-      {/* arrow (matches card) */}
-      <div
-        className="
-          absolute left-1/2 -bottom-1.5 h-2 w-2 -translate-x-1/2 rotate-45
-          bg-neutral-900/35 backdrop-blur-lg
-          border-l border-t border-white/8 ring-1 ring-white/10
-        "
-      />
-    </div>
-  </div>
-);
-
+  const commitPresetDrafts = () => {
+    const next = presetDrafts.map((s, idx) => {
+      const n = parseFloat(s);
+      return Number.isFinite(n) && n >= 0 ? n : amountPresets[idx];
+    });
+    setAmountPresets(next);
+    setEditingPresets(false);
+  };
 
   return (
-    <div className="flex h-full flex-shrink-0 flex-col bg-neutral-950">
-      {/* Stats */}
-      <div className="border-b border-emerald-950 px-4 py-3 overflow-visible">
-      <div className="grid grid-cols-4 gap-3 text-xs">
-        {/* 5m Vol */}
-        <div>
-          <div className="text-neutral-400">5m Vol</div>
-          <div className="text-white">{formatSmartNumber(vol5m)}</div>
-        </div>
+    <div
+      className="flex h-full flex-col text-[12px] leading-tight"
+      style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial' }}
+    >
+      {/* ===== A. Time buttons ===== */}
+      <div className="px-3 pt-2 pb-1.5 border-b border-[#2A2B33]">
+        <div className="mx-auto w-full max-w-xl overflow-hidden">
+          <div className="flex gap-1 rounded-xl bg-[#1E1F26] border border-[#2A2B33] p-1">
+            {(["1m", "5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
+              const changeMap: Record<TimeRange, number> = {
+                "1m": Number((token as any).price_change_1m ?? (token as any).change_1m ?? 0),
+                "5m": Number((token as any).price_change_5m ?? (token as any).change_5m ?? 0),
+                "1h": Number((token as any).price_change_1h ?? (token as any).change_1h ?? 0),
+                "6h": Number((token as any).price_change_6h ?? (token as any).change_6h ?? 0),
+                "24h": Number((token as any).price_change_24h ?? (token as any).change_24h ?? 0),
+              };
+              const ch = changeMap[rng] ?? 0;
+              const isUp = ch >= 0;
+              const abs = Math.abs(ch);
 
-        {/* Buys */}
-        <div className="relative group cursor-help">
-          <div className="text-neutral-400">Buys</div>
-          <div className="text-white">
-            {buysCount} <span className="text-neutral-500">/</span> {formatSmartNumber(buysValue)}
-          </div>
-          <GlassTip>
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-            <span className="font-semibold text-white/95 whitespace-nowrap">Buys</span>
-
-            <span className="text-white/40 select-none">•</span>
-            <span className="tabular-nums whitespace-nowrap">
-              5m: {buysCount} / ${formatSmartNumber(buysValue)}
-            </span>
-
-            <span className="text-white/40 select-none">•</span>
-            <span className="tabular-nums whitespace-nowrap">
-              1h: {getCountsAndVol(token as any, "buy", "1h").count} / $
-              {formatSmartNumber(getCountsAndVol(token as any, "buy", "1h").vol)}
-            </span>
-
-            <span className="text-white/40 select-none">•</span>
-            <span className="tabular-nums whitespace-nowrap">
-              6h: {getCountsAndVol(token as any, "buy", "6h").count} / $
-              {formatSmartNumber(getCountsAndVol(token as any, "buy", "6h").vol)}
-            </span>
-
-            <span className="text-white/40 select-none">•</span>
-            <span className="tabular-nums whitespace-nowrap">
-              24h: {getCountsAndVol(token as any, "buy", "24h").count} / $
-              {formatSmartNumber(getCountsAndVol(token as any, "buy", "24h").vol)}
-            </span>
-          </div>
-        </GlassTip>
-
-        </div>
-
-        {/* Sells */}
-        <div className="relative group cursor-help">
-          <div className="text-neutral-400">Sells</div>
-          <div className="text-white">
-            {sellsCount} <span className="text-neutral-500">/</span> {formatSmartNumber(sellsValue)}
-          </div>
-          <GlassTip>
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
-            <span className="font-semibold text-white/95 whitespace-nowrap">Sells</span>
-
-            <span className="text-white/40 select-none">•</span>
-            <span className="tabular-nums whitespace-nowrap">
-              5m: {sellsCount} / ${formatSmartNumber(sellsValue)}
-            </span>
-
-            <span className="text-white/40 select-none">•</span>
-            <span className="tabular-nums whitespace-nowrap">
-              1h: {getCountsAndVol(token as any, "sell", "1h").count} / $
-              {formatSmartNumber(getCountsAndVol(token as any, "sell", "1h").vol)}
-            </span>
-
-            <span className="text-white/40 select-none">•</span>
-            <span className="tabular-nums whitespace-nowrap">
-              6h: {getCountsAndVol(token as any, "sell", "6h").count} / $
-              {formatSmartNumber(getCountsAndVol(token as any, "sell", "6h").vol)}
-            </span>
-
-            <span className="text-white/40 select-none">•</span>
-            <span className="tabular-nums whitespace-nowrap">
-              24h: {getCountsAndVol(token as any, "sell", "24h").count} / $
-              {formatSmartNumber(getCountsAndVol(token as any, "sell", "24h").vol)}
-            </span>
-          </div>
-        </GlassTip>
-
-
-        </div>
-
-        {/* Net Vol. */}
-        <div>
-          <div className="text-neutral-400">Net Vol.</div>
-          <div className="text-white">
-            {netVol < 0 ? "-" : ""}$
-            {Math.abs(netVol).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </div>
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-800">
-        <div
-          className="h-full bg-emerald-400"
-          style={{ width: `${buyPct}%`, transition: "width 180ms" }}
-        />
-      </div>
-    </div>
-
-
-      {/* Trade box */}
-     <div className="flex w-full flex-col border-b border-emerald-950 pb-4">
-  {/* Segmented Buy/Sell */}
-      <div className="px-4 pt-4 flex justify-center"> 
-        <div className="inline-flex items-center gap-1 rounded-full border border-neutral-800 bg-neutral-900 p-1.5 shadow-sm">
-          <button
-            type="button"
-            className={cx(
-              baseBtn,
-              "h-10 px-5 min-w-[100px] rounded-full text-sm",
-              mode === "buy"
-                ? "bg-emerald-500 text-black shadow-sm shadow-emerald-900/30"
-                : "text-neutral-300 hover:text-neutral-50"
-            )}
-            onClick={() => setMode("buy")}
-          >
-            Buy
-          </button>
-
-          <button
-            type="button"
-            className={cx(
-              baseBtn,
-              "h-10 px-5 min-w-[100px] rounded-full text-sm",
-              mode === "sell"
-                ? "bg-red-500 text-black shadow-sm shadow-red-900/30"
-                : "text-neutral-300 hover:text-neutral-50"
-            )}
-            onClick={() => setMode("sell")}
-          >
-            Sell
-          </button>
-        </div>
-      </div>
-
-        {/* Tabs */}
-        <div className="mt-4 flex items-center gap-5 border-b border-neutral-800 px-4 text-sm">
-          <button
-            className={cx(
-              tabBtn,
-              tab === "market" ? "text-emerald-400 border-b-2 border-emerald-400" : "text-neutral-400"
-            )}
-            onClick={() => setTab("market")}
-          >
-            Market
-          </button>
-          <button
-            className={cx(
-              tabBtn,
-              tab === "limit" ? "text-emerald-400 border-b-2 border-emerald-400" : "text-neutral-400"
-            )}
-            onClick={() => setTab("limit")}
-          >
-            Limit
-          </button>
-          <button
-            className={cx(
-              tabBtn,
-              tab === "adv" ? "text-emerald-400 border-b-2 border-emerald-400" : "text-neutral-400"
-            )}
-            onClick={() => setTab("adv")}
-          >
-            Adv.
-          </button>
-        </div>
-
-        {/* Amount card */}
-        <div className="px-4">
-          <div className="mt-3 rounded-2xl border border-neutral-800 bg-neutral-900/60">
-            <div className="flex items-center justify-between px-3 pt-2">
-              <span className="text-xs font-semibold text-neutral-400">AMOUNT</span>
-              <span className="text-xs font-bold text-white">{amount || "-"}</span>
-            </div>
-
-            <div className="p-3 pt-2 flex flex-wrap items-center gap-2">
-              {[0.01, 0.1, 1, 10].map((opt) => (
+              return (
                 <button
-                  key={opt}
-                  type="button"
+                  key={rng}
+                  onClick={() => setTimeRange(rng)}
+                  aria-pressed={timeRange === rng}
                   className={cx(
-                    baseBtn,
-                    "shrink-0 px-3 h-8 text-[11px] rounded-full border border-neutral-700 bg-neutral-900 hover:bg-neutral-800",
-                    amount === String(opt) &&
-                      (mode === "buy"
-                        ? "bg-emerald-600 text-black border-transparent"
-                        : "bg-red-500 text-black border-transparent")
+                    "flex-1 h-9 rounded-lg px-2 text-left flex flex-col items-start justify-center cursor-pointer",
+                    timeRange === rng ? "bg-[#17191E] ring-1 ring-white/10" : "hover:bg-[#1E1F26]"
                   )}
-                  onClick={() => setAmount(String(opt))}
                 >
-                  {opt}
+                  <span
+                    className={cx(
+                      "text-[11px] tracking-wide uppercase font-semibold",
+                      timeRange === rng ? "text-[#E6E7EA]" : "text-[#9CA3AF]"
+                    )}
+                  >
+                    {rng}
+                  </span>
+                  <span className={cx("text-[10px] tabular-nums", isUp ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
+                    {isUp ? "+" : "-"}
+                    {abs.toFixed(1)}%
+                  </span>
                 </button>
-              ))}
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
-              {/* input: grows, can wrap to next line, won't overflow */}
-              <div className="min-w-0 flex-1 sm:flex-none sm:min-w-[140px]">
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  className="w-full h-9 rounded-xl border border-neutral-700 bg-neutral-950 px-3 text-xs font-semibold text-white placeholder:text-neutral-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                  placeholder="0.0"
-                  value={["0.01", "0.1", "1", "10"].includes(amount) ? "" : amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
-              </div>
+      {/* ===== B. Stats ===== */}
+      <div className="px-3 py-1.5 border-b border-[#2A2B33]">
+        <div className="grid grid-cols-4 gap-4 tabular-nums">
+          <div>
+            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">24h Vol</div>
+            <div className="text-[#E6E7EA] whitespace-nowrap text-[12px]">${formatSmartNumber(totalVol || 0)}</div>
+          </div>
+          <div>
+            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Buys</div>
+            <div className="whitespace-nowrap tabular-nums text-[#70E0B0] flex items-baseline gap-1 text-[12px]">
+              <span>{buyStats.count ?? 0}</span>
+              <span className="text-[#9CA3AF]">/</span>
+              <span className="text-[#70E0B0]">${formatSmartNumber(buyStats.vol || 0)}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Sells</div>
+            <div className="whitespace-nowrap tabular-nums text-[#FF4D7F] flex items-baseline gap-1 text-[12px]">
+              <span>{sellStats.count ?? 0}</span>
+              <span className="text-[#9CA3AF]">/</span>
+              <span className="text-[#FF4D7F]">${formatSmartNumber(sellStats.vol || 0)}</span>
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Net</div>
+            <div className={cx("whitespace-nowrap tabular-nums text-[12px]", netVol >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
+              {netVol >= 0 ? "+" : "-"}${formatSmartNumber(Math.abs(netVol))}
             </div>
           </div>
         </div>
+        <div className="mt-1 h-0.5 w-full rounded-full bg-[#17191E] relative overflow-hidden">
+          <div className="absolute left-0 top-0 h-full" style={{ width: `${buyPct}%`, background: AX.mint }} />
+          <div className="absolute right-0 top-0 h-full" style={{ width: `${sellPct}%`, background: AX.sell }} />
+        </div>
+      </div>
 
-
-        {/* Limit fields */}
-        {tab === "limit" && (
-          <div className="px-4">
-            <div className="mt-3 rounded-2xl border border-neutral-800 bg-neutral-900/60 p-3">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-xs font-semibold text-neutral-400">TARGET MARKET CAP</span>
-                <span className="text-xs font-bold text-white">{targetMC || "-"}</span>
-              </div>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                className="h-9 w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 text-xs font-semibold text-white placeholder:text-neutral-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                placeholder="0.0"
-                value={targetMC}
-                onChange={(e) => setTargetMC(e.target.value)}
-              />
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-neutral-800 bg-neutral-900/60 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold text-neutral-400">DIRECTION</span>
-                <span className="text-xs font-bold text-white">{direction}</span>
-              </div>
-              <div className="flex gap-2">
-                {(["Above", "Below"] as const).map((d) => {
-                  const active = direction === d;
-                  return (
-                    <button
-                      key={d}
-                      type="button"
-                      className={cx(
-                        baseBtn,
-                        "w-full h-9 rounded-xl border border-neutral-700 bg-neutral-950 hover:bg-neutral-800 text-xs",
-                        active &&
-                          (mode === "buy"
-                            ? "bg-emerald-600 text-black border-transparent"
-                            : "bg-red-500 text-black border-transparent")
-                      )}
-                      onClick={() => setDirection(d)}
-                    >
-                      {d}
-                    </button>
-                  );
-                })}
-              </div>
+      {/* ===== C. Buy/Sell switcher ===== */}
+      <div className="px-3 py-1.5 -mt-px border-b border-[#2A2B33]">
+        <div className="mx-auto w-full max-w-xl relative">
+          <div className="relative h-9 rounded-lg border border-[#2A2B33] bg-[#1E1F26] overflow-hidden">
+            <div
+              className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
+              style={{
+                transform: mode === "sell" ? "translateX(100%)" : "translateX(0%)",
+                background: mode === "buy" ? AX.mint : AX.sell,
+              }}
+            />
+            <div className="relative z-10 grid grid-cols-2 h-full">
+              <button
+                className={cx(
+                  "cursor-pointer select-none text-[13px] font-semibold",
+                  "flex items-center justify-center h-full",
+                  mode === "buy" ? "text-black" : "text-[#C7CBD1] hover:text-white"
+                )}
+                onClick={() => setMode("buy")}
+              >
+                Buy
+              </button>
+              <button
+                className={cx(
+                  "cursor-pointer select-none text-[13px] font-semibold",
+                  "flex items-center justify-center h-full",
+                  mode === "sell" ? "text-black" : "text-[#C7CBD1] hover:text-white"
+                )}
+                onClick={() => setMode("sell")}
+              >
+                Sell
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      </div>
 
-        {/* Settings summary */}
-        <div className="mx-4 mt-3 flex flex-wrap items-center gap-4 rounded-xl px-1 text-xs text-neutral-200">
-          <InterstateTooltip label="Max Slippage">
-            <span className="flex items-center gap-1">
-              <FaRunning /> {settings.maxSlippage * 100}%
-            </span>
-          </InterstateTooltip>
-
-          <InterstateTooltip
-            label={`Priority Fee: ${settings.priority}. ${
-              settings.priority < 0.01 ? "We recommend a priority fee of atleast 0.01" : ""
-            }`}
-          >
-            <span className="flex items-center gap-1 text-yellow-400">
-              <FaGasPump /> {settings.priority} {settings.priority < 0.01 ? <span>&#9888;</span> : ""}
-            </span>
-          </InterstateTooltip>
-
-          <InterstateTooltip label="Bribe">
-            <span className="flex items-center gap-1 text-yellow-400">
-              <FaCoins /> {settings.bribe} <span>&#9888;</span>
-            </span>
-          </InterstateTooltip>
-
-          <InterstateTooltip label="MEV Protection">
-            <span
-              className={cx(
-                "flex items-center gap-1",
-                settings.mevMode === "off"
-                  ? "text-neutral-400"
-                  : settings.mevMode === "reduced"
-                  ? "text-yellow-400"
-                  : "text-emerald-400"
-              )}
+      {/* ===== D. Tabs ===== */}
+      <div className="px-3 pt-1 pb-1.5 border-b border-[#2A2B33]">
+        <div className="flex items-center gap-6">
+          {(["market", "limit", "adv"] as const).map((t) => (
+            <button
+              key={t}
+              className={cx(tabBtn, "hover:text-[#E6E7EA]", tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]")}
+              onClick={() => setTab(t)}
             >
-              <FaBan />
-              {settings.mevMode === "off" ? "Off" : settings.mevMode === "reduced" ? "Reduced" : "Secure"}
-            </span>
-          </InterstateTooltip>
+              {t === "adv" ? "Adv." : t[0].toUpperCase() + t.slice(1)}
+            </button>
+          ))}
+          <div className="ml-auto flex items-center gap-2 text-[10px] text-[#9CA3AF]">
+            <span className="px-1 py-0.5 border border-[#2A2B33] rounded bg-[#17191E]">1</span>
+            <span className="px-1 py-0.5 border border-[#2A2B33] rounded bg-[#17191E]">0</span>
+          </div>
         </div>
+      </div>
 
-        {/* Feedback */}
-        {message && (
-          <div
+      {/* ===== E. Amount ===== */}
+      <div className="px-3 pt-2">
+        <div className="relative rounded-lg border border-[#2A2B33] bg-[#1E1F26]">
+          <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+            <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Amount</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*[.,]?[0-9]*"
+                className="h-8 w-28 bg-transparent border-none text-right
+                           text-[14px] font-semibold text-[#E6E7EA] tabular-nums
+                           placeholder:text-[#9CA3AF] focus:outline-none"
+                placeholder="0.0"
+                value={amount}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/,/g, ".");
+                  if (allowDecimal(raw)) setAmount(raw);
+                }}
+              />
+              <span className="text-[11px] font-semibold text-[#9CA3AF]">SOL</span>
+            </div>
+          </div>
+
+          {/* Presets */}
+          <div className="border-t border-[#2A2B33] rounded-b-lg overflow-hidden">
+            <div className="grid grid-cols-5">
+              {[0.01, 0.1, 0.5, 1].map((opt, i) => {
+                const active = amount === String(opt);
+                if (editingPresets) {
+                  return (
+                    <div key={i} className="h-9 border-r border-[#2A2B33] last:border-r-0 min-w-0">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        className="h-full w-full bg-[#17191E] text-center text-[12px] font-semibold text-[#E6E7EA]
+                                   outline-none focus:bg-[#1E1F26]"
+                        value={presetDrafts[i] ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/,/g, ".");
+                          if (allowDecimal(v)) {
+                            setPresetDrafts((d) => d.map((x, idx) => (idx === i ? v : x)));
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            commitPresetDrafts();
+                          }
+                        }}
+                      />
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className={cx(
+                      "h-9 border-r border-[#2A2B33] last:border-r-0 text-[12px] font-semibold tabular-nums",
+                      active
+                        ? mode === "buy"
+                          ? "bg-[#70E0B0] text-black"
+                          : "bg-[#FF4D7F] text-black"
+                        : "bg-[#17191E] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                    )}
+                    onClick={() => setAmount(String(opt))}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+              {!editingPresets ? (
+                <button
+                  type="button"
+                  onClick={() => setEditingPresets(true)}
+                  className="h-9 bg-[#17191E] hover:bg-[#1E1F26] text-[#E6E7EA]"
+                  title="Edit preset values"
+                >
+                  <LuPencil className="mx-auto h-4 w-4" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={commitPresetDrafts}
+                  className="h-9 bg-[#1E1F26] text-[#E6E7EA] hover:bg-[#17191E]"
+                  title="Done"
+                >
+                  <LuCheck className="mx-auto h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== F. LIMIT FIELDS (with SLIDER) ===== */}
+      {tab === "limit" && (
+        <div className="px-3 pt-2 space-y-2.5">
+          {/* Market cap input */}
+          <div className="rounded-lg border border-[#2A2B33] bg-[#1E1F26] p-2.5">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">MKT CAP</span>
+              <span className="text-[12px] font-semibold text-[#E6E7EA]">$</span>
+            </div>
+            <input
+              type="text"
+              inputMode="decimal"
+              pattern="[0-9]*[.,]?[0-9]*"
+              className="h-8 w-full overflow-hidden rounded border border-[#2A2B33] bg-[#101114] px-2 text-[12px] font-semibold text-[#E6E7EA] placeholder:text-[#9CA3AF] focus:border-[#70E0B0] focus:outline-none focus:ring-1 focus:ring-[color:rgb(112_224_176_/_0.4)]"
+              placeholder={baseMarketCap ? String(baseMarketCap) : "0.0"}
+              value={targetMC}
+              onChange={(e) => {
+                const v = e.target.value.replace(/,/g, ".");
+                if (/^\d*\.?\d*$/.test(v)) setTargetMC(v);
+              }}
+            />
+
+            {/* Slider row */}
+            <div className="mt-3 flex items-center gap-3">
+              {/* slider + ticks */}
+              <div className="flex-1">
+                <input
+                  type="range"
+                  min={-100}
+                  max={100}
+                  step={1}
+                  value={baseMarketCap ? derivedPct : 0}
+                  onChange={(e) => {
+                    if (!baseMarketCap) return;
+                    const p = clamp(Number(e.target.value), -100, 100);
+                    const next = Math.max(0, Math.round(baseMarketCap * (1 + p / 100)));
+                    setTargetMC(String(next));
+                  }}
+                  className="w-full accent-[#3B82F6] cursor-pointer"
+                />
+                {/* tick labels */}
+                <div className="mt-1 flex justify-between text-[10px] text-[#9CA3AF]">
+                  <span>-100%</span>
+                  <span>-50%</span>
+                  <span>0%</span>
+                  <span>+50%</span>
+                  <span>+100%</span>
+                </div>
+              </div>
+
+              {/* % box */}
+              <div className="w-16">
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={-100}
+                    max={100}
+                    step={1}
+                    value={baseMarketCap ? derivedPct : 0}
+                    onChange={(e) => {
+                      const p = clamp(Number(e.target.value || 0), -100, 100);
+                      if (baseMarketCap) {
+                        const next = Math.max(0, Math.round(baseMarketCap * (1 + p / 100)));
+                        setTargetMC(String(next));
+                      }
+                    }}
+                    className="h-8 w-full rounded border border-[#2A2B33] bg-[#101114] px-2 pr-6 text-[12px] font-semibold text-[#E6E7EA] outline-none"
+                  />
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[#9CA3AF]">%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* helper if base MC is unknown */}
+            {!baseMarketCap ? (
+              <div className="mt-2 text-[10px] text-[#9CA3AF]">
+                Current market cap unavailable — enter a target value directly to enable the slider.
+              </div>
+            ) : null}
+          </div>
+
+          {/* Direction toggle */}
+          <div className="rounded-lg border border-[#2A2B33] bg-[#1E1F26] p-2.5">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Direction</span>
+              <span className="text-[12px] font-semibold text-[#E6E7EA]">{direction}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(["Above", "Below"] as const).map((d) => {
+                const active = direction === d;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    className={cx(
+                      baseBtn,
+                      "h-8 rounded border border-[#2A2B33] bg-[#101114] hover:bg-[#1E1F26] text-[12px] cursor-pointer",
+                      active && (mode === "buy" ? "bg-[#70E0B0] text-black border-transparent" : "bg-[#FF4D7F] text-black border-transparent")
+                    )}
+                    onClick={() => setDirection(d)}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Settings ===== */}
+      <div className="mx-3 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#E6E7EA]">
+        <InterstateTooltip label="Max Slippage">
+          <span className="flex items-center gap-1 text-[#9CA3AF]">
+            <FaRunning className="opacity-80" /> {settings.maxSlippage * 100}%
+          </span>
+        </InterstateTooltip>
+        <InterstateTooltip
+          label={`Priority Fee: ${settings.priority}. ${settings.priority < 0.01 ? "We recommend a priority fee of atleast 0.01" : ""}`}
+        >
+          <span className="flex items-center gap-1 text-[#9CA3AF]">
+            <FaGasPump className="opacity-90" /> {settings.priority}
+            {settings.priority < 0.01 ? <span className="text-[#FF4D7F]">⚠</span> : null}
+          </span>
+        </InterstateTooltip>
+        <InterstateTooltip label="Bribe">
+          <span className="flex items-center gap-1 text-[#9CA3AF]">
+            <FaCoins className="opacity-90" /> {settings.bribe} <span className="text-[#FF4D7F]">⚠</span>
+          </span>
+        </InterstateTooltip>
+        <InterstateTooltip label="MEV Protection">
+          <span
             className={cx(
-              "mx-4 mt-3 rounded-xl p-2 text-center text-xs font-bold",
-              message.type === "success" ? "bg-emerald-600 text-black" : "bg-red-500 text-black"
+              "flex items-center gap-1",
+              settings.mevMode === "off" ? "text-[#9CA3AF]" : settings.mevMode === "reduced" ? "text-[#9CA3AF]" : "text-[#70E0B0]"
             )}
           >
-            {message.text}
-          </div>
-        )}
+            <FaBan className="opacity-90" />
+            {settings.mevMode === "off" ? "Off" : settings.mevMode === "reduced" ? "Reduced" : "Secure"}
+          </span>
+        </InterstateTooltip>
+      </div>
 
-        {/* Primary action */}
-        <div className="px-4">
-          <button
-            type="button"
-            className={cx(
-              baseBtn,
-              "w-full mt-3 h-12 rounded-full text-sm shadow-sm",
-              mode === "buy"
-                ? "bg-emerald-500 text-black hover:bg-emerald-400 active:translate-y-[1px] shadow-emerald-900/40"
-                : "bg-red-500 text-black hover:bg-red-400 active:translate-y-[1px] shadow-red-900/30"
-            )}
-            disabled={!amount || isLoading || (tab === "limit" && !targetMC)}
-            onClick={async () => {
-              if (!user?.bearerToken) {
+      {/* Feedback */}
+      {message && (
+        <div
+          className={cx(
+            "mx-3 mt-2 rounded-md p-2 text-center text-[11px] font-bold",
+            message.type === "success" ? "bg-[#70E0B0] text-black" : "bg-[#FF4D7F] text-black"
+          )}
+        >
+          {message.text}
+        </div>
+      )}
+
+      {/* Helper line */}
+      <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
+        {amount ? (
+          <>
+            You’ll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span> SOL
+          </>
+        ) : (
+          "Enter amount"
+        )}
+      </div>
+
+      {/* Primary action */}
+      <div className="px-3 py-2">
+        <button
+          type="button"
+          className={cx(
+            baseBtn,
+            "w-full h-10 rounded-full text-[14px] cursor-pointer",
+            mode === "buy" ? "bg-[#70E0B0] text-black hover:bg-[#58B890]" : "bg-[#FF4D7F] text-black hover:opacity-90"
+          )}
+          disabled={!amount || isLoading || (tab === "limit" && !targetMC)}
+          onClick={async () => {
+            if (!user?.bearerToken) {
+              setMessage({ type: "error", text: "Authentication required to create orders." });
+              return;
+            }
+            setIsLoading(true);
+            setMessage(null);
+
+            if (tab === "limit") {
+              if (!amount || !targetMC) {
                 setMessage({
                   type: "error",
-                  text: "Authentication required to create orders.",
+                  text: "Amount and Target Market Cap are required for limit orders.",
                 });
+                setIsLoading(false);
                 return;
               }
-
-              setIsLoading(true);
-              setMessage(null);
-
-              if (tab === "limit") {
-                if (!amount || !targetMC) {
-                  setMessage({
-                    type: "error",
-                    text: "Amount and Target Market Cap are required for limit orders.",
-                  });
-                  setIsLoading(false);
-                  return;
-                }
-                try {
-                  await createLimitOrder(
-                    {
-                      tokenAddress: token.pair_address,
-                      amount: Number(amount),
-                      type: mode === "buy" ? "Buy" : "Sell",
-                      direction,
-                      targetMC: Number(targetMC),
-                    },
-                    user.bearerToken
-                  );
-                  setMessage({
-                    type: "success",
-                    text: `Limit order for ${token.symbol} created successfully!`,
-                  });
-                  setAmount("");
-                  setTargetMC("");
-                } catch (error: any) {
-                  setMessage({
-                    type: "error",
-                    text: `Failed to create limit order: ${error.message}`,
-                  });
-                } finally {
-                  setIsLoading(false);
-                }
-                return;
-              }
-
-              // Market flow
-              if (mode === "buy") {
-                const requested = Number(amount || 0);
-                const safetyBuffer = 0.003; // ~0.003 SOL
-                const required = requested + safetyBuffer;
-                if (!requested || requested <= 0) {
-                  setIsLoading(false);
-                  setMessage({ type: "error", text: "Enter a valid amount." });
-                  toast.error("Enter a valid amount");
-                  return;
-                }
-                if (solBalance < required) {
-                  setIsLoading(false);
-                  const need = Math.max(required - solBalance, 0);
-                  const msg = `Less balance: need ~${required.toFixed(3)} SOL (missing ${need.toFixed(3)} SOL).`;
-                  setMessage({ type: "error", text: msg });
-                  toast.error("Less balance. Please fund your wallet.");
-                  return;
-                }
-              }
-
-              let poolType: "PumpAmm" | "Raydium CPMM" | "" = "";
-              switch ((token as any).amm_id) {
-                case "pump_amm":
-                  poolType = "PumpAmm";
-                  break;
-                case "raydium_cpmm":
-                  poolType = "Raydium CPMM";
-                  break;
-                default:
-                  poolType = "PumpAmm";
-              }
-
               try {
-                const tradeParams = {
-                  amount: Number(amount),
-                  poolAddress: token.pair_address,
-                  baseMint: token.mint,
-                  quoteMint: SOL_MINT_ADDRESS,
-                  mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
-                  poolType,
-                };
-                const tr = await tradeBuy(tradeParams, user.bearerToken);
-                const txHash = tr?.hash || tr?.txid;
-                const tokenAmount = tr?.amount || tr?.tokenAmount;
-                if (tr && txHash) {
-                  setMessage({
-                    type: "success",
-                    text: `✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${
-                      tokenAmount || "tokens"
-                    } ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`,
-                  });
-                } else {
-                  setMessage({ type: "error", text: "❌ Trade failed. Please try again." });
-                }
+                await createLimitOrder(
+                  {
+                    tokenAddress: token.pair_address,
+                    amount: Number(amount),
+                    type: mode === "buy" ? "Buy" : "Sell",
+                    direction,
+                    targetMC: Number(targetMC),
+                  },
+                  user.bearerToken
+                );
+                setMessage({ type: "success", text: `Limit order for ${token.symbol} created successfully!` });
+                setAmount("");
+                setTargetMC("");
               } catch (error: any) {
-                let errorMessage = error.message || "Unknown error";
-                if (
-                  error.message?.includes("Insufficient SOL balance") ||
-                  error.message?.includes("INSUFFICIENT_BALANCE")
-                ) {
-                  errorMessage = `💰 Insufficient SOL balance. Add SOL and try again.`;
-                } else if (error.message?.includes("insufficient funds")) {
-                  errorMessage = `💰 Insufficient funds. Please add SOL.`;
-                } else if (
-                  error.message?.includes("Invalid account discriminator") ||
-                  error.message?.includes("INVALID_POOL_ADDRESS")
-                ) {
-                  errorMessage = `❌ Invalid pool address.`;
-                } else if (error.message?.includes("TokenAccountNotFoundError")) {
-                  errorMessage = `❌ Token account not found.`;
-                }
-                setMessage({ type: "error", text: errorMessage });
+                setMessage({ type: "error", text: `Failed to create limit order: ${error.message}` });
               } finally {
                 setIsLoading(false);
               }
-            }}
-          >
-            {isLoading ? "Processing..." : mode === "buy" ? `Buy ${token.symbol}` : `Sell ${token.symbol}`}
-          </button>
+              return;
+            }
+
+            // Market flow
+            if (mode === "buy") {
+              const requested = Number(amount || 0);
+              const safetyBuffer = 0.003;
+              const required = requested + safetyBuffer;
+              if (!requested || requested <= 0) {
+                setIsLoading(false);
+                setMessage({ type: "error", text: "Enter a valid amount." });
+                toast.error("Enter a valid amount");
+                return;
+              }
+              if (solBalance < required) {
+                setIsLoading(false);
+                const need = Math.max(required - solBalance, 0);
+                const msg = `Less balance: need ~${required.toFixed(3)} SOL (missing ${need.toFixed(3)} SOL).`;
+                setMessage({ type: "error", text: msg });
+                toast.error("Less balance. Please fund your wallet.");
+                return;
+              }
+            }
+
+            let poolType: "PumpAmm" | "Raydium CPMM" | "" = "";
+            switch ((token as any).amm_id) {
+              case "pump_amm":
+                poolType = "PumpAmm";
+                break;
+              case "raydium_cpmm":
+                poolType = "Raydium CPMM";
+                break;
+              default:
+                poolType = "PumpAmm";
+            }
+
+            try {
+              const tradeParams = {
+                amount: Number(amount),
+                poolAddress: token.pair_address,
+                baseMint: token.mint,
+                quoteMint: SOL_MINT_ADDRESS,
+                mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
+                poolType,
+              };
+              const tr = await tradeBuy(tradeParams, user.bearerToken);
+              const txHash = tr?.hash || tr?.txid;
+              const tokenAmount = tr?.amount || tr?.tokenAmount;
+              if (tr && txHash) {
+                setMessage({
+                  type: "success",
+                  text: `✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`,
+                });
+              } else {
+                setMessage({ type: "error", text: "❌ Trade failed. Please try again." });
+              }
+            } catch (error: any) {
+              let errorMessage = error.message || "Unknown error";
+              if (error.message?.includes("Insufficient SOL balance") || error.message?.includes("INSUFFICIENT_BALANCE")) {
+                errorMessage = `💰 Insufficient SOL balance. Add SOL and try again.`;
+              } else if (error.message?.includes("insufficient funds")) {
+                errorMessage = `💰 Insufficient funds. Please add SOL.`;
+              } else if (error.message?.includes("Invalid account discriminator") || error.message?.includes("INVALID_POOL_ADDRESS")) {
+                errorMessage = `❌ Invalid pool address.`;
+              } else if (error.message?.includes("TokenAccountNotFoundError")) {
+                errorMessage = `❌ Token account not found.`;
+              }
+              setMessage({ type: "error", text: errorMessage });
+            } finally {
+              setIsLoading(false);
+            }
+          }}
+        >
+          {isLoading ? (
+            "Processing..."
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              {mode === "buy" ? "Buy" : "Sell"} {token.symbol}
+              {prettyAmt(amount) && (
+                <>
+                  {" "}{prettyAmt(amount)}
+                  <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                </>
+              )}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* footer mini stats */}
+      <div className="grid grid-cols-4" style={{ borderTop: `1px solid ${AX.border}` }}>
+        <div className="flex flex-col items-center gap-0.5" style={{ borderRight: `1px solid ${AX.border}` }}>
+          <span className="text-[10px] text-[#9CA3AF]">Bought</span>
+          <span className="text-[#70E0B0] text-[11px]">$0</span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5" style={{ borderRight: `1px solid ${AX.border}` }}>
+          <span className="text-[10px] text-[#9CA3AF]">Sold</span>
+          <span className="text-[#FF4D7F] text-[11px]">$0</span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5" style={{ borderRight: `1px solid ${AX.border}` }}>
+          <span className="text-[10px] text-[#9CA3AF]">Holding</span>
+          <span className="text-[#E6E7EA] text-[11px]">$0</span>
+        </div>
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-[10px] text-[#9CA3AF]">PnL</span>
+          <span className="text-[#70E0B0] text-[11px]">$0(+0%)</span>
         </div>
       </div>
 
-      {/* Mini PnL cards */}
-      <div className="grid grid-cols-4 border-b border-emerald-950">
-        <div className="flex w-full flex-col items-center gap-1 border-r border-emerald-950 p-2 text-xs text-neutral-500">
-          <span>Bought</span>
-          <span className="text-sm text-emerald-300">$0</span>
-        </div>
-        <div className="flex w-full flex-col items-center gap-1 border-r border-emerald-950 p-2 text-xs text-neutral-500">
-          <span>Sold</span>
-          <span className="text-sm text-red-400">$0</span>
-        </div>
-        <div className="flex w-full flex-col items-center gap-1 border-r border-emerald-950 p-2 text-xs text-neutral-500">
-          <span>Holding</span>
-          <span className="text-sm text-neutral-50">$0</span>
-        </div>
-        <div className="flex w-full flex-col items-center gap-1 p-2 text-xs text-neutral-500">
-          <span>PnL</span>
-          <span className="text-sm text-emerald-300">$0(+0%)</span>
-        </div>
-      </div>
-
-      {/* Presets / QuickBuy */}
-      <div className="w-full border-b border-emerald-950">
+      <div className="w-full overflow-hidden" style={{ borderTop: `1px solid ${AX.border}` }}>
         <QuickBuy hideActionButton className="rounded-none border-none bg-transparent" />
-      </div>
-
-      {/* Token Info */}
-      <div className="border-b border-emerald-950 p-4">
-        <div className="mb-2 text-xs text-neutral-400">Token Info</div>
-        <div className="grid grid-cols-2 place-items-center gap-2 text-xs">
-          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
-            <span className="font-bold text-emerald-400">
-              {token.total_holders
-                ? ((token.total_holders / token.total_supply) * 100).toFixed(2)
-                : "0"}
-              %
-            </span>
-            <span className="text-neutral-400">Top 10 H.</span>
-          </div>
-          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
-            <span className="font-bold text-neutral-300">
-              {token.is_verified_contract ? "Yes" : "No"}
-            </span>
-            <span className="text-neutral-400">Dev H.</span>
-          </div>
-          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
-            <span className="font-bold text-red-400">
-              {token.total_snipers
-                ? ((token.total_snipers / token.total_supply) * 100).toFixed(2)
-                : "0"}
-              %
-            </span>
-            <span className="text-neutral-400">Snipers H.</span>
-          </div>
-          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
-            <span className="font-bold text-red-400">
-              {token.possible_spam ? "Yes" : "No"}
-            </span>
-            <span className="text-neutral-400">Insiders</span>
-          </div>
-          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
-            <span className="font-bold text-red-400">
-              {token.total_liquidity_usd ? formatSmartNumber(token.total_liquidity_usd) : "0"}
-            </span>
-            <span className="text-neutral-400">Liquidity</span>
-          </div>
-          <div className="flex h-20 w-20 flex-col items-center justify-center overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
-            <span className="font-bold text-red-400">
-              {token.bonding_pct ? `${Math.round(Number(token.bonding_pct))}%` : "0%"}
-            </span>
-            <span className="text-neutral-400">Progress</span>
-          </div>
-        </div>
       </div>
     </div>
   );
