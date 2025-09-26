@@ -1,33 +1,27 @@
 import React from "react";
 import type { Token } from "~/utils/db";
-import {
-  FaGlobe,
-  FaUser,
-  FaSearch,
-  FaCrown,
-  FaClock,
-  FaFilter,
-  FaShareAlt,
-  FaEye,
-  FaStar,
-  FaRegSquare,
-  FaRegStar,
-  FaExpand,
-  FaRunning,
-  FaGasPump,
-  FaCoins,
-  FaBan,
-} from "react-icons/fa";
-import { FiCopy, FiShare } from "react-icons/fi";
-import { IoShareSocialOutline } from "react-icons/io5";
-import { formatSmartNumber } from '~/utils/db';
-import { useQuickBuy } from '../QuickBuyContext';
-import InterstateTooltip from '../InterstateTooltip';
-import { useWatchlist } from '../WatchlistContext';
-import { fetchTokenMetadata } from '~/utils/functions';
+import { formatSmartNumber } from "~/utils/db";
+import { useWatchlist } from "../WatchlistContext";
+import { fetchTokenMetadata } from "~/utils/functions";
 import { SubscriptNumber } from "../InterstateTable";
 
-// Helper function to format age
+import { IoShareSocialOutline } from "react-icons/io5";
+import { FaRegStar, FaStar, FaGlobe, FaUser, FaSearch, FaExpand } from "react-icons/fa";
+import { FiCopy } from "react-icons/fi";
+
+/* ---------- AXIOM palette ---------- */
+const AX = {
+  bg: "#101114",
+  surface: "#1E1F26",
+  surface2: "#17191E",
+  border: "#2A2B33",
+  text: "#E6E7EA",
+  muted: "#9CA3AF",
+  mint: "#70E0B0",
+  green: "#38D39F",
+};
+
+/* ---------- helpers ---------- */
 function getTokenAge(createdAt: string) {
   const createdDate = new Date(createdAt);
   const now = new Date();
@@ -35,98 +29,42 @@ function getTokenAge(createdAt: string) {
   const diffMins = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays > 0) {
-    return `${diffDays}d`;
-  } else if (diffHours > 0) {
-    return `${diffHours}h`;
-  } else {
-    return `${diffMins}m`;
+  if (diffDays > 0) return `${diffDays}d`;
+  if (diffHours > 0) return `${diffHours}h`;
+  return `${diffMins}m`;
+}
+
+// Make NFT/token images work across ipfs/arweave/http
+function normalizeAssetUrl(raw?: string): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (s.startsWith("data:")) return s;
+
+  if (s.startsWith("ipfs://")) {
+    const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
   }
+  if (/^ipfs[/:]/i.test(s)) {
+    const cid = s.replace(/^ipfs[/:]/i, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+  }
+
+  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s)) {
+    return `https://arweave.net/${s}`;
+  }
+
+  if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
+  if (s.startsWith("https://")) return s;
+
+  return null;
 }
-
-interface TradeHeaderProps {
-  token: Token;
-}
-
-const HeaderColumnSection = ({
-  label,
-  children
-}: {
-  label: string;
-  children: React.ReactNode;
-}) => {
-  return (
-    <div className="flex flex-col items-start gap-1">
-      <span className="text-xs leading-none text-neutral-400">{label}</span>
-      <span className="mt-0.5 text-sm leading-none text-white">{children}</span>
-    </div>
-  );
-};
-
-// Tooltip component
-const Tooltip: React.FC<{ label: string; children: React.ReactNode }> = ({
-  label,
-  children,
-}) => {
-  const [show, setShow] = React.useState(false);
-  return (
-    <span
-      className="relative flex items-center"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-      onFocus={() => setShow(true)}
-      onBlur={() => setShow(false)}
-      tabIndex={0}
-    >
-      {children}
-      {show && (
-        <span className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 rounded-lg bg-neutral-900 px-2 py-1 text-xs whitespace-nowrap text-white shadow-lg">
-          {label}
-        </span>
-      )}
-    </span>
-  );
-};
-
-const QuickBuyPresetBar: React.FC = () => {
-  const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const settings = presets[activePreset]?.quickBuySettings;
-  return (
-    <div className="mb-2 flex flex-col gap-2 rounded-xl bg-neutral-900/80 px-3 py-2">
-      <div className="flex gap-2 mb-1">
-        {[0, 1, 2].map((i) => (
-          <button
-            key={i}
-            className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? 'bg-blue-700 text-white' : 'bg-neutral-800 text-blue-300 hover:bg-neutral-700'}`}
-            onClick={() => setActivePreset(i)}
-          >
-            {`PRESET ${i + 1}`}
-          </button>
-        ))}
-      </div>
-      <div className="flex items-center gap-4 text-neutral-200 text-xs">
-        <InterstateTooltip label="Max Slippage">
-          <span className="flex items-center gap-1"><FaRunning /> {settings.maxSlippage * 100}%</span>
-        </InterstateTooltip>
-        <InterstateTooltip label={`Priority Fee: ${settings.priority}. ${settings.priority < 0.01 ? 'We recommend a priority fee of atleast 0.01' : ''}`}>
-          <span className="flex items-center gap-1 text-yellow-400"><FaGasPump /> {settings.priority} {settings.priority < 0.01 ? <span className="text-yellow-400">&#9888;</span> : ''}</span>
-        </InterstateTooltip>
-        <InterstateTooltip label="Bribe">
-          <span className="flex items-center gap-1 text-yellow-400"><FaCoins /> {settings.bribe} <span className="text-yellow-400">&#9888;</span></span>
-        </InterstateTooltip>
-        <InterstateTooltip label="MEV Protection">
-          <span className={`flex items-center gap-1 ${settings.mevMode === 'off' ? 'text-neutral-400' : settings.mevMode === 'reduced' ? 'text-yellow-400' : 'text-emerald-400'}`}><FaBan /> {settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}</span>
-        </InterstateTooltip>
-      </div>
-    </div>
-  );
-};
 
 const tokenMetadataCache: Record<string, any> = {};
 function useTokenMetadata(uri?: string) {
   const [meta, setMeta] = React.useState<any | null>(null);
   const [loading, setLoading] = React.useState(!!uri);
   const [showInitial, setShowInitial] = React.useState(false);
+
   React.useEffect(() => {
     let cancelled = false;
     if (!uri) {
@@ -141,7 +79,7 @@ function useTokenMetadata(uri?: string) {
     }
     setLoading(true);
     setShowInitial(false);
-    const timer = setTimeout(() => setShowInitial(true), 500);
+    const timer = setTimeout(() => setShowInitial(true), 400);
     fetchTokenMetadata(uri).then((data) => {
       if (!cancelled) {
         if (data) tokenMetadataCache[uri] = data;
@@ -154,107 +92,202 @@ function useTokenMetadata(uri?: string) {
       clearTimeout(timer);
     };
   }, [uri]);
+
   return { meta, loading, showInitial };
+}
+
+/* ---------- tiny UI atoms ---------- */
+function StatInline({
+  label,
+  children,
+  accent,
+}: {
+  label: string;
+  children: React.ReactNode;
+  accent?: "green";
+}) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="text-[12px] tracking-wide" style={{ color: AX.muted }}>
+        {label}
+      </span>
+      <span
+        className="text-[13px] font-semibold"
+        style={{ color: accent === "green" ? AX.green : AX.text }}
+      >
+        {children}
+      </span>
+    </div>
+  );
+}
+
+const Tooltip: React.FC<{ label: string; children: React.ReactNode }> = ({
+  label,
+  children,
+}) => {
+  const [show, setShow] = React.useState(false);
+  return (
+    <span
+      className="relative inline-flex items-center"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
+      tabIndex={0}
+    >
+      {children}
+      {show && (
+        <span
+          className="absolute -top-2 right-1/2 translate-y-[-100%] translate-x-1/2 whitespace-nowrap rounded-md px-2 py-1 text-[11px] text-white shadow"
+          style={{ background: "#0E0F12" }}
+        >
+          {label}
+        </span>
+      )}
+    </span>
+  );
+};
+
+/* ===================================================================== */
+
+interface TradeHeaderProps {
+  token: Token;
 }
 
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
   const isWatched = isInWatchlist(token.pair_address);
-
-  const handleWatchlistClick = () => {
-    if (isWatched) {
-      removeFromWatchlist(token.pair_address);
-    } else {
-      addToWatchlist(token);
-    }
-  };
-
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
 
+  const handleWatchlistClick = () => {
+    if (isWatched) removeFromWatchlist(token.pair_address);
+    else addToWatchlist(token);
+  };
+
+  // values like your screenshot
+  const mcap = token.market_cap_usd ?? 0;
+  const price = token.usd_price ?? (token as any).price_usd ?? (token as any).price ?? 0;
+  const liq = token.total_liquidity_usd ?? (token as any).liquidity_usd ?? 0;
+  const supply = token.total_supply ?? (token as any).supply ?? 0;
+  const feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? "—";
+  const curvePct =
+    (token as any).bonding_pct ??
+    (token as any).bonding_curve_progress ??
+    (token as any).bcurve ??
+    0;
+
+  const imgSrc =
+    normalizeAssetUrl(meta?.image) ||
+    normalizeAssetUrl((meta?.properties as any)?.image) ||
+    normalizeAssetUrl((token as any).logo) ||
+    null;
+
   return (
-    <>
-      <div className="mb-2 flex w-full items-center gap-6 rounded-lg px-3 py-1.5">
-        {/* Left: Logo, Symbol, Name, Clipboard, Age */}
-        <div className="flex min-w-0 items-center gap-3">
-          {/* Logo */}
-          {loading && !showInitial ? (
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-t-4 border-b-4 border-blue-500"></div>
-          ) : meta?.image ? (
-            <img
-              src={meta.image}
-              alt={token.name}
-              width={36}
-              height={36}
-              className="min-h-[36px] min-w-[36px] rounded-full border border-neutral-800"
-            />
-          ) : <div className="h-10 w-10 rounded-full border border-neutral-800 flex items-center justify-center">
-            {token.name.charAt(0)}
-          </div>}
-          {/* Symbol, Name, Clipboard, Age */}
-          <div className="flex min-w-0 flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="truncate text-base leading-none font-bold text-white">
-                {token.symbol}
-              </span>
-              <span className="truncate text-sm leading-none text-neutral-400">
-                {token.name}
-              </span>
-              <FiCopy className="ml-1 cursor-pointer text-xs text-neutral-400" />
-            </div>
-            <div className="mt-1 flex items-center gap-2">
-              {/* Age with gold circle and clock */}
-              <span className="flex items-center text-xs font-semibold">
-                <span className="text-green-300">
-                  {getTokenAge(token.created_at)}
-                </span>
-              </span>
-              {/* Website, Holders, Search icons */}
-              <FaGlobe className="cursor-pointer text-[15px] text-blue-300 hover:text-blue-400" />
-              <FaUser className="cursor-pointer text-[15px] text-blue-300 hover:text-blue-400" />
-              <FaSearch className="cursor-pointer text-[15px] text-blue-300 hover:text-blue-400" />
-            </div>
+    <div
+      className="flex w-full items-center gap-6 px-2 py-2"
+      style={{ background: "transparent", color: AX.text, fontFamily: 'Inter, ui-sans-serif, system-ui' }}
+    >
+      {/* LEFT: avatar + name block */}
+      <div className="flex min-w-0 items-center gap-3">
+        {/* avatar with robust fallbacks */}
+        {loading && !showInitial ? (
+          <div className="h-9 w-9 animate-pulse rounded-md" style={{ background: AX.surface2 }} />
+        ) : imgSrc ? (
+          <img
+            src={imgSrc}
+            alt={token.name}
+            width={36}
+            height={36}
+            className="min-h-[36px] min-w-[36px] rounded-md border object-cover"
+            style={{ borderColor: AX.border, background: AX.surface2 }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+              const parent = (e.target as HTMLImageElement).parentElement!;
+              const fallback = document.createElement("div");
+              fallback.className =
+                "flex h-9 w-9 items-center justify-center rounded-md border text-sm font-bold";
+              (fallback.style as any).borderColor = AX.border;
+              (fallback.style as any).background = AX.surface2;
+              (fallback.style as any).color = AX.text;
+              fallback.textContent = token.name?.charAt(0) || "?";
+              parent.insertBefore(fallback, parent.firstChild);
+            }}
+          />
+        ) : (
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-md border text-sm font-bold"
+            style={{ borderColor: AX.border, color: AX.text, background: AX.surface2 }}
+          >
+            {token.name?.charAt(0) || "?"}
           </div>
-        </div>
-        {/* Center: Price, Liquidity, Supply, Global Fees Paid */}
-        <div className="flex items-center justify-center gap-4">
-          <div className="text-base leading-tight font-medium text-white">
-            ${formatSmartNumber(token.market_cap_usd || 0).toLocaleString()}
+        )}
+
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-[16px] font-semibold">{token.symbol}</span>
+            <span className="truncate text-[13px]" style={{ color: AX.muted }}>
+              {token.name}
+            </span>
+            <FiCopy className="ml-0.5 cursor-pointer text-[14px]" style={{ color: AX.muted }} />
           </div>
-          {/* Price */}
-          <HeaderColumnSection
-            label={"Price"}>
-              ${<SubscriptNumber value={token.usd_price} />}
-            </HeaderColumnSection>
-          <HeaderColumnSection
-            label={"Liquidity"}>
-              ${formatSmartNumber(token.total_liquidity_usd)}
-            </HeaderColumnSection>
-          <HeaderColumnSection
-            label={"Supply"}>
-              {formatSmartNumber(token.total_supply)}
-            </HeaderColumnSection>
-        </div>
-        {/* Right: Action Icons */}
-        <div className="mr-0 ml-auto flex items-center gap-4 pr-1 text-lg text-neutral-300">
-          <Tooltip label="Share token pair">
-            <IoShareSocialOutline className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />
-          </Tooltip>
-          <Tooltip label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}>
-            <button
-              onClick={handleWatchlistClick}
-              className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400"
-            >
-              {isWatched ? <FaStar className="text-yellow-400" /> : <FaRegStar />}
-            </button>
-          </Tooltip>
-          <Tooltip label="Expand Chart">
-            <FaExpand className="cursor-pointer text-[17px] duration-50 ease-in hover:text-emerald-400" />
-          </Tooltip>
+          <div className="mt-1 flex items-center gap-3">
+            <span className="text-[12px] font-semibold" style={{ color: "#3DDC84" }}>
+              {getTokenAge(token.created_at)}
+            </span>
+            <FaGlobe className="cursor-pointer text-[14px]" style={{ color: "#8EC5FF" }} />
+            <FaUser className="cursor-pointer text-[14px]" style={{ color: "#8EC5FF" }} />
+            <FaSearch className="cursor-pointer text-[14px]" style={{ color: "#8EC5FF" }} />
+          </div>
         </div>
       </div>
-    </>
+
+      {/* CENTER: mcap big + inline KPIs in ONE line */}
+      <div className="flex min-w-0 flex-1 items-center gap-8">
+        <div className="text-[22px] font-semibold tabular-nums">
+          ${formatSmartNumber(mcap)}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1">
+          <StatInline label="Price">
+            ${<SubscriptNumber value={price} />}
+          </StatInline>
+          <StatInline label="Liquidity">
+            ${formatSmartNumber(liq)}
+          </StatInline>
+          <StatInline label="Supply">
+            {formatSmartNumber(supply)}
+          </StatInline>
+          <StatInline label="Global Fees Paid">
+            {feesPaid === "—" ? "—" : feesPaid}
+          </StatInline>
+          <StatInline label="B.Curve" accent="green">
+            {Number.isFinite(Number(curvePct)) ? `${Math.round(Number(curvePct))}%` : "—"}
+          </StatInline>
+        </div>
+      </div>
+
+      {/* RIGHT: SINGLE action cluster (no duplicates) */}
+      <div className="ml-auto flex items-center gap-4 pr-1 text-neutral-300">
+        <Tooltip label="Share">
+          <IoShareSocialOutline className="cursor-pointer text-[18px] hover:text-white" />
+        </Tooltip>
+
+        <Tooltip label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}>
+          <button
+            onClick={handleWatchlistClick}
+            className="cursor-pointer text-[18px] hover:text-white"
+            aria-label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+          >
+            {isWatched ? <FaStar className="text-yellow-400" /> : <FaRegStar />}
+          </button>
+        </Tooltip>
+
+        <Tooltip label="Expand chart">
+          <FaExpand className="cursor-pointer text-[18px] hover:text-white" />
+        </Tooltip>
+      </div>
+    </div>
   );
 };
 
 export default TradeHeader;
-export { QuickBuyPresetBar };

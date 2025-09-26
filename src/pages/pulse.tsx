@@ -642,7 +642,7 @@ export default function PulsePage() {
         <title>Pulse | Interstate Memeboard</title>
         <meta name="description" content="Real-time token tracking with launchpad integration" />
       </Head>
-      <div className="min-h-screen bg-neutral-950 text-neutral-100">
+      <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#0f1012' }}>
         <Header />
         <div className="w-full p-4">
           <div className="mb-6">

@@ -1,181 +1,280 @@
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
-import type { Token } from "~/utils/db";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Head from "next/head";
-import Link from "next/link";
-import {
-  FaGlobe,
-  FaUser,
-  FaSearch,
-  FaCheckCircle,
-  FaQuestionCircle,
-  FaPowerOff,
-  FaTimes,
-} from "react-icons/fa";
-import dynamic from "next/dynamic";
+import { Toaster } from "react-hot-toast";
 import { useWallet } from "../../components/useWallet";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import toast, { Toaster } from "react-hot-toast";
 import { useUser } from "../../components/UserContext";
-import PriceChartWidget from "../../components/PriceChartWidget";
 import Header from "../../components/Header";
 import TradeHeader from "../../components/trade/TradeHeader";
+import PriceChartWidget from "../../components/PriceChartWidget";
 import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
-import { formatSmartNumber } from "~/utils/db";
-import { tradeBuy, tradeSellPercentage, tradeSellExactAmount } from "../../utils/api";
-import Trades from "../../components/trade/Trades";
 import CodexTrades from "../../components/trade/CodexTrades";
 import CodexTopTraders from "../../components/trade/CodexTopTraders";
 import CodexDevTokens from "../../components/trade/CodexDevTokens";
 import CodexHolders from "../../components/trade/CodexHolders";
 import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
 
+/* ---------- AXIOM palette ---------- */
+const AX = {
+  bg: "#101114",
+  surface: "#1E1F26",
+  surface2: "#17191E",
+  border: "#2A2B33",
+  text: "#E6E7EA",
+  muted: "#9CA3AF",
+  mint: "#70E0B0",
+  mintHover: "#58B890",
+  sell: "#FF4D7F",
+};
+
+/* ===================================================================== */
+
 export default function TradePage() {
   const router = useRouter();
   const { id } = router.query;
+
   const [showSkeleton, setShowSkeleton] = useState(true);
-  const [chartHeight, setChartHeight] = useState(600);
-  const { address, isConnected } = useWallet();
-  const [sellPercentage, setSellPercentage] = useState("");
-  const [txStatus, setTxStatus] = useState<string | null>(null);
-  const [txLoading, setTxLoading] = useState(false);
-  const [usdcAmount, setUsdcAmount] = useState("");
-  const [memeAmount, setMemeAmount] = useState("");
-  const [memePrice, setMemePrice] = useState<number | null>(null); // price in USDC per memecoin
-  const [tradeMode, setTradeMode] = useState<"buy" | "sell">("buy");
-  const [tradeAmount, setTradeAmount] = useState<string>("");
-  const amountOptions = ["0.1", "1", "10"];
-  
-  const { user, loading: userLoading } = useUser();
+  const { isConnected } = useWallet();
+  const { user } = useUser();
   const [selectedTab, setSelectedTab] = useState("Trades");
   const [search, setSearch] = useState("");
 
-  // Polling per-token service (every 3 seconds)
-  const { 
-    token, 
-    trades, 
-    isPolling, 
-    error: pollingError, 
-    loading: pollingLoading,
-    isHydrating,
-    refresh
-  } = useSingleTokenPolling(
-    typeof id === "string" ? id : undefined
+  const { token, isPolling, loading: pollingLoading, isHydrating } =
+    useSingleTokenPolling(typeof id === "string" ? id : undefined);
+
+  // ---------------- drag-to-resize for left column ----------------
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const draggingRef = useRef(false);
+  const startYRef = useRef(0);
+  const startTopPxRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+  const MIN_TOP = 220;
+  const MIN_BOTTOM = 180;
+
+  const [topPanePx, setTopPanePx] = useState<number>(() => {
+    if (typeof window === "undefined") return 420;
+    const v = Number(localStorage.getItem("tradeSplitTopPx"));
+    return Number.isFinite(v) && v > 0 ? v : 420;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("tradeSplitTopPx", String(topPanePx));
+  }, [topPanePx]);
+
+  const clampTop = useCallback((desired: number) => {
+    const el = containerRef.current;
+    if (!el) return desired;
+    const rect = el.getBoundingClientRect();
+    const maxTop = Math.max(MIN_TOP, rect.height - MIN_BOTTOM);
+    return Math.min(Math.max(desired, MIN_TOP), maxTop);
+  }, []);
+
+  const applyByDelta = useCallback(
+    (pageY: number) => {
+      const delta = pageY - startYRef.current;
+      const next = clampTop(startTopPxRef.current + delta);
+      setTopPanePx(next);
+    },
+    [clampTop]
   );
 
+  const onPointerMove = useCallback(
+    (ev: PointerEvent) => {
+      if (!draggingRef.current) return;
+      ev.preventDefault();
+      const pageY = ev.clientY + window.scrollY;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => applyByDelta(pageY));
+    },
+    [applyByDelta]
+  );
+
+  const stopDrag = useCallback(() => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    document.body.style.cursor = "";
+    (document.body.style as any).userSelect = "";
+    document.documentElement.style.cursor = "";
+    window.removeEventListener("pointermove", onPointerMove as any, { capture: true } as any);
+    window.removeEventListener("pointerup", stopDrag as any, { capture: true } as any);
+  }, [onPointerMove]);
+
+  const startDrag = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      draggingRef.current = true;
+      startYRef.current = e.clientY + window.scrollY;
+      startTopPxRef.current = topPanePx;
+
+      document.body.style.cursor = "row-resize";
+      (document.body.style as any).userSelect = "none";
+      document.documentElement.style.cursor = "row-resize";
+
+      window.addEventListener("pointermove", onPointerMove, { capture: true });
+      window.addEventListener("pointerup", stopDrag as any, { capture: true });
+    },
+    [onPointerMove, stopDrag, topPanePx]
+  );
+
+  useEffect(() => () => (rafRef.current ? cancelAnimationFrame(rafRef.current) : undefined), []);
   useEffect(() => {
-    // Show skeleton for at least 1.5s
     setShowSkeleton(true);
-    const timer = setTimeout(() => setShowSkeleton(false), 1500);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setShowSkeleton(false), 1000);
+    return () => clearTimeout(t);
   }, [id]);
-
-  useEffect(() => {
-    if (token) {
-      console.log('Polling token data:', token);
-    }
-  }, [token]);
-
-  useEffect(() => {
-    if (token?.usd_price) {
-      console.log(`Price changed: ${token.price}`);
-    }
-  }, [token?.usd_price]);
-
-  useEffect(() => {
-    function handleResize() {
-      setChartHeight(window.innerHeight - 220);
-    }
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   if (showSkeleton) {
     return (
-      <div className="min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100">
+      <div
+        className="min-h-screen w-full flex flex-col"
+        style={{ backgroundColor: '#0f1012', color: AX.text, fontFamily: 'Inter, ui-sans-serif, system-ui' }}
+      >
         <Header search={search} setSearch={setSearch} />
-        <div className="flex flex-1 flex-row w-full">
-          <div className="flex-1 min-w-0 flex flex-col pb-4 border-r border-emerald-950">
-            <div className="h-16 w-1/2 bg-neutral-800 animate-pulse rounded mb-4" />
-            <div className="min-h-[500px] w-full bg-neutral-800 animate-pulse rounded mb-4" />
-            <hr className="border-emerald-950" />
-            <div className="h-12 w-1/3 bg-neutral-800 animate-pulse rounded mb-4" />
-            <div className="space-y-2">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-8 w-full bg-neutral-800 animate-pulse rounded" />
-              ))}
-            </div>
-          </div>
-          <div className="w-full max-w-md flex-shrink-0">
-            <div className="space-y-2">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="h-8 w-full bg-neutral-800 animate-pulse rounded" />
-              ))}
-            </div>
-          </div>
-        </div>
+        <div className="flex flex-1" />
       </div>
     );
   }
 
   if (pollingLoading) {
-    return (
-      <div className="mt-20 text-center text-2xl text-neutral-400">
-        Loading...
-      </div>
-    );
+    return <div className="mt-20 text-center text-2xl" style={{ color: AX.muted }}>Loading...</div>;
   }
 
   if (!token) {
-    return (
-      <div className="mt-20 text-center text-2xl text-red-400">
-        Token not found
-        {pollingError && (
-          <div className="mt-4 text-sm text-neutral-400">
-            API Error: {pollingError}
-          </div>
-        )}
-      </div>
-    );
+    return <div className="mt-20 text-center text-2xl" style={{ color: AX.sell }}>Token not found</div>;
   }
 
   return (
     <>
-      <Head>
-        <title>{token?.name} | Trade</title>
-      </Head>
+      <Head><title>{token?.name} | Trade</title></Head>
       <Toaster position="top-right" />
-      <div className="min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100">
-        {/* Header always at the top, full width */}
+
+      {draggingRef.current && <div className="fixed inset-0 z-[60] cursor-row-resize" />}
+
+      <div
+        className="min-h-screen w-full flex flex-col"
+        style={{ backgroundColor: '#0f1012', color: AX.text, fontFamily: 'Inter, ui-sans-serif, system-ui' }}
+      >
+        {/* Top global header */}
         <Header search={search} setSearch={setSearch} />
-        {isPolling && <div className="text-center text-blue-500 p-2 bg-blue-900/50">Live data updating every 3 seconds...</div>}
-        {isHydrating && <div className="text-center text-yellow-500 p-2 bg-yellow-900/50">Finding trading pair for this token...</div>}
-        {/* Main content: flex row, fills the rest of the page */}
-        <div className="flex flex-1 flex-row w-full">
-          {/* Left: Chart and Info */}
-          <div className="flex-1 min-w-0 flex flex-col pb-4 border-r border-emerald-950">
-            <TradeHeader token={token} />
-            <div className="min-h-[500px] flex-1">
-              <PriceChartWidget token={token} pairAddress={typeof id === "string" ? id : undefined} />
-            </div>
-            <hr className="border-emerald-950" />
-            <TradeTabs
-              selectedTab={selectedTab}
-              setSelectedTab={setSelectedTab}
-            />
-            {selectedTab === "Trades" && <CodexTrades token={token} />}
-            {selectedTab === "Top Traders" && <CodexTopTraders token={token} />}
-            {selectedTab === "Holders" && <CodexHolders token={token} />}
-            {selectedTab === "Dev Tokens" && <CodexDevTokens token={token} />}
+
+        {/* little live banners */}
+        {isPolling && (
+          <div
+            className="text-center text-xs px-2 py-1.5"
+            style={{ color: AX.text, backgroundColor: "#14231B", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}
+          >
+            Live data updating every 3 seconds…
           </div>
-          {/* Right: Buy/Sell and Token Info */}
-          <div className="w-full max-w-md flex-shrink-0">
+        )}
+        {isHydrating && (
+          <div
+            className="text-center text-xs px-2 py-1.5"
+            style={{ color: AX.text, backgroundColor: "#2A2414", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}
+          >
+            Finding trading pair for this token…
+          </div>
+        )}
+
+        <div className="flex flex-1 w-full">
+          {/* LEFT: chart + tables */}
+          <div
+            ref={containerRef}
+            className="flex-1 min-w-0 flex flex-col pb-3"
+            style={{ borderRight: `1px solid ${AX.border}` }}
+          >
+            {/* TOP pane */}
+            <div className="flex-shrink-0 flex flex-col" style={{ height: topPanePx }}>
+              {/* TradeHeader includes name + the ONLY icon cluster */}
+              <div className="px-2">
+                <TradeHeader token={token} />
+              </div>
+
+              {/* Chart — hide TradingView top toolbar to avoid extra icons */}
+              <div className="flex-1 min-h-[240px] tv-hide-toolbar">
+                <PriceChartWidget
+                  token={token}
+                  pairAddress={typeof id === "string" ? id : undefined}
+                />
+              </div>
+            </div>
+
+            {/* Resizer */}
+            <div
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize chart and trades panels"
+              tabIndex={0}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                draggingRef.current = true;
+                startYRef.current = e.clientY + window.scrollY;
+                startTopPxRef.current = topPanePx;
+                document.body.style.cursor = "row-resize";
+                (document.body.style as any).userSelect = "none";
+                document.documentElement.style.cursor = "row-resize";
+                const onMove = (ev: any) => {
+                  if (!draggingRef.current) return;
+                  const pageY = ev.clientY + window.scrollY;
+                  if (rafRef.current) cancelAnimationFrame(rafRef.current);
+                  rafRef.current = requestAnimationFrame(() => {
+                    const delta = pageY - startYRef.current;
+                    setTopPanePx((v) => clampTop(startTopPxRef.current + delta));
+                  });
+                };
+                const onUp = () => {
+                  draggingRef.current = false;
+                  document.body.style.cursor = "";
+                  (document.body.style as any).userSelect = "";
+                  document.documentElement.style.cursor = "";
+                  window.removeEventListener("pointermove", onMove, { capture: true } as any);
+                  window.removeEventListener("pointerup", onUp as any, { capture: true } as any);
+                };
+                window.addEventListener("pointermove", onMove, { capture: true });
+                window.addEventListener("pointerup", onUp as any, { capture: true });
+              }}
+              className="relative z-10 h-4 cursor-row-resize select-none touch-none"
+              style={{ touchAction: "none" }}
+            >
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px" style={{ background: AX.border }} />
+              <div
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 px-1 py-0.5 rounded-full"
+                style={{ background: AX.bg }}
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: AX.mint, opacity: 0.8 }} />
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: AX.mint, opacity: 0.8 }} />
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: AX.mint, opacity: 0.8 }} />
+              </div>
+            </div>
+
+            {/* BOTTOM pane */}
+            <div className="flex-1 min-h-[120px] flex flex-col">
+              <hr style={{ borderColor: AX.border }} />
+              <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
+              <div className="flex-1 min-h-0">
+                {selectedTab === "Trades" && <CodexTrades token={token} />}
+                {selectedTab === "Top Traders" && <CodexTopTraders token={token} />}
+                {selectedTab === "Holders" && <CodexHolders token={token} />}
+                {selectedTab === "Dev Tokens" && <CodexDevTokens token={token} />}
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: action panel */}
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px]">
             <TradeActionPanel token={token} />
           </div>
         </div>
       </div>
+
+      {/* Hide TradingView top toolbar inside this page */}
+      <style jsx global>{`
+        .tv-hide-toolbar .chart-controls-bar,
+        .tv-hide-toolbar .layout__area--top,
+        .tv-hide-toolbar .toolbar-2po1G0-,
+        .tv-hide-toolbar .chart-page .header-chart-panel,
+        .tv-hide-toolbar .button-3SuA8iQk { display: none !important; }
+      `}</style>
     </>
   );
 }
