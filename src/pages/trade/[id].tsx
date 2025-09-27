@@ -14,6 +14,8 @@ import CodexTopTraders from "../../components/trade/CodexTopTraders";
 import CodexDevTokens from "../../components/trade/CodexDevTokens";
 import CodexHolders from "../../components/trade/CodexHolders";
 import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
+import { useQuickBuyQueryParams } from "../../components/QuickBuy";
+import { useTradePageQueryParams } from "../../utils/queryParams";
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
@@ -39,6 +41,25 @@ export default function TradePage() {
   const { user } = useUser();
   const [selectedTab, setSelectedTab] = useState("Trades");
   const [search, setSearch] = useState("");
+
+  // Query parameter handling for trade settings
+  const { 
+    queryString, 
+    getQueryParams, 
+    getTradeParams, 
+    getLimitOrderParams,
+    settings: quickBuySettings,
+    side: quickBuySide 
+  } = useQuickBuyQueryParams();
+
+  // Trade page specific parameters
+  const { 
+    params: tradeParams, 
+    setParams: setTradeParams, 
+    getQueryString: getTradeQueryString,
+    getApiParams: getTradeApiParams,
+    isReady: tradeParamsReady 
+  } = useTradePageQueryParams();
 
   const { token, isPolling, loading: pollingLoading, isHydrating } =
     useSingleTokenPolling(typeof id === "string" ? id : undefined);
@@ -238,18 +259,22 @@ export default function TradePage() {
             >
               <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px" style={{ background: AX.border }} />
               <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 px-1 py-0.5 rounded-full"
-                style={{ background: AX.bg }}
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 px-2 py-1 rounded-full transition-all duration-200 hover:scale-105"
+                style={{ 
+                  background: 'rgba(61, 220, 132, 0.08)',
+                  border: `1px solid rgba(61, 220, 132, 0.2)`,
+                  maxWidth: '32px',
+                  maxHeight: '12px'
+                }}
               >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: AX.mint, opacity: 0.8 }} />
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: AX.mint, opacity: 0.8 }} />
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: AX.mint, opacity: 0.8 }} />
+                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.6 }} />
+                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.6 }} />
+                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.6 }} />
               </div>
             </div>
 
             {/* BOTTOM pane */}
             <div className="flex-1 min-h-[120px] flex flex-col">
-              <hr style={{ borderColor: AX.border }} />
               <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
               <div className="flex-1 min-h-0">
                 {selectedTab === "Trades" && <CodexTrades token={token} />}
@@ -262,10 +287,17 @@ export default function TradePage() {
 
           {/* RIGHT: action panel */}
           <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px]">
-            <TradeActionPanel token={token} />
+            <TradeActionPanel 
+              token={token} 
+              tradeParams={tradeParams}
+              setTradeParams={setTradeParams}
+              quickBuySettings={quickBuySettings}
+              quickBuySide={quickBuySide}
+            />
           </div>
         </div>
       </div>
+
 
       {/* Hide TradingView top toolbar inside this page */}
       <style jsx global>{`

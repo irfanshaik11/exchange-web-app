@@ -13,25 +13,45 @@ type InterstateTooltipProps = {
 
 const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, widthClass = 'max-w-md', xOffset = '-translate-x-1/2', width, height, className }) => {
   const [show, setShow] = React.useState(false);
+  const [position, setPosition] = React.useState({ top: 0, left: 0 });
+  const triggerRef = React.useRef<HTMLSpanElement>(null);
 
   const tooltipStyle = {
     ...(width && { width: `${width}px` }),
     ...(height && { height: `${height}px` }),
+    top: `${position.top}px`,
+    left: `${position.left}px`,
+  };
+
+  const updatePosition = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPosition({
+        top: rect.bottom + window.scrollY + 8,
+        left: rect.left + window.scrollX,
+      });
+    }
+  };
+
+  const handleMouseEnter = () => {
+    updatePosition();
+    setShow(true);
   };
 
   return (
     <span
+      ref={triggerRef}
       className="relative inline-block"
-      onMouseEnter={() => setShow(true)}
+      onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShow(false)}
-      onFocus={() => setShow(true)}
+      onFocus={handleMouseEnter}
       onBlur={() => setShow(false)}
       tabIndex={0}
     >
       {children}
       {show && (
         <span
-          className={`absolute top-full left-0 z-50 mt-2 ${xOffset} rounded-lg bg-neutral-900/90 border border-emerald-700 shadow-2xl shadow-emerald-500/20 px-3 py-2 text-xs whitespace-pre-line text-white ${widthClass} ${className}`}
+          className={`fixed z-[999999] rounded-lg bg-neutral-900/90 border border-emerald-700 shadow-2xl shadow-emerald-500/20 px-3 py-2 text-xs whitespace-pre-line text-white ${widthClass} ${className}`}
           style={tooltipStyle}
         >
           {typeof label === 'string' ? label : label}

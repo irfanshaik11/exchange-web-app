@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { LuPencil, LuCheck } from "react-icons/lu";
 import { formatSmartNumber, type Token } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
@@ -80,24 +80,80 @@ const prettyAmt = (s: string) => {
 
 interface TradeActionPanelProps {
   token: Token;
+  tradeParams?: {
+    mode: "buy" | "sell";
+    tab: "market" | "limit" | "adv";
+    timeRange: "1m" | "5m" | "1h" | "6h" | "24h";
+    amount: string;
+    targetMC: string;
+    sliderPct: number;
+  };
+  setTradeParams?: (params: any) => void;
+  quickBuySettings?: any;
+  quickBuySide?: "buy" | "sell";
 }
 
-const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
-  const [mode, setMode] = useState<"buy" | "sell">("buy");
-  const [tab, setTab] = useState<"market" | "limit" | "adv">("market");
-  const [timeRange, setTimeRange] = useState<TimeRange>("5m");
-  const [amount, setAmount] = useState("");
-  const [targetMC, setTargetMC] = useState("");              // USD MKT CAP we’re targeting
-  const [direction, setDirection] = useState<"Above" | "Below">("Above");
+const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ 
+  token, 
+  tradeParams: externalTradeParams,
+  setTradeParams: setExternalTradeParams,
+  quickBuySettings: externalQuickBuySettings,
+  quickBuySide: externalQuickBuySide
+}) => {
+  // Internal state with fallback to external props
+  const [mode, setMode] = useState<"buy" | "sell">(externalTradeParams?.mode || "buy");
+  const [tab, setTab] = useState<"market" | "limit" | "adv">(externalTradeParams?.tab || "market");
+  const [timeRange, setTimeRange] = useState<TimeRange>(externalTradeParams?.timeRange || "5m");
+  const [amount, setAmount] = useState(externalTradeParams?.amount || "");
+  const [targetMC, setTargetMC] = useState(externalTradeParams?.targetMC || "");
+  const [sliderPct, setSliderPct] = useState(externalTradeParams?.sliderPct || 0);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  // Update internal state when external props change (only on mount)
+  useEffect(() => {
+    if (externalTradeParams) {
+      setMode(externalTradeParams.mode);
+      setTab(externalTradeParams.tab);
+      setTimeRange(externalTradeParams.timeRange);
+      setAmount(externalTradeParams.amount);
+      setTargetMC(externalTradeParams.targetMC);
+      setSliderPct(externalTradeParams.sliderPct);
+    }
+  }, []); // Only run on mount
+
+  // Update external state when internal state changes (debounced)
+  const updateExternalParams = useCallback(() => {
+    if (setExternalTradeParams) {
+      setExternalTradeParams({
+        mode,
+        tab,
+        timeRange,
+        amount,
+        targetMC,
+        sliderPct,
+      });
+    }
+  }, [mode, tab, timeRange, amount, targetMC, sliderPct, setExternalTradeParams]);
+
+  // Debounce external updates to avoid loops
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      updateExternalParams();
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [mode, tab, timeRange, amount, targetMC, sliderPct, updateExternalParams]);
+
   const { presets: qbPresets, activePreset } = useQuickBuy();
   const { user, solBalance } = useUser();
-  const settings =
+  
+  // Use external QuickBuy settings if available, otherwise use internal context
+  const settings = externalQuickBuySettings || (
     mode === "buy"
       ? qbPresets[activePreset].quickBuySettings
-      : qbPresets[activePreset].quickSellSettings;
+      : qbPresets[activePreset].quickSellSettings
+  );
 
   // Best-effort current market cap to anchor the slider
   const baseMarketCap: number = useMemo(() => {
@@ -116,8 +172,25 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
   // Derive % change from base MC -> targetMC (used to display slider value)
   const derivedPct: number = useMemo(() => {
     const t = Number(targetMC);
-    if (!baseMarketCap || !Number.isFinite(t) || t <= 0) return 0;
+    if (!baseMarketCap || !Number.isFinite(t)) return 0;
+    // Allow negative percentages even when targetMC is 0
+    if (t <= 0) {
+      // Calculate what percentage would result in 0 market cap
+      return -100;
+    }
     return clamp(Math.round(((t - baseMarketCap) / baseMarketCap) * 100), -100, 100);
+  }, [targetMC, baseMarketCap]);
+
+  // Sync slider percentage when market cap changes (e.g., from typing)
+  useEffect(() => {
+    if (baseMarketCap && targetMC) {
+      const t = Number(targetMC);
+      if (Number.isFinite(t) && t > 0) {
+        const calculatedPct = Math.round(((t - baseMarketCap) / baseMarketCap) * 100);
+        const clampedPct = clamp(calculatedPct, -100, 100);
+        setSliderPct(clampedPct);
+      }
+    }
   }, [targetMC, baseMarketCap]);
 
   // chart stats
@@ -136,11 +209,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
 
   const commitPresetDrafts = () => {
     const next = presetDrafts.map((s, idx) => {
+      // Handle empty string, just ".", or whitespace as 0
+      if (!s || s.trim() === "" || s.trim() === ".") {
+        return 0;
+      }
       const n = parseFloat(s);
-      return Number.isFinite(n) && n >= 0 ? n : amountPresets[idx];
+      return Number.isFinite(n) && n >= 0 ? n : 0;
     });
     setAmountPresets(next);
     setEditingPresets(false);
+    // Force re-render by updating the drafts
+    setPresetDrafts(next.map(String));
   };
 
   return (
@@ -149,7 +228,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
       style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial' }}
     >
       {/* ===== A. Time buttons ===== */}
-      <div className="px-3 pt-2 pb-1.5 border-b border-[#2A2B33]">
+      <div className="px-3 pt-2 pb-2 border-b border-[#2A2B33]">
         <div className="mx-auto w-full max-w-xl overflow-hidden">
           <div className="flex gap-1 rounded-xl bg-[#1E1F26] border border-[#2A2B33] p-1">
             {(["1m", "5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
@@ -278,42 +357,60 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
               {t === "adv" ? "Adv." : t[0].toUpperCase() + t.slice(1)}
             </button>
           ))}
-          <div className="ml-auto flex items-center gap-2 text-[10px] text-[#9CA3AF]">
-            <span className="px-1 py-0.5 border border-[#2A2B33] rounded bg-[#17191E]">1</span>
-            <span className="px-1 py-0.5 border border-[#2A2B33] rounded bg-[#17191E]">0</span>
-          </div>
         </div>
       </div>
 
       {/* ===== E. Amount ===== */}
       <div className="px-3 pt-2">
-        <div className="relative rounded-lg border border-[#2A2B33] bg-[#1E1F26]">
+        <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#1E1F26]">
           <div className="flex items-center justify-between gap-3 px-3 py-1.5">
-            <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Amount</span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Amount</span>
               <input
                 type="text"
                 inputMode="decimal"
                 pattern="[0-9]*[.,]?[0-9]*"
-                className="h-8 w-28 bg-transparent border-none text-right
-                           text-[14px] font-semibold text-[#E6E7EA] tabular-nums
+                className="h-8 w-20 bg-transparent border-none text-left pl-2
+                           text-[12px] font-normal text-[#E6E7EA] tabular-nums
                            placeholder:text-[#9CA3AF] focus:outline-none"
-                placeholder="0.0"
+                style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                placeholder="0.00"
                 value={amount}
                 onChange={(e) => {
                   const raw = e.target.value.replace(/,/g, ".");
                   if (allowDecimal(raw)) setAmount(raw);
                 }}
               />
-              <span className="text-[11px] font-semibold text-[#9CA3AF]">SOL</span>
+            </div>
+            <div className="flex items-center justify-center w-5 h-5">
+              <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
+                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
+                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear)"/>
+                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear)"/>
+                <defs>
+                  <linearGradient id="paint0_linear" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint1_linear" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint2_linear" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                </defs>
+              </svg>
             </div>
           </div>
 
           {/* Presets */}
           <div className="border-t border-[#2A2B33] rounded-b-lg overflow-hidden">
             <div className="grid grid-cols-5">
-              {[0.01, 0.1, 0.5, 1].map((opt, i) => {
-                const active = amount === String(opt);
+              {amountPresets.map((opt, i) => {
+                const currentValue = editingPresets ? (presetDrafts[i] || "") : String(opt);
+                const active = amount === currentValue;
                 if (editingPresets) {
                   return (
                     <div key={i} className="h-9 border-r border-[#2A2B33] last:border-r-0 min-w-0">
@@ -346,9 +443,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
                     className={cx(
                       "h-9 border-r border-[#2A2B33] last:border-r-0 text-[12px] font-semibold tabular-nums",
                       active
-                        ? mode === "buy"
-                          ? "bg-[#70E0B0] text-black"
-                          : "bg-[#FF4D7F] text-black"
+                        ? "bg-[#2A2B33] text-[#E6E7EA]"
                         : "bg-[#17191E] hover:bg-[#1E1F26] text-[#E6E7EA]"
                     )}
                     onClick={() => setAmount(String(opt))}
@@ -383,46 +478,104 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
 
       {/* ===== F. LIMIT FIELDS (with SLIDER) ===== */}
       {tab === "limit" && (
-        <div className="px-3 pt-2 space-y-2.5">
+        <div className="px-3 pt-2 space-y-3">
           {/* Market cap input */}
-          <div className="rounded-lg border border-[#2A2B33] bg-[#1E1F26] p-2.5">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">MKT CAP</span>
-              <span className="text-[12px] font-semibold text-[#E6E7EA]">$</span>
+          <div className=" pt-2 pb-3">
+            <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#1E1F26] mb-3">
+              <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">MKT CAP</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.,]?[0-9]*"
+                    className="h-8 w-20 bg-transparent border-none text-left pl-2
+                               text-[12px] font-normal text-[#E6E7EA] tabular-nums
+                               placeholder:text-[#9CA3AF] focus:outline-none"
+                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                    placeholder="0"
+                    value={targetMC}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/,/g, ".");
+                      if (/^\d*\.?\d*$/.test(v)) setTargetMC(v);
+                    }}
+                  />
+                </div>
+                <span className="text-[11px] font-normal text-[#9CA3AF]">$</span>
+              </div>
             </div>
-            <input
-              type="text"
-              inputMode="decimal"
-              pattern="[0-9]*[.,]?[0-9]*"
-              className="h-8 w-full overflow-hidden rounded border border-[#2A2B33] bg-[#101114] px-2 text-[12px] font-semibold text-[#E6E7EA] placeholder:text-[#9CA3AF] focus:border-[#70E0B0] focus:outline-none focus:ring-1 focus:ring-[color:rgb(112_224_176_/_0.4)]"
-              placeholder={baseMarketCap ? String(baseMarketCap) : "0.0"}
-              value={targetMC}
-              onChange={(e) => {
-                const v = e.target.value.replace(/,/g, ".");
-                if (/^\d*\.?\d*$/.test(v)) setTargetMC(v);
-              }}
-            />
 
             {/* Slider row */}
-            <div className="mt-3 flex items-center gap-3">
+            <div className="flex items-center gap-3 ml-2">
               {/* slider + ticks */}
               <div className="flex-1">
-                <input
-                  type="range"
-                  min={-100}
-                  max={100}
-                  step={1}
-                  value={baseMarketCap ? derivedPct : 0}
-                  onChange={(e) => {
-                    if (!baseMarketCap) return;
-                    const p = clamp(Number(e.target.value), -100, 100);
-                    const next = Math.max(0, Math.round(baseMarketCap * (1 + p / 100)));
-                    setTargetMC(String(next));
-                  }}
-                  className="w-full accent-[#3B82F6] cursor-pointer"
-                />
+                <div className="relative h-4 flex items-center">
+                  {/* Base track */}
+                  <div className="absolute top-1/2 left-0 w-full h-0.5 bg-[#2A2B33] rounded-lg"></div>
+                  
+                  {/* Markings positioned correctly */}
+                  <div className="absolute top-1/2 left-0 w-full h-0.5 flex justify-between items-center pointer-events-none">
+                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
+                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
+                    <div className="w-px h-1.5 bg-[#E6E7EA] -mt-0.5"></div>
+                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
+                    <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
+                  </div>
+                  
+                  <input
+                    type="range"
+                    min={-100}
+                    max={100}
+                    step={1}
+                    value={sliderPct}
+                    onChange={(e) => {
+                      if (!baseMarketCap) return;
+                      const p = clamp(Number(e.target.value), -100, 100);
+                      setSliderPct(p);
+                      const next = Math.round(baseMarketCap * (1 + p / 100));
+                      setTargetMC(String(Math.max(0, next)));
+                    }}
+                    className="w-full h-0.5 appearance-none cursor-pointer slider relative z-10 bg-transparent"
+                    style={{
+                      background: `linear-gradient(to right, 
+                        ${sliderPct >= 0 
+                          ? `#2A2B33 0%, #2A2B33 50%, #526fff 50%, #526fff ${50 + (sliderPct / 2)}%, #2A2B33 ${50 + (sliderPct / 2)}%, #2A2B33 100%`
+                          : `#2A2B33 0%, #2A2B33 ${50 + (sliderPct / 2)}%, #FF4D7F ${50 + (sliderPct / 2)}%, #FF4D7F 50%, #2A2B33 50%, #2A2B33 100%`
+                        }`
+                    }}
+                  />
+                  <style jsx>{`
+                    .slider::-webkit-slider-thumb {
+                      appearance: none;
+                      width: 16px;
+                      height: 16px;
+                      border-radius: 50%;
+                      background: #526fff;
+                      cursor: pointer;
+                      border: none;
+                      outline: none;
+                      z-index: 50;
+                    }
+                    .slider::-moz-range-thumb {
+                      width: 16px;
+                      height: 16px;
+                      border-radius: 50%;
+                      background: #526fff;
+                      cursor: pointer;
+                      border: none;
+                      outline: none;
+                      z-index: 50;
+                    }
+                    .slider::-webkit-slider-track {
+                      background: transparent;
+                    }
+                    .slider::-moz-range-track {
+                      background: transparent;
+                    }
+                  `}</style>
+                </div>
                 {/* tick labels */}
-                <div className="mt-1 flex justify-between text-[10px] text-[#9CA3AF]">
+                <div className="mt-2 flex justify-between text-[9px] text-[#9CA3AF] font-normal">
                   <span>-100%</span>
                   <span>-50%</span>
                   <span>0%</span>
@@ -432,62 +585,37 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
               </div>
 
               {/* % box */}
-              <div className="w-16">
+              <div className="w-18">
                 <div className="relative">
                   <input
                     type="number"
                     min={-100}
                     max={100}
                     step={1}
-                    value={baseMarketCap ? derivedPct : 0}
+                    value={sliderPct}
                     onChange={(e) => {
                       const p = clamp(Number(e.target.value || 0), -100, 100);
+                      setSliderPct(p);
                       if (baseMarketCap) {
-                        const next = Math.max(0, Math.round(baseMarketCap * (1 + p / 100)));
-                        setTargetMC(String(next));
+                        const next = Math.round(baseMarketCap * (1 + p / 100));
+                        setTargetMC(String(Math.max(0, next)));
                       }
                     }}
-                    className="h-8 w-full rounded border border-[#2A2B33] bg-[#101114] px-2 pr-6 text-[12px] font-semibold text-[#E6E7EA] outline-none"
+                    className="h-8 w-full rounded border border-[#2A2B33] bg-[#101114] px-2 pr-5 text-[12px] font-semibold text-[#E6E7EA] outline-none focus:border-[#52c5ff] focus:ring-1 focus:ring-[#52c5ff]/20 transition-all duration-200"
                   />
-                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-[#9CA3AF]">%</span>
+                  <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[#9CA3AF] font-normal">%</span>
                 </div>
               </div>
             </div>
 
             {/* helper if base MC is unknown */}
             {!baseMarketCap ? (
-              <div className="mt-2 text-[10px] text-[#9CA3AF]">
+              <div className="mt-2 text-[9px] text-[#9CA3AF] font-normal">
                 Current market cap unavailable — enter a target value directly to enable the slider.
               </div>
             ) : null}
           </div>
 
-          {/* Direction toggle */}
-          <div className="rounded-lg border border-[#2A2B33] bg-[#1E1F26] p-2.5">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Direction</span>
-              <span className="text-[12px] font-semibold text-[#E6E7EA]">{direction}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {(["Above", "Below"] as const).map((d) => {
-                const active = direction === d;
-                return (
-                  <button
-                    key={d}
-                    type="button"
-                    className={cx(
-                      baseBtn,
-                      "h-8 rounded border border-[#2A2B33] bg-[#101114] hover:bg-[#1E1F26] text-[12px] cursor-pointer",
-                      active && (mode === "buy" ? "bg-[#70E0B0] text-black border-transparent" : "bg-[#FF4D7F] text-black border-transparent")
-                    )}
-                    onClick={() => setDirection(d)}
-                  >
-                    {d}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
       )}
 
@@ -540,11 +668,30 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
       <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
         {amount ? (
           <>
-            You’ll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span> SOL
+            You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span> 
+            <div className="inline-block w-3 h-3 ml-1 align-middle">
+              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
+                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
+                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
+                <defs>
+                  <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
           </>
-        ) : (
-          "Enter amount"
-        )}
+        ) : null}
       </div>
 
       {/* Primary action */}
@@ -580,7 +727,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
                     tokenAddress: token.pair_address,
                     amount: Number(amount),
                     type: mode === "buy" ? "Buy" : "Sell",
-                    direction,
+                    direction: "Above",
                     targetMC: Number(targetMC),
                   },
                   user.bearerToken
@@ -683,22 +830,114 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ token }) => {
       </div>
 
       {/* footer mini stats */}
-      <div className="grid grid-cols-4" style={{ borderTop: `1px solid ${AX.border}` }}>
-        <div className="flex flex-col items-center gap-0.5" style={{ borderRight: `1px solid ${AX.border}` }}>
-          <span className="text-[10px] text-[#9CA3AF]">Bought</span>
-          <span className="text-[#70E0B0] text-[11px]">$0</span>
+      <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
+        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3">
+              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_bought)"/>
+                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_bought)"/>
+                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_bought)"/>
+                <defs>
+                  <linearGradient id="paint0_linear_bought" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint1_linear_bought" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint2_linear_bought" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <span className="text-[#70E0B0] text-[12px] font-semibold">0</span>
+          </div>
         </div>
-        <div className="flex flex-col items-center gap-0.5" style={{ borderRight: `1px solid ${AX.border}` }}>
-          <span className="text-[10px] text-[#9CA3AF]">Sold</span>
-          <span className="text-[#FF4D7F] text-[11px]">$0</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3">
+              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_sold)"/>
+                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_sold)"/>
+                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_sold)"/>
+                <defs>
+                  <linearGradient id="paint0_linear_sold" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint1_linear_sold" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint2_linear_sold" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <span className="text-[#FF4D7F] text-[12px] font-semibold">0</span>
+          </div>
         </div>
-        <div className="flex flex-col items-center gap-0.5" style={{ borderRight: `1px solid ${AX.border}` }}>
-          <span className="text-[10px] text-[#9CA3AF]">Holding</span>
-          <span className="text-[#E6E7EA] text-[11px]">$0</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3">
+              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_holding)"/>
+                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_holding)"/>
+                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_holding)"/>
+                <defs>
+                  <linearGradient id="paint0_linear_holding" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint1_linear_holding" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint2_linear_holding" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <span className="text-[#E6E7EA] text-[12px] font-semibold">0</span>
+          </div>
         </div>
-        <div className="flex flex-col items-center gap-0.5">
-          <span className="text-[10px] text-[#9CA3AF]">PnL</span>
-          <span className="text-[#70E0B0] text-[11px]">$0(+0%)</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">PnL</span>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3">
+              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_pnl)"/>
+                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_pnl)"/>
+                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_pnl)"/>
+                <defs>
+                  <linearGradient id="paint0_linear_pnl" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint1_linear_pnl" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                  <linearGradient id="paint2_linear_pnl" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                    <stop offset="0" stopColor="#00FFA3"/>
+                    <stop offset="1" stopColor="#DC1FFF"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <span className="text-[#70E0B0] text-[12px] font-semibold">0(+0%)</span>
+          </div>
         </div>
       </div>
 
