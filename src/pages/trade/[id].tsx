@@ -6,7 +6,7 @@ import { useWallet } from "../../components/useWallet";
 import { useUser } from "../../components/UserContext";
 import Header from "../../components/Header";
 import TradeHeader from "../../components/trade/TradeHeader";
-import PriceChartWidget from "../../components/PriceChartWidget";
+import CustomSolanaChart from "../../components/CustomSolanaChart";
 import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
 import CodexTrades from "../../components/trade/CodexTrades";
@@ -211,13 +211,15 @@ export default function TradePage() {
                 <TradeHeader token={token} />
               </div>
 
-              {/* Chart — hide TradingView top toolbar to avoid extra icons */}
-              <div className="flex-1 min-h-[240px] tv-hide-toolbar">
-                <PriceChartWidget
-                  token={token}
-                  pairAddress={typeof id === "string" ? id : undefined}
-                />
-              </div>
+              {/* Custom Solana Chart with OHLC Data */}
+        <div className="flex-1 min-h-[240px]">
+          <CustomSolanaChart
+            token={token}
+            pairAddress={typeof id === "string" ? id : undefined}
+            height="100%"
+            width="100%"
+          />
+        </div>
             </div>
 
             {/* Resizer */}
@@ -299,13 +301,42 @@ export default function TradePage() {
       </div>
 
 
-      {/* Hide TradingView top toolbar inside this page */}
+      {/* Simple TradingView Widget styling */}
       <style jsx global>{`
-        .tv-hide-toolbar .chart-controls-bar,
-        .tv-hide-toolbar .layout__area--top,
-        .tv-hide-toolbar .toolbar-2po1G0-,
-        .tv-hide-toolbar .chart-page .header-chart-panel,
-        .tv-hide-toolbar .button-3SuA8iQk { display: none !important; }
+        /* Ensure TradingView widget fits properly in our layout */
+        .tradingview-widget-container {
+          width: 100% !important;
+          height: 100% !important;
+          background: rgba(0, 0, 0, 1) !important;
+        }
+        
+        .tradingview-widget-container__widget {
+          height: calc(100% - 32px) !important;
+          background: rgba(0, 0, 0, 1) !important;
+        }
+        
+        /* Clean, minimal copyright styling */
+        .tradingview-widget-copyright {
+          color: #6b7280 !important;
+          font-size: 11px !important;
+          text-align: center !important;
+          padding: 8px 0 !important;
+          background: transparent !important;
+          border-top: 1px solid rgba(242, 242, 242, 0.06) !important;
+        }
+        
+        .tradingview-widget-copyright .blue-text {
+          color: #3b82f6 !important;
+          text-decoration: none !important;
+        }
+        
+        .tradingview-widget-copyright .blue-text:hover {
+          color: #60a5fa !important;
+        }
+        
+        .tradingview-widget-copyright .trademark {
+          color: #9ca3af !important;
+        }
       `}</style>
     </>
   );
