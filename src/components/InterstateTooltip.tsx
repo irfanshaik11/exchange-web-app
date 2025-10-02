@@ -51,7 +51,7 @@ const InterstateTooltip: React.FC<InterstateTooltipProps> = ({ label, children, 
       {children}
       {show && (
         <span
-          className={`fixed z-[999999] rounded-lg bg-neutral-900/90 border border-emerald-700 shadow-2xl shadow-emerald-500/20 px-3 py-2 text-xs whitespace-pre-line text-white ${widthClass} ${className}`}
+          className={`fixed z-[999999] rounded-lg bg-[#17191E] border border-[#2A2B33] shadow-lg shadow-black/30 px-3 py-2 text-xs whitespace-pre-line text-[#9CA3AF] ${widthClass} ${className}`}
           style={tooltipStyle}
         >
           {typeof label === 'string' ? label : label}

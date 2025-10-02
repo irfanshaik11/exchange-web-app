@@ -172,7 +172,7 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
         {presetLabels.map((label, i) => (
           <button
             key={label}
-            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? "bg-[#1a1f38] text-[#526fff]" : "bg-transparent text-[#9CA3AF] hover:bg-[#1E1F26] hover:text-[#E6E7EA]"}`}
+            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? "bg-[#4B5563] text-[#70E0B0]" : "bg-transparent text-[#9CA3AF] hover:bg-[#1E1F26] hover:text-[#70E0B0]"}`}
             onClick={() => {
               setActivePreset(i);
               setExpanded(true);

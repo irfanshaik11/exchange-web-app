@@ -18,7 +18,7 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-/* ---- Axiom palette ---- */
+/* ---- style palette ---- */
 const AX = {
   bg: "#101114",
   surface: "#1E1F26",
@@ -109,6 +109,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [sliderPct, setSliderPct] = useState(externalTradeParams?.sliderPct || 0);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [migrationMode, setMigrationMode] = useState(false);
+  const [devSellMode, setDevSellMode] = useState(true);
 
   // Update internal state when external props change (only on mount)
   useEffect(() => {
@@ -155,7 +157,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       : qbPresets[activePreset].quickSellSettings
   );
 
-  // Best-effort current market cap to anchor the slider
   const baseMarketCap: number = useMemo(() => {
     const t: any = token || {};
     return Number(
@@ -360,7 +361,52 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         </div>
       </div>
 
-      {/* ===== E. Amount ===== */}
+      {/* ===== E. Migration/Dev Sell Toggle ===== */}
+      {tab === "adv" && (
+        <div className="px-3 pt-2">
+          <div className="mx-auto w-full max-w-xs relative rounded-md border border-[#2A2B33] bg-[#1E1F26] p-0.5">
+            <div
+              className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
+              style={{
+                transform: migrationMode ? "translateX(0%)" : "translateX(100%)",
+                background: '#4B5563',
+              }}
+            />
+            <div className="relative flex">
+              <button
+                type="button"
+                className={cx(
+                  "flex-1 py-1.5 text-[12px] font-medium transition-colors duration-200 rounded-md flex items-center justify-center gap-1",
+                  migrationMode ? "text-[#70E0B0]" : "text-[#9CA3AF]"
+                )}
+                onClick={() => {
+                  setMigrationMode(true);
+                  setDevSellMode(false);
+                }}
+              >
+                <span>»</span>
+                Migration
+              </button>
+              <button
+                type="button"
+                className={cx(
+                  "flex-1 py-1.5 text-[12px] font-medium transition-colors duration-200 rounded-md flex items-center justify-center gap-1",
+                  devSellMode ? "text-[#70E0B0]" : "text-[#9CA3AF]"
+                )}
+                onClick={() => {
+                  setDevSellMode(true);
+                  setMigrationMode(false);
+                }}
+              >
+                <span>↑</span>
+                Dev Sell
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== F. Amount ===== */}
       <div className="px-3 pt-2">
         <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#1E1F26]">
           <div className="flex items-center justify-between gap-3 px-3 py-1.5">
@@ -513,7 +559,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   {/* Base track */}
                   <div className="absolute top-1/2 left-0 w-full h-0.5 bg-[#2A2B33] rounded-lg"></div>
                   
-                  {/* Markings positioned correctly */}
+                  {/* Markings */}
                   <div className="absolute top-1/2 left-0 w-full h-0.5 flex justify-between items-center pointer-events-none">
                     <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
                     <div className="w-px h-1 bg-[#9CA3AF] -mt-0.5"></div>
@@ -693,6 +739,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           </>
         ) : null}
       </div>
+
 
       {/* Primary action */}
       <div className="px-3 py-2">
