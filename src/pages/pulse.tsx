@@ -644,7 +644,7 @@ export default function PulsePage() {
       </Head>
       <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#0f1012' }}>
         <Header />
-        <div className="w-full p-4">
+        <div className="w-full px-5 py-6">
           <div className="mb-6">
             <h1 className="text-2xl font-bold mb-2">Pulse</h1>
             <p className="text-neutral-400 mb-2">Real-time token tracking with launchpad integration</p>

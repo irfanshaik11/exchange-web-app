@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber } from "~/utils/db";
-import { HiLightningBolt } from "react-icons/hi";
 import {
   FaUser,
   FaGlobe,
@@ -10,7 +9,35 @@ import {
   FaRegCopy,
   FaBolt,
   FaCamera,
+  FaUsers,
+  FaTrophy,
+  FaRunning, 
+  FaGasPump, 
+  FaCoins, 
+  FaBan,
+  FaRedo,
+  FaDollarSign, 
+  FaRocket, 
+  FaChartBar, 
+  FaGem
 } from "react-icons/fa";
+import { FaDice } from "react-icons/fa6";
+import { BsPersonGear, BsCoin, BsMoon, BsCloud, BsCup, BsArrowUp } from "react-icons/bs";
+import { LuChefHat } from "react-icons/lu";
+import { RiGhostLine, RiFlaskLine } from "react-icons/ri";
+import { BiCandles, BiRefresh } from "react-icons/bi";
+import { 
+  HiChartBar,
+  HiUserGroup,
+  HiLightningBolt, 
+  HiSparkles
+} from "react-icons/hi";
+import { 
+  MdTrendingUp,
+  MdEmojiEvents,
+  MdDynamicFeed
+} from "react-icons/md";
+import { SiSolana } from "react-icons/si";
 
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
@@ -23,15 +50,13 @@ const AX = {
   mint: "#70E0B0",
   mintHover: "#58B890",
   sell: "#FF4D7F",
-  // AI-inspired colors
-  aiBlue: "#3B82F6",
-  aiBlueHover: "#2563EB",
+  aiBlue: "#22C55E",
+  aiBlueHover: "#16A34A",
   aiGreen: "#22C55E",
   aiGreenHover: "#16A34A",
   aiCyan: "#06B6D4",
   aiCyanHover: "#0891B2",
-  // Glow effects
-  glowBlue: "rgba(59, 130, 246, 0.3)",
+  glowBlue: "rgba(34, 197, 94, 0.3)",
   glowGreen: "rgba(34, 197, 94, 0.3)",
   glowCyan: "rgba(6, 182, 212, 0.3)",
 };
@@ -54,7 +79,7 @@ interface PulseTableProps {
 // Add a simple in-memory cache for token metadata
 const tokenMetadataCache: Record<string, any> = {};
 
-// Smart color system based on token properties (like Axiom)
+// Smart color system based on token properties
 interface SmartColorProps {
   children: React.ReactNode;
   className?: string;
@@ -198,6 +223,45 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
   );
 };
 
+// Token Metrics Component - displays users, trades, achievements, and rank
+function TokenMetrics({ token }: { token: Token }) {
+  // Mock data for now 
+  const metrics = {
+    users: 2037,
+    trades: 1, 
+    achievements: 0,
+    rank: "0/1"
+  };
+
+  return (
+    <div className="flex items-center gap-1 relative z-10">
+      {/* Users Icon - Multiple People */}
+      <div className="flex items-center gap-1">
+        <FaUsers size={12} style={{ color: AX.muted }} />
+        <span className="text-xs" style={{ color: AX.text }}>{metrics.users}</span>
+      </div>
+      
+      {/* Candles Icon - Trading/Volume */}
+      <div className="flex items-center gap-1">
+        <BiCandles size={12} style={{ color: AX.muted }} />
+        <span className="text-xs" style={{ color: AX.text }}>{metrics.trades}</span>
+      </div>
+      
+      {/* Trophy Icon - Achievements */}
+      <div className="flex items-center gap-1">
+        <MdEmojiEvents size={12} style={{ color: AX.muted }} />
+        <span className="text-xs" style={{ color: AX.text }}>{metrics.achievements}</span>
+      </div>
+      
+      {/* Crown Icon - Ranking */}
+      <div className="flex items-center gap-1">
+        <FaCrown size={12} style={{ color: AX.muted }} />
+        <span className="text-xs" style={{ color: AX.text }}>{metrics.rank}</span>
+      </div>
+    </div>
+  );
+}
+
 function useTokenMetadata(uri?: string) {
   const [meta, setMeta] = useState<any | null>(null);
   const [loading, setLoading] = useState(!!uri);
@@ -338,7 +402,7 @@ function TokenImage({
         </div>
       </div>
 
-      {/* AI-styled Image Preview Window */}
+      {/* Image Preview Window */}
       {showPreview && (
         <div 
           className="absolute z-[9999] pointer-events-none"
@@ -371,7 +435,7 @@ function TokenImage({
                 priority={priority}
               />
               
-              {/* AI-inspired border effects */}
+              {/* border effects */}
               <div className="absolute inset-0 pointer-events-none">
                 {/* Animated border lines */}
                 <div 
@@ -437,6 +501,34 @@ function TokenImage({
         </div>
       )}
 
+      {/* Global CSS to remove number input arrows */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          input[type="number"]::-webkit-outer-spin-button,
+          input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none !important;
+            margin: 0 !important;
+            display: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            width: 0 !important;
+            height: 0 !important;
+            position: absolute !important;
+            left: -9999px !important;
+          }
+          
+          input[type="number"] {
+            -moz-appearance: textfield !important;
+            -webkit-appearance: none !important;
+          }
+          
+          input[type="number"]:focus {
+            outline: none !important;
+            box-shadow: none !important;
+          }
+        `
+      }} />
+
       {/* CSS for animations */}
       <style jsx>{`
         @keyframes shine {
@@ -492,6 +584,177 @@ function TokenImage({
           }
         }
         */
+        
+        /* Minimalistic input styling - remove number arrows */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        
+        input[type="number"] {
+          -moz-appearance: textfield;
+        }
+        
+        /* Additional browser support for removing number input arrows */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        
+        /* Ensure all number inputs in the filter modal have no arrows */
+        .minimal-input[type="number"]::-webkit-outer-spin-button,
+        .minimal-input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        
+        .minimal-input[type="number"] {
+          -moz-appearance: textfield;
+        }
+        
+        /* Minimalistic input styling */
+        .minimal-input {
+          border: 1px solid transparent;
+          transition: all 0.2s ease;
+        }
+        
+        .minimal-input:focus {
+          outline: none !important;
+          border-color: #2A2B33 !important;
+          box-shadow: none !important;
+        }
+        
+        /* Specific targeting for filter modal number inputs */
+        .filter-modal input[type="number"]::-webkit-outer-spin-button,
+        .filter-modal input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        
+        .filter-modal input[type="number"] {
+          -moz-appearance: textfield;
+        }
+        
+        /* Comprehensive number input arrow removal for all browsers */
+        .filter-modal input[type="number"]::-webkit-outer-spin-button,
+        .filter-modal input[type="number"]::-webkit-inner-spin-button,
+        .filter-modal .minimal-input[type="number"]::-webkit-outer-spin-button,
+        .filter-modal .minimal-input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          display: none !important;
+        }
+        
+        .filter-modal input[type="number"],
+        .filter-modal .minimal-input[type="number"] {
+          -moz-appearance: textfield !important;
+        }
+        
+        /* Remove all focus highlights and blue borders */
+        .filter-modal input[type="number"]:focus,
+        .filter-modal .minimal-input[type="number"]:focus {
+          outline: none !important;
+          box-shadow: none !important;
+          border-color: #2A2B33 !important;
+        }
+        
+        /* Ensure no browser default styling interferes */
+        .filter-modal input[type="number"]::-webkit-outer-spin-button,
+        .filter-modal input[type="number"]::-webkit-inner-spin-button {
+          opacity: 0 !important;
+          pointer-events: none !important;
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          width: 0 !important;
+          height: 0 !important;
+          position: absolute !important;
+          left: -9999px !important;
+        }
+        
+        /* Additional aggressive spinner removal */
+        .filter-modal input[type="number"] {
+          -webkit-appearance: none !important;
+          -moz-appearance: textfield !important;
+        }
+        
+        /* Hide any remaining spinner elements */
+        .filter-modal input[type="number"]::-webkit-clear-button,
+        .filter-modal input[type="number"]::-webkit-search-cancel-button {
+          display: none !important;
+        }
+        
+        /* Global rules for ALL number inputs in the entire modal */
+        .filter-modal * input[type="number"]::-webkit-outer-spin-button,
+        .filter-modal * input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          display: none !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          width: 0 !important;
+          height: 0 !important;
+          position: absolute !important;
+          left: -9999px !important;
+        }
+        
+        .filter-modal * input[type="number"] {
+          -moz-appearance: textfield !important;
+          -webkit-appearance: none !important;
+        }
+        
+        /* Remove focus highlights for ALL number inputs */
+        .filter-modal * input[type="number"]:focus {
+          outline: none !important;
+          box-shadow: none !important;
+          border-color: #2A2B33 !important;
+        }
+        
+        /* Additional targeting for nested elements */
+        div input[type="number"]::-webkit-outer-spin-button,
+        div input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          display: none !important;
+        }
+        
+        div input[type="number"] {
+          -moz-appearance: textfield !important;
+        }
+        
+        /* Universal number input spinner removal - targets ALL number inputs */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          display: none !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          width: 0 !important;
+          height: 0 !important;
+          position: absolute !important;
+          left: -9999px !important;
+        }
+        
+        /* Universal focus highlight removal */
+        input[type="number"]:focus {
+          outline: none !important;
+          box-shadow: none !important;
+          border-color: #2A2B33 !important;
+        }
+        
+        /* Ensure minimal-input class also removes spinners */
+        .minimal-input[type="number"]::-webkit-outer-spin-button,
+        .minimal-input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none !important;
+          margin: 0 !important;
+          display: none !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
       `}</style>
     </>
   );
@@ -511,6 +774,9 @@ const PulseTable = React.memo(function PulseTable({
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilterTab, setActiveFilterTab] = useState('New Pairs');
   const [activeCategoryTab, setActiveCategoryTab] = useState('Audit');
+  const [selectedPill, setSelectedPill] = useState('P1');
+  const [thunderAmount, setThunderAmount] = useState('0.0');
+  const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
   // const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Added by hujoe - can use in the future
@@ -529,6 +795,23 @@ const PulseTable = React.memo(function PulseTable({
     maxAge: '',
     ageUnit: 'm',
     top10HoldersPercent: '',
+    // New Audit Fields
+    devHoldingPercentMin: '',
+    devHoldingPercentMax: '',
+    snipersPercentMin: '',
+    snipersPercentMax: '',
+    insidersPercentMin: '',
+    insidersPercentMax: '',
+    bundlePercentMin: '',
+    bundlePercentMax: '',
+    holdersMin: '',
+    holdersMax: '',
+    proTradersMin: '',
+    proTradersMax: '',
+    devMigrationsMin: '',
+    devMigrationsMax: '',
+    devPairsCreatedMin: '',
+    devPairsCreatedMax: '',
     // Metrics
     minMarketCap: '',
     maxMarketCap: '',
@@ -536,10 +819,30 @@ const PulseTable = React.memo(function PulseTable({
     maxVolume: '',
     minLiquidity: '',
     maxLiquidity: '',
+    bCurvePercentMin: '',
+    bCurvePercentMax: '',
+    globalFeesPaidMin: '',
+    globalFeesPaidMax: '',
+    txnsMin: '',
+    txnsMax: '',
+    numBuysMin: '',
+    numBuysMax: '',
+    numSellsMin: '',
+    numSellsMax: '',
     // Socials
     twitterFollowers: '',
     telegramMembers: '',
     discordMembers: '',
+    twitterReusesMin: '',
+    twitterReusesMax: '',
+    tweetAgeMin: '',
+    tweetAgeMax: '',
+    tweetAgeUnit: 'm',
+    hasTwitter: false,
+    hasWebsite: false,
+    hasTelegram: false,
+    atLeastOneSocial: false,
+    onlyPumpLive: false,
     // Sort
     sortBy: 'marketCap',
     sortOrder: 'desc'
@@ -548,31 +851,31 @@ const PulseTable = React.memo(function PulseTable({
 
   // Protocol and quote token data with improved color scheme
   const protocols = [
-    { name: 'Pump', icon: '💊', color: '#00ff88' },
-    { name: 'Bonk', icon: '🔥', color: '#ff6b35' },
-    { name: 'Bags', icon: '💰', color: '#00d4aa' },
-    { name: 'Moonshot', icon: '🌙', color: '#a855f7' },
-    { name: 'Heaven', icon: '☁️', color: '#8b5cf6' },
-    { name: 'Daos.fun', icon: '👻', color: '#06b6d4' },
-    { name: 'Candle', icon: '🕯️', color: '#f59e0b' },
-    { name: 'Sugar', icon: '🍩', color: '#ec4899' },
-    { name: 'Believe', icon: '🔄', color: '#10b981' },
-    { name: 'Jupiter Studio', icon: '🌀', color: '#8b5cf6' },
-    { name: 'Moonit', icon: '⬆️', color: '#fbbf24' },
-    { name: 'Boop', icon: '🐱', color: '#3b82f6' },
-    { name: 'LaunchLab', icon: '🚀', color: '#ef4444' },
-    { name: 'Dynamic BC', icon: '📊', color: '#f97316' },
-    { name: 'Raydium', icon: 'R', color: '#6b7280' },
-    { name: 'Meteora AMM', icon: '☄️', color: '#92400e' },
-    { name: 'Meteora AMM V2', icon: '☄️', color: '#a16207' },
-    { name: 'Pump AMM', icon: '💊', color: '#64748b' },
-    { name: 'Orca', icon: '🐋', color: '#0ea5e9' }
+    { name: 'Pump', icon: <RiFlaskLine className="w-4 h-4" />, color: '#00ff88' },
+    { name: 'Bonk', icon: <HiLightningBolt className="w-4 h-4" />, color: '#ff6b35' },
+    { name: 'Bags', icon: <BsCoin className="w-4 h-4" />, color: '#00d4aa' },
+    { name: 'Moonshot', icon: <BsMoon className="w-4 h-4" />, color: '#a855f7' },
+    { name: 'Heaven', icon: <BsCloud className="w-4 h-4" />, color: '#8b5cf6' },
+    { name: 'Daos.fun', icon: <RiGhostLine className="w-4 h-4" />, color: '#06b6d4' },
+    { name: 'Candle', icon: <HiSparkles className="w-4 h-4" />, color: '#f59e0b' },
+    { name: 'Sugar', icon: <BsCup className="w-4 h-4" />, color: '#ec4899' },
+    { name: 'Believe', icon: <BiRefresh className="w-4 h-4" />, color: '#10b981' },
+    { name: 'Jupiter Studio', icon: <MdDynamicFeed className="w-4 h-4" />, color: '#8b5cf6' },
+    { name: 'Moonit', icon: <BsArrowUp className="w-4 h-4" />, color: '#fbbf24' },
+    { name: 'Boop', icon: <FaGem className="w-4 h-4" />, color: '#3b82f6' },
+    { name: 'LaunchLab', icon: <FaRocket className="w-4 h-4" />, color: '#ef4444' },
+    { name: 'Dynamic BC', icon: <FaChartBar className="w-4 h-4" />, color: '#f97316' },
+    { name: 'Raydium', icon: <span className="text-xs font-bold">R</span>, color: '#6b7280' },
+    { name: 'Meteora AMM', icon: <HiSparkles className="w-4 h-4" />, color: '#92400e' },
+    { name: 'Meteora AMM V2', icon: <HiSparkles className="w-4 h-4" />, color: '#a16207' },
+    { name: 'Pump AMM', icon: <RiFlaskLine className="w-4 h-4" />, color: '#64748b' },
+    { name: 'Orca', icon: <span className="text-xs font-bold">O</span>, color: '#0ea5e9' }
   ];
 
   const quoteTokens = [
-    { name: 'SOL', icon: '📊', color: '#00ff88' },
-    { name: 'USDC', icon: '$', color: '#06b6d4' },
-    { name: 'USD1', icon: '1', color: '#fbbf24' }
+    { name: 'SOL', icon: <SiSolana className="w-4 h-4" style={{ color: '#00FFA3' }} />, color: '#00ff88' },
+    { name: 'USDC', icon: <FaDollarSign className="w-3 h-3" />, color: '#06b6d4' },
+    { name: 'USD1', icon: <FaDollarSign className="w-3 h-3" />, color: '#fbbf24' }
   ];
 
   // Close filter dropdown when clicking outside
@@ -699,6 +1002,12 @@ const PulseTable = React.memo(function PulseTable({
     try {
       const a = token?.pair_address || token?.mint || token?.address || "";
       if (typeof a !== "string" || a.length < 8) return a || "-";
+      
+      // Check if address ends with "pump" and show it
+      if (a.toLowerCase().endsWith("pump")) {
+        return `${a.slice(0, 4)}...pump`;
+      }
+      
       return `${a.slice(0, 4)}...${a.slice(-4)}`;
     } catch {
       return "-";
@@ -771,40 +1080,144 @@ const PulseTable = React.memo(function PulseTable({
 
   return (
     <div
-      className={`flex w-full min-w-[340px] flex-1 flex-col shadow-lg ${isFirstOrLast === "first" ? "border-r border-l" : "border-r"}`}
+      className={`flex w-full min-w-[340px] flex-1 flex-col shadow-lg ${isFirstOrLast === "first" ? "border-r border-l border-t rounded-tl-lg" : isFirstOrLast === "last" ? "border-r border-t rounded-tr-lg" : "border-r border-t"}`}
       style={{ 
-        backgroundColor: AX.bg,
+        backgroundColor: 'rgba(30, 31, 38, 0.3)',
         borderColor: AX.border 
       }}
     >
       <div 
-        className="mb-2 flex items-center justify-between border-t border-b p-2 text-lg font-bold"
+        className="mb-2 flex items-center justify-between border-b p-3 text-lg font-bold"
         style={{ 
-          backgroundColor: AX.surface, 
+          backgroundColor: 'transparent', 
           borderColor: AX.border, 
           color: AX.text 
         }}
       >
-        <span>{title}</span>
+        <span style={{ 
+          fontWeight: '300',
+          letterSpacing: '0.5px',
+          fontSize: '16px'
+        }}>{title}</span>
+        
+        {/* Right side container for pill and filter */}
+        <div className="flex items-center gap-2">
+          {/* P1 P2 P3 Pill with Thunder and Solana - Slick Border Only */}
+          <div className="flex items-center justify-center rounded-full px-3 py-1.5 gap-2 border"
+               style={{ borderColor: AX.border }}>
+          {/* Amount - Editable */}
+          <div className="flex items-center justify-center gap-1">
+            <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
+            <input
+              type="text"
+              value={thunderAmount}
+              onChange={(e) => setThunderAmount(e.target.value)}
+              className="bg-transparent border-none outline-none text-xs font-medium w-6 text-center"
+              style={{ color: AX.text }}
+            />
+          </div>
+          
+          {/* Solana Symbol */}
+          <div className="flex items-center justify-center">
+            <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+              <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana)"/>
+              <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana)"/>
+              <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana)"/>
+              <defs>
+                <linearGradient id="paint0_linear_solana" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#00FFA3"/>
+                  <stop offset="1" stopColor="#DC1FFF"/>
+                </linearGradient>
+                <linearGradient id="paint1_linear_solana" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#00FFA3"/>
+                  <stop offset="1" stopColor="#DC1FFF"/>
+                </linearGradient>
+                <linearGradient id="paint2_linear_solana" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                  <stop offset="0" stopColor="#00FFA3"/>
+                  <stop offset="1" stopColor="#DC1FFF"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          
+          {/* Separator */}
+          <div className="w-px h-4 bg-gray-600"></div>
+          
+          {/* P1 P2 P3 Pill - Simple Toggle */}
+          <div className="flex items-center justify-center gap-1 relative">
+            {['P1', 'P2', 'P3'].map((pill) => (
+              <div key={pill} className="relative flex items-center justify-center">
+                <button
+                  className={`px-1.5 py-0.5 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center ${
+                    selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-white'
+                  }`}
+                  onClick={() => {
+                    setSelectedPill(pill);
+                    console.log(`Selected ${pill}`);
+                  }}
+                  onMouseEnter={() => setShowPillTooltip(pill)}
+                  onMouseLeave={() => setShowPillTooltip(null)}
+                >
+                  {pill}
+                </button>
+                
+                {/* Tooltip for each pill */}
+                {showPillTooltip === pill && (
+                  <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
+                       style={{ 
+                         backgroundColor: 'rgba(15, 16, 18, 0.95)',
+                         borderColor: AX.border 
+                       }}>
+                    <div className="p-2 space-y-1.5">
+                      {/* Slippage - Running person icon */}
+                      <div className="flex items-center gap-1.5">
+                        <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
+                        <span className="text-gray-300 text-xs font-light">20%</span>
+                      </div>
+                      
+                      {/* Priority Fee - Gas pump icon with yellow styling */}
+                      <div className="flex items-center gap-1.5">
+                        <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                        <span className="text-yellow-400 text-xs font-light">0.001</span>
+                        <span className="text-red-500 text-xs font-light">⚠</span>
+                      </div>
+                      
+                      {/* Bribe - Coins icon with yellow styling */}
+                      <div className="flex items-center gap-1.5">
+                        <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                        <span className="text-yellow-400 text-xs font-light">0.05</span>
+                        <span className="text-red-500 text-xs font-light">⚠</span>
+                      </div>
+                      
+                      {/* MEV Protection - Ban icon */}
+                      <div className="flex items-center gap-1.5">
+                        <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
+                        <span className="text-gray-300 text-xs font-light">Off</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
         
         {/* Filter Controls */}
         <div className="relative filter-dropdown">
           <button
-            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 ease-out"
+            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 ease-out cursor-pointer"
             style={{
               backgroundColor: 'transparent',
               color: showFilters ? AX.aiBlue : AX.muted
             }}
             onMouseEnter={(e) => {
               if (!showFilters) {
-                e.currentTarget.style.color = AX.aiBlue;
-                e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
+                e.currentTarget.style.color = '#E6E7EA';
               }
             }}
             onMouseLeave={(e) => {
               if (!showFilters) {
                 e.currentTarget.style.color = AX.muted;
-                e.currentTarget.style.boxShadow = 'none';
               }
             }}
             onClick={() => setShowFilters(!showFilters)}
@@ -822,38 +1235,48 @@ const PulseTable = React.memo(function PulseTable({
           
           {/* Comprehensive Filter Modal */}
           {showFilters && (
-            <div 
-              className="absolute top-full right-0 mt-2 w-96 rounded-lg shadow-xl border z-50"
+            <>
+              {/* Backdrop */}
+              <div 
+                className="fixed inset-0 z-40"
+                style={{ 
+                  backgroundColor: 'rgba(0, 0, 0, 0.3)'
+                }}
+                onClick={() => setShowFilters(false)}
+              />
+              {/* Modal */}
+              <div 
+                className="filter-modal fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] rounded-lg shadow-xl border z-50"
               style={{
                 backgroundColor: AX.surface,
                 borderColor: AX.border,
-                boxShadow: `0 8px 32px rgba(0, 0, 0, 0.3), 0 0 8px ${AX.glowBlue}`
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
               }}
             >
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: AX.border }}>
-                <h3 className="text-lg font-bold" style={{ color: AX.text }}>Filters</h3>
-                <div className="flex items-center gap-2">
-                  <button className="p-1 rounded hover:bg-gray-700 transition-colors">
-                    <span className="text-sm">🔄</span>
-                  </button>
+                <h3 className="text-lg" style={{ 
+                  color: AX.text, 
+                  fontWeight: '300',
+                  letterSpacing: '0.5px'
+                }}>Filters</h3>
                   <button 
                     onClick={() => setShowFilters(false)}
-                    className="p-1 rounded hover:bg-gray-700 transition-colors"
+                    className="p-1 rounded hover:bg-gray-700 transition-colors cursor-pointer"
                   >
                     <span className="text-sm">✕</span>
                   </button>
-                </div>
               </div>
 
               {/* Filter Tabs */}
-              <div className="flex border-b" style={{ borderColor: AX.border }}>
+              <div className="flex border-b items-center justify-between" style={{ borderColor: AX.border }}>
+                <div className="flex">
                 {['New Pairs', 'Final Stretch', 'Migrated'].map((tab) => (
                   <button
                     key={tab}
-                    className={`px-4 py-2 text-sm font-medium transition-colors ${
-                      activeFilterTab === tab ? 'border-b-2' : ''
-                    }`}
+                      className={`px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                        activeFilterTab === tab ? 'border-b-2' : ''
+                      }`}
                     style={{
                       color: activeFilterTab === tab ? AX.aiBlue : AX.muted,
                       borderBottomColor: activeFilterTab === tab ? AX.aiBlue : 'transparent'
@@ -863,15 +1286,83 @@ const PulseTable = React.memo(function PulseTable({
                     {tab}
                   </button>
                 ))}
+                </div>
+                <button 
+                  className="p-2 rounded hover:bg-gray-700 transition-colors mr-2 cursor-pointer"
+                  onClick={() => {
+                    // Reset all filters
+                    setFilters({
+                      protocols: [],
+                      quoteTokens: [],
+                      searchKeywords: '',
+                      excludeKeywords: '',
+                      dexPaid: false,
+                      caEndsInPump: false,
+                      minAge: '',
+                      maxAge: '',
+                      ageUnit: 'm',
+                      top10HoldersPercent: '',
+                      devHoldingPercentMin: '',
+                      devHoldingPercentMax: '',
+                      snipersPercentMin: '',
+                      snipersPercentMax: '',
+                      insidersPercentMin: '',
+                      insidersPercentMax: '',
+                      bundlePercentMin: '',
+                      bundlePercentMax: '',
+                      holdersMin: '',
+                      holdersMax: '',
+                      proTradersMin: '',
+                      proTradersMax: '',
+                      devMigrationsMin: '',
+                      devMigrationsMax: '',
+                      devPairsCreatedMin: '',
+                      devPairsCreatedMax: '',
+                      minMarketCap: '',
+                      maxMarketCap: '',
+                      minVolume: '',
+                      maxVolume: '',
+                      minLiquidity: '',
+                      maxLiquidity: '',
+                      bCurvePercentMin: '',
+                      bCurvePercentMax: '',
+                      globalFeesPaidMin: '',
+                      globalFeesPaidMax: '',
+                      txnsMin: '',
+                      txnsMax: '',
+                      numBuysMin: '',
+                      numBuysMax: '',
+                      numSellsMin: '',
+                      numSellsMax: '',
+                      twitterFollowers: '',
+                      telegramMembers: '',
+                      discordMembers: '',
+                      twitterReusesMin: '',
+                      twitterReusesMax: '',
+                      tweetAgeMin: '',
+                      tweetAgeMax: '',
+                      tweetAgeUnit: 'm',
+                      hasTwitter: false,
+                      hasWebsite: false,
+                      hasTelegram: false,
+                      atLeastOneSocial: false,
+                      onlyPumpLive: false,
+                      sortBy: 'marketCap',
+                      sortOrder: 'desc'
+                    });
+                  }}
+                >
+                  <BiRefresh className="w-4 h-4" style={{ color: AX.text }} />
+                </button>
               </div>
 
-              <div className="p-6 max-h-96 overflow-y-auto" style={{ backgroundColor: AX.bg }}>
+              <div className="p-4 max-h-[500px] overflow-y-auto" style={{ backgroundColor: AX.surface }}>
                 {/* Protocols */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-3">
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-medium" style={{ color: AX.text }}>Protocols</h4>
                     <button 
-                      className="text-xs px-3 py-1 rounded-full font-medium transition-all duration-300 ease-out"
+                      className="text-xs px-3 py-1 rounded-full font-medium transition-all duration-300 ease-out cursor-pointer"
                       style={{ 
                         backgroundColor: AX.aiBlue, 
                         color: '#000000',
@@ -898,11 +1389,11 @@ const PulseTable = React.memo(function PulseTable({
                       Select All
                     </button>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {protocols.map((protocol) => (
                       <button
                         key={protocol.name}
-                        className="flex items-center gap-2 px-3 py-2 text-xs font-medium transition-all duration-300 ease-out"
+                        className="flex items-center gap-1 px-2 py-1.5 text-sm font-medium transition-all duration-300 ease-out whitespace-nowrap cursor-pointer"
                         style={{
                           backgroundColor: filters.protocols.includes(protocol.name) 
                             ? protocol.color 
@@ -949,21 +1440,21 @@ const PulseTable = React.memo(function PulseTable({
                           }));
                         }}
                       >
-                        <span className="text-sm">{protocol.icon}</span>
-                        <span className="truncate font-semibold">{protocol.name}</span>
+                        <span className="text-sm" style={{ color: 'inherit' }}>{protocol.icon}</span>
+                        <span className="truncate font-semibold" style={{ color: 'inherit' }}>{protocol.name}</span>
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {/* Quote Tokens */}
-                <div className="mb-6">
-                  <h4 className="text-sm font-medium mb-3" style={{ color: AX.text }}>Quote Tokens</h4>
+                <div className="mb-4">
+                  <h4 className="text-sm font-medium mb-2" style={{ color: AX.text }}>Quote Tokens</h4>
                   <div className="flex gap-3">
                     {quoteTokens.map((token) => (
                       <button
                         key={token.name}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all duration-300 ease-out"
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all duration-300 ease-out cursor-pointer"
                         style={{
                           backgroundColor: filters.quoteTokens.includes(token.name) 
                             ? token.color 
@@ -1010,7 +1501,7 @@ const PulseTable = React.memo(function PulseTable({
                           }));
                         }}
                       >
-                        <span className="text-base">{token.icon}</span>
+                        <span className="text-base" style={{ color: 'inherit' }}>{token.icon}</span>
                         <span className="font-bold">{token.name}</span>
                       </button>
                     ))}
@@ -1025,11 +1516,20 @@ const PulseTable = React.memo(function PulseTable({
                     placeholder="keyword1, keyword2..."
                     value={filters.searchKeywords}
                     onChange={(e) => setFilters(prev => ({ ...prev, searchKeywords: e.target.value }))}
-                    className="w-full px-3 py-2 rounded border text-sm"
+                          className="w-full px-3 py-2 rounded text-sm border"
                     style={{
-                      backgroundColor: AX.bg,
+                            backgroundColor: AX.surface,
                       borderColor: AX.border,
-                      color: AX.text
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
                     }}
                   />
                   <h4 className="text-sm font-medium mb-2 mt-3" style={{ color: AX.text }}>Exclude Keywords</h4>
@@ -1038,11 +1538,20 @@ const PulseTable = React.memo(function PulseTable({
                     placeholder="keyword1, keyword2..."
                     value={filters.excludeKeywords}
                     onChange={(e) => setFilters(prev => ({ ...prev, excludeKeywords: e.target.value }))}
-                    className="w-full px-3 py-2 rounded border text-sm"
+                          className="w-full px-3 py-2 rounded text-sm border"
                     style={{
-                      backgroundColor: AX.bg,
+                            backgroundColor: AX.surface,
                       borderColor: AX.border,
-                      color: AX.text
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
                     }}
                   />
                 </div>
@@ -1052,7 +1561,7 @@ const PulseTable = React.memo(function PulseTable({
                   {['Audit', '$ Metrics', 'Socials'].map((tab) => (
                     <button
                       key={tab}
-                      className={`px-3 py-2 text-sm font-medium transition-colors ${
+                      className={`px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
                         activeCategoryTab === tab ? 'border-b-2' : ''
                       }`}
                       style={{
@@ -1068,14 +1577,15 @@ const PulseTable = React.memo(function PulseTable({
 
                 {/* Category Content */}
                 {activeCategoryTab === 'Audit' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
+                    {/* Existing checkboxes */}
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         id="dexPaid"
                         checked={filters.dexPaid}
                         onChange={(e) => setFilters(prev => ({ ...prev, dexPaid: e.target.checked }))}
-                        className="rounded"
+                        className="rounded cursor-pointer"
                       />
                       <label htmlFor="dexPaid" className="text-sm" style={{ color: AX.text }}>Dex Paid</label>
                     </div>
@@ -1085,23 +1595,426 @@ const PulseTable = React.memo(function PulseTable({
                         id="caEndsInPump"
                         checked={filters.caEndsInPump}
                         onChange={(e) => setFilters(prev => ({ ...prev, caEndsInPump: e.target.checked }))}
-                        className="rounded"
+                        className="rounded cursor-pointer"
                       />
                       <label htmlFor="caEndsInPump" className="text-sm" style={{ color: AX.text }}>CA ends in 'pump'</label>
                     </div>
+
+                    {/* Dev Holding % */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Dev Holding %</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.devHoldingPercentMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, devHoldingPercentMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.devHoldingPercentMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, devHoldingPercentMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Snipers % */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Snipers %</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.snipersPercentMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, snipersPercentMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.snipersPercentMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, snipersPercentMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Insiders % */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Insiders %</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.insidersPercentMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, insidersPercentMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.insidersPercentMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, insidersPercentMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bundle % */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Bundle %</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.bundlePercentMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, bundlePercentMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.bundlePercentMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, bundlePercentMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Holders */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Holders</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.holdersMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, holdersMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.holdersMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, holdersMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Pro Traders */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Pro Traders</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.proTradersMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, proTradersMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.proTradersMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, proTradersMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Dev Migrations */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Dev Migrations</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.devMigrationsMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, devMigrationsMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.devMigrationsMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, devMigrationsMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Dev Pairs Created */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Dev Pairs Created</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.devPairsCreatedMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, devPairsCreatedMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.devPairsCreatedMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, devPairsCreatedMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Age (existing) */}
                     <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Age</label>
-                      <div className="flex gap-2">
+                      <div className="flex gap-1">
                         <input
                           type="number"
                           placeholder="Min"
                           value={filters.minAge}
                           onChange={(e) => setFilters(prev => ({ ...prev, minAge: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded border text-sm"
+                          className="flex-1 px-2 py-1.5 rounded minimal-input text-sm"
                           style={{
-                            backgroundColor: AX.bg,
+                            backgroundColor: AX.surface,
                             borderColor: AX.border,
-                            color: AX.text
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
                           }}
                         />
                         <select
@@ -1109,7 +2022,7 @@ const PulseTable = React.memo(function PulseTable({
                           onChange={(e) => setFilters(prev => ({ ...prev, ageUnit: e.target.value }))}
                           className="px-2 py-2 rounded border text-sm"
                           style={{
-                            backgroundColor: AX.bg,
+                            backgroundColor: AX.surface,
                             borderColor: AX.border,
                             color: AX.text
                           }}
@@ -1123,11 +2036,20 @@ const PulseTable = React.memo(function PulseTable({
                           placeholder="Max"
                           value={filters.maxAge}
                           onChange={(e) => setFilters(prev => ({ ...prev, maxAge: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded border text-sm"
+                          className="flex-1 px-2 py-1.5 rounded minimal-input text-sm"
                           style={{
-                            backgroundColor: AX.bg,
+                            backgroundColor: AX.surface,
                             borderColor: AX.border,
-                            color: AX.text
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
                           }}
                         />
                         <select
@@ -1135,7 +2057,7 @@ const PulseTable = React.memo(function PulseTable({
                           onChange={(e) => setFilters(prev => ({ ...prev, ageUnit: e.target.value }))}
                           className="px-2 py-2 rounded border text-sm"
                           style={{
-                            backgroundColor: AX.bg,
+                            backgroundColor: AX.surface,
                             borderColor: AX.border,
                             color: AX.text
                           }}
@@ -1146,6 +2068,8 @@ const PulseTable = React.memo(function PulseTable({
                         </select>
                       </div>
                     </div>
+
+                    {/* Top 10 Holders % (existing) */}
                     <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Top 10 Holders %</label>
                       <input
@@ -1153,90 +2077,52 @@ const PulseTable = React.memo(function PulseTable({
                         placeholder="Enter percentage"
                         value={filters.top10HoldersPercent}
                         onChange={(e) => setFilters(prev => ({ ...prev, top10HoldersPercent: e.target.value }))}
-                        className="w-full px-3 py-2 rounded border text-sm"
+                          className="w-full px-3 py-2 rounded text-sm border"
                         style={{
-                          backgroundColor: AX.bg,
+                            backgroundColor: AX.surface,
                           borderColor: AX.border,
-                          color: AX.text
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
                         }}
                       />
                     </div>
+
                   </div>
                 )}
 
                 {activeCategoryTab === '$ Metrics' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
+                    {/* Liquidity */}
                     <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Market Cap Range</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          placeholder="Min"
-                          value={filters.minMarketCap}
-                          onChange={(e) => setFilters(prev => ({ ...prev, minMarketCap: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded border text-sm"
-                          style={{
-                            backgroundColor: AX.bg,
-                            borderColor: AX.border,
-                            color: AX.text
-                          }}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Max"
-                          value={filters.maxMarketCap}
-                          onChange={(e) => setFilters(prev => ({ ...prev, maxMarketCap: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded border text-sm"
-                          style={{
-                            backgroundColor: AX.bg,
-                            borderColor: AX.border,
-                            color: AX.text
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Volume Range</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          placeholder="Min"
-                          value={filters.minVolume}
-                          onChange={(e) => setFilters(prev => ({ ...prev, minVolume: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded border text-sm"
-                          style={{
-                            backgroundColor: AX.bg,
-                            borderColor: AX.border,
-                            color: AX.text
-                          }}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Max"
-                          value={filters.maxVolume}
-                          onChange={(e) => setFilters(prev => ({ ...prev, maxVolume: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded border text-sm"
-                          style={{
-                            backgroundColor: AX.bg,
-                            borderColor: AX.border,
-                            color: AX.text
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Liquidity Range</label>
-                      <div className="flex gap-2">
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Liquidity ($)</label>
+                      <div className="flex gap-1">
                         <input
                           type="number"
                           placeholder="Min"
                           value={filters.minLiquidity}
                           onChange={(e) => setFilters(prev => ({ ...prev, minLiquidity: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded border text-sm"
+                          className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
-                            backgroundColor: AX.bg,
+                            backgroundColor: AX.surface,
                             borderColor: AX.border,
-                            color: AX.text
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
                           }}
                         />
                         <input
@@ -1244,65 +2130,581 @@ const PulseTable = React.memo(function PulseTable({
                           placeholder="Max"
                           value={filters.maxLiquidity}
                           onChange={(e) => setFilters(prev => ({ ...prev, maxLiquidity: e.target.value }))}
-                          className="flex-1 px-3 py-2 rounded border text-sm"
+                          className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
-                            backgroundColor: AX.bg,
+                            backgroundColor: AX.surface,
                             borderColor: AX.border,
-                            color: AX.text
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
                           }}
                         />
                       </div>
                     </div>
+
+                    {/* Volume */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Volume ($)</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.minVolume}
+                          onChange={(e) => setFilters(prev => ({ ...prev, minVolume: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.maxVolume}
+                          onChange={(e) => setFilters(prev => ({ ...prev, maxVolume: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Market Cap */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Market Cap ($)</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.minMarketCap}
+                          onChange={(e) => setFilters(prev => ({ ...prev, minMarketCap: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.maxMarketCap}
+                          onChange={(e) => setFilters(prev => ({ ...prev, maxMarketCap: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* B. curve %} */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>B. curve %</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.bCurvePercentMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, bCurvePercentMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.bCurvePercentMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, bCurvePercentMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Global Fees Paid (SOL) */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Global Fees Paid (SOL)</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.globalFeesPaidMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, globalFeesPaidMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.globalFeesPaidMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, globalFeesPaidMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Txns */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Txns</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.txnsMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, txnsMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.txnsMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, txnsMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Num Buys */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Num Buys</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.numBuysMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, numBuysMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.numBuysMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, numBuysMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Num Sells */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Num Sells</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.numSellsMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, numSellsMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.numSellsMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, numSellsMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
+                    </div>
+
                   </div>
                 )}
 
                 {activeCategoryTab === 'Socials' && (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
+                    {/* Twitter Reuses */}
                     <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Twitter Followers</label>
-                      <input
-                        type="number"
-                        placeholder="Min followers"
-                        value={filters.twitterFollowers}
-                        onChange={(e) => setFilters(prev => ({ ...prev, twitterFollowers: e.target.value }))}
-                        className="w-full px-3 py-2 rounded border text-sm"
-                        style={{
-                          backgroundColor: AX.bg,
-                          borderColor: AX.border,
-                          color: AX.text
-                        }}
-                      />
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Twitter Reuses</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.twitterReusesMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, twitterReusesMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.twitterReusesMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, twitterReusesMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                      </div>
                     </div>
+
+                    {/* Tweet Age */}
                     <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Telegram Members</label>
-                      <input
-                        type="number"
-                        placeholder="Min members"
-                        value={filters.telegramMembers}
-                        onChange={(e) => setFilters(prev => ({ ...prev, telegramMembers: e.target.value }))}
-                        className="w-full px-3 py-2 rounded border text-sm"
-                        style={{
-                          backgroundColor: AX.bg,
-                          borderColor: AX.border,
-                          color: AX.text
-                        }}
-                      />
+                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Tweet Age</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          value={filters.tweetAgeMin}
+                          onChange={(e) => setFilters(prev => ({ ...prev, tweetAgeMin: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <select
+                          value={filters.tweetAgeUnit}
+                          onChange={(e) => setFilters(prev => ({ ...prev, tweetAgeUnit: e.target.value }))}
+                          className="px-2 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        >
+                          <option value="m">m</option>
+                          <option value="h">h</option>
+                          <option value="d">d</option>
+                        </select>
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          value={filters.tweetAgeMax}
+                          onChange={(e) => setFilters(prev => ({ ...prev, tweetAgeMax: e.target.value }))}
+                          className="flex-1 px-3 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'textfield',
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        />
+                        <select
+                          value={filters.tweetAgeUnit}
+                          onChange={(e) => setFilters(prev => ({ ...prev, tweetAgeUnit: e.target.value }))}
+                          className="px-2 py-2 rounded text-sm border"
+                          style={{
+                            backgroundColor: AX.surface,
+                            borderColor: AX.border,
+                            color: AX.text,
+                            outline: 'none',
+                            boxShadow: 'none'
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.outline = 'none';
+                            e.target.style.boxShadow = 'none';
+                            e.target.style.borderColor = AX.border;
+                          }}
+                        >
+                          <option value="m">m</option>
+                          <option value="h">h</option>
+                          <option value="d">d</option>
+                        </select>
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Discord Members</label>
-                      <input
-                        type="number"
-                        placeholder="Min members"
-                        value={filters.discordMembers}
-                        onChange={(e) => setFilters(prev => ({ ...prev, discordMembers: e.target.value }))}
-                        className="w-full px-3 py-2 rounded border text-sm"
-                        style={{
-                          backgroundColor: AX.bg,
-                          borderColor: AX.border,
-                          color: AX.text
-                        }}
-                      />
+
+                    {/* Checkboxes */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={filters.hasTwitter}
+                          onChange={(e) => setFilters(prev => ({ ...prev, hasTwitter: e.target.checked }))}
+                          className="rounded cursor-pointer"
+                          style={{
+                            accentColor: AX.aiBlue
+                          }}
+                        />
+                        <span className="text-sm" style={{ color: AX.text }}>Twitter</span>
+                      </label>
+                      
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={filters.hasWebsite}
+                          onChange={(e) => setFilters(prev => ({ ...prev, hasWebsite: e.target.checked }))}
+                          className="rounded cursor-pointer"
+                          style={{
+                            accentColor: AX.aiBlue
+                          }}
+                        />
+                        <span className="text-sm" style={{ color: AX.text }}>Website</span>
+                      </label>
+                      
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={filters.hasTelegram}
+                          onChange={(e) => setFilters(prev => ({ ...prev, hasTelegram: e.target.checked }))}
+                          className="rounded cursor-pointer"
+                          style={{
+                            accentColor: AX.aiBlue
+                          }}
+                        />
+                        <span className="text-sm" style={{ color: AX.text }}>Telegram</span>
+                      </label>
+                      
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={filters.atLeastOneSocial}
+                          onChange={(e) => setFilters(prev => ({ ...prev, atLeastOneSocial: e.target.checked }))}
+                          className="rounded cursor-pointer"
+                          style={{
+                            accentColor: AX.aiBlue
+                          }}
+                        />
+                        <span className="text-sm" style={{ color: AX.text }}>At Least One Social</span>
+                      </label>
+                      
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={filters.onlyPumpLive}
+                          onChange={(e) => setFilters(prev => ({ ...prev, onlyPumpLive: e.target.checked }))}
+                          className="rounded cursor-pointer"
+                          style={{
+                            accentColor: AX.aiBlue
+                          }}
+                        />
+                        <span className="text-sm" style={{ color: AX.text }}>Only Pump Live</span>
+                      </label>
                     </div>
+
                   </div>
                 )}
               </div>
@@ -1310,17 +2712,56 @@ const PulseTable = React.memo(function PulseTable({
               {/* Footer */}
               <div className="flex items-center justify-between p-4 border-t" style={{ borderColor: AX.border }}>
                 <div className="flex gap-2">
-                  <button className="px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                          style={{ backgroundColor: AX.border, color: AX.text }}>
+                  <button 
+                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                    style={{ backgroundColor: AX.border, color: AX.text }}
+                    onClick={() => {
+                      // Import functionality
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.json';
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            try {
+                              const importedFilters = JSON.parse(event.target?.result as string);
+                              setFilters(importedFilters);
+                            } catch (error) {
+                              console.error('Error importing filters:', error);
+                            }
+                          };
+                          reader.readAsText(file);
+                        }
+                      };
+                      input.click();
+                    }}
+                  >
                     Import
                   </button>
-                  <button className="px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                          style={{ backgroundColor: AX.border, color: AX.text }}>
+                  <button 
+                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                    style={{ backgroundColor: AX.border, color: AX.text }}
+                    onClick={() => {
+                      // Export functionality
+                      const dataStr = JSON.stringify(filters, null, 2);
+                      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                      const url = URL.createObjectURL(dataBlob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = 'pulse-filters.json';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
                     Export
                   </button>
                 </div>
                 <button 
-                  className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-out"
+                  className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-out cursor-pointer"
                   style={{
                     backgroundColor: AX.aiBlue,
                     color: '#000000'
@@ -1334,7 +2775,6 @@ const PulseTable = React.memo(function PulseTable({
                     e.currentTarget.style.boxShadow = 'none';
                   }}
                   onClick={() => {
-                    // Apply filters logic here
                     setShowFilters(false);
                   }}
                 >
@@ -1342,10 +2782,12 @@ const PulseTable = React.memo(function PulseTable({
                 </button>
               </div>
             </div>
+            </>
           )}
         </div>
+        </div>
       </div>
-      <div className="custom-scrollbar max-h-[70vh] overflow-y-scroll">
+      <div className="custom-scrollbar max-h-[70vh] overflow-y-scroll ">
         {loading && tokens.length === 0 ? (
           Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
@@ -1455,22 +2897,19 @@ const PulseTable = React.memo(function PulseTable({
             return (
               <div
                 key={`${pairAddress || mintAddress || "noaddr"}-${idx}`}
-                className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b p-2 transition-all duration-300 ease-out"
+                className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 pb-5 transition-all duration-300 ease-out"
                 style={{ 
                   borderColor: AX.border,
                   backgroundColor: 'transparent'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(30, 31, 38, 0.4)';
-                  e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}, 0 0 16px ${AX.glowBlue}`;
+                  e.currentTarget.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.boxShadow = 'none';
                 }}
                 onClick={handleTokenClick}
               >
-                {/* Smooth AI Wave Effect - Dark Bluish Feel */}
                 {/* Added by hujoe - can use in the future
                 {waveTokens.has(idx) && (
                   <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-lg z-10">
@@ -1582,7 +3021,11 @@ const PulseTable = React.memo(function PulseTable({
                       token={token}
                       priority={title === "New Pairs"}
                     />
-                  <span className="mt-1 max-w-[60px] truncate font-mono text-xs" style={{ color: AX.muted }}>
+                  {/* Token Metrics */}
+                  <div className="absolute bottom-7 -right-36">
+                    <TokenMetrics token={token} />
+                  </div>
+                  <span className="mt-1 mb-4 max-w-[70px] truncate font-mono text-[10px]" style={{ color: AX.muted }}>
                     {shortAddr(token)}
                   </span>
                 </div>
@@ -1593,10 +3036,10 @@ const PulseTable = React.memo(function PulseTable({
                     {/* Left: Token Info & Socials */}
                     <div className="flex min-w-0 flex-col">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate font-semibold text-sm" style={{ color: AX.text }}>
+                        <span className="font-semibold text-sm flex-shrink-0" style={{ color: AX.text }}>
                           {token.symbol}
                         </span>
-                        <span className="text-xs" style={{ color: AX.muted }}>
+                        <span className="text-xs truncate" style={{ color: AX.muted }}>
                           {token.name}
                         </span>
                         <div className="relative ml-1">
@@ -1680,13 +3123,11 @@ const PulseTable = React.memo(function PulseTable({
                               style={{ color: AX.muted }}
                               onMouseEnter={(e) => {
                                 e.currentTarget.style.color = AX.aiCyan;
-                                e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowCyan}`;
                                 const tooltip = e.currentTarget.nextElementSibling as HTMLElement;
                                 if (tooltip) tooltip.style.opacity = '1';
                               }}
                               onMouseLeave={(e) => {
                                 e.currentTarget.style.color = AX.muted;
-                                e.currentTarget.style.boxShadow = 'none';
                                 const tooltip = e.currentTarget.nextElementSibling as HTMLElement;
                                 if (tooltip) tooltip.style.opacity = '0';
                               }}
@@ -1697,11 +3138,10 @@ const PulseTable = React.memo(function PulseTable({
                           
                           {/* Search on Twitter Button - show for all tokens */}
                           <button
-                            className="transition-colors duration-200"
+                            className="transition-colors duration-200 cursor-pointer"
                             style={{ color: AX.muted }}
                             onMouseEnter={(e) => {
                               e.currentTarget.style.color = AX.aiCyan;
-                              e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowCyan}`;
                               const tooltip = document.getElementById(`search-tooltip-${idx}`) as HTMLElement;
                               if (tooltip) {
                                 const rect = e.currentTarget.getBoundingClientRect();
@@ -1712,7 +3152,6 @@ const PulseTable = React.memo(function PulseTable({
                             }}
                             onMouseLeave={(e) => {
                               e.currentTarget.style.color = AX.muted;
-                              e.currentTarget.style.boxShadow = 'none';
                               const tooltip = document.getElementById(`search-tooltip-${idx}`) as HTMLElement;
                               if (tooltip) tooltip.style.opacity = '0';
                             }}
@@ -1726,14 +3165,13 @@ const PulseTable = React.memo(function PulseTable({
                             <FaSearch size={14} />
                           </button>
 
-                          {/* X Profile Preview Button - show for all tokens */}
+                          {/* X Profile Preview Button */}
                           <div className="relative">
                             <button
                               className="transition-colors duration-200"
                               style={{ color: AX.muted }}
                               onMouseEnter={(e) => {
                                 e.currentTarget.style.color = AX.aiBlue;
-                                e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
                                 const tooltip = document.getElementById(`profile-tooltip-${idx}`) as HTMLElement;
                                 if (tooltip) {
                                   const rect = e.currentTarget.getBoundingClientRect();
@@ -1752,10 +3190,8 @@ const PulseTable = React.memo(function PulseTable({
                               }}
                               onMouseLeave={(e) => {
                                 e.currentTarget.style.color = AX.muted;
-                                e.currentTarget.style.boxShadow = 'none';
                                 const tooltip = document.getElementById(`profile-tooltip-${idx}`) as HTMLElement;
                                 if (tooltip) tooltip.style.opacity = '0';
-                                // Don't hide popup immediately - let popup's onMouseLeave handle it
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1816,7 +3252,7 @@ const PulseTable = React.memo(function PulseTable({
                                       <span className="text-xs text-gray-400">Live</span>
                                     </div>
                                   </div>
-                                  {/* Profile Header - Twitter Style */}
+                                  {/* Profile Header*/}
                                   <div className="p-4 pt-8">
                                     <div className="flex items-start justify-between">
                                       <div className="flex-1 min-w-0">
@@ -2019,7 +3455,7 @@ const PulseTable = React.memo(function PulseTable({
                             )}
                           </div>
                           
-                          {/* Pump.fun Tooltip - only show for pump tokens */}
+                          {/* Pump.fun Tooltip */}
                           {token.mint.slice(-4) === "pump" && (
                             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 rounded text-xs font-medium opacity-0 transition-opacity duration-200 pointer-events-none whitespace-nowrap"
                                  style={{ 
@@ -2041,28 +3477,27 @@ const PulseTable = React.memo(function PulseTable({
                     {/* Right: MC, V, F, TX */}
                     <div className="items-right justify-right flex min-w-[140px] flex-col items-end gap-1 text-right">
                       <div className="justify-right flex flex-col text-xs">
-                        <span style={{ color: AX.muted }}>
-                          MC{" "}
-                          <SmartColor token={token} metricType="marketCap" className="text-lg">
-                            <SmoothNumber
-                              value={
-                                (token as any).fully_diluted_value ??
-                                (token as any).market_cap_usd ??
-                                0
-                              }
-                              formatter={(val) => `$${formatSmartNumber(val)}`}
-                              duration={300}
-                            />
-                          </SmartColor>
-                        </span>
+                         <span style={{ color: AX.muted }}>
+                           MC{" "}
+                           <SmartColor token={token} metricType="marketCap" className="text-base font-semibold">
+                             <SmoothNumber
+                               value={
+                                 (token as any).fully_diluted_value ??
+                                 (token as any).market_cap_usd ??
+                                 0
+                               }
+                               formatter={(val) => `$${formatSmartNumber(val)}`}
+                               duration={300}
+                             />
+                           </SmartColor>
+                         </span>
                         <span style={{ color: AX.muted }}>
                           V{" "}
                           <span 
-                            className="text-sm"
+                            className="text-base font-semibold"
                             style={{ 
                               color: '#ffffff',
-                              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-                              fontWeight: '400'
+                              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
                             }}
                           >
                             <SmoothNumber
@@ -2075,13 +3510,41 @@ const PulseTable = React.memo(function PulseTable({
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
-                          TX{" "}
+                          F{" "}
+                          <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none" className="ml-1">
+                            <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana)"/>
+                            <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana)"/>
+                            <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana)"/>
+                            <defs>
+                              <linearGradient id="paint0_linear_solana" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                                <stop offset="0" stopColor="#00FFA3"/>
+                                <stop offset="1" stopColor="#DC1FFF"/>
+                              </linearGradient>
+                              <linearGradient id="paint1_linear_solana" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                                <stop offset="0" stopColor="#00FFA3"/>
+                                <stop offset="1" stopColor="#DC1FFF"/>
+                              </linearGradient>
+                              <linearGradient id="paint2_linear_solana" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                                <stop offset="0" stopColor="#00FFA3"/>
+                                <stop offset="1" stopColor="#DC1FFF"/>
+                              </linearGradient>
+                            </defs>
+                          </svg>
                           <span 
-                            className="text-xs"
+                            className="text-sm font-semibold"
                             style={{ 
                               color: '#ffffff',
-                              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-                              fontWeight: '400'
+                              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
+                            }}
+                          >
+                            {((token as any).liquidity_usd && formatSmartNumber((token as any).liquidity_usd)) || '0.024'}
+                          </span>
+                          TX{" "}
+                          <span 
+                            className="text-sm font-semibold"
+                            style={{ 
+                              color: '#ffffff',
+                              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
                             }}
                           >
                             <SmoothNumber
@@ -2092,12 +3555,12 @@ const PulseTable = React.memo(function PulseTable({
                               duration={300}
                             />
                           </span>
-                          <div className="flex flex-row">
-                            <div
-                              className={`h-0.5 w-[${(token.total_buys_5m / (token.total_buys_5m + token.total_sells_5m)) * 24}px] bg-emerald-300`}
-                            ></div>
-                            <div
-                              className={`h-0.5 w-[${(token.total_sells_5m / (token.total_buys_5m + token.total_sells_5m)) * 24}px] bg-red-400`}
+                          <div className="w-8 h-1 bg-gray-700 rounded-full overflow-hidden ml-1">
+                            <div 
+                              className="h-full bg-green-400 rounded-full"
+                              style={{
+                                width: `${Math.min(100, Math.max(10, ((token.total_buys_5m ?? 0) / Math.max(1, (token.total_buys_5m ?? 0) + (token.total_sells_5m ?? 0))) * 100))}%`
+                              }}
                             ></div>
                           </div>
                         </div>
@@ -2141,20 +3604,16 @@ const PulseTable = React.memo(function PulseTable({
                         </span> */}
                       </div>
                       <button 
-                        className="flex cursor-pointer items-center gap-1 rounded-full px-3 py-1 text-xs font-bold shadow transition-all duration-300 ease-out"
+                        className="flex cursor-pointer items-center gap-1 rounded-full px-3 py-1 text-xs font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100"
                         style={{ 
                           backgroundColor: AX.aiGreen, 
                           color: '#000000' 
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.backgroundColor = AX.aiGreenHover;
-                          e.currentTarget.style.boxShadow = `0 0 12px ${AX.glowGreen}, 0 0 24px ${AX.glowGreen}`;
-                          e.currentTarget.style.transform = 'scale(1.05)';
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = AX.aiGreen;
-                          e.currentTarget.style.boxShadow = 'none';
-                          e.currentTarget.style.transform = 'scale(1)';
                         }}
                       >
                         <HiLightningBolt className="text-black" size={18} /> 0
@@ -2162,58 +3621,79 @@ const PulseTable = React.memo(function PulseTable({
                       </button>
                     </div>
                   </div>
-                  {/* Bottom Row: Badges & Buy Button */}
-                  <div className="mt-1 flex flex-row items-center justify-between gap-2">
-                    {showBubbleMetrics && (
-                      <div className="flex gap-1">
-                        {[
-                          {
-                            icon: <FaUser size={10} />,
-                            label: "Buyers",
-                            value: token.total_buyers_5m ?? 0,
-                            color: "text-green-400",
-                          },
-                          {
-                            icon: <FaCrown size={10} />,
-                            label: "Sellers",
-                            value: token.total_sellers_5m ?? 0,
-                            color: "text-red-400",
-                          },
-                          {
-                            icon: <FaSearch size={10} />,
-                            label: "Wallets",
-                            value: token.unique_wallets_5m ?? 0,
-                            color: "text-blue-400",
-                          },
-                          {
-                            icon: <FaUser size={10} />,
-                            label: "24h TX",
-                            value:
-                              (token.total_buys_24h ?? 0) +
-                              (token.total_sells_24h ?? 0),
-                            color: "text-yellow-400",
-                          },
-                          {
-                            icon: <FaUser size={10} />,
-                            label: "Vol 24h",
-                            value: Math.round(
-                              (token.total_buy_volume_24h ?? 0) +
-                                (token.total_sell_volume_24h ?? 0),
-                            ),
-                            color: "text-gray-400",
-                          },
-                        ].map((b, i) => (
-                          <span
-                            key={i}
-                            className={`flex items-center gap-1 bg-neutral-800 ${b.color} rounded-full border border-neutral-700 px-2 py-0.5 text-[10px]`}
-                          >
-                            {b.icon}{" "}
-                            <SmoothNumber value={b.value} duration={300} />
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                </div>
+                
+                {/* Bottom Row */}
+                <div className="absolute left-3 bottom-2 flex flex-row items-center gap-0.5">
+                  {/* Buyers percentage - Green */}
+                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                        style={{ 
+                          color: AX.aiGreen,
+                          fontSize: '11px',
+                          fontWeight: '500',
+                          borderColor: 'rgba(107, 114, 128, 0.1)',
+                          backgroundColor: 'transparent'
+                        }}>
+                    <BsPersonGear size={14} /> {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
+                  </span>
+                  
+                  {/* DS indicator - Blue with time */}
+                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                        style={{ 
+                          color: '#3B82F6',
+                          fontSize: '11px',
+                          fontWeight: '500',
+                          borderColor: 'rgba(107, 114, 128, 0.1)',
+                          backgroundColor: 'transparent'
+                        }}>
+                    <LuChefHat size={14} /> DS <span style={{ color: '#ffffff' }}>{getAgeLabel(token)}</span>
+                  </span>
+                  
+                  {/* Snipe percentage - Red */}
+                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                        style={{ 
+                          color: '#EF4444',
+                          fontSize: '11px',
+                          fontWeight: '500',
+                          borderColor: 'rgba(107, 114, 128, 0.1)',
+                          backgroundColor: 'transparent'
+                        }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                      <line x1="12" y1="4" x2="12" y2="8" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="4" y1="12" x2="8" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="16" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+                      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                    </svg>
+                    {Math.round(((token.total_sells_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
+                  </span>
+                  
+                  {/* Ghost percentage - Green */}
+                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                        style={{ 
+                          color: AX.aiGreen,
+                          fontSize: '11px',
+                          fontWeight: '500',
+                          borderColor: 'rgba(107, 114, 128, 0.1)',
+                          backgroundColor: 'transparent'
+                        }}>
+                    <RiGhostLine size={14} />
+                    {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
+                  </span>
+                  
+                  {/* Three Dice percentage - Green */}
+                  <span className="flex items-center gap-1 text-xs px-1 py-1 rounded-full border transition-all duration-200"
+                        style={{ 
+                          color: AX.aiGreen,
+                          fontSize: '11px',
+                          fontWeight: '500',
+                          borderColor: 'rgba(107, 114, 128, 0.1)',
+                          backgroundColor: 'transparent'
+                        }}>
+                    <FaDice size={14} />
+                    {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
+                  </span>
                 </div>
               </div>
             );
