@@ -7,6 +7,7 @@ import { useUser } from "../../components/UserContext";
 import Header from "../../components/Header";
 import TradeHeader from "../../components/trade/TradeHeader";
 import CustomSolanaChart from "../../components/CustomSolanaChart";
+import FixedChart from "../../components/FixedChart";
 import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
 import CodexTrades from "../../components/trade/CodexTrades";
@@ -204,22 +205,29 @@ export default function TradePage() {
             className="flex-1 min-w-0 flex flex-col pb-3"
             style={{ borderRight: `1px solid ${AX.border}` }}
           >
-            {/* TOP pane */}
+            {/* TOP pane - Chart in top left */}
             <div className="flex-shrink-0 flex flex-col" style={{ height: topPanePx }}>
               {/* TradeHeader includes name + the ONLY icon cluster */}
               <div className="px-2">
                 <TradeHeader token={token} />
               </div>
 
-              {/* Custom Solana Chart with OHLC Data */}
-        <div className="flex-1 min-h-[240px]">
-          <CustomSolanaChart
-            token={token}
-            pairAddress={typeof id === "string" ? id : undefined}
-            height="100%"
-            width="100%"
-          />
-        </div>
+              {/* Chart in top left corner */}
+              <div className="flex-1 min-h-[240px]">
+                {/* Temporary: Using FixedChart to show mock data properly */}
+                <FixedChart
+                  height="100%"
+                  width="100%"
+                />
+                {/* Original chart (commented out for now)
+                <CustomSolanaChart
+                  token={token}
+                  pairAddress={typeof id === "string" ? id : undefined}
+                  height="100%"
+                  width="100%"
+                />
+                */}
+              </div>
             </div>
 
             {/* Resizer */}
@@ -301,41 +309,13 @@ export default function TradePage() {
       </div>
 
 
-      {/* Simple TradingView Widget styling */}
+      {/* Lightweight Charts styling */}
       <style jsx global>{`
-        /* Ensure TradingView widget fits properly in our layout */
-        .tradingview-widget-container {
+        /* Ensure lightweight charts fit properly in our layout */
+        .lightweight-chart-container {
           width: 100% !important;
           height: 100% !important;
           background: rgba(0, 0, 0, 1) !important;
-        }
-        
-        .tradingview-widget-container__widget {
-          height: calc(100% - 32px) !important;
-          background: rgba(0, 0, 0, 1) !important;
-        }
-        
-        /* Clean, minimal copyright styling */
-        .tradingview-widget-copyright {
-          color: #6b7280 !important;
-          font-size: 11px !important;
-          text-align: center !important;
-          padding: 8px 0 !important;
-          background: transparent !important;
-          border-top: 1px solid rgba(242, 242, 242, 0.06) !important;
-        }
-        
-        .tradingview-widget-copyright .blue-text {
-          color: #3b82f6 !important;
-          text-decoration: none !important;
-        }
-        
-        .tradingview-widget-copyright .blue-text:hover {
-          color: #60a5fa !important;
-        }
-        
-        .tradingview-widget-copyright .trademark {
-          color: #9ca3af !important;
         }
       `}</style>
     </>
