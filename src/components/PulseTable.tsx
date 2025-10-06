@@ -1089,7 +1089,7 @@ const PulseTable = React.memo(function PulseTable({
       }}
     >
       <div 
-        className="mb-2 flex items-center justify-between border-b p-3 text-lg font-bold"
+        className="mb-2 flex items-center justify-between border-b p-2 text-lg font-bold"
         style={{ 
           backgroundColor: 'transparent', 
           borderColor: AX.border, 
@@ -2899,16 +2899,30 @@ const PulseTable = React.memo(function PulseTable({
             return (
               <div
                 key={`${pairAddress || mintAddress || "noaddr"}-${idx}`}
-                className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 pb-5 transition-all duration-300 ease-out"
+                className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1  transition-all duration-300 ease-out"
                 style={{ 
                   borderColor: AX.border,
                   backgroundColor: 'transparent'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
+                  // Show and position the popup
+                  const popup = e.currentTarget.querySelector('.status-popup') as HTMLElement;
+                  if (popup) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    popup.style.display = 'block';
+                    popup.style.left = `${rect.left + rect.width / 2}px`;
+                    popup.style.top = `${rect.top - 30}px`;
+                    popup.style.transform = 'translateX(-50%)';
+                  }
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';
+                  // Hide the popup
+                  const popup = e.currentTarget.querySelector('.status-popup') as HTMLElement;
+                  if (popup) {
+                    popup.style.display = 'none';
+                  }
                 }}
                 onClick={handleTokenClick}
               >
@@ -2955,15 +2969,19 @@ const PulseTable = React.memo(function PulseTable({
                 
                 {/* Status popout on hover */}
                 <span
-                  className={`absolute left-1/2 z-20 hidden -translate-x-1/2 border px-3 py-1 text-sm shadow-xl group-hover:flex ${
-                    idx === 0 ? "top-full mt-2" : "-top-7"
-                  }`}
+                  className={`status-popup fixed hidden border px-2 py-1 text-xs shadow-none`}
                   style={{ 
                     pointerEvents: "none",
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
                     color: AX.text,
-                    boxShadow: `0 4px 12px rgba(0, 0, 0, 0.3), 0 0 8px ${AX.glowBlue}`
+                    zIndex: 99999,
+                    left: '50%',
+                    top: '100px',
+                    transform: 'translateX(-50%)',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: '500'
                   }}
                 >
                   {(() => {
@@ -3024,10 +3042,10 @@ const PulseTable = React.memo(function PulseTable({
                       priority={title === "New Pairs"}
                     />
                   {/* Token Metrics */}
-                  <div className="absolute bottom-7 -right-36">
+                  <div className="absolute bottom-16 -right-59">
                     <TokenMetrics token={token} />
                   </div>
-                  <span className="mt-1 mb-4 max-w-[70px] truncate font-mono text-[10px]" style={{ color: AX.muted }}>
+                  <span className="mt-2 mb-1 max-w-[70px] truncate font-mono text-[10px]" style={{ color: AX.muted }}>
                     {shortAddr(token)}
                   </span>
                 </div>
@@ -3038,10 +3056,10 @@ const PulseTable = React.memo(function PulseTable({
                     {/* Left: Token Info & Socials */}
                     <div className="flex min-w-0 flex-col">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="font-semibold text-sm flex-shrink-0" style={{ color: AX.text }}>
+                        <span className="font-semibold text-xs flex-shrink-0" style={{ color: AX.text }}>
                           {token.symbol}
                         </span>
-                        <span className="text-xs truncate" style={{ color: AX.muted }}>
+                        <span className="text-[10px] truncate" style={{ color: AX.muted }}>
                           {token.name}
                         </span>
                         <div className="relative ml-1">
@@ -3108,11 +3126,11 @@ const PulseTable = React.memo(function PulseTable({
                               }
                             }}
                         >
-                          <FaRegCopy size={14} />
+                          <FaRegCopy size={12} />
                         </button>
                       </div>
                       </div>
-                      <div className="mt-1 flex items-center gap-2 text-sm" style={{ color: AX.aiGreen }}>
+                      <div className="mt-1 flex items-center gap-2 text-xs" style={{ color: AX.aiGreen }}>
                         <span>{getAgeLabel(token)}</span>
                         {/* Socials */}
                         <div className="relative flex items-center gap-2">
@@ -3164,7 +3182,7 @@ const PulseTable = React.memo(function PulseTable({
                               window.open(twitterUrl, '_blank');
                             }}
                           >
-                            <FaSearch size={14} />
+                            <FaSearch size={12} />
                           </button>
 
                           {/* X Profile Preview Button */}
@@ -3202,7 +3220,7 @@ const PulseTable = React.memo(function PulseTable({
                                 window.open(profileUrl, '_blank');
                               }}
                             >
-                              <FaUser size={14} />
+                              <FaUser size={12} />
                             </button>
                             
                             {/* Small X Profile Preview - positioned near token */}
@@ -3494,9 +3512,9 @@ const PulseTable = React.memo(function PulseTable({
                            </SmartColor>
                          </span>
                         <span style={{ color: AX.muted }}>
-                          V{" "}
+                          <span className="text-xs">V</span>{" "}
                           <span 
-                            className="text-base font-semibold"
+                            className="text-sm font-semibold"
                             style={{ 
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
@@ -3504,7 +3522,7 @@ const PulseTable = React.memo(function PulseTable({
                           >
                             <SmoothNumber
                               value={(token as any).volume_24h || 0}
-                              formatter={(val) => `$${formatSmartNumber(val)}`}
+                              formatter={(val) => `$${formatSmartNumber(Math.round(val))}`}
                               duration={300}
                             />
                           </span>
@@ -3512,8 +3530,8 @@ const PulseTable = React.memo(function PulseTable({
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
-                          F{" "}
-                          <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none" className="ml-1">
+                          <span className="text-xs">F</span>{" "}
+                          <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none" className="ml-1">
                             <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana)"/>
                             <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana)"/>
                             <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana)"/>
@@ -3533,7 +3551,7 @@ const PulseTable = React.memo(function PulseTable({
                             </defs>
                           </svg>
                           <span 
-                            className="text-sm font-semibold"
+                            className="text-xs font-semibold"
                             style={{ 
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
@@ -3541,9 +3559,9 @@ const PulseTable = React.memo(function PulseTable({
                           >
                             {((token as any).liquidity_usd && formatSmartNumber((token as any).liquidity_usd)) || '0.024'}
                           </span>
-                          TX{" "}
+                          <span className="text-xs">TX</span>{" "}
                           <span 
-                            className="text-sm font-semibold"
+                            className="text-xs font-semibold"
                             style={{ 
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
@@ -3606,7 +3624,7 @@ const PulseTable = React.memo(function PulseTable({
                         </span> */}
                       </div>
                       <button 
-                        className="flex cursor-pointer items-center gap-1 rounded-full px-3 py-1 text-xs font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100"
+                        className="flex cursor-pointer items-center gap-1 rounded-full px-0.5 py-0.5 text-[10px] font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100"
                         style={{ 
                           backgroundColor: AX.aiGreen, 
                           color: '#000000' 
@@ -3618,7 +3636,7 @@ const PulseTable = React.memo(function PulseTable({
                           e.currentTarget.style.backgroundColor = AX.aiGreen;
                         }}
                       >
-                        <HiLightningBolt className="text-black" size={18} /> 0
+                        <HiLightningBolt className="text-black" size={12} /> 0
                         SOL
                       </button>
                     </div>
@@ -3626,7 +3644,7 @@ const PulseTable = React.memo(function PulseTable({
                 </div>
                 
                 {/* Bottom Row */}
-                <div className="absolute left-3 bottom-2 flex flex-row items-center gap-0.5">
+                <div className="absolute left-24 bottom-2 flex flex-row items-center gap-1">
                   {/* Buyers percentage - Green */}
                   <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
@@ -3636,7 +3654,7 @@ const PulseTable = React.memo(function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <BsPersonGear size={14} /> {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
+                    <BsPersonGear size={13} /> {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
                   </span>
                   
                   {/* DS indicator - Blue with time */}
@@ -3648,7 +3666,7 @@ const PulseTable = React.memo(function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <LuChefHat size={14} /> DS <span style={{ color: '#ffffff' }}>{getAgeLabel(token)}</span>
+                    <LuChefHat size={13} /> DS <span style={{ color: '#ffffff' }}>{getAgeLabel(token)}</span>
                   </span>
                   
                   {/* Snipe percentage - Red */}
@@ -3660,7 +3678,7 @@ const PulseTable = React.memo(function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                       <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" fill="none"/>
                       <line x1="12" y1="4" x2="12" y2="8" stroke="currentColor" strokeWidth="1.5"/>
                       <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5"/>
@@ -3680,12 +3698,12 @@ const PulseTable = React.memo(function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <RiGhostLine size={14} />
+                    <RiGhostLine size={13} />
                     {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
                   </span>
                   
                   {/* Three Dice percentage - Green */}
-                  <span className="flex items-center gap-1 text-xs px-1 py-1 rounded-full border transition-all duration-200"
+                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -3693,7 +3711,7 @@ const PulseTable = React.memo(function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <FaDice size={14} />
+                    <FaDice size={13} />
                     {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
                   </span>
                 </div>

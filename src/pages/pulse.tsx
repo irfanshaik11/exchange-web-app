@@ -558,7 +558,7 @@ export default function PulsePage() {
       </Head>
       <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#0f1012' }}>
         <Header />
-        <div className="w-full px-5 py-6">
+        <div className="w-full px-5 pt-2 pb-6">
           <div className="mb-2">
             <div className="flex items-center justify-between">
               <h1 className="text-2xl font-bold">Pulse</h1>
