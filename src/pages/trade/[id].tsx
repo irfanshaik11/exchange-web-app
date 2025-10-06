@@ -5,6 +5,7 @@ import { Toaster } from "react-hot-toast";
 import { useWallet } from "../../components/useWallet";
 import { useUser } from "../../components/UserContext";
 import Header from "../../components/Header";
+import Footer from "../../components/Footer";
 import TradeHeader from "../../components/trade/TradeHeader";
 import CustomSolanaChart from "../../components/CustomSolanaChart";
 import FixedChart from "../../components/FixedChart";
@@ -307,7 +308,7 @@ export default function TradePage() {
           </div>
         </div>
       </div>
-
+      <Footer />
 
       {/* Lightweight Charts styling */}
       <style jsx global>{`

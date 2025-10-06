@@ -1,11 +1,25 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Disable server-side caching/etag for this proxy to prevent 304s
-  res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  try { res.removeHeader('ETag'); } catch {}
+  // Set appropriate cache headers for better performance
+  const isFresh = req.query.fresh === '1';
+  
+  if (isFresh) {
+    // Disable caching for fresh requests
+    res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else {
+    // Allow short-term caching for regular requests
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
+    res.setHeader('ETag', `"launchpad-tokens-${Date.now()}"`);
+  }
+  
+  try { 
+    if (!isFresh) {
+      res.removeHeader('ETag'); 
+    }
+  } catch {}
   
   // Preserve query parameters
   const params = new URLSearchParams();

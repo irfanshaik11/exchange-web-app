@@ -20,6 +20,7 @@ import { useUser } from "../components/UserContext";
 import Cookies from "js-cookie";
 import QRCode from "qrcode";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
 import type { Token } from "~/utils/db";
 import InterstateButton from "../components/InterstateButton";
 import InterstateTable from "../components/InterstateTable";
@@ -548,6 +549,7 @@ export default function Home() {
             />
           )}
         </main>
+        <Footer />
         <QuickBuySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </div>
     </>

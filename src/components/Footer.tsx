@@ -1,0 +1,286 @@
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import { 
+  FaWallet, 
+  FaCompass, 
+  FaChartLine, 
+  FaChartBar,
+  FaBell,
+  FaPalette,
+  FaGamepad,
+  FaFileAlt,
+  FaChevronDown,
+  FaCog,
+  FaBars
+} from 'react-icons/fa';
+
+// Custom X (Twitter) icon component
+const XIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>
+);
+
+/* ---- style palette ---- */
+const AX = {
+  bg: "#101114",
+  surface: "#1E1F26",
+  surface2: "#17191E",
+  border: "#2A2B33",
+  text: "#E6E7EA",
+  muted: "#9CA3AF",
+  mint: "#70E0B0",
+  mintHover: "#58B890",
+  sell: "#FF4D7F",
+  green: "#22c55e",
+  red: "#ef4444",
+  purple: "#8b5cf6",
+  teal: "#14b8a6",
+};
+
+export default function Footer() {
+  const router = useRouter();
+  const [activePreset, setActivePreset] = useState('PRESET 2');
+  const [showWalletDropdown, setShowWalletDropdown] = useState(false);
+  const [showGlobalDropdown, setShowGlobalDropdown] = useState(false);
+
+  const navLinks = [
+    { name: "Wallet", href: "/wallet", icon: FaWallet },
+    { name: "Twitter", href: "/twitter", icon: XIcon, hasNotification: true },
+    { name: "Discover", href: "/", icon: FaCompass, hasNotification: true },
+    { name: "Pulse", href: "/pulse", icon: FaChartLine, hasNotification: true },
+    { name: "PnL", href: "/pnl", icon: FaChartBar },
+  ];
+
+  const statusIcons = [
+    { icon: "❤️", color: "red" },
+    { icon: "💊", color: "green" },
+    { icon: "🦊", color: "orange" },
+  ];
+
+  const utilityIcons = [
+    { icon: FaBars, tooltip: "Layout" },
+    { icon: FaBell, tooltip: "Notifications" },
+    { icon: FaPalette, tooltip: "Theme" },
+  ];
+
+  const socialLinks = [
+    { icon: FaGamepad, href: "/discord", tooltip: "Discord" },
+    { icon: XIcon, href: "/twitter", tooltip: "Twitter" },
+    { icon: FaFileAlt, href: "/docs", tooltip: "Docs", text: "Docs" },
+  ];
+
+  return (
+    <footer 
+      className="fixed bottom-0 left-0 right-0 z-30 border-t backdrop-blur"
+      style={{ 
+        backgroundColor: AX.bg, 
+        borderColor: AX.border 
+      }}
+    >
+      <div className="flex items-center justify-between px-2 sm:px-4 py-2 h-12 overflow-x-auto">
+        {/* Left Section - Preset Button */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          <button
+            className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 ease-out"
+            style={{
+              backgroundColor: AX.mint,
+              color: '#000000',
+              border: `1px solid ${AX.mint}`
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = AX.mintHover;
+              e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = AX.mint;
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <FaBars size={10} className="sm:w-3 sm:h-3" />
+            <FaCog size={10} className="sm:w-3 sm:h-3" />
+            <span className="hidden sm:inline">{activePreset}</span>
+            <span className="sm:hidden">P2</span>
+          </button>
+
+          {/* Wallet Display */}
+          <div className="relative">
+            <button
+              onClick={() => setShowWalletDropdown(!showWalletDropdown)}
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full border transition-all duration-300 ease-out"
+              style={{
+                backgroundColor: 'transparent',
+                borderColor: AX.border,
+                color: AX.text
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = AX.surface;
+                e.currentTarget.style.borderColor = AX.mint;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.borderColor = AX.border;
+              }}
+            >
+              <FaWallet size={10} className="sm:w-3 sm:h-3" />
+              <span className="text-xs sm:text-sm">1</span>
+              {/* Solana Logo */}
+              <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 flex items-center justify-center">
+                <span className="text-xs font-bold text-white">S</span>
+              </div>
+              <span className="text-xs sm:text-sm">0</span>
+              <FaChevronDown size={8} className="sm:w-2 sm:h-2" />
+            </button>
+          </div>
+        </div>
+
+        {/* Center Section - Navigation Links */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {navLinks.map((link, index) => {
+            const IconComponent = link.icon;
+            const isActive = router.pathname === link.href;
+            
+            return (
+              <React.Fragment key={link.name}>
+                {index > 0 && (
+                  <div 
+                    className="w-px h-3 sm:h-4 mx-1" 
+                    style={{ backgroundColor: AX.border }}
+                  />
+                )}
+                <Link
+                  href={link.href}
+                  className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-1 rounded transition-all duration-300 ease-out group"
+                  style={{
+                    color: isActive ? AX.mint : AX.muted,
+                    backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.color = AX.mint;
+                      e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isActive) {
+                      e.currentTarget.style.color = AX.muted;
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }
+                  }}
+                >
+                  <IconComponent size={12} className="sm:w-3 sm:h-3" />
+                  <span className="text-xs sm:text-sm hidden sm:inline">{link.name}</span>
+                  {link.hasNotification && (
+                    <div 
+                      className="absolute -top-1 -right-1 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full"
+                      style={{ backgroundColor: AX.sell }}
+                    />
+                  )}
+                </Link>
+              </React.Fragment>
+            );
+          })}
+        </div>
+
+        {/* Right Section - Status, Price, Global, Utilities, Social */}
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {/* Status Icons */}
+          <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-full border" style={{ borderColor: AX.border }}>
+            {statusIcons.map((status, index) => (
+              <div key={index} className="text-xs">
+                {status.icon}
+              </div>
+            ))}
+          </div>
+
+          {/* Solana Price */}
+          <div className="flex items-center gap-1 px-1 sm:px-2 py-1 rounded-full border" style={{ borderColor: AX.border }}>
+            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 flex items-center justify-center">
+              <span className="text-xs font-bold text-white">S</span>
+            </div>
+            <span className="text-xs sm:text-sm hidden sm:inline" style={{ color: AX.text }}>$</span>
+            <span className="text-xs sm:text-sm font-medium" style={{ color: AX.green }}>$228.58</span>
+          </div>
+
+          <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
+
+          {/* Global Dropdown */}
+          <div className="relative hidden sm:block">
+            <button
+              onClick={() => setShowGlobalDropdown(!showGlobalDropdown)}
+              className="flex items-center gap-1 px-2 py-1 rounded transition-all duration-300 ease-out"
+              style={{ color: AX.text }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = AX.surface;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+            >
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: AX.red }} />
+              <span className="text-sm font-medium">GLOBAL</span>
+              <FaChevronDown size={10} />
+            </button>
+          </div>
+
+          <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
+
+          {/* Utility Icons */}
+          <div className="flex items-center gap-1">
+            {utilityIcons.map((utility, index) => {
+              const IconComponent = utility.icon;
+              return (
+                <button
+                  key={index}
+                  className="p-1 rounded transition-all duration-300 ease-out group"
+                  style={{ color: AX.muted }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = AX.mint;
+                    e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = AX.muted;
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                  title={utility.tooltip}
+                >
+                  <IconComponent size={12} className="sm:w-3 sm:h-3" />
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
+
+          {/* Social Links */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            {socialLinks.map((social, index) => {
+              const IconComponent = social.icon;
+              return (
+                <Link
+                  key={index}
+                  href={social.href}
+                  className="flex items-center gap-1 px-1 sm:px-2 py-1 rounded transition-all duration-300 ease-out group"
+                  style={{ color: AX.muted }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = AX.mint;
+                    e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = AX.muted;
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
+                  title={social.tooltip}
+                >
+                  <IconComponent size={12} className="sm:w-3 sm:h-3" />
+                  {social.text && <span className="text-xs sm:text-sm hidden sm:inline">{social.text}</span>}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}

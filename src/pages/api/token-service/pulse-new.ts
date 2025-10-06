@@ -2,11 +2,25 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 // import { ImageSearchService } from '~/utils/imageSearch'; // REMOVED - not used
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Disable caching for realtime freshness
-  res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  try { res.removeHeader('ETag'); } catch {}
+  // Set appropriate cache headers for better performance
+  const isFresh = req.query.fresh === '1';
+  
+  if (isFresh) {
+    // Disable caching for fresh requests
+    res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else {
+    // Allow short-term caching for regular requests
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    res.setHeader('ETag', `"pulse-new-${Date.now()}"`);
+  }
+  
+  try { 
+    if (!isFresh) {
+      res.removeHeader('ETag'); 
+    }
+  } catch {}
 
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(req.query)) {

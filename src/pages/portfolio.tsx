@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Head from "next/head";
 import Header from "../components/Header";
+import Footer from "../components/Footer";
 import Positions from "../components/trade/Positions";
 import TradeTable from "../components/trade/TradeTable";
 import { useUser } from "../components/UserContext";
@@ -781,6 +782,7 @@ export default function PortfolioPage() {
          )}
        </div>
      </div>
+     <Footer />
    </>
  );
 }

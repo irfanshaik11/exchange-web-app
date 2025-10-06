@@ -1,12 +1,16 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import Head from 'next/head';
 import PulseTable from '../components/PulseTable';
+import PulseControlBar from '../components/PulseControlBar';
 import type { Token } from '~/utils/db';
 import Header from '../components/Header';
+import Footer from '../components/Footer';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 // import { PriorityImageSearcher } from '../utils/imageSearch'; // DISABLED - no external image searches
 import { useImagePreloader } from '../hooks/useImagePreloader';
+import { useCachedPulseTokens, useCachedLaunchpadData } from '../hooks/useCachedTokens';
+import { useCachedFinalStretchTokens, useCachedMigratedTokens } from '../hooks/useCachedTokensAdditional';
 import { env } from '~/env';
 
 interface LaunchpadToken {
@@ -35,78 +39,43 @@ interface LaunchpadData {
 
 // FEATURE FLAG: To re-enable the 5 bubble metrics, change showBubbleMetrics={false} to showBubbleMetrics={true} in all PulseTable components below
 export default function PulsePage() {
-  const [tokens, setTokens] = useState<Token[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Use cached hooks for immediate data display
+  const { 
+    tokens, 
+    loading: tokensLoading, 
+    error: tokensError, 
+    isStale: tokensStale,
+    refreshTokens 
+  } = useCachedPulseTokens();
+  
+  const { 
+    launchpadData, 
+    loading: launchpadLoading, 
+    error: launchpadError, 
+    isStale: launchpadStale,
+    refreshData: refreshLaunchpadData 
+  } = useCachedLaunchpadData();
+
+  // Use cached hooks for Final Stretch and Migrated tokens
+  const { 
+    tokens: cachedFinalStretchTokens, 
+    loading: finalStretchLoading, 
+    error: finalStretchError, 
+    isStale: finalStretchStale 
+  } = useCachedFinalStretchTokens();
+  
+  const { 
+    tokens: cachedMigratedTokens, 
+    loading: migratedLoading, 
+    error: migratedError, 
+    isStale: migratedStale 
+  } = useCachedMigratedTokens();
+
   const [httpNew, setHttpNew] = useState<any[]>([]);
   const [httpNewTick, setHttpNewTick] = useState(0);
-  const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
-  const [httpFinalStretchTick, setHttpFinalStretchTick] = useState(0);
-  const [httpMigrated, setHttpMigrated] = useState<any[]>([]);
-  const [httpMigratedTick, setHttpMigratedTick] = useState(0);
-
-  // Launchpad data state
-  const [launchpadData, setLaunchpadData] = useState<LaunchpadData>({
-    new: [],
-    completing: [],
-    completed: []
-  });
-  const [launchpadLoading, setLaunchpadLoading] = useState(true);
-  const [launchpadError, setLaunchpadError] = useState<string | null>(null);
 
   // Use WebSocket for New Pairs
   const { data: newPairsTokens, loading: wsLoading } = usePaginatedTokensWebSocket({ filter: 'new', limit: 20 });
-
-  // Fetch regular tokens (optional - graceful fallback)
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    // Use deployed service directly when backend is deployed
-    const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-      ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
-      : env.NEXT_PUBLIC_GO_SERVICE_URL;
-    const url = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-      ? `${baseUrl}/v1/pulse/new?limit=200`
-      : `/api/token-service/getAllTokens?filter=new&order=desc&limit=200`;
-
-    fetch(url)
-      .then(res => res.ok ? res.json() : { result: [] })
-      .then((data: { result: Token[] } | Token[]) => {
-        const arr = Array.isArray(data) ? (data as Token[]) : (data.result || []);
-        setTokens(arr);
-      })
-      .catch(() => setTokens([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  // Fetch launchpad data
-  useEffect(() => {
-    const fetchLaunchpadData = async () => {
-      setLaunchpadLoading(true);
-      setLaunchpadError(null);
-      try {
-        // Use deployed service directly when backend is deployed
-        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
-          : env.NEXT_PUBLIC_GO_SERVICE_URL;
-        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-          ? `${baseUrl}/v1/launchpad/tokens?limit=30`
-          : `/api/launchpad/tokens?limit=30`;
-
-        const response = await fetch(apiUrl);
-        if (!response.ok) throw new Error('Failed to fetch launchpad data');
-        const data: LaunchpadData = await response.json();
-        setLaunchpadData(data);
-      } catch (err) {
-        setLaunchpadError('Failed to load launchpad data');
-      } finally {
-        setLaunchpadLoading(false);
-      }
-    };
-    fetchLaunchpadData();
-    const interval = setInterval(fetchLaunchpadData, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Fast polling fallback for New Pairs (cache-bypass)
   useEffect(() => {
@@ -136,71 +105,7 @@ export default function PulsePage() {
       } catch {}
     };
     poll();
-    const id = setInterval(poll, 2000);
-    return () => { alive = false; clearInterval(id); };
-  }, []);
-
-  // Fast polling fallback for Final Stretch tokens (cache-bypass)
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      try {
-        // Use deployed service directly when backend is deployed
-        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
-          : env.NEXT_PUBLIC_GO_SERVICE_URL;
-        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-          ? `${baseUrl}/v1/pulse/final-stretch?limit=30&t=${Date.now()}`
-          : `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
-
-        const res = await fetch(apiUrl);
-        if (!alive) return;
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            // Only replace when we have non-empty fresh data to avoid flicker
-            if (data.length > 0) {
-              setHttpFinalStretch(data as any[]);
-              setHttpFinalStretchTick((t) => t + 1);
-            }
-          }
-        }
-      } catch {}
-    };
-    poll();
-    const id = setInterval(poll, 2000);
-    return () => { alive = false; clearInterval(id); };
-  }, []);
-
-  // Fast polling fallback for Migrated tokens (cache-bypass)
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      try {
-        // Use deployed service directly when backend is deployed
-        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
-          : env.NEXT_PUBLIC_GO_SERVICE_URL;
-        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-          ? `${baseUrl}/v1/pulse/migrated?limit=30&t=${Date.now()}`
-          : `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
-
-        const res = await fetch(apiUrl);
-        if (!alive) return;
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            // Only replace when we have non-empty fresh data to avoid flicker
-            if (data.length > 0) {
-              setHttpMigrated(data as any[]);
-              setHttpMigratedTick((t) => t + 1);
-            }
-          }
-        }
-      } catch {}
-    };
-    poll();
-    const id = setInterval(poll, 2000);
+    const id = setInterval(poll, 10000); // Reduced frequency to prevent refresh issues
     return () => { alive = false; clearInterval(id); };
   }, []);
 
@@ -303,11 +208,20 @@ export default function PulsePage() {
 
   // Combine regular tokens with launchpad tokens and HTTP tokens (stable refs)
   const combinedNewPairs = useMemo(() => [...newPairs, ...launchpadNewPairs], [newPairs, launchpadNewPairs]);
-  const combinedFinalStretch = useMemo(() => [...httpFinalStretch, ...launchpadFinalStretch], [httpFinalStretch, launchpadFinalStretch]);
-  const combinedMigrated = useMemo(() => [...httpMigrated, ...launchpadMigrated], [httpMigrated, launchpadMigrated]);
+  const combinedFinalStretch = useMemo(() => [...cachedFinalStretchTokens, ...launchpadFinalStretch], [cachedFinalStretchTokens, launchpadFinalStretch]);
+  const combinedMigrated = useMemo(() => [...cachedMigratedTokens, ...launchpadMigrated], [cachedMigratedTokens, launchpadMigrated]);
 
-  const isLoading = (loading && wsLoading) || launchpadLoading;
-  const hasError = launchpadError && !(launchpadData?.new?.length || 0) && !(launchpadData?.completing?.length || 0) && !(launchpadData?.completed?.length || 0);
+  // Memoize the loading state to prevent unnecessary re-renders
+  const isLoading = useMemo(() => {
+    return (tokensLoading && !tokens.length) || 
+           (launchpadLoading && !launchpadData?.new?.length && !launchpadData?.completing?.length && !launchpadData?.completed?.length) ||
+           (finalStretchLoading && !cachedFinalStretchTokens.length) ||
+           (migratedLoading && !cachedMigratedTokens.length);
+  }, [tokensLoading, tokens.length, launchpadLoading, launchpadData?.new?.length, launchpadData?.completing?.length, launchpadData?.completed?.length, finalStretchLoading, cachedFinalStretchTokens.length, migratedLoading, cachedMigratedTokens.length]);
+  
+  const hasError = useMemo(() => {
+    return launchpadError && !(launchpadData?.new?.length || 0) && !(launchpadData?.completing?.length || 0) && !(launchpadData?.completed?.length || 0);
+  }, [launchpadError, launchpadData?.new?.length, launchpadData?.completing?.length, launchpadData?.completed?.length]);
 
   // Enrich WS new pairs with created_at/image from known sources when available
   const wsNewRaw: any[] = Array.isArray(newPairsTokens) ? (newPairsTokens as any[]) : [];
@@ -528,8 +442,8 @@ export default function PulsePage() {
       }
     };
 
-    // Poll every 2 seconds for additional updates
-    const interval = setInterval(pollMarketData, 2000);
+    // Poll every 10 seconds for additional updates (reduced frequency)
+    const interval = setInterval(pollMarketData, 10000);
     return () => clearInterval(interval);
   }, [realtimeAddrs]);
 
@@ -571,7 +485,7 @@ export default function PulsePage() {
   
   // Apply same limiting logic as new pairs to final stretch and migrated
   const finalStretchToShow = useMemo(() => {
-    const source = httpFinalStretch.length ? httpFinalStretch : combinedFinalStretch;
+    const source = cachedFinalStretchTokens.length ? cachedFinalStretchTokens : combinedFinalStretch;
     const uniq = new Map<string, any>();
     for (const t of source as any[]) {
       const key = (t?.pair_address || t?.mint) as string | undefined;
@@ -595,10 +509,10 @@ export default function PulsePage() {
     const result = withTs.concat(withoutTs);
     // Limit to 30 tokens like new pairs
     return result.slice(0, 30);
-  }, [httpFinalStretch, combinedFinalStretch, getTs]);
+  }, [cachedFinalStretchTokens, combinedFinalStretch, getTs]);
 
   const migratedToShow = useMemo(() => {
-    const source = httpMigrated.length ? httpMigrated : combinedMigrated;
+    const source = cachedMigratedTokens.length ? cachedMigratedTokens : combinedMigrated;
     const uniq = new Map<string, any>();
     for (const t of source as any[]) {
       const key = (t?.pair_address || t?.mint) as string | undefined;
@@ -622,7 +536,7 @@ export default function PulsePage() {
     const result = withTs.concat(withoutTs);
     // Limit to 30 tokens like new pairs
     return result.slice(0, 30);
-  }, [httpMigrated, combinedMigrated, getTs]);
+  }, [cachedMigratedTokens, combinedMigrated, getTs]);
 
   const enrichedFinalStretch = useMemo(() => enrichWithMarketData(finalStretchToShow as any), [enrichWithMarketData, finalStretchToShow]);
   const enrichedMigrated = useMemo(() => enrichWithMarketData(migratedToShow as any), [enrichWithMarketData, migratedToShow]);
@@ -640,30 +554,15 @@ export default function PulsePage() {
     <>
       <Head>
         <title>Pulse | Interstate Memeboard</title>
-        <meta name="description" content="Real-time token tracking with launchpad integration" />
+        <meta name="description" content="Token tracking dashboard" />
       </Head>
       <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#0f1012' }}>
         <Header />
         <div className="w-full px-5 py-6">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold mb-2">Pulse</h1>
-            <p className="text-neutral-400 mb-2">Real-time token tracking with launchpad integration</p>
-            <div className="flex gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${tokens.length > 0 ? 'bg-green-500' : 'bg-gray-500'}`}></div>
-                <span className="text-neutral-400">Regular Tokens: {tokens.length > 0 ? `${tokens.length} tokens` : 'Unavailable'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${(launchpadData?.new?.length || 0) + (launchpadData?.completing?.length || 0) + (launchpadData?.completed?.length || 0) > 0 ? 'bg-green-500' : 'bg-gray-500'}`}></div>
-                <span className="text-neutral-400">Launchpad: {(launchpadData?.new?.length || 0) + (launchpadData?.completing?.length || 0) + (launchpadData?.completed?.length || 0)} tokens</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span className="text-neutral-400">
-                  Real-time Data: {wsConnected ? 'Connected' : 'Disconnected'}
-                  {wsError && ` (${wsError})`}
-                </span>
-              </div>
+          <div className="mb-2">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-bold">Pulse</h1>
+              <PulseControlBar className="mb-0.5" />
             </div>
           </div>
 
@@ -687,6 +586,7 @@ export default function PulsePage() {
             </div>
           )}
         </div>
+        <Footer />
       </div>
     </>
   );
