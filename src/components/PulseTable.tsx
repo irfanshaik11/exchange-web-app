@@ -3522,7 +3522,14 @@ const PulseTable = React.memo(function PulseTable({
                           >
                             <SmoothNumber
                               value={(token as any).volume_24h || 0}
-                              formatter={(val) => `$${formatSmartNumber(Math.round(val))}`}
+                              formatter={(val) => {
+                                const rounded = Math.round(val);
+                                if (rounded >= 1e12) return `$${Math.round(rounded / 1e12)}T`;
+                                if (rounded >= 1e9) return `$${Math.round(rounded / 1e9)}B`;
+                                if (rounded >= 1e6) return `$${Math.round(rounded / 1e6)}M`;
+                                if (rounded >= 1e3) return `$${Math.round(rounded / 1e3)}K`;
+                                return `$${rounded}`;
+                              }}
                               duration={300}
                             />
                           </span>
