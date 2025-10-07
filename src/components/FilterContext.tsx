@@ -21,8 +21,12 @@ export interface FilterState {
 
 interface FilterContextType {
   filter: FilterState;
+  pendingFilter: FilterState;
   setFilter: (f: FilterState) => void;
+  setPendingFilter: (f: FilterState) => void;
+  applyFilters: () => void;
   resetFilter: () => void;
+  hasPendingChanges: boolean;
 }
 
 const defaultFilter: FilterState = {
@@ -47,6 +51,7 @@ const FilterContext = createContext<FilterContextType | undefined>(undefined);
 
 export function FilterProvider({ children }: { children: React.ReactNode }) {
   const [filter, setFilterState] = useState<FilterState>(defaultFilter);
+  const [pendingFilter, setPendingFilterState] = useState<FilterState>(defaultFilter);
 
   // On mount, update filter from localStorage if available (client-side only)
   useEffect(() => {
@@ -59,7 +64,9 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
           if (!savedFilters.amms) {
             savedFilters.amms = defaultFilter.amms;
           }
-          setFilterState({ ...defaultFilter, ...savedFilters });
+          const loadedFilters = { ...defaultFilter, ...savedFilters };
+          setFilterState(loadedFilters);
+          setPendingFilterState(loadedFilters);
         } catch {
           // Optionally log error
         }
@@ -73,11 +80,36 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
     }
   }, [filter]);
 
-  const setFilter = (f: FilterState) => setFilterState(f);
-  const resetFilter = () => setFilterState(defaultFilter);
+  const setFilter = (f: FilterState) => {
+    setFilterState(f);
+    setPendingFilterState(f);
+  };
+
+  const setPendingFilter = (f: FilterState) => {
+    setPendingFilterState(f);
+  };
+
+  const applyFilters = () => {
+    setFilterState(pendingFilter);
+  };
+
+  const resetFilter = () => {
+    setFilterState(defaultFilter);
+    setPendingFilterState(defaultFilter);
+  };
+
+  const hasPendingChanges = JSON.stringify(filter) !== JSON.stringify(pendingFilter);
 
   return (
-    <FilterContext.Provider value={{ filter, setFilter, resetFilter }}>
+    <FilterContext.Provider value={{ 
+      filter, 
+      pendingFilter, 
+      setFilter, 
+      setPendingFilter, 
+      applyFilters, 
+      resetFilter, 
+      hasPendingChanges 
+    }}>
       {children}
     </FilterContext.Provider>
   );

@@ -91,6 +91,11 @@ export type Token = {
   bonding_curve_progress: number | string;
   bonding_pct?: number; // Bonding percentage for fallback
   uri?: string; // IPFS metadata URI
+  // Protocol/AMM information
+  launchpad_protocol?: string; // Backend protocol field
+  protocol?: string; // Alternative protocol field
+  amm_id?: string; // AMM identifier
+  launchpadProtocol?: string; // Alternative protocol field name
 };
 
 /**

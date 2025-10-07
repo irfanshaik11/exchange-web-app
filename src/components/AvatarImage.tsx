@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { withImageFallback } from '~/utils/images';
+import ImageBubble from './ImageBubble';
 
 interface AvatarImageProps {
   src?: string | null;
@@ -9,6 +10,8 @@ interface AvatarImageProps {
   width?: number;
   height?: number;
   className?: string;
+  showBubble?: boolean;
+  bubbleSrc?: string;
 }
 
 export default function AvatarImage({
@@ -19,6 +22,8 @@ export default function AvatarImage({
   width = 48,
   height = 48,
   className = '',
+  showBubble = true,
+  bubbleSrc,
 }: AvatarImageProps) {
   const normalizedSrc = useMemo(() => withImageFallback(src, fallbackSrc), [src, fallbackSrc]);
   const finalSrc = normalizedSrc; // Only use the normalized source, no random avatar fallback
@@ -34,23 +39,27 @@ export default function AvatarImage({
     const directSchemes = finalSrc.startsWith('data:') || finalSrc.startsWith('blob:');
     const srcUrl = directSchemes ? finalSrc : `/api/image?url=${encodeURIComponent(finalSrc)}`;
     return (
-      <img
-        src={srcUrl}
-        alt={name || symbol || ''}
-        width={width}
-        height={height}
-        className={className}
-        onError={() => setShowImage(false)}
-      />
+      <div className="relative border border-green-400 rounded-lg p-0.5">
+        <img
+          src={srcUrl}
+          alt={name || symbol || ''}
+          width={width}
+          height={height}
+          className={`${className} rounded-lg`}
+          onError={() => setShowImage(false)}
+        />
+        {showBubble && <ImageBubble src={bubbleSrc} />}
+      </div>
     );
   }
 
   return (
     <div
-      className={className + ' flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold rounded-full shadow-lg'}
+      className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold rounded-full shadow-lg border border-green-400`}
       style={{ width, height }}
     >
       <span className="text-lg">{initial}</span>
+      {showBubble && <ImageBubble src={bubbleSrc} />}
     </div>
   );
 }

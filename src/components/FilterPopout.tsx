@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
 import CustomCheckbox from './CustomCheckbox';
@@ -10,38 +10,66 @@ import Image from 'next/image';
 interface FilterPopoutProps {
   open: boolean;
   onClose: () => void;
+  onApplyFilters?: (filters: any) => void;
+  currentFilters?: any;
 }
 
-const FilterPopout: React.FC<FilterPopoutProps> = ({ open, onClose }) => {
-  const { filter, setFilter, resetFilter } = useFilter();
+const FilterPopout: React.FC<FilterPopoutProps> = ({ open, onClose, onApplyFilters, currentFilters }) => {
+  // Use local state for pending changes if we have currentFilters (PulseTable mode)
+  const [pendingFilters, setPendingFilters] = useState(currentFilters || {});
+  
+  // Use global filter context if no currentFilters provided (global mode)
+  const globalFilter = useFilter();
+  
+  const isGlobalMode = !currentFilters;
+  const filters = isGlobalMode ? globalFilter.pendingFilter : pendingFilters;
+  const setFilters = isGlobalMode ? globalFilter.setPendingFilter : setPendingFilters;
+  const hasPendingChanges = isGlobalMode ? globalFilter.hasPendingChanges : JSON.stringify(currentFilters) !== JSON.stringify(pendingFilters);
 
   const handleAmmToggle = (ammId: string) => {
-    setFilter({
-      ...filter,
-      amms: filter.amms.includes(ammId)
-        ? filter.amms.filter(id => id !== ammId)
-        : [...filter.amms, ammId],
+    setFilters({
+      ...filters,
+      amms: filters.amms.includes(ammId)
+        ? filters.amms.filter(id => id !== ammId)
+        : [...filters.amms, ammId],
     });
   };
 
-  const handleMinMaxChange = (key: keyof typeof filter, value: string | number) => {
-    setFilter({ ...filter, [key]: value });
+  const handleMinMaxChange = (key: keyof typeof filters, value: string | number) => {
+    setFilters({ ...filters, [key]: value });
   };
 
-  const handleTextChange = (key: keyof typeof filter, value: string) => {
-    setFilter({ ...filter, [key]: value });
+  const handleTextChange = (key: keyof typeof filters, value: string) => {
+    setFilters({ ...filters, [key]: value });
   };
 
   const handleDexPaidToggle = () => {
-    setFilter({ ...filter, dexPaid: !filter.dexPaid });
+    setFilters({ ...filters, dexPaid: !filters.dexPaid });
   };
 
-  const renderMinMaxInputs = (label: string, minKey: keyof typeof filter, maxKey: keyof typeof filter) => (
+  const handleApply = () => {
+    if (isGlobalMode) {
+      globalFilter.applyFilters();
+    } else if (onApplyFilters) {
+      onApplyFilters(pendingFilters);
+    }
+    onClose();
+  };
+
+  const handleReset = () => {
+    if (isGlobalMode) {
+      globalFilter.resetFilter();
+    } else if (currentFilters) {
+      setPendingFilters(currentFilters);
+    }
+  };
+
+  const renderMinMaxInputs = (label: string, minKey: keyof typeof filters, maxKey: keyof typeof filters) => (
     <div>
       <h3 className="text-neutral-300 text-sm font-semibold mb-2">{label}</h3>
       <div className="grid grid-cols-2 gap-4">
-        <input type="number" placeholder="Min" value={filter[minKey] !== undefined && filter[minKey] !== null ? String(filter[minKey]) : ''} onChange={e => handleMinMaxChange(minKey, e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-        <input type="number" placeholder="Max" value={filter[maxKey] !== undefined && filter[maxKey] !== null ? String(filter[maxKey]) : ''} onChange={e => handleMinMaxChange(maxKey, e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        <input type="number" placeholder="Min" value={filters[minKey] !== undefined && filters[minKey] !== null ? String(filters[minKey]) : ''} onChange={e => handleMinMaxChange(minKey, e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        <input type="number" placeholder="Max" value={filters[maxKey] !== undefined && filters[maxKey] !== null ? String(filters[maxKey]) : ''} onChange={e => handleMinMaxChange(maxKey, e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
       </div>
     </div>
   );
@@ -68,7 +96,7 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({ open, onClose }) => {
                 key={amm.id}
                 onClick={() => handleAmmToggle(amm.id)}
                 className={`flex flex-row items-center gap-2 p-0.25 rounded-full text-sm font-medium transition-all duration-300 ease-in-out transform cursor-pointer ${
-                  filter.amms.includes(amm.id)
+                  filters.amms.includes(amm.id)
                     ? `p-0.5 bg-gradient-to-br ${amm.borderColor} text-white shadow-lg`
                     : `p-0.5 bg-gradient-to-br ${amm.borderColor} text-white shadow-lg opacity-50`
                 }`}>
@@ -83,15 +111,15 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({ open, onClose }) => {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-neutral-300 text-sm font-semibold mb-1">Search Keywords</label>
-            <input type="text" placeholder="keyword1, keyword2..." value={filter.searchKeywords} onChange={e => handleTextChange('searchKeywords', e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            <input type="text" placeholder="keyword1, keyword2..." value={filters.searchKeywords} onChange={e => handleTextChange('searchKeywords', e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
           </div>
           <div>
             <label className="block text-neutral-300 text-sm font-semibold mb-1">Exclude Keywords</label>
-            <input type="text" placeholder="keyword1, keyword2..." value={filter.excludeKeywords} onChange={e => handleTextChange('excludeKeywords', e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            <input type="text" placeholder="keyword1, keyword2..." value={filters.excludeKeywords} onChange={e => handleTextChange('excludeKeywords', e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
           </div>
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
-          <CustomCheckbox checked={filter.dexPaid} onChange={handleDexPaidToggle} /> Dex Paid
+          <CustomCheckbox checked={filters.dexPaid} onChange={handleDexPaidToggle} /> Dex Paid
         </label>
         {renderMinMaxInputs("Top 10 Holders %", 'topHoldersMin', 'topHoldersMax')}
         {renderMinMaxInputs("Liquidity ($)", 'liquidityMin', 'liquidityMax')}
@@ -100,10 +128,16 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({ open, onClose }) => {
         {renderMinMaxInputs("Txns", 'txnsMin', 'txnsMax')}
       </div>
       <div className="flex justify-between items-center flex-shrink-0 mt-6 pt-4" style={{marginLeft: '-1.5rem', marginRight: '-1.5rem', paddingLeft: '1.5rem', paddingRight: '1.5rem'}}>
-        <button onClick={() => { resetFilter(); onClose(); }} className="text-neutral-400 hover:text-white flex items-center gap-2">
+        <button onClick={handleReset} className="text-neutral-400 hover:text-white flex items-center gap-2">
           <FaPowerOff /> Reset
         </button>
-        <InterstateButton variant="primary" onClick={onClose}>Apply all</InterstateButton>
+        <InterstateButton 
+          variant="primary" 
+          onClick={handleApply}
+          disabled={!hasPendingChanges}
+        >
+          Apply Filters
+        </InterstateButton>
       </div>
     </InterstatePopout>
   );

@@ -302,20 +302,138 @@ function useTokenMetadata(uri?: string) {
 function TokenImage({
   token,
   priority = false,
+  isNewPairs = false,
 }: {
   token: Token;
   priority?: boolean;
+  isNewPairs?: boolean;
 }) {
   const [showPreview, setShowPreview] = useState(false);
   
   // Use uri field from deployed service, fallback to image field, then token.logo
   const imageUrl = (token as any).uri || (token as any).image || token.logo;
 
+  // Calculate migration progress for border color (only for New Pairs)
+  const getMigrationProgress = (token: Token): number => {
+    if (!isNewPairs) return 0; // Only apply to New Pairs
+    
+    // Priority order: bonding_pct, bonding_curve_progress, graduationPercent, market cap / 70k
+    const bondingPct = (token as any).bonding_pct;
+    const bondingProgress = token.bonding_curve_progress;
+    const graduationPercent = (token as any).graduationPercent;
+    const marketCap = (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
+    
+    if (typeof bondingPct === 'number' && bondingPct >= 0) {
+      return Math.min(Math.max(bondingPct / 100, 0), 1); // Convert percentage to 0-1 range
+    }
+    
+    if (typeof bondingProgress === 'number' && bondingProgress >= 0) {
+      return Math.min(Math.max(bondingProgress, 0), 1);
+    }
+    
+    if (typeof graduationPercent === 'number' && graduationPercent >= 0) {
+      return Math.min(Math.max(graduationPercent / 100, 0), 1); // Convert percentage to 0-1 range
+    }
+    
+    // Fallback: market cap divided by 70k (capped at 1.0)
+    if (marketCap > 0) {
+      return Math.min(marketCap / 70000, 1.0);
+    }
+    
+    return 0; // Default to 0% progress for new tokens
+  };
+
+  // Get border color based on migration progress (loading bar style)
+  const getProgressBorderColor = (progress: number): string => {
+    if (!isNewPairs) return '#22c55e'; // Default green for non-New Pairs
+    
+    // Loading bar style: green = good progress, red = bad/slow progress
+    if (progress >= 0.7) {
+      // Good progress - bright green
+      return '#22c55e'; // green-500
+    } else if (progress >= 0.4) {
+      // Medium progress - yellow
+      return '#eab308'; // yellow-500
+    } else if (progress >= 0.1) {
+      // Slow progress - orange
+      return '#f97316'; // orange-500
+    } else {
+      // Very slow/bad progress - red
+      return '#ef4444'; // red-500
+    }
+  };
+
+  // Get icon based on token data
+  const getTokenIcon = (token: Token): string => {
+    // Check for specific protocol/launchpad data
+    const protocol = (token as any).protocol;
+    const launchpadName = (token as any).launchpadName;
+    const amm = (token as any).amm;
+    
+    // Protocol-specific icons
+    if (protocol === 'pump' || launchpadName === 'pump') {
+      return '/pump.svg';
+    }
+    if (protocol === 'raydium' || amm === 'raydium') {
+      return '/ray.svg';
+    }
+    if (protocol === 'meteora' || amm === 'meteora') {
+      return '/meteora.svg';
+    }
+    if (protocol === 'orca' || amm === 'orca') {
+      return '/orca.svg'; // You'll need to add this icon
+    }
+    if (protocol === 'jupiter' || amm === 'jupiter') {
+      return '/jupiter.svg'; // You'll need to add this icon
+    }
+    
+    // Default to pump icon for new pairs
+    return '/pump.svg';
+  };
+
+  const tokenIcon = getTokenIcon(token);
+  const migrationProgress = getMigrationProgress(token);
+
+  // Use real migration progress for each token, with fallback to unique test progress
+  const getUniqueTestProgress = (token: Token): number => {
+    if (!token.symbol) return 0;
+    // Create a simple hash from the symbol to get consistent progress per token
+    let hash = 0;
+    for (let i = 0; i < token.symbol.length; i++) {
+      const char = token.symbol.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    // Convert hash to 0-60% range (New Pairs range)
+    return Math.abs(hash) % 60 / 100;
+  };
+
+  // Use real progress if available, otherwise use unique test progress
+  // For New Pairs, progress should be 0-60% range, so we scale it to 0-1 for the border
+  const finalProgress = migrationProgress > 0 ? migrationProgress : (isNewPairs ? getUniqueTestProgress(token) : 0);
+  
+  // Scale New Pairs progress to fill more of the border (since they max out at ~60%)
+  // Cap at 95% to never show full completion
+  const scaledProgress = isNewPairs ? Math.min(finalProgress / 0.6, 0.95) : finalProgress;
+  const progressBorderColor = getProgressBorderColor(finalProgress);
+
+  // Debug logging for New Pairs
+  if (isNewPairs) {
+    console.log(`[TokenImage] ${token.symbol} progress:`, {
+      bonding_pct: (token as any).bonding_pct,
+      bonding_curve_progress: token.bonding_curve_progress,
+      graduationPercent: (token as any).graduationPercent,
+      calculatedProgress: migrationProgress,
+      finalProgress: finalProgress,
+      borderColor: progressBorderColor
+    });
+  }
+
   const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
     console.log('Mouse enter - showing preview for:', token.symbol);
     setShowPreview(true);
     const target = e.currentTarget as HTMLDivElement;
-    target.style.borderColor = AX.aiCyan;
+    // Don't change border color since we're using SVG border now
     target.style.boxShadow = `0 0 12px ${AX.glowCyan}, 0 0 24px ${AX.glowCyan}`;
     target.style.transform = 'scale(1.08)';
   };
@@ -324,22 +442,24 @@ function TokenImage({
     console.log('Mouse leave - hiding preview for:', token.symbol);
     setShowPreview(false);
     const target = e.currentTarget as HTMLDivElement;
-    target.style.borderColor = AX.border;
+    // Don't change border color since we're using SVG border now
     target.style.boxShadow = 'none';
     target.style.transform = 'scale(1)';
   };
 
   return (
     <>
-      <div className="relative h-20 w-20 overflow-hidden rounded-lg border-2 transition-all duration-300 ease-out"
+      <div className="relative h-20 w-20 overflow-visible rounded-lg transition-all duration-300 ease-out"
            style={{ 
-             backgroundColor: AX.surface, 
-             borderColor: AX.border 
+             backgroundColor: AX.surface
            }}>
         <div 
-          className="h-full w-full"
+          className="h-full w-full rounded-lg overflow-hidden relative"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
+          style={{
+            border: isNewPairs ? '2px solid transparent' : '1px solid #22c55e'
+          }}
         >
     <FastImage
       src={imageUrl}
@@ -348,9 +468,56 @@ function TokenImage({
       name={token.name}
             width={80}
             height={80}
-            className="h-full w-full object-cover transition-all duration-300"
+            className="h-full w-full object-cover transition-all duration-300 rounded-lg"
       priority={priority}
+      showBubble={false}
     />
+        </div>
+        
+        {/* Thin loading border - solid green, clockwise from bottom-right (only for New Pairs) */}
+        {isNewPairs && (
+          <div className="absolute inset-0 pointer-events-none">
+            <svg className="w-full h-full" viewBox="0 0 80 80">
+              {/* Background border */}
+              <rect
+                x="2"
+                y="2"
+                width="76"
+                height="76"
+                fill="none"
+                stroke="rgba(255, 255, 255, 0.1)"
+                strokeWidth="1"
+                rx="8"
+              />
+              
+              {/* Progress border - clockwise rounded path starting from bottom-right */}
+              <path
+                d="M 78 78 L 10 78 Q 2 78 2 70 L 2 10 Q 2 2 10 2 L 70 2 Q 78 2 78 10 L 78 70 Q 78 78 70 78"
+                fill="none"
+                stroke="#22c55e"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray={`${4 * 76}`} // Total perimeter
+                strokeDashoffset={`${4 * 76 * (1 - scaledProgress)}`}
+                className="transition-all duration-700 ease-out"
+              />
+            </svg>
+          </div>
+        )}
+        
+        {/* Dynamic protocol icon bubble - positioned outside the image container */}
+        <div className="absolute bottom-0 right-0 bg-white rounded-full border-2 flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10 shadow-lg"
+             style={{ 
+               width: 20, 
+               height: 20,
+               borderColor: '#22c55e' // Always green
+             }}>
+          <img
+            src={tokenIcon}
+            alt={`${(token as any).protocol || (token as any).launchpadName || 'Protocol'} logo`}
+            className="w-3/4 h-3/4 object-contain"
+          />
         </div>
         {/* Camera icon overlay with AI-inspired styling - only shows on image hover */}
         <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300 pointer-events-none"
@@ -487,6 +654,23 @@ function TokenImage({
               ></div>
             </div>
 
+            {/* Migration progress tooltip - only for New Pairs */}
+            {isNewPairs && (
+              <div 
+                className="absolute -top-10 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-xs font-medium whitespace-nowrap z-50"
+                style={{
+                  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                  color: '#22c55e',
+                  border: '1px solid #22c55e20',
+                  backdropFilter: 'blur(4px)',
+                  opacity: showPreview ? 1 : 0,
+                  transition: 'opacity 0.2s ease-out'
+                }}
+              >
+                Progress: {Math.round(scaledProgress * 100)}%
+              </div>
+            )}
+            
             {/* Token info overlay */}
             <div 
               className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-xs font-medium whitespace-nowrap"
@@ -849,6 +1033,92 @@ const PulseTable = React.memo(function PulseTable({
     sortBy: 'marketCap',
     sortOrder: 'desc'
   });
+
+  // Pending filters for Apply button functionality
+  const [pendingFilters, setPendingFilters] = useState(filters);
+  const [hasPendingChanges, setHasPendingChanges] = useState(false);
+
+  // Functions to handle filter changes
+  const handleApplyFilters = () => {
+    setFilters(pendingFilters);
+    setHasPendingChanges(false);
+    setShowFilters(false);
+  };
+
+  const handleResetFilters = () => {
+    const defaultFilters = {
+      protocols: [] as string[],
+      quoteTokens: [] as string[],
+      searchKeywords: '',
+      excludeKeywords: '',
+      dexPaid: false,
+      caEndsInPump: false,
+      minAge: '',
+      maxAge: '',
+      ageUnit: 'm',
+      top10HoldersPercent: '',
+      devHoldingPercentMin: '',
+      devHoldingPercentMax: '',
+      snipersPercentMin: '',
+      snipersPercentMax: '',
+      insidersPercentMin: '',
+      insidersPercentMax: '',
+      bundlePercentMin: '',
+      bundlePercentMax: '',
+      holdersMin: '',
+      holdersMax: '',
+      proTradersMin: '',
+      proTradersMax: '',
+      devMigrationsMin: '',
+      devMigrationsMax: '',
+      devPairsCreatedMin: '',
+      devPairsCreatedMax: '',
+      minMarketCap: '',
+      maxMarketCap: '',
+      minVolume: '',
+      maxVolume: '',
+      minLiquidity: '',
+      maxLiquidity: '',
+      bCurvePercentMin: '',
+      bCurvePercentMax: '',
+      globalFeesPaidMin: '',
+      globalFeesPaidMax: '',
+      txnsMin: '',
+      txnsMax: '',
+      numBuysMin: '',
+      numBuysMax: '',
+      numSellsMin: '',
+      numSellsMax: '',
+      twitterFollowers: '',
+      telegramMembers: '',
+      discordMembers: '',
+      twitterReusesMin: '',
+      twitterReusesMax: '',
+      tweetAgeMin: '',
+      tweetAgeMax: '',
+      tweetAgeUnit: 'm',
+      hasTwitter: false,
+      hasWebsite: false,
+      hasTelegram: false,
+      atLeastOneSocial: false,
+      onlyPumpLive: false,
+      sortBy: 'marketCap',
+      sortOrder: 'desc'
+    };
+    setPendingFilters(defaultFilters);
+    setFilters(defaultFilters);
+    setHasPendingChanges(false);
+  };
+
+  const handlePendingFilterChange = (updater: (prev: any) => any) => {
+    setPendingFilters(updater);
+    setHasPendingChanges(true);
+  };
+
+  // Update pending changes when filters change
+  useEffect(() => {
+    setHasPendingChanges(JSON.stringify(filters) !== JSON.stringify(pendingFilters));
+  }, [filters, pendingFilters]);
   const router = useRouter();
 
   // Protocol and quote token data with official icons from web3icons
@@ -928,9 +1198,197 @@ const PulseTable = React.memo(function PulseTable({
     }, 2000);
   };
 
+  // Helper function to map protocol names to backend protocol values
+  const mapProtocolToBackend = (protocolName: string): string[] => {
+    switch (protocolName) {
+      case 'Pump':
+        return ['pump.fun'];
+      case 'Raydium':
+        return ['raydium'];
+      case 'Meteora AMM':
+      case 'Meteora AMM V2':
+        return ['meteora'];
+      case 'Bonk':
+        return ['bonk'];
+      case 'Bags':
+        return ['bags'];
+      case 'Moonshot':
+        return ['moonshot'];
+      case 'Heaven':
+        return ['heaven'];
+      case 'Daos.fun':
+        return ['daos.fun'];
+      case 'Candle':
+        return ['candle'];
+      case 'Sugar':
+        return ['sugar'];
+      case 'Believe':
+        return ['believe'];
+      case 'Jupiter Studio':
+        return ['jupiter'];
+      case 'Moonit':
+        return ['moonit'];
+      case 'Boop':
+        return ['boop'];
+      case 'LaunchLab':
+        return ['launchlab'];
+      case 'Dynamic BC':
+        return ['dynamic'];
+      case 'Pump AMM':
+        return ['pump.fun'];
+      case 'Orca':
+        return ['orca'];
+      default:
+        return [];
+    }
+  };
+
+  // Helper function to get token protocol from various fields
+  const getTokenProtocol = (token: any): string | null => {
+    // Check multiple possible fields for protocol information
+    return token.launchpad_protocol || 
+           token.protocol || 
+           token.amm_id || 
+           token.launchpadProtocol ||
+           null;
+  };
+
   // Filter and sort tokens
   const filteredAndSortedTokens = useMemo(() => {
     let filtered = [...tokens];
+
+    // Apply protocol filters
+    if (filters.protocols.length > 0) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(token => {
+        const tokenProtocol = getTokenProtocol(token);
+        if (!tokenProtocol) return false;
+        
+        // Check if token's protocol matches any of the selected protocols
+        const matches = filters.protocols.some(selectedProtocol => {
+          const backendProtocols = mapProtocolToBackend(selectedProtocol);
+          return backendProtocols.some(backendProtocol => 
+            tokenProtocol.toLowerCase().includes(backendProtocol.toLowerCase()) ||
+            backendProtocol.toLowerCase().includes(tokenProtocol.toLowerCase())
+          );
+        });
+        
+        // Debug logging
+        if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_FILTER__) {
+          console.log(`[Protocol Filter] Token ${token.symbol} (${tokenProtocol}) matches ${filters.protocols}:`, matches);
+        }
+        
+        return matches;
+      });
+      
+      // Debug logging
+      if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_FILTER__) {
+        console.log(`[Protocol Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for protocols:`, filters.protocols);
+      }
+    }
+
+    // Apply keyword filters
+    if (filters.searchKeywords.trim()) {
+      const searchTerms = filters.searchKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
+      if (searchTerms.length > 0) {
+        const beforeCount = filtered.length;
+        filtered = filtered.filter(token => {
+          const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
+          return searchTerms.some(term => tokenText.includes(term));
+        });
+        console.log(`[Keyword Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for search keywords:`, searchTerms);
+      }
+    }
+
+    if (filters.excludeKeywords.trim()) {
+      const excludeTerms = filters.excludeKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
+      if (excludeTerms.length > 0) {
+        const beforeCount = filtered.length;
+        filtered = filtered.filter(token => {
+          const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
+          return !excludeTerms.some(term => tokenText.includes(term));
+        });
+        console.log(`[Exclude Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for exclude keywords:`, excludeTerms);
+      }
+    }
+
+    // Apply quote token filters
+    if (filters.quoteTokens.length > 0) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(token => {
+        // For now, we'll filter based on pair address patterns or other heuristics
+        // Since we don't have explicit quote token data, we'll use pair address patterns
+        const pairAddress = token.pair_address;
+        if (!pairAddress) return false;
+        
+        return filters.quoteTokens.some(quoteToken => {
+          // This is a simplified approach - in reality you'd need to check the actual pair
+          // For now, we'll just return true if any quote token is selected
+          // You might want to implement more sophisticated logic based on your data
+          return true;
+        });
+      });
+      console.log(`[Quote Token Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for quote tokens:`, filters.quoteTokens);
+    }
+
+    // Apply dexPaid filter
+    if (filters.dexPaid) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(token => {
+        // Check if token has paid dex fees (this would need to be implemented based on your data structure)
+        // For now, we'll assume all tokens have paid if this filter is enabled
+        return true; // Placeholder - implement based on actual dexPaid field
+      });
+      console.log(`[DexPaid Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for dexPaid:`, filters.dexPaid);
+    }
+
+    // Apply caEndsInPump filter
+    if (filters.caEndsInPump) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(token => {
+        // Check if contract address ends in "pump"
+        return token.mint && token.mint.toLowerCase().endsWith('pump');
+      });
+      console.log(`[CA Ends in Pump Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for caEndsInPump:`, filters.caEndsInPump);
+    }
+
+    // Apply age filters
+    if (filters.minAge || filters.maxAge) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(token => {
+        const launchTime = (token as any).launch_time || (token as any).created_at;
+        if (!launchTime) return false;
+        
+        const launchDate = new Date(launchTime);
+        const now = new Date();
+        const ageInMinutes = (now.getTime() - launchDate.getTime()) / (1000 * 60);
+        
+        let ageInTargetUnit = ageInMinutes;
+        if (filters.ageUnit === 'h') {
+          ageInTargetUnit = ageInMinutes / 60;
+        } else if (filters.ageUnit === 'd') {
+          ageInTargetUnit = ageInMinutes / (60 * 24);
+        }
+        
+        const minAge = filters.minAge ? parseFloat(filters.minAge) : 0;
+        const maxAge = filters.maxAge ? parseFloat(filters.maxAge) : Infinity;
+        
+        return ageInTargetUnit >= minAge && ageInTargetUnit <= maxAge;
+      });
+      console.log(`[Age Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for age range:`, filters.minAge, '-', filters.maxAge, filters.ageUnit);
+    }
+
+    // Apply top 10 holders percent filter
+    if (filters.top10HoldersPercent) {
+      const beforeCount = filtered.length;
+      const threshold = parseFloat(filters.top10HoldersPercent);
+      filtered = filtered.filter(token => {
+        // This would need to be implemented based on actual holder data
+        // For now, we'll skip this filter as we don't have holder data
+        return true;
+      });
+      console.log(`[Top 10 Holders Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for top10HoldersPercent:`, threshold);
+    }
 
     // Apply filters
     if (filters.minMarketCap) {
@@ -965,6 +1423,108 @@ const PulseTable = React.memo(function PulseTable({
       });
     }
 
+    // Apply liquidity filters
+    if (filters.minLiquidity) {
+      const minLiq = parseFloat(filters.minLiquidity);
+      filtered = filtered.filter(token => {
+        const liquidity = (token as any).total_liquidity_usd ?? 0;
+        return liquidity >= minLiq;
+      });
+    }
+
+    if (filters.maxLiquidity) {
+      const maxLiq = parseFloat(filters.maxLiquidity);
+      filtered = filtered.filter(token => {
+        const liquidity = (token as any).total_liquidity_usd ?? 0;
+        return liquidity <= maxLiq;
+      });
+    }
+
+    // Apply bonding curve percent filters
+    if (filters.bCurvePercentMin) {
+      const minBC = parseFloat(filters.bCurvePercentMin);
+      filtered = filtered.filter(token => {
+        const bondingCurve = (token as any).bonding_pct ?? 0;
+        return bondingCurve >= minBC;
+      });
+    }
+
+    if (filters.bCurvePercentMax) {
+      const maxBC = parseFloat(filters.bCurvePercentMax);
+      filtered = filtered.filter(token => {
+        const bondingCurve = (token as any).bonding_pct ?? 0;
+        return bondingCurve <= maxBC;
+      });
+    }
+
+    // Apply transaction count filters
+    if (filters.txnsMin) {
+      const minTxns = parseFloat(filters.txnsMin);
+      filtered = filtered.filter(token => {
+        const txns = (token as any).total_buys_24h + (token as any).total_sells_24h ?? 0;
+        return txns >= minTxns;
+      });
+    }
+
+    if (filters.txnsMax) {
+      const maxTxns = parseFloat(filters.txnsMax);
+      filtered = filtered.filter(token => {
+        const txns = (token as any).total_buys_24h + (token as any).total_sells_24h ?? 0;
+        return txns <= maxTxns;
+      });
+    }
+
+    // Apply buy count filters
+    if (filters.numBuysMin) {
+      const minBuys = parseFloat(filters.numBuysMin);
+      filtered = filtered.filter(token => {
+        const buys = (token as any).total_buys_24h ?? 0;
+        return buys >= minBuys;
+      });
+    }
+
+    if (filters.numBuysMax) {
+      const maxBuys = parseFloat(filters.numBuysMax);
+      filtered = filtered.filter(token => {
+        const buys = (token as any).total_buys_24h ?? 0;
+        return buys <= maxBuys;
+      });
+    }
+
+    // Apply sell count filters
+    if (filters.numSellsMin) {
+      const minSells = parseFloat(filters.numSellsMin);
+      filtered = filtered.filter(token => {
+        const sells = (token as any).total_sells_24h ?? 0;
+        return sells >= minSells;
+      });
+    }
+
+    if (filters.numSellsMax) {
+      const maxSells = parseFloat(filters.numSellsMax);
+      filtered = filtered.filter(token => {
+        const sells = (token as any).total_sells_24h ?? 0;
+        return sells <= maxSells;
+      });
+    }
+
+    // Apply unique wallets filters
+    if (filters.holdersMin) {
+      const minHolders = parseFloat(filters.holdersMin);
+      filtered = filtered.filter(token => {
+        const holders = (token as any).unique_wallets_24h ?? 0;
+        return holders >= minHolders;
+      });
+    }
+
+    if (filters.holdersMax) {
+      const maxHolders = parseFloat(filters.holdersMax);
+      filtered = filtered.filter(token => {
+        const holders = (token as any).unique_wallets_24h ?? 0;
+        return holders <= maxHolders;
+      });
+    }
+
     // Sort tokens
     filtered.sort((a, b) => {
       let aValue, bValue;
@@ -995,7 +1555,7 @@ const PulseTable = React.memo(function PulseTable({
     });
 
     return filtered;
-  }, [tokens, filters]);
+  }, [tokens, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.sortBy, filters.sortOrder]);
 
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => filteredAndSortedTokens, [filteredAndSortedTokens]);
@@ -1207,7 +1767,7 @@ const PulseTable = React.memo(function PulseTable({
         {/* Filter Controls */}
         <div className="relative filter-dropdown">
           <button
-            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 ease-out cursor-pointer"
+            className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 ease-out cursor-pointer relative"
             style={{
               backgroundColor: 'transparent',
               color: showFilters ? AX.aiBlue : AX.muted
@@ -1233,6 +1793,16 @@ const PulseTable = React.memo(function PulseTable({
               <line x1="4" y1="18" x2="20" y2="18"/>
               <circle cx="8" cy="18" r="2"/>
             </svg>
+            
+            {/* Protocol Filter Count Indicator */}
+            {filters.protocols.length > 0 && (
+              <span 
+                className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
+                style={{ fontSize: '10px' }}
+              >
+                {filters.protocols.length}
+              </span>
+            )}
           </button>
           
           {/* Comprehensive Filter Modal */}
@@ -1516,8 +2086,8 @@ const PulseTable = React.memo(function PulseTable({
                   <input
                     type="text"
                     placeholder="keyword1, keyword2..."
-                    value={filters.searchKeywords}
-                    onChange={(e) => setFilters(prev => ({ ...prev, searchKeywords: e.target.value }))}
+                    value={pendingFilters.searchKeywords}
+                    onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, searchKeywords: e.target.value }))}
                           className="w-full px-3 py-2 rounded text-sm border"
                     style={{
                             backgroundColor: AX.surface,
@@ -1538,8 +2108,8 @@ const PulseTable = React.memo(function PulseTable({
                   <input
                     type="text"
                     placeholder="keyword1, keyword2..."
-                    value={filters.excludeKeywords}
-                    onChange={(e) => setFilters(prev => ({ ...prev, excludeKeywords: e.target.value }))}
+                    value={pendingFilters.excludeKeywords}
+                    onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, excludeKeywords: e.target.value }))}
                           className="w-full px-3 py-2 rounded text-sm border"
                     style={{
                             backgroundColor: AX.surface,
@@ -1585,8 +2155,8 @@ const PulseTable = React.memo(function PulseTable({
                       <input
                         type="checkbox"
                         id="dexPaid"
-                        checked={filters.dexPaid}
-                        onChange={(e) => setFilters(prev => ({ ...prev, dexPaid: e.target.checked }))}
+                        checked={pendingFilters.dexPaid}
+                        onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, dexPaid: e.target.checked }))}
                         className="rounded cursor-pointer"
                       />
                       <label htmlFor="dexPaid" className="text-sm" style={{ color: AX.text }}>Dex Paid</label>
@@ -1595,8 +2165,8 @@ const PulseTable = React.memo(function PulseTable({
                       <input
                         type="checkbox"
                         id="caEndsInPump"
-                        checked={filters.caEndsInPump}
-                        onChange={(e) => setFilters(prev => ({ ...prev, caEndsInPump: e.target.checked }))}
+                        checked={pendingFilters.caEndsInPump}
+                        onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, caEndsInPump: e.target.checked }))}
                         className="rounded cursor-pointer"
                       />
                       <label htmlFor="caEndsInPump" className="text-sm" style={{ color: AX.text }}>CA ends in 'pump'</label>
@@ -2763,22 +3333,45 @@ const PulseTable = React.memo(function PulseTable({
                   </button>
                 </div>
                 <button 
-                  className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-out cursor-pointer"
+                  onClick={handleResetFilters}
+                  className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-out cursor-pointer mr-2"
                   style={{
-                    backgroundColor: AX.aiBlue,
-                    color: '#000000'
+                    backgroundColor: AX.surface,
+                    color: AX.muted,
+                    border: `1px solid ${AX.border}`
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#2563eb';
-                    e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
+                    e.currentTarget.style.backgroundColor = AX.border;
+                    e.currentTarget.style.color = AX.text;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = AX.aiBlue;
-                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.color = AX.muted;
                   }}
-                  onClick={() => {
-                    setShowFilters(false);
+                >
+                  Reset
+                </button>
+                <button 
+                  className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ease-out cursor-pointer"
+                  style={{
+                    backgroundColor: hasPendingChanges ? AX.aiBlue : AX.surface,
+                    color: hasPendingChanges ? '#000000' : AX.muted,
+                    opacity: hasPendingChanges ? 1 : 0.5
                   }}
+                  disabled={!hasPendingChanges}
+                  onMouseEnter={(e) => {
+                    if (hasPendingChanges) {
+                      e.currentTarget.style.backgroundColor = '#2563eb';
+                      e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (hasPendingChanges) {
+                      e.currentTarget.style.backgroundColor = AX.aiBlue;
+                      e.currentTarget.style.boxShadow = 'none';
+                    }
+                  }}
+                  onClick={handleApplyFilters}
                 >
                   Apply All
                 </button>
@@ -3040,6 +3633,7 @@ const PulseTable = React.memo(function PulseTable({
                     <TokenImage
                       token={token}
                       priority={title === "New Pairs"}
+                      isNewPairs={title === "New Pairs"}
                     />
                   {/* Token Metrics */}
                   <div className="absolute bottom-16 -right-59">
@@ -3793,7 +4387,7 @@ const PulseTable = React.memo(function PulseTable({
       {/* Copy Success Toast */}
       {showToast && (
         <div 
-          className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[99999] px-4 py-2 rounded-lg shadow-lg transition-all duration-300 ease-out"
+          className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg transition-all duration-300 ease-out"
           style={{
             backgroundColor: AX.surface,
             color: AX.aiGreen,
