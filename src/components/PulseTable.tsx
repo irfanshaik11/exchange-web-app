@@ -1464,7 +1464,7 @@ const PulseTable = React.memo(function PulseTable({
     if (filters.txnsMin) {
       const minTxns = parseFloat(filters.txnsMin);
       filtered = filtered.filter(token => {
-        const txns = (token as any).total_buys_24h + (token as any).total_sells_24h ?? 0;
+        const txns = ((token as any).total_buys_24h ?? 0) + ((token as any).total_sells_24h ?? 0);
         return txns >= minTxns;
       });
     }
@@ -1472,7 +1472,7 @@ const PulseTable = React.memo(function PulseTable({
     if (filters.txnsMax) {
       const maxTxns = parseFloat(filters.txnsMax);
       filtered = filtered.filter(token => {
-        const txns = (token as any).total_buys_24h + (token as any).total_sells_24h ?? 0;
+        const txns = ((token as any).total_buys_24h ?? 0) + ((token as any).total_sells_24h ?? 0);
         return txns <= maxTxns;
       });
     }

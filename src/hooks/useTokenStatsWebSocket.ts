@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { env } from "../env";
 
-interface TokenStatsData {
+export interface TokenStatsData {
   success: boolean;
   tokenAddress: string;
   pairAddress: string;
@@ -20,7 +20,7 @@ interface TokenStatsData {
   };
 }
 
-interface TokenStatsState {
+export interface TokenStatsState {
   isConnected: boolean;
   isReconnecting: boolean;
   error: string | null;
@@ -29,7 +29,7 @@ interface TokenStatsState {
   lastUpdate: string | null;
 }
 
-interface UseTokenStatsWebSocketParams {
+export interface UseTokenStatsWebSocketParams {
   pairAddress?: string;
   tokenAddress?: string;
   enabled?: boolean;

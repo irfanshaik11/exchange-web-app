@@ -1,5 +1,27 @@
 import type { OHLCData } from '../components/LightweightChart';
-import type { TokenStats, TimeframeStats } from '../hooks/useTokenStatsWebSocket';
+
+// Define types locally since they're not exported from the hook
+interface TimeframeStats {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  buy_count: number;
+  sell_count: number;
+  buy_volume: number;
+  sell_volume: number;
+  total_volume: number;
+}
+
+interface TokenStats {
+  timeframes: {
+    '5m': TimeframeStats;
+    '1h': TimeframeStats;
+    '6h': TimeframeStats;
+    '24h': TimeframeStats;
+  };
+}
 
 /**
  * Transform WebSocket token stats into OHLC data format

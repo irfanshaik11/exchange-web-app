@@ -1,10 +1,55 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { TokenStats, TimeframeStats, TokenStatsWebSocketOptions, TokenStatsWebSocketState } from './useTokenStatsWebSocket';
 
 /**
  * Mock WebSocket hook that simulates real WebSocket system
  * needs to be replaced with the real useTokenStatsWebSocket hook
  */
+
+// Define types locally for the mock
+interface TimeframeStats {
+  buy_count: number;
+  sell_count: number;
+  buy_volume: number;
+  sell_volume: number;
+  total_volume: number;
+  price_change: number;
+  price_change_percent: number;
+  current_price: number;
+  high: number;
+  low: number;
+  open: number;
+  close: number;
+}
+
+interface TokenStats {
+  pair_address: string;
+  token_address: string;
+  timeframes: {
+    '5m': TimeframeStats;
+    '1h': TimeframeStats;
+    '12h': TimeframeStats;
+    '24h': TimeframeStats;
+  };
+  last_updated: string;
+}
+
+interface TokenStatsWebSocketOptions {
+  pairAddress?: string;
+  tokenAddress?: string;
+  enabled?: boolean;
+  reconnectInterval?: number;
+  maxReconnectAttempts?: number;
+}
+
+interface TokenStatsWebSocketState {
+  stats: TokenStats | null;
+  isConnected: boolean;
+  isConnecting: boolean;
+  loading: boolean;
+  error: string | null;
+  lastUpdate: string | null;
+  reconnectAttempts: number;
+}
 
 // Mock data generator that simulates real token stats
 const generateMockTokenStats = (pairAddress: string): TokenStats => {
@@ -66,6 +111,7 @@ export const useTokenStatsWebSocketMock = (options: TokenStatsWebSocketOptions) 
     stats: null,
     isConnected: false,
     isConnecting: false,
+    loading: true,
     error: null,
     lastUpdate: null,
     reconnectAttempts: 0
@@ -98,7 +144,7 @@ export const useTokenStatsWebSocketMock = (options: TokenStatsWebSocketOptions) 
       setState(prev => ({
         ...prev,
         stats: initialStats,
-        lastUpdate: new Date()
+        lastUpdate: new Date().toISOString()
       }));
 
       // Simulate real-time updates every 2-5 seconds
@@ -107,7 +153,7 @@ export const useTokenStatsWebSocketMock = (options: TokenStatsWebSocketOptions) 
         setState(prev => ({
           ...prev,
           stats: updatedStats,
-          lastUpdate: new Date()
+          lastUpdate: new Date().toISOString()
         }));
       }, 2000 + Math.random() * 3000); // Random interval between 2-5 seconds
 

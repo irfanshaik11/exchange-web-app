@@ -348,11 +348,11 @@ export default function useTradeEventsWebSocket({
   const getTradeStats = useCallback(() => {
     const trades = state.trades;
     const totalTrades = trades.length;
-    const buyTrades = trades.filter(t => t.side === 'buy').length;
-    const sellTrades = trades.filter(t => t.side === 'sell').length;
-    const totalVolume = trades.reduce((sum, t) => sum + (parseFloat(t.amount) * parseFloat(t.price)), 0);
-    const buyVolume = trades.filter(t => t.side === 'buy').reduce((sum, t) => sum + (parseFloat(t.amount) * parseFloat(t.price)), 0);
-    const sellVolume = trades.filter(t => t.side === 'sell').reduce((sum, t) => sum + (parseFloat(t.amount) * parseFloat(t.price)), 0);
+    const buyTrades = trades.filter(t => t.eventDisplayType === 'Buy').length;
+    const sellTrades = trades.filter(t => t.eventDisplayType === 'Sell').length;
+    const totalVolume = trades.reduce((sum, t) => sum + (parseFloat(t.token0SwapValueUsd as string) + parseFloat(t.token1SwapValueUsd as string)), 0);
+    const buyVolume = trades.filter(t => t.eventDisplayType === 'Buy').reduce((sum, t) => sum + (parseFloat(t.token0SwapValueUsd as string) + parseFloat(t.token1SwapValueUsd as string)), 0);
+    const sellVolume = trades.filter(t => t.eventDisplayType === 'Sell').reduce((sum, t) => sum + (parseFloat(t.token0SwapValueUsd as string) + parseFloat(t.token1SwapValueUsd as string)), 0);
 
     return {
       totalTrades,

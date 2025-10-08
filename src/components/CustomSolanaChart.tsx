@@ -23,17 +23,15 @@ const CustomSolanaChart: React.FC<CustomSolanaChartProps> = ({
     isConnected: wsConnected,
     loading: wsLoading,
     error: wsError,
-    ohlcData: wsOHLCData,
-    getOHLCStats,
+    data: wsOHLCData,
   } = useOHLCWebSocket({
     pairAddress: pairAddress || token.pair_address,
     timeframe: "5m",
     enabled: true,
-    maxDataPoints: 100,
   });
 
   // Use real-time OHLC data from Codex (disabled until deployed service is ready)
-  const { ohlcData, isConnected, error: codexError } = useCodexOHLC({
+  const { ohlcData, isConnected: codexConnected, error: codexError } = useCodexOHLC({
     tokenId: token.mint, // Use token mint as tokenId
     enabled: false // Disabled until teammate deploys the service
   });
@@ -47,8 +45,17 @@ const CustomSolanaChart: React.FC<CustomSolanaChartProps> = ({
     generateHistory: true
   });
 
+  // Transform WebSocket OHLC data to LightweightChart format
+  const transformedWSData = wsOHLCData.map(item => ({
+    time: Math.floor(new Date(item.timestamp).getTime() / 1000) as any, // Convert to UTC timestamp
+    open: item.open,
+    high: item.high,
+    low: item.low,
+    close: item.close,
+  }));
+
   // Use WebSocket OHLC data if available, otherwise fallback to chart data
-  const displayData = wsOHLCData.length > 0 ? wsOHLCData : chartData;
+  const displayData = wsOHLCData.length > 0 ? transformedWSData : chartData;
   const isConnected = wsConnected;
   const combinedError = wsError || error;
 

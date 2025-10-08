@@ -30,7 +30,7 @@ export const MOCK_CONFIG = {
 };
 
 // Export the appropriate hook based on configuration
-export { useTokenStatsWebSocket } from '../hooks/useTokenStatsWebSocket';
+export { default as useTokenStatsWebSocket } from '../hooks/useTokenStatsWebSocket';
 export { useTokenStatsWebSocketMock } from '../hooks/useTokenStatsWebSocketMock';
 
 // Main hook that switches between mock and real
