@@ -26,7 +26,7 @@ const CustomSolanaChart: React.FC<CustomSolanaChartProps> = ({
     data: wsOHLCData,
   } = useOHLCWebSocket({
     pairAddress: pairAddress || token.pair_address,
-    timeframe: "5m",
+    timeframe: "1d", // Daily timeframe for very zoomed out view
     enabled: true,
   });
 

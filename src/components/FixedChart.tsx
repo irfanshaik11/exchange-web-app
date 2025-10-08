@@ -23,11 +23,12 @@ const FixedChart: React.FC<FixedChartProps> = ({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const didInitialFitRef = useRef(false); // Track if we've done the initial fit
 
   // Use OHLC WebSocket data if pairAddress is provided
   const { isConnected, loading, error, data: ohlcData, reconnect } = useOHLCWebSocket({
     pairAddress,
-    timeframe: '5m',
+    timeframe: '1d', // Daily timeframe for very zoomed out view
     enabled: !!pairAddress,
   });
 
@@ -71,12 +72,9 @@ const FixedChart: React.FC<FixedChartProps> = ({
             borderColor: '#2B2B43',
             timeVisible: true,
             secondsVisible: false,
-            barSpacing: 6, // Reduce bar spacing for more data
-            minBarSpacing: 2, // Allow bars to be closer together
-            fixLeftEdge: false,
-            fixRightEdge: false,
-            lockVisibleTimeRangeOnResize: true,
-            rightOffset: 10, // Add some padding on the right
+            barSpacing: 2.0, // Initial; we override after setData
+            // minBarSpacing: 0.5, // ← remove this
+            rightOffset: 10,
           },
           handleScroll: {
             mouseWheel: true,
@@ -103,12 +101,16 @@ const FixedChart: React.FC<FixedChartProps> = ({
           borderUpColor: '#26a69a',
           wickDownColor: '#ef5350',
           wickUpColor: '#26a69a',
-          // Make candlesticks thinner
+          // Make candlesticks thinner with better price formatting
           priceFormat: {
             type: 'price',
             precision: 6,
             minMove: 0.000001,
           },
+          // Additional styling for thinner appearance
+          lastValueVisible: true,
+          priceLineVisible: false,
+          baseLineVisible: false,
         });
 
         chartRef.current = chart;
@@ -119,27 +121,27 @@ const FixedChart: React.FC<FixedChartProps> = ({
           // Generate more realistic data with better spread
           const now = Math.floor(Date.now() / 1000);
           const data = [];
-          let basePrice = 100;
+          let basePrice = 0.000012; // Start with a realistic small price
 
-          for (let i = 0; i < 100; i++) {
-            const time = (now - (100 - i) * 60) as UTCTimestamp; // 1 minute intervals
+          for (let i = 0; i < 30; i++) { // Generate 30 days of data (30 x 1-day intervals)
+            const time = (now - (30 - i) * 86400) as UTCTimestamp; // 1 day intervals (86400 seconds)
             
-            // More realistic price movement
-            const volatility = 0.03; // 3% volatility
-            const trend = Math.sin(i * 0.1) * 0.001; // Slight trend
+            // More realistic price movement for daily candles (higher volatility)
+            const volatility = 0.15; // 15% daily volatility for crypto
+            const trend = Math.sin(i * 0.1) * 0.02; // Slight trend over days
             const change = (Math.random() - 0.5) * volatility + trend;
             
             const open = basePrice;
             const close = basePrice * (1 + change);
-            const high = Math.max(open, close) * (1 + Math.random() * 0.01);
-            const low = Math.min(open, close) * (1 - Math.random() * 0.01);
+            const high = Math.max(open, close) * (1 + Math.random() * 0.03);
+            const low = Math.min(open, close) * (1 - Math.random() * 0.03);
 
             data.push({
               time,
-              open: Number(open.toFixed(2)),
-              high: Number(high.toFixed(2)),
-              low: Number(low.toFixed(2)),
-              close: Number(close.toFixed(2)),
+              open: Number(open.toFixed(8)), // More precision for small prices
+              high: Number(high.toFixed(8)),
+              low: Number(low.toFixed(8)),
+              close: Number(close.toFixed(8)),
             });
 
             basePrice = close;
@@ -149,11 +151,40 @@ const FixedChart: React.FC<FixedChartProps> = ({
 
           // Set mock data with a small delay to ensure chart is ready
           setTimeout(() => {
-            if (candlestickSeries) {
+            if (candlestickSeries && chart) {
               console.log('FixedChart: Setting mock data to series');
               candlestickSeries.setData(data);
+              
+              // After seriesRef.current.setData(data)
+              if (chartRef.current) {
+                const width = chartContainerRef.current?.clientWidth || 600;
+                const bars = data.length;
+
+                // Target ~80 bars on screen for larger candles
+                const targetBarsOnScreen = 80;
+                const spacing = Math.max(0.1, Math.min(4, width / targetBarsOnScreen));
+
+                chartRef.current.applyOptions({
+                  timeScale: { barSpacing: spacing }
+                });
+
+                // Optional: widen the logical range so the single/few bars look smaller
+                if (bars < 50) {
+                  const from = -Math.max(100, 200 - bars); // show empty space to the left
+                  const to = bars; // keep right edge at the last bar
+                  // @ts-ignore old typings
+                  chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
+                }
+              }
+              
+              // Fit to all content for zoomed out view by default
+              if (!didInitialFitRef.current) {
+                chart.timeScale().fitContent();
+                didInitialFitRef.current = true;
+              }
+              
               setIsReady(true);
-              console.log('FixedChart: Mock data set successfully');
+              console.log('FixedChart: Mock data set successfully with dynamic spacing');
             }
           }, 100);
         } else {
@@ -222,14 +253,32 @@ const FixedChart: React.FC<FixedChartProps> = ({
     
     seriesRef.current.setData(chartData);
     
-    // Set a default visible range instead of fitting all content
-    if (chartRef.current && chartData.length > 0) {
-      const now = Date.now() / 1000;
-      const oneHourAgo = now - (60 * 60); // Show last hour by default
-      chartRef.current.timeScale().setVisibleRange({
-        from: oneHourAgo as UTCTimestamp,
-        to: now as UTCTimestamp,
+    // After seriesRef.current.setData(chartData)
+    if (chartRef.current) {
+      const width = chartContainerRef.current?.clientWidth || 600;
+      const bars = chartData.length;
+
+      // Target ~80 bars on screen for larger candles
+      const targetBarsOnScreen = 80;
+      const spacing = Math.max(0.1, Math.min(4, width / targetBarsOnScreen));
+
+      chartRef.current.applyOptions({
+        timeScale: { barSpacing: spacing }
       });
+
+      // Optional: widen the logical range so the single/few bars look smaller
+      if (bars < 50) {
+        const from = -Math.max(100, 200 - bars); // show empty space to the left
+        const to = bars; // keep right edge at the last bar
+        // @ts-ignore old typings
+        chartRef.current.timeScale().setVisibleLogicalRange({ from, to });
+      }
+    }
+    
+    // Fit to all content for zoomed out view by default (after first data load)
+    if (chartRef.current && chartData.length > 0 && !didInitialFitRef.current) {
+      chartRef.current.timeScale().fitContent();
+      didInitialFitRef.current = true;
     }
   }, [ohlcData, pairAddress]);
 

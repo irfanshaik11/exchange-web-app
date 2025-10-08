@@ -66,12 +66,6 @@ export type Timeframe = "1m" | "5m" | "30m" | "1h";
 
 export default function Home() {
   const router = useRouter();
-  
-  // Redirect to Pulse page immediately
-  useEffect(() => {
-    router.push('/pulse');
-  }, [router]);
-
   const [search, setSearch] = useState("");
   // Populate search state if we arrived with ?search= in the URL
   useEffect(() => {

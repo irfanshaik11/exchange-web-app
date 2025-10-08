@@ -338,6 +338,18 @@ export default function TradePage() {
           width: 100% !important;
           height: 100% !important;
         }
+        
+        /* Make candlesticks appear thinner */
+        .tv-lightweight-charts .pane {
+          overflow: visible !important;
+        }
+        
+        /* Reduce candlestick width visually */
+        .tv-lightweight-charts canvas {
+          image-rendering: pixelated;
+          image-rendering: -moz-crisp-edges;
+          image-rendering: crisp-edges;
+        }
       `}</style>
     </>
   );

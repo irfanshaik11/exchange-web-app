@@ -28,7 +28,7 @@ interface TokenStats {
  */
 export const transformTokenStatsToOHLC = (
   stats: TokenStats,
-  timeframe: keyof TokenStats['timeframes'] = '5m'
+  timeframe: keyof TokenStats['timeframes'] = '1h' // Use 1h as default for more zoomed out view
 ): OHLCData[] => {
   const timeframeStats = stats.timeframes[timeframe];
   
@@ -54,7 +54,7 @@ export const transformTokenStatsToOHLC = (
  */
 export const generateHistoricalOHLCFromStats = (
   stats: TokenStats,
-  timeframe: keyof TokenStats['timeframes'] = '5m',
+  timeframe: keyof TokenStats['timeframes'] = '1h', // Use 1h as default for more zoomed out view
   periods: number = 100
 ): OHLCData[] => {
   const currentStats = stats.timeframes[timeframe];
