@@ -726,7 +726,7 @@ function TokenImage({
           100% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
         }
         
-        /* Wave animations - Added by hujoe - can use in the future
+        /* Wave animations for migrating tokens - Green theme */
         @keyframes smoothWaveFlow {
           0% { 
             transform: translateX(-120%); 
@@ -746,6 +746,29 @@ function TokenImage({
           }
           100% { 
             transform: translateX(120%); 
+            opacity: 0;
+          }
+        }
+        
+        @keyframes subtleWaveFlow {
+          0% { 
+            transform: translateX(-100%); 
+            opacity: 0;
+          }
+          10% { 
+            opacity: 0.2;
+          }
+          20% { 
+            opacity: 0.3;
+          }
+          80% { 
+            opacity: 0.3;
+          }
+          90% { 
+            opacity: 0.15;
+          }
+          100% { 
+            transform: translateX(100%); 
             opacity: 0;
           }
         }
@@ -772,7 +795,29 @@ function TokenImage({
             background: rgba(30, 58, 138, 0);
           }
         }
-        */
+        
+        @keyframes greenGlowPulse {
+          0% { 
+            box-shadow: 0 0 0px rgba(34, 197, 94, 0), 0 0 0px rgba(34, 197, 94, 0), inset 0 0 0px rgba(34, 197, 94, 0);
+            background: rgba(34, 197, 94, 0);
+          }
+          25% { 
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4), 0 0 30px rgba(34, 197, 94, 0.2), inset 0 0 15px rgba(34, 197, 94, 0.1);
+            background: rgba(34, 197, 94, 0.05);
+          }
+          50% { 
+            box-shadow: 0 0 25px rgba(34, 197, 94, 0.6), 0 0 50px rgba(34, 197, 94, 0.3), inset 0 0 25px rgba(34, 197, 94, 0.15);
+            background: rgba(34, 197, 94, 0.08);
+          }
+          75% { 
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4), 0 0 30px rgba(34, 197, 94, 0.2), inset 0 0 15px rgba(34, 197, 94, 0.1);
+            background: rgba(34, 197, 94, 0.05);
+          }
+          100% { 
+            box-shadow: 0 0 0px rgba(34, 197, 94, 0), 0 0 0px rgba(34, 197, 94, 0), inset 0 0 0px rgba(34, 197, 94, 0);
+            background: rgba(34, 197, 94, 0);
+          }
+        }
         
         /* Minimalistic input styling - remove number arrows */
         input[type="number"]::-webkit-outer-spin-button,
@@ -968,7 +1013,7 @@ const PulseTable = React.memo(function PulseTable({
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
-  // const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Added by hujoe - can use in the future
+  const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Wave animation for migrating tokens
   const isNewPairs = title.toLowerCase().includes('new');
   
   const [filters, setFilters] = useState({
@@ -1602,6 +1647,32 @@ const PulseTable = React.memo(function PulseTable({
 
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => filteredAndSortedTokens, [filteredAndSortedTokens]);
+
+  // Add top 3 final stretch tokens to wave animation
+  useEffect(() => {
+    const isFinalStretch = title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch");
+    console.log(`[Wave Animation] Title: "${title}", isFinalStretch: ${isFinalStretch}, tokens: ${memoizedTokens.length}`);
+    
+    if (isFinalStretch && memoizedTokens.length > 0) {
+      // Add only top 3 final stretch tokens to wave animation set
+      const newWaveTokens = new Set<number>();
+      const topThreeCount = Math.min(3, memoizedTokens.length);
+      for (let i = 0; i < topThreeCount; i++) {
+        newWaveTokens.add(i);
+      }
+      console.log(`[Wave Animation] Setting wave tokens:`, Array.from(newWaveTokens));
+      setWaveTokens(newWaveTokens);
+      
+      // Keep animation running continuously for final stretch tokens
+      return () => {
+        // Don't clear the animation for final stretch tokens
+      };
+    } else {
+      // Clear animation for non-final-stretch tables
+      console.log(`[Wave Animation] Clearing wave tokens`);
+      setWaveTokens(new Set());
+    }
+  }, [memoizedTokens, title]);
 
   const shortAddr = (token: any): string => {
     try {
@@ -3562,46 +3633,19 @@ const PulseTable = React.memo(function PulseTable({
                 }}
                 onClick={handleTokenClick}
               >
-                {/* Added by hujoe - can use in the future
+                {/* Subtle wave animation for top 3 final stretch tokens */}
                 {waveTokens.has(idx) && (
                   <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-lg z-10">
                     <div 
-                      className="absolute top-0 left-0 h-full w-full opacity-0"
+                      className="absolute top-0 left-0 h-full w-full"
                       style={{
-                        background: 'linear-gradient(90deg, transparent, rgba(30, 58, 138, 0.1), rgba(30, 58, 138, 0.3), rgba(30, 58, 138, 0.1), transparent)',
-                        animation: 'smoothWaveFlow 2.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                        filter: 'blur(1px)'
-                      }}
-                    ></div>
-                    
-                    <div 
-                      className="absolute top-0 left-0 h-full w-full opacity-0"
-                      style={{
-                        background: 'linear-gradient(90deg, transparent, rgba(30, 58, 138, 0.05), rgba(30, 58, 138, 0.15), rgba(30, 58, 138, 0.05), transparent)',
-                        animation: 'smoothWaveFlow 2.5s cubic-bezier(0.4, 0, 0.2, 1) 0.2s',
-                        filter: 'blur(2px)'
-                      }}
-                    ></div>
-                    
-                    <div 
-                      className="absolute inset-0 rounded-lg"
-                      style={{
-                        animation: 'aiGlowPulse 2.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                        background: 'linear-gradient(135deg, rgba(30, 58, 138, 0.02), rgba(30, 58, 138, 0.05), rgba(30, 58, 138, 0.02))'
-                      }}
-                    ></div>
-                    
-                    <div 
-                      className="absolute inset-0 rounded-lg border"
-                      style={{
-                        borderColor: 'rgba(30, 58, 138, 0.3)',
-                        animation: 'aiGlowPulse 2.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                        boxShadow: 'inset 0 0 0px rgba(30, 58, 138, 0)'
+                        background: 'linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.4), rgba(34, 197, 94, 0.2), transparent)',
+                        animation: 'subtleWaveFlow 3s ease-in-out infinite',
+                        filter: 'blur(0.5px)'
                       }}
                     ></div>
                   </div>
                 )}
-                */}
                 
                 {/* Status popout on hover */}
                 <span
