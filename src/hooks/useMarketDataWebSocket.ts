@@ -1,35 +1,42 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 
-export interface MarketData {
+interface MarketData {
   mint: string;
   price_usd: number;
   market_cap_usd: number;
-  volume_usd?: number;
+  volume_usd: number;
   updated_at: string;
 }
 
 interface MarketDataUpdate {
-  type: string;
+  type: 'market_data';
   data: Record<string, MarketData>;
   timestamp: string;
 }
 
-interface UseRealtimeWebSocketReturn {
-  marketData: Record<string, MarketData>;
+interface UseMarketDataWebSocketOptions {
+  pairAddress?: string;
+  tokenAddress?: string;
+  enabled?: boolean;
+  url?: string;
+  reconnectInterval?: number;
+  maxReconnectAttempts?: number;
+}
+
+interface UseMarketDataWebSocketReturn {
+  isConnected: boolean;
   loading: boolean;
   error: string | null;
-  connected: boolean;
+  data: Record<string, MarketData>;
+  getMarketData: () => MarketData | null;
   reconnect: () => void;
 }
 
-export function useRealtimeWebSocket(
-  mints: string[],
-  opts?: { 
-    url?: string;
-    reconnectInterval?: number;
-    maxReconnectAttempts?: number;
-  }
-): UseRealtimeWebSocketReturn {
+export default function useMarketDataWebSocket(
+  options: UseMarketDataWebSocketOptions = {}
+): UseMarketDataWebSocketReturn {
+  const { pairAddress, tokenAddress, enabled = true, url, reconnectInterval, maxReconnectAttempts } = options;
+  
   const [marketData, setMarketData] = useState<Record<string, MarketData>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,28 +45,22 @@ export function useRealtimeWebSocket(
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  const mintsRef = useRef<string[]>(mints);
+  const mintsRef = useRef<string[]>([]);
   
-  const url = opts?.url || 'ws://localhost:8080/v1/ws/market-data';
-  const reconnectInterval = opts?.reconnectInterval || 5000;
-  const maxReconnectAttempts = opts?.maxReconnectAttempts || 10;
+  // Use the deployed websocket URL
+  const wsUrl = url || 'ws://34.47.209.237:8080/v1/ws/market-data';
+  const reconnectIntervalMs = reconnectInterval || 5000;
+  const maxReconnectAttemptsCount = maxReconnectAttempts || 10;
 
-  // Update mints ref when mints change
+  // Update mints when tokenAddress changes
   useEffect(() => {
-    mintsRef.current = mints;
-  }, [mints]);
+    if (tokenAddress) {
+      mintsRef.current = [tokenAddress];
+    }
+  }, [tokenAddress]);
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
-    // If using deployed service, disable WebSocket and use HTTP polling fallback
-    if (process.env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED === 'true') {
-      console.log('🚫 WebSocket disabled for deployed service, using HTTP polling fallback');
-      setLoading(false);
-      setConnected(false);
-      setError(null);
+    if (wsRef.current?.readyState === WebSocket.OPEN || !enabled) {
       return;
     }
 
@@ -67,11 +68,11 @@ export function useRealtimeWebSocket(
       setLoading(true);
       setError(null);
       
-      const ws = new WebSocket(url);
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('Market data WebSocket connected');
         setConnected(true);
         setLoading(false);
         setError(null);
@@ -104,27 +105,25 @@ export function useRealtimeWebSocket(
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code, event.reason);
+        console.log('Market data WebSocket closed:', event.code, event.reason);
         setConnected(false);
         
-        // Attempt to reconnect if not a clean close
-        if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        if (reconnectAttemptsRef.current < maxReconnectAttemptsCount) {
           reconnectAttemptsRef.current++;
-          console.log(`Attempting to reconnect (${reconnectAttemptsRef.current}/${maxReconnectAttempts})...`);
+          console.log(`Attempting to reconnect (${reconnectAttemptsRef.current}/${maxReconnectAttemptsCount})...`);
           
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
-          }, reconnectInterval);
-        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+          }, reconnectIntervalMs);
+        } else {
           setError('Max reconnection attempts reached');
           setLoading(false);
         }
       };
 
-      ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
+      ws.onerror = (error) => {
+        console.error('Market data WebSocket error:', error);
         setError('WebSocket connection error');
-        setLoading(false);
       };
 
     } catch (err) {
@@ -141,43 +140,44 @@ export function useRealtimeWebSocket(
     }
     
     if (wsRef.current) {
-      wsRef.current.close(1000, 'Component unmounting');
+      wsRef.current.close();
       wsRef.current = null;
     }
     
     setConnected(false);
+    setError(null);
   }, []);
 
   const reconnect = useCallback(() => {
     disconnect();
     reconnectAttemptsRef.current = 0;
-    connect();
+    setTimeout(connect, 100);
   }, [disconnect, connect]);
 
-  // Connect on mount and when mints change
-  useEffect(() => {
-    if (mints.length > 0) {
-      connect();
-    }
-    
-    return () => {
-      disconnect();
-    };
-  }, [mints.length, connect, disconnect]);
+  // Get market data for the current token (no parameters needed)
+  const getMarketData = useCallback((): MarketData | null => {
+    if (!tokenAddress) return null;
+    return marketData[tokenAddress] || null;
+  }, [marketData, tokenAddress]);
 
-  // Cleanup on unmount
   useEffect(() => {
+    if (enabled && tokenAddress) {
+      connect();
+    } else {
+      disconnect();
+    }
+
     return () => {
       disconnect();
     };
-  }, [disconnect]);
+  }, [enabled, tokenAddress, connect, disconnect]);
 
   return {
-    marketData,
+    isConnected: connected,
     loading,
     error,
-    connected,
-    reconnect,
+    data: marketData,
+    getMarketData,
+    reconnect
   };
 }
-

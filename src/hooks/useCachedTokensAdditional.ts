@@ -61,13 +61,9 @@ export function useCachedFinalStretchTokens() {
     }
 
     try {
-      const { env } = await import('~/env');
-      const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-        ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
-        : env.NEXT_PUBLIC_GO_SERVICE_URL;
-      const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-        ? `${baseUrl}/v1/pulse/final-stretch?limit=30&t=${Date.now()}`
-        : `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+      // Force direct backend calls when backend is deployed
+      const baseUrl = 'http://34.47.209.237:8080';
+      const apiUrl = `${baseUrl}/v1/pulse/final-stretch?limit=30&t=${Date.now()}`;
 
       const response = await fetch(apiUrl);
       const data = response.ok ? await response.json() : [];
@@ -187,13 +183,9 @@ export function useCachedMigratedTokens() {
     }
 
     try {
-      const { env } = await import('~/env');
-      const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-        ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
-        : env.NEXT_PUBLIC_GO_SERVICE_URL;
-      const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-        ? `${baseUrl}/v1/pulse/migrated?limit=30&t=${Date.now()}`
-        : `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
+      // Force direct backend calls when backend is deployed
+      const baseUrl = 'http://34.47.209.237:8080';
+      const apiUrl = `${baseUrl}/v1/pulse/migrated?limit=30&t=${Date.now()}`;
 
       const response = await fetch(apiUrl);
       const data = response.ok ? await response.json() : [];

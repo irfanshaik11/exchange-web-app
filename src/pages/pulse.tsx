@@ -74,8 +74,10 @@ export default function PulsePage() {
   const [httpNew, setHttpNew] = useState<any[]>([]);
   const [httpNewTick, setHttpNewTick] = useState(0);
 
-  // Use WebSocket for New Pairs
-  const { data: newPairsTokens, loading: wsLoading } = usePaginatedTokensWebSocket({ filter: 'new', limit: 20 });
+  // DISABLED: WebSocket hook to prevent redundant API calls
+  // const { data: newPairsTokens, loading: wsLoading } = usePaginatedTokensWebSocket({ filter: 'new', limit: 20 });
+  const newPairsTokens: any[] = []; // Empty array since we're not using WebSocket
+  const wsLoading = false;
 
   // Fast polling fallback for New Pairs (cache-bypass)
   useEffect(() => {

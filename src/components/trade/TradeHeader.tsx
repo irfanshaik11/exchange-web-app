@@ -4,6 +4,7 @@ import { formatSmartNumber } from "~/utils/db";
 import { useWatchlist } from "../WatchlistContext";
 import { fetchTokenMetadata } from "~/utils/functions";
 import { SubscriptNumber } from "../InterstateTable";
+import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 
 import { IoShareSocialOutline } from "react-icons/io5";
 import { FaRegStar, FaStar, FaGlobe, FaUser, FaSearch, FaExpand, FaCamera, FaRegCopy } from "react-icons/fa";
@@ -181,6 +182,19 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number, showBelow?: boolean} | null>(null);
   const [showToast, setShowToast] = useState(false);
 
+  // WebSocket hook for real-time market data
+  const {
+    isConnected: wsConnected,
+    loading: wsLoading,
+    error: wsError,
+    data: wsData,
+    getMarketData,
+  } = useMarketDataWebSocket({
+    pairAddress: token.pair_address,
+    tokenAddress: token.mint,
+    enabled: true,
+  });
+
   const showCopyToast = () => {
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2000);
@@ -191,13 +205,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
     else addToWatchlist(token);
   };
 
-  // values like your screenshot
-  const mcap = token.market_cap_usd ?? 0;
-  const price = token.usd_price ?? (token as any).price_usd ?? (token as any).price ?? 0;
-  const liq = token.total_liquidity_usd ?? (token as any).liquidity_usd ?? 0;
+  // Real-time market data from WebSocket with fallback to static data
+  const marketData = getMarketData();
+  const mcap = marketData?.market_cap_usd || token.market_cap_usd || 0;
+  const price = marketData?.price_usd || token.usd_price || (token as any).price_usd || (token as any).price || 0;
+  const liq = marketData?.volume_usd || token.total_liquidity_usd || (token as any).liquidity_usd || 0;
   const supply = token.total_supply ?? (token as any).supply ?? 0;
   const feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? "—";
-  const curvePct =
+  const curvePct = 
     (token as any).bonding_pct ??
     (token as any).bonding_curve_progress ??
     (token as any).bcurve ??
@@ -218,6 +233,22 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
         fontFamily: 'Inter, ui-sans-serif, system-ui'
       }}
     >
+      {/* WebSocket Connection Status */}
+      {wsError && (
+        <div className="absolute top-0 left-0 right-0 px-3 py-1 bg-red-900/20 border-b border-red-500/30 z-10">
+          <div className="text-[10px] text-red-400 text-center">
+            Market Data Error: {wsError}
+          </div>
+        </div>
+      )}
+      
+      {!wsConnected && !wsLoading && wsData === null && (
+        <div className="absolute top-0 left-0 right-0 px-3 py-1 bg-yellow-900/20 border-b border-yellow-500/30 z-10">
+          <div className="text-[10px] text-yellow-400 text-center">
+            Using static market data (WebSocket disconnected)
+          </div>
+        </div>
+      )}
       {/* LEFT: Token Info */}
       <div className="flex items-center gap-3">
         {/* Token Avatar with Pill Styling */}
@@ -527,10 +558,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
 
       {/* CENTER: Market Data - Compact */}
       <div className="flex items-center gap-6">
-        {/* Market Cap - Large Display */}
+        {/* Market Cap - Large Display with Live Indicator */}
         <div className="text-center">
-          <div className="text-[18px] font-light tabular-nums" style={{ color: AX.text, fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}>
-          ${formatSmartNumber(mcap)}
+          <div className="text-[18px] font-light tabular-nums flex items-center justify-center gap-1" style={{ color: AX.text, fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}>
+            ${formatSmartNumber(mcap)}
+            {wsConnected && <span className="text-[#70E0B0] text-[12px]">●</span>}
           </div>
         </div>
 

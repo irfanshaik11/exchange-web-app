@@ -215,10 +215,11 @@ export default function TradePage() {
 
               {/* Chart in top left corner */}
               <div className="flex-1 min-h-[240px]">
-                {/* Temporary: Using FixedChart to show mock data properly */}
+                {/* Using FixedChart with OHLC WebSocket data */}
                 <FixedChart
                   height="100%"
                   width="100%"
+                  pairAddress={typeof id === "string" ? id : undefined}
                 />
                 {/* Original chart (commented out for now)
                 <CustomSolanaChart

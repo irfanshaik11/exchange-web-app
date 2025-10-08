@@ -11,8 +11,9 @@ import { createLimitOrder, tradeBuy, SOL_MINT_ADDRESS } from "~/utils/api";
 import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
+import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 
-type TimeRange = "1m" | "5m" | "1h" | "6h" | "24h";
+type TimeRange = "5m" | "1h" | "6h" | "24h";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -47,9 +48,7 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
   const s = side;
   const count =
-    window === "1m"
-      ? num(t[`total_${s}s_1m`]) || num(t[`total_${s}s_60s`])
-      : window === "5m"
+    window === "5m"
       ? num(t[`total_${s}s_5m`])
       : window === "1h"
       ? num(t[`total_${s}s_1h`]) || num(t[`total_${s}s_60m`])
@@ -58,9 +57,7 @@ function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
       : num(t[`total_${s}s_24h`]);
 
   const vol =
-    window === "1m"
-      ? num(t[`total_${s}_volume_1m`]) || num(t[`total_${s}_volume_60s`])
-      : window === "5m"
+    window === "5m"
       ? num(t[`total_${s}_volume_5m`])
       : window === "1h"
       ? num(t[`total_${s}_volume_1h`]) || num(t[`total_${s}_volume_60m`])
@@ -83,7 +80,7 @@ interface TradeActionPanelProps {
   tradeParams?: {
     mode: "buy" | "sell";
     tab: "market" | "limit" | "adv";
-    timeRange: "1m" | "5m" | "1h" | "6h" | "24h";
+    timeRange: "5m" | "1h" | "6h" | "24h";
     amount: string;
     targetMC: string;
     sliderPct: number;
@@ -103,7 +100,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Internal state with fallback to external props
   const [mode, setMode] = useState<"buy" | "sell">(externalTradeParams?.mode || "buy");
   const [tab, setTab] = useState<"market" | "limit" | "adv">(externalTradeParams?.tab || "market");
-  const [timeRange, setTimeRange] = useState<TimeRange>(externalTradeParams?.timeRange || "5m");
+  const [timeRange, setTimeRange] = useState<TimeRange>(externalTradeParams?.timeRange as TimeRange || "5m");
   const [amount, setAmount] = useState(externalTradeParams?.amount || "");
   const [targetMC, setTargetMC] = useState(externalTradeParams?.targetMC || "");
   const [sliderPct, setSliderPct] = useState(externalTradeParams?.sliderPct || 0);
@@ -112,12 +109,25 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
 
+  // WebSocket hook for real-time token stats
+  const {
+    isConnected: wsConnected,
+    loading: wsLoading,
+    error: wsError,
+    data: wsData,
+    getFormattedStats,
+  } = useTokenStatsWebSocket({
+    pairAddress: token.pair_address,
+    tokenAddress: token.mint,
+    enabled: true,
+  });
+
   // Update internal state when external props change (only on mount)
   useEffect(() => {
     if (externalTradeParams) {
       setMode(externalTradeParams.mode);
       setTab(externalTradeParams.tab);
-      setTimeRange(externalTradeParams.timeRange);
+      setTimeRange(externalTradeParams.timeRange as TimeRange);
       setAmount(externalTradeParams.amount);
       setTargetMC(externalTradeParams.targetMC);
       setSliderPct(externalTradeParams.sliderPct);
@@ -194,13 +204,45 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
   }, [targetMC, baseMarketCap]);
 
-  // chart stats
-  const buyStats = getCountsAndVol(token as any, "buy", timeRange);
-  const sellStats = getCountsAndVol(token as any, "sell", timeRange);
-  const totalVol = (buyStats.vol ?? 0) + (sellStats.vol ?? 0);
-  const buyPct = totalVol ? (buyStats.vol / totalVol) * 100 : 50;
-  const sellPct = 100 - buyPct;
-  const netVol = (buyStats.vol ?? 0) - (sellStats.vol ?? 0);
+  // Real-time stats from WebSocket with fallback to static data
+  const realTimeStats = useMemo(() => {
+    if (wsData && wsData.data && wsData.data.timeframes) {
+      // Use WebSocket data
+      const stats = getFormattedStats(timeRange);
+      return {
+        buys: stats.buys,
+        sells: stats.sells,
+        volume: stats.volume,
+        buyVolume: stats.buyVolume,
+        sellVolume: stats.sellVolume,
+        netVolume: stats.netVolume,
+        buyPercentage: stats.buyPercentage,
+        sellPercentage: stats.sellPercentage,
+      };
+    } else {
+      // Fallback to static data
+      const buyStats = getCountsAndVol(token as any, "buy", timeRange);
+      const sellStats = getCountsAndVol(token as any, "sell", timeRange);
+      const totalVol = (buyStats.vol ?? 0) + (sellStats.vol ?? 0);
+      const buyPct = totalVol ? (buyStats.vol / totalVol) * 100 : 50;
+      const sellPct = 100 - buyPct;
+      const netVol = (buyStats.vol ?? 0) - (sellStats.vol ?? 0);
+      
+      return {
+        buys: buyStats.count,
+        sells: sellStats.count,
+        volume: totalVol,
+        buyVolume: buyStats.vol,
+        sellVolume: sellStats.vol,
+        netVolume: netVol,
+        buyPercentage: buyPct,
+        sellPercentage: sellPct,
+      };
+    }
+  }, [wsData, timeRange, getFormattedStats, token]);
+
+  // Extract stats for easier access
+  const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
 
   // amount presets
   const [amountPresets, setAmountPresets] = useState<number[]>([0.01, 0.1, 0.5, 1]);
@@ -228,13 +270,28 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       className="flex h-full flex-col text-[12px] leading-tight"
       style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial' }}
     >
+      {/* WebSocket Connection Status */}
+      {wsError && (
+        <div className="px-3 py-1 bg-red-900/20 border-b border-red-500/30">
+          <div className="text-[10px] text-red-400">
+            WebSocket Error: {wsError}
+          </div>
+        </div>
+      )}
+      
+      {!wsConnected && !wsLoading && wsData === null && (
+        <div className="px-3 py-1 bg-yellow-900/20 border-b border-yellow-500/30">
+          <div className="text-[10px] text-yellow-400">
+            Using static data (WebSocket disconnected)
+          </div>
+        </div>
+      )}
       {/* ===== A. Time buttons ===== */}
       <div className="px-3 pt-2 pb-2 border-b border-[#2A2B33]">
         <div className="mx-auto w-full max-w-xl overflow-hidden">
           <div className="flex gap-1 rounded-xl bg-[#1E1F26] border border-[#2A2B33] p-1">
-            {(["1m", "5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
+            {(["5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
               const changeMap: Record<TimeRange, number> = {
-                "1m": Number((token as any).price_change_1m ?? (token as any).change_1m ?? 0),
                 "5m": Number((token as any).price_change_5m ?? (token as any).change_5m ?? 0),
                 "1h": Number((token as any).price_change_1h ?? (token as any).change_1h ?? 0),
                 "6h": Number((token as any).price_change_6h ?? (token as any).change_6h ?? 0),
@@ -273,39 +330,42 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         </div>
       </div>
 
-      {/* ===== B. Stats ===== */}
+      {/* ===== B. Real-time Stats ===== */}
       <div className="px-3 py-1.5 border-b border-[#2A2B33]">
         <div className="grid grid-cols-4 gap-4 tabular-nums">
           <div>
-            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">24h Vol</div>
-            <div className="text-[#E6E7EA] whitespace-nowrap text-[12px]">${formatSmartNumber(totalVol || 0)}</div>
+            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">
+              {timeRange} Vol
+              {wsConnected && <span className="text-[#70E0B0] ml-1">●</span>}
+            </div>
+            <div className="text-[#E6E7EA] whitespace-nowrap text-[12px]">${formatSmartNumber(volume || 0)}</div>
           </div>
           <div>
             <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Buys</div>
             <div className="whitespace-nowrap tabular-nums text-[#70E0B0] flex items-baseline gap-1 text-[12px]">
-              <span>{buyStats.count ?? 0}</span>
+              <span>{buys ?? 0}</span>
               <span className="text-[#9CA3AF]">/</span>
-              <span className="text-[#70E0B0]">${formatSmartNumber(buyStats.vol || 0)}</span>
+              <span className="text-[#70E0B0]">${formatSmartNumber(buyVolume || 0)}</span>
             </div>
           </div>
           <div>
             <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Sells</div>
             <div className="whitespace-nowrap tabular-nums text-[#FF4D7F] flex items-baseline gap-1 text-[12px]">
-              <span>{sellStats.count ?? 0}</span>
+              <span>{sells ?? 0}</span>
               <span className="text-[#9CA3AF]">/</span>
-              <span className="text-[#FF4D7F]">${formatSmartNumber(sellStats.vol || 0)}</span>
+              <span className="text-[#FF4D7F]">${formatSmartNumber(sellVolume || 0)}</span>
             </div>
           </div>
           <div>
             <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Net</div>
-            <div className={cx("whitespace-nowrap tabular-nums text-[12px]", netVol >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
-              {netVol >= 0 ? "+" : "-"}${formatSmartNumber(Math.abs(netVol))}
+            <div className={cx("whitespace-nowrap tabular-nums text-[12px]", netVolume >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
+              {netVolume >= 0 ? "+" : "-"}${formatSmartNumber(Math.abs(netVolume))}
             </div>
           </div>
         </div>
         <div className="mt-1 h-0.5 w-full rounded-full bg-[#17191E] relative overflow-hidden">
-          <div className="absolute left-0 top-0 h-full" style={{ width: `${buyPct}%`, background: AX.mint }} />
-          <div className="absolute right-0 top-0 h-full" style={{ width: `${sellPct}%`, background: AX.sell }} />
+          <div className="absolute left-0 top-0 h-full" style={{ width: `${buyPercentage}%`, background: AX.mint }} />
+          <div className="absolute right-0 top-0 h-full" style={{ width: `${sellPercentage}%`, background: AX.sell }} />
         </div>
       </div>
 

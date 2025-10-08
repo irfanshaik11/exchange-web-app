@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Token } from '~/utils/db';
 import { useCodexOHLC } from '~/hooks/useCodexOHLC';
+import useOHLCWebSocket from '~/hooks/useOHLCWebSocket';
 import LightweightChart from './LightweightChart';
 import { useChartData } from '~/hooks/useChartData';
 
@@ -17,36 +18,113 @@ const CustomSolanaChart: React.FC<CustomSolanaChartProps> = ({
   height = "100%",
   width = "100%"
 }) => {
+  // Use real-time OHLC data from WebSocket
+  const {
+    isConnected: wsConnected,
+    loading: wsLoading,
+    error: wsError,
+    ohlcData: wsOHLCData,
+    getOHLCStats,
+  } = useOHLCWebSocket({
+    pairAddress: pairAddress || token.pair_address,
+    timeframe: "5m",
+    enabled: true,
+    maxDataPoints: 100,
+  });
+
   // Use real-time OHLC data from Codex (disabled until deployed service is ready)
-  const { ohlcData, isConnected, error: wsError } = useCodexOHLC({
+  const { ohlcData, isConnected, error: codexError } = useCodexOHLC({
     tokenId: token.mint, // Use token mint as tokenId
     enabled: false // Disabled until teammate deploys the service
   });
 
-  // Use lightweight chart data with mock data
+  // Use lightweight chart data with mock data as fallback
   const { data: chartData, isLoading, error, refresh } = useChartData({
     pairAddress: pairAddress || 'So11111111111111111111111111111111111111112', // Default pair for mock data
-    interval: '1m',
+    interval: '5m',
     limit: 100,
     useWebSocket: false, // Force mock data for now
     generateHistory: true
   });
 
+  // Use WebSocket OHLC data if available, otherwise fallback to chart data
+  const displayData = wsOHLCData.length > 0 ? wsOHLCData : chartData;
+  const isConnected = wsConnected;
+  const combinedError = wsError || error;
+
   // Debug logging
   console.log('CustomSolanaChart Debug:', {
     token: token.symbol,
     pairAddress,
+    wsConnected,
+    wsOHLCDataLength: wsOHLCData.length,
     chartDataLength: chartData.length,
-    isLoading,
-    error,
-    hasData: chartData.length > 0
+    displayDataLength: displayData.length,
+    isLoading: wsLoading || isLoading,
+    error: combinedError,
+    hasData: displayData.length > 0
   });
 
   // Combine WebSocket error with chart data error
-  const combinedError = error || wsError;
+  const finalError = combinedError;
 
   return (
     <div style={{ height, width }} className="relative">
+      {/* Real-time OHLC Header */}
+      {wsConnected && wsOHLCData.length > 0 && (
+        <div className="absolute top-0 left-0 right-0 h-14 bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 flex items-center px-4 text-white text-sm z-20 shadow-lg">
+          <div className="flex items-center justify-between w-full">
+            {/* Left: OHLC Data */}
+            <div className="flex items-center space-x-6">
+              {(() => {
+                const latest = wsOHLCData[0];
+                const previous = wsOHLCData[1];
+                const priceChange = previous ? latest.close - previous.close : 0;
+                const priceChangePercent = previous ? (priceChange / previous.close) * 100 : 0;
+                
+                return (
+                  <>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-gray-400 text-xs">O:</span>
+                      <span className="text-white font-mono text-sm">${latest.open.toFixed(6)}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-gray-400 text-xs">H:</span>
+                      <span className="text-emerald-400 font-mono text-sm">${latest.high.toFixed(6)}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-gray-400 text-xs">L:</span>
+                      <span className="text-red-400 font-mono text-sm">${latest.low.toFixed(6)}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-gray-400 text-xs">C:</span>
+                      <span className={`font-mono text-sm font-semibold ${latest.close >= latest.open ? 'text-emerald-400' : 'text-red-400'}`}>
+                        ${latest.close.toFixed(6)}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2 ml-4">
+                      <span className="text-gray-400 text-xs">Change:</span>
+                      <span className={`font-mono text-sm font-semibold ${priceChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {priceChange >= 0 ? '+' : ''}{priceChangePercent.toFixed(2)}%
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Right: Status */}
+            <div className="flex items-center space-x-4">
+              {/* Connection Status */}
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+                <span className="text-gray-400 text-xs">Live OHLC Data</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Enhanced Real-time OHLC Header - Hidden until deployed service */}
       {false && ohlcData && (
         <div className="absolute top-0 left-0 right-0 h-14 bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 flex items-center px-4 text-white text-sm z-20 shadow-lg">
@@ -108,11 +186,11 @@ const CustomSolanaChart: React.FC<CustomSolanaChartProps> = ({
 
       {/* Lightweight Chart */}
       <LightweightChart
-        data={chartData}
+        data={displayData}
         height={height}
         width={width}
-        isLoading={isLoading}
-        error={combinedError}
+        isLoading={wsLoading || isLoading}
+        error={finalError}
         onRefresh={refresh}
         className="w-full h-full"
       />

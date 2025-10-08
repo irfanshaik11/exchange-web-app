@@ -1,207 +1,264 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from "react";
+import { env } from "../env";
 
-export interface TokenStats {
-  pair_address: string;
-  token_address: string;
-  timeframes: {
-    '5m': TimeframeStats;
-    '1h': TimeframeStats;
-    '12h': TimeframeStats;
-    '24h': TimeframeStats;
-  };
-  last_updated: string;
-}
-
-export interface TimeframeStats {
-  buy_count: number;
-  sell_count: number;
-  buy_volume: number;
-  sell_volume: number;
-  total_volume: number;
-  price_change: number;
-  price_change_percent: number;
-  current_price: number;
-  high: number;
-  low: number;
-  open: number;
-  close: number;
-}
-
-export interface TokenStatsWebSocketOptions {
+interface TokenStatsData {
+  success: boolean;
+  tokenAddress: string;
   pairAddress: string;
-  enabled?: boolean;
-  reconnectInterval?: number;
-  maxReconnectAttempts?: number;
+  dataSource: string;
+  timestamp: string;
+  data: {
+    timeframes: {
+      [key: string]: {
+        buys: number;
+        sells: number;
+        volume: number;
+        buyVolume: number;
+        sellVolume: number;
+      };
+    };
+  };
 }
 
-export interface TokenStatsWebSocketState {
-  stats: TokenStats | null;
+interface TokenStatsState {
   isConnected: boolean;
-  isConnecting: boolean;
+  isReconnecting: boolean;
   error: string | null;
-  lastUpdate: Date | null;
-  reconnectAttempts: number;
+  loading: boolean;
+  data: TokenStatsData | null;
+  lastUpdate: string | null;
 }
 
-export const useTokenStatsWebSocket = (options: TokenStatsWebSocketOptions) => {
-  const {
-    pairAddress,
-    enabled = true,
-    reconnectInterval = 5000,
-    maxReconnectAttempts = 10
-  } = options;
+interface UseTokenStatsWebSocketParams {
+  pairAddress?: string;
+  tokenAddress?: string;
+  enabled?: boolean;
+}
 
-  const [state, setState] = useState<TokenStatsWebSocketState>({
-    stats: null,
+export default function useTokenStatsWebSocket({
+  pairAddress,
+  tokenAddress,
+  enabled = true,
+}: UseTokenStatsWebSocketParams) {
+  const [state, setState] = useState<TokenStatsState>({
     isConnected: false,
-    isConnecting: false,
+    isReconnecting: false,
     error: null,
+    loading: true,
+    data: null,
     lastUpdate: null,
-    reconnectAttempts: 0
   });
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectAttemptsRef = useRef(0);
+  const maxReconnectAttempts = 5;
+  const reconnectAttemptRef = useRef(0);
 
-  const connect = useCallback(() => {
-    if (!enabled || !pairAddress || wsRef.current?.readyState === WebSocket.OPEN) {
+  const processMessage = useCallback((message: any) => {
+    try {
+      // Validate message structure
+      if (message.success && message.data && message.data.timeframes) {
+        setState(prev => ({
+          ...prev,
+          data: message,
+          lastUpdate: new Date().toISOString(),
+          loading: false,
+        }));
+      } else {
+        console.warn('Invalid token stats message format:', message);
+      }
+    } catch (error) {
+      console.error('Error processing token stats message:', error);
+    }
+  }, []);
+
+  const connectWebSocket = useCallback(() => {
+    if (!pairAddress || !tokenAddress || !enabled) {
       return;
     }
 
-    setState(prev => ({ ...prev, isConnecting: true, error: null }));
-
     try {
-      const wsUrl = `ws://localhost:8080/v1/ws/token-stats?pair_address=${encodeURIComponent(pairAddress)}`;
+      const wsUrl = `ws://34.47.209.237:8080/v1/ws/token-stats?pair_address=${pairAddress}&token_address=${tokenAddress}`;
       const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('TokenStats WebSocket connected for pair:', pairAddress);
         setState(prev => ({
           ...prev,
           isConnected: true,
-          isConnecting: false,
+          isReconnecting: false,
           error: null,
-          reconnectAttempts: 0
         }));
-        reconnectAttemptsRef.current = 0;
+        reconnectAttemptRef.current = 0;
       };
 
       ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as TokenStats;
-          setState(prev => ({
-            ...prev,
-            stats: data,
-            lastUpdate: new Date(),
-            error: null
-          }));
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-          setState(prev => ({
-            ...prev,
-            error: 'Failed to parse server message'
-          }));
+        const handleText = (text: string) => {
+          try {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+
+            // Ignore keepalive/ping frames
+            if (trimmed === 'ping' || trimmed === 'pong' || trimmed === 'ok') return;
+
+            // Try to parse as JSON
+            try {
+              const msg = JSON.parse(trimmed);
+              processMessage(msg);
+              return;
+            } catch (_) {
+              // Fall through to multi-JSON handling
+            }
+
+            // Handle concatenated or newline-delimited JSON messages
+            const fixed = trimmed
+              .replace(/}\s*{/g, '}\n{')
+              .replace(/]\s*\[/g, ']\n[');
+            const parts = fixed.split(/\r?\n+/);
+            
+            for (const part of parts) {
+              const p = part.trim();
+              if (!p || p === 'ping' || p === 'pong' || p === 'ok') continue;
+              try {
+                const msg = JSON.parse(p);
+                processMessage(msg);
+              } catch (e) {
+                console.warn('Skipping non-JSON WS chunk:', p.slice(0, 120));
+              }
+            }
+          } catch (error) {
+            console.error('Error handling WebSocket message:', error);
+          }
+        };
+
+        // Handle different message types
+        if (typeof event.data === 'string') {
+          handleText(event.data);
+        } else if (event.data instanceof Blob) {
+          event.data.text().then(handleText);
+        } else if (event.data instanceof ArrayBuffer) {
+          const text = new TextDecoder().decode(event.data);
+          handleText(text);
         }
       };
 
       ws.onclose = (event) => {
-        console.log('TokenStats WebSocket closed:', event.code, event.reason);
         setState(prev => ({
           ...prev,
           isConnected: false,
-          isConnecting: false
+          loading: false,
         }));
 
-        // Attempt to reconnect if not manually closed
-        if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
-          reconnectAttemptsRef.current++;
-          setState(prev => ({
-            ...prev,
-            reconnectAttempts: reconnectAttemptsRef.current,
-            error: `Connection lost. Reconnecting... (${reconnectAttemptsRef.current}/${maxReconnectAttempts})`
-          }));
-
+        // Attempt reconnection if not a clean close
+        if (event.code !== 1000 && reconnectAttemptRef.current < maxReconnectAttempts) {
+          reconnectAttemptRef.current++;
+          setState(prev => ({ ...prev, isReconnecting: true }));
+          
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-          }, reconnectInterval);
-        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+            connectWebSocket();
+          }, delay);
+        } else if (reconnectAttemptRef.current >= maxReconnectAttempts) {
           setState(prev => ({
             ...prev,
-            error: 'Max reconnection attempts reached'
+            error: 'Max reconnection attempts reached',
+            isReconnecting: false,
           }));
         }
       };
 
       ws.onerror = (error) => {
-        console.error('TokenStats WebSocket error:', error);
+        console.error('WebSocket error:', error);
         setState(prev => ({
           ...prev,
           error: 'WebSocket connection error',
-          isConnecting: false
+          loading: false,
         }));
       };
 
-      wsRef.current = ws;
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error);
       setState(prev => ({
         ...prev,
         error: 'Failed to create WebSocket connection',
-        isConnecting: false
+        loading: false,
       }));
     }
-  }, [pairAddress, enabled, reconnectInterval, maxReconnectAttempts]);
+  }, [pairAddress, tokenAddress, enabled, processMessage]);
 
-  const disconnect = useCallback(() => {
+  // Effect for managing WebSocket connection
+  useEffect(() => {
+    if (!pairAddress || !tokenAddress || !enabled) {
+      setState(prev => ({
+        ...prev,
+        isConnected: false,
+        loading: false,
+        data: null,
+      }));
+      return;
+    }
+
+    setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
+
+    // Clean up existing connection
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
 
-    if (wsRef.current) {
-      wsRef.current.close(1000, 'Manual disconnect');
-      wsRef.current = null;
-    }
+    connectWebSocket();
 
-    setState(prev => ({
-      ...prev,
-      isConnected: false,
-      isConnecting: false,
-      error: null
-    }));
-  }, []);
-
-  const reconnect = useCallback(() => {
-    disconnect();
-    reconnectAttemptsRef.current = 0;
-    connect();
-  }, [disconnect, connect]);
-
-  // Connect when enabled and pairAddress changes
-  useEffect(() => {
-    if (enabled && pairAddress) {
-      connect();
-    } else {
-      disconnect();
-    }
-
+    // Cleanup function
     return () => {
-      disconnect();
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
     };
-  }, [enabled, pairAddress, connect, disconnect]);
+  }, [pairAddress, tokenAddress, enabled, connectWebSocket]);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      disconnect();
+  // Get stats for a specific timeframe
+  const getStatsForTimeframe = useCallback((timeframe: string) => {
+    if (!state.data?.data?.timeframes?.[timeframe]) {
+      return {
+        buys: 0,
+        sells: 0,
+        volume: 0,
+        buyVolume: 0,
+        sellVolume: 0,
+      };
+    }
+    return state.data.data.timeframes[timeframe];
+  }, [state.data]);
+
+  // Get formatted stats for display
+  const getFormattedStats = useCallback((timeframe: string) => {
+    const stats = getStatsForTimeframe(timeframe);
+    return {
+      buys: stats.buys,
+      sells: stats.sells,
+      volume: stats.volume,
+      buyVolume: stats.buyVolume,
+      sellVolume: stats.sellVolume,
+      netVolume: stats.buyVolume - stats.sellVolume,
+      buyPercentage: stats.volume > 0 ? (stats.buyVolume / stats.volume) * 100 : 50,
+      sellPercentage: stats.volume > 0 ? (stats.sellVolume / stats.volume) * 100 : 50,
     };
-  }, [disconnect]);
+  }, [getStatsForTimeframe]);
 
   return {
     ...state,
-    connect,
-    disconnect,
-    reconnect
+    getStatsForTimeframe,
+    getFormattedStats,
+    reconnect: connectWebSocket,
   };
-};
+}

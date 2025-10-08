@@ -229,13 +229,9 @@ export function useCachedPulseTokens() {
     }
 
     try {
-      const { env } = await import('~/env');
-      const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-        ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
-        : env.NEXT_PUBLIC_GO_SERVICE_URL;
-      const url = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-        ? `${baseUrl}/v1/pulse/new?limit=200`
-        : `/api/token-service/getAllTokens?filter=new&order=desc&limit=200`;
+      // Force direct backend calls when backend is deployed
+      const baseUrl = 'http://34.47.209.237:8080';
+      const url = `${baseUrl}/v1/pulse/new?limit=200`;
 
       const response = await fetch(url);
       const data = response.ok ? await response.json() : { result: [] };

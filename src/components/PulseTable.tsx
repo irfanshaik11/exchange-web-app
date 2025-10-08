@@ -478,16 +478,19 @@ function TokenImage({
         {isNewPairs && (
           <div className="absolute inset-0 pointer-events-none">
             <svg className="w-full h-full" viewBox="0 0 80 80">
-              {/* Background border */}
+              {/* Background border - outer grey border */}
+              
+              
+              {/* Inner grey border */}
               <rect
-                x="2"
-                y="2"
-                width="76"
-                height="76"
+                x="3"
+                y="3"
+                width="74"
+                height="74"
                 fill="none"
-                stroke="rgba(255, 255, 255, 0.1)"
+                stroke="#4B5563"
                 strokeWidth="1"
-                rx="8"
+                rx="6"
               />
               
               {/* Progress border - clockwise rounded path starting from bottom-right */}
@@ -495,7 +498,7 @@ function TokenImage({
                 d="M 78 78 L 10 78 Q 2 78 2 70 L 2 10 Q 2 2 10 2 L 70 2 Q 78 2 78 10 L 78 70 Q 78 78 70 78"
                 fill="none"
                 stroke="#22c55e"
-                strokeWidth="1.5"
+                strokeWidth="3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeDasharray={`${4 * 76}`} // Total perimeter
@@ -3458,7 +3461,7 @@ const PulseTable = React.memo(function PulseTable({
                 try {
                   console.log("Fetching pair address for mint:", mintAddress);
                   const response = await fetch(
-                    "/api/token-service/hydrate-pair",
+                    "http://34.47.209.237:8080/v1/token/hydrate-pair",
                     {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },

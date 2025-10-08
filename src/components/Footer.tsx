@@ -14,6 +14,8 @@ import {
   FaCog,
   FaBars
 } from 'react-icons/fa';
+import QuickBuySettingsModal from './QuickBuySettingsModal';
+import { useQuickBuy } from './QuickBuyContext';
 
 // Custom X (Twitter) icon component
 const XIcon = ({ size = 14 }: { size?: number }) => (
@@ -41,9 +43,10 @@ const AX = {
 
 export default function Footer() {
   const router = useRouter();
-  const [activePreset, setActivePreset] = useState('PRESET 2');
   const [showWalletDropdown, setShowWalletDropdown] = useState(false);
   const [showGlobalDropdown, setShowGlobalDropdown] = useState(false);
+  const [showPresetModal, setShowPresetModal] = useState(false);
+  const { activePreset } = useQuickBuy();
 
   const navLinks = [
     { name: "Wallet", href: "/wallet", icon: FaWallet },
@@ -89,6 +92,7 @@ export default function Footer() {
               color: '#000000',
               border: `1px solid ${AX.mint}`
             }}
+            onClick={() => setShowPresetModal(true)}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = AX.mintHover;
               e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.3)';
@@ -100,8 +104,8 @@ export default function Footer() {
           >
             <FaBars size={10} className="sm:w-3 sm:h-3" />
             <FaCog size={10} className="sm:w-3 sm:h-3" />
-            <span className="hidden sm:inline">{activePreset}</span>
-            <span className="sm:hidden">P2</span>
+            <span className="hidden sm:inline">PRESET {activePreset + 1}</span>
+            <span className="sm:hidden">P{activePreset + 1}</span>
           </button>
 
           {/* Wallet Display */}
@@ -281,6 +285,12 @@ export default function Footer() {
           </div>
         </div>
       </div>
+      
+      {/* Preset Settings Modal */}
+      <QuickBuySettingsModal 
+        open={showPresetModal} 
+        onClose={() => setShowPresetModal(false)} 
+      />
     </footer>
   );
 }

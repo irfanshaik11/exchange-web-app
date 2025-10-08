@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 export interface TradePageParams {
   mode: "buy" | "sell";
   tab: "market" | "limit" | "adv";
-  timeRange: "1m" | "5m" | "1h" | "6h" | "24h";
+  timeRange: "5m" | "1h" | "6h" | "24h";
   amount: string;
   targetMC: string;
   sliderPct: number;
@@ -35,7 +35,7 @@ export const useTradePageQueryParams = () => {
       const newParams: TradePageParams = {
         mode: (query.mode as "buy" | "sell") || defaultTradePageParams.mode,
         tab: (query.tab as "market" | "limit" | "adv") || defaultTradePageParams.tab,
-        timeRange: (query.timeRange as "1m" | "5m" | "1h" | "6h" | "24h") || defaultTradePageParams.timeRange,
+        timeRange: (query.timeRange as "5m" | "1h" | "6h" | "24h") || defaultTradePageParams.timeRange,
         amount: (query.amount as string) || defaultTradePageParams.amount,
         targetMC: (query.targetMC as string) || defaultTradePageParams.targetMC,
         sliderPct: parseFloat(query.sliderPct as string) || defaultTradePageParams.sliderPct,
@@ -114,7 +114,7 @@ export const parseQueryParams = (query: any): Partial<TradePageParams> => {
     parsed.tab = query.tab as "market" | "limit" | "adv";
   }
   if (query.timeRange && typeof query.timeRange === 'string') {
-    parsed.timeRange = query.timeRange as "1m" | "5m" | "1h" | "6h" | "24h";
+    parsed.timeRange = query.timeRange as "5m" | "1h" | "6h" | "24h";
   }
   if (query.amount && typeof query.amount === 'string') {
     parsed.amount = query.amount;
