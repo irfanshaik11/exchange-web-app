@@ -969,6 +969,8 @@ const PulseTable = React.memo(function PulseTable({
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
   // const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Added by hujoe - can use in the future
+  const isNewPairs = title.toLowerCase().includes('new');
+  
   const [filters, setFilters] = useState({
     // Protocols
     protocols: [] as string[],
@@ -1032,8 +1034,8 @@ const PulseTable = React.memo(function PulseTable({
     hasTelegram: false,
     atLeastOneSocial: false,
     onlyPumpLive: false,
-    // Sort
-    sortBy: 'marketCap',
+    // Sort - default to timestamp for New Pairs, marketCap for others
+    sortBy: isNewPairs ? 'timestamp' : 'marketCap',
     sortOrder: 'desc'
   });
 
@@ -1105,7 +1107,7 @@ const PulseTable = React.memo(function PulseTable({
       hasTelegram: false,
       atLeastOneSocial: false,
       onlyPumpLive: false,
-      sortBy: 'marketCap',
+      sortBy: isNewPairs ? 'timestamp' : 'marketCap',
       sortOrder: 'desc'
     };
     setPendingFilters(defaultFilters);
@@ -1532,6 +1534,11 @@ const PulseTable = React.memo(function PulseTable({
     filtered.sort((a, b) => {
       let aValue, bValue;
       
+      // Debug log for sort method
+      if (typeof window !== 'undefined' && filtered.length > 0) {
+        console.log(`[PulseTable] Sorting by: ${filters.sortBy} (${filters.sortOrder}) for ${title}`);
+      }
+      
       switch (filters.sortBy) {
         case 'marketCap':
           aValue = (a as any).fully_diluted_value ?? (a as any).market_cap_usd ?? 0;
@@ -1544,6 +1551,39 @@ const PulseTable = React.memo(function PulseTable({
         case 'symbol':
           aValue = a.symbol?.toLowerCase() ?? '';
           bValue = b.symbol?.toLowerCase() ?? '';
+          break;
+        case 'timestamp':
+        case 'time':
+          // Sort by timestamp (newest first for desc, oldest first for asc)
+          const getTimestamp = (token: any): number => {
+            const ts = token?.launch_time ?? token?.launchTime ?? 
+                      token?.created_at ?? token?.createdAt ?? 
+                      token?.firstSeen ?? token?.first_seen ?? 
+                      token?.pair_created_at ?? token?.pairCreatedAt ?? 
+                      token?.timestamp ?? token?.ts ?? null;
+            
+            if (!ts) return 0;
+            if (typeof ts === 'number') return ts > 1e12 ? ts : ts > 1e9 ? ts * 1000 : 0;
+            if (typeof ts === 'string') {
+              const n = Number(ts);
+              if (!Number.isNaN(n) && n > 0) return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
+              const d = Date.parse(ts);
+              return Number.isNaN(d) ? 0 : d;
+            }
+            return 0;
+          };
+          aValue = getTimestamp(a);
+          bValue = getTimestamp(b);
+          
+          // Debug logging for timestamp sorting
+          if (typeof window !== 'undefined' && Math.abs(aValue - bValue) < 60000) { // Log when within 1 minute
+            console.log(`[PulseTable] Timestamp sorting:`, {
+              tokenA: { name: a.name, symbol: a.symbol, ts: aValue, created_at: a.created_at || (a as any).launch_time },
+              tokenB: { name: b.name, symbol: b.symbol, ts: bValue, created_at: b.created_at || (b as any).launch_time },
+              diff: bValue - aValue,
+              result: bValue > aValue ? 'B first (newer)' : 'A first (newer)'
+            });
+          }
           break;
         default:
           aValue = (a as any).fully_diluted_value ?? (a as any).market_cap_usd ?? 0;
@@ -1922,7 +1962,7 @@ const PulseTable = React.memo(function PulseTable({
                       hasTelegram: false,
                       atLeastOneSocial: false,
                       onlyPumpLive: false,
-                      sortBy: 'marketCap',
+                      sortBy: isNewPairs ? 'timestamp' : 'marketCap',
                       sortOrder: 'desc'
                     });
                   }}

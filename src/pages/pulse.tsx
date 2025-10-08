@@ -74,10 +74,11 @@ export default function PulsePage() {
   const [httpNew, setHttpNew] = useState<any[]>([]);
   const [httpNewTick, setHttpNewTick] = useState(0);
 
-  // DISABLED: WebSocket hook to prevent redundant API calls
-  // const { data: newPairsTokens, loading: wsLoading } = usePaginatedTokensWebSocket({ filter: 'new', limit: 20 });
-  const newPairsTokens: any[] = []; // Empty array since we're not using WebSocket
-  const wsLoading = false;
+  // ENABLED: WebSocket hook for real-time token updates
+  const { data: newPairsTokens, loading: wsLoading } = usePaginatedTokensWebSocket({ filter: 'new', limit: 30 });
+  // Fallback to empty array if WebSocket fails
+  // const newPairsTokens: any[] = [];
+  // const wsLoading = false;
 
   // Fast polling fallback for New Pairs (cache-bypass)
   useEffect(() => {
@@ -107,8 +108,36 @@ export default function PulsePage() {
       } catch {}
     };
     poll();
-    const id = setInterval(poll, 10000); // Reduced frequency to prevent refresh issues
+    const id = setInterval(poll, 500); // Faster polling for real-time updates (2 seconds)
     return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  // Immediate poll on mount for faster initial load
+  useEffect(() => {
+    const immediatePoll = async () => {
+      try {
+        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
+          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+          : env.NEXT_PUBLIC_GO_SERVICE_URL;
+        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
+          ? `${baseUrl}/v1/pulse/new?limit=30&t=${Date.now()}`
+          : `/api/token-service/pulse-new?limit=30&t=${Date.now()}`;
+
+        const res = await fetch(apiUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setHttpNew(data as any[]);
+            setHttpNewTick((t) => t + 1);
+            console.log(`[Pulse] Immediate poll got ${data.length} tokens`);
+          }
+        }
+      } catch (error) {
+        console.log('Immediate poll failed:', error);
+      }
+    };
+    
+    immediatePoll();
   }, []);
 
   // Convert launchpad tokens to Token format for PulseTable
@@ -311,7 +340,25 @@ export default function PulsePage() {
       const ts = getTs(t);
       if (ts > 0) withTs.push(t); else withoutTs.push(t);
     }
-    withTs.sort((a, b) => getTs(b) - getTs(a));
+    // Sort by timestamp in descending order (newest first)
+    // Higher timestamp = more recent = should appear first
+    withTs.sort((a, b) => {
+      const tsA = getTs(a);
+      const tsB = getTs(b);
+      const diff = tsB - tsA; // Newest first (descending order)
+      
+      // Debug logging for sorting when timestamps are close
+      if (typeof window !== 'undefined' && Math.abs(diff) < 60000) { // Log when within 1 minute
+        console.log(`[Pulse] Sorting comparison:`, {
+          tokenA: { name: a.name, symbol: a.symbol, ts: tsA, created_at: a.created_at || a.launch_time },
+          tokenB: { name: b.name, symbol: b.symbol, ts: tsB, created_at: b.created_at || b.launch_time },
+          diff: diff,
+          result: diff > 0 ? 'B first (newer)' : 'A first (newer)'
+        });
+      }
+      
+      return diff;
+    });
     // For those without a timestamp, try a secondary order by FDV desc then name
     withoutTs.sort((a, b) => {
       const fdvA = Number((a as any).fully_diluted_value) || 0;
@@ -382,8 +429,10 @@ export default function PulsePage() {
         created_at: t.created_at || t.createdAt || t.launch_time || t.launchTime,
         firstSeen: t.firstSeen,
         updated_at: t.updated_at || t.updatedAt,
+        name: t.name,
+        symbol: t.symbol,
       }));
-      // console.log('[Pulse] NewPairs top10', sample);
+      console.log('[Pulse] NewPairs top10 with timestamps:', sample);
     } catch {}
   }
   const newPairsFallback = newPairsData;
@@ -410,8 +459,8 @@ export default function PulsePage() {
 
   const { marketData, connected: wsConnected, error: wsError } = useRealtimeWebSocket(realtimeAddrs, {
     url: `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/market-data`,
-    reconnectInterval: 2000,
-    maxReconnectAttempts: 10
+    reconnectInterval: 1000, // Faster reconnection for better real-time updates
+    maxReconnectAttempts: 20 // More attempts for better reliability
   });
 
   // Additional polling for more frequent updates
@@ -444,8 +493,8 @@ export default function PulsePage() {
       }
     };
 
-    // Poll every 10 seconds for additional updates (reduced frequency)
-    const interval = setInterval(pollMarketData, 10000);
+    // Poll every 3 seconds for additional updates (faster frequency for real-time)
+    const interval = setInterval(pollMarketData, 3000);
     return () => clearInterval(interval);
   }, [realtimeAddrs]);
 
@@ -501,6 +550,7 @@ export default function PulsePage() {
       const ts = getTs(t);
       if (ts > 0) withTs.push(t); else withoutTs.push(t);
     }
+    // Sort by timestamp in descending order (newest first)
     withTs.sort((a, b) => getTs(b) - getTs(a));
     withoutTs.sort((a, b) => {
       const fdvA = Number((a as any).fully_diluted_value) || 0;
@@ -528,6 +578,7 @@ export default function PulsePage() {
       const ts = getTs(t);
       if (ts > 0) withTs.push(t); else withoutTs.push(t);
     }
+    // Sort by timestamp in descending order (newest first)
     withTs.sort((a, b) => getTs(b) - getTs(a));
     withoutTs.sort((a, b) => {
       const fdvA = Number((a as any).fully_diluted_value) || 0;
