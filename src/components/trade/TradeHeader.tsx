@@ -212,11 +212,83 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const liq = marketData?.volume_usd || token.total_liquidity_usd || (token as any).liquidity_usd || 0;
   const supply = token.total_supply ?? (token as any).supply ?? 0;
   const feesPaid = (token as any).global_fees_paid ?? (token as any).globalFeesPaid ?? "—";
-  const curvePct = 
-    (token as any).bonding_pct ??
-    (token as any).bonding_curve_progress ??
-    (token as any).bcurve ??
-    0;
+  // Calculate bonding curve percentage
+  const calculateBondingCurveProgress = (token: any) => {
+    // Debug logging - log all available token fields
+    console.log('[TradeHeader] Full token object:', token);
+    console.log('[TradeHeader] Market data:', marketData);
+    
+    // Check all possible bonding curve fields
+    const allBondingFields = {
+      bonding_pct: (token as any).bonding_pct,
+      bonding_curve_progress: (token as any).bonding_curve_progress,
+      bcurve: (token as any).bcurve,
+      graduation_percent: (token as any).graduation_percent,
+      graduationPercent: (token as any).graduationPercent,
+      bonding_curve: (token as any).bonding_curve,
+      bondingCurve: (token as any).bondingCurve,
+      progress: (token as any).progress,
+      curve: (token as any).curve,
+    };
+    
+    console.log('[TradeHeader] All bonding curve fields:', allBondingFields);
+    
+    // Try each field and find the first valid one
+    for (const [fieldName, value] of Object.entries(allBondingFields)) {
+      if (value !== null && value !== undefined && value !== '') {
+        let numericValue = value;
+        
+        // Handle string values
+        if (typeof value === 'string') {
+          const cleaned = value.replace('%', '').replace(',', '');
+          numericValue = parseFloat(cleaned);
+        }
+        
+        if (Number.isFinite(numericValue) && numericValue >= 0) {
+          console.log(`[TradeHeader] Using field ${fieldName} with value:`, numericValue);
+          return numericValue;
+        }
+      }
+    }
+
+    // If no bonding curve data, try to calculate from market cap
+    const currentMarketCap = marketData?.market_cap_usd || token.market_cap_usd || token.fully_diluted_value || token.total_fully_diluted_valuation || 0;
+    
+    console.log('[TradeHeader] Market cap values:', {
+      fromMarketData: marketData?.market_cap_usd,
+      tokenMarketCap: token.market_cap_usd,
+      fullyDilutedValue: token.fully_diluted_value,
+      totalFullyDilutedValuation: token.total_fully_diluted_valuation,
+      finalMarketCap: currentMarketCap
+    });
+    
+    // Try to calculate market cap from price and supply
+    let calculatedMarketCap = currentMarketCap;
+    if (!calculatedMarketCap && token.usd_price && token.total_supply) {
+      calculatedMarketCap = token.usd_price * token.total_supply;
+      console.log('[TradeHeader] Calculated market cap from price and supply:', calculatedMarketCap);
+    }
+    
+    const finalMarketCap = calculatedMarketCap || currentMarketCap;
+    const graduationTargetUSD = 69000000; // $69M
+    
+    if (finalMarketCap > 0) {
+      const progress = Math.min((finalMarketCap / graduationTargetUSD) * 100, 100);
+      console.log('[TradeHeader] Calculated progress:', progress);
+      return Math.round(progress * 100) / 100;
+    }
+    
+    // Last resort: show a small percentage if we have any price
+    if (token.usd_price > 0) {
+      console.log('[TradeHeader] Using fallback estimate from price');
+      return Math.min(token.usd_price * 10000, 10); // Cap at 10%
+    }
+    
+    console.log('[TradeHeader] No data available, returning 0');
+    return 0;
+  };
+
+  const curvePct = calculateBondingCurveProgress(token);
 
   const imgSrc =
     normalizeAssetUrl(meta?.image) ||
@@ -577,11 +649,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
           <StatInline label="Supply">
             {formatSmartNumber(supply)}
           </StatInline>
-          <StatInline label="Global Fees Paid">
+          {/* <StatInline label="Global Fees Paid">
             {feesPaid === "—" ? "—" : feesPaid}
-          </StatInline>
+          </StatInline> */}
           <StatInline label="B.Curve" accent="green">
-            {Number.isFinite(Number(curvePct)) ? `${Math.round(Number(curvePct))}%` : "—"}
+            {Number.isFinite(Number(curvePct)) ? `${Number(curvePct).toFixed(1)}%` : "—"}
           </StatInline>
         </div>
       </div>

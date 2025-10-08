@@ -1,7 +1,6 @@
 import React from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useCodexDevTokens from '../../hooks/useCodexDevTokens';
-import useTokenCreator from '../../hooks/useTokenCreator';
 import type { Token } from '~/utils/db';
 
 interface CodexDevTokensProps {
@@ -60,27 +59,23 @@ function formatVolume(volume: string) {
 }
 
 const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
-  // Get the real creator address for this token
-  const { creatorAddress, isLoading: creatorLoading, error: creatorError } = useTokenCreator(token.mint);
-  const { tokens, isLoading, error } = useCodexDevTokens(creatorAddress || undefined);
+  const { tokens, isLoading, error } = useCodexDevTokens(token.mint, {
+    limit: 10
+  });
 
   return (
-    <div className="w-full">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Dev Tokens</h3>
-        <div className="flex items-center space-x-2">
-          <span className="text-sm text-neutral-400">({tokens.length})</span>
-        </div>
-      </div>
+    <div className="w-full h-full flex flex-col">
+
       
-      {(error || creatorError) && (
-        <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-          <p className="text-red-400 text-sm">{error || creatorError}</p>
+      {error && (
+        <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg flex-shrink-0">
+          <p className="text-red-400 text-sm">{error}</p>
         </div>
       )}
 
-      <table className="w-full text-xs">
-        <thead>
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-xs">
+        <thead className="sticky top-0 bg-gray-900 z-10">
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Token ↓</th>
             <th className="px-2 py-2 text-left">Migrated</th>
@@ -90,22 +85,16 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
           </tr>
         </thead>
         <tbody>
-          {creatorLoading || isLoading ? (
+          {isLoading ? (
             <tr>
               <td colSpan={5} className="text-center py-6 text-neutral-500">
-                {creatorLoading ? 'Loading creator address...' : 'Loading dev tokens...'}
-              </td>
-            </tr>
-          ) : !creatorAddress ? (
-            <tr>
-              <td colSpan={5} className="text-center py-6 text-neutral-500">
-                Creator address not found for this token.
+                Loading dev tokens...
               </td>
             </tr>
           ) : !tokens || tokens.length === 0 ? (
             <tr>
               <td colSpan={5} className="text-center py-6 text-neutral-500">
-                No dev tokens found for this creator.
+                No dev tokens found.
               </td>
             </tr>
           ) : (
@@ -157,7 +146,8 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
             })
           )}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 };

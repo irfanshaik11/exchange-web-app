@@ -270,22 +270,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       className="flex h-full flex-col text-[12px] leading-tight"
       style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial' }}
     >
-      {/* WebSocket Connection Status */}
-      {wsError && (
-        <div className="px-3 py-1 bg-red-900/20 border-b border-red-500/30">
-          <div className="text-[10px] text-red-400">
-            WebSocket Error: {wsError}
-          </div>
-        </div>
-      )}
-      
-      {!wsConnected && !wsLoading && wsData === null && (
-        <div className="px-3 py-1 bg-yellow-900/20 border-b border-yellow-500/30">
-          <div className="text-[10px] text-yellow-400">
-            Using static data (WebSocket disconnected)
-          </div>
-        </div>
-      )}
       {/* ===== A. Time buttons ===== */}
       <div className="px-3 pt-2 pb-2 border-b border-[#2A2B33]">
         <div className="mx-auto w-full max-w-xl overflow-hidden">

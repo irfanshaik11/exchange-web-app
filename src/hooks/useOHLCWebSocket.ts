@@ -49,26 +49,107 @@ export default function useOHLCWebSocket({
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
 
+  // Function to fetch historical OHLC data
+  const fetchHistoricalData = useCallback(async () => {
+    if (!pairAddress) return;
+    
+    try {
+      // Fetching historical data silently
+      
+      // Try to get historical OHLC data from trade view endpoint
+      // This endpoint should have OHLC data in the response
+      const response = await fetch(`http://34.47.209.237:8080/v1/trade/view?pair_address=${pairAddress}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Processing trade view response silently
+        
+        // Check if the response contains OHLC data
+        if (data && data.ohlcData && Array.isArray(data.ohlcData) && data.ohlcData.length > 0) {
+          // Found historical OHLC data
+          
+          // Convert to our format
+          const historicalData = data.ohlcData.map((item: any) => ({
+            timestamp: item.timestamp,
+            open: item.open,
+            high: item.high,
+            low: item.low,
+            close: item.close,
+            volume: item.volume,
+            txCount: item.txCount,
+          }));
+          
+          setState(prev => ({
+            ...prev,
+            data: historicalData,
+            loading: false,
+            lastUpdate: new Date().toISOString(),
+          }));
+          
+          return;
+        }
+      }
+      
+      // No historical data found
+      
+      // If no historical data, just set loading to false
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        lastUpdate: new Date().toISOString(),
+      }));
+      
+    } catch (error) {
+      // Error fetching historical data (silent)
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: 'Failed to fetch historical data',
+      }));
+    }
+  }, [pairAddress]);
+
   const processMessage = useCallback((message: OHLCWebSocketMessage) => {
     try {
-      console.log('OHLC websocket message received:', message);
+      // Processing WebSocket message silently
       
       if (message.type === 'ohlc_update' && message.data) {
         const ohlcData = message.data;
+        // Valid OHLC data received
         
         setState(prev => {
-          // Add new data to the beginning and keep only last 200 candles
-          const updatedData = [ohlcData, ...prev.data].slice(0, 200);
+          // Processing OHLC data
+          
+          // Find if this timestamp already exists
+          const existingIndex = prev.data.findIndex(item => item.timestamp === ohlcData.timestamp);
+          
+          let updatedData;
+          if (existingIndex !== -1) {
+            // Update existing OHLC bar
+            console.log('OHLC WebSocket: Updating existing OHLC bar at index:', existingIndex);
+            updatedData = [...prev.data];
+            updatedData[existingIndex] = ohlcData;
+          } else {
+            // Add new OHLC bar and sort by timestamp
+            console.log('OHLC WebSocket: Adding new OHLC bar');
+            updatedData = [...prev.data, ohlcData];
+            updatedData.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+          }
+          
+          // Keep only last 200 candles
+          const finalData = updatedData.slice(-200);
+          
+          console.log('OHLC WebSocket: Final data count:', finalData.length);
           
           return {
             ...prev,
-            data: updatedData,
+            data: finalData,
             lastUpdate: new Date().toISOString(),
             loading: false,
           };
         });
-        
-        console.log('OHLC data updated:', ohlcData);
+      } else {
+        console.log('OHLC WebSocket: Invalid message format:', message);
       }
     } catch (error) {
       console.error('Error processing OHLC message:', error);
@@ -77,11 +158,13 @@ export default function useOHLCWebSocket({
 
   const connectWebSocket = useCallback(() => {
     if (!pairAddress || !enabled) {
+      console.log('OHLC WebSocket: Not connecting - pairAddress:', pairAddress, 'enabled:', enabled);
       return;
     }
 
     try {
       const wsUrl = `ws://34.47.209.237:8080/v1/trade/ohlc?pair_address=${pairAddress}&timeframe=${timeframe}`;
+      console.log('OHLC WebSocket: Attempting to connect to:', wsUrl);
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -94,11 +177,24 @@ export default function useOHLCWebSocket({
         }));
         reconnectAttemptRef.current = 0;
         console.log('OHLC websocket connected to:', wsUrl);
+        
+        // If no data comes within 5 seconds, fetch historical data
+        setTimeout(() => {
+          setState(prev => {
+            if (prev.data.length === 0) {
+              console.log('OHLC WebSocket: No real-time data received, fetching historical data');
+              fetchHistoricalData();
+            }
+            return prev;
+          });
+        }, 5000);
       };
 
       ws.onmessage = (event) => {
         try {
+          console.log('OHLC WebSocket: Raw message received:', event.data);
           const message: OHLCWebSocketMessage = JSON.parse(event.data);
+          console.log('OHLC WebSocket: Parsed message:', message);
           processMessage(message);
         } catch (error) {
           console.error('Error parsing OHLC message:', error);
@@ -158,6 +254,10 @@ export default function useOHLCWebSocket({
   }, [connectWebSocket]);
 
   useEffect(() => {
+    // Fetch historical data first to show past price movements
+    fetchHistoricalData();
+    
+    // Then connect to WebSocket for real-time updates
     connectWebSocket();
 
     return () => {
@@ -169,7 +269,7 @@ export default function useOHLCWebSocket({
         wsRef.current.close();
       }
     };
-  }, [connectWebSocket]);
+  }, [connectWebSocket, fetchHistoricalData]);
 
   return {
     ...state,

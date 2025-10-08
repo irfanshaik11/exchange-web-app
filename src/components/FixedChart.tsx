@@ -31,6 +31,8 @@ const FixedChart: React.FC<FixedChartProps> = ({
     enabled: !!pairAddress,
   });
 
+  // Removed debug logging for cleaner experience
+
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
@@ -69,6 +71,12 @@ const FixedChart: React.FC<FixedChartProps> = ({
             borderColor: '#2B2B43',
             timeVisible: true,
             secondsVisible: false,
+            barSpacing: 6, // Reduce bar spacing for more data
+            minBarSpacing: 2, // Allow bars to be closer together
+            fixLeftEdge: false,
+            fixRightEdge: false,
+            lockVisibleTimeRangeOnResize: true,
+            rightOffset: 10, // Add some padding on the right
           },
           handleScroll: {
             mouseWheel: true,
@@ -78,6 +86,12 @@ const FixedChart: React.FC<FixedChartProps> = ({
             axisPressedMouseMove: true,
             mouseWheel: true,
             pinch: true,
+          },
+          // Make chart less zoomed in by default
+          localization: {
+            timeFormatter: (time: any) => {
+              return new Date(time * 1000).toLocaleTimeString();
+            },
           },
         });
 
@@ -89,6 +103,12 @@ const FixedChart: React.FC<FixedChartProps> = ({
           borderUpColor: '#26a69a',
           wickDownColor: '#ef5350',
           wickUpColor: '#26a69a',
+          // Make candlesticks thinner
+          priceFormat: {
+            type: 'price',
+            precision: 6,
+            minMove: 0.000001,
+          },
         });
 
         chartRef.current = chart;
@@ -177,45 +197,45 @@ const FixedChart: React.FC<FixedChartProps> = ({
 
     console.log('FixedChart: Processing OHLC data', { count: ohlcData.length });
 
-    // Convert OHLC data to chart format
-    const chartData = ohlcData.map(item => ({
-      time: (new Date(item.timestamp).getTime() / 1000) as UTCTimestamp,
-      open: item.open,
-      high: item.high,
-      low: item.low,
-      close: item.close,
-    }));
+    // Convert OHLC data to chart format and deduplicate by timestamp
+    const dataMap = new Map<number, any>();
+    
+    ohlcData.forEach(item => {
+      const time = Math.floor(new Date(item.timestamp).getTime() / 1000);
+      dataMap.set(time, {
+        time: time as UTCTimestamp,
+        open: item.open,
+        high: item.high,
+        low: item.low,
+        close: item.close,
+      });
+    });
 
-    console.log('FixedChart: Setting real OHLC data to series', { count: chartData.length });
+    // Convert to array and sort by time
+    const chartData = Array.from(dataMap.values()).sort((a, b) => a.time - b.time);
+
+    console.log('FixedChart: Setting real OHLC data to series', { 
+      originalCount: ohlcData.length, 
+      deduplicatedCount: chartData.length,
+      times: chartData.map(d => new Date(d.time * 1000).toISOString())
+    });
+    
     seriesRef.current.setData(chartData);
     
-    // Fit content to show all data
-    if (chartRef.current) {
-      chartRef.current.timeScale().fitContent();
+    // Set a default visible range instead of fitting all content
+    if (chartRef.current && chartData.length > 0) {
+      const now = Date.now() / 1000;
+      const oneHourAgo = now - (60 * 60); // Show last hour by default
+      chartRef.current.timeScale().setVisibleRange({
+        from: oneHourAgo as UTCTimestamp,
+        to: now as UTCTimestamp,
+      });
     }
   }, [ohlcData, pairAddress]);
 
   return (
     <div className={`relative ${className}`} style={{ height, width }}>
-      {/* Connection Status Indicator */}
-      {pairAddress && (
-        <div className="absolute top-2 right-2 z-10 flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full ${
-            isConnected ? 'bg-green-400' : 'bg-red-400'
-          }`}></div>
-          <span className="text-xs text-gray-400">
-            {isConnected ? 'Live' : 'Disconnected'}
-          </span>
-          {error && (
-            <button
-              onClick={reconnect}
-              className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              Retry
-            </button>
-          )}
-        </div>
-      )}
+      {/* Connection Status Indicator - Hidden for seamless experience */}
       
       <div 
         ref={chartContainerRef} 
@@ -244,6 +264,27 @@ const FixedChart: React.FC<FixedChartProps> = ({
             >
               Retry Connection
             </button>
+          </div>
+        </div>
+      )}
+      
+      {/* No Data Overlay */}
+      {pairAddress && !loading && !error && ohlcData.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-50">
+          <div className="text-white text-center">
+            <p className="text-gray-400 mb-2">No Trading Activity</p>
+            <p className="text-sm mb-4">This pair has no recent OHLC data</p>
+            <p className="text-xs text-gray-500">
+              WebSocket: {isConnected ? 'Connected ✓' : 'Disconnected ✗'}
+            </p>
+            {!isConnected && (
+              <button
+                onClick={reconnect}
+                className="mt-2 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                Retry Connection
+              </button>
+            )}
           </div>
         </div>
       )}

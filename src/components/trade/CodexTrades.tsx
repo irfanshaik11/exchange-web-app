@@ -120,17 +120,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
   const isLoading = wsLoading || codexLoading;
 
   return (
-    <div className="w-full">
+    <div className="w-full h-full flex flex-col">
       
-      {error && (
-        <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
-      )}
+      {/* Removed WebSocket error messages for seamless experience */}
 
-
-      <table className="w-full text-xs">
-        <thead>
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-xs">
+        <thead className="sticky top-0 bg-gray-900 z-10">
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Age ↓</th>
             <th className="px-2 py-2 text-left">Type</th>
@@ -214,7 +210,8 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
             })
           )}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 };

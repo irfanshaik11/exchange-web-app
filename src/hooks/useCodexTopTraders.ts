@@ -17,14 +17,20 @@ interface CodexTopTrader {
 }
 
 interface CodexTopTradersResponse {
-  data: {
-    tokenTopTraders: {
-      items: CodexTopTrader[];
-    };
+  tokenTopTraders: {
+    items: CodexTopTrader[] | null;
   };
 }
 
-export default function useCodexTopTraders(tokenAddress: string | undefined) {
+interface UseCodexTopTradersOptions {
+  limit?: number;
+  tradingPeriod?: string;
+}
+
+export default function useCodexTopTraders(
+  tokenAddress: string | undefined,
+  options: UseCodexTopTradersOptions = {}
+) {
   const [traders, setTraders] = useState<CodexTopTrader[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,45 +45,23 @@ export default function useCodexTopTraders(tokenAddress: string | undefined) {
     const fetchTopTraders = async () => {
       try {
         setIsLoading(true);
-        const apiKey = process.env.NEXT_PUBLIC_CODEX_API_KEY;
+        setError(null);
         
-        const response = await fetch('https://graph.codex.io/graphql', {
-          method: 'POST',
+        // Set default values for parameters
+        const limit = options.limit || 20;
+        const tradingPeriod = options.tradingPeriod || 'WEEK';
+        
+        // Build the URL with query parameters
+        const url = new URL('http://34.47.209.237:8080/v1/tokens/top-traders');
+        url.searchParams.set('tokenAddress', tokenAddress);
+        url.searchParams.set('limit', limit.toString());
+        url.searchParams.set('tradingPeriod', tradingPeriod);
+        
+        const response = await fetch(url.toString(), {
+          method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': apiKey || '',
           },
-          body: JSON.stringify({
-            query: `
-              query {
-                tokenTopTraders(
-                  input: {
-                    tokenAddress: "${tokenAddress}"
-                    networkId: 1399811149
-                    tradingPeriod: WEEK
-                    limit: 20
-                    offset: 0
-                  }
-                ) {
-                  items {
-                    walletAddress
-                    tokenAmountBought
-                    tokenAmountSold
-                    amountBoughtUsd
-                    amountSoldUsd
-                    volumeUsd
-                    realizedProfitUsd
-                    realizedProfitPercentage
-                    buys
-                    sells
-                    tokenBalance
-                    firstTransactionAt
-                    lastTransactionAt
-                  }
-                }
-              }
-            `
-          })
         });
 
         if (!response.ok) {
@@ -86,9 +70,12 @@ export default function useCodexTopTraders(tokenAddress: string | undefined) {
 
         const result: CodexTopTradersResponse = await response.json();
         
-        if (result.data?.tokenTopTraders?.items) {
-          setTraders(result.data.tokenTopTraders.items);
-          console.log(`Fetched ${result.data.tokenTopTraders.items.length} top traders`);
+        if (result.tokenTopTraders?.items) {
+          setTraders(result.tokenTopTraders.items);
+          console.log(`Fetched ${result.tokenTopTraders.items.length} top traders`);
+        } else {
+          setTraders([]);
+          console.log('No top traders found');
         }
       } catch (err) {
         console.error('Failed to fetch top traders:', err);
@@ -99,7 +86,7 @@ export default function useCodexTopTraders(tokenAddress: string | undefined) {
     };
 
     fetchTopTraders();
-  }, [tokenAddress]);
+  }, [tokenAddress, options.limit, options.tradingPeriod]);
 
   return { traders, isLoading, error };
 }

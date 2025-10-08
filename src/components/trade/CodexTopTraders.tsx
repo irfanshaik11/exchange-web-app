@@ -59,19 +59,13 @@ function formatPrice(amountUsd: string, tokenAmount: string) {
 }
 
 const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
-  const { traders, isLoading, error } = useCodexTopTraders(token.mint);
+  const { traders, isLoading, error } = useCodexTopTraders(token.mint, {
+    limit: 20,
+    tradingPeriod: 'WEEK'
+  });
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Top Traders</h3>
-        <div className="flex items-center space-x-2">
-          <label className="flex items-center space-x-2 text-sm text-neutral-400">
-            <input type="checkbox" className="rounded" />
-            <span>Only Tracked</span>
-          </label>
-        </div>
-      </div>
       
       {error && (
         <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
@@ -79,7 +73,8 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
         </div>
       )}
 
-      <table className="w-full text-xs">
+      <div className="overflow-y-auto max-h-96">
+        <table className="w-full text-xs">
         <thead>
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Wallet</th>
@@ -171,6 +166,7 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 };

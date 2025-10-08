@@ -37,6 +37,13 @@ const AX = {
 export default function TradePage() {
   const router = useRouter();
   const { id } = router.query;
+  
+  // Debug logging
+  console.log('TradePage Debug:', {
+    id,
+    idType: typeof id,
+    isString: typeof id === "string"
+  });
 
   const [showSkeleton, setShowSkeleton] = useState(true);
   const { isConnected } = useWallet();
@@ -318,6 +325,18 @@ export default function TradePage() {
           width: 100% !important;
           height: 100% !important;
           background: rgba(0, 0, 0, 1) !important;
+        }
+        
+        /* Make chart bars thinner and more spaced */
+        .ohlc-chart-container {
+          width: 100% !important;
+          height: 100% !important;
+        }
+        
+        /* Ensure proper chart spacing */
+        .tv-lightweight-charts {
+          width: 100% !important;
+          height: 100% !important;
         }
       `}</style>
     </>
