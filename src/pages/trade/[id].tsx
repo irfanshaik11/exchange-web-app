@@ -8,7 +8,7 @@ import Header from "../../components/Header";
 import Footer from "../../components/Footer";
 import TradeHeader from "../../components/trade/TradeHeader";
 import CustomSolanaChart from "../../components/CustomSolanaChart";
-import FixedChart from "../../components/FixedChart";
+
 import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
 import CodexTrades from "../../components/trade/CodexTrades";
@@ -18,7 +18,8 @@ import CodexHolders from "../../components/trade/CodexHolders";
 import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
 import { useQuickBuyQueryParams } from "../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../utils/queryParams";
-
+import dynamic from 'next/dynamic';
+const BirdeyeChart = dynamic(() => import('../../components/BirdeyeChart'), { ssr: false });
 /* ---------- AXIOM palette ---------- */
 const AX = {
   bg: "#101114",
@@ -70,8 +71,19 @@ export default function TradePage() {
     isReady: tradeParamsReady 
   } = useTradePageQueryParams();
 
-  const { token, isPolling, loading: pollingLoading, isHydrating } =
+  const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
     useSingleTokenPolling(typeof id === "string" ? id : undefined);
+
+  // Debug: Log the pair addresses
+  useEffect(() => {
+    if (resolvedPairAddress || token?.pair_address) {
+      console.log('[Trade Page] Pair addresses:', {
+        resolvedPairAddress,
+        tokenPairAddress: token?.pair_address,
+        match: resolvedPairAddress === token?.pair_address
+      });
+    }
+  }, [resolvedPairAddress, token?.pair_address]);
 
   // ---------------- drag-to-resize for left column ----------------
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -222,12 +234,18 @@ export default function TradePage() {
 
               {/* Chart in top left corner */}
               <div className="flex-1 min-h-[240px]">
-                {/* Using FixedChart with OHLC WebSocket data */}
-                <FixedChart
-                  height="100%"
-                  width="100%"
-                  pairAddress={typeof id === "string" ? id : undefined}
-                />
+              {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 ? (
+                <BirdeyeChart
+                pairAddress={resolvedPairAddress}
+                timeframe="1m"
+                mode="count"
+                timeFrom={1726700000}
+              />
+              ) : (
+                <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
+                  {isHydrating ? 'Resolving pair address...' : 'No pair address available'}
+                </div>
+              )}
                 {/* Original chart (commented out for now)
                 <CustomSolanaChart
                   token={token}

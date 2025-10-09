@@ -218,6 +218,7 @@ export default function useSingleTokenPolling(address: string | undefined) {
     loading: state.loading,
     error: state.error,
     isHydrating,
+    resolvedPairAddress,
     // Expose manual refresh function
     refresh: loadData,
   };
