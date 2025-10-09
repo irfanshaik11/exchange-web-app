@@ -68,6 +68,7 @@ import { LuPill, LuSearch } from "react-icons/lu";
 import Link from "next/link";
 import { CiSearch } from "react-icons/ci";
 import FastImage from "./FastImage";
+import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 
 interface PulseTableProps {
   title: string;
@@ -4374,7 +4375,24 @@ const PulseTable = React.memo(function PulseTable({
                       <line x1="16" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5"/>
                       <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
                     </svg>
-                    {Math.round(((token.total_sells_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
+                    {(() => {
+                      // Only show sniper data for Ethereum addresses (starting with 0x)
+                      const address = pairAddress || mintAddress;
+                      const isEthereumAddress = address && address.startsWith('0x') && address.length === 42;
+                      
+                      if (isEthereumAddress) {
+                        return (
+                          <SniperHoldingsDisplay 
+                            pairAddress={address}
+                            chainId="eth"
+                            blocksAfterCreation={1000}
+                          />
+                        );
+                      } else {
+                        // For non-Ethereum addresses (like Solana), show dash
+                        return <span className="text-xs">-</span>;
+                      }
+                    })()}
                   </span>
                   
                   {/* Ghost percentage - Green */}
@@ -4387,7 +4405,7 @@ const PulseTable = React.memo(function PulseTable({
                           backgroundColor: 'transparent'
                         }}>
                     <RiGhostLine size={13} />
-                    {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
+                    -
                   </span>
                   
                   {/* Three Dice percentage - Green */}
@@ -4400,7 +4418,7 @@ const PulseTable = React.memo(function PulseTable({
                           backgroundColor: 'transparent'
                         }}>
                     <FaDice size={13} />
-                    {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
+                    -
                   </span>
                 </div>
               </div>

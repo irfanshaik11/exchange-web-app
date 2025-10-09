@@ -294,7 +294,10 @@ export default function TradePage() {
 
             {/* BOTTOM pane */}
             <div className="flex-1 min-h-[120px] flex flex-col">
-              <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
+              <TradeTabs 
+                selectedTab={selectedTab} 
+                setSelectedTab={setSelectedTab}
+              />
               <div className="flex-1 min-h-0">
                 {selectedTab === "Trades" && <CodexTrades token={token} />}
                 {selectedTab === "Top Traders" && <CodexTopTraders token={token} />}
