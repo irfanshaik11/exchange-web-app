@@ -24,10 +24,6 @@ interface SniperWallet {
   currentBalanceUsdValue: string;
   realizedProfitPercentage: string;
   realizedProfitUsd: string;
-  remainingSnipedBalance: string;
-  remainingSnipedBalanceUsdValue: string;
-  unrealizedProfitUsd: string;
-  unrealizedProfitPercentage: string;
   snipedTransactions: SniperTransaction[];
   sellTransactions: SellTransaction[];
 }
@@ -51,7 +47,6 @@ interface SniperHoldingsData {
   totalSnipedUsd: number;
   totalRealizedProfitUsd: number;
   averageProfitPercentage: number;
-  averageHoldingPercentage: number;
   snipers: SniperWallet[];
 }
 
@@ -130,31 +125,11 @@ export const useMoralisSniperHoldings = ({
           }, 0) / snipers.length
         : 0;
 
-      // Calculate average holding percentage
-      // Holding % = (remainingSnipedBalance / totalTokensSniped) * 100
-      const averageHoldingPercentage = snipers.length > 0
-        ? snipers.reduce((sum, sniper) => {
-            const totalSniped = sniper.totalTokensSniped && sniper.totalTokensSniped !== ''
-              ? parseFloat(sniper.totalTokensSniped)
-              : 0;
-            const remaining = sniper.remainingSnipedBalance && sniper.remainingSnipedBalance !== ''
-              ? parseFloat(sniper.remainingSnipedBalance)
-              : 0;
-            
-            const holdingPercentage = totalSniped > 0 
-              ? (remaining / totalSniped) * 100 
-              : 0;
-            
-            return sum + holdingPercentage;
-          }, 0) / snipers.length
-        : 0;
-
       const processedData: SniperHoldingsData = {
         totalSnipers,
         totalSnipedUsd,
         totalRealizedProfitUsd,
         averageProfitPercentage,
-        averageHoldingPercentage,
         snipers,
       };
 

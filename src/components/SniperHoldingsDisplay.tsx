@@ -6,15 +6,13 @@ interface SniperHoldingsDisplayProps {
   chainId?: string;
   blocksAfterCreation?: number;
   showDetails?: boolean;
-  showOnlyHoldingPercentage?: boolean;
 }
 
 const SniperHoldingsDisplay: React.FC<SniperHoldingsDisplayProps> = ({ 
   pairAddress, 
   chainId = 'eth',
   blocksAfterCreation = 1000,
-  showDetails = false,
-  showOnlyHoldingPercentage = false
+  showDetails = false 
 }) => {
   const { data, loading, error } = useMoralisSniperHoldings({
     pairAddress,
@@ -67,15 +65,6 @@ const SniperHoldingsDisplay: React.FC<SniperHoldingsDisplayProps> = ({
     return <span className="text-xs">-</span>;
   }
 
-  // Show only holding percentage for snipe icon in PulseTable
-  if (showOnlyHoldingPercentage) {
-    return (
-      <span className="text-xs font-medium" style={{ color: '#a78bfa' }}>
-        {formatPercentage(data.averageHoldingPercentage)}
-      </span>
-    );
-  }
-
   if (showDetails) {
     return (
       <div className="flex flex-col gap-1 text-xs">
@@ -93,24 +82,15 @@ const SniperHoldingsDisplay: React.FC<SniperHoldingsDisplayProps> = ({
           </span>
           <span>avg profit</span>
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-purple-400">
-            {formatPercentage(data.averageHoldingPercentage)}
-          </span>
-          <span>holding</span>
-        </div>
       </div>
     );
   }
 
-  // Simple display for table rows - now includes holding percentage
+  // Simple display for table rows
   return (
-    <div className="flex flex-col gap-0.5 text-xs">
+    <div className="flex flex-col gap-1 text-xs">
       <span className="text-green-400 font-semibold">{data.totalSnipers}</span>
       <span className="text-blue-400">${formatNumber(data.totalSnipedUsd)}</span>
-      <span className="text-purple-400" title="Average holding %">
-        {formatPercentage(data.averageHoldingPercentage)} held
-      </span>
     </div>
   );
 };

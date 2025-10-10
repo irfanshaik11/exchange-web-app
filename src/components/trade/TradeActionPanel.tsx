@@ -75,6 +75,22 @@ const prettyAmt = (s: string) => {
   return Number(n.toFixed(6)).toString();
 };
 
+const formatCompactNumber = (n: number): string => {
+  if (!Number.isFinite(n)) return "0";
+  const abs = Math.abs(n);
+  
+  if (abs >= 1_000_000_000) {
+    return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + "B";
+  }
+  if (abs >= 1_000_000) {
+    return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  }
+  if (abs >= 1_000) {
+    return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  }
+  return Math.round(n).toString();
+};
+
 interface TradeActionPanelProps {
   token: Token;
   tradeParams?: {
@@ -316,34 +332,33 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* ===== B. Real-time Stats ===== */}
       <div className="px-3 py-1.5 border-b border-[#2A2B33]">
-        <div className="grid grid-cols-4 gap-4 tabular-nums">
+        <div className="grid grid-cols-4 gap-3 tabular-nums">
           <div>
-            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">
+            <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide whitespace-nowrap">
               {timeRange} Vol
-              {wsConnected && <span className="text-[#70E0B0] ml-1">●</span>}
             </div>
-            <div className="text-[#E6E7EA] whitespace-nowrap text-[12px]">${formatSmartNumber(volume || 0)}</div>
+            <div className="text-[#E6E7EA] whitespace-nowrap text-[11px]">${formatCompactNumber(Math.round(volume || 0))}</div>
           </div>
           <div>
             <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Buys</div>
-            <div className="whitespace-nowrap tabular-nums text-[#70E0B0] flex items-baseline gap-1 text-[12px]">
-              <span>{buys ?? 0}</span>
+            <div className="whitespace-nowrap tabular-nums text-[#70E0B0] flex items-baseline gap-0.5 text-[11px]">
+              <span>{formatCompactNumber(Math.round(buys ?? 0))}</span>
               <span className="text-[#9CA3AF]">/</span>
-              <span className="text-[#70E0B0]">${formatSmartNumber(buyVolume || 0)}</span>
+              <span className="text-[#70E0B0]">${formatCompactNumber(Math.round(buyVolume || 0))}</span>
             </div>
           </div>
           <div>
             <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Sells</div>
-            <div className="whitespace-nowrap tabular-nums text-[#FF4D7F] flex items-baseline gap-1 text-[12px]">
-              <span>{sells ?? 0}</span>
+            <div className="whitespace-nowrap tabular-nums text-[#FF4D7F] flex items-baseline gap-0.5 text-[11px]">
+              <span>{formatCompactNumber(Math.round(sells ?? 0))}</span>
               <span className="text-[#9CA3AF]">/</span>
-              <span className="text-[#FF4D7F]">${formatSmartNumber(sellVolume || 0)}</span>
+              <span className="text-[#FF4D7F]">${formatCompactNumber(Math.round(sellVolume || 0))}</span>
             </div>
           </div>
           <div>
             <div className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Net</div>
-            <div className={cx("whitespace-nowrap tabular-nums text-[12px]", netVolume >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
-              {netVolume >= 0 ? "+" : "-"}${formatSmartNumber(Math.abs(netVolume))}
+            <div className={cx("whitespace-nowrap tabular-nums text-[11px]", netVolume >= 0 ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
+              {netVolume >= 0 ? "+" : "-"}${formatCompactNumber(Math.round(Math.abs(netVolume)))}
             </div>
           </div>
         </div>
