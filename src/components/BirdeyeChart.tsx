@@ -427,8 +427,8 @@ export interface BirdeyePairChartProps {
   onDataUpdate?: (data: BirdeyeOHLC[]) => void;
 }
 
-/** Test key; don’t ship to prod like this */
-const BIRDEYE_API_KEY = 'ff0bcb7c34704869b6af6f740775898f';
+/** Get API key from environment variables */
+const BIRDEYE_API_KEY = process.env.NEXT_PUBLIC_BIRDEYE_API_KEY || '';
 const BIRDEYE_PAIR_URL = 'https://public-api.birdeye.so/defi/v3/ohlcv/pair';
 const VALID_TF: BirdeyeTF[] = ['1s','15s','30s','1m','5m','15m','1h','4h','1d'];
 

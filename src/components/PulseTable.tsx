@@ -4386,6 +4386,7 @@ const PulseTable = React.memo(function PulseTable({
                             pairAddress={address}
                             chainId="eth"
                             blocksAfterCreation={1000}
+                            showOnlyHoldingPercentage={true}
                           />
                         );
                       } else {
