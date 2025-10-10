@@ -129,6 +129,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
     onlyBonded: false,
   });
   const [searchResults, setSearchResults] = useState<Token[]>([]);
+  const [cachedTokens, setCachedTokens] = useState<any[]>([]);
+  const [lastFetchTime, setLastFetchTime] = useState(0);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -179,209 +181,125 @@ const SearchModalContent = React.memo(function SearchModalContent({
     }
   };
 
+  // Fetch tokens and cache them
+  const fetchTokens = useCallback(async () => {
+    const now = Date.now();
+    // Cache for 30 seconds
+    if (cachedTokens.length > 0 && (now - lastFetchTime) < 30000) {
+      return cachedTokens;
+    }
+
+    try {
+      console.log('📥 Fetching tokens from service...');
+      
+      const endpoints = [
+        '/api/token-service/pulse-new?limit=100',
+        '/api/token-service/pulse-final-stretch?limit=100',
+        '/api/token-service/pulse-migrated?limit=100'
+      ];
+
+      const responses = await Promise.all(
+        endpoints.map(endpoint => 
+          fetch(`${endpoint}&t=${Date.now()}`).then(res => res.ok ? res.json() : [])
+        )
+      );
+
+      const allTokens = responses.flat().filter((token: any) => token && token.mint);
+      
+      console.log('✅ Cached', allTokens.length, 'tokens');
+      setCachedTokens(allTokens);
+      setLastFetchTime(now);
+      
+      return allTokens;
+    } catch (error) {
+      console.error('❌ Fetch error:', error);
+      return [];
+    }
+  }, [cachedTokens, lastFetchTime]);
+
+  // Live search as user types
   const searchTokens = useCallback(async (searchQuery: string) => {
     if (searchQuery.trim().length < 1) {
       setSearchResults([]);
+      setSearchLoading(false);
       return;
     }
     
     setSearchLoading(true);
     try {
-      // Use GraphQL query directly to Codex API (without sorting - we'll sort on frontend)
-      const apiKey = process.env.NEXT_PUBLIC_CODEX_API_KEY;
+      console.log('🔍 Live searching:', { query: searchQuery.trim() });
       
-      console.log('🔍 Real search with GraphQL API:', {
-        query: searchQuery.trim(),
-        apiKey: apiKey ? 'Present' : 'Missing'
-      });
+      // Get cached tokens or fetch if needed
+      const allTokens = await fetchTokens();
       
-      const response = await fetch('https://graph.codex.io/graphql', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': apiKey || '',
-        },
-        body: JSON.stringify({
-          query: `
-            query {
-              pumpTokens: filterTokens(
-                phrase: "${searchQuery.trim()}"
-                rankings: {attribute: volume1, direction: DESC}
-                filters: {
-                  network: 1399811149
-                  launchpadProtocol: "Pump"
-                }
-              ) {
-                results {
-                  token {
-                    name
-                    symbol
-                    address
-                    createdAt
-                    info {
-                      imageThumbUrl
-                      imageSmallUrl
-                      imageLargeUrl
-                    }
-                  }
-                  pair {
-                    address
-                  }
-                  marketCap
-                  liquidity
-                  volume1
-                }
-              }
-              
-              raydiumTokens: filterTokens(
-                phrase: "${searchQuery.trim()}"
-                rankings: {attribute: volume1, direction: DESC}
-                filters: {
-                  network: 1399811149
-                  launchpadProtocol: "RaydiumLaunchpad"
-                }
-              ) {
-                results {
-                  token {
-                    name
-                    symbol
-                    address
-                    createdAt
-                    info {
-                      imageThumbUrl
-                      imageSmallUrl
-                      imageLargeUrl
-                    }
-                  }
-                  pair {
-                    address
-                  }
-                  marketCap
-                  liquidity
-                  volume1
-                }
-              }
-              
-              meteoraTokens: filterTokens(
-                phrase: "${searchQuery.trim()}"
-                rankings: {attribute: volume1, direction: DESC}
-                filters: {
-                  network: 1399811149
-                  launchpadProtocol: "MeteoraDBC"
-                }
-              ) {
-                results {
-                  token {
-                    name
-                    symbol
-                    address
-                    createdAt
-                    info {
-                      imageThumbUrl
-                      imageSmallUrl
-                      imageLargeUrl
-                    }
-                  }
-                  pair {
-                    address
-                  }
-                  marketCap
-                  liquidity
-                  volume1
-                }
-              }
-            }
-          `
-        })
-      });
+      if (allTokens.length === 0) {
+        setSearchResults([]);
+        return;
+      }
       
-      if (response.ok) {
-        const data = await response.json();
+      // Filter tokens by search query (search in name, symbol, and mint)
+      const searchLower = searchQuery.trim().toLowerCase();
+      const filteredTokens = allTokens.filter((token: any) => {
+        const name = (token.name || '').toLowerCase();
+        const symbol = (token.symbol || '').toLowerCase();
+        const mint = (token.mint || '').toLowerCase();
         
-        if (data.errors) {
-          console.error("GraphQL errors:", data.errors);
-          setSearchResults([]);
-          return;
+        return name.includes(searchLower) || 
+               symbol.includes(searchLower) || 
+               mint.includes(searchLower);
+      });
+      
+      console.log('🔍 Found results:', {
+        query: searchQuery,
+        totalTokens: allTokens.length,
+        matchedTokens: filteredTokens.length
+      });
+      
+      // Convert token service response to Token format
+      const tokens: Token[] = filteredTokens.map((token: any) => {
+        // Determine AMM/protocol from the token data
+        let amm = "pump_amm"; // default
+        if (token.protocol === "raydium" || token.launchpadName === "Raydium") {
+          amm = "raydium_cpmm";
+        } else if (token.protocol === "meteora" || token.launchpadName === "Meteora") {
+          amm = "meteora";
         }
         
-        // Combine results from all protocols
-        const allResults = [
-          ...(data.data?.pumpTokens?.results || []),
-          ...(data.data?.raydiumTokens?.results || []),
-          ...(data.data?.meteoraTokens?.results || [])
-        ];
+        // Parse timestamp
+        let createdAt = "";
+        if (token.launch_time) {
+          createdAt = new Date(token.launch_time).toISOString();
+        } else if (token.created_at) {
+          createdAt = new Date(token.created_at).toISOString();
+        }
         
-        console.log('🔍 Real search results:', {
-          totalResults: allResults.length,
-          pumpTokens: data.data?.pumpTokens?.results?.length || 0,
-          raydiumTokens: data.data?.raydiumTokens?.results?.length || 0,
-          meteoraTokens: data.data?.meteoraTokens?.results?.length || 0,
-          sampleToken: allResults[0] ? {
-            name: allResults[0].token?.name,
-            symbol: allResults[0].token?.symbol,
-            address: allResults[0].token?.address
-          } : 'No results'
-        });
-        
-        // Convert GraphQL response to Token format
-        const tokens: Token[] = allResults.map((result: any) => {
-          // Get the best available image URL (prioritize small, then thumb, then large)
-          const imageUrl = result.token.info?.imageSmallUrl || 
-                          result.token.info?.imageThumbUrl || 
-                          result.token.info?.imageLargeUrl || 
-                          null;
-          
-          // Determine AMM type based on which protocol the token came from
-          let amm = "pump_amm"; // default
-          if (data.data?.raydiumTokens?.results?.some((r: any) => r.token.address === result.token.address)) {
-            amm = "raydium_cpmm";
-          } else if (data.data?.meteoraTokens?.results?.some((r: any) => r.token.address === result.token.address)) {
-            amm = "pump_amm"; // Meteora uses same logic as pump.fun
-          }
-          
-          return {
-            id: 0,
-            mint: result.token.address,
-            name: result.token.name || "",
-            symbol: result.token.symbol || "",
-            logo: imageUrl,
-            fully_diluted_value: result.marketCap || 0,
-            total_liquidity_usd: result.liquidity || 0,
-            total_buy_volume_1h: result.volume1 || 0,
-            total_sell_volume_1h: 0,
-            volume_1h: result.volume1 || 0,
-            created_at: result.token.createdAt ? new Date(result.token.createdAt * 1000).toISOString() : "",
-            bonding_curve_progress: "0%",
-            amm: amm,
-            uri: imageUrl,
-            pair_address: result.pair?.address || result.token.address
-          };
-        });
-        
-        console.log('🔍 Final converted tokens:', {
-          tokenCount: tokens.length,
-          sampleToken: tokens[0] ? {
-            name: tokens[0].name,
-            symbol: tokens[0].symbol,
-            mint: tokens[0].mint,
-            amm: tokens[0].amm
-          } : 'No tokens'
-        });
-        
-        setSearchResults(tokens);
-      } else {
-        console.error("GraphQL API error:", response.status, response.statusText);
-        const errorText = await response.text();
-        console.error("Error response:", errorText);
-        setSearchResults([]);
-      }
+        return {
+          id: 0,
+          mint: token.mint,
+          name: token.name || "",
+          symbol: token.symbol || "",
+          logo: token.logo || token.image || token.uri,
+          fully_diluted_value: token.market_cap_usd || token.marketCapUSD || token.fully_diluted_value || 0,
+          total_liquidity_usd: token.liquidity_usd || 0,
+          total_buy_volume_1h: token.total_buy_volume_1h || 0,
+          total_sell_volume_1h: token.total_sell_volume_1h || 0,
+          volume_1h: token.volume_24h || token.volume24h || 0,
+          created_at: createdAt,
+          bonding_curve_progress: token.bonding_pct ? `${token.bonding_pct}%` : "0%",
+          amm: amm,
+          uri: token.uri || token.logo || token.image,
+          pair_address: token.pair_address || token.mint
+        };
+      });
+      
+      setSearchResults(tokens);
     } catch (error) {
       console.error("Search error:", error);
       setSearchResults([]);
     } finally {
       setSearchLoading(false);
     }
-  }, []); // Remove sortBy dependency
+  }, [fetchTokens]);
 
   const handleSelectToken = useCallback(
     async (token: Token) => {
@@ -426,9 +344,17 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
   const handleQueryChange = useCallback((newQuery: string) => {
     setQuery(newQuery);
-    // Don't call onQueryChange automatically - only search on Enter
-    // onQueryChange?.(newQuery);
-  }, []);
+    
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Debounce search - wait 300ms after user stops typing
+    searchTimeoutRef.current = setTimeout(() => {
+      searchTokens(newQuery);
+    }, 300);
+  }, [searchTokens]);
 
   const updateFilter = useCallback((filterName: keyof SearchFilters) => {
     setFilters((prev) => ({ ...prev, [filterName]: !prev[filterName] }));
@@ -452,10 +378,18 @@ const SearchModalContent = React.memo(function SearchModalContent({
     if (open) {
       setQuery("");
       setSearchResults([]);
+      // Pre-fetch tokens when modal opens for instant search
+      fetchTokens();
       const timer = setTimeout(() => inputRef.current?.focus(), 0);
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        // Clear search timeout on close
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+        }
+      };
     }
-  }, [open]);
+  }, [open, fetchTokens]);
 
   // No need to re-run search when sort changes - we sort on the frontend now
 
@@ -539,11 +473,11 @@ const SearchModalContent = React.memo(function SearchModalContent({
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
           onKeyDown={handleInputKeyDown}
-          placeholder="Search by name, ticker, or CA…"
+          placeholder="Search by name, ticker, or CA… (live search)"
           className="w-full bg-transparent text-[20px] outline-none placeholder:text-neutral-500"
         />
         <span className="absolute top-1/2 right-4 -translate-y-1/2 rounded bg-neutral-900 px-2 py-0.5 text-[10px] text-neutral-300">
-          Enter to search
+          {searchLoading ? '🔄 Searching...' : 'Type to search'}
         </span>
       </div>
 
@@ -554,16 +488,16 @@ const SearchModalContent = React.memo(function SearchModalContent({
             {isSearching ? "Search Results" : "Search"} ({displayTokens.length})
           </span>
         </div>
-        {searchLoading ? (
+        {searchLoading && displayTokens.length === 0 ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
-            <span className="ml-2 text-sm text-neutral-400">Searching...</span>
+            <span className="ml-2 text-sm text-neutral-400">Loading tokens...</span>
           </div>
         ) : displayTokens.length === 0 ? (
           <p className="text-sm text-neutral-500">
             {isSearching
-              ? "No search results found."
-              : "Type a token name and press Enter to search."}
+              ? "No results found. Try a different search term."
+              : "Start typing to search tokens (e.g., 'pepe', 'sol', 'pump')..."}
           </p>
         ) : (
           <ul className="flex h-full flex-col gap-4 overflow-y-auto">
@@ -643,11 +577,8 @@ const TokenListItem = React.memo(
         onClick={handleClick}
       >
         <div className="flex w-48 items-center gap-4">
-          <div className="relative flex-shrink-0">
+          <div className="flex-shrink-0">
             <TokenLogo token={token} />
-            <div className="absolute -right-1 -bottom-1 flex h-5 w-5 items-center justify-center rounded-full border border-teal-400 bg-neutral-900">
-              <span className="text-[9px] font-bold text-white">R</span>
-            </div>
           </div>
           <div className="max-w-[200px] min-w-0">
             <div className="flex items-center gap-2">

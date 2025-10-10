@@ -162,6 +162,9 @@ type BuyParams = {
   amount: number;
   mevProtection?: 0 | 1;
   poolType: "PumpAmm" | "Raydium CPMM" | "";
+  slippage?: number; // e.g., 0.4 for 40%
+  priorityFee?: number; // in SOL, e.g., 0.001
+  bribe?: number; // in SOL, e.g., 0.001
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) =>

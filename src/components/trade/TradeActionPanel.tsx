@@ -890,6 +890,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 quoteMint: SOL_MINT_ADDRESS,
                 mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
                 poolType,
+                slippage: settings.maxSlippage || 0.4, // Default 40%
+                priorityFee: settings.priority || 0.0001, // Default 0.0001 SOL
+                bribe: settings.bribe || 0, // Default 0
               };
               const tr = await tradeBuy(tradeParams, user.bearerToken);
               const txHash = tr?.hash || tr?.txid;
