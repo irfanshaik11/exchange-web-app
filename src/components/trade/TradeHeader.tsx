@@ -291,9 +291,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const curvePct = calculateBondingCurveProgress(token);
 
   const imgSrc =
+    normalizeAssetUrl((token as any).image_url) ||
     normalizeAssetUrl(meta?.image) ||
     normalizeAssetUrl((meta?.properties as any)?.image) ||
     normalizeAssetUrl((token as any).logo) ||
+    normalizeAssetUrl((token as any).image) ||
     null;
 
   return (
@@ -326,7 +328,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
         {/* Token Avatar with Pill Styling */}
         <div className="relative">
           <div 
-            className="relative h-10 w-10 rounded-md border transition-all duration-300 cursor-pointer"
+            className="relative h-11 w-11 rounded-md border transition-all duration-300 cursor-pointer"
             style={{ 
               borderColor: showPreview ? AX.aiCyan : AX.border,
               boxShadow: showPreview ? `0 0 12px ${AX.glowCyan}, 0 0 24px ${AX.glowCyan}, inset 0 0 12px ${AX.glowCyan}` : 'none'
@@ -349,14 +351,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
             src={imgSrc}
             alt={token.name}
                 symbol={token.symbol}
-                width={35}
-                height={35}
+                width={40}
+                height={40}
                 className="h-full w-full rounded-md object-cover"
                 priority={true}
           />
         ) : (
           <div
-                className="flex h-full w-full items-center justify-center rounded-md text-base font-light"
+                className="flex h-full w-full items-center justify-center rounded-md text-xl font-light"
                 style={{ color: AX.text, background: AX.surface2, fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
           >
             {token.name?.charAt(0) || "?"}
@@ -525,7 +527,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
                     if (tooltip) tooltip.style.opacity = '0';
                   }}
                 >
-                  <LuPill />
+                  <LuPill size={6} />
                 </Link>
               )}
               
