@@ -20,6 +20,7 @@ import { useQuickBuyQueryParams } from "../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../utils/queryParams";
 import dynamic from 'next/dynamic';
 const BirdeyeChart = dynamic(() => import('../../components/BirdeyeChart'), { ssr: false });
+const BackendOHLCChart = dynamic(() => import('../../components/BackendOHLCChart'), { ssr: false });
 /* ---------- AXIOM palette ---------- */
 const AX = {
   bg: "#101114",
@@ -233,27 +234,22 @@ export default function TradePage() {
               </div>
 
               {/* Chart in top left corner */}
-              <div className="flex-1 min-h-[240px]">
-              {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 ? (
-                <BirdeyeChart
-                pairAddress={resolvedPairAddress}
-                timeframe="1m"
-                mode="count"
-                timeFrom={1726700000}
-              />
-              ) : (
-                <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
-                  {isHydrating ? 'Resolving pair address...' : 'No pair address available'}
-                </div>
-              )}
-                {/* Original chart (commented out for now)
-                <CustomSolanaChart
-                  token={token}
-                  pairAddress={typeof id === "string" ? id : undefined}
-                  height="100%"
-                  width="100%"
-                />
-                */}
+              <div className="flex-1 min-h-[240px] relative chart-wrapper" style={{ zIndex: 50, width: '100%', maxWidth: '1200px' }}>
+                {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 ? (
+                  <BackendOHLCChart
+                    pairAddress={resolvedPairAddress}
+                    interval="1m"
+                    timeframe="24h"
+                    height="100%"
+                    width="100%"
+                    baseRefreshMs={30000}
+                    className="relative"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
+                    {isHydrating ? 'Resolving pair address...' : 'No pair address available'}
+                  </div>
+                )}
               </div>
             </div>
 

@@ -61,8 +61,8 @@ export function useCachedFinalStretchTokens() {
     }
 
     try {
-      // Force direct backend calls when backend is deployed
-      const baseUrl = 'http://34.47.209.237:8080';
+      // Use environment variable for backend URL
+      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
       const apiUrl = `${baseUrl}/v1/pulse/final-stretch?limit=30&t=${Date.now()}`;
 
       const response = await fetch(apiUrl);
@@ -183,8 +183,8 @@ export function useCachedMigratedTokens() {
     }
 
     try {
-      // Force direct backend calls when backend is deployed
-      const baseUrl = 'http://34.47.209.237:8080';
+      // Use environment variable for backend URL
+      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
       const apiUrl = `${baseUrl}/v1/pulse/migrated?limit=30&t=${Date.now()}`;
 
       const response = await fetch(apiUrl);

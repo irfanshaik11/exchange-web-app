@@ -134,7 +134,9 @@ export default function useTradeEventsWebSocket({
     }
 
     try {
-      const wsUrl = `ws://34.47.209.237:8080/v1/ws/trade-events?pair=${pairAddress}`;
+      const baseUrl = (process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8080').replace(/^https?:\/\//, '');
+      const protocol = process.env.NEXT_PUBLIC_WEBSOCKET_URL?.startsWith('https') ? 'wss' : 'ws';
+      const wsUrl = `${protocol}://${baseUrl}/v1/ws/trade-events?pair=${pairAddress}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
@@ -292,12 +294,13 @@ export default function useTradeEventsWebSocket({
       
       // Make multiple API calls to get all available trades
       const allTrades: any[] = [];
+      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
       
       // Try different endpoints and parameters to get more data
       const endpoints = [
-        `http://34.47.209.237:8080/v1/trade/view?pair_address=${pairAddress}`,
-        `http://34.47.209.237:8080/v1/trade/view?pair_address=${pairAddress}&limit=100`,
-        `http://34.47.209.237:8080/v1/trade/view?pair_address=${pairAddress}&limit=200`,
+        `${baseUrl}/v1/trade/view?pair_address=${pairAddress}`,
+        `${baseUrl}/v1/trade/view?pair_address=${pairAddress}&limit=100`,
+        `${baseUrl}/v1/trade/view?pair_address=${pairAddress}&limit=200`,
       ];
       
       for (const endpoint of endpoints) {

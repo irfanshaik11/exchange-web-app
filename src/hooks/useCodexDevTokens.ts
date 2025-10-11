@@ -45,9 +45,10 @@ export default function useCodexDevTokens(
         
         // Set default values for parameters
         const limit = options.limit || 10;
+        const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
         
         // Build the URL with query parameters
-        const url = new URL('http://34.47.209.237:8080/v1/tokens/dev');
+        const url = new URL(`${baseUrl}/v1/tokens/dev`);
         url.searchParams.set('tokenAddress', tokenAddress);
         url.searchParams.set('limit', limit.toString());
         

@@ -86,7 +86,8 @@ export default function useSingleTokenPolling(address: string | undefined) {
     try {
       console.log('Loading data for pair_address:', resolvedPairAddress);
       // Call backend directly instead of going through Next.js API route
-      const url = `http://34.47.209.237:8080/v1/trade/view?pair_address=${resolvedPairAddress}`;
+      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+      const url = `${baseUrl}/v1/trade/view?pair_address=${resolvedPairAddress}`;
       console.log('API URL:', url);
       
       const response = await fetch(url);

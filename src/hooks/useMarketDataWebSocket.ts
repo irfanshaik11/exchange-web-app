@@ -47,8 +47,14 @@ export default function useMarketDataWebSocket(
   const reconnectAttemptsRef = useRef(0);
   const mintsRef = useRef<string[]>([]);
   
-  // Use the deployed websocket URL
-  const wsUrl = url || 'ws://34.47.209.237:8080/v1/ws/market-data';
+  // Use the deployed websocket URL from environment variable
+  const getWsUrl = () => {
+    if (url) return url;
+    const baseUrl = (process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8080').replace(/^https?:\/\//, '');
+    const protocol = process.env.NEXT_PUBLIC_WEBSOCKET_URL?.startsWith('https') ? 'wss' : 'ws';
+    return `${protocol}://${baseUrl}/v1/ws/market-data`;
+  };
+  const wsUrl = getWsUrl();
   const reconnectIntervalMs = reconnectInterval || 5000;
   const maxReconnectAttemptsCount = maxReconnectAttempts || 10;
 

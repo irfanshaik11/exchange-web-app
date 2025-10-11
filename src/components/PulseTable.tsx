@@ -3572,8 +3572,9 @@ const PulseTable = React.memo(function PulseTable({
               if (mintAddress) {
                 try {
                   console.log("Fetching pair address for mint:", mintAddress);
+                  const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
                   const response = await fetch(
-                    "http://34.47.209.237:8080/v1/token/hydrate-pair",
+                    `${baseUrl}/v1/token/hydrate-pair`,
                     {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
