@@ -61,12 +61,13 @@ export function useCachedFinalStretchTokens() {
     }
 
     try {
-      // Use environment variable for backend URL
-      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-      const apiUrl = `${baseUrl}/v1/pulse/final-stretch?limit=30&t=${Date.now()}`;
+      // Use Next.js API proxy to avoid CORS issues
+      const apiUrl = `/api/token-service/getAllTokens?filter=final-stretch&limit=30&t=${Date.now()}`;
+      console.log('🔍 Fetching final stretch tokens from:', apiUrl);
 
       const response = await fetch(apiUrl);
       const data = response.ok ? await response.json() : [];
+      console.log('🔍 Final stretch tokens response:', data.length, 'tokens');
       
       // Cache the fresh data
       const cacheData: CachedData<any[]> = {
@@ -99,11 +100,8 @@ export function useCachedFinalStretchTokens() {
   }, [tokens.length]);
 
   useEffect(() => {
-    const cacheHit = tokens.length > 0;
-    
-    if (!cacheHit) {
-      fetchTokens();
-    }
+    // Always fetch data on initial load to ensure we have fresh data
+    fetchTokens();
     // Remove automatic background refresh to prevent page refreshes
   }, []); // Empty dependency array to prevent re-runs
 
@@ -183,12 +181,13 @@ export function useCachedMigratedTokens() {
     }
 
     try {
-      // Use environment variable for backend URL
-      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-      const apiUrl = `${baseUrl}/v1/pulse/migrated?limit=30&t=${Date.now()}`;
+      // Use Next.js API proxy to avoid CORS issues
+      const apiUrl = `/api/token-service/getAllTokens?filter=migrated&limit=30&t=${Date.now()}`;
+      console.log('🔍 Fetching migrated tokens from:', apiUrl);
 
       const response = await fetch(apiUrl);
       const data = response.ok ? await response.json() : [];
+      console.log('🔍 Migrated tokens response:', data.length, 'tokens');
       
       // Cache the fresh data
       const cacheData: CachedData<any[]> = {
@@ -221,11 +220,8 @@ export function useCachedMigratedTokens() {
   }, [tokens.length]);
 
   useEffect(() => {
-    const cacheHit = tokens.length > 0;
-    
-    if (!cacheHit) {
-      fetchTokens();
-    }
+    // Always fetch data on initial load to ensure we have fresh data
+    fetchTokens();
     // Remove automatic background refresh to prevent page refreshes
   }, []); // Empty dependency array to prevent re-runs
 

@@ -74,24 +74,19 @@ export default function PulsePage() {
   const [httpNew, setHttpNew] = useState<any[]>([]);
   const [httpNewTick, setHttpNewTick] = useState(0);
 
-  // ENABLED: WebSocket hook for real-time token updates
-  const { data: newPairsTokens, loading: wsLoading } = usePaginatedTokensWebSocket({ filter: 'new', limit: 30 });
-  // Fallback to empty array if WebSocket fails
-  // const newPairsTokens: any[] = [];
-  // const wsLoading = false;
+  // DISABLED: WebSocket hook for real-time token updates (token service doesn't have WebSocket endpoint)
+  // const { data: newPairsTokens, loading: wsLoading } = usePaginatedTokensWebSocket({ filter: 'new', limit: 30 });
+  // Use HTTP API instead
+  const newPairsTokens: any[] = [];
+  const wsLoading = false;
 
   // Fast polling fallback for New Pairs (cache-bypass)
   useEffect(() => {
     let alive = true;
     const poll = async () => {
       try {
-        // Use deployed service directly when backend is deployed
-        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
-          : env.NEXT_PUBLIC_GO_SERVICE_URL;
-        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-          ? `${baseUrl}/v1/pulse/new?limit=30&t=${Date.now()}`
-          : `/api/token-service/pulse-new?limit=30&t=${Date.now()}`;
+        // Always use Next.js API proxy to avoid CORS issues
+        const apiUrl = `/api/token-service/getAllTokens?filter=new&limit=30&t=${Date.now()}`;
 
         const res = await fetch(apiUrl);
         if (!alive) return;
@@ -108,7 +103,7 @@ export default function PulsePage() {
       } catch {}
     };
     poll();
-    const id = setInterval(poll, 500); // Faster polling for real-time updates (2 seconds)
+    const id = setInterval(poll, 2000); // Poll every 2 seconds for real-time updates
     return () => { alive = false; clearInterval(id); };
   }, []);
 
@@ -565,6 +560,11 @@ export default function PulsePage() {
 
   const migratedToShow = useMemo(() => {
     const source = cachedMigratedTokens.length ? cachedMigratedTokens : combinedMigrated;
+    console.log('🔍 Migrated tokens source:', {
+      cachedMigratedTokens: cachedMigratedTokens.length,
+      combinedMigrated: combinedMigrated.length,
+      source: source.length
+    });
     const uniq = new Map<string, any>();
     for (const t of source as any[]) {
       const key = (t?.pair_address || t?.mint) as string | undefined;
@@ -588,7 +588,9 @@ export default function PulsePage() {
     });
     const result = withTs.concat(withoutTs);
     // Limit to 30 tokens like new pairs
-    return result.slice(0, 30);
+    const final = result.slice(0, 30);
+    console.log('🔍 Migrated tokens final:', final.length, 'tokens');
+    return final;
   }, [cachedMigratedTokens, combinedMigrated, getTs]);
 
   const enrichedFinalStretch = useMemo(() => enrichWithMarketData(finalStretchToShow as any), [enrichWithMarketData, finalStretchToShow]);

@@ -14,7 +14,7 @@ import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 
-type TimeRange = "5m" | "1h" | "6h" | "24h";
+type TimeRange = "5m" | "1h" | "12h" | "24h";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -53,8 +53,8 @@ function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
       ? num(t[`total_${s}s_5m`])
       : window === "1h"
       ? num(t[`total_${s}s_1h`]) || num(t[`total_${s}s_60m`])
-      : window === "6h"
-      ? num(t[`total_${s}s_6h`]) || num(t[`total_${s}s_360m`])
+      : window === "12h"
+      ? num(t[`total_${s}s_12h`]) || num(t[`total_${s}s_720m`])
       : num(t[`total_${s}s_24h`]);
 
   const vol =
@@ -62,8 +62,8 @@ function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
       ? num(t[`total_${s}_volume_5m`])
       : window === "1h"
       ? num(t[`total_${s}_volume_1h`]) || num(t[`total_${s}_volume_60m`])
-      : window === "6h"
-      ? num(t[`total_${s}_volume_6h`]) || num(t[`total_${s}_volume_360m`])
+      : window === "12h"
+      ? num(t[`total_${s}_volume_12h`]) || num(t[`total_${s}_volume_720m`])
       : num(t[`total_${s}_volume_24h`]);
 
   return { count, vol };
@@ -97,7 +97,7 @@ interface TradeActionPanelProps {
   tradeParams?: {
     mode: "buy" | "sell";
     tab: "market" | "limit" | "adv";
-    timeRange: "5m" | "1h" | "6h" | "24h";
+    timeRange: "5m" | "1h" | "12h" | "24h";
     amount: string;
     targetMC: string;
     sliderPct: number;
@@ -224,8 +224,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Real-time stats from WebSocket with fallback to static data
   const realTimeStats = useMemo(() => {
     if (wsData && wsData.data && wsData.data.timeframes) {
-      // Use WebSocket data
-      const stats = getFormattedStats(timeRange);
+      // Use WebSocket data directly since timeframes now match
+      const wsTimeframe = timeRange;
+      const stats = getFormattedStats(wsTimeframe);
       return {
         buys: stats.buys,
         sells: stats.sells,
@@ -291,14 +292,26 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       <div className="px-3 pt-2 pb-2 border-b border-[#2A2B33]">
         <div className="mx-auto w-full max-w-xl overflow-hidden">
           <div className="flex gap-1 rounded-xl bg-[#1E1F26] border border-[#2A2B33] p-1">
-            {(["5m", "1h", "6h", "24h"] as TimeRange[]).map((rng) => {
-              const changeMap: Record<TimeRange, number> = {
-                "5m": Number((token as any).price_change_5m ?? (token as any).change_5m ?? 0),
-                "1h": Number((token as any).price_change_1h ?? (token as any).change_1h ?? 0),
-                "6h": Number((token as any).price_change_6h ?? (token as any).change_6h ?? 0),
-                "24h": Number((token as any).price_change_24h ?? (token as any).change_24h ?? 0),
-              };
-              const ch = changeMap[rng] ?? 0;
+            {(["5m", "1h", "12h", "24h"] as TimeRange[]).map((rng) => {
+              // Get change from WebSocket data if available, otherwise fallback to token properties
+              let ch = 0;
+              if (wsData && wsData.data && wsData.data.timeframes) {
+                // Use timeframe directly since we now match WebSocket timeframes
+                const wsTimeframe = rng;
+                const wsStats = wsData.data.timeframes[wsTimeframe];
+                const rawChange = wsStats?.change ?? 0;
+                // Convert decimal to percentage (e.g., -0.0157 -> -1.57)
+                ch = rawChange * 100;
+              } else {
+                // Fallback to token properties
+                const changeMap: Record<TimeRange, number> = {
+                  "5m": Number((token as any).price_change_5m ?? (token as any).change_5m ?? 0),
+                  "1h": Number((token as any).price_change_1h ?? (token as any).change_1h ?? 0),
+                  "12h": Number((token as any).price_change_12h ?? (token as any).change_12h ?? 0),
+                  "24h": Number((token as any).price_change_24h ?? (token as any).change_24h ?? 0),
+                };
+                ch = changeMap[rng] ?? 0;
+              }
               const isUp = ch >= 0;
               const abs = Math.abs(ch);
 

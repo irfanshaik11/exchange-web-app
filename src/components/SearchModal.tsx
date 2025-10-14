@@ -131,6 +131,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
   const [searchResults, setSearchResults] = useState<Token[]>([]);
   const [cachedTokens, setCachedTokens] = useState<any[]>([]);
   const [lastFetchTime, setLastFetchTime] = useState(0);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -217,45 +218,38 @@ const SearchModalContent = React.memo(function SearchModalContent({
     }
   }, [cachedTokens, lastFetchTime]);
 
-  // Live search as user types
+  // Search when Enter is pressed
   const searchTokens = useCallback(async (searchQuery: string) => {
     if (searchQuery.trim().length < 1) {
       setSearchResults([]);
       setSearchLoading(false);
+      setHasSearched(false);
       return;
     }
     
     setSearchLoading(true);
+    setHasSearched(true);
     try {
-      console.log('🔍 Live searching:', { query: searchQuery.trim() });
+      console.log('🔍 Searching:', { query: searchQuery.trim() });
       
-      // Get cached tokens or fetch if needed
-      const allTokens = await fetchTokens();
+      // Use backend search endpoint instead of local filtering
+      const response = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(searchQuery.trim())}&limit=50`);
       
-      if (allTokens.length === 0) {
+      if (!response.ok) {
+        console.error('❌ Search API error:', response.status);
         setSearchResults([]);
         return;
       }
       
-      // Filter tokens by search query (search in name, symbol, and mint)
-      const searchLower = searchQuery.trim().toLowerCase();
-      const filteredTokens = allTokens.filter((token: any) => {
-        const name = (token.name || '').toLowerCase();
-        const symbol = (token.symbol || '').toLowerCase();
-        const mint = (token.mint || '').toLowerCase();
-        
-        return name.includes(searchLower) || 
-               symbol.includes(searchLower) || 
-               mint.includes(searchLower);
-      });
+      const searchData = await response.json();
+      const filteredTokens = searchData.tokens || [];
       
       console.log('🔍 Found results:', {
         query: searchQuery,
-        totalTokens: allTokens.length,
         matchedTokens: filteredTokens.length
       });
       
-      // Convert token service response to Token format
+      // Convert search response to Token format
       const tokens: Token[] = filteredTokens.map((token: any) => {
         // Determine AMM/protocol from the token data
         let amm = "pump_amm"; // default
@@ -265,12 +259,24 @@ const SearchModalContent = React.memo(function SearchModalContent({
           amm = "meteora";
         }
         
-        // Parse timestamp
+        // Parse timestamp - handle both Unix timestamps and date strings
         let createdAt = "";
         if (token.launch_time) {
-          createdAt = new Date(token.launch_time).toISOString();
+          // Handle Unix timestamp (seconds) or date string
+          if (typeof token.launch_time === 'number') {
+            // Convert Unix timestamp to ISO string
+            createdAt = new Date(token.launch_time * 1000).toISOString();
+          } else {
+            createdAt = new Date(token.launch_time).toISOString();
+          }
         } else if (token.created_at) {
-          createdAt = new Date(token.created_at).toISOString();
+          // Handle Unix timestamp (seconds) or date string
+          if (typeof token.created_at === 'number') {
+            // Convert Unix timestamp to ISO string
+            createdAt = new Date(token.created_at * 1000).toISOString();
+          } else {
+            createdAt = new Date(token.created_at).toISOString();
+          }
         }
         
         return {
@@ -350,11 +356,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
       clearTimeout(searchTimeoutRef.current);
     }
     
-    // Debounce search - wait 300ms after user stops typing
-    searchTimeoutRef.current = setTimeout(() => {
-      searchTokens(newQuery);
-    }, 300);
-  }, [searchTokens]);
+    // Don't search automatically - only on Enter key press
+  }, []);
 
   const updateFilter = useCallback((filterName: keyof SearchFilters) => {
     setFilters((prev) => ({ ...prev, [filterName]: !prev[filterName] }));
@@ -378,6 +381,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
     if (open) {
       setQuery("");
       setSearchResults([]);
+      setHasSearched(false);
       // Pre-fetch tokens when modal opens for instant search
       fetchTokens();
       const timer = setTimeout(() => inputRef.current?.focus(), 0);
@@ -395,9 +399,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
 
   const isSearching = useMemo(() => query.trim().length > 0, [query]);
   const displayTokens = useMemo(() => {
-    if (!isSearching) return [];
+    if (!hasSearched) return [];
     return sortTokens(searchResults, sortBy);
-  }, [isSearching, searchResults, sortBy]);
+  }, [hasSearched, searchResults, sortBy]);
 
   return (
     <InterstatePopout
@@ -495,9 +499,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
           </div>
         ) : displayTokens.length === 0 ? (
           <p className="text-sm text-neutral-500">
-            {isSearching
+            {hasSearched
               ? "No results found. Try a different search term."
-              : "Start typing to search tokens (e.g., 'pepe', 'sol', 'pump')..."}
+              : "Type a search term and press Enter to search tokens (e.g., 'pepe', 'sol', 'pump')..."}
           </p>
         ) : (
           <ul className="flex h-full flex-col gap-4 overflow-y-auto">
