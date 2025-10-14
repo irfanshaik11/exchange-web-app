@@ -389,12 +389,9 @@ function TokenImage({
   // Get protocol color based on launchpad_protocol field
   const getProtocolColor = (token: Token): string => {
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
-    const protocol = (token as any).protocol?.toLowerCase();
-    const launchpadName = (token as any).launchpadName?.toLowerCase();
-    const amm = (token as any).amm?.toLowerCase();
     
-    // Use the first available protocol identifier
-    const protocolId = launchpadProtocol || protocol || launchpadName || amm;
+    // Use the launchpad_protocol identifier
+    const protocolId = launchpadProtocol;
     
     if (!protocolId) {
       return '#22c55e'; // Default green
@@ -446,14 +443,10 @@ function TokenImage({
 
   // Get icon based on token data - dynamically maps launchpad_protocol to icon
   const getTokenIcon = (token: Token): string => {
-    // Priority: launchpad_protocol > protocol > launchpadName > amm
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
-    const protocol = (token as any).protocol?.toLowerCase();
-    const launchpadName = (token as any).launchpadName?.toLowerCase();
-    const amm = (token as any).amm?.toLowerCase();
     
-    // Use the first available protocol identifier
-    const protocolId = launchpadProtocol || protocol || launchpadName || amm;
+    // Use the launchpad_protocol identifier
+    const protocolId = launchpadProtocol;
     
     if (!protocolId) {
       // Default to pump icon if no protocol info

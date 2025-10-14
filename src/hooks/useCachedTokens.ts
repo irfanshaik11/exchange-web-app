@@ -230,7 +230,7 @@ export function useCachedPulseTokens() {
 
     try {
       // Use environment variable for backend URL
-      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
       const url = `${baseUrl}/v1/pulse/new?limit=200`;
 
       const response = await fetch(url);

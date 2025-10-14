@@ -50,7 +50,7 @@ export default function useMarketDataWebSocket(
   // Use the deployed websocket URL from environment variable
   const getWsUrl = () => {
     if (url) return url;
-    const baseUrl = (process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8080').replace(/^https?:\/\//, '');
+    const baseUrl = (process.env.NEXT_PUBLIC_WEBSOCKET_URL || '').replace(/^https?:\/\//, '');
     const protocol = process.env.NEXT_PUBLIC_WEBSOCKET_URL?.startsWith('https') ? 'wss' : 'ws';
     return `${protocol}://${baseUrl}/v1/ws/market-data`;
   };
