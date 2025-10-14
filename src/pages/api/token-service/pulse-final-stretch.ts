@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Only set default limit if no limit is provided
   if (!params.get('limit')) params.set('limit', '30');
 
-  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
 
   const fetchWithTimeout = async (url: string, timeoutMs = 2500) => {
     const ctrl = new AbortController();

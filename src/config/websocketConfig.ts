@@ -12,7 +12,9 @@ export const USE_MOCK_WEBSOCKET = true;
 export const USE_MOCK_CHART_DATA = true;
 
 // websocket endpoint
-export const WEBSOCKET_ENDPOINT = 'ws://localhost:8080/v1/ws/token-stats';
+export const WEBSOCKET_ENDPOINT = process.env.NEXT_PUBLIC_WEBSOCKET_URL ? 
+  `${process.env.NEXT_PUBLIC_WEBSOCKET_URL.startsWith('https') ? 'wss' : 'ws'}://${process.env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^https?:\/\//, '')}/v1/ws/token-stats` : 
+  '';
 
 // Mock configuration
 export const MOCK_CONFIG = {

@@ -40,7 +40,9 @@ export function useRealtimeWebSocket(
   const reconnectAttemptsRef = useRef(0);
   const mintsRef = useRef<string[]>(mints);
   
-  const url = opts?.url || 'ws://localhost:8080/v1/ws/market-data';
+  const url = opts?.url || (process.env.NEXT_PUBLIC_WEBSOCKET_URL ? 
+    `${process.env.NEXT_PUBLIC_WEBSOCKET_URL.startsWith('https') ? 'wss' : 'ws'}://${process.env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^https?:\/\//, '')}/v1/ws/market-data` : 
+    '');
   const reconnectInterval = opts?.reconnectInterval || 5000;
   const maxReconnectAttempts = opts?.maxReconnectAttempts || 10;
 

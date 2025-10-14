@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Use the backend URL from environment
-  const baseURL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://backend-service.narrative.trade";
+  const baseURL = process.env.NEXT_PUBLIC_BACKEND_URL;
   const urlParams = new URLSearchParams();
   urlParams.set(paramKey, paramVal);
 

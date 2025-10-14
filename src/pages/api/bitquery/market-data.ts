@@ -34,8 +34,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Too many mint addresses (max 200)' });
   }
 
-  const primaryBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
-  const fallbackBase = process.env.NEXT_PUBLIC_GO_FALLBACK_URL || 'http://localhost:9000';
+  const primaryBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+  const fallbackBase = process.env.NEXT_PUBLIC_GO_FALLBACK_URL;
 
   const fetchWithTimeout = async (url: string, timeoutMs = 5000) => {
     const ctrl = new AbortController();

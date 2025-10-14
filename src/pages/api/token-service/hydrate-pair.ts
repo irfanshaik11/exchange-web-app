@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-const GO_SERVICE_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+const GO_SERVICE_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {

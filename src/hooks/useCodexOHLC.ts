@@ -36,7 +36,7 @@ export const useCodexOHLC = ({ tokenId, enabled = true }: UseCodexOHLCOptions) =
 
     try {
       // Connect to your backend WebSocket that subscribes to Codex
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws';
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || '';
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
