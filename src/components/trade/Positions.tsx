@@ -20,12 +20,24 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      console.log('⚠️ Positions: No userId provided');
+      return;
+    }
+    console.log(`🔍 Fetching positions for userId: ${userId}`);
     setLoading(true);
     getActivePositionsByUser(userId)
       .then(positions => {
+        console.log(`✅ Positions received:`, positions);
+        console.log(`   Count: ${positions.length}`);
+        if (positions.length > 0) {
+          console.log(`   First position:`, positions[0]);
+        }
         setPositions(positions);
         onPositionsChange(positions);
+      })
+      .catch(error => {
+        console.error('❌ Error fetching positions:', error);
       })
       .finally(() => setLoading(false));
   }, [userId, onPositionsChange]);

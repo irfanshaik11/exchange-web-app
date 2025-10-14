@@ -35,6 +35,7 @@ import throttle from 'lodash.throttle';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
 import { env } from "../env";
+import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 
 const navLinks = [
   { name: "Discover", href: "/" },
@@ -268,13 +269,16 @@ export default function Home() {
       return;
     }
     try {
+      const poolType = getPoolTypeFromToken(token);
+      console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      
       const data = await tradeBuy({
         poolAddress: token.pair_address,
         baseMint: token.mint, // Use token.mint as baseMint
         quoteMint: SOL_MINT_ADDRESS, // Always SOL
         amount: quickBuyAmount,
         mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
-        poolType: "PumpAmm" // Assuming this is a PumpAmm pool
+        poolType: poolType
       }, user.bearerToken);
       
       // Handle different response formats from backend

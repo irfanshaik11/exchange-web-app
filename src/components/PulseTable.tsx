@@ -364,36 +364,161 @@ function TokenImage({
     }
   };
 
-  // Get icon based on token data
-  const getTokenIcon = (token: Token): string => {
-    // Check for specific protocol/launchpad data
-    const protocol = (token as any).protocol;
-    const launchpadName = (token as any).launchpadName;
-    const amm = (token as any).amm;
+  // Protocol color mapping - matches the filter section colors (subtle versions)
+  const protocolColorMap: Record<string, string> = {
+    'pump': '#357553',        // Custom green for pump
+    'bonk': '#ff6b35',
+    'moonshot': '#a855f7',
+    'heaven': '#8b5cf6',
+    'daos.fun': '#06b6d4',
+    'candle': '#f59e0b',
+    'sugar': '#ec4899',
+    'believe': '#10b981',
+    'jupiter': '#8b5cf6',
+    'moonit': '#fbbf24',
+    'boop': '#3b82f6',
+    'launchlab': '#ef4444',
+    'dynamic': '#526fff',
+    'raydium': '#6b7280',
+    'meteora': '#92400e',
+    'meteora_v2': '#a16207',
+    'pump_amm': '#e9ba14',    // Gold for meteora amm
+    'orca': '#0ea5e9'
+  };
+
+  // Get protocol color based on launchpad_protocol field
+  const getProtocolColor = (token: Token): string => {
+    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+    const protocol = (token as any).protocol?.toLowerCase();
+    const launchpadName = (token as any).launchpadName?.toLowerCase();
+    const amm = (token as any).amm?.toLowerCase();
     
-    // Protocol-specific icons
-    if (protocol === 'pump' || launchpadName === 'pump') {
+    // Use the first available protocol identifier
+    const protocolId = launchpadProtocol || protocol || launchpadName || amm;
+    
+    if (!protocolId) {
+      return '#22c55e'; // Default green
+    }
+    
+    // Direct match first
+    if (protocolColorMap[protocolId]) {
+      return protocolColorMap[protocolId];
+    }
+    
+    // Partial match for variations
+    if (protocolId.includes('meteora')) {
+      if (protocolId.includes('v2') || protocolId === 'cp_amm') {
+        return protocolColorMap['meteora_v2'];
+      }
+      return protocolColorMap['meteora'];
+    }
+    
+    if (protocolId.includes('pump')) {
+      if (protocolId === 'pump_amm' || protocolId === 'pump.fun') {
+        return protocolColorMap['pump_amm'];
+      }
+      return protocolColorMap['pump'];
+    }
+    
+    if (protocolId.includes('raydium')) {
+      return protocolColorMap['raydium'];
+    }
+    
+    if (protocolId.includes('moonit') || protocolId === 'token_launchpad') {
+      return protocolColorMap['moonit'];
+    }
+    
+    if (protocolId.includes('bonk')) {
+      return protocolColorMap['bonk'];
+    }
+    
+    if (protocolId.includes('orca')) {
+      return protocolColorMap['orca'];
+    }
+    
+    if (protocolId.includes('jupiter')) {
+      return protocolColorMap['jupiter'];
+    }
+    
+    // Default to green if no match found
+    return '#22c55e';
+  };
+
+  // Get icon based on token data - dynamically maps launchpad_protocol to icon
+  const getTokenIcon = (token: Token): string => {
+    // Priority: launchpad_protocol > protocol > launchpadName > amm
+    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+    const protocol = (token as any).protocol?.toLowerCase();
+    const launchpadName = (token as any).launchpadName?.toLowerCase();
+    const amm = (token as any).amm?.toLowerCase();
+    
+    // Use the first available protocol identifier
+    const protocolId = launchpadProtocol || protocol || launchpadName || amm;
+    
+    if (!protocolId) {
+      // Default to pump icon if no protocol info
       return '/pump.svg';
     }
-    if (protocol === 'raydium' || amm === 'raydium') {
-      return '/ray.svg';
-    }
-    if (protocol === 'meteora' || amm === 'meteora') {
+    
+    // Map protocol names to their icons
+    // Meteora variations
+    if (protocolId.includes('meteora') || protocolId === 'cp_amm' || protocolId === 'lb_clmm') {
       return '/meteora.svg';
     }
-    if (protocol === 'orca' || amm === 'orca') {
-      return '/orca.svg'; // You'll need to add this icon
-    }
-    if (protocol === 'jupiter' || amm === 'jupiter') {
-      return '/jupiter.svg'; // You'll need to add this icon
+    
+    // Pump variations
+    if (protocolId.includes('pump')) {
+      // Check if it's pump_amm (migrated) or regular pump
+      if (protocolId === 'pump_amm' || protocolId === 'pump.fun') {
+        return '/pump-amm-temp.svg'; // Migrated pump tokens
+      }
+      return '/pump.svg'; // Regular pump tokens
     }
     
-    // Default to pump icon for new pairs
+    // Raydium variations
+    if (protocolId.includes('raydium') || protocolId === 'raydium_amm' || protocolId === 'amm_v3') {
+      return '/ray.svg';
+    }
+    
+    // Moonit (token_launchpad)
+    if (protocolId.includes('moonit') || protocolId === 'token_launchpad') {
+      return '/moonit.svg';
+    }
+    
+    // Bonk (raydium_launchpad)
+    if (protocolId.includes('bonk') || protocolId === 'raydium_launchpad') {
+      return '/bonk.svg';
+    }
+    
+    // Orca
+    if (protocolId.includes('orca')) {
+      return '/orca.svg'; // You'll need to add this icon if it doesn't exist
+    }
+    
+    // Jupiter
+    if (protocolId.includes('jupiter')) {
+      return '/jupiter.svg'; // You'll need to add this icon if it doesn't exist
+    }
+    
+    // Default to pump icon for unknown protocols
     return '/pump.svg';
   };
 
   const tokenIcon = getTokenIcon(token);
+  const protocolColor = getProtocolColor(token);
   const migrationProgress = getMigrationProgress(token);
+
+  // Debug logging for protocol detection
+  if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_ICONS__) {
+    console.log(`[TokenImage] ${token.symbol}:`, {
+      launchpad_protocol: (token as any).launchpad_protocol,
+      protocol: (token as any).protocol,
+      launchpadName: (token as any).launchpadName,
+      amm: (token as any).amm,
+      selectedIcon: tokenIcon,
+      protocolColor: protocolColor
+    });
+  }
 
   // Use real migration progress for each token, with fallback to unique test progress
   const getUniqueTestProgress = (token: Token): number => {
@@ -450,29 +575,40 @@ function TokenImage({
 
   return (
     <>
-      <div className="relative h-20 w-20 overflow-visible rounded-lg transition-all duration-300 ease-out"
-           style={{ 
-             backgroundColor: AX.surface
-           }}>
+      <div className="relative h-20 w-20 flex items-center justify-center">
+        {/* Outer border container */}
         <div 
-          className="h-full w-full rounded-lg overflow-hidden relative"
+          className="relative rounded-lg transition-all duration-300 ease-out"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           style={{
-            border: isNewPairs ? '2px solid transparent' : '1px solid #22c55e'
+            border: isNewPairs ? '1px solid transparent' : `1px solid ${protocolColor}`,
+            padding: '2px'
           }}
         >
-    <FastImage
-      src={imageUrl}
-      alt={token.name || token.symbol || ""}
-      symbol={token.symbol}
-      name={token.name}
-            width={80}
-            height={80}
-            className="h-full w-full object-cover transition-all duration-300 rounded-lg"
-      priority={priority}
-      showBubble={false}
-    />
+          {/* Inner silver border container */}
+          <div 
+            className="relative rounded-lg"
+            style={{
+              border: isNewPairs ? '1px solid transparent' : `1px solid rgba(192, 192, 192, 0.5)`,
+              padding: '2px'
+            }}
+          >
+            {/* Image container */}
+            <div className="relative rounded-lg overflow-hidden">
+              <FastImage
+                src={imageUrl}
+                alt={token.name || token.symbol || ""}
+                symbol={token.symbol}
+                name={token.name}
+                width={70}
+                height={70}
+                className="w-full h-full object-cover transition-all duration-300"
+                priority={priority}
+                showBubble={false}
+              />
+            </div>
+          </div>
         </div>
         
         {/* Thin loading border - solid green, clockwise from bottom-right (only for New Pairs) */}
@@ -511,15 +647,16 @@ function TokenImage({
         )}
         
         {/* Dynamic protocol icon bubble - positioned outside the image container */}
-        <div className="absolute bottom-0 right-0 bg-white rounded-full border-2 flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10 shadow-lg"
+        <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
              style={{ 
                width: 20, 
                height: 20,
-               borderColor: '#22c55e' // Always green
+               border: `2px solid ${protocolColor}`,
+               boxShadow: `0 0 4px ${protocolColor}60`
              }}>
           <img
             src={tokenIcon}
-            alt={`${(token as any).protocol || (token as any).launchpadName || 'Protocol'} logo`}
+            alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || 'Protocol'} logo`}
             className="w-3/4 h-3/4 object-contain"
           />
         </div>
@@ -3561,47 +3698,11 @@ const PulseTable = React.memo(function PulseTable({
             const pairAddress = (token as any)?.pair_address;
             const mintAddress = (token as any)?.mint;
 
-            const handleTokenClick = async () => {
-              // If we have pair_address, navigate directly
-              if (pairAddress) {
-                router.push(`/trade/${pairAddress}`);
-                return;
-              }
-
-              // If we only have mint_address, fetch pair_address first
-              if (mintAddress) {
-                try {
-                  console.log("Fetching pair address for mint:", mintAddress);
-                  const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
-                  const response = await fetch(
-                    `${baseUrl}/v1/token/hydrate-pair`,
-                    {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ mint: mintAddress }),
-                    },
-                  );
-
-                  if (response.ok) {
-                    const data = await response.json();
-                    if (data.pair_address) {
-                      console.log("Got pair address:", data.pair_address);
-                      router.push(`/trade/${data.pair_address}`);
-                    } else {
-                      console.error(
-                        "No pair address found for mint:",
-                        mintAddress,
-                      );
-                    }
-                  } else {
-                    console.error(
-                      "Failed to fetch pair address for mint:",
-                      mintAddress,
-                    );
-                  }
-                } catch (error) {
-                  console.error("Error fetching pair address:", error);
-                }
+            const handleTokenClick = () => {
+              // Navigate immediately with pair_address or mint - trade page will handle resolution
+              const address = pairAddress || mintAddress;
+              if (address) {
+                router.push(`/trade/${address}`);
               }
             };
 

@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
+import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 
 type TimeRange = "5m" | "1h" | "6h" | "24h";
 
@@ -870,17 +871,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               }
             }
 
-            let poolType: "PumpAmm" | "Raydium CPMM" | "" = "";
-            switch ((token as any).amm_id) {
-              case "pump_amm":
-                poolType = "PumpAmm";
-                break;
-              case "raydium_cpmm":
-                poolType = "Raydium CPMM";
-                break;
-              default:
-                poolType = "PumpAmm";
-            }
+            // Use shared pool type detection
+            const poolType = getPoolTypeFromToken(token);
+            console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
 
             try {
               const tradeParams = {
@@ -890,10 +883,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 quoteMint: SOL_MINT_ADDRESS,
                 mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
                 poolType,
+                // Preset trading parameters
                 slippage: settings.maxSlippage || 0.4, // Default 40%
                 priorityFee: settings.priority || 0.0001, // Default 0.0001 SOL
                 bribe: settings.bribe || 0, // Default 0
+                mevMode: settings.mevMode,
+                autoFee: settings.autoFee || false,
+                maxFee: settings.maxFee || 0,
+                rpc: settings.rpc,
               };
+              console.log(`🎯 Trading with presets:`, {
+                slippage: `${(tradeParams.slippage * 100).toFixed(1)}%`,
+                priorityFee: `${tradeParams.priorityFee} SOL`,
+                bribe: `${tradeParams.bribe} SOL`,
+                mevMode: tradeParams.mevMode,
+                autoFee: tradeParams.autoFee,
+              });
               const tr = await tradeBuy(tradeParams, user.bearerToken);
               const txHash = tr?.hash || tr?.txid;
               const tokenAmount = tr?.amount || tr?.tokenAmount;

@@ -26,7 +26,7 @@ export interface BackendOHLCChartProps {
   onDataUpdate?: (data: BackendOHLCData[]) => void;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://157.180.71.112:8080';
+const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://157.180.71.112:8080';
 const VALID_INTERVALS: BackendInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
 
 const SEC_PER_BAR: Record<BackendInterval, number> = {

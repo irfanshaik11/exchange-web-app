@@ -161,10 +161,15 @@ type BuyParams = {
   quoteMint: string;
   amount: number;
   mevProtection?: 0 | 1;
-  poolType: "PumpAmm" | "Raydium CPMM" | "";
+  poolType: "PumpAmm" | "Raydium CPMM" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "bags" | "MoonShoot" | "";
+  // Preset trading parameters
   slippage?: number; // e.g., 0.4 for 40%
   priorityFee?: number; // in SOL, e.g., 0.001
   bribe?: number; // in SOL, e.g., 0.001
+  mevMode?: 'off' | 'reduced' | 'on';
+  autoFee?: boolean;
+  maxFee?: number; // in SOL
+  rpc?: string;
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) =>

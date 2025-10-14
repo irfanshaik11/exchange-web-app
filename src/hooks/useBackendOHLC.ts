@@ -27,7 +27,7 @@ export interface UseBackendOHLCOptions {
   onError?: (error: Error) => void;
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://157.180.71.112:8080';
+const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://157.180.71.112:8080';
 
 /**
  * Custom hook to fetch OHLC data from your backend
