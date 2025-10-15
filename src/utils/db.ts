@@ -85,6 +85,7 @@ export type Token = {
   total_fully_diluted_valuation: number;
   total_snipers: number;
   pair_address: string;
+  migrated_pool_address?: string; // Migrated pool address for tokens that have been migrated
   total_holders: number;
   created_at: string; // ISO timestamp
   updated_at: string; // ISO timestamp

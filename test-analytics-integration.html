@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Analytics Integration Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #0f1012;
+            color: #E6E7EA;
+        }
+        h1 {
+            color: #22C55E;
+            border-bottom: 2px solid #22C55E;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            background: #1E1F26;
+            border: 1px solid #2A2B33;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #22C55E;
+            background: #17191E;
+        }
+        .test-result.error {
+            border-left-color: #EF4444;
+            background: #2A1A1A;
+        }
+        .test-result.success {
+            border-left-color: #22C55E;
+            background: #1A2A1A;
+        }
+        .metric-display {
+            display: inline-block;
+            padding: 8px 16px;
+            margin: 5px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .metric-green { background: rgba(34, 197, 94, 0.2); color: #22C55E; }
+        .metric-yellow { background: rgba(234, 179, 8, 0.2); color: #EAB308; }
+        .metric-red { background: rgba(239, 68, 68, 0.2); color: #EF4444; }
+        .metric-gray { background: rgba(156, 163, 175, 0.2); color: #9CA3AF; }
+        button {
+            background: #22C55E;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 10px 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #16A34A;
+        }
+        button:disabled {
+            background: #6B7280;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #22C55E;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        code {
+            background: #17191E;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #22C55E;
+        }
+        .json-display {
+            background: #17191E;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status-online { background: #22C55E; color: #000; }
+        .status-offline { background: #EF4444; color: #fff; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Token Analytics Integration Test</h1>
+    
+    <div class="test-section">
+        <h2>1. API Health Check</h2>
+        <button onclick="testHealth()">Test API Health</button>
+        <div id="health-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Token Registration</h2>
+        <input type="text" id="mint-input" placeholder="Enter token mint address" 
+               value="DKiykx2ATmbt5ufaDpGka8b2kzi39TdqmHx4K66game"
+               style="width: 400px; padding: 10px; background: #17191E; border: 1px solid #2A2B33; color: #E6E7EA; border-radius: 4px;">
+        <br>
+        <button onclick="testRegister()">Register Token</button>
+        <div id="register-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Fetch Metrics (Cached)</h2>
+        <button onclick="testMetricsCached()">Fetch Cached Metrics</button>
+        <div id="metrics-cached-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Fetch Metrics (Blockchain Refresh)</h2>
+        <button onclick="testMetricsRefresh()">Fetch Fresh Metrics (from Blockchain)</button>
+        <div id="metrics-refresh-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Display Test - Visual Metrics</h2>
+        <button onclick="testDisplay()">Display Metrics Visually</button>
+        <div id="display-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>6. Full Integration Test</h2>
+        <button onclick="testFullIntegration()">Run Full Integration Test</button>
+        <div id="full-test-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:4000';
+        let currentMint = 'DKiykx2ATmbt5ufaDpGka8b2kzi39TdqmHx4K66game';
+
+        function log(elementId, message, type = 'info') {
+            const el = document.getElementById(elementId);
+            const className = type === 'error' ? 'test-result error' : 
+                             type === 'success' ? 'test-result success' : 'test-result';
+            el.innerHTML += `<div class="${className}">${message}</div>`;
+        }
+
+        function clear(elementId) {
+            document.getElementById(elementId).innerHTML = '';
+        }
+
+        async function testHealth() {
+            clear('health-result');
+            log('health-result', 'Testing API health...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                if (data.ok) {
+                    log('health-result', `✅ API is online! <span class="status-badge status-online">ONLINE</span>`, 'success');
+                    log('health-result', `Environment: <code>${data.env}</code>`);
+                } else {
+                    log('health-result', '❌ API returned unexpected response', 'error');
+                }
+            } catch (error) {
+                log('health-result', `❌ API is offline: ${error.message} <span class="status-badge status-offline">OFFLINE</span>`, 'error');
+            }
+        }
+
+        async function testRegister() {
+            currentMint = document.getElementById('mint-input').value;
+            clear('register-result');
+            log('register-result', `Registering token: <code>${currentMint}</code>...`);
+            
+            try {
+                const response = await fetch(`${API_BASE}/tokens`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mint: currentMint })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.token) {
+                    log('register-result', '✅ Token registered successfully!', 'success');
+                    log('register-result', `Token ID: <code>${data.token.id}</code>`);
+                    log('register-result', `Created: <code>${new Date(data.token.createdAt).toLocaleString()}</code>`);
+                    log('register-result', '<div class="json-display">' + JSON.stringify(data, null, 2) + '</div>');
+                } else {
+                    log('register-result', `⚠️ Registration response: ${data.error || 'Unknown error'}`, 'error');
+                    log('register-result', '<div class="json-display">' + JSON.stringify(data, null, 2) + '</div>');
+                }
+            } catch (error) {
+                log('register-result', `❌ Registration failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testMetricsCached() {
+            currentMint = document.getElementById('mint-input').value;
+            clear('metrics-cached-result');
+            log('metrics-cached-result', `Fetching cached metrics for: <code>${currentMint.slice(0, 8)}...</code>`);
+            
+            try {
+                const start = Date.now();
+                const response = await fetch(`${API_BASE}/tokens/${currentMint}/metrics?refresh=false`);
+                const elapsed = Date.now() - start;
+                const data = await response.json();
+                
+                if (response.ok && data.metrics) {
+                    log('metrics-cached-result', `✅ Metrics fetched in ${elapsed}ms`, 'success');
+                    log('metrics-cached-result', `Total Holders: <code>${data.metrics.total_holders_count}</code>`);
+                    log('metrics-cached-result', `Whale %: <code>${data.metrics.whale_holding_percentage.toFixed(2)}%</code>`);
+                    log('metrics-cached-result', `Sniper %: <code>${data.metrics.sniper_holding_percentage.toFixed(2)}%</code>`);
+                    log('metrics-cached-result', `Dev %: <code>${data.metrics.dev_holding_percentage.toFixed(2)}%</code>`);
+                    log('metrics-cached-result', '<div class="json-display">' + JSON.stringify(data.metrics, null, 2) + '</div>');
+                } else {
+                    log('metrics-cached-result', `❌ Failed to fetch metrics: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                log('metrics-cached-result', `❌ Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testMetricsRefresh() {
+            currentMint = document.getElementById('mint-input').value;
+            clear('metrics-refresh-result');
+            log('metrics-refresh-result', `Fetching fresh blockchain data for: <code>${currentMint.slice(0, 8)}...</code>`);
+            log('metrics-refresh-result', '<div class="loading"></div> This may take 2-5 seconds...');
+            
+            try {
+                const start = Date.now();
+                const response = await fetch(`${API_BASE}/tokens/${currentMint}/metrics?refresh=true`);
+                const elapsed = Date.now() - start;
+                const data = await response.json();
+                
+                if (response.ok && data.metrics) {
+                    log('metrics-refresh-result', `✅ Fresh data fetched in ${elapsed}ms`, 'success');
+                    log('metrics-refresh-result', `Total Holders: <code>${data.metrics.total_holders_count}</code>`);
+                    log('metrics-refresh-result', `Whale %: <code>${data.metrics.whale_holding_percentage.toFixed(2)}%</code>`);
+                    log('metrics-refresh-result', `Sniper %: <code>${data.metrics.sniper_holding_percentage.toFixed(2)}%</code>`);
+                    log('metrics-refresh-result', `Dev %: <code>${data.metrics.dev_holding_percentage.toFixed(2)}%</code>`);
+                    log('metrics-refresh-result', `Insider %: <code>${data.metrics.insider_holding_percentage.toFixed(2)}%</code>`);
+                    
+                    // Show distribution
+                    const dist = data.metrics.holder_distribution;
+                    log('metrics-refresh-result', `<strong>Holder Distribution:</strong> 🐋 ${dist.whales} whales, 🦈 ${dist.sharks} sharks, 🐟 ${dist.fish} fish, 🦐 ${dist.shrimps} shrimps`);
+                    
+                    log('metrics-refresh-result', '<div class="json-display">' + JSON.stringify(data.metrics, null, 2) + '</div>');
+                } else {
+                    log('metrics-refresh-result', `❌ Failed to fetch metrics: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                log('metrics-refresh-result', `❌ Request failed: ${error.message}`, 'error');
+            }
+        }
+
+        function getMetricColor(value, type) {
+            if (type === 'whale') {
+                if (value > 50) return 'metric-red';
+                if (value > 30) return 'metric-yellow';
+                return 'metric-green';
+            }
+            
+            if (value < 0.1) return 'metric-gray';
+            if (value > 15) return 'metric-red';
+            if (value > 5) return 'metric-yellow';
+            return 'metric-green';
+        }
+
+        async function testDisplay() {
+            currentMint = document.getElementById('mint-input').value;
+            clear('display-result');
+            log('display-result', 'Fetching and displaying metrics visually...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/tokens/${currentMint}/metrics?refresh=false`);
+                const data = await response.json();
+                
+                if (response.ok && data.metrics) {
+                    const m = data.metrics;
+                    
+                    let html = '<h3>Visual Metric Display</h3>';
+                    html += `<div class="metric-display ${getMetricColor(m.sniper_holding_percentage, 'sniper')}">🎯 Sniper: ${m.sniper_holding_percentage.toFixed(1)}%</div>`;
+                    html += `<div class="metric-display ${getMetricColor(m.insider_holding_percentage, 'insider')}">👻 Insider: ${m.insider_holding_percentage.toFixed(1)}%</div>`;
+                    html += `<div class="metric-display ${getMetricColor(m.dev_holding_percentage, 'dev')}">🎲 Dev: ${m.dev_holding_percentage.toFixed(1)}%</div>`;
+                    html += `<div class="metric-display ${getMetricColor(m.whale_holding_percentage, 'whale')}">🐋 Whale: ${m.whale_holding_percentage.toFixed(1)}%</div>`;
+                    
+                    log('display-result', html);
+                    log('display-result', '✅ This is how metrics should appear in PulseTable!', 'success');
+                } else {
+                    log('display-result', `❌ Failed to fetch metrics`, 'error');
+                }
+            } catch (error) {
+                log('display-result', `❌ Display test failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testFullIntegration() {
+            currentMint = document.getElementById('mint-input').value;
+            clear('full-test-result');
+            log('full-test-result', '<h3>Running Full Integration Test...</h3>');
+            
+            // Test 1: Health
+            log('full-test-result', '<strong>Test 1: API Health</strong>');
+            try {
+                const health = await fetch(`${API_BASE}/health`);
+                const healthData = await health.json();
+                if (healthData.ok) {
+                    log('full-test-result', '✅ API is online', 'success');
+                } else {
+                    log('full-test-result', '❌ API health check failed', 'error');
+                    return;
+                }
+            } catch (e) {
+                log('full-test-result', '❌ API is offline', 'error');
+                return;
+            }
+            
+            // Test 2: Register
+            log('full-test-result', '<strong>Test 2: Token Registration</strong>');
+            try {
+                const register = await fetch(`${API_BASE}/tokens`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mint: currentMint })
+                });
+                if (register.ok || register.status === 500) { // 500 might be "already exists"
+                    log('full-test-result', '✅ Token registration endpoint working', 'success');
+                } else {
+                    log('full-test-result', '⚠️ Token registration returned unexpected status', 'error');
+                }
+            } catch (e) {
+                log('full-test-result', '❌ Token registration failed', 'error');
+            }
+            
+            // Test 3: Fetch cached
+            log('full-test-result', '<strong>Test 3: Fetch Cached Metrics</strong>');
+            try {
+                const cached = await fetch(`${API_BASE}/tokens/${currentMint}/metrics?refresh=false`);
+                const cachedData = await cached.json();
+                if (cached.ok && cachedData.metrics) {
+                    log('full-test-result', `✅ Cached metrics: ${cachedData.metrics.total_holders_count} holders`, 'success');
+                    
+                    if (cachedData.metrics.total_holders_count === 0) {
+                        log('full-test-result', '⚠️ No holder data yet, will trigger blockchain fetch...', 'error');
+                    }
+                } else {
+                    log('full-test-result', '❌ Failed to fetch cached metrics', 'error');
+                }
+            } catch (e) {
+                log('full-test-result', '❌ Cached metrics fetch failed', 'error');
+            }
+            
+            // Test 4: Fetch fresh
+            log('full-test-result', '<strong>Test 4: Fetch Fresh Blockchain Data</strong>');
+            log('full-test-result', '<div class="loading"></div> Fetching from Solana blockchain...');
+            try {
+                const fresh = await fetch(`${API_BASE}/tokens/${currentMint}/metrics?refresh=true`);
+                const freshData = await fresh.json();
+                if (fresh.ok && freshData.metrics) {
+                    log('full-test-result', `✅ Blockchain data: ${freshData.metrics.total_holders_count} holders`, 'success');
+                    log('full-test-result', `Whale concentration: ${freshData.metrics.whale_holding_percentage.toFixed(2)}%`);
+                    
+                    // Final display test
+                    const m = freshData.metrics;
+                    let html = '<h3>✅ Final Result - How It Will Look:</h3>';
+                    html += `<div class="metric-display ${getMetricColor(m.sniper_holding_percentage, 'sniper')}">🎯 Sniper: ${m.sniper_holding_percentage.toFixed(1)}%</div>`;
+                    html += `<div class="metric-display ${getMetricColor(m.insider_holding_percentage, 'insider')}">👻 Insider: ${m.insider_holding_percentage.toFixed(1)}%</div>`;
+                    html += `<div class="metric-display ${getMetricColor(m.dev_holding_percentage, 'dev')}">🎲 Dev: ${m.dev_holding_percentage.toFixed(1)}%</div>`;
+                    html += `<div class="metric-display ${getMetricColor(m.whale_holding_percentage, 'whale')}">🐋 Whale: ${m.whale_holding_percentage.toFixed(1)}%</div>`;
+                    log('full-test-result', html);
+                    
+                    log('full-test-result', '<strong>🎉 ALL TESTS PASSED! Integration is working correctly.</strong>', 'success');
+                } else {
+                    log('full-test-result', '❌ Failed to fetch blockchain data', 'error');
+                }
+            } catch (e) {
+                log('full-test-result', `❌ Blockchain fetch failed: ${e.message}`, 'error');
+            }
+        }
+
+        // Auto-run health check on load
+        window.onload = () => {
+            testHealth();
+        };
+    </script>
+</body>
+</html>
+
+

@@ -128,17 +128,24 @@ export default function usePaginatedTokensWebSocket({
       
       const pollData = async () => {
         try {
-          const queryParams = new URLSearchParams({
-            filter: filter || 'marketcap',
-            order: order || 'desc',
-            offset: (offset || 0).toString(),
-            limit: (limit || 20).toString(),
-          });
-          
           const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
             ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
             : env.NEXT_PUBLIC_GO_SERVICE_URL;
-          const url = `${baseUrl}/v1/tokens?${queryParams}`;
+          
+          // Use specialized pulse endpoints for 'new' filter, otherwise use getAllTokens
+          let url: string;
+          if (filter === 'new') {
+            url = `${baseUrl}/v1/pulse/new?limit=${limit || 30}&t=${Date.now()}`;
+          } else {
+            const queryParams = new URLSearchParams({
+              filter: filter || 'marketcap',
+              order: order || 'desc',
+              offset: (offset || 0).toString(),
+              limit: (limit || 20).toString(),
+            });
+            url = `${baseUrl}/api/token-service/getAllTokens?${queryParams}`;
+          }
+          
           const response = await fetch(url);
           
           if (response.ok) {

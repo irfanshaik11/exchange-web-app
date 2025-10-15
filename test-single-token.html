@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Single Token Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #0a0a0a;
+            color: #0f0;
+        }
+        .test { padding: 10px; margin: 10px 0; background: #111; border: 1px solid #333; }
+        .value { color: #ff0; font-weight: bold; font-size: 20px; }
+        .success { color: #0f0; }
+        .error { color: #f00; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Single Token Debug Test</h1>
+    
+    <input type="text" id="mint" value="DKiykx2ATmbt5ufaDpGka8b2kzi39TdqmHx4K66game" 
+           style="width: 500px; padding: 10px; background: #111; color: #0f0; border: 1px solid #333;">
+    <button onclick="testToken()" style="padding: 10px 20px; margin: 10px;">TEST THIS TOKEN</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        async function testToken() {
+            const mint = document.getElementById('mint').value;
+            const results = document.getElementById('results');
+            results.innerHTML = '<div class="test">Testing ' + mint + '...</div>';
+            
+            try {
+                // Step 1: Register
+                results.innerHTML += '<div class="test">STEP 1: Registering token...</div>';
+                const regRes = await fetch('http://localhost:4000/tokens', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mint})
+                });
+                const regData = await regRes.json();
+                results.innerHTML += '<div class="test success">✓ Token registered: ' + JSON.stringify(regData, null, 2) + '</div>';
+                
+                // Step 2: Get cached metrics
+                results.innerHTML += '<div class="test">STEP 2: Getting cached metrics...</div>';
+                const cacheRes = await fetch(`http://localhost:4000/tokens/${mint}/metrics?refresh=false`);
+                const cacheData = await cacheRes.json();
+                results.innerHTML += '<div class="test">Cached data: <pre>' + JSON.stringify(cacheData.metrics, null, 2) + '</pre></div>';
+                
+                // Step 3: Check if we have data
+                const hasData = cacheData.metrics.total_holders_count > 0;
+                results.innerHTML += '<div class="test">Has holder data: ' + hasData + '</div>';
+                
+                if (!hasData) {
+                    results.innerHTML += '<div class="test">STEP 3: No data found, fetching from blockchain...</div>';
+                    const freshRes = await fetch(`http://localhost:4000/tokens/${mint}/metrics?refresh=true`);
+                    const freshData = await freshRes.json();
+                    results.innerHTML += '<div class="test success">✓ Fresh data: <pre>' + JSON.stringify(freshData.metrics, null, 2) + '</pre></div>';
+                    
+                    displayMetrics(freshData.metrics);
+                } else {
+                    displayMetrics(cacheData.metrics);
+                }
+                
+            } catch (error) {
+                results.innerHTML += '<div class="test error">✗ ERROR: ' + error.message + '</div>';
+            }
+        }
+        
+        function displayMetrics(metrics) {
+            const results = document.getElementById('results');
+            
+            results.innerHTML += '<div class="test"><h2>📊 FINAL DISPLAY TEST</h2></div>';
+            
+            // Test each metric
+            const tests = [
+                {name: 'Sniper', key: 'sniper_holding_percentage', icon: '🎯'},
+                {name: 'Insider', key: 'insider_holding_percentage', icon: '👻'},
+                {name: 'Dev', key: 'dev_holding_percentage', icon: '🎲'},
+                {name: 'Whale', key: 'whale_holding_percentage', icon: '🐋'}
+            ];
+            
+            tests.forEach(test => {
+                const value = metrics[test.key];
+                const color = value < 0.1 ? '#666' : value > 15 ? '#f00' : value > 5 ? '#ff0' : '#0f0';
+                const display = value < 0.1 ? '0%' : `${value.toFixed(1)}%`;
+                
+                results.innerHTML += `<div class="test">
+                    ${test.icon} <strong>${test.name}:</strong> 
+                    <span style="color: ${color}; font-size: 24px; font-weight: bold;">${display}</span>
+                    <br>Raw value: ${value}
+                    <br>Formatted: ${value.toFixed(1)}%
+                    <br>Display: ${display}
+                    <br>Color: ${color}
+                </div>`;
+            });
+            
+            results.innerHTML += `<div class="test success">
+                <h3>✓ Total Holders: <span class="value">${metrics.total_holders_count}</span></h3>
+                <h3>✓ Whale Distribution:</h3>
+                <div>🐋 Whales: ${metrics.holder_distribution.whales}</div>
+                <div>🦈 Sharks: ${metrics.holder_distribution.sharks}</div>
+                <div>🐟 Fish: ${metrics.holder_distribution.fish}</div>
+                <div>🦐 Shrimps: ${metrics.holder_distribution.shrimps}</div>
+            </div>`;
+            
+            // Test the actual component logic
+            results.innerHTML += '<div class="test"><h2>🧪 COMPONENT LOGIC TEST</h2></div>';
+            
+            tests.forEach(test => {
+                const value = metrics[test.key] || 0;
+                const shouldShowZero = test.key === 'whale_holding_percentage';
+                const willShowZero = value < 0.1 && !shouldShowZero;
+                
+                results.innerHTML += `<div class="test">
+                    <strong>${test.name}:</strong><br>
+                    Raw value: ${value}<br>
+                    shouldShowZero: ${shouldShowZero}<br>
+                    value < 0.1: ${value < 0.1}<br>
+                    Will show "0%": ${willShowZero}<br>
+                    <span style="font-size: 20px; font-weight: bold; color: ${willShowZero ? '#666' : '#0f0'}">
+                        Display: ${willShowZero ? '0%' : value.toFixed(1) + '%'}
+                    </span>
+                </div>`;
+            });
+        }
+        
+        // Auto-run on load
+        window.onload = () => testToken();
+    </script>
+</body>
+</html>
+
+

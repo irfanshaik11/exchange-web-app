@@ -61,12 +61,14 @@ export function useCachedFinalStretchTokens() {
     }
 
     try {
-      // Use environment variable for backend URL
-      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-      const apiUrl = `${baseUrl}/v1/pulse/final-stretch?limit=30&t=${Date.now()}`;
+      // Use Next.js API route which proxies to the backend
+      const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
 
+      console.log('[Final Stretch] Fetching from:', apiUrl);
       const response = await fetch(apiUrl);
+      console.log('[Final Stretch] Response status:', response.status, response.ok);
       const data = response.ok ? await response.json() : [];
+      console.log('[Final Stretch] Received tokens:', data.length);
       
       // Cache the fresh data
       const cacheData: CachedData<any[]> = {
@@ -183,12 +185,14 @@ export function useCachedMigratedTokens() {
     }
 
     try {
-      // Use environment variable for backend URL
-      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-      const apiUrl = `${baseUrl}/v1/pulse/migrated?limit=30&t=${Date.now()}`;
+      // Use Next.js API route which proxies to the backend
+      const apiUrl = `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
 
+      console.log('[Migrated] Fetching from:', apiUrl);
       const response = await fetch(apiUrl);
+      console.log('[Migrated] Response status:', response.status, response.ok);
       const data = response.ok ? await response.json() : [];
+      console.log('[Migrated] Received tokens:', data.length);
       
       // Cache the fresh data
       const cacheData: CachedData<any[]> = {

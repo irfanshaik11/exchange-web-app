@@ -71,6 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           bonding_pct: parseFloat(r.bonding_pct ?? 0), // Also include raw bonding_pct for fallback
           created_at: r.launch_time || r.created_at || null,
           launch_time: r.launch_time || null,
+          launchpad_protocol: r.launchpad_protocol || null, // Pass through protocol for filtering and colors
           // Optional extra fields used by the UI
           logo: r.logo || r.uri || r.image || null,
           image: r.image || r.uri || r.logo || null,

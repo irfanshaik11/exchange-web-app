@@ -12,6 +12,31 @@ interface RequestOptions extends RequestInit {
 }
 
 /**
+ * Custom error class for structured API errors from backend
+ */
+export class ApiError extends Error {
+  code?: string;
+  details?: any;
+  suggestions?: string[];
+  status?: number;
+
+  constructor(
+    message: string,
+    code?: string,
+    details?: any,
+    suggestions?: string[],
+    status?: number
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.details = details;
+    this.suggestions = suggestions;
+    this.status = status;
+  }
+}
+
+/**
  * Low-level helper that wraps `fetch` with sane defaults:
  *  – Prepends `NEXT_PUBLIC_BACKEND_URL`
  *  – Sets `Content-Type: application/json`
@@ -38,6 +63,18 @@ async function apiFetch<T = unknown>(
   const data = await res.json().catch(() => undefined);
 
   if (!res.ok) {
+    // Check if backend returned a structured error
+    if (data && typeof data === 'object') {
+      const message = data.message || data.error || res.statusText;
+      const code = data.code;
+      const details = data.details;
+      const suggestions = data.suggestions;
+      
+      // Throw structured error with all info
+      throw new ApiError(message, code, details, suggestions, res.status);
+    }
+    
+    // Fallback to simple error
     const message =
       (data as any)?.message || (data as any)?.error || res.statusText;
     throw new Error(message);
@@ -170,6 +207,9 @@ type BuyParams = {
   autoFee?: boolean;
   maxFee?: number; // in SOL
   rpc?: string;
+  // Optional debugging metadata
+  tokenName?: string;
+  tokenSymbol?: string;
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) =>

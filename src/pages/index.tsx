@@ -33,7 +33,7 @@ import InterstatePopout from '../components/InterstatePopout';
 import FilterPopout from '../components/FilterPopout';
 import throttle from 'lodash.throttle';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
-import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
+import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "../utils/api";
 import { env } from "../env";
 import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 
@@ -278,7 +278,10 @@ export default function Home() {
         quoteMint: SOL_MINT_ADDRESS, // Always SOL
         amount: quickBuyAmount,
         mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
-        poolType: poolType
+        poolType: poolType,
+        // Debugging metadata
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
       }, user.bearerToken);
       
       // Handle different response formats from backend
@@ -296,7 +299,31 @@ export default function Home() {
       }
     } catch (e: any) {
       console.error('Quick Buy error:', e);
-      toast.error(`❌ Quick Buy failed: ${e.message || "Unknown error"}`);
+      
+      // Handle structured API errors
+      if (e instanceof ApiError) {
+        if (e.code === 'NO_ACTIVE_POOL') {
+          toast.error(`⚠️ Pool unavailable for ${token.symbol}. No active trading pools found.`, { duration: 5000 });
+          if (e.suggestions && e.suggestions.length > 0) {
+            setTimeout(() => {
+              toast.error(`💡 ${e.suggestions[0]}`, { duration: 5000 });
+            }, 500);
+          }
+        } else if (e.code === 'POOL_GRADUATED') {
+          toast.error(`🎓 Pool graduated for ${token.symbol}. Token may have migrated to a new pool.`, { duration: 5000 });
+        } else {
+          toast.error(`❌ Quick Buy failed: ${e.message}`, { duration: 5000 });
+        }
+      } else {
+        // Handle generic errors with better messages
+        let errorMsg = e.message || "Unknown error";
+        if (errorMsg.includes("Pool is completed") || errorMsg.includes("graduated")) {
+          errorMsg = `Pool has graduated. Try refreshing to find the new pool.`;
+        } else if (errorMsg.includes("TokenAccountNotFoundError") || errorMsg.includes("Pool account does not exist")) {
+          errorMsg = `Pool not found. The token may not have an active trading pool.`;
+        }
+        toast.error(`❌ Quick Buy failed: ${errorMsg}`, { duration: 5000 });
+      }
     }
   }
 

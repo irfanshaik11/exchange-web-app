@@ -10,7 +10,8 @@ import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 // import { PriorityImageSearcher } from '../utils/imageSearch'; // DISABLED - no external image searches
 import { useImagePreloader } from '../hooks/useImagePreloader';
 import { useCachedPulseTokens, useCachedLaunchpadData } from '../hooks/useCachedTokens';
-import { useCachedFinalStretchTokens, useCachedMigratedTokens } from '../hooks/useCachedTokensAdditional';
+// DISABLED: Using HTTP polling instead for real-time data
+// import { useCachedFinalStretchTokens, useCachedMigratedTokens } from '../hooks/useCachedTokensAdditional';
 import { env } from '~/env';
 
 interface LaunchpadToken {
@@ -56,23 +57,27 @@ export default function PulsePage() {
     refreshData: refreshLaunchpadData 
   } = useCachedLaunchpadData();
 
-  // Use cached hooks for Final Stretch and Migrated tokens
-  const { 
-    tokens: cachedFinalStretchTokens, 
-    loading: finalStretchLoading, 
-    error: finalStretchError, 
-    isStale: finalStretchStale 
-  } = useCachedFinalStretchTokens();
+  // DISABLED: Use HTTP polling instead of cached hooks for real-time data
+  // const { 
+  //   tokens: cachedFinalStretchTokens, 
+  //   loading: finalStretchLoading, 
+  //   error: finalStretchError, 
+  //   isStale: finalStretchStale 
+  // } = useCachedFinalStretchTokens();
   
-  const { 
-    tokens: cachedMigratedTokens, 
-    loading: migratedLoading, 
-    error: migratedError, 
-    isStale: migratedStale 
-  } = useCachedMigratedTokens();
+  // const { 
+  //   tokens: cachedMigratedTokens, 
+  //   loading: migratedLoading, 
+  //   error: migratedError, 
+  //   isStale: migratedStale 
+  // } = useCachedMigratedTokens();
 
   const [httpNew, setHttpNew] = useState<any[]>([]);
   const [httpNewTick, setHttpNewTick] = useState(0);
+  const [httpMigrated, setHttpMigrated] = useState<any[]>([]);
+  const [httpMigratedTick, setHttpMigratedTick] = useState(0);
+  const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
+  const [httpFinalStretchTick, setHttpFinalStretchTick] = useState(0);
 
   // ENABLED: WebSocket hook for real-time token updates
   const { data: newPairsTokens, loading: wsLoading } = usePaginatedTokensWebSocket({ filter: 'new', limit: 30 });
@@ -138,6 +143,150 @@ export default function PulsePage() {
     };
     
     immediatePoll();
+  }, []);
+
+  // Clear stale localStorage cache for migrated tokens
+  useEffect(() => {
+    try {
+      localStorage.removeItem('cached_migrated_tokens');
+      console.log('[Migrated] Cleared stale localStorage cache');
+    } catch {}
+  }, []);
+
+  // Immediate poll on mount for Migrated tokens (just like New Pairs)
+  useEffect(() => {
+    const immediatePoll = async () => {
+      try {
+        // Always use Next.js API proxy to avoid CORS issues
+        const apiUrl = `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
+
+        const res = await fetch(apiUrl, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setHttpMigrated(data as any[]);
+            setHttpMigratedTick((t) => t + 1);
+            console.log(`[Migrated] Immediate poll got ${data.length} tokens`);
+          }
+        }
+      } catch (error) {
+        console.log('[Migrated] Immediate poll failed:', error);
+      }
+    };
+    
+    immediatePoll();
+  }, []);
+
+  // Fast polling for Migrated tokens (cache-bypass)
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        // Always use Next.js API proxy to avoid CORS issues
+        const apiUrl = `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
+
+        const res = await fetch(apiUrl, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        if (!alive) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            if (data.length > 0) {
+              console.log(`[Migrated Polling] Received ${data.length} tokens. Top 3:`, data.slice(0, 3).map((t: any) => ({ symbol: t.symbol, migrated_time: t.migrated_time })));
+              setHttpMigrated(data as any[]);
+              setHttpMigratedTick((t) => t + 1);
+            }
+          }
+
+        }
+      } catch {}
+    };
+    poll();
+    const id = setInterval(poll, 2000); // Poll every 2 seconds for migrated
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+
+  // Clear stale localStorage cache for final stretch tokens
+  useEffect(() => {
+    try {
+      localStorage.removeItem('cached_final_stretch_tokens');
+      console.log('[Final Stretch] Cleared stale localStorage cache');
+    } catch {}
+  }, []);
+
+  // Immediate poll on mount for Final Stretch tokens (just like New Pairs)
+  useEffect(() => {
+    const immediatePoll = async () => {
+      try {
+        // Always use Next.js API proxy to avoid CORS issues
+        const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+
+        const res = await fetch(apiUrl, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setHttpFinalStretch(data as any[]);
+            setHttpFinalStretchTick((t) => t + 1);
+            console.log(`[Final Stretch] Immediate poll got ${data.length} tokens`);
+          }
+        }
+      } catch (error) {
+        console.log('[Final Stretch] Immediate poll failed:', error);
+      }
+    };
+    
+    immediatePoll();
+  }, []);
+
+  // Fast polling for Final Stretch tokens (cache-bypass)
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        // Always use Next.js API proxy to avoid CORS issues
+        const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+
+        const res = await fetch(apiUrl, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        if (!alive) return;
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            if (data.length > 0) {
+              console.log(`[Final Stretch Polling] Received ${data.length} tokens`);
+              setHttpFinalStretch(data as any[]);
+              setHttpFinalStretchTick((t) => t + 1);
+            }
+          }
+
+        }
+      } catch {}
+    };
+    poll();
+    const id = setInterval(poll, 2000); // Poll every 2 seconds for final stretch
+    return () => { alive = false; clearInterval(id); };
   }, []);
 
   // Convert launchpad tokens to Token format for PulseTable
@@ -239,16 +388,16 @@ export default function PulsePage() {
 
   // Combine regular tokens with launchpad tokens and HTTP tokens (stable refs)
   const combinedNewPairs = useMemo(() => [...newPairs, ...launchpadNewPairs], [newPairs, launchpadNewPairs]);
-  const combinedFinalStretch = useMemo(() => [...cachedFinalStretchTokens, ...launchpadFinalStretch], [cachedFinalStretchTokens, launchpadFinalStretch]);
-  const combinedMigrated = useMemo(() => [...cachedMigratedTokens, ...launchpadMigrated], [cachedMigratedTokens, launchpadMigrated]);
+  // Don't use launchpad data for Final Stretch and Migrated - use HTTP polling only
+  const combinedFinalStretch = useMemo(() => [], []);
+  const combinedMigrated = useMemo(() => [], []);
 
   // Memoize the loading state to prevent unnecessary re-renders
   const isLoading = useMemo(() => {
     return (tokensLoading && !tokens.length) || 
            (launchpadLoading && !launchpadData?.new?.length && !launchpadData?.completing?.length && !launchpadData?.completed?.length) ||
-           (finalStretchLoading && !cachedFinalStretchTokens.length) ||
-           (migratedLoading && !cachedMigratedTokens.length);
-  }, [tokensLoading, tokens.length, launchpadLoading, launchpadData?.new?.length, launchpadData?.completing?.length, launchpadData?.completed?.length, finalStretchLoading, cachedFinalStretchTokens.length, migratedLoading, cachedMigratedTokens.length]);
+           (httpNewTick === 0 && httpNew.length === 0);
+  }, [tokensLoading, tokens.length, launchpadLoading, launchpadData?.new?.length, launchpadData?.completing?.length, launchpadData?.completed?.length, httpNewTick, httpNew.length]);
   
   const hasError = useMemo(() => {
     return launchpadError && !(launchpadData?.new?.length || 0) && !(launchpadData?.completing?.length || 0) && !(launchpadData?.completed?.length || 0);
@@ -279,7 +428,9 @@ export default function PulsePage() {
 
   // Build New Pairs dataset with recency sort and de-dup
   const getTs = (t: any): number => {
+    // For migrated tokens, prioritize migrated_time over launch_time
     let v: any = (
+      t?.migrated_time ?? t?.migratedTime ??
       t?.launch_time ?? t?.launchTime ??
       t?.created_at ?? t?.createdAt ??
       t?.firstSeen ?? t?.first_seen ??
@@ -372,7 +523,96 @@ export default function PulsePage() {
     return result.length > 0 ? result : combinedNewPairs;
   };
 
+  const buildMigrated = (): any[] => {
+    // Use ONLY HTTP pulse-migrated (authoritative by migrated_time) - no fallback to prevent stale data
+    const source = httpMigrated;
+    if (typeof window !== 'undefined') {
+      try {
+        console.log(`[Pulse] migrated source=http sizes http=${httpMigrated.length}`);
+        if (httpMigrated.length > 0) {
+          console.log(`[Pulse] httpMigrated sample:`, httpMigrated.slice(0, 3).map(t => ({ 
+            symbol: t.symbol, 
+            migrated_time: t.migrated_time,
+            launch_time: t.launch_time
+          })));
+        }
+      } catch {}
+    }
+    
+    // No deduplication needed - backend returns clean data
+    if (!Array.isArray(source) || source.length === 0) {
+      return [];
+    }
+    
+    const withTs: any[] = [];
+    const withoutTs: any[] = [];
+    for (const t of source) {
+      const ts = getTs(t);
+      if (ts > 0) withTs.push(t); else withoutTs.push(t);
+    }
+    // Sort by timestamp in descending order (newest first - by migrated_time)
+    withTs.sort((a, b) => {
+      const tsA = getTs(a);
+      const tsB = getTs(b);
+      const diff = tsB - tsA; // Newest first (descending order)
+      
+      // Debug logging
+      if (typeof window !== 'undefined' && Math.abs(diff) < 300000) { // Log when within 5 minutes
+        console.log(`[Pulse Migrated] Sorting comparison:`, {
+          tokenA: { symbol: a.symbol, ts: tsA, migrated_time: a.migrated_time },
+          tokenB: { symbol: b.symbol, ts: tsB, migrated_time: b.migrated_time },
+          diff: diff,
+          result: diff > 0 ? 'B first (newer)' : 'A first (newer)'
+        });
+      }
+      
+      return diff;
+    });
+    withoutTs.sort((a, b) => {
+      const fdvA = Number((a as any).fully_diluted_value) || 0;
+      const fdvB = Number((b as any).fully_diluted_value) || 0;
+      if (fdvB !== fdvA) return fdvB - fdvA;
+      return String((a as any).symbol || (a as any).name || '').localeCompare(String((b as any).symbol || (b as any).name || ''));
+    });
+    const result = withTs.concat(withoutTs);
+    return result;
+  };
+
+  const buildFinalStretch = (): any[] => {
+    // Use ONLY HTTP pulse-final-stretch - no fallback to prevent stale data
+    const source = httpFinalStretch;
+    if (typeof window !== 'undefined') {
+      try {
+        console.log(`[Pulse] final-stretch source=http sizes http=${httpFinalStretch.length}`);
+      } catch {}
+    }
+    
+    // No deduplication needed - backend returns clean data
+    if (!Array.isArray(source) || source.length === 0) {
+      return [];
+    }
+    
+    const withTs: any[] = [];
+    const withoutTs: any[] = [];
+    for (const t of source) {
+      const ts = getTs(t);
+      if (ts > 0) withTs.push(t); else withoutTs.push(t);
+    }
+    // Sort by timestamp in descending order (newest first)
+    withTs.sort((a, b) => getTs(b) - getTs(a));
+    withoutTs.sort((a, b) => {
+      const fdvA = Number((a as any).fully_diluted_value) || 0;
+      const fdvB = Number((b as any).fully_diluted_value) || 0;
+      if (fdvB !== fdvA) return fdvB - fdvA;
+      return String((a as any).symbol || (a as any).name || '').localeCompare(String((b as any).symbol || (b as any).name || ''));
+    });
+    const result = withTs.concat(withoutTs);
+    return result;
+  };
+
   const newPairsData = useMemo(() => buildNewPairs(), [httpNewTick, wsNewEnriched, combinedNewPairs]);
+  const migratedData = useMemo(() => buildMigrated(), [httpMigratedTick, httpMigrated]);
+  const finalStretchData = useMemo(() => buildFinalStretch(), [httpFinalStretchTick, httpFinalStretch]);
   
   // DISABLED: Image search - images should only come from JSON response
   // const priorityImageSearcher = useRef(new PriorityImageSearcher());
@@ -395,8 +635,10 @@ export default function PulsePage() {
     }
   }, [newPairsData, preloadImages]);
 
-  // Keep last non-empty list to prevent flicker when WS/HTTP blips (guard against needless updates)
+  // Keep last non-empty lists to prevent flicker when WS/HTTP blips (guard against needless updates)
   const [lastNonEmptyNewPairs, setLastNonEmptyNewPairs] = useState<any[]>([]);
+  const [lastNonEmptyMigrated, setLastNonEmptyMigrated] = useState<any[]>([]);
+  const [lastNonEmptyFinalStretch, setLastNonEmptyFinalStretch] = useState<any[]>([]);
   const hasSeededRef = useRef(false);
   useEffect(() => {
     const sameList = (a: any[], b: any[]) => {
@@ -419,7 +661,46 @@ export default function PulsePage() {
       hasSeededRef.current = true;
     }
   }, [newPairsData, combinedNewPairs]);
+
+  useEffect(() => {
+    const sameList = (a: any[], b: any[]) => {
+      if (a === b) return true;
+      if (!a || !b) return false;
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        const ka = (a[i]?.pair_address || a[i]?.mint) as string | undefined;
+        const kb = (b[i]?.pair_address || b[i]?.mint) as string | undefined;
+        if (ka !== kb) return false;
+      }
+      return true;
+    };
+
+    if (migratedData && migratedData.length > 0) {
+      setLastNonEmptyMigrated((prev) => (sameList(prev, migratedData) ? prev : migratedData));
+    }
+  }, [migratedData]);
+
+  useEffect(() => {
+    const sameList = (a: any[], b: any[]) => {
+      if (a === b) return true;
+      if (!a || !b) return false;
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        const ka = (a[i]?.pair_address || a[i]?.mint) as string | undefined;
+        const kb = (b[i]?.pair_address || b[i]?.mint) as string | undefined;
+        if (ka !== kb) return false;
+      }
+      return true;
+    };
+
+    if (finalStretchData && finalStretchData.length > 0) {
+      setLastNonEmptyFinalStretch((prev) => (sameList(prev, finalStretchData) ? prev : finalStretchData));
+    }
+  }, [finalStretchData]);
+
   const newPairsToShow = lastNonEmptyNewPairs.length > 0 ? lastNonEmptyNewPairs : newPairsData;
+  const migratedToShow = lastNonEmptyMigrated.length > 0 ? lastNonEmptyMigrated : migratedData;
+  const finalStretchToShow = lastNonEmptyFinalStretch.length > 0 ? lastNonEmptyFinalStretch : finalStretchData;
   // Debug: log top entries order and timestamps (after data is computed)
   if (typeof window !== 'undefined') {
     try {
@@ -443,8 +724,8 @@ export default function PulsePage() {
   const realtimeAddrs = useMemo(() => {
     const src: any[] = [
       ...(newPairsToShow as any[] || []),
-      ...(combinedFinalStretch as any[] || []),
-      ...(combinedMigrated as any[] || []),
+      ...(finalStretchToShow as any[] || []),
+      ...(migratedToShow as any[] || []),
     ];
     const uniq = new Set<string>();
     for (const t of src) {
@@ -455,7 +736,7 @@ export default function PulsePage() {
       if (uniq.size >= 200) break;
     }
     return Array.from(uniq);
-  }, [newPairsToShow, combinedFinalStretch, combinedMigrated]);
+  }, [newPairsToShow, finalStretchToShow, migratedToShow]);
 
   const { marketData, connected: wsConnected, error: wsError } = useRealtimeWebSocket(realtimeAddrs, {
     url: `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/market-data`,
@@ -533,64 +814,6 @@ export default function PulsePage() {
   }, [marketData]);
 
   const enrichedNewPairsToShow = useMemo(() => enrichWithMarketData(newPairsToShow as any), [enrichWithMarketData, newPairsToShow]);
-  
-  // Apply same limiting logic as new pairs to final stretch and migrated
-  const finalStretchToShow = useMemo(() => {
-    const source = cachedFinalStretchTokens.length ? cachedFinalStretchTokens : combinedFinalStretch;
-    const uniq = new Map<string, any>();
-    for (const t of source as any[]) {
-      const key = (t?.pair_address || t?.mint) as string | undefined;
-      if (!key) continue;
-      if (!uniq.has(key)) uniq.set(key, t);
-    }
-    const vals = Array.from(uniq.values());
-    const withTs: any[] = [];
-    const withoutTs: any[] = [];
-    for (const t of vals) {
-      const ts = getTs(t);
-      if (ts > 0) withTs.push(t); else withoutTs.push(t);
-    }
-    // Sort by timestamp in descending order (newest first)
-    withTs.sort((a, b) => getTs(b) - getTs(a));
-    withoutTs.sort((a, b) => {
-      const fdvA = Number((a as any).fully_diluted_value) || 0;
-      const fdvB = Number((b as any).fully_diluted_value) || 0;
-      if (fdvB !== fdvA) return fdvB - fdvA;
-      return String((a as any).symbol || (a as any).name || '').localeCompare(String((b as any).symbol || (b as any).name || ''));
-    });
-    const result = withTs.concat(withoutTs);
-    // Limit to 30 tokens like new pairs
-    return result.slice(0, 30);
-  }, [cachedFinalStretchTokens, combinedFinalStretch, getTs]);
-
-  const migratedToShow = useMemo(() => {
-    const source = cachedMigratedTokens.length ? cachedMigratedTokens : combinedMigrated;
-    const uniq = new Map<string, any>();
-    for (const t of source as any[]) {
-      const key = (t?.pair_address || t?.mint) as string | undefined;
-      if (!key) continue;
-      if (!uniq.has(key)) uniq.set(key, t);
-    }
-    const vals = Array.from(uniq.values());
-    const withTs: any[] = [];
-    const withoutTs: any[] = [];
-    for (const t of vals) {
-      const ts = getTs(t);
-      if (ts > 0) withTs.push(t); else withoutTs.push(t);
-    }
-    // Sort by timestamp in descending order (newest first)
-    withTs.sort((a, b) => getTs(b) - getTs(a));
-    withoutTs.sort((a, b) => {
-      const fdvA = Number((a as any).fully_diluted_value) || 0;
-      const fdvB = Number((b as any).fully_diluted_value) || 0;
-      if (fdvB !== fdvA) return fdvB - fdvA;
-      return String((a as any).symbol || (a as any).name || '').localeCompare(String((b as any).symbol || (b as any).name || ''));
-    });
-    const result = withTs.concat(withoutTs);
-    // Limit to 30 tokens like new pairs
-    return result.slice(0, 30);
-  }, [cachedMigratedTokens, combinedMigrated, getTs]);
-
   const enrichedFinalStretch = useMemo(() => enrichWithMarketData(finalStretchToShow as any), [enrichWithMarketData, finalStretchToShow]);
   const enrichedMigrated = useMemo(() => enrichWithMarketData(migratedToShow as any), [enrichWithMarketData, migratedToShow]);
 
@@ -644,3 +867,5 @@ export default function PulsePage() {
     </>
   );
 }
+
+

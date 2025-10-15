@@ -69,6 +69,7 @@ import Link from "next/link";
 import { CiSearch } from "react-icons/ci";
 import FastImage from "./FastImage";
 import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
+// import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
 
 interface PulseTableProps {
   title: string;
@@ -304,10 +305,12 @@ function TokenImage({
   token,
   priority = false,
   isNewPairs = false,
+  columnType = 'new',
 }: {
   token: Token;
   priority?: boolean;
   isNewPairs?: boolean;
+  columnType?: 'new' | 'final-stretch' | 'migrated';
 }) {
   const [showPreview, setShowPreview] = useState(false);
   
@@ -366,7 +369,8 @@ function TokenImage({
 
   // Protocol color mapping - matches the filter section colors (subtle versions)
   const protocolColorMap: Record<string, string> = {
-    'pump': '#357553',        // Custom green for pump
+    'pump': '#22c55e',        // Green for pump.fun
+    'pump.fun': '#22c55e',    // Green for pump.fun
     'bonk': '#ff6b35',
     'moonshot': '#a855f7',
     'heaven': '#8b5cf6',
@@ -375,13 +379,15 @@ function TokenImage({
     'sugar': '#ec4899',
     'believe': '#10b981',
     'jupiter': '#8b5cf6',
-    'moonit': '#fbbf24',
-    'boop': '#3b82f6',
+    'moonit': '#74831f',      // Green-brown for moonit
+    'boop': '#134577',        // Dark blue for boopfun
+    'boopfun': '#134577',     // Dark blue for boopfun
     'launchlab': '#ef4444',
     'dynamic': '#526fff',
-    'raydium': '#6b7280',
-    'meteora': '#92400e',
-    'meteora_v2': '#a16207',
+    'raydium': '#5c51f7',     // Purple for raydium
+    'raydiumlaunchpad': '#5c51f7',  // Purple for raydiumlaunchpad
+    'meteora': '#ff4662',     // Pink-red for meteora
+    'meteora_v2': '#ff4662',  // Pink-red for meteora
     'pump_amm': '#e9ba14',    // Gold for meteora amm
     'orca': '#0ea5e9'
   };
@@ -390,50 +396,56 @@ function TokenImage({
   const getProtocolColor = (token: Token): string => {
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
     
-    // Use the launchpad_protocol identifier
-    const protocolId = launchpadProtocol;
-    
-    if (!protocolId) {
+    if (!launchpadProtocol) {
       return '#22c55e'; // Default green
     }
     
+    // Special handling for Meteora - use column type since Meteora doesn't have bonding scores
+    if (launchpadProtocol.includes('meteora')) {
+      // Meteora tokens: red in new pairs and final stretch, yellow in migrated
+      if (columnType === 'migrated') {
+        return '#eab308'; // Yellow for migrated
+      } else {
+        return '#ff4662'; // Red for new pairs and final stretch
+      }
+    }
+    
+    // Special handling for Pump - use column type to determine color
+    if (launchpadProtocol.includes('pump')) {
+      // Pump tokens: green in new pairs and final stretch, yellow in migrated
+      if (columnType === 'migrated') {
+        return '#eab308'; // Yellow for migrated
+      } else {
+        return '#22c55e'; // Green for new pairs and final stretch
+      }
+    }
+    
     // Direct match first
-    if (protocolColorMap[protocolId]) {
-      return protocolColorMap[protocolId];
+    if (protocolColorMap[launchpadProtocol]) {
+      return protocolColorMap[launchpadProtocol];
     }
     
-    // Partial match for variations
-    if (protocolId.includes('meteora')) {
-      if (protocolId.includes('v2') || protocolId === 'cp_amm') {
-        return protocolColorMap['meteora_v2'];
-      }
-      return protocolColorMap['meteora'];
+    if (launchpadProtocol.includes('raydium')) {
+      return '#5c51f7'; // Purple for raydium
     }
     
-    if (protocolId.includes('pump')) {
-      if (protocolId === 'pump_amm' || protocolId === 'pump.fun') {
-        return protocolColorMap['pump_amm'];
-      }
-      return protocolColorMap['pump'];
+    if (launchpadProtocol.includes('moonit')) {
+      return '#74831f'; // Green-brown for moonit
     }
     
-    if (protocolId.includes('raydium')) {
-      return protocolColorMap['raydium'];
+    if (launchpadProtocol.includes('boop')) {
+      return '#134577'; // Dark blue for boopfun
     }
     
-    if (protocolId.includes('moonit') || protocolId === 'token_launchpad') {
-      return protocolColorMap['moonit'];
-    }
-    
-    if (protocolId.includes('bonk')) {
+    if (launchpadProtocol.includes('bonk')) {
       return protocolColorMap['bonk'];
     }
     
-    if (protocolId.includes('orca')) {
+    if (launchpadProtocol.includes('orca')) {
       return protocolColorMap['orca'];
     }
     
-    if (protocolId.includes('jupiter')) {
+    if (launchpadProtocol.includes('jupiter')) {
       return protocolColorMap['jupiter'];
     }
     
@@ -445,61 +457,43 @@ function TokenImage({
   const getTokenIcon = (token: Token): string => {
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
     
-    // Use the launchpad_protocol identifier
-    const protocolId = launchpadProtocol;
-    
-    if (!protocolId) {
-      // Default to pump icon if no protocol info
-      return '/pump.svg';
+    if (!launchpadProtocol) {
+      // Default to pump.fun icon if no protocol info
+      return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
     }
     
-    // Map protocol names to their icons
-    // Meteora variations
-    if (protocolId.includes('meteora') || protocolId === 'cp_amm' || protocolId === 'lb_clmm') {
-      return '/meteora.svg';
+    // Map launchpad_protocol to external logo URLs
+    if (launchpadProtocol.includes('pump')) {
+      return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
     }
     
-    // Pump variations
-    if (protocolId.includes('pump')) {
-      // Check if it's pump_amm (migrated) or regular pump
-      if (protocolId === 'pump_amm' || protocolId === 'pump.fun') {
-        return '/pump-amm-temp.svg'; // Migrated pump tokens
-      }
-      return '/pump.svg'; // Regular pump tokens
+    if (launchpadProtocol.includes('meteora')) {
+      return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
     }
     
-    // Raydium variations
-    if (protocolId.includes('raydium') || protocolId === 'raydium_amm' || protocolId === 'amm_v3') {
-      return '/ray.svg';
+    if (launchpadProtocol.includes('raydium')) {
+      return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
     }
     
-    // Moonit (token_launchpad)
-    if (protocolId.includes('moonit') || protocolId === 'token_launchpad') {
-      return '/moonit.svg';
+    if (launchpadProtocol.includes('boop')) {
+      return 'https://dropsearn.fra1.cdn.digitaloceanspaces.com/media/projects/logos/boopfun_logo_1746246162.webp';
     }
     
-    // Bonk (raydium_launchpad)
-    if (protocolId.includes('bonk') || protocolId === 'raydium_launchpad') {
-      return '/bonk.svg';
+    if (launchpadProtocol.includes('moonit')) {
+      return 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6_LEZppFrAkKMqApIwCM_R5n0-b4XC8Aluw&s';
     }
     
-    // Orca
-    if (protocolId.includes('orca')) {
-      return '/orca.svg'; // You'll need to add this icon if it doesn't exist
-    }
-    
-    // Jupiter
-    if (protocolId.includes('jupiter')) {
-      return '/jupiter.svg'; // You'll need to add this icon if it doesn't exist
-    }
-    
-    // Default to pump icon for unknown protocols
-    return '/pump.svg';
+    // Default to pump.fun icon for unknown protocols
+    return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
   };
 
   const tokenIcon = getTokenIcon(token);
   const protocolColor = getProtocolColor(token);
   const migrationProgress = getMigrationProgress(token);
+  
+  // Check if token is Meteora
+  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+  const isMeteora = launchpadProtocol.includes('meteora');
 
   // Debug logging for protocol detection
   if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_ICONS__) {
@@ -534,7 +528,6 @@ function TokenImage({
   // Scale New Pairs progress to fill more of the border (since they max out at ~60%)
   // Cap at 95% to never show full completion
   const scaledProgress = isNewPairs ? Math.min(finalProgress / 0.6, 0.95) : finalProgress;
-  const progressBorderColor = getProgressBorderColor(finalProgress);
 
   // Debug logging for New Pairs
   if (isNewPairs) {
@@ -544,7 +537,9 @@ function TokenImage({
       graduationPercent: (token as any).graduationPercent,
       calculatedProgress: migrationProgress,
       finalProgress: finalProgress,
-      borderColor: progressBorderColor
+      scaledProgress: scaledProgress,
+      protocolColor: protocolColor,
+      protocol: (token as any).launchpad_protocol
     });
   }
 
@@ -575,7 +570,7 @@ function TokenImage({
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           style={{
-            border: isNewPairs ? '1px solid transparent' : `1px solid ${protocolColor}`,
+            border: `1px solid ${protocolColor}`,
             padding: '2px'
           }}
         >
@@ -583,7 +578,7 @@ function TokenImage({
           <div 
             className="relative rounded-lg"
             style={{
-              border: isNewPairs ? '1px solid transparent' : `1px solid rgba(192, 192, 192, 0.5)`,
+              border: `1px solid rgba(192, 192, 192, 0.5)`,
               padding: '2px'
             }}
           >
@@ -627,7 +622,7 @@ function TokenImage({
               <path
                 d="M 78 78 L 10 78 Q 2 78 2 70 L 2 10 Q 2 2 10 2 L 70 2 Q 78 2 78 10 L 78 70 Q 78 78 70 78"
                 fill="none"
-                stroke="#22c55e"
+                stroke={protocolColor}
                 strokeWidth="3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -650,7 +645,10 @@ function TokenImage({
           <img
             src={tokenIcon}
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || 'Protocol'} logo`}
-            className="w-3/4 h-3/4 object-contain"
+            className={`${isMeteora ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+            style={{
+              filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
+            }}
           />
         </div>
         {/* Camera icon overlay with AI-inspired styling - only shows on image hover */}
@@ -1210,8 +1208,8 @@ const PulseTable = React.memo(function PulseTable({
     hasTelegram: false,
     atLeastOneSocial: false,
     onlyPumpLive: false,
-    // Sort - default to timestamp for New Pairs, marketCap for others
-    sortBy: isNewPairs ? 'timestamp' : 'marketCap',
+    // Sort - default to timestamp for New Pairs and Migrated, marketCap for others
+    sortBy: (isNewPairs || title.toLowerCase().includes('migrated')) ? 'timestamp' : 'marketCap',
     sortOrder: 'desc'
   });
 
@@ -1283,7 +1281,7 @@ const PulseTable = React.memo(function PulseTable({
       hasTelegram: false,
       atLeastOneSocial: false,
       onlyPumpLive: false,
-      sortBy: isNewPairs ? 'timestamp' : 'marketCap',
+      sortBy: (isNewPairs || title.toLowerCase().includes('migrated')) ? 'timestamp' : 'marketCap',
       sortOrder: 'desc'
     };
     setPendingFilters(defaultFilters);
@@ -1380,25 +1378,27 @@ const PulseTable = React.memo(function PulseTable({
   };
 
   // Helper function to map protocol names to backend protocol values
+  // Returns multiple variations to match against launchpad_protocol field
   const mapProtocolToBackend = (protocolName: string): string[] => {
     switch (protocolName) {
       case 'Pump':
-        return ['pump.fun'];
+        return ['pump', 'pump.fun', 'pumpfun'];
       case 'Raydium':
-        return ['raydium'];
+        return ['raydium', 'raydiumlaunchpad'];
       case 'Meteora AMM':
+        return ['meteora', 'meteora_amm', 'meteoraamm'];
       case 'Meteora AMM V2':
-        return ['meteora'];
+        return ['meteora', 'meteora_v2', 'meteorav2', 'meteora_amm'];
       case 'Bonk':
-        return ['bonk'];
+        return ['bonk', 'bonkbot'];
       case 'Bags':
-        return ['bags'];
+        return ['bags', 'bags.fm', 'bagsfm'];
       case 'Moonshot':
         return ['moonshot'];
       case 'Heaven':
         return ['heaven'];
       case 'Daos.fun':
-        return ['daos.fun'];
+        return ['daos', 'daos.fun', 'daosfun'];
       case 'Candle':
         return ['candle'];
       case 'Sugar':
@@ -1406,17 +1406,17 @@ const PulseTable = React.memo(function PulseTable({
       case 'Believe':
         return ['believe'];
       case 'Jupiter Studio':
-        return ['jupiter'];
+        return ['jupiter', 'jupiterstudio'];
       case 'Moonit':
         return ['moonit'];
       case 'Boop':
-        return ['boop'];
+        return ['boop', 'boopfun', 'boop.fun'];
       case 'LaunchLab':
-        return ['launchlab'];
+        return ['launchlab', 'launch_lab'];
       case 'Dynamic BC':
-        return ['dynamic'];
+        return ['dynamic', 'dynamicbc'];
       case 'Pump AMM':
-        return ['pump.fun'];
+        return ['pump_amm', 'pumpamm', 'pump amm'];
       case 'Orca':
         return ['orca'];
       default:
@@ -1425,12 +1425,15 @@ const PulseTable = React.memo(function PulseTable({
   };
 
   // Helper function to get token protocol from various fields
+  // Prioritizes launchpad_protocol which is the primary source used for display
   const getTokenProtocol = (token: any): string | null => {
     // Check multiple possible fields for protocol information
+    // Priority: launchpad_protocol > protocol > amm_id > launchpadProtocol
     return token.launchpad_protocol || 
            token.protocol || 
            token.amm_id || 
            token.launchpadProtocol ||
+           token.launchpadName ||
            null;
   };
 
@@ -1443,11 +1446,57 @@ const PulseTable = React.memo(function PulseTable({
       const beforeCount = filtered.length;
       filtered = filtered.filter(token => {
         const tokenProtocol = getTokenProtocol(token);
-        if (!tokenProtocol) return false;
+        
+        // Get bonding curve progress to determine if token has migrated
+        const bondingProgress = typeof token.bonding_curve_progress === 'number' 
+          ? token.bonding_curve_progress 
+          : parseFloat(String(token.bonding_curve_progress || '0'));
+        const bondingPct = (token as any).bonding_pct || 0;
+        const isMigrated = bondingProgress >= 0.85 || bondingPct >= 85;
+        const isFinalStretch = (bondingProgress >= 0.6 && bondingProgress < 0.85) || (bondingPct >= 60 && bondingPct < 85);
         
         // Check if token's protocol matches any of the selected protocols
         const matches = filters.protocols.some(selectedProtocol => {
           const backendProtocols = mapProtocolToBackend(selectedProtocol);
+          
+          // Special handling for Pump-related filters on migrated/final stretch tokens
+          // These tokens originated from Pump.fun even if they've migrated to another protocol
+          if (selectedProtocol === 'Pump' || selectedProtocol === 'Pump AMM') {
+            // In Migrated column: tokens have moved from Pump to AMMs (Raydium/Meteora)
+            if (isMigrated) {
+              if (selectedProtocol === 'Pump') {
+                // Show all migrated tokens when filtering by "Pump" since they all came from Pump
+                return true;
+              }
+              if (selectedProtocol === 'Pump AMM') {
+                // Show migrated tokens that moved to AMMs
+                if (tokenProtocol) {
+                  return tokenProtocol.toLowerCase().includes('raydium') ||
+                         tokenProtocol.toLowerCase().includes('meteora') ||
+                         tokenProtocol.toLowerCase().includes('orca');
+                }
+              }
+            }
+            
+            // In Final Stretch column: tokens are still on Pump but approaching migration
+            if (isFinalStretch) {
+              // Show all final stretch tokens when filtering by "Pump"
+              return selectedProtocol === 'Pump';
+            }
+            
+            // In New Pairs column: standard Pump protocol matching
+            if (!isMigrated && !isFinalStretch && tokenProtocol) {
+              return backendProtocols.some(backendProtocol => 
+                tokenProtocol.toLowerCase().includes(backendProtocol.toLowerCase()) ||
+                backendProtocol.toLowerCase().includes(tokenProtocol.toLowerCase())
+              );
+            }
+          }
+          
+          // For non-Pump protocols (Raydium, Meteora, etc.), use standard matching
+          // This allows filtering migrated tokens by their CURRENT protocol
+          if (!tokenProtocol) return false;
+          
           return backendProtocols.some(backendProtocol => 
             tokenProtocol.toLowerCase().includes(backendProtocol.toLowerCase()) ||
             backendProtocol.toLowerCase().includes(tokenProtocol.toLowerCase())
@@ -1456,7 +1505,7 @@ const PulseTable = React.memo(function PulseTable({
         
         // Debug logging
         if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_FILTER__) {
-          console.log(`[Protocol Filter] Token ${token.symbol} (${tokenProtocol}) matches ${filters.protocols}:`, matches);
+          console.log(`[Protocol Filter] Token ${token.symbol} (${tokenProtocol}) - bonding: ${bondingProgress}% - migrated: ${isMigrated} - matches ${filters.protocols}:`, matches);
         }
         
         return matches;
@@ -1732,7 +1781,9 @@ const PulseTable = React.memo(function PulseTable({
         case 'time':
           // Sort by timestamp (newest first for desc, oldest first for asc)
           const getTimestamp = (token: any): number => {
-            const ts = token?.launch_time ?? token?.launchTime ?? 
+            // For migrated tokens, prioritize migrated_time over launch_time
+            const ts = token?.migrated_time ?? token?.migratedTime ??
+                      token?.launch_time ?? token?.launchTime ?? 
                       token?.created_at ?? token?.createdAt ?? 
                       token?.firstSeen ?? token?.first_seen ?? 
                       token?.pair_created_at ?? token?.pairCreatedAt ?? 
@@ -1752,13 +1803,28 @@ const PulseTable = React.memo(function PulseTable({
           bValue = getTimestamp(b);
           
           // Debug logging for timestamp sorting
-          if (typeof window !== 'undefined' && Math.abs(aValue - bValue) < 60000) { // Log when within 1 minute
-            console.log(`[PulseTable] Timestamp sorting:`, {
-              tokenA: { name: a.name, symbol: a.symbol, ts: aValue, created_at: a.created_at || (a as any).launch_time },
-              tokenB: { name: b.name, symbol: b.symbol, ts: bValue, created_at: b.created_at || (b as any).launch_time },
-              diff: bValue - aValue,
-              result: bValue > aValue ? 'B first (newer)' : 'A first (newer)'
-            });
+          if (typeof window !== 'undefined' && title.toLowerCase().includes('migrated') && filtered.length > 0) { 
+            // Log first 3 tokens to verify migrated_time is being used
+            if (filtered.indexOf(a) < 3 || filtered.indexOf(b) < 3) {
+              console.log(`[PulseTable] ${title} timestamp sorting:`, {
+                tokenA: { 
+                  name: a.name, 
+                  symbol: a.symbol, 
+                  ts: aValue, 
+                  migrated_time: (a as any).migrated_time,
+                  launch_time: (a as any).launch_time 
+                },
+                tokenB: { 
+                  name: b.name, 
+                  symbol: b.symbol, 
+                  ts: bValue, 
+                  migrated_time: (b as any).migrated_time,
+                  launch_time: (b as any).launch_time 
+                },
+                diff: bValue - aValue,
+                result: bValue > aValue ? 'B first (newer)' : 'A first (newer)'
+              });
+            }
           }
           break;
         default:
@@ -3744,79 +3810,97 @@ const PulseTable = React.memo(function PulseTable({
                 )}
                 
                 {/* Status popout on hover */}
-                <span
-                  className={`status-popup fixed hidden border px-2 py-1 text-xs shadow-none`}
-                  style={{ 
-                    pointerEvents: "none",
-                    backgroundColor: AX.surface,
-                    borderColor: AX.border,
-                    color: AX.text,
-                    zIndex: 99999,
-                    left: '50%',
-                    top: '100px',
-                    transform: 'translateX(-50%)',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    fontWeight: '500'
-                  }}
-                >
-                  {(() => {
-                    // Determine token status based on title and token data
-                    const isNewPairs = title.toLowerCase().includes("new");
-                    const isFinalStretch =
-                      title.toLowerCase().includes("final") ||
-                      title.toLowerCase().includes("stretch");
-                    const isMigrated = title.toLowerCase().includes("migrated");
+                {(() => {
+                  // Determine token status based on title and token data
+                  const isNewPairs = title.toLowerCase().includes("new");
+                  const isFinalStretch =
+                    title.toLowerCase().includes("final") ||
+                    title.toLowerCase().includes("stretch");
+                  const isMigrated = title.toLowerCase().includes("migrated");
+                  
+                  // Check if token is Meteora
+                  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+                  const isMeteora = launchpadProtocol.includes('meteora');
 
-                    if (isNewPairs) {
-                      // Show bonding curve progress for new pairs
-                      // bonding_pct is already in 0-100 range from backend (percentages)
-                      const bondingProgress =
-                        typeof token.bonding_pct === "number"
-                          ? Math.round(token.bonding_pct)
-                          : Math.round(parseFloat(token.bonding_pct || "0"));
+                  // Don't render the status popup at all for Meteora tokens
+                  if (isMeteora) {
+                    return null;
+                  }
 
-                      return (
-                        <span style={{ color: AX.aiGreen }}>
-                          Bonding Curve: {bondingProgress}%
-                        </span>
-                      );
-                    } else if (isFinalStretch) {
-                      // Show "migrating" for final stretch
-                      return (
-                        <span style={{ color: AX.aiCyan }}>
-                          Migrating
-                        </span>
-                      );
-                    } else if (isMigrated) {
-                      // Show "migrated" for migrated tokens
-                      return (
-                        <span style={{ color: AX.aiBlue }}>
-                          Migrated
-                        </span>
-                      );
-                    } else {
-                      // Fallback to bonding curve progress
-                      const bondingProgress =
-                        typeof token.bonding_curve_progress === "number"
-                          ? Math.round(token.bonding_curve_progress)
-                          : Math.round(
-                              parseFloat(token.bonding_curve_progress || "0"),
-                            );
-                      return (
-                        <span style={{ color: AX.aiGreen }}>
-                          Bonding: {bondingProgress}%
-                        </span>
-                      );
-                    }
-                  })()}
-                </span>
+                  return (
+                    <span
+                      className={`status-popup fixed hidden border px-2 py-1 text-xs shadow-none`}
+                      style={{ 
+                        pointerEvents: "none",
+                        backgroundColor: AX.surface,
+                        borderColor: AX.border,
+                        color: AX.text,
+                        zIndex: 99999,
+                        left: '50%',
+                        top: '100px',
+                        transform: 'translateX(-50%)',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: '500'
+                      }}
+                    >
+                      {(() => {
+                        if (isNewPairs) {
+                          // Show bonding curve progress for tokens in new pairs
+                          // bonding_pct is already in 0-100 range from backend (percentages)
+                          const bondingProgress =
+                            typeof token.bonding_pct === "number"
+                              ? Math.round(token.bonding_pct)
+                              : Math.round(parseFloat(token.bonding_pct || "0"));
+
+                          return (
+                            <span style={{ color: AX.aiGreen }}>
+                              Bonding Curve: {bondingProgress}%
+                            </span>
+                          );
+                        } else if (isFinalStretch) {
+                          // Show "migrating" for final stretch
+                          return (
+                            <span style={{ color: AX.aiCyan }}>
+                              Migrating
+                            </span>
+                          );
+                        } else if (isMigrated) {
+                          // Show "migrated" for migrated tokens
+                          return (
+                            <span style={{ color: AX.aiBlue }}>
+                              Migrated
+                            </span>
+                          );
+                        } else {
+                          // Fallback to bonding curve progress
+                          const bondingProgress =
+                            typeof token.bonding_curve_progress === "number"
+                              ? Math.round(token.bonding_curve_progress)
+                              : Math.round(
+                                  parseFloat(token.bonding_curve_progress || "0"),
+                                );
+                          return (
+                            <span style={{ color: AX.aiGreen }}>
+                              Bonding: {bondingProgress}%
+                            </span>
+                          );
+                        }
+                      })()}
+                    </span>
+                  );
+                })()}
                 {/* Profile Picture & Address */}
                 <div className="flex flex-col items-center relative">
                     <TokenImage
                       token={token}
                       priority={title === "New Pairs"}
                       isNewPairs={title === "New Pairs"}
+                      columnType={
+                        title.toLowerCase().includes("migrated") ? 'migrated' :
+                        title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch") ? 'final-stretch' :
+                        'new'
+                      }
                     />
                   {/* Token Metrics */}
                   <div className="absolute bottom-16 -right-59">
@@ -4471,7 +4555,6 @@ const PulseTable = React.memo(function PulseTable({
                       <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
                     </svg>
                     {(() => {
-                      // Only show sniper data for Ethereum addresses (starting with 0x)
                       const address = pairAddress || mintAddress;
                       const isEthereumAddress = address && address.startsWith('0x') && address.length === 42;
                       
@@ -4484,13 +4567,19 @@ const PulseTable = React.memo(function PulseTable({
                           />
                         );
                       } else {
-                        // For non-Ethereum addresses (like Solana), show dash
-                        return <span className="text-xs">-</span>;
+                        // For Solana addresses, show token analytics
+                        return (
+                          // <SolanaTokenAnalytics 
+                          //   mintAddress={mintAddress}
+                          //   metricType="sniper"
+                          // />
+                          <span className="text-xs text-gray-500">-</span>
+                        );
                       }
                     })()}
                   </span>
                   
-                  {/* Ghost percentage - Green */}
+                  {/* Ghost percentage (Insider Holdings) - Green */}
                   <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
@@ -4500,10 +4589,14 @@ const PulseTable = React.memo(function PulseTable({
                           backgroundColor: 'transparent'
                         }}>
                     <RiGhostLine size={13} />
-                    -
+                    {/* <SolanaTokenAnalytics 
+                      mintAddress={mintAddress}
+                      metricType="insider"
+                    /> */}
+                    <span className="text-xs text-gray-500">-</span>
                   </span>
                   
-                  {/* Three Dice percentage - Green */}
+                  {/* Three Dice percentage (Dev Holdings) - Green */}
                   <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
@@ -4513,7 +4606,11 @@ const PulseTable = React.memo(function PulseTable({
                           backgroundColor: 'transparent'
                         }}>
                     <FaDice size={13} />
-                    -
+                    {/* <SolanaTokenAnalytics 
+                      mintAddress={mintAddress}
+                      metricType="dev"
+                    /> */}
+                    <span className="text-xs text-gray-500">-</span>
                   </span>
                 </div>
               </div>
