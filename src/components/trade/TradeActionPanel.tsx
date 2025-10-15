@@ -7,7 +7,7 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
-import { createLimitOrder, tradeBuy, SOL_MINT_ADDRESS } from "~/utils/api";
+import { createLimitOrder, tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
@@ -114,6 +114,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   quickBuySettings: externalQuickBuySettings,
   quickBuySide: externalQuickBuySide
 }) => {
+  // Determine the pool address to use: migrated_pool_address if available, otherwise pair_address
+  const effectivePoolAddress = useMemo(() => {
+    return token.migrated_pool_address || token.pair_address;
+  }, [token.migrated_pool_address, token.pair_address]);
+
   // Internal state with fallback to external props
   const [mode, setMode] = useState<"buy" | "sell">(externalTradeParams?.mode || "buy");
   const [tab, setTab] = useState<"market" | "limit" | "adv">(externalTradeParams?.tab || "market");
@@ -134,7 +139,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     data: wsData,
     getFormattedStats,
   } = useTokenStatsWebSocket({
-    pairAddress: token.pair_address,
+    pairAddress: effectivePoolAddress,
     tokenAddress: token.mint,
     enabled: true,
   });
@@ -844,7 +849,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               try {
                 await createLimitOrder(
                   {
-                    tokenAddress: token.pair_address,
+                    tokenAddress: effectivePoolAddress,
                     amount: Number(amount),
                     type: mode === "buy" ? "Buy" : "Sell",
                     direction: "Above",
@@ -887,11 +892,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             // Use shared pool type detection
             const poolType = getPoolTypeFromToken(token);
             console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+            console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
 
             try {
               const tradeParams = {
                 amount: Number(amount),
-                poolAddress: token.pair_address,
+                poolAddress: effectivePoolAddress,
                 baseMint: token.mint,
                 quoteMint: SOL_MINT_ADDRESS,
                 mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
@@ -904,6 +910,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 autoFee: settings.autoFee || false,
                 maxFee: settings.maxFee || 0,
                 rpc: settings.rpc,
+                // Debugging metadata
+                tokenName: token.name,
+                tokenSymbol: token.symbol,
               };
               console.log(`🎯 Trading with presets:`, {
                 slippage: `${(tradeParams.slippage * 100).toFixed(1)}%`,
@@ -924,17 +933,62 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 setMessage({ type: "error", text: "❌ Trade failed. Please try again." });
               }
             } catch (error: any) {
+              console.error("Trade error:", error);
+              
               let errorMessage = error.message || "Unknown error";
-              if (error.message?.includes("Insufficient SOL balance") || error.message?.includes("INSUFFICIENT_BALANCE")) {
-                errorMessage = `💰 Insufficient SOL balance. Add SOL and try again.`;
-              } else if (error.message?.includes("insufficient funds")) {
-                errorMessage = `💰 Insufficient funds. Please add SOL.`;
-              } else if (error.message?.includes("Invalid account discriminator") || error.message?.includes("INVALID_POOL_ADDRESS")) {
-                errorMessage = `❌ Invalid pool address.`;
-              } else if (error.message?.includes("TokenAccountNotFoundError")) {
-                errorMessage = `❌ Token account not found.`;
+              let suggestions: string[] = [];
+              
+              // Handle structured API errors
+              if (error instanceof ApiError) {
+                errorMessage = error.message;
+                suggestions = error.suggestions || [];
+                
+                // Special handling for specific error codes
+                if (error.code === 'NO_ACTIVE_POOL') {
+                  errorMessage = `⚠️ Pool Unavailable: ${error.message}`;
+                  toast.error(`Pool unavailable for ${token.symbol}`, { duration: 5000 });
+                } else if (error.code === 'POOL_GRADUATED') {
+                  errorMessage = `🎓 Pool Graduated: This pool has completed its bonding curve. A new pool may be available.`;
+                  toast.error(`Pool graduated for ${token.symbol}`, { duration: 5000 });
+                } else if (error.code === 'SERVICE_UNAVAILABLE') {
+                  errorMessage = `⏸️ Service Temporarily Unavailable: ${error.message}`;
+                  toast.error(`Trading service unavailable. Try a different token.`, { duration: 6000 });
+                } else if (error.code === 'TRADE_FAILED') {
+                  errorMessage = `❌ Trade Failed: This pool configuration is not currently supported.`;
+                  suggestions = error.suggestions || ['Try a different token on a supported DEX'];
+                }
+              } else {
+                // Handle known error patterns from error message
+                if (error.message?.includes("Insufficient SOL balance") || error.message?.includes("INSUFFICIENT_BALANCE")) {
+                  errorMessage = `💰 Insufficient SOL balance. Add SOL and try again.`;
+                } else if (error.message?.includes("insufficient funds")) {
+                  errorMessage = `💰 Insufficient funds. Please add SOL.`;
+                } else if (error.message?.includes("Invalid account discriminator") || error.message?.includes("INVALID_POOL_ADDRESS")) {
+                  errorMessage = `❌ Invalid pool address. The pool data may be outdated.`;
+                  suggestions.push("Try refreshing the page to get updated pool information");
+                } else if (error.message?.includes("TokenAccountNotFoundError")) {
+                  errorMessage = `❌ Token account not found. The pool may not exist.`;
+                  suggestions.push("This token may not have an active trading pool");
+                } else if (error.message?.includes("Pool is completed") || error.message?.includes("POOL_GRADUATED")) {
+                  errorMessage = `🎓 This pool has graduated and is no longer active.`;
+                  suggestions.push("The token may have migrated to a new pool");
+                  suggestions.push("Try refreshing to see if a new pool is available");
+                }
               }
+              
+              // Display error message
               setMessage({ type: "error", text: errorMessage });
+              
+              // Show suggestions if available
+              if (suggestions.length > 0) {
+                console.log("Error suggestions:", suggestions);
+                setTimeout(() => {
+                  toast.error(
+                    `💡 Suggestions:\n${suggestions.slice(0, 2).join("\n")}`,
+                    { duration: 6000 }
+                  );
+                }, 1000);
+              }
             } finally {
               setIsLoading(false);
             }

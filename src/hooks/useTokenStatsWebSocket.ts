@@ -78,7 +78,7 @@ export default function useTokenStatsWebSocket({
     }
 
     try {
-      const baseUrl = (process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8080').replace(/^https?:\/\//, '');
+      const baseUrl = (process.env.NEXT_PUBLIC_WEBSOCKET_URL || '').replace(/^https?:\/\//, '');
       const protocol = process.env.NEXT_PUBLIC_WEBSOCKET_URL?.startsWith('https') ? 'wss' : 'ws';
       const wsUrl = `${protocol}://${baseUrl}/v1/ws/token-stats?pair_address=${pairAddress}&token_address=${tokenAddress}`;
       const ws = new WebSocket(wsUrl);

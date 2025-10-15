@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log(`Fetching OHLC data for mint: ${mint}`);
     
     // Proxy request to your Go backend
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
     const response = await fetch(`${backendUrl}/v1/trade/ohlc?mint=${encodeURIComponent(mint)}`, {
       headers: {
         'X-API-Key': process.env.BACKEND_API_KEY || 'test-key',

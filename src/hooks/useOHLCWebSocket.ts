@@ -55,7 +55,7 @@ export default function useOHLCWebSocket({
     
     try {
       // Fetching historical data silently
-      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
       
       // Try to get historical OHLC data from trade view endpoint
       // This endpoint should have OHLC data in the response
@@ -164,7 +164,7 @@ export default function useOHLCWebSocket({
     }
 
     try {
-      const baseUrl = (process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8080').replace(/^https?:\/\//, '');
+      const baseUrl = (process.env.NEXT_PUBLIC_WEBSOCKET_URL || '').replace(/^https?:\/\//, '');
       const protocol = process.env.NEXT_PUBLIC_WEBSOCKET_URL?.startsWith('https') ? 'wss' : 'ws';
       const wsUrl = `${protocol}://${baseUrl}/v1/trade/ohlc?pair_address=${pairAddress}&timeframe=${timeframe}`;
       console.log('OHLC WebSocket: Attempting to connect to:', wsUrl);
