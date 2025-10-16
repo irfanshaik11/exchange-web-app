@@ -36,7 +36,7 @@ const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
           />
         ))}
       </div>
-      <span className="text-sm text-white">0</span>
+      <span className="text-sm text-white">{count}</span>
     </div>
   </InterstateTooltip>
 );
@@ -62,25 +62,43 @@ export default function PortfolioPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState("Max");
+  const [timeframeMetrics, setTimeframeMetrics] = useState({
+    unrealizedPnl: 0,
+    realizedPnl: 0,
+    winningTrades: 0,
+    losingTrades: 0,
+  });
+  const [performanceBreakdown, setPerformanceBreakdown] = useState({
+    above500: 0,
+    between200And500: 0,
+    between0And200: 0,
+    between0AndMinus50: 0,
+    belowMinus50: 0,
+  });
 
 
- useEffect(() => {
-   const fetchTradeHistory = async () => {
-     if (user?.id && activeSpotTab === 1) {
-       setLoadingTradeHistory(true);
-       try {
-         const history = await getTradeHistoryByUser(user.id);
-         setTradeHistory(history);
-       } catch (error) {
-         console.error("Failed to fetch trade history:", error);
-         setTradeHistory([]);
-       } finally {
-         setLoadingTradeHistory(false);
-       }
-     }
-   };
+ // Fetch trade history whenever user is logged in (needed for performance metrics)
+  useEffect(() => {
+    const fetchTradeHistory = async () => {
+      if (user?.id) {
+        setLoadingTradeHistory(true);
+        try {
+          const history = await getTradeHistoryByUser(user.id);
+          setTradeHistory(history);
+        } catch (error) {
+          console.error("Failed to fetch trade history:", error);
+          setTradeHistory([]);
+        } finally {
+          setLoadingTradeHistory(false);
+        }
+      }
+    };
 
+    fetchTradeHistory();
+  }, [user?.id]);
 
+  // Fetch trade activity only when on Activity tab
+  useEffect(() => {
     const fetchTradeActivity = async () => {
       if (user?.id && activeSpotTab === 3) {
         setLoadingTradeActivity(true);
@@ -96,9 +114,7 @@ export default function PortfolioPage() {
       }
     };
 
-
-   fetchTradeHistory();
-   fetchTradeActivity();
+    fetchTradeActivity();
   }, [user?.id, activeSpotTab]);
 
 
@@ -120,6 +136,90 @@ export default function PortfolioPage() {
      setTotalValue(solBalance + totalRemainingValue);
    }
  }, [positions, solBalance]);
+
+ // Calculate metrics based on selected timeframe
+ useEffect(() => {
+   const calculateTimeframeMetrics = () => {
+     const now = Date.now();
+     let timeframeDays = 0;
+     
+     switch (selectedTimeframe) {
+       case "1d":
+         timeframeDays = 1;
+         break;
+       case "7d":
+         timeframeDays = 7;
+         break;
+       case "30d":
+         timeframeDays = 30;
+         break;
+       case "Max":
+         timeframeDays = Infinity;
+         break;
+     }
+
+     const cutoffTime = timeframeDays === Infinity ? 0 : now - (timeframeDays * 24 * 60 * 60 * 1000);
+
+     // Calculate winning and losing trades based on positions
+     let winningTrades = 0;
+     let losingTrades = 0;
+     let totalRealizedPnl = 0;
+
+     // Performance breakdown counters
+     let above500 = 0;
+     let between200And500 = 0;
+     let between0And200 = 0;
+     let between0AndMinus50 = 0;
+     let belowMinus50 = 0;
+
+     // Count winning/losing positions and categorize by PNL percentage
+     positions.forEach(pos => {
+       if (pos.pnl > 0) {
+         winningTrades++;
+       } else if (pos.pnl < 0) {
+         losingTrades++;
+       }
+       // Calculate realized PNL from sold positions
+       if (pos.sold > 0) {
+         totalRealizedPnl += pos.pnl * (pos.sold / (pos.bought || 1));
+       }
+
+       // Categorize by PNL percentage
+       const pnlPercent = pos.pnlPercentage;
+       if (pnlPercent > 500) {
+         above500++;
+       } else if (pnlPercent >= 200 && pnlPercent <= 500) {
+         between200And500++;
+       } else if (pnlPercent >= 0 && pnlPercent < 200) {
+         between0And200++;
+       } else if (pnlPercent >= -50 && pnlPercent < 0) {
+         between0AndMinus50++;
+       } else if (pnlPercent < -50) {
+         belowMinus50++;
+       }
+     });
+
+     // For now, use the overall unrealized PNL since positions don't have timestamps
+     const unrealizedPnlForTimeframe = unrealizedPnl;
+
+     setTimeframeMetrics({
+       unrealizedPnl: unrealizedPnlForTimeframe,
+       realizedPnl: totalRealizedPnl,
+       winningTrades,
+       losingTrades,
+     });
+
+     setPerformanceBreakdown({
+       above500,
+       between200And500,
+       between0And200,
+       between0AndMinus50,
+       belowMinus50,
+     });
+   };
+
+   calculateTimeframeMetrics();
+ }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl]);
 
 
  return (
@@ -153,7 +253,7 @@ export default function PortfolioPage() {
               >
                 Wallets
               </button>
-              <button
+              {/* <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "perpetuals"
                     ? "text-white"
@@ -162,7 +262,7 @@ export default function PortfolioPage() {
                 onClick={() => setActiveSection("perpetuals")}
               >
                 Perpetuals
-              </button>
+              </button> */}
             </div>
           
             {/* Right side controls for Spot section */}
@@ -187,10 +287,10 @@ export default function PortfolioPage() {
                         </linearGradient>
                       </defs>
                     </svg>
-                    <span className="text-sm text-[#9CA3AF]">0</span>
+                    <span className="text-sm text-[#9CA3AF]">{formatSmartNumber(solBalance)}</span>
                   </div>
                 </InterstateTooltip>
-                <StackedTokenBoxes count={0} />
+                <StackedTokenBoxes count={positions.length} />
                 <div className="flex items-center gap-2">
                   <FaSearch className="text-[#9CA3AF]" />
                   <input
@@ -282,12 +382,39 @@ export default function PortfolioPage() {
                       </svg>
                     </InterstateTooltip>
                   </div>
-                  <div className="flex flex-1 items-center justify-center h-32">
-                    {/* Chart placeholder with pink line */}
-                    <div className="relative w-full h-full">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full h-px bg-[#FF4D7F]"></div>
-                      </div>
+                  <div className="flex flex-col h-32">
+                    <div className="text-2xl font-light mb-2" style={{ color: timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F' }}>
+                      ${timeframeMetrics.realizedPnl.toFixed(2)}
+                    </div>
+                    {/* Dynamic PNL chart */}
+                    <div className="relative w-full flex-1">
+                      <svg className="w-full h-full" viewBox="0 0 300 80" preserveAspectRatio="none">
+                        {/* Horizontal reference line */}
+                        <line 
+                          x1="0" 
+                          y1="40" 
+                          x2="300" 
+                          y2="40" 
+                          stroke="#2A2B33" 
+                          strokeWidth="1"
+                        />
+                        {/* Dynamic PNL line */}
+                        <path
+                          d={(() => {
+                            const pnl = timeframeMetrics.realizedPnl;
+                            const absMaxPnl = Math.max(Math.abs(pnl), 100);
+                            const normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
+                            const endY = 40 - (normalizedPnl * 30);
+                            
+                            // Create a line that trends up/down based on PNL
+                            return `M 0 40 L 50 ${40 - (normalizedPnl * 10)} L 100 ${40 - (normalizedPnl * 15)} L 150 ${40 - (normalizedPnl * 20)} L 200 ${40 - (normalizedPnl * 25)} L 300 ${endY}`;
+                          })()}
+                          stroke={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'}
+                          strokeWidth="2"
+                          fill="none"
+                          style={{ transition: 'all 0.3s ease' }}
+                        />
+                      </svg>
                     </div>
                   </div>
                 </div>
@@ -302,16 +429,16 @@ export default function PortfolioPage() {
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">Unrealized PNL</span>
-                      <span className="text-white font-light">${unrealizedPnl.toFixed(2)}</span>
+                      <span className="text-[#6B7280] font-light">{selectedTimeframe} Unrealized PNL</span>
+                      <span className="text-white font-light">${timeframeMetrics.unrealizedPnl.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">Realized PNL</span>
-                      <span className="text-white font-light">$0.00</span>
+                      <span className="text-[#6B7280] font-light">{selectedTimeframe} Realized PNL</span>
+                      <span className="text-white font-light">${timeframeMetrics.realizedPnl.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">Total TXNS</span>
-                      <span className="text-white font-light">0 0 / 0</span>
+                      <span className="text-[#6B7280] font-light">{selectedTimeframe} Total TXNS</span>
+                      <span className="text-white font-light">{timeframeMetrics.winningTrades}/{timeframeMetrics.losingTrades}</span>
                     </div>
                   
                     {/* Performance breakdown */}
@@ -321,35 +448,35 @@ export default function PortfolioPage() {
                           <div className="w-2 h-2 rounded-full bg-[#70E0B0]"></div>
                           <span className="text-[#6B7280] font-light">&gt;500%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.above500}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-[#70E0B0]"></div>
                           <span className="text-[#6B7280] font-light">200% ~ 500%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.between200And500}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-[#70E0B0]"></div>
                           <span className="text-[#6B7280] font-light">0% ~ 200%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.between0And200}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-[#FF4D7F]"></div>
                           <span className="text-[#6B7280] font-light">0% ~ -50%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.between0AndMinus50}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-[#FF4D7F]"></div>
                           <span className="text-[#6B7280] font-light">&lt; -50%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.belowMinus50}</span>
                       </div>
                     </div>
                   

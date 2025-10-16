@@ -3,6 +3,7 @@ import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
 
 export interface PositionRow {
   tokenAddress: string;
+  pairAddress?: string; // Pool/pair address for navigation
   bought: number;
   boughtUsdValue: number;
   sold: number;

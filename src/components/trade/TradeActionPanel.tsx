@@ -975,6 +975,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               const tradeParams = {
                 amount: Number(amount),
                 poolAddress: effectivePoolAddress,
+                originalPairAddress: token.pair_address, // Original pair_address from token-service
                 baseMint: token.mint,
                 quoteMint: SOL_MINT_ADDRESS,
                 mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
