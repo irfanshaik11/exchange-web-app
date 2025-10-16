@@ -70,6 +70,11 @@ import { CiSearch } from "react-icons/ci";
 import FastImage from "./FastImage";
 import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
+import { useUser } from "~/components/UserContext";
+import { useQuickBuy } from "~/components/QuickBuyContext";
+import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { toast } from "react-hot-toast";
 
 interface PulseTableProps {
   title: string;
@@ -1299,6 +1304,69 @@ const PulseTable = React.memo(function PulseTable({
     setHasPendingChanges(JSON.stringify(filters) !== JSON.stringify(pendingFilters));
   }, [filters, pendingFilters]);
   const router = useRouter();
+  
+  // Quick buy functionality
+  const { user } = useUser();
+  const { presets, activePreset } = useQuickBuy();
+  
+  // QUICK BUY handler
+  const handleQuickBuy = async (token: Token) => {
+    if (!user) {
+      toast.error("⚠️ Please connect your wallet to trade");
+      return;
+    }
+
+    const buyAmount = parseFloat(thunderAmount);
+    if (isNaN(buyAmount) || buyAmount <= 0) {
+      toast.error("⚠️ Please enter a valid SOL amount");
+      return;
+    }
+
+    try {
+      const poolType = getPoolTypeFromToken(token);
+      console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      
+      const data = await tradeBuy({
+        poolAddress: token.pair_address,
+        baseMint: token.mint,
+        quoteMint: SOL_MINT_ADDRESS,
+        amount: buyAmount,
+        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
+        poolType: poolType,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+      }, user.bearerToken);
+      
+      const txHash = data?.hash || data?.txid;
+      const tokenAmount = data?.amount || data?.tokenAmount;
+
+      if (data && txHash) {
+        console.log(`✅ Quick Buy successful! Hash: ${txHash}`);
+        toast.success(
+          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`,
+          { duration: 5000 }
+        );
+      } else {
+        console.log('❌ Quick Buy failed - no transaction hash returned');
+        toast.error("❌ Quick Buy failed - no transaction hash returned");
+      }
+    } catch (e: any) {
+      console.error('Quick Buy error:', e);
+      
+      if (e instanceof ApiError) {
+        if (e.code === 'NO_ACTIVE_POOL') {
+          toast.error(`⚠️ Pool unavailable for ${token.symbol}. No active trading pools found.`, { duration: 5000 });
+        } else if (e.code === 'INSUFFICIENT_BALANCE') {
+          toast.error(`⚠️ Insufficient balance. You need ${buyAmount} SOL for this trade.`, { duration: 5000 });
+        } else {
+          toast.error(`❌ ${e.message || 'Quick Buy failed'}`, { duration: 5000 });
+        }
+      } else {
+        const errorMsg = e?.message || e?.toString() || 'Unknown error';
+        toast.error(`❌ Quick Buy failed: ${errorMsg}`, { duration: 5000 });
+      }
+    }
+  };
 
   // Protocol and quote token data with official icons from web3icons
   const protocols = [
@@ -1440,6 +1508,14 @@ const PulseTable = React.memo(function PulseTable({
   // Filter and sort tokens
   const filteredAndSortedTokens = useMemo(() => {
     let filtered = [...tokens];
+
+    // Filter out tokens without migrated_pool_address in the Migrated column
+    if (title.toLowerCase().includes('migrated')) {
+      filtered = filtered.filter(token => {
+        const hasMigratedPoolAddress = !!(token as any).migrated_pool_address;
+        return hasMigratedPoolAddress;
+      });
+    }
 
     // Apply protocol filters
     if (filters.protocols.length > 0) {
@@ -2263,7 +2339,7 @@ const PulseTable = React.memo(function PulseTable({
                       }}
                       onClick={() => {
                         const allProtocols = protocols.map(p => p.name);
-                        setFilters(prev => ({ 
+                        handlePendingFilterChange(prev => ({ 
                           ...prev, 
                           protocols: prev.protocols.length === allProtocols.length ? [] : allProtocols 
                         }));
@@ -2278,24 +2354,24 @@ const PulseTable = React.memo(function PulseTable({
                         key={protocol.name}
                         className="flex items-center gap-1 px-2 py-1.5 text-sm font-medium transition-all duration-300 ease-out whitespace-nowrap cursor-pointer"
                         style={{
-                          backgroundColor: filters.protocols.includes(protocol.name) 
+                          backgroundColor: pendingFilters.protocols.includes(protocol.name) 
                             ? protocol.color 
                             : 'transparent',
-                          borderColor: filters.protocols.includes(protocol.name) 
+                          borderColor: pendingFilters.protocols.includes(protocol.name) 
                             ? protocol.color 
                             : 'transparent',
-                          border: filters.protocols.includes(protocol.name) ? '2px solid' : 'none',
-                          color: filters.protocols.includes(protocol.name) 
+                          border: pendingFilters.protocols.includes(protocol.name) ? '2px solid' : 'none',
+                          color: pendingFilters.protocols.includes(protocol.name) 
                             ? '#000000' 
                             : AX.text,
                           borderRadius: '20px',
-                          boxShadow: filters.protocols.includes(protocol.name) 
+                          boxShadow: pendingFilters.protocols.includes(protocol.name) 
                             ? `0 0 12px ${protocol.color}40, 0 0 24px ${protocol.color}20` 
                             : 'none',
-                          transform: filters.protocols.includes(protocol.name) ? 'scale(1.02)' : 'scale(1)'
+                          transform: pendingFilters.protocols.includes(protocol.name) ? 'scale(1.02)' : 'scale(1)'
                         }}
                         onMouseEnter={(e) => {
-                          if (!filters.protocols.includes(protocol.name)) {
+                          if (!pendingFilters.protocols.includes(protocol.name)) {
                             e.currentTarget.style.backgroundColor = protocol.color + '10';
                             e.currentTarget.style.borderColor = protocol.color;
                             e.currentTarget.style.border = '1px solid';
@@ -2305,7 +2381,7 @@ const PulseTable = React.memo(function PulseTable({
                           }
                         }}
                         onMouseLeave={(e) => {
-                          if (!filters.protocols.includes(protocol.name)) {
+                          if (!pendingFilters.protocols.includes(protocol.name)) {
                             e.currentTarget.style.backgroundColor = 'transparent';
                             e.currentTarget.style.borderColor = 'transparent';
                             e.currentTarget.style.border = 'none';
@@ -2315,7 +2391,7 @@ const PulseTable = React.memo(function PulseTable({
                           }
                         }}
                         onClick={() => {
-                          setFilters(prev => ({
+                          handlePendingFilterChange(prev => ({
                             ...prev,
                             protocols: prev.protocols.includes(protocol.name)
                               ? prev.protocols.filter(p => p !== protocol.name)
@@ -2339,24 +2415,24 @@ const PulseTable = React.memo(function PulseTable({
                         key={token.name}
                         className="flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all duration-300 ease-out cursor-pointer"
                         style={{
-                          backgroundColor: filters.quoteTokens.includes(token.name) 
+                          backgroundColor: pendingFilters.quoteTokens.includes(token.name) 
                             ? token.color 
                             : 'transparent',
-                          borderColor: filters.quoteTokens.includes(token.name) 
+                          borderColor: pendingFilters.quoteTokens.includes(token.name) 
                             ? token.color 
                             : 'transparent',
-                          border: filters.quoteTokens.includes(token.name) ? '2px solid' : 'none',
-                          color: filters.quoteTokens.includes(token.name) 
+                          border: pendingFilters.quoteTokens.includes(token.name) ? '2px solid' : 'none',
+                          color: pendingFilters.quoteTokens.includes(token.name) 
                             ? '#000000' 
                             : AX.text,
                           borderRadius: '20px',
-                          boxShadow: filters.quoteTokens.includes(token.name) 
+                          boxShadow: pendingFilters.quoteTokens.includes(token.name) 
                             ? `0 0 12px ${token.color}40, 0 0 24px ${token.color}20` 
                             : 'none',
-                          transform: filters.quoteTokens.includes(token.name) ? 'scale(1.02)' : 'scale(1)'
+                          transform: pendingFilters.quoteTokens.includes(token.name) ? 'scale(1.02)' : 'scale(1)'
                         }}
                         onMouseEnter={(e) => {
-                          if (!filters.quoteTokens.includes(token.name)) {
+                          if (!pendingFilters.quoteTokens.includes(token.name)) {
                             e.currentTarget.style.backgroundColor = token.color + '10';
                             e.currentTarget.style.borderColor = token.color;
                             e.currentTarget.style.border = '1px solid';
@@ -2366,7 +2442,7 @@ const PulseTable = React.memo(function PulseTable({
                           }
                         }}
                         onMouseLeave={(e) => {
-                          if (!filters.quoteTokens.includes(token.name)) {
+                          if (!pendingFilters.quoteTokens.includes(token.name)) {
                             e.currentTarget.style.backgroundColor = 'transparent';
                             e.currentTarget.style.borderColor = 'transparent';
                             e.currentTarget.style.border = 'none';
@@ -2376,7 +2452,7 @@ const PulseTable = React.memo(function PulseTable({
                           }
                         }}
                         onClick={() => {
-                          setFilters(prev => ({
+                          handlePendingFilterChange(prev => ({
                             ...prev,
                             quoteTokens: prev.quoteTokens.includes(token.name)
                               ? prev.quoteTokens.filter(t => t !== token.name)
@@ -2490,8 +2566,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.devHoldingPercentMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, devHoldingPercentMin: e.target.value }))}
+                          value={pendingFilters.devHoldingPercentMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, devHoldingPercentMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2511,8 +2587,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.devHoldingPercentMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, devHoldingPercentMax: e.target.value }))}
+                          value={pendingFilters.devHoldingPercentMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, devHoldingPercentMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2539,8 +2615,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.snipersPercentMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, snipersPercentMin: e.target.value }))}
+                          value={pendingFilters.snipersPercentMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, snipersPercentMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2560,8 +2636,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.snipersPercentMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, snipersPercentMax: e.target.value }))}
+                          value={pendingFilters.snipersPercentMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, snipersPercentMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2588,8 +2664,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.insidersPercentMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, insidersPercentMin: e.target.value }))}
+                          value={pendingFilters.insidersPercentMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, insidersPercentMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2609,8 +2685,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.insidersPercentMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, insidersPercentMax: e.target.value }))}
+                          value={pendingFilters.insidersPercentMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, insidersPercentMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2637,8 +2713,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.bundlePercentMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, bundlePercentMin: e.target.value }))}
+                          value={pendingFilters.bundlePercentMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, bundlePercentMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2658,8 +2734,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.bundlePercentMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, bundlePercentMax: e.target.value }))}
+                          value={pendingFilters.bundlePercentMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, bundlePercentMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2686,8 +2762,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.holdersMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, holdersMin: e.target.value }))}
+                          value={pendingFilters.holdersMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, holdersMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2707,8 +2783,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.holdersMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, holdersMax: e.target.value }))}
+                          value={pendingFilters.holdersMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, holdersMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2735,8 +2811,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.proTradersMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, proTradersMin: e.target.value }))}
+                          value={pendingFilters.proTradersMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, proTradersMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2756,8 +2832,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.proTradersMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, proTradersMax: e.target.value }))}
+                          value={pendingFilters.proTradersMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, proTradersMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2784,8 +2860,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.devMigrationsMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, devMigrationsMin: e.target.value }))}
+                          value={pendingFilters.devMigrationsMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, devMigrationsMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2805,8 +2881,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.devMigrationsMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, devMigrationsMax: e.target.value }))}
+                          value={pendingFilters.devMigrationsMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, devMigrationsMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2833,8 +2909,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.devPairsCreatedMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, devPairsCreatedMin: e.target.value }))}
+                          value={pendingFilters.devPairsCreatedMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, devPairsCreatedMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2854,8 +2930,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.devPairsCreatedMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, devPairsCreatedMax: e.target.value }))}
+                          value={pendingFilters.devPairsCreatedMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, devPairsCreatedMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -2882,8 +2958,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.minAge}
-                          onChange={(e) => setFilters(prev => ({ ...prev, minAge: e.target.value }))}
+                          value={pendingFilters.minAge}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, minAge: e.target.value }))}
                           className="flex-1 px-2 py-1.5 rounded minimal-input text-sm"
                           style={{
                             backgroundColor: AX.surface,
@@ -2901,8 +2977,8 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                         <select
-                          value={filters.ageUnit}
-                          onChange={(e) => setFilters(prev => ({ ...prev, ageUnit: e.target.value }))}
+                          value={pendingFilters.ageUnit}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, ageUnit: e.target.value }))}
                           className="px-2 py-2 rounded border text-sm"
                           style={{
                             backgroundColor: AX.surface,
@@ -2917,8 +2993,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.maxAge}
-                          onChange={(e) => setFilters(prev => ({ ...prev, maxAge: e.target.value }))}
+                          value={pendingFilters.maxAge}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, maxAge: e.target.value }))}
                           className="flex-1 px-2 py-1.5 rounded minimal-input text-sm"
                           style={{
                             backgroundColor: AX.surface,
@@ -2936,8 +3012,8 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                         <select
-                          value={filters.ageUnit}
-                          onChange={(e) => setFilters(prev => ({ ...prev, ageUnit: e.target.value }))}
+                          value={pendingFilters.ageUnit}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, ageUnit: e.target.value }))}
                           className="px-2 py-2 rounded border text-sm"
                           style={{
                             backgroundColor: AX.surface,
@@ -2958,8 +3034,8 @@ const PulseTable = React.memo(function PulseTable({
                       <input
                         type="number"
                         placeholder="Enter percentage"
-                        value={filters.top10HoldersPercent}
-                        onChange={(e) => setFilters(prev => ({ ...prev, top10HoldersPercent: e.target.value }))}
+                        value={pendingFilters.top10HoldersPercent}
+                        onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, top10HoldersPercent: e.target.value }))}
                           className="w-full px-3 py-2 rounded text-sm border"
                         style={{
                             backgroundColor: AX.surface,
@@ -2990,8 +3066,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.minLiquidity}
-                          onChange={(e) => setFilters(prev => ({ ...prev, minLiquidity: e.target.value }))}
+                          value={pendingFilters.minLiquidity}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, minLiquidity: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3011,8 +3087,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.maxLiquidity}
-                          onChange={(e) => setFilters(prev => ({ ...prev, maxLiquidity: e.target.value }))}
+                          value={pendingFilters.maxLiquidity}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, maxLiquidity: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3039,8 +3115,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.minVolume}
-                          onChange={(e) => setFilters(prev => ({ ...prev, minVolume: e.target.value }))}
+                          value={pendingFilters.minVolume}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, minVolume: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3060,8 +3136,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.maxVolume}
-                          onChange={(e) => setFilters(prev => ({ ...prev, maxVolume: e.target.value }))}
+                          value={pendingFilters.maxVolume}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, maxVolume: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3088,8 +3164,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.minMarketCap}
-                          onChange={(e) => setFilters(prev => ({ ...prev, minMarketCap: e.target.value }))}
+                          value={pendingFilters.minMarketCap}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, minMarketCap: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3109,8 +3185,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.maxMarketCap}
-                          onChange={(e) => setFilters(prev => ({ ...prev, maxMarketCap: e.target.value }))}
+                          value={pendingFilters.maxMarketCap}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, maxMarketCap: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3137,8 +3213,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.bCurvePercentMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, bCurvePercentMin: e.target.value }))}
+                          value={pendingFilters.bCurvePercentMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, bCurvePercentMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3158,8 +3234,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.bCurvePercentMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, bCurvePercentMax: e.target.value }))}
+                          value={pendingFilters.bCurvePercentMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, bCurvePercentMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3186,8 +3262,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.globalFeesPaidMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, globalFeesPaidMin: e.target.value }))}
+                          value={pendingFilters.globalFeesPaidMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, globalFeesPaidMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3207,8 +3283,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.globalFeesPaidMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, globalFeesPaidMax: e.target.value }))}
+                          value={pendingFilters.globalFeesPaidMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, globalFeesPaidMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3235,8 +3311,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.txnsMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, txnsMin: e.target.value }))}
+                          value={pendingFilters.txnsMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, txnsMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3256,8 +3332,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.txnsMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, txnsMax: e.target.value }))}
+                          value={pendingFilters.txnsMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, txnsMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3284,8 +3360,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.numBuysMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, numBuysMin: e.target.value }))}
+                          value={pendingFilters.numBuysMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, numBuysMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3305,8 +3381,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.numBuysMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, numBuysMax: e.target.value }))}
+                          value={pendingFilters.numBuysMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, numBuysMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3333,8 +3409,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.numSellsMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, numSellsMin: e.target.value }))}
+                          value={pendingFilters.numSellsMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, numSellsMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3354,8 +3430,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.numSellsMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, numSellsMax: e.target.value }))}
+                          value={pendingFilters.numSellsMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, numSellsMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3387,8 +3463,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.twitterReusesMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, twitterReusesMin: e.target.value }))}
+                          value={pendingFilters.twitterReusesMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, twitterReusesMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3408,8 +3484,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.twitterReusesMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, twitterReusesMax: e.target.value }))}
+                          value={pendingFilters.twitterReusesMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, twitterReusesMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3436,8 +3512,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Min"
-                          value={filters.tweetAgeMin}
-                          onChange={(e) => setFilters(prev => ({ ...prev, tweetAgeMin: e.target.value }))}
+                          value={pendingFilters.tweetAgeMin}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, tweetAgeMin: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3455,8 +3531,8 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                         <select
-                          value={filters.tweetAgeUnit}
-                          onChange={(e) => setFilters(prev => ({ ...prev, tweetAgeUnit: e.target.value }))}
+                          value={pendingFilters.tweetAgeUnit}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, tweetAgeUnit: e.target.value }))}
                           className="px-2 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3478,8 +3554,8 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="number"
                           placeholder="Max"
-                          value={filters.tweetAgeMax}
-                          onChange={(e) => setFilters(prev => ({ ...prev, tweetAgeMax: e.target.value }))}
+                          value={pendingFilters.tweetAgeMax}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, tweetAgeMax: e.target.value }))}
                           className="flex-1 px-3 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3497,8 +3573,8 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                         <select
-                          value={filters.tweetAgeUnit}
-                          onChange={(e) => setFilters(prev => ({ ...prev, tweetAgeUnit: e.target.value }))}
+                          value={pendingFilters.tweetAgeUnit}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, tweetAgeUnit: e.target.value }))}
                           className="px-2 py-2 rounded text-sm border"
                           style={{
                             backgroundColor: AX.surface,
@@ -3526,7 +3602,7 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="checkbox"
                           checked={filters.hasTwitter}
-                          onChange={(e) => setFilters(prev => ({ ...prev, hasTwitter: e.target.checked }))}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, hasTwitter: e.target.checked }))}
                           className="rounded cursor-pointer"
                           style={{
                             accentColor: AX.aiBlue
@@ -3539,7 +3615,7 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="checkbox"
                           checked={filters.hasWebsite}
-                          onChange={(e) => setFilters(prev => ({ ...prev, hasWebsite: e.target.checked }))}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, hasWebsite: e.target.checked }))}
                           className="rounded cursor-pointer"
                           style={{
                             accentColor: AX.aiBlue
@@ -3552,7 +3628,7 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="checkbox"
                           checked={filters.hasTelegram}
-                          onChange={(e) => setFilters(prev => ({ ...prev, hasTelegram: e.target.checked }))}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, hasTelegram: e.target.checked }))}
                           className="rounded cursor-pointer"
                           style={{
                             accentColor: AX.aiBlue
@@ -3565,7 +3641,7 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="checkbox"
                           checked={filters.atLeastOneSocial}
-                          onChange={(e) => setFilters(prev => ({ ...prev, atLeastOneSocial: e.target.checked }))}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, atLeastOneSocial: e.target.checked }))}
                           className="rounded cursor-pointer"
                           style={{
                             accentColor: AX.aiBlue
@@ -3578,7 +3654,7 @@ const PulseTable = React.memo(function PulseTable({
                         <input
                           type="checkbox"
                           checked={filters.onlyPumpLive}
-                          onChange={(e) => setFilters(prev => ({ ...prev, onlyPumpLive: e.target.checked }))}
+                          onChange={(e) => handlePendingFilterChange(prev => ({ ...prev, onlyPumpLive: e.target.checked }))}
                           className="rounded cursor-pointer"
                           style={{
                             accentColor: AX.aiBlue
@@ -4503,8 +4579,12 @@ const PulseTable = React.memo(function PulseTable({
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = AX.aiGreen;
                         }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickBuy(token);
+                        }}
                       >
-                        <HiLightningBolt className="text-black" size={12} /> 0
+                        <HiLightningBolt className="text-black" size={12} /> {thunderAmount || '0'}
                         SOL
                       </button>
                     </div>

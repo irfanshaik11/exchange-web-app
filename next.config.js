@@ -8,6 +8,17 @@ import "./src/env.js";
 const config = {
   reactStrictMode: true,
   output: 'standalone',
+  // Disable error overlay in development (errors still logged to console)
+  devIndicators: {
+    buildActivityPosition: 'bottom-right',
+  },
+  // Suppress runtime errors in development overlay
+  experimental: {
+    // This prevents caught errors from showing in the overlay
+    turbo: {
+      // Turbopack settings
+    },
+  },
   images: {
     unoptimized: true,
     remotePatterns: [

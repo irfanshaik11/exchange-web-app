@@ -47,9 +47,9 @@ interface TradeTableProps {
 
 const TradeTable: React.FC<TradeTableProps> = ({ trades, loading }) => {
   return (
-    <div className="w-full">
+    <div className="w-full h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
       <table className="w-full text-xs">
-        <thead>
+        <thead className="sticky top-0 bg-[#1E1F26] z-10">
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Age</th>
             <th className="px-2 py-2 text-left">Type</th>

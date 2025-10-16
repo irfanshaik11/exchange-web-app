@@ -4,6 +4,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import Positions from "../components/trade/Positions";
 import TradeTable from "../components/trade/TradeTable";
+import Activity from "../components/trade/Activity";
 import { useUser } from "../components/UserContext";
 import InterstateTooltip from "~/components/InterstateTooltip";
 import CustomCheckbox from "../components/CustomCheckbox";
@@ -13,7 +14,7 @@ import {
 } from "~/utils/functions";
 import { formatSmartNumber } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
-import { FaSearch, FaEye, FaUpload } from "react-icons/fa";
+import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
 
 // Stacked Token Boxes Component
@@ -36,9 +37,22 @@ const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
           />
         ))}
       </div>
-      <span className="text-sm text-white">0</span>
+      <span className="text-sm text-white">{count}</span>
     </div>
   </InterstateTooltip>
+);
+
+// SOL icon component for inline use
+const SolIcon = () => (
+  <SiSolana 
+    className="h-3 w-3 inline-block -mt-0.5 mx-0.5" 
+    aria-hidden="true"
+    style={{ 
+      color: 'unset',
+      fill: 'url(#solana-gradient-inline)',
+      filter: 'none'
+    }}
+  />
 );
 
 
@@ -59,31 +73,79 @@ export default function PortfolioPage() {
   const [unrealizedPnlPercentage, setUnrealizedPnlPercentage] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
+  const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
+  const [filteredPositions, setFilteredPositions] = useState<PositionRow[]>([]);
+  const [filteredTop100Positions, setFilteredTop100Positions] = useState<PositionRow[]>([]);
+  const [filteredTradeHistory, setFilteredTradeHistory] = useState<TradeRow[]>([]);
+  const [filteredTradeActivity, setFilteredTradeActivity] = useState<TradeRow[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
+  const [solPrice, setSolPrice] = useState(0);
+  
+  // Fetch SOL price
+  useEffect(() => {
+    const fetchSolPrice = async () => {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+        const data = await response.json();
+        setSolPrice(data.solana.usd);
+      } catch (error) {
+        console.error('Error fetching SOL price:', error);
+        setSolPrice(150); // Fallback price
+      }
+    };
+    fetchSolPrice();
+    const interval = setInterval(fetchSolPrice, 60000);
+    return () => clearInterval(interval);
+  }, []);
   const [selectedTimeframe, setSelectedTimeframe] = useState("Max");
+  const [timeframeMetrics, setTimeframeMetrics] = useState({
+    unrealizedPnl: 0,
+    realizedPnl: 0,
+    winningTrades: 0,
+    losingTrades: 0,
+  });
+  const [performanceBreakdown, setPerformanceBreakdown] = useState({
+    above500: 0,
+    between200And500: 0,
+    between0And200: 0,
+    between0AndMinus50: 0,
+    belowMinus50: 0,
+  });
 
 
- useEffect(() => {
-   const fetchTradeHistory = async () => {
-     if (user?.id && activeSpotTab === 1) {
-       setLoadingTradeHistory(true);
-       try {
-         const history = await getTradeHistoryByUser(user.id);
-         setTradeHistory(history);
-       } catch (error) {
-         console.error("Failed to fetch trade history:", error);
-         setTradeHistory([]);
-       } finally {
-         setLoadingTradeHistory(false);
-       }
-     }
-   };
+ // Fetch trade history whenever user is logged in (needed for performance metrics)
+  useEffect(() => {
+    const fetchTradeHistory = async () => {
+      if (user?.id) {
+        setLoadingTradeHistory(true);
+        try {
+          const history = await getTradeHistoryByUser(user.id);
+          setTradeHistory(history);
+        } catch (error) {
+          console.error("Failed to fetch trade history:", error);
+          setTradeHistory([]);
+        } finally {
+          setLoadingTradeHistory(false);
+        }
+      }
+    };
 
+    fetchTradeHistory();
+  }, [user?.id]);
 
+  // Fetch trade activity only when on Activity tab
+  useEffect(() => {
+    let isInitialLoad = true;
+    
     const fetchTradeActivity = async () => {
       if (user?.id && activeSpotTab === 3) {
-        setLoadingTradeActivity(true);
+        // Only show loading state on initial load, not on refreshes
+        if (isInitialLoad) {
+          setLoadingTradeActivity(true);
+        }
         try {
           const activity = await getTradeActivityByUser(user.id);
           setTradeActivity(activity);
@@ -91,14 +153,24 @@ export default function PortfolioPage() {
           console.error("Failed to fetch trade activity:", error);
           setTradeActivity([]);
         } finally {
-          setLoadingTradeActivity(false);
+          if (isInitialLoad) {
+            setLoadingTradeActivity(false);
+            isInitialLoad = false;
+          }
         }
       }
     };
 
-
-   fetchTradeHistory();
-   fetchTradeActivity();
+    fetchTradeActivity();
+    
+    // Auto-refresh every 5 seconds when on Activity tab
+    if (user?.id && activeSpotTab === 3) {
+      const intervalId = setInterval(() => {
+        fetchTradeActivity();
+      }, 5000);
+      
+      return () => clearInterval(intervalId);
+    }
   }, [user?.id, activeSpotTab]);
 
 
@@ -118,8 +190,152 @@ export default function PortfolioPage() {
        totalBoughtValue ? (totalPnl / totalBoughtValue) * 100 : 0,
      );
      setTotalValue(solBalance + totalRemainingValue);
+
+     // Create top 100 positions sorted by USD value
+     const sortedByUsdValue = [...positions].sort((a, b) => {
+       return b.remainingUsdValue - a.remainingUsdValue;
+     });
+     setTop100Positions(sortedByUsdValue.slice(0, 100));
    }
  }, [positions, solBalance]);
+
+ // Search filtering effect
+ useEffect(() => {
+   const filterData = () => {
+     if (!searchQuery.trim()) {
+       // If no search query, show all data
+       setFilteredPositions(positions);
+       setFilteredTop100Positions(top100Positions);
+       setFilteredTradeHistory(tradeHistory);
+       setFilteredTradeActivity(tradeActivity);
+       return;
+     }
+
+     const query = searchQuery.toLowerCase().trim();
+
+     // Filter positions (Active Positions and Top 100 tabs)
+     const filteredPos = positions.filter(pos => {
+       const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || '';
+       return pos.tokenAddress.toLowerCase().includes(query) ||
+              pos.pairAddress?.toLowerCase().includes(query) ||
+              tokenName.includes(query);
+     });
+     setFilteredPositions(filteredPos);
+
+     // Filter top 100 positions
+     const filteredTop100 = top100Positions.filter(pos => {
+       const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || '';
+       return pos.tokenAddress.toLowerCase().includes(query) ||
+              pos.pairAddress?.toLowerCase().includes(query) ||
+              tokenName.includes(query);
+     });
+     setFilteredTop100Positions(filteredTop100);
+
+     // Filter trade history
+     const filteredHistory = tradeHistory.filter(trade => {
+       const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || '';
+       return trade.tokenAddress.toLowerCase().includes(query) ||
+              trade.transactionHash.toLowerCase().includes(query) ||
+              tokenName.includes(query);
+     });
+     setFilteredTradeHistory(filteredHistory);
+
+     // Filter trade activity
+     const filteredActivity = tradeActivity.filter(trade => {
+       const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || '';
+       return trade.tokenAddress.toLowerCase().includes(query) ||
+              trade.transactionHash.toLowerCase().includes(query) ||
+              tokenName.includes(query);
+     });
+     setFilteredTradeActivity(filteredActivity);
+   };
+
+   filterData();
+ }, [searchQuery, positions, top100Positions, tradeHistory, tradeActivity, tokenNames]);
+
+ // Calculate metrics based on selected timeframe
+ useEffect(() => {
+   const calculateTimeframeMetrics = () => {
+     const now = Date.now();
+     let timeframeDays = 0;
+     
+     switch (selectedTimeframe) {
+       case "1d":
+         timeframeDays = 1;
+         break;
+       case "7d":
+         timeframeDays = 7;
+         break;
+       case "30d":
+         timeframeDays = 30;
+         break;
+       case "Max":
+         timeframeDays = Infinity;
+         break;
+     }
+
+     const cutoffTime = timeframeDays === Infinity ? 0 : now - (timeframeDays * 24 * 60 * 60 * 1000);
+
+     // Calculate winning and losing trades based on positions
+     let winningTrades = 0;
+     let losingTrades = 0;
+     let totalRealizedPnl = 0;
+
+     // Performance breakdown counters
+     let above500 = 0;
+     let between200And500 = 0;
+     let between0And200 = 0;
+     let between0AndMinus50 = 0;
+     let belowMinus50 = 0;
+
+     // Count winning/losing positions and categorize by PNL percentage
+     positions.forEach(pos => {
+       if (pos.pnl > 0) {
+         winningTrades++;
+       } else if (pos.pnl < 0) {
+         losingTrades++;
+       }
+       // Calculate realized PNL from sold positions
+       if (pos.sold > 0) {
+         totalRealizedPnl += pos.pnl * (pos.sold / (pos.bought || 1));
+       }
+
+       // Categorize by PNL percentage
+       const pnlPercent = pos.pnlPercentage;
+       if (pnlPercent > 500) {
+         above500++;
+       } else if (pnlPercent >= 200 && pnlPercent <= 500) {
+         between200And500++;
+       } else if (pnlPercent >= 0 && pnlPercent < 200) {
+         between0And200++;
+       } else if (pnlPercent >= -50 && pnlPercent < 0) {
+         between0AndMinus50++;
+       } else if (pnlPercent < -50) {
+         belowMinus50++;
+       }
+     });
+
+     // For now, use the overall unrealized PNL since positions don't have timestamps
+     const unrealizedPnlForTimeframe = unrealizedPnl;
+
+     setTimeframeMetrics({
+       unrealizedPnl: unrealizedPnlForTimeframe,
+       realizedPnl: totalRealizedPnl,
+       winningTrades,
+       losingTrades,
+     });
+
+     setPerformanceBreakdown({
+       above500,
+       between200And500,
+       between0And200,
+       between0AndMinus50,
+       belowMinus50,
+     });
+   };
+
+   calculateTimeframeMetrics();
+ }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl]);
 
 
  return (
@@ -143,7 +359,7 @@ export default function PortfolioPage() {
               >
                 Spot
               </button>
-              <button
+              {/* <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "wallet"
                     ? "text-white"
@@ -152,8 +368,8 @@ export default function PortfolioPage() {
                 onClick={() => setActiveSection("wallet")}
               >
                 Wallets
-              </button>
-              <button
+              </button> */}
+              {/* <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "perpetuals"
                     ? "text-white"
@@ -162,7 +378,7 @@ export default function PortfolioPage() {
                 onClick={() => setActiveSection("perpetuals")}
               >
                 Perpetuals
-              </button>
+              </button> */}
             </div>
           
             {/* Right side controls for Spot section */}
@@ -185,19 +401,23 @@ export default function PortfolioPage() {
                           <stop offset="0%" stopColor="#9945FF" />
                           <stop offset="100%" stopColor="#14F195" />
                         </linearGradient>
+                        <linearGradient id="solana-gradient-inline" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#9945FF" />
+                          <stop offset="100%" stopColor="#14F195" />
+                        </linearGradient>
                       </defs>
                     </svg>
-                    <span className="text-sm text-[#9CA3AF]">0</span>
+                    <span className="text-sm text-[#9CA3AF]">{formatSmartNumber(solBalance)}</span>
                   </div>
                 </InterstateTooltip>
-                <StackedTokenBoxes count={0} />
+                <StackedTokenBoxes count={positions.length} />
                 <div className="flex items-center gap-2">
-                  <FaSearch className="text-[#9CA3AF]" />
+                  {/* <FaSearch className="text-[#9CA3AF]" />
                   <input
                     type="text"
                     placeholder="Search for other wallets..."
                     className="bg-transparent text-sm text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none"
-                  />
+                  /> */}
                 </div>
                 <div className="flex items-center gap-1">
                   <button 
@@ -250,19 +470,28 @@ export default function PortfolioPage() {
                     <div>
                       <div className="text-[#6B7280] text-sm font-light">Total Value</div>
                       <div className="text-2xl font-light text-white">
-                        ${totalValue.toFixed(2)}
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(totalValue / solPrice)}</>
+                          : `$${totalValue.toFixed(2)}`
+                        }
                       </div>
                     </div>
                     <div>
                       <div className="text-[#6B7280] text-sm font-light">Unrealized PNL</div>
                       <div className="text-2xl font-light text-white">
-                        ${unrealizedPnl.toFixed(2)}
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(unrealizedPnl / solPrice)}</>
+                          : `$${unrealizedPnl.toFixed(2)}`
+                        }
                       </div>
                     </div>
                     <div>
                       <div className="text-[#6B7280] text-sm font-light">Available Balance</div>
                       <div className="text-2xl font-light text-white">
-                        ${formatSmartNumber(usdcBalance)}
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(usdcBalance / solPrice)}</>
+                          : `$${formatSmartNumber(usdcBalance)}`
+                        }
                       </div>
                     </div>
                   </div>
@@ -282,12 +511,42 @@ export default function PortfolioPage() {
                       </svg>
                     </InterstateTooltip>
                   </div>
-                  <div className="flex flex-1 items-center justify-center h-32">
-                    {/* Chart placeholder with pink line */}
-                    <div className="relative w-full h-full">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full h-px bg-[#FF4D7F]"></div>
-                      </div>
+                  <div className="flex flex-col h-32">
+                    <div className="text-2xl font-light mb-2" style={{ color: timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F' }}>
+                      {sortByUSD && solPrice > 0
+                        ? <><SolIcon />{formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl) / solPrice)}</>
+                        : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                      }
+                    </div>
+                    {/* Dynamic PNL chart */}
+                    <div className="relative w-full flex-1">
+                      <svg className="w-full h-full" viewBox="0 0 300 80" preserveAspectRatio="none">
+                        {/* Horizontal reference line */}
+                        <line 
+                          x1="0" 
+                          y1="40" 
+                          x2="300" 
+                          y2="40" 
+                          stroke="#2A2B33" 
+                          strokeWidth="1"
+                        />
+                        {/* Dynamic PNL line */}
+                        <path
+                          d={(() => {
+                            const pnl = timeframeMetrics.realizedPnl;
+                            const absMaxPnl = Math.max(Math.abs(pnl), 100);
+                            const normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
+                            const endY = 40 - (normalizedPnl * 30);
+                            
+                            // Create a line that trends up/down based on PNL
+                            return `M 0 40 L 50 ${40 - (normalizedPnl * 10)} L 100 ${40 - (normalizedPnl * 15)} L 150 ${40 - (normalizedPnl * 20)} L 200 ${40 - (normalizedPnl * 25)} L 300 ${endY}`;
+                          })()}
+                          stroke={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'}
+                          strokeWidth="2"
+                          fill="none"
+                          style={{ transition: 'all 0.3s ease' }}
+                        />
+                      </svg>
                     </div>
                   </div>
                 </div>
@@ -302,16 +561,26 @@ export default function PortfolioPage() {
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">Unrealized PNL</span>
-                      <span className="text-white font-light">${unrealizedPnl.toFixed(2)}</span>
+                      <span className="text-[#6B7280] font-light">{selectedTimeframe} Unrealized PNL</span>
+                      <span className="text-white font-light">
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(timeframeMetrics.unrealizedPnl / solPrice)}</>
+                          : `$${timeframeMetrics.unrealizedPnl.toFixed(2)}`
+                        }
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">Realized PNL</span>
-                      <span className="text-white font-light">$0.00</span>
+                      <span className="text-[#6B7280] font-light">{selectedTimeframe} Realized PNL</span>
+                      <span className="text-white font-light">
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(timeframeMetrics.realizedPnl / solPrice)}</>
+                          : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                        }
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-[#6B7280] font-light">Total TXNS</span>
-                      <span className="text-white font-light">0 0 / 0</span>
+                      <span className="text-[#6B7280] font-light">{selectedTimeframe} Total TXNS</span>
+                      <span className="text-white font-light">{timeframeMetrics.winningTrades}/{timeframeMetrics.losingTrades}</span>
                     </div>
                   
                     {/* Performance breakdown */}
@@ -321,35 +590,35 @@ export default function PortfolioPage() {
                           <div className="w-2 h-2 rounded-full bg-[#70E0B0]"></div>
                           <span className="text-[#6B7280] font-light">&gt;500%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.above500}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-[#70E0B0]"></div>
                           <span className="text-[#6B7280] font-light">200% ~ 500%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.between200And500}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-[#70E0B0]"></div>
                           <span className="text-[#6B7280] font-light">0% ~ 200%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.between0And200}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-[#FF4D7F]"></div>
                           <span className="text-[#6B7280] font-light">0% ~ -50%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.between0AndMinus50}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-[#FF4D7F]"></div>
                           <span className="text-[#6B7280] font-light">&lt; -50%</span>
                         </div>
-                        <span className="text-white font-light">0</span>
+                        <span className="text-white font-light">{performanceBreakdown.belowMinus50}</span>
                       </div>
                     </div>
                   
@@ -381,24 +650,46 @@ export default function PortfolioPage() {
                   </div>
                   
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#17191E] border border-[#2A2B33] hover:border-[#374151] transition-colors cursor-text">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#17191E] border border-[#2A2B33] hover:border-[#374151] transition-colors">
                       <FaSearch className="text-[#9CA3AF] text-xs" />
                       <input
                         type="text"
                         placeholder="Search by name or address"
                         className="bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none w-40"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                       />
+                      {searchQuery.trim() && (
+                        <button
+                          onClick={() => setSearchQuery("")}
+                          className="text-[#9CA3AF] hover:text-white transition-colors"
+                        >
+                          <FaTimes className="text-xs" />
+                        </button>
+                      )}
                     </div>
+                    {searchQuery.trim() && (
+                      <div className="text-xs text-[#9CA3AF]">
+                        {(() => {
+                          const activeTab = activeSpotTab;
+                          if (activeTab === 0) return `${filteredPositions.length} of ${positions.length} positions`;
+                          if (activeTab === 1) return `${filteredTradeHistory.length} of ${tradeHistory.length} trades`;
+                          if (activeTab === 2) return `${filteredTop100Positions.length} of ${top100Positions.length} positions`;
+                          if (activeTab === 3) return `${filteredTradeActivity.length} of ${tradeActivity.length} activities`;
+                          return '';
+                        })()}
+                      </div>
+                    )}
                     <button 
                       onClick={() => setShowHidden(!showHidden)}
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs ${
-                        showHidden 
+                        !showHidden 
                           ? 'bg-[#2A2B33] text-[#70E0B0]' 
                           : 'bg-transparent hover:bg-[#2A2B33] text-[#9CA3AF] hover:text-white'
                       }`}
                     >
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        {showHidden ? (
+                        {!showHidden ? (
                           <>
                             <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
                             <line x1="1" y1="1" x2="23" y2="23"/>
@@ -417,23 +708,34 @@ export default function PortfolioPage() {
                       className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer bg-transparent text-[#9CA3AF] hover:text-white text-xs"
                     >
                       <span className="text-xs">↑↓</span>
-                      {sortByUSD ? 'SOL' : 'USD'}
+                      {sortByUSD ? 'USD' : 'SOL'}
                     </button>
                   </div>
                 </div>
               
                {/* Table headers */}
-               <div className="grid grid-cols-6 gap-4 px-6 py-1 border-b border-[#2A2B33] text-xs text-[#9CA3AF]">
-                 <div>Token</div>
-                 <div>Bought</div>
-                 <div>Sold</div>
-                 <div className="flex items-center gap-1">
-                   Remaining
-                   <span className="text-sm">↓</span>
+               {/* {activeSpotTab !== 3 ? (
+                 <div className="grid grid-cols-6 gap-4 px-6 py-1 border-b border-[#2A2B33] text-xs text-[#9CA3AF]">
+                   <div>Token</div>
+                   <div>Bought</div>
+                   <div>Sold</div>
+                   <div className="flex items-center gap-1">
+                     Remaining
+                     <span className="text-sm">↓</span>
+                   </div>
+                   <div>PNL</div>
+                   <div>Action</div>
                  </div>
-                 <div>PNL</div>
-                 <div>Action</div>
-               </div>
+               ) : (
+                 <div className="grid grid-cols-6 gap-4 px-6 py-1 border-b border-[#2A2B33] text-xs text-[#9CA3AF]">
+                   <div>Type</div>
+                   <div>Token</div>
+                   <div>Amount</div>
+                   <div>Market Cap</div>
+                   <div>Age</div>
+                   <div>Explorer</div>
+                 </div>
+               )} */}
               
                {/* Table Content */}
                <div className="min-h-[200px]">
@@ -451,6 +753,11 @@ export default function PortfolioPage() {
                        bearerToken={user.bearerToken}
                        userId={user.id}
                        onPositionsChange={setPositions}
+                       onTokenNamesChange={setTokenNames}
+                       preloadedPositions={filteredPositions}
+                       skipFetch={searchQuery.trim() !== ""}
+                       showHidden={showHidden}
+                       showInSOL={sortByUSD}
                      />
                    ))}
                  {activeSpotTab === 1 &&
@@ -464,20 +771,53 @@ export default function PortfolioPage() {
                      </div>
                    ) : (
                      <TradeTable
-                       trades={tradeHistory}
+                       trades={filteredTradeHistory}
                        loading={loadingTradeHistory}
                      />
                    ))}
-                  {activeSpotTab === 2 && (
-                    <div className="py-8 text-center text-[#9CA3AF]">
-                      No data.
-                    </div>
-                  )}
-                  {activeSpotTab === 3 && (
-                    <div className="px-6 py-8 text-sm text-[#9CA3AF] font-light">
-                      No activity log.
-                    </div>
-                  )}
+                  {activeSpotTab === 2 &&
+                    (userLoading ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Loading...
+                      </div>
+                    ) : !user?.id ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Please log in to view your positions.
+                      </div>
+                    ) : filteredTop100Positions.length === 0 ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        {searchQuery.trim() ? "No positions found matching your search." : "No positions found."}
+                      </div>
+                    ) : (
+                      <Positions
+                        bearerToken={user.bearerToken}
+                        userId={user.id}
+                        onPositionsChange={() => {}} // No-op since we're using preloaded positions
+                        onTokenNamesChange={setTokenNames}
+                        preloadedPositions={filteredTop100Positions}
+                        skipFetch={true}
+                        showHidden={showHidden}
+                        showInSOL={sortByUSD}
+                      />
+                    ))}
+                  {activeSpotTab === 3 &&
+                    (userLoading || loadingTradeActivity ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Loading...
+                      </div>
+                    ) : !user?.id ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Please log in to view your activity.
+                      </div>
+                    ) : (
+                      <div className="w-full">
+                      <Activity
+                        trades={filteredTradeActivity}
+                        loading={loadingTradeActivity}
+                        onTokenNamesChange={setTokenNames}
+                      />
+                      </div>
+                    ))}
                 </div>
               </div>
            </div>
@@ -502,7 +842,7 @@ export default function PortfolioPage() {
                    <button 
                      onClick={() => setShowHidden(!showHidden)}
                      className={`flex items-center gap-1 px-1 ml-10 py-1 rounded-full transition-colors duration-200 cursor-pointer text-xs whitespace-nowrap ${
-                       showHidden 
+                       !showHidden 
                          ? 'text-[#70E0B0]' 
                          : 'text-[#9CA3AF] hover:text-white'
                      }`}

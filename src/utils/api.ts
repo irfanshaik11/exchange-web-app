@@ -140,6 +140,15 @@ interface CreateLimitOrderParams {
   type: "Buy" | "Sell";
   direction: "Above" | "Below";
   targetMC: number;
+  // Optional context data from frontend (for better logging and validation)
+  currentPrice?: number | string;
+  currentMarketCap?: number | string;
+  tokenName?: string;
+  tokenSymbol?: string;
+  tokenDecimals?: number;
+  poolAddress?: string; // For trading execution (migrated_pool_address || pair_address)
+  pairAddress?: string; // For market cap tracking (always pair_address)
+  poolType?: string;
 }
 
 interface LimitOrder {
