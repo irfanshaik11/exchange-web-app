@@ -1441,6 +1441,14 @@ const PulseTable = React.memo(function PulseTable({
   const filteredAndSortedTokens = useMemo(() => {
     let filtered = [...tokens];
 
+    // Filter out tokens without migrated_pool_address in the Migrated column
+    if (title.toLowerCase().includes('migrated')) {
+      filtered = filtered.filter(token => {
+        const hasMigratedPoolAddress = !!(token as any).migrated_pool_address;
+        return hasMigratedPoolAddress;
+      });
+    }
+
     // Apply protocol filters
     if (filters.protocols.length > 0) {
       const beforeCount = filtered.length;

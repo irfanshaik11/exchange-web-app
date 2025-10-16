@@ -533,7 +533,8 @@ export default function PulsePage() {
           console.log(`[Pulse] httpMigrated sample:`, httpMigrated.slice(0, 3).map(t => ({ 
             symbol: t.symbol, 
             migrated_time: t.migrated_time,
-            launch_time: t.launch_time
+            launch_time: t.launch_time,
+            migrated_pool_address: t.migrated_pool_address
           })));
         }
       } catch {}
@@ -543,10 +544,31 @@ export default function PulsePage() {
     if (!Array.isArray(source) || source.length === 0) {
       return [];
     }
+
+    // Filter out tokens without migrated_pool_address
+    const filteredSource = source.filter(token => {
+      const hasMigratedPoolAddress = token.migrated_pool_address && token.migrated_pool_address.trim() !== '';
+      if (!hasMigratedPoolAddress && typeof window !== 'undefined') {
+        console.log(`[Pulse] ❌ Filtering out token without migrated_pool_address:`, {
+          symbol: token.symbol,
+          name: token.name,
+          mint: token.mint,
+          migrated_pool_address: token.migrated_pool_address
+        });
+      }
+      return hasMigratedPoolAddress;
+    });
+
+    if (typeof window !== 'undefined') {
+      try {
+        const filtered_count = source.length - filteredSource.length;
+        console.log(`[Pulse] Migrated filter result: ${source.length} total → ${filteredSource.length} with migrated_pool_address (filtered out ${filtered_count})`);
+      } catch {}
+    }
     
     const withTs: any[] = [];
     const withoutTs: any[] = [];
-    for (const t of source) {
+    for (const t of filteredSource) {
       const ts = getTs(t);
       if (ts > 0) withTs.push(t); else withoutTs.push(t);
     }

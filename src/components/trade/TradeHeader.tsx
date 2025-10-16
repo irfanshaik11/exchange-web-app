@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber } from "~/utils/db";
 import { useWatchlist } from "../WatchlistContext";
-import { fetchTokenMetadata } from "~/utils/functions";
 import { SubscriptNumber } from "../InterstateTable";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 
@@ -51,6 +50,197 @@ function getTokenAge(createdAt: string) {
   return `${diffMins}m`;
 }
 
+// Protocol color mapping - matches PulseTable styling
+const protocolColorMap: Record<string, string> = {
+  'pump': '#22c55e',        // Green for pump.fun
+  'pump.fun': '#22c55e',    // Green for pump.fun
+  'bonk': '#ff6b35',
+  'moonshot': '#a855f7',
+  'heaven': '#8b5cf6',
+  'daos.fun': '#06b6d4',
+  'candle': '#f59e0b',
+  'sugar': '#ec4899',
+  'believe': '#10b981',
+  'jupiter': '#8b5cf6',
+  'moonit': '#74831f',      // Green-brown for moonit
+  'boop': '#134577',        // Dark blue for boopfun
+  'boopfun': '#134577',     // Dark blue for boopfun
+  'launchlab': '#ef4444',
+  'dynamic': '#526fff',
+  'raydium': '#5c51f7',     // Purple for raydium
+  'raydiumlaunchpad': '#5c51f7',  // Purple for raydiumlaunchpad
+  'meteora': '#ff4662',     // Pink-red for meteora
+  'meteora_v2': '#ff4662',  // Pink-red for meteora
+  'pump_amm': '#e9ba14',    // Gold for pump amm
+  'orca': '#0ea5e9'
+};
+
+// Determine column type based on token's migration/bonding progress
+function getColumnType(token: Token): 'new' | 'final-stretch' | 'migrated' {
+  // Check if token has migrated/graduated
+  const isMigrated = (token as any).is_migrated || 
+                     (token as any).migrated || 
+                     (token as any).graduated ||
+                     (token as any).is_graduated;
+  
+  if (isMigrated) {
+    return 'migrated';
+  }
+  
+  // Calculate bonding curve progress
+  const bondingPct = (token as any).bonding_pct;
+  const bondingProgress = token.bonding_curve_progress;
+  const graduationPercent = (token as any).graduationPercent;
+  const marketCap = (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
+  
+  let progress = 0;
+  
+  if (typeof bondingPct === 'number' && bondingPct >= 0) {
+    progress = bondingPct;
+  } else if (typeof bondingProgress === 'number' && bondingProgress >= 0) {
+    progress = bondingProgress * 100; // Convert to percentage
+  } else if (typeof graduationPercent === 'number' && graduationPercent >= 0) {
+    progress = graduationPercent;
+  } else if (marketCap > 0) {
+    // Estimate based on market cap (graduation target is $69M)
+    progress = Math.min((marketCap / 69000000) * 100, 100);
+  }
+  
+  // Final stretch is typically 60-100% progress
+  if (progress >= 60) {
+    return 'final-stretch';
+  }
+  
+  // Default to new pairs
+  return 'new';
+}
+
+// Get protocol color based on launchpad_protocol field and column type
+function getProtocolColor(token: Token, columnType: 'new' | 'final-stretch' | 'migrated'): string {
+  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+  const protocol = (token as any).protocol?.toLowerCase();
+  const launchpadName = (token as any).launchpadName?.toLowerCase();
+  const amm = (token as any).amm?.toLowerCase();
+  
+  // Try all possible protocol field names
+  const protocolValue = launchpadProtocol || protocol || launchpadName || amm;
+  
+  if (!protocolValue) {
+    return '#22c55e'; // Default green
+  }
+  
+  // Special handling for Meteora - use column type since Meteora doesn't have bonding scores
+  if (protocolValue.includes('meteora')) {
+    // Meteora tokens: red in new pairs and final stretch, yellow in migrated
+    if (columnType === 'migrated') {
+      return '#eab308'; // Yellow for migrated
+    } else {
+      return '#ff4662'; // Red for new pairs and final stretch
+    }
+  }
+  
+  // Special handling for Pump - use column type to determine color
+  if (protocolValue.includes('pump')) {
+    // Pump tokens: green in new pairs and final stretch, yellow in migrated
+    if (columnType === 'migrated') {
+      return '#eab308'; // Yellow for migrated
+    } else {
+      return '#22c55e'; // Green for new pairs and final stretch
+    }
+  }
+  
+  // Direct match first
+  if (protocolColorMap[protocolValue]) {
+    return protocolColorMap[protocolValue];
+  }
+  
+  if (protocolValue.includes('raydium')) {
+    return '#5c51f7'; // Purple for raydium
+  }
+  
+  if (protocolValue.includes('moonit')) {
+    return '#74831f'; // Green-brown for moonit
+  }
+  
+  if (protocolValue.includes('boop')) {
+    return '#134577'; // Dark blue for boopfun
+  }
+  
+  if (protocolValue.includes('bonk')) {
+    return protocolColorMap['bonk'];
+  }
+  
+  if (protocolValue.includes('orca')) {
+    return protocolColorMap['orca'];
+  }
+  
+  if (protocolValue.includes('jupiter')) {
+    return protocolColorMap['jupiter'];
+  }
+  
+  // Default to green if no match found
+  return '#22c55e';
+}
+
+// Get icon based on token data - dynamically maps launchpad_protocol to icon
+function getTokenIcon(token: Token): string {
+  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+  const protocol = (token as any).protocol?.toLowerCase();
+  const launchpadName = (token as any).launchpadName?.toLowerCase();
+  const amm = (token as any).amm?.toLowerCase();
+  
+  // Debug logging
+  console.log('[TradeHeader getTokenIcon]', {
+    symbol: token.symbol,
+    launchpad_protocol: (token as any).launchpad_protocol,
+    protocol: (token as any).protocol,
+    launchpadName: (token as any).launchpadName,
+    amm: (token as any).amm
+  });
+  
+  // Try all possible protocol field names
+  const protocolValue = launchpadProtocol || protocol || launchpadName || amm;
+  
+  if (!protocolValue) {
+    console.log('[TradeHeader getTokenIcon] No protocol found, defaulting to pump');
+    // Default to pump.fun icon if no protocol info
+    return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+  }
+  
+  // Map launchpad_protocol to external logo URLs
+  if (protocolValue.includes('pump')) {
+    return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+  }
+  
+  if (protocolValue.includes('meteora')) {
+    return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
+  }
+  
+  if (protocolValue.includes('raydium')) {
+    return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+  }
+  
+  if (protocolValue.includes('boop')) {
+    return 'https://dropsearn.fra1.cdn.digitaloceanspaces.com/media/projects/logos/boopfun_logo_1746246162.webp';
+  }
+  
+  if (protocolValue.includes('moonit')) {
+    return 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6_LEZppFrAkKMqApIwCM_R5n0-b4XC8Aluw&s';
+  }
+  
+  if (protocolValue.includes('orca')) {
+    return 'https://s2.coinmarketcap.com/static/img/coins/64x64/7501.png';
+  }
+  
+  if (protocolValue.includes('jupiter')) {
+    return 'https://s2.coinmarketcap.com/static/img/coins/64x64/29210.png';
+  }
+  
+  console.log('[TradeHeader getTokenIcon] Unknown protocol:', protocolValue, 'defaulting to pump');
+  // Default to pump.fun icon for unknown protocols
+  return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+}
+
 // Make NFT/token images work across ipfs/arweave/http
 function normalizeAssetUrl(raw?: string): string | null {
   if (!raw) return null;
@@ -76,42 +266,6 @@ function normalizeAssetUrl(raw?: string): string | null {
   return null;
 }
 
-const tokenMetadataCache: Record<string, any> = {};
-function useTokenMetadata(uri?: string) {
-  const [meta, setMeta] = React.useState<any | null>(null);
-  const [loading, setLoading] = React.useState(!!uri);
-  const [showInitial, setShowInitial] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    if (!uri) {
-      setMeta(null);
-      setLoading(false);
-      return;
-    }
-    if (tokenMetadataCache[uri]) {
-      setMeta(tokenMetadataCache[uri]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setShowInitial(false);
-    const timer = setTimeout(() => setShowInitial(true), 400);
-    fetchTokenMetadata(uri).then((data) => {
-      if (!cancelled) {
-        if (data) tokenMetadataCache[uri] = data;
-        setMeta(data);
-        setLoading(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [uri]);
-
-  return { meta, loading, showInitial };
-}
 
 /* ---------- tiny UI atoms ---------- */
 function StatInline({
@@ -176,7 +330,6 @@ interface TradeHeaderProps {
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
   const isWatched = isInWatchlist(token.pair_address);
-  const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const [showPreview, setShowPreview] = useState(false);
   const [showXPreview, setShowXPreview] = useState(false);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number, showBelow?: boolean} | null>(null);
@@ -290,13 +443,47 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
 
   const curvePct = calculateBondingCurveProgress(token);
 
-  const imgSrc =
-    normalizeAssetUrl((token as any).image_url) ||
-    normalizeAssetUrl(meta?.image) ||
-    normalizeAssetUrl((meta?.properties as any)?.image) ||
-    normalizeAssetUrl((token as any).logo) ||
-    normalizeAssetUrl((token as any).image) ||
-    null;
+  // Use uri field from deployed service, fallback to image field, then token.logo (same as PulseTable)
+  const imageUrl = (token as any).uri || (token as any).image || token.logo;
+  const imgSrc = normalizeAssetUrl(imageUrl);
+
+  // Get protocol styling - determine column type first
+  const columnType = getColumnType(token);
+  const protocolColor = getProtocolColor(token, columnType);
+  const tokenIcon = getTokenIcon(token);
+  
+  // Check all protocol fields to determine if Meteora
+  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+  const protocol = (token as any).protocol?.toLowerCase() || '';
+  const launchpadName = (token as any).launchpadName?.toLowerCase() || '';
+  const amm = (token as any).amm?.toLowerCase() || '';
+  const protocolValue = launchpadProtocol || protocol || launchpadName || amm;
+  const isMeteora = protocolValue.includes('meteora');
+
+  // Debug logging for protocol detection and image source
+  console.log(`[TradeHeader] ${token.symbol}:`, {
+    protocolFields: {
+      launchpad_protocol: (token as any).launchpad_protocol,
+      protocol: (token as any).protocol,
+      launchpadName: (token as any).launchpadName,
+      amm: (token as any).amm,
+      usedProtocolValue: protocolValue
+    },
+    columnType: columnType,
+    protocolColor: protocolColor,
+    tokenIcon: tokenIcon,
+    isMeteora: isMeteora,
+    bonding_pct: (token as any).bonding_pct,
+    bonding_curve_progress: token.bonding_curve_progress,
+    is_migrated: (token as any).is_migrated,
+    graduated: (token as any).graduated,
+    imageSource: {
+      uri: (token as any).uri,
+      image: (token as any).image,
+      logo: token.logo,
+      usedImageUrl: imageUrl
+    }
+  });
 
   return (
     <div
@@ -326,12 +513,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
       {/* LEFT: Token Info */}
       <div className="flex items-center gap-3">
         {/* Token Avatar with Pill Styling */}
-        <div className="relative">
+        <div className="relative h-11 w-11">
+          {/* Outer border container with protocol color */}
           <div 
-            className="relative h-11 w-11 rounded-md border transition-all duration-300 cursor-pointer"
+            className="relative h-full w-full rounded-md transition-all duration-300 cursor-pointer"
             style={{ 
-              borderColor: showPreview ? AX.aiCyan : AX.border,
-              boxShadow: showPreview ? `0 0 12px ${AX.glowCyan}, 0 0 24px ${AX.glowCyan}, inset 0 0 12px ${AX.glowCyan}` : 'none'
+              border: `1px solid ${showPreview ? AX.aiCyan : protocolColor}`,
+              padding: '1px'
             }}
             onMouseEnter={(e) => {
               setShowPreview(true);
@@ -340,46 +528,76 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
             }}
             onMouseLeave={(e) => {
               setShowPreview(false);
-              e.currentTarget.style.borderColor = AX.border;
+              e.currentTarget.style.borderColor = protocolColor;
               e.currentTarget.style.boxShadow = 'none';
             }}
           >
-        {loading && !showInitial ? (
-              <div className="h-full w-full animate-pulse rounded-md" style={{ background: AX.surface2 }} />
-        ) : imgSrc ? (
-              <FastImage
-            src={imgSrc}
-            alt={token.name}
-                symbol={token.symbol}
-                width={40}
-                height={40}
-                className="h-full w-full rounded-md object-cover"
-                priority={true}
-          />
-        ) : (
-          <div
-                className="flex h-full w-full items-center justify-center rounded-md text-xl font-light"
-                style={{ color: AX.text, background: AX.surface2, fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
-          >
-            {token.name?.charAt(0) || "?"}
-          </div>
-        )}
+            {/* Inner silver border container */}
+            <div 
+              className="relative h-full w-full rounded-md"
+              style={{
+                border: `1px solid rgba(192, 192, 192, 0.3)`,
+                padding: '1px'
+              }}
+            >
+              {/* Image container */}
+              <div className="relative h-full w-full rounded-md overflow-hidden">
+                {imgSrc ? (
+                  <FastImage
+                    src={imageUrl}
+                    alt={token.name || token.symbol || ""}
+                    symbol={token.symbol}
+                    name={token.name}
+                    width={40}
+                    height={40}
+                    className="h-full w-full rounded-md object-cover transition-all duration-300"
+                    priority={true}
+                    showBubble={false}
+                  />
+                ) : (
+                  <div
+                    className="flex h-full w-full items-center justify-center rounded-md text-xl font-light"
+                    style={{ color: AX.text, background: AX.surface2, fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                  >
+                    {token.name?.charAt(0) || "?"}
+                  </div>
+                )}
 
-            {/* Camera icon overlay */}
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300 pointer-events-none"
-                 style={{ opacity: showPreview ? 1 : 0 }}>
-              <div className="flex items-center justify-center rounded-full p-1.5"
-                   style={{ 
-                     backgroundColor: AX.aiCyan,
-                     boxShadow: `0 0 6px ${AX.glowCyan}`
-                   }}>
-                <FaCamera 
-                  size={14} 
-                  style={{ color: '#000000' }}
-                  className="drop-shadow-lg"
-                />
+                {/* Camera icon overlay */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300 pointer-events-none"
+                     style={{ opacity: showPreview ? 1 : 0 }}>
+                  <div className="flex items-center justify-center rounded-full p-1.5"
+                       style={{ 
+                         backgroundColor: AX.aiCyan,
+                         boxShadow: `0 0 6px ${AX.glowCyan}`
+                       }}>
+                    <FaCamera 
+                      size={12} 
+                      style={{ color: '#000000' }}
+                      className="drop-shadow-lg"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
+          
+          {/* Dynamic protocol icon bubble - positioned outside the image container (bottom right pill) */}
+          <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
+               style={{ 
+                 width: 20, 
+                 height: 20,
+                 border: `2px solid ${protocolColor}`,
+                 boxShadow: `0 0 4px ${protocolColor}60`
+               }}>
+            <img
+              src={tokenIcon}
+              alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || 'Protocol'} logo`}
+              className={`${isMeteora ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+              style={{
+                filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
+              }}
+            />
           </div>
 
           {/* AI-styled Image Preview Window */}
@@ -403,9 +621,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
                    }}>
                 {imgSrc ? (
                   <FastImage
-                    src={imgSrc}
-                    alt={token.name}
+                    src={imageUrl}
+                    alt={token.name || token.symbol || ""}
                     symbol={token.symbol}
+                    name={token.name}
                     width={200}
                     height={200}
                     className="h-full w-full object-cover"
