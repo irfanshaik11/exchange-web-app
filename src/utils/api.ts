@@ -201,7 +201,7 @@ export const updateLimitOrder = (
 /*                               Trade endpoints                              */
 /* -------------------------------------------------------------------------- */
 
-type BuyParams = {
+export type BuyParams = {
   poolAddress: string;
   baseMint: string;
   quoteMint: string;
