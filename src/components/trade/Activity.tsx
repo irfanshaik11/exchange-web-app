@@ -8,6 +8,7 @@ import { FaExternalLinkAlt } from 'react-icons/fa';
 interface ActivityProps {
   trades: TradeRow[];
   loading: boolean;
+  onTokenNamesChange?: (tokenNames: Record<string, string>) => void; // Optional: callback to pass token names to parent
 }
 
 interface TokenMetadata {
@@ -46,7 +47,7 @@ function formatAge(timestamp: number | string): string {
   }
 }
 
-const Activity: React.FC<ActivityProps> = ({ trades, loading }) => {
+const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange }) => {
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const router = useRouter();
 
@@ -56,46 +57,59 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading }) => {
     // Fetch token data for each unique token in trades - use same pattern as Positions
     const uniqueTokens = Array.from(new Set(trades.map(t => t.tokenAddress)));
     
-    uniqueTokens.forEach(async (tokenAddress) => {
+    uniqueTokens.forEach(async (tokenAddress, idx) => {
       try {
-        console.log(`Fetching token data for: ${tokenAddress}`);
+        // Find the trade to get originalPairAddress (backend stores this for token-service lookups)
+        const trade = trades.find(t => t.tokenAddress === tokenAddress);
+        const pairAddress = trade?.originalPairAddress || trade?.pairAddress || tokenAddress;
         
-        // Try to get token data from token-service using mint address
-        let response = await fetch(`/api/token-service/trade-view?mint=${tokenAddress}`);
+        console.log(`Fetching token data for pair: ${pairAddress} (tokenAddress: ${tokenAddress})`);
         
-        if (!response.ok) {
-          // Try with pair_address as fallback
-          console.log(`Trying pair_address for: ${tokenAddress}`);
-          response = await fetch(`/api/token-service/trade-view?pair_address=${tokenAddress}`);
-        }
+        // Use originalPairAddress to get token data (same as Positions component)
+        const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`);
         
         if (!response.ok) {
-          console.error(`Failed to fetch token data for ${tokenAddress}:`, response.status);
+          console.error(`Failed to fetch token data for ${pairAddress}:`, response.status);
           return;
         }
         
         const data = await response.json();
         const tokenData = data?.token;
         
-        console.log(`Token data received for ${tokenAddress}:`, tokenData);
+        console.log(`Token data received for ${pairAddress}:`, tokenData);
         
         if (tokenData) {
-          setTokenMetadata(prev => ({
-            ...prev,
-            [tokenAddress]: {
-              imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
-              protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
-              name: tokenData.name || '',
-              symbol: tokenData.symbol || '',
-              createdAt: tokenData.created_timestamp || tokenData.createdAt,
+          setTokenMetadata(prev => {
+            const updated = {
+              ...prev,
+              [tokenAddress]: {
+                imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
+                protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
+                name: tokenData.name || '',
+                symbol: tokenData.symbol || '',
+                createdAt: tokenData.created_timestamp || tokenData.createdAt,
+              }
+            };
+            
+            // Pass token names to parent if callback is provided
+            if (onTokenNamesChange) {
+              const tokenNames: Record<string, string> = {};
+              Object.keys(updated).forEach(key => {
+                if (updated[key]?.name) {
+                  tokenNames[key] = updated[key].name!;
+                }
+              });
+              onTokenNamesChange(tokenNames);
             }
-          }));
+            
+            return updated;
+          });
         }
       } catch (error) {
         console.error(`Error fetching token data for ${tokenAddress}:`, error);
       }
     });
-  }, [trades]);
+  }, [trades, onTokenNamesChange]);
 
   return (
     <div className="w-full h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
@@ -108,9 +122,10 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading }) => {
           {
             trades.map((trade, idx) => {
               const handleRowClick = () => {
-                // Navigate to token trade page
-                if (trade.tokenAddress) {
-                  router.push(`/trade/${trade.tokenAddress}`);
+                // Navigate to token trade page using originalPairAddress (same as Positions)
+                const navigateAddress = trade.originalPairAddress || trade.pairAddress || trade.tokenAddress;
+                if (navigateAddress) {
+                  router.push(`/trade/${navigateAddress}`);
                 }
               };
               

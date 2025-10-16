@@ -14,7 +14,7 @@ import {
 } from "~/utils/functions";
 import { formatSmartNumber } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
-import { FaSearch, FaEye, FaUpload } from "react-icons/fa";
+import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
 
 // Stacked Token Boxes Component
@@ -61,6 +61,12 @@ export default function PortfolioPage() {
   const [totalValue, setTotalValue] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
+  const [filteredPositions, setFilteredPositions] = useState<PositionRow[]>([]);
+  const [filteredTop100Positions, setFilteredTop100Positions] = useState<PositionRow[]>([]);
+  const [filteredTradeHistory, setFilteredTradeHistory] = useState<TradeRow[]>([]);
+  const [filteredTradeActivity, setFilteredTradeActivity] = useState<TradeRow[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState("Max");
@@ -101,9 +107,14 @@ export default function PortfolioPage() {
 
   // Fetch trade activity only when on Activity tab
   useEffect(() => {
+    let isInitialLoad = true;
+    
     const fetchTradeActivity = async () => {
       if (user?.id && activeSpotTab === 3) {
-        setLoadingTradeActivity(true);
+        // Only show loading state on initial load, not on refreshes
+        if (isInitialLoad) {
+          setLoadingTradeActivity(true);
+        }
         try {
           const activity = await getTradeActivityByUser(user.id);
           setTradeActivity(activity);
@@ -111,12 +122,24 @@ export default function PortfolioPage() {
           console.error("Failed to fetch trade activity:", error);
           setTradeActivity([]);
         } finally {
-          setLoadingTradeActivity(false);
+          if (isInitialLoad) {
+            setLoadingTradeActivity(false);
+            isInitialLoad = false;
+          }
         }
       }
     };
 
     fetchTradeActivity();
+    
+    // Auto-refresh every 5 seconds when on Activity tab
+    if (user?.id && activeSpotTab === 3) {
+      const intervalId = setInterval(() => {
+        fetchTradeActivity();
+      }, 5000);
+      
+      return () => clearInterval(intervalId);
+    }
   }, [user?.id, activeSpotTab]);
 
 
@@ -144,6 +167,60 @@ export default function PortfolioPage() {
      setTop100Positions(sortedByUsdValue.slice(0, 100));
    }
  }, [positions, solBalance]);
+
+ // Search filtering effect
+ useEffect(() => {
+   const filterData = () => {
+     if (!searchQuery.trim()) {
+       // If no search query, show all data
+       setFilteredPositions(positions);
+       setFilteredTop100Positions(top100Positions);
+       setFilteredTradeHistory(tradeHistory);
+       setFilteredTradeActivity(tradeActivity);
+       return;
+     }
+
+     const query = searchQuery.toLowerCase().trim();
+
+     // Filter positions (Active Positions and Top 100 tabs)
+     const filteredPos = positions.filter(pos => {
+       const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || '';
+       return pos.tokenAddress.toLowerCase().includes(query) ||
+              pos.pairAddress?.toLowerCase().includes(query) ||
+              tokenName.includes(query);
+     });
+     setFilteredPositions(filteredPos);
+
+     // Filter top 100 positions
+     const filteredTop100 = top100Positions.filter(pos => {
+       const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || '';
+       return pos.tokenAddress.toLowerCase().includes(query) ||
+              pos.pairAddress?.toLowerCase().includes(query) ||
+              tokenName.includes(query);
+     });
+     setFilteredTop100Positions(filteredTop100);
+
+     // Filter trade history
+     const filteredHistory = tradeHistory.filter(trade => {
+       const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || '';
+       return trade.tokenAddress.toLowerCase().includes(query) ||
+              trade.transactionHash.toLowerCase().includes(query) ||
+              tokenName.includes(query);
+     });
+     setFilteredTradeHistory(filteredHistory);
+
+     // Filter trade activity
+     const filteredActivity = tradeActivity.filter(trade => {
+       const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || '';
+       return trade.tokenAddress.toLowerCase().includes(query) ||
+              trade.transactionHash.toLowerCase().includes(query) ||
+              tokenName.includes(query);
+     });
+     setFilteredTradeActivity(filteredActivity);
+   };
+
+   filterData();
+ }, [searchQuery, positions, top100Positions, tradeHistory, tradeActivity, tokenNames]);
 
  // Calculate metrics based on selected timeframe
  useEffect(() => {
@@ -516,14 +593,36 @@ export default function PortfolioPage() {
                   </div>
                   
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#17191E] border border-[#2A2B33] hover:border-[#374151] transition-colors cursor-text">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#17191E] border border-[#2A2B33] hover:border-[#374151] transition-colors">
                       <FaSearch className="text-[#9CA3AF] text-xs" />
                       <input
                         type="text"
                         placeholder="Search by name or address"
                         className="bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none w-40"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                       />
+                      {searchQuery.trim() && (
+                        <button
+                          onClick={() => setSearchQuery("")}
+                          className="text-[#9CA3AF] hover:text-white transition-colors"
+                        >
+                          <FaTimes className="text-xs" />
+                        </button>
+                      )}
                     </div>
+                    {searchQuery.trim() && (
+                      <div className="text-xs text-[#9CA3AF]">
+                        {(() => {
+                          const activeTab = activeSpotTab;
+                          if (activeTab === 0) return `${filteredPositions.length} of ${positions.length} positions`;
+                          if (activeTab === 1) return `${filteredTradeHistory.length} of ${tradeHistory.length} trades`;
+                          if (activeTab === 2) return `${filteredTop100Positions.length} of ${top100Positions.length} positions`;
+                          if (activeTab === 3) return `${filteredTradeActivity.length} of ${tradeActivity.length} activities`;
+                          return '';
+                        })()}
+                      </div>
+                    )}
                     <button 
                       onClick={() => setShowHidden(!showHidden)}
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs ${
@@ -597,6 +696,9 @@ export default function PortfolioPage() {
                        bearerToken={user.bearerToken}
                        userId={user.id}
                        onPositionsChange={setPositions}
+                       onTokenNamesChange={setTokenNames}
+                       preloadedPositions={filteredPositions}
+                       skipFetch={searchQuery.trim() !== ""}
                      />
                    ))}
                  {activeSpotTab === 1 &&
@@ -610,7 +712,7 @@ export default function PortfolioPage() {
                      </div>
                    ) : (
                      <TradeTable
-                       trades={tradeHistory}
+                       trades={filteredTradeHistory}
                        loading={loadingTradeHistory}
                      />
                    ))}
@@ -623,16 +725,17 @@ export default function PortfolioPage() {
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Please log in to view your positions.
                       </div>
-                    ) : top100Positions.length === 0 ? (
+                    ) : filteredTop100Positions.length === 0 ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
-                        No positions found.
+                        {searchQuery.trim() ? "No positions found matching your search." : "No positions found."}
                       </div>
                     ) : (
                       <Positions
                         bearerToken={user.bearerToken}
                         userId={user.id}
                         onPositionsChange={() => {}} // No-op since we're using preloaded positions
-                        preloadedPositions={top100Positions}
+                        onTokenNamesChange={setTokenNames}
+                        preloadedPositions={filteredTop100Positions}
                         skipFetch={true}
                       />
                     ))}
@@ -647,10 +750,11 @@ export default function PortfolioPage() {
                       </div>
                     ) : (
                       <div className="w-full">
-                        <Activity
-                          trades={tradeActivity}
-                          loading={loadingTradeActivity}
-                        />
+                      <Activity
+                        trades={filteredTradeActivity}
+                        loading={loadingTradeActivity}
+                        onTokenNamesChange={setTokenNames}
+                      />
                       </div>
                     ))}
                 </div>

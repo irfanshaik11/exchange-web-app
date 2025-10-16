@@ -18,6 +18,8 @@ export interface PositionRow {
 export interface TradeRow {
   id: number;
   tokenAddress: string;
+  pairAddress?: string; // Pool/pair address
+  originalPairAddress?: string; // Original pair address from backend
   tradeTime: string;
   type: 'Buy' | 'Sell';
   marketCap: string | number;

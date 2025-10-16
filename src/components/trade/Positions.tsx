@@ -12,6 +12,7 @@ interface PositionsProps {
   onPositionsChange: (positions: PositionRow[]) => void;
   preloadedPositions?: PositionRow[]; // Optional: use provided positions instead of fetching
   skipFetch?: boolean; // Optional: skip the API fetch if positions are provided
+  onTokenNamesChange?: (tokenNames: Record<string, string>) => void; // Optional: callback to pass token names to parent
 }
 
 interface TokenMetadata {
@@ -26,7 +27,7 @@ function shortAddr(addr: string) {
   return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
-const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsChange, preloadedPositions, skipFetch }) => {
+const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsChange, preloadedPositions, skipFetch, onTokenNamesChange }) => {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
@@ -55,15 +56,30 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
           const tokenData = data?.token;
           
           if (tokenData) {
-            setTokenMetadata(prev => ({
-              ...prev,
-              [pos.tokenAddress]: {
-                imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
-                protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
-                name: tokenData.name || '',
-                symbol: tokenData.symbol || '',
+            setTokenMetadata(prev => {
+              const updated = {
+                ...prev,
+                [pos.tokenAddress]: {
+                  imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
+                  protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
+                  name: tokenData.name || '',
+                  symbol: tokenData.symbol || '',
+                }
+              };
+              
+              // Pass token names to parent if callback is provided
+              if (onTokenNamesChange) {
+                const tokenNames: Record<string, string> = {};
+                Object.keys(updated).forEach(key => {
+                  if (updated[key]?.name) {
+                    tokenNames[key] = updated[key].name!;
+                  }
+                });
+                onTokenNamesChange(tokenNames);
               }
-            }));
+              
+              return updated;
+            });
           }
         } catch (error) {
           console.error(`Error fetching token data for ${pos.pairAddress || pos.tokenAddress}:`, error);
@@ -79,10 +95,17 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
       console.log('⚠️ Positions: No userId provided');
       return;
     }
-    console.log(`🔍 Fetching positions for userId: ${userId}`);
-    setLoading(true);
-    getActivePositionsByUser(userId)
-      .then(positions => {
+    
+    let isInitialLoad = true;
+    
+    const fetchPositions = async () => {
+      console.log(`🔍 Fetching positions for userId: ${userId}`);
+      // Only show loading state on initial load, not on refreshes
+      if (isInitialLoad) {
+        setLoading(true);
+      }
+      try {
+        const positions = await getActivePositionsByUser(userId);
         console.log(`✅ Positions received:`, positions);
         console.log(`   Count: ${positions.length}`);
         if (positions.length > 0) {
@@ -109,31 +132,59 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
             const tokenData = data?.token;
             
             if (tokenData) {
-              setTokenMetadata(prev => ({
-                ...prev,
-                [pos.tokenAddress]: {
-                  imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
-                  protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
-                  name: tokenData.name || '',
-                  symbol: tokenData.symbol || '',
+              setTokenMetadata(prev => {
+                const updated = {
+                  ...prev,
+                  [pos.tokenAddress]: {
+                    imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
+                    protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
+                    name: tokenData.name || '',
+                    symbol: tokenData.symbol || '',
+                  }
+                };
+                
+                // Pass token names to parent if callback is provided
+                if (onTokenNamesChange) {
+                  const tokenNames: Record<string, string> = {};
+                  Object.keys(updated).forEach(key => {
+                    if (updated[key]?.name) {
+                      tokenNames[key] = updated[key].name!;
+                    }
+                  });
+                  onTokenNamesChange(tokenNames);
                 }
-              }));
+                
+                return updated;
+              });
             }
           } catch (error) {
             console.error(`Error fetching token data for ${pos.pairAddress || pos.tokenAddress}:`, error);
           }
         });
-      })
-      .catch(error => {
+      } catch (error) {
         console.error('❌ Error fetching positions:', error);
-      })
-      .finally(() => setLoading(false));
-  }, [userId, onPositionsChange, skipFetch]);
+      } finally {
+        if (isInitialLoad) {
+          setLoading(false);
+          isInitialLoad = false;
+        }
+      }
+    };
+    
+    fetchPositions();
+    
+    // Auto-refresh every 5 seconds to get latest positions
+    const intervalId = setInterval(() => {
+      fetchPositions();
+    }, 5000);
+    
+    return () => clearInterval(intervalId);
+  }, [userId, onPositionsChange, skipFetch, onTokenNamesChange]);
 
   return (
-    <div className=" w-full">
+    <div className="w-full h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
       <table className="w-full text-xs">
-        <thead>
+        <thead className="sticky top-0 bg-[#1E1F26] z-10">
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Token</th>
             <th className="px-2 py-2 text-left">Bought</th>
