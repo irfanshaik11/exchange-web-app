@@ -4,6 +4,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import Positions from "../components/trade/Positions";
 import TradeTable from "../components/trade/TradeTable";
+import Activity from "../components/trade/Activity";
 import { useUser } from "../components/UserContext";
 import InterstateTooltip from "~/components/InterstateTooltip";
 import CustomCheckbox from "../components/CustomCheckbox";
@@ -59,6 +60,7 @@ export default function PortfolioPage() {
   const [unrealizedPnlPercentage, setUnrealizedPnlPercentage] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
+  const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState("Max");
@@ -134,6 +136,12 @@ export default function PortfolioPage() {
        totalBoughtValue ? (totalPnl / totalBoughtValue) * 100 : 0,
      );
      setTotalValue(solBalance + totalRemainingValue);
+
+     // Create top 100 positions sorted by USD value
+     const sortedByUsdValue = [...positions].sort((a, b) => {
+       return b.remainingUsdValue - a.remainingUsdValue;
+     });
+     setTop100Positions(sortedByUsdValue.slice(0, 100));
    }
  }, [positions, solBalance]);
 
@@ -550,17 +558,28 @@ export default function PortfolioPage() {
                 </div>
               
                {/* Table headers */}
-               <div className="grid grid-cols-6 gap-4 px-6 py-1 border-b border-[#2A2B33] text-xs text-[#9CA3AF]">
-                 <div>Token</div>
-                 <div>Bought</div>
-                 <div>Sold</div>
-                 <div className="flex items-center gap-1">
-                   Remaining
-                   <span className="text-sm">↓</span>
+               {/* {activeSpotTab !== 3 ? (
+                 <div className="grid grid-cols-6 gap-4 px-6 py-1 border-b border-[#2A2B33] text-xs text-[#9CA3AF]">
+                   <div>Token</div>
+                   <div>Bought</div>
+                   <div>Sold</div>
+                   <div className="flex items-center gap-1">
+                     Remaining
+                     <span className="text-sm">↓</span>
+                   </div>
+                   <div>PNL</div>
+                   <div>Action</div>
                  </div>
-                 <div>PNL</div>
-                 <div>Action</div>
-               </div>
+               ) : (
+                 <div className="grid grid-cols-6 gap-4 px-6 py-1 border-b border-[#2A2B33] text-xs text-[#9CA3AF]">
+                   <div>Type</div>
+                   <div>Token</div>
+                   <div>Amount</div>
+                   <div>Market Cap</div>
+                   <div>Age</div>
+                   <div>Explorer</div>
+                 </div>
+               )} */}
               
                {/* Table Content */}
                <div className="min-h-[200px]">
@@ -595,16 +614,45 @@ export default function PortfolioPage() {
                        loading={loadingTradeHistory}
                      />
                    ))}
-                  {activeSpotTab === 2 && (
-                    <div className="py-8 text-center text-[#9CA3AF]">
-                      No data.
-                    </div>
-                  )}
-                  {activeSpotTab === 3 && (
-                    <div className="px-6 py-8 text-sm text-[#9CA3AF] font-light">
-                      No activity log.
-                    </div>
-                  )}
+                  {activeSpotTab === 2 &&
+                    (userLoading ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Loading...
+                      </div>
+                    ) : !user?.id ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Please log in to view your positions.
+                      </div>
+                    ) : top100Positions.length === 0 ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        No positions found.
+                      </div>
+                    ) : (
+                      <Positions
+                        bearerToken={user.bearerToken}
+                        userId={user.id}
+                        onPositionsChange={() => {}} // No-op since we're using preloaded positions
+                        preloadedPositions={top100Positions}
+                        skipFetch={true}
+                      />
+                    ))}
+                  {activeSpotTab === 3 &&
+                    (userLoading || loadingTradeActivity ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Loading...
+                      </div>
+                    ) : !user?.id ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Please log in to view your activity.
+                      </div>
+                    ) : (
+                      <div className="w-full">
+                        <Activity
+                          trades={tradeActivity}
+                          loading={loadingTradeActivity}
+                        />
+                      </div>
+                    ))}
                 </div>
               </div>
            </div>

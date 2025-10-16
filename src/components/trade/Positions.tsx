@@ -10,6 +10,8 @@ interface PositionsProps {
   userId: string;
   bearerToken: string;
   onPositionsChange: (positions: PositionRow[]) => void;
+  preloadedPositions?: PositionRow[]; // Optional: use provided positions instead of fetching
+  skipFetch?: boolean; // Optional: skip the API fetch if positions are provided
 }
 
 interface TokenMetadata {
@@ -24,13 +26,55 @@ function shortAddr(addr: string) {
   return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
-const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsChange }) => {
+const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsChange, preloadedPositions, skipFetch }) => {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const router = useRouter();
 
+  // If preloaded positions are provided, use them
   useEffect(() => {
+    if (preloadedPositions && skipFetch) {
+      setPositions(preloadedPositions);
+      setLoading(false);
+      
+      // Fetch token metadata for preloaded positions
+      preloadedPositions.forEach(async (pos) => {
+        try {
+          const pairAddress = pos.pairAddress || pos.tokenAddress;
+          console.log(`Fetching token data for pair: ${pairAddress}`);
+          
+          const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`);
+          
+          if (!response.ok) {
+            console.error(`Failed to fetch token data for ${pairAddress}:`, response.status);
+            return;
+          }
+          
+          const data = await response.json();
+          const tokenData = data?.token;
+          
+          if (tokenData) {
+            setTokenMetadata(prev => ({
+              ...prev,
+              [pos.tokenAddress]: {
+                imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
+                protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
+                name: tokenData.name || '',
+                symbol: tokenData.symbol || '',
+              }
+            }));
+          }
+        } catch (error) {
+          console.error(`Error fetching token data for ${pos.pairAddress || pos.tokenAddress}:`, error);
+        }
+      });
+    }
+  }, [preloadedPositions, skipFetch]);
+
+  useEffect(() => {
+    if (skipFetch) return; // Skip fetch if using preloaded positions
+    
     if (!userId) {
       console.log('⚠️ Positions: No userId provided');
       return;
@@ -84,7 +128,7 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
         console.error('❌ Error fetching positions:', error);
       })
       .finally(() => setLoading(false));
-  }, [userId, onPositionsChange]);
+  }, [userId, onPositionsChange, skipFetch]);
 
   return (
     <div className=" w-full">
