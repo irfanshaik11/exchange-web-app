@@ -118,7 +118,19 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
       ) : trades.length === 0 ? (
         <div className="py-8 text-center text-[#9CA3AF]">No activity found.</div>
       ) : (
-        <div className="space-y-0">
+        <div>
+          {/* Header Row */}
+          <div className="grid gap-4 px-6 py-2 border-b border-[#2A2B33] text-xs text-[#9CA3AF] sticky top-0 bg-[#1E1F26] z-10" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
+            <div>Type</div>
+            <div>Token</div>
+            <div>Amount</div>
+            <div>Market Cap</div>
+            <div>Age</div>
+            <div>Explorer</div>
+          </div>
+          
+          {/* Data Rows */}
+          <div className="space-y-0">
           {
             trades.map((trade, idx) => {
               const handleRowClick = () => {
@@ -173,7 +185,8 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
               return (
                 <div 
                   key={trade.id || idx} 
-                  className="grid grid-cols-6 gap-4 px-6 py-3 border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors cursor-pointer"
+                  className="grid gap-4 px-6 py-3 border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors cursor-pointer"
+                  style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}
                   onClick={handleRowClick}
                 >
                   <div className="flex items-center">
@@ -274,6 +287,7 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
               );
             })
           }
+          </div>
         </div>
       )}
     </div>

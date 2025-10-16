@@ -5,6 +5,9 @@ import { getActivePositionsByUser } from '~/utils/functions';
 import type { PositionRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
 import FastImage from '../FastImage';
+import InterstateTooltip from '~/components/InterstateTooltip';
+import { FaArrowUp, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { SiSolana } from 'react-icons/si';
 
 interface PositionsProps {
   userId: string;
@@ -13,6 +16,9 @@ interface PositionsProps {
   preloadedPositions?: PositionRow[]; // Optional: use provided positions instead of fetching
   skipFetch?: boolean; // Optional: skip the API fetch if positions are provided
   onTokenNamesChange?: (tokenNames: Record<string, string>) => void; // Optional: callback to pass token names to parent
+  showHidden?: boolean; // Optional: whether to show hidden tokens
+  onHiddenTokensChange?: (hiddenTokens: Set<string>) => void; // Optional: callback to pass hidden tokens to parent
+  showInSOL?: boolean; // Optional: whether to show values in SOL instead of USD
 }
 
 interface TokenMetadata {
@@ -27,11 +33,88 @@ function shortAddr(addr: string) {
   return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
-const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsChange, preloadedPositions, skipFetch, onTokenNamesChange }) => {
+// SOL icon component
+const SolIcon = () => (
+  <>
+    <SiSolana 
+      className="h-3 w-3 inline-block -mt-0.5" 
+      aria-hidden="true"
+      style={{ 
+        color: 'unset',
+        fill: 'url(#solana-gradient-positions)',
+        filter: 'none'
+      }}
+    />
+    <svg className="absolute w-0 h-0 pointer-events-none">
+      <defs>
+        <linearGradient id="solana-gradient-positions" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#9945FF" />
+          <stop offset="100%" stopColor="#14F195" />
+        </linearGradient>
+      </defs>
+    </svg>
+  </>
+);
+
+const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsChange, preloadedPositions, skipFetch, onTokenNamesChange, showHidden = false, onHiddenTokensChange, showInSOL = false }) => {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
+  const [hiddenTokens, setHiddenTokens] = useState<Set<string>>(new Set());
+  const [solPrice, setSolPrice] = useState<number>(0);
   const router = useRouter();
+  
+  // Fetch SOL price
+  useEffect(() => {
+    const fetchSolPrice = async () => {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+        const data = await response.json();
+        setSolPrice(data.solana.usd);
+      } catch (error) {
+        console.error('Error fetching SOL price:', error);
+        setSolPrice(150); // Fallback price
+      }
+    };
+    fetchSolPrice();
+    // Refresh price every 60 seconds
+    const interval = setInterval(fetchSolPrice, 60000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Load hidden tokens from localStorage on mount
+  useEffect(() => {
+    const savedHidden = localStorage.getItem('hiddenTokens');
+    if (savedHidden) {
+      try {
+        const hiddenArray: string[] = JSON.parse(savedHidden);
+        const hiddenSet: Set<string> = new Set(hiddenArray);
+        setHiddenTokens(hiddenSet);
+        if (onHiddenTokensChange) {
+          onHiddenTokensChange(hiddenSet);
+        }
+      } catch (e) {
+        console.error('Error loading hidden tokens:', e);
+      }
+    }
+  }, [onHiddenTokensChange]);
+  
+  const toggleHideToken = (tokenAddress: string) => {
+    setHiddenTokens(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(tokenAddress)) {
+        newSet.delete(tokenAddress);
+      } else {
+        newSet.add(tokenAddress);
+      }
+      // Save to localStorage
+      localStorage.setItem('hiddenTokens', JSON.stringify(Array.from(newSet)));
+      if (onHiddenTokensChange) {
+        onHiddenTokensChange(newSet);
+      }
+      return newSet;
+    });
+  };
 
   // If preloaded positions are provided, use them
   useEffect(() => {
@@ -200,7 +283,9 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
           ) : positions.length === 0 ? (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions found.</td></tr>
           ) : (
-            positions.map((pos, idx) => {
+            positions
+              .filter(pos => showHidden || !hiddenTokens.has(pos.tokenAddress))
+              .map((pos, idx) => {
               // Use pairAddress if available, otherwise fall back to tokenAddress
               const navigateAddress = pos.pairAddress || pos.tokenAddress;
               // Display pairAddress if available, otherwise show tokenAddress
@@ -238,11 +323,14 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
               };
 
               const tokenIcon = getProtocolIcon(metadata?.protocol);
+              const isHidden = hiddenTokens.has(pos.tokenAddress);
               
               return (
               <tr 
                 key={pos.tokenAddress || idx} 
-                className="border-b border-neutral-800 hover:bg-neutral-800/60 cursor-pointer transition-colors"
+                className={`border-b border-neutral-800 hover:bg-neutral-800/60 cursor-pointer transition-colors ${
+                  isHidden ? 'opacity-40 bg-neutral-900/30' : ''
+                }`}
                 onClick={handleRowClick}
               >
                 <td className="px-2 py-2">
@@ -302,35 +390,75 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
                 </td>
                 <td className="px-2 py-2">
                   {formatSmartNumber(pos.bought)}
-                  <span className="ml-1 text-neutral-400">(${formatSmartNumber(pos.boughtUsdValue)})</span>
+                  <span className="ml-1 text-neutral-400">
+                    {showInSOL && solPrice > 0
+                      ? <>(<SolIcon />{formatSmartNumber(pos.boughtUsdValue / solPrice)})</>
+                      : `($${formatSmartNumber(pos.boughtUsdValue)})`
+                    }
+                  </span>
                 </td>
                 <td className="px-2 py-2">
                   {formatSmartNumber(pos.sold)}
-                  <span className="ml-1 text-neutral-400">(${formatSmartNumber(pos.soldUsdValue)})</span>
+                  <span className="ml-1 text-neutral-400">
+                    {showInSOL && solPrice > 0
+                      ? <>(<SolIcon />{formatSmartNumber(pos.soldUsdValue / solPrice)})</>
+                      : `($${formatSmartNumber(pos.soldUsdValue)})`
+                    }
+                  </span>
                 </td>
                 <td className="px-2 py-2">
                   {formatSmartNumber(pos.remaining)}
-                  <span className="ml-1 text-neutral-400">(${formatSmartNumber(pos.remainingUsdValue)})</span>
+                  <span className="ml-1 text-neutral-400">
+                    {showInSOL && solPrice > 0
+                      ? <>(<SolIcon />{formatSmartNumber(pos.remainingUsdValue / solPrice)})</>
+                      : `($${formatSmartNumber(pos.remainingUsdValue)})`
+                    }
+                  </span>
                 </td>
                 <td className={`px-2 py-2 font-semibold ${pos.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
-                  {pos.pnl >= 0 ? '+' : ''}{formatSmartNumber(pos.pnl)}
+                  {showInSOL && solPrice > 0
+                    ? <>{pos.pnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(pos.pnl) / solPrice)}</>
+                    : `${pos.pnl >= 0 ? '+' : ''}$${formatSmartNumber(Math.abs(pos.pnl))}`
+                  }
                   <span className="ml-1 text-xs">({(pos.pnlPercentage).toFixed(2)}%)</span>
                 </td>
                 <td className="px-2 py-2">
-                  {pos.actions === 'sell' && (
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation(); // Prevent row click when clicking sell button
-                        tradeSellPercentage({
-                          tokenAddress: pos.tokenAddress,
-                          percentageToSell: 100,
-                        }, bearerToken)
-                      }} 
-                      className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 transition"
-                    >
-                      Sell
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* Hide/Show Eye Icon */}
+                    <InterstateTooltip label={isHidden ? "Show token" : "Hide token"}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleHideToken(pos.tokenAddress);
+                        }}
+                        className="p-1.5 rounded hover:bg-neutral-700/50 transition-colors text-neutral-400 hover:text-white"
+                      >
+                        {isHidden ? (
+                          <FaEyeSlash className="text-sm" />
+                        ) : (
+                          <FaEye className="text-sm" />
+                        )}
+                      </button>
+                    </InterstateTooltip>
+                    
+                    {/* Sell Arrow Icon */}
+                    {pos.actions === 'sell' && (
+                      <InterstateTooltip label="Sell">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            tradeSellPercentage({
+                              tokenAddress: pos.tokenAddress,
+                              percentageToSell: 100,
+                            }, bearerToken)
+                          }} 
+                          className="p-1.5 rounded hover:bg-red-600/20 transition-colors text-neutral-400 hover:text-red-500"
+                        >
+                          <FaArrowUp className="text-sm" />
+                        </button>
+                      </InterstateTooltip>
+                    )}
+                  </div>
                 </td>
               </tr>
               );

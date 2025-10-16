@@ -42,6 +42,19 @@ const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
   </InterstateTooltip>
 );
 
+// SOL icon component for inline use
+const SolIcon = () => (
+  <SiSolana 
+    className="h-3 w-3 inline-block -mt-0.5 mx-0.5" 
+    aria-hidden="true"
+    style={{ 
+      color: 'unset',
+      fill: 'url(#solana-gradient-inline)',
+      filter: 'none'
+    }}
+  />
+);
+
 
 const spotTabs = ["Active Positions", "History", "Top 100", "Activity"];
 
@@ -69,6 +82,24 @@ export default function PortfolioPage() {
   const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
+  const [solPrice, setSolPrice] = useState(0);
+  
+  // Fetch SOL price
+  useEffect(() => {
+    const fetchSolPrice = async () => {
+      try {
+        const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+        const data = await response.json();
+        setSolPrice(data.solana.usd);
+      } catch (error) {
+        console.error('Error fetching SOL price:', error);
+        setSolPrice(150); // Fallback price
+      }
+    };
+    fetchSolPrice();
+    const interval = setInterval(fetchSolPrice, 60000);
+    return () => clearInterval(interval);
+  }, []);
   const [selectedTimeframe, setSelectedTimeframe] = useState("Max");
   const [timeframeMetrics, setTimeframeMetrics] = useState({
     unrealizedPnl: 0,
@@ -328,7 +359,7 @@ export default function PortfolioPage() {
               >
                 Spot
               </button>
-              <button
+              {/* <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "wallet"
                     ? "text-white"
@@ -337,7 +368,7 @@ export default function PortfolioPage() {
                 onClick={() => setActiveSection("wallet")}
               >
                 Wallets
-              </button>
+              </button> */}
               {/* <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "perpetuals"
@@ -370,6 +401,10 @@ export default function PortfolioPage() {
                           <stop offset="0%" stopColor="#9945FF" />
                           <stop offset="100%" stopColor="#14F195" />
                         </linearGradient>
+                        <linearGradient id="solana-gradient-inline" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor="#9945FF" />
+                          <stop offset="100%" stopColor="#14F195" />
+                        </linearGradient>
                       </defs>
                     </svg>
                     <span className="text-sm text-[#9CA3AF]">{formatSmartNumber(solBalance)}</span>
@@ -377,12 +412,12 @@ export default function PortfolioPage() {
                 </InterstateTooltip>
                 <StackedTokenBoxes count={positions.length} />
                 <div className="flex items-center gap-2">
-                  <FaSearch className="text-[#9CA3AF]" />
+                  {/* <FaSearch className="text-[#9CA3AF]" />
                   <input
                     type="text"
                     placeholder="Search for other wallets..."
                     className="bg-transparent text-sm text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none"
-                  />
+                  /> */}
                 </div>
                 <div className="flex items-center gap-1">
                   <button 
@@ -435,19 +470,28 @@ export default function PortfolioPage() {
                     <div>
                       <div className="text-[#6B7280] text-sm font-light">Total Value</div>
                       <div className="text-2xl font-light text-white">
-                        ${totalValue.toFixed(2)}
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(totalValue / solPrice)}</>
+                          : `$${totalValue.toFixed(2)}`
+                        }
                       </div>
                     </div>
                     <div>
                       <div className="text-[#6B7280] text-sm font-light">Unrealized PNL</div>
                       <div className="text-2xl font-light text-white">
-                        ${unrealizedPnl.toFixed(2)}
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(unrealizedPnl / solPrice)}</>
+                          : `$${unrealizedPnl.toFixed(2)}`
+                        }
                       </div>
                     </div>
                     <div>
                       <div className="text-[#6B7280] text-sm font-light">Available Balance</div>
                       <div className="text-2xl font-light text-white">
-                        ${formatSmartNumber(usdcBalance)}
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(usdcBalance / solPrice)}</>
+                          : `$${formatSmartNumber(usdcBalance)}`
+                        }
                       </div>
                     </div>
                   </div>
@@ -469,7 +513,10 @@ export default function PortfolioPage() {
                   </div>
                   <div className="flex flex-col h-32">
                     <div className="text-2xl font-light mb-2" style={{ color: timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F' }}>
-                      ${timeframeMetrics.realizedPnl.toFixed(2)}
+                      {sortByUSD && solPrice > 0
+                        ? <><SolIcon />{formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl) / solPrice)}</>
+                        : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                      }
                     </div>
                     {/* Dynamic PNL chart */}
                     <div className="relative w-full flex-1">
@@ -515,11 +562,21 @@ export default function PortfolioPage() {
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-[#6B7280] font-light">{selectedTimeframe} Unrealized PNL</span>
-                      <span className="text-white font-light">${timeframeMetrics.unrealizedPnl.toFixed(2)}</span>
+                      <span className="text-white font-light">
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(timeframeMetrics.unrealizedPnl / solPrice)}</>
+                          : `$${timeframeMetrics.unrealizedPnl.toFixed(2)}`
+                        }
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-[#6B7280] font-light">{selectedTimeframe} Realized PNL</span>
-                      <span className="text-white font-light">${timeframeMetrics.realizedPnl.toFixed(2)}</span>
+                      <span className="text-white font-light">
+                        {sortByUSD && solPrice > 0
+                          ? <><SolIcon />{formatSmartNumber(timeframeMetrics.realizedPnl / solPrice)}</>
+                          : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                        }
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-[#6B7280] font-light">{selectedTimeframe} Total TXNS</span>
@@ -626,13 +683,13 @@ export default function PortfolioPage() {
                     <button 
                       onClick={() => setShowHidden(!showHidden)}
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs ${
-                        showHidden 
+                        !showHidden 
                           ? 'bg-[#2A2B33] text-[#70E0B0]' 
                           : 'bg-transparent hover:bg-[#2A2B33] text-[#9CA3AF] hover:text-white'
                       }`}
                     >
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        {showHidden ? (
+                        {!showHidden ? (
                           <>
                             <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
                             <line x1="1" y1="1" x2="23" y2="23"/>
@@ -651,7 +708,7 @@ export default function PortfolioPage() {
                       className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer bg-transparent text-[#9CA3AF] hover:text-white text-xs"
                     >
                       <span className="text-xs">↑↓</span>
-                      {sortByUSD ? 'SOL' : 'USD'}
+                      {sortByUSD ? 'USD' : 'SOL'}
                     </button>
                   </div>
                 </div>
@@ -699,6 +756,8 @@ export default function PortfolioPage() {
                        onTokenNamesChange={setTokenNames}
                        preloadedPositions={filteredPositions}
                        skipFetch={searchQuery.trim() !== ""}
+                       showHidden={showHidden}
+                       showInSOL={sortByUSD}
                      />
                    ))}
                  {activeSpotTab === 1 &&
@@ -737,6 +796,8 @@ export default function PortfolioPage() {
                         onTokenNamesChange={setTokenNames}
                         preloadedPositions={filteredTop100Positions}
                         skipFetch={true}
+                        showHidden={showHidden}
+                        showInSOL={sortByUSD}
                       />
                     ))}
                   {activeSpotTab === 3 &&
@@ -781,7 +842,7 @@ export default function PortfolioPage() {
                    <button 
                      onClick={() => setShowHidden(!showHidden)}
                      className={`flex items-center gap-1 px-1 ml-10 py-1 rounded-full transition-colors duration-200 cursor-pointer text-xs whitespace-nowrap ${
-                       showHidden 
+                       !showHidden 
                          ? 'text-[#70E0B0]' 
                          : 'text-[#9CA3AF] hover:text-white'
                      }`}
