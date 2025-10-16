@@ -301,12 +301,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               // Get change from WebSocket data if available, otherwise fallback to token properties
               let ch = 0;
               if (wsData && wsData.data && wsData.data.timeframes) {
-                // Use timeframe directly since we now match WebSocket timeframes
-                const wsTimeframe = rng;
-                const wsStats = wsData.data.timeframes[wsTimeframe];
-                const rawChange = wsStats?.change ?? 0;
-                // Convert decimal to percentage (e.g., -0.0157 -> -1.57)
-                ch = rawChange * 100;
+                // Map from WebSocket timeframes data to timeframe changes
+                // Use change property if available, otherwise fallback to 0
+                const changeMap: Record<TimeRange, number> = {
+                  "5m": Number(wsData.data.timeframes["5m"]?.change ?? 0),
+                  "1h": Number(wsData.data.timeframes["1h"]?.change ?? 0),
+                  "12h": Number(wsData.data.timeframes["12h"]?.change ?? 0),
+                  "24h": Number(wsData.data.timeframes["24h"]?.change ?? 0),
+                };
+                ch = changeMap[rng] ?? 0;
               } else {
                 // Fallback to token properties
                 const changeMap: Record<TimeRange, number> = {
@@ -340,7 +343,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   </span>
                   <span className={cx("text-[10px] tabular-nums", isUp ? "text-[#70E0B0]" : "text-[#FF4D7F]")}>
                     {isUp ? "+" : "-"}
-                    {abs.toFixed(1)}%
+                    {abs.toFixed(2)}%
                   </span>
                 </button>
               );

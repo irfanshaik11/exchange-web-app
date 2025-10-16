@@ -692,7 +692,9 @@ export default function InterstateTable({
       const diff = aVal - bVal;
       if (diff === 0) {
         // Stable tiebreaker to reduce jitter between polls
-        return a.token.pair_address.localeCompare(b.token.pair_address);
+        const aAddress = a.token.pair_address || a.token.mint || '';
+        const bAddress = b.token.pair_address || b.token.mint || '';
+        return aAddress.localeCompare(bAddress);
       }
       return sortDirection === 'asc' ? diff : -diff;
     });

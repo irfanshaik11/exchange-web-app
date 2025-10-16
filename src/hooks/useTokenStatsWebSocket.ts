@@ -15,6 +15,7 @@ export interface TokenStatsData {
         volume: number;
         buyVolume: number;
         sellVolume: number;
+        change: number;
       };
     };
   };
