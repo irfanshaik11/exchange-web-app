@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { 
@@ -8,19 +8,43 @@ import {
   FaChartBar,
   FaBell,
   FaPalette,
-  FaGamepad,
+  FaDiscord,
   FaFileAlt,
   FaChevronDown,
   FaCog,
   FaBars
 } from 'react-icons/fa';
 import QuickBuySettingsModal from './QuickBuySettingsModal';
+import PnLModal from './PnLModal';
 import { useQuickBuy } from './QuickBuyContext';
 
 // Custom X (Twitter) icon component
 const XIcon = ({ size = 14 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>
+);
+
+// Official Solana logo component
+const SolanaIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 397.7 311.7" fill="currentColor">
+    <defs>
+      <linearGradient id="solanaGradient" x1="360.8791" y1="351.4553" x2="141.213" y2="-69.2936" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#00FFA3"/>
+        <stop offset="1" stopColor="#DC1FFF"/>
+      </linearGradient>
+      <linearGradient id="solanaGradient2" x1="264.8291" y1="401.6014" x2="45.163" y2="-19.1475" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#00FFA3"/>
+        <stop offset="1" stopColor="#DC1FFF"/>
+      </linearGradient>
+      <linearGradient id="solanaGradient3" x1="312.5484" y1="376.688" x2="92.8822" y2="-44.061" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#00FFA3"/>
+        <stop offset="1" stopColor="#DC1FFF"/>
+      </linearGradient>
+    </defs>
+    <path d="M64.6,237.9c2.4-2.4,5.7-3.8,9.2-3.8h317.4c5.8,0,8.7,7,4.6,11.1l-62.7,62.7c-2.4,2.4-5.7,3.8-9.2,3.8H6.5c-5.8,0-8.7-7-4.6-11.1L64.6,237.9z" fill="url(#solanaGradient)"/>
+    <path d="M64.6,3.8C67.1,1.4,70.4,0,73.8,0h317.4c5.8,0,8.7,7,4.6,11.1l-62.7,62.7c-2.4,2.4-5.7,3.8-9.2,3.8H6.5c-5.8,0-8.7-7-4.6-11.1L64.6,3.8z" fill="url(#solanaGradient2)"/>
+    <path d="M333.1,120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8,0-8.7,7-4.6,11.1l62.7,62.7c2.4,2.4,5.7,3.8,9.2,3.8h317.4c5.8,0,8.7-7,4.6-11.1L333.1,120.1z" fill="url(#solanaGradient3)"/>
   </svg>
 );
 
@@ -46,32 +70,67 @@ export default function Footer() {
   const [showWalletDropdown, setShowWalletDropdown] = useState(false);
   const [showGlobalDropdown, setShowGlobalDropdown] = useState(false);
   const [showPresetModal, setShowPresetModal] = useState(false);
+  const [showPnLModal, setShowPnLModal] = useState(false);
+  const [solPrice, setSolPrice] = useState<number>(0);
   const { activePreset } = useQuickBuy();
 
+  // Fetch SOL price using Pyth Network
+  useEffect(() => {
+    const fetchSolPrice = async () => {
+      try {
+        // Pyth Network price feed for SOL/USD
+        const SOL_USD_FEED = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
+        const response = await fetch(
+          `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
+          { signal: AbortSignal.timeout(5000) }
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          const priceData = data.parsed?.[0]?.price;
+          if (priceData?.price && priceData?.expo) {
+            const price = Number(priceData.price) * Math.pow(10, priceData.expo);
+            setSolPrice(price);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching SOL price from Pyth:', error);
+      }
+      
+      // Fallback to static price if Pyth fails
+      setSolPrice(228.58);
+    };
+    
+    fetchSolPrice();
+    const interval = setInterval(fetchSolPrice, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
   const navLinks = [
-    { name: "Wallet", href: "/wallet", icon: FaWallet },
-    { name: "Twitter", href: "/twitter", icon: XIcon, hasNotification: true },
-    { name: "Discover", href: "/", icon: FaCompass, hasNotification: true },
-    { name: "Pulse", href: "/pulse", icon: FaChartLine, hasNotification: true },
-    { name: "PnL", href: "/pnl", icon: FaChartBar },
+    // { name: "Wallet", href: "/wallet", icon: FaWallet },
+    // { name: "Twitter", href: "/twitter", icon: XIcon, hasNotification: true },
+    // { name: "Discover", href: "/", icon: FaCompass, hasNotification: true },
+    // { name: "Pulse", href: "/pulse", icon: FaChartLine, hasNotification: true },
+    // { name: "PnL", href: "/pnl", icon: FaChartBar },
   ];
 
   const statusIcons = [
-    { icon: "❤️", color: "red" },
-    { icon: "💊", color: "green" },
-    { icon: "🦊", color: "orange" },
+    // { icon: "❤️", color: "red" },
+    // { icon: "💊", color: "green" },
+    // { icon: "🦊", color: "orange" },
   ];
 
   const utilityIcons = [
-    { icon: FaBars, tooltip: "Layout" },
-    { icon: FaBell, tooltip: "Notifications" },
-    { icon: FaPalette, tooltip: "Theme" },
+    // { icon: FaBars, tooltip: "Layout" },
+    // { icon: FaBell, tooltip: "Notifications" },
+    // { icon: FaPalette, tooltip: "Theme" },
   ];
 
   const socialLinks = [
-    { icon: FaGamepad, href: "/discord", tooltip: "Discord" },
-    { icon: XIcon, href: "/twitter", tooltip: "Twitter" },
-    { icon: FaFileAlt, href: "/docs", tooltip: "Docs", text: "Docs" },
+    { icon: FaDiscord, href: "https://discord.gg/sACYQmCsTJ", tooltip: "Discord", text: undefined },
+    { icon: XIcon, href: "https://x.com/narrative_hq", tooltip: "Twitter", text: undefined },
+    // { icon: FaFileAlt, href: "/docs", tooltip: "Docs", text: "Docs" },
   ];
 
   return (
@@ -109,34 +168,36 @@ export default function Footer() {
           </button>
 
           {/* Wallet Display */}
-          <div className="relative">
-            <button
-              onClick={() => setShowWalletDropdown(!showWalletDropdown)}
-              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full border transition-all duration-300 ease-out"
-              style={{
-                backgroundColor: 'transparent',
-                borderColor: AX.border,
-                color: AX.text
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = AX.surface;
-                e.currentTarget.style.borderColor = AX.mint;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.borderColor = AX.border;
-              }}
-            >
-              <FaWallet size={10} className="sm:w-3 sm:h-3" />
-              <span className="text-xs sm:text-sm">1</span>
-              {/* Solana Logo */}
-              <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 flex items-center justify-center">
-                <span className="text-xs font-bold text-white">S</span>
-              </div>
-              <span className="text-xs sm:text-sm">0</span>
-              <FaChevronDown size={8} className="sm:w-2 sm:h-2" />
-            </button>
-          </div>
+          {false && (
+            <div className="relative">
+              <button
+                onClick={() => setShowWalletDropdown(!showWalletDropdown)}
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full border transition-all duration-300 ease-out"
+                style={{
+                  backgroundColor: 'transparent',
+                  borderColor: AX.border,
+                  color: AX.text
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = AX.surface;
+                  e.currentTarget.style.borderColor = AX.mint;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.borderColor = AX.border;
+                }}
+              >
+                <FaWallet size={10} className="sm:w-3 sm:h-3" />
+                <span className="text-xs sm:text-sm">1</span>
+                {/* Solana Logo */}
+                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 flex items-center justify-center">
+                  <span className="text-xs font-bold text-white">S</span>
+                </div>
+                <span className="text-xs sm:text-sm">0</span>
+                <FaChevronDown size={8} className="sm:w-2 sm:h-2" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Center Section - Navigation Links */}
@@ -190,27 +251,49 @@ export default function Footer() {
         {/* Right Section - Status, Price, Global, Utilities, Social */}
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           {/* Status Icons */}
-          <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-full border" style={{ borderColor: AX.border }}>
+          {/* <div className="hidden sm:flex items-center gap-1 px-2 py-1 rounded-full border" style={{ borderColor: AX.border }}>
             {statusIcons.map((status, index) => (
               <div key={index} className="text-xs">
                 {status.icon}
               </div>
             ))}
-          </div>
+          </div> */}
+
+          {/* PnL Link */}
+          <button
+            onClick={() => setShowPnLModal(true)}
+            className="flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-1 rounded transition-all duration-300 ease-out group"
+            style={{
+              color: AX.muted,
+              backgroundColor: 'transparent'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = AX.mint;
+              e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = AX.muted;
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <FaChartBar size={12} className="sm:w-3 sm:h-3" />
+            <span className="text-xs sm:text-sm hidden sm:inline">PnL</span>
+          </button>
+
+          <div className="w-px h-3 sm:h-4" style={{ backgroundColor: AX.border }} />
 
           {/* Solana Price */}
           <div className="flex items-center gap-1 px-1 sm:px-2 py-1 rounded-full border" style={{ borderColor: AX.border }}>
-            <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 flex items-center justify-center">
-              <span className="text-xs font-bold text-white">S</span>
-            </div>
-            <span className="text-xs sm:text-sm hidden sm:inline" style={{ color: AX.text }}>$</span>
-            <span className="text-xs sm:text-sm font-medium" style={{ color: AX.green }}>$228.58</span>
+            <SolanaIcon size={14} />
+            <span className="text-xs sm:text-sm font-medium" style={{ color: AX.green }}>
+              {solPrice > 0 ? `$${solPrice.toFixed(2)}` : '...'}
+            </span>
           </div>
 
           <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
 
           {/* Global Dropdown */}
-          <div className="relative hidden sm:block">
+          {/* <div className="relative hidden sm:block">
             <button
               onClick={() => setShowGlobalDropdown(!showGlobalDropdown)}
               className="flex items-center gap-1 px-2 py-1 rounded transition-all duration-300 ease-out"
@@ -228,7 +311,7 @@ export default function Footer() {
             </button>
           </div>
 
-          <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
+          <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} /> */}
 
           {/* Utility Icons */}
           <div className="flex items-center gap-1">
@@ -265,6 +348,8 @@ export default function Footer() {
                 <Link
                   key={index}
                   href={social.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex items-center gap-1 px-1 sm:px-2 py-1 rounded transition-all duration-300 ease-out group"
                   style={{ color: AX.muted }}
                   onMouseEnter={(e) => {
@@ -277,7 +362,7 @@ export default function Footer() {
                   }}
                   title={social.tooltip}
                 >
-                  <IconComponent size={12} className="sm:w-3 sm:h-3" />
+                  <IconComponent size={16} className="sm:w-5 sm:h-5" />
                   {social.text && <span className="text-xs sm:text-sm hidden sm:inline">{social.text}</span>}
                 </Link>
               );
@@ -290,6 +375,12 @@ export default function Footer() {
       <QuickBuySettingsModal 
         open={showPresetModal} 
         onClose={() => setShowPresetModal(false)} 
+      />
+      
+      {/* PnL Modal */}
+      <PnLModal 
+        isOpen={showPnLModal} 
+        onClose={() => setShowPnLModal(false)} 
       />
     </footer>
   );

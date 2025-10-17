@@ -74,9 +74,35 @@ export default function PulsePage() {
 
   const [httpNew, setHttpNew] = useState<any[]>([]);
   const [httpNewTick, setHttpNewTick] = useState(0);
-  const [httpMigrated, setHttpMigrated] = useState<any[]>([]);
+  const [httpMigrated, setHttpMigrated] = useState<any[]>(() => {
+    // Initialize with cached data immediately
+    try {
+      const cached = localStorage.getItem('cached_pulse_migrated');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.data && parsed.timestamp && (now - parsed.timestamp < 5 * 60 * 1000)) {
+          return parsed.data;
+        }
+      }
+    } catch {}
+    return [];
+  });
   const [httpMigratedTick, setHttpMigratedTick] = useState(0);
-  const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
+  const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>(() => {
+    // Initialize with cached data immediately
+    try {
+      const cached = localStorage.getItem('cached_pulse_final_stretch');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.data && parsed.timestamp && (now - parsed.timestamp < 5 * 60 * 1000)) {
+          return parsed.data;
+        }
+      }
+    } catch {}
+    return [];
+  });
   const [httpFinalStretchTick, setHttpFinalStretchTick] = useState(0);
 
   // DISABLED: WebSocket hook for real-time token updates (token service doesn't have WebSocket endpoint)
@@ -140,14 +166,6 @@ export default function PulsePage() {
     immediatePoll();
   }, []);
 
-  // Clear stale localStorage cache for migrated tokens
-  useEffect(() => {
-    try {
-      localStorage.removeItem('cached_migrated_tokens');
-      console.log('[Migrated] Cleared stale localStorage cache');
-    } catch {}
-  }, []);
-
   // Immediate poll on mount for Migrated tokens (just like New Pairs)
   useEffect(() => {
     const immediatePoll = async () => {
@@ -168,6 +186,10 @@ export default function PulsePage() {
             setHttpMigrated(data as any[]);
             setHttpMigratedTick((t) => t + 1);
             console.log(`[Migrated] Immediate poll got ${data.length} tokens`);
+            // Cache the data
+            try {
+              localStorage.setItem('cached_pulse_migrated', JSON.stringify({ data, timestamp: Date.now() }));
+            } catch {}
           }
         }
       } catch (error) {
@@ -201,6 +223,10 @@ export default function PulsePage() {
               console.log(`[Migrated Polling] Received ${data.length} tokens. Top 3:`, data.slice(0, 3).map((t: any) => ({ symbol: t.symbol, migrated_time: t.migrated_time })));
               setHttpMigrated(data as any[]);
               setHttpMigratedTick((t) => t + 1);
+              // Cache the data
+              try {
+                localStorage.setItem('cached_pulse_migrated', JSON.stringify({ data, timestamp: Date.now() }));
+              } catch {}
             }
           }
 
@@ -210,14 +236,6 @@ export default function PulsePage() {
     poll();
     const id = setInterval(poll, 2000); // Poll every 2 seconds for migrated
     return () => { alive = false; clearInterval(id); };
-  }, []);
-
-  // Clear stale localStorage cache for final stretch tokens
-  useEffect(() => {
-    try {
-      localStorage.removeItem('cached_final_stretch_tokens');
-      console.log('[Final Stretch] Cleared stale localStorage cache');
-    } catch {}
   }, []);
 
   // Immediate poll on mount for Final Stretch tokens (just like New Pairs)
@@ -240,6 +258,10 @@ export default function PulsePage() {
             setHttpFinalStretch(data as any[]);
             setHttpFinalStretchTick((t) => t + 1);
             console.log(`[Final Stretch] Immediate poll got ${data.length} tokens`);
+            // Cache the data
+            try {
+              localStorage.setItem('cached_pulse_final_stretch', JSON.stringify({ data, timestamp: Date.now() }));
+            } catch {}
           }
         }
       } catch (error) {
@@ -273,6 +295,10 @@ export default function PulsePage() {
               console.log(`[Final Stretch Polling] Received ${data.length} tokens`);
               setHttpFinalStretch(data as any[]);
               setHttpFinalStretchTick((t) => t + 1);
+              // Cache the data
+              try {
+                localStorage.setItem('cached_pulse_final_stretch', JSON.stringify({ data, timestamp: Date.now() }));
+              } catch {}
             }
           }
 
@@ -855,7 +881,7 @@ export default function PulsePage() {
           <div className="mb-2">
             <div className="flex items-center justify-between">
               <h1 className="text-2xl font-bold">Pulse</h1>
-              <PulseControlBar className="mb-0.5" />
+              {/* <PulseControlBar className="mb-0.5" /> */}
             </div>
           </div>
 

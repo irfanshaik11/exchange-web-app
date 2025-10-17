@@ -233,13 +233,29 @@ const SmoothNumber: React.FC<SmoothNumberProps> = ({
 };
 
 // Token Metrics Component - displays users, trades, achievements, and rank
-function TokenMetrics({ token }: { token: Token }) {
-  // Mock data for now 
-  const metrics = {
-    users: 2037,
-    trades: 1, 
+function TokenMetrics({ token, rank, totalTokens }: { token: Token; rank?: number; totalTokens?: number }) {
+  // Helper function to format numbers with K, M, B suffixes
+  const formatNumber = (num: number): string => {
+    if (num >= 1e9) return `${(num / 1e9).toFixed(1)}B`;
+    if (num >= 1e6) return `${(num / 1e6).toFixed(1)}M`;
+    if (num >= 1e3) return `${(num / 1e3).toFixed(1)}K`;
+    return num.toString();
+  };
+
+  // Real data from token
+  const rawMetrics = {
+    users: token.total_holders || token.unique_wallets_24h || 0,
+    trades: token.unique_wallets_5m || token.unique_wallets_1h || 0, 
     achievements: 0,
     rank: "0/1"
+  };
+
+  // Format the metrics for display
+  const metrics = {
+    users: formatNumber(rawMetrics.users),
+    trades: formatNumber(rawMetrics.trades),
+    achievements: rawMetrics.achievements,
+    rank: rank && totalTokens ? `${rank}/${totalTokens}` : "0/1"
   };
 
   return (
@@ -251,22 +267,30 @@ function TokenMetrics({ token }: { token: Token }) {
       </div>
       
       {/* Candles Icon - Trading/Volume */}
-      <div className="flex items-center gap-1">
+      {/* <div className="flex items-center gap-1">
         <BiCandles size={12} style={{ color: AX.muted }} />
         <span className="text-xs" style={{ color: AX.text }}>{metrics.trades}</span>
-      </div>
+      </div> */}
       
       {/* Trophy Icon - Achievements */}
-      <div className="flex items-center gap-1">
+      {/* <div className="flex items-center gap-1">
         <MdEmojiEvents size={12} style={{ color: AX.muted }} />
         <span className="text-xs" style={{ color: AX.text }}>{metrics.achievements}</span>
-      </div>
+      </div> */}
       
       {/* Crown Icon - Ranking */}
-      <div className="flex items-center gap-1">
+      {/* <div 
+        className="flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+        onClick={() => {
+          // Open Solscan with the token's mint address
+          const solscanUrl = `https://solscan.io/token/${token.mint}`;
+          window.open(solscanUrl, '_blank');
+        }}
+        title="View on Solscan"
+      >
         <FaCrown size={12} style={{ color: AX.muted }} />
         <span className="text-xs" style={{ color: AX.text }}>{metrics.rank}</span>
-      </div>
+      </div> */}
     </div>
   );
 }
@@ -3979,9 +4003,13 @@ const PulseTable = React.memo(function PulseTable({
                       }
                     />
                   {/* Token Metrics */}
-                  <div className="absolute bottom-16 -right-59">
-                    <TokenMetrics token={token} />
-                  </div>
+                  {/* <div className="absolute bottom-16 -right-49">
+                    <TokenMetrics 
+                      token={token} 
+                      rank={idx + 1} 
+                      totalTokens={memoizedTokens.length} 
+                    />
+                  </div> */}
                   <span className="mt-2 mb-1 max-w-[70px] truncate font-mono text-[10px]" style={{ color: AX.muted }}>
                     {shortAddr(token)}
                   </span>
@@ -4209,54 +4237,6 @@ const PulseTable = React.memo(function PulseTable({
                                       <span className="text-xs text-gray-400">Live</span>
                                     </div>
                                   </div>
-                                  {/* Profile Header*/}
-                                  <div className="p-4 pt-8">
-                                    <div className="flex items-start justify-between">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2">
-                                          <h3 className="text-sm font-bold truncate" style={{ color: AX.text }}>
-                                            {token.symbol || 'Unknown'}
-                                          </h3>
-                                          {/* Verified Badge */}
-                                          <div 
-                                            className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
-                                            style={{ backgroundColor: '#FFD700' }}
-                                          >
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                              <path d="M9 12l2 2 4-4"/>
-                                              <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
-                                            </svg>
-                                          </div>
-                                        </div>
-                                        <p className="text-xs truncate" style={{ color: AX.muted }}>
-                                          @{token.symbol?.toLowerCase() || 'unknown'}
-                                        </p>
-                                        <p className="text-xs mt-1" style={{ color: AX.muted }}>
-                                          {token.name || 'Token'}
-                                        </p>
-                                      </div>
-                                      
-                                      {/* Follow Button */}
-                                      <button
-                                        className="px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200"
-                                        style={{
-                                          backgroundColor: AX.aiBlue,
-                                          color: '#000000',
-                                          boxShadow: `0 0 8px ${AX.glowBlue}`
-                                        }}
-                                        onMouseEnter={(e) => {
-                                          e.currentTarget.style.backgroundColor = AX.aiBlueHover;
-                                          e.currentTarget.style.boxShadow = `0 0 12px ${AX.glowBlue}`;
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.style.backgroundColor = AX.aiBlue;
-                                          e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
-                                        }}
-                                      >
-                                        Follow
-                                      </button>
-                                    </div>
-                                  </div>
 
                                   {/* Official X Profile Layout */}
                                   <div className="px-4 py-4">
@@ -4319,7 +4299,7 @@ const PulseTable = React.memo(function PulseTable({
                                     </div>
                                     
                                     {/* Stats Row */}
-                                    <div className="flex items-center justify-center gap-8 text-sm mb-4">
+                                    {/* <div className="flex items-center justify-center gap-8 text-sm mb-4">
                                       <div className="text-center">
                                         <div className="font-bold text-white text-lg">
                                           {(() => {
@@ -4346,7 +4326,7 @@ const PulseTable = React.memo(function PulseTable({
                                         </div>
                                         <div className="text-gray-400 text-xs">Followers</div>
                                       </div>
-                                    </div>
+                                    </div> */}
                                     
                                     {/* Follow Button */}
                                     <div className="flex justify-center mb-4">
@@ -4410,6 +4390,25 @@ const PulseTable = React.memo(function PulseTable({
                                 </div>
                               </div>
                             )}
+                          </div>
+
+                          {/* People Icon - Total Holders */}
+                          <div className="relative flex items-center gap-1">
+                            <FaUsers 
+                              size={12} 
+                              style={{ color: AX.muted }} 
+                              className="cursor-help"
+                              title="Holders"
+                            />
+                            <span className="text-xs" style={{ color: AX.text }}>
+                              {(() => {
+                                const holders = token.total_holders || token.unique_wallets_24h || 0;
+                                if (holders >= 1e9) return `${(holders / 1e9).toFixed(1)}B`;
+                                if (holders >= 1e6) return `${(holders / 1e6).toFixed(1)}M`;
+                                if (holders >= 1e3) return `${(holders / 1e3).toFixed(1)}K`;
+                                return holders.toString();
+                              })()}
+                            </span>
                           </div>
                           
                           {/* Pump.fun Tooltip */}
