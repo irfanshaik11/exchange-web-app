@@ -401,18 +401,20 @@ function TokenImage({
   const protocolColorMap: Record<string, string> = {
     'pump': '#22c55e',        // Green for pump.fun
     'pump.fun': '#22c55e',    // Green for pump.fun
-    'bonk': '#ff6b35',
-    'moonshot': '#a855f7',
+    'bonk': '#ff6b35',        // Orange for bonk
+    'bags': '#22c55e',        // Green for bags
+    'moonshot': '#eab308',    // Yellow for moonshot
+    'moonshoot': '#eab308',   // Yellow for moonshoot
+    'moonit': '#eab308',      // Yellow for moonit
     'heaven': '#8b5cf6',
     'daos.fun': '#06b6d4',
     'candle': '#f59e0b',
     'sugar': '#ec4899',
     'believe': '#10b981',
     'jupiter': '#8b5cf6',
-    'moonit': '#74831f',      // Green-brown for moonit
     'boop': '#134577',        // Dark blue for boopfun
     'boopfun': '#134577',     // Dark blue for boopfun
-    'launchlab': '#ef4444',
+    'launchlab': '#3b82f6',   // Blue for launchlab (default)
     'dynamic': '#526fff',
     'raydium': '#5c51f7',     // Purple for raydium
     'raydiumlaunchpad': '#5c51f7',  // Purple for raydiumlaunchpad
@@ -450,6 +452,15 @@ function TokenImage({
       }
     }
     
+    // Special handling for LaunchLab - blue in new pairs and final stretch, yellow in migrated
+    if (launchpadProtocol.includes('launch')) {
+      if (columnType === 'migrated') {
+        return '#eab308'; // Yellow for migrated
+      } else {
+        return '#3b82f6'; // Blue for new pairs and final stretch
+      }
+    }
+    
     // Direct match first
     if (protocolColorMap[launchpadProtocol]) {
       return protocolColorMap[launchpadProtocol];
@@ -459,8 +470,8 @@ function TokenImage({
       return '#5c51f7'; // Purple for raydium
     }
     
-    if (launchpadProtocol.includes('moonit')) {
-      return '#74831f'; // Green-brown for moonit
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot')) {
+      return '#eab308'; // Yellow for moonit/moonshot/moonshoot
     }
     
     if (launchpadProtocol.includes('boop')) {
@@ -469,6 +480,10 @@ function TokenImage({
     
     if (launchpadProtocol.includes('bonk')) {
       return protocolColorMap['bonk'];
+    }
+    
+    if (launchpadProtocol.includes('bags')) {
+      return '#22c55e'; // Green for bags
     }
     
     if (launchpadProtocol.includes('orca')) {
@@ -506,11 +521,24 @@ function TokenImage({
     }
     
     if (launchpadProtocol.includes('boop')) {
-      return 'https://dropsearn.fra1.cdn.digitaloceanspaces.com/media/projects/logos/boopfun_logo_1746246162.webp';
+      return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
     }
     
-    if (launchpadProtocol.includes('moonit')) {
-      return 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6_LEZppFrAkKMqApIwCM_R5n0-b4XC8Aluw&s';
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot')) {
+      return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+    }
+    
+    if (launchpadProtocol.includes('bonk')) {
+      return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+    }
+    
+    if (launchpadProtocol.includes('bags')) {
+      return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
+    }
+    
+    if (launchpadProtocol.includes('launch')) {
+      // LaunchLab uses Raydium icon
+      return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
     }
     
     // Default to pump.fun icon for unknown protocols
@@ -521,9 +549,13 @@ function TokenImage({
   const protocolColor = getProtocolColor(token);
   const migrationProgress = getMigrationProgress(token);
   
-  // Check if token is Meteora
+  // Check if token should have full circle image (no white space)
   const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
   const isMeteora = launchpadProtocol.includes('meteora');
+  const isBonk = launchpadProtocol.includes('bonk');
+  const isBags = launchpadProtocol.includes('bags');
+  const isMoonit = launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot');
+  const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
 
   // Debug logging for protocol detection
   if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_ICONS__) {
@@ -675,7 +707,7 @@ function TokenImage({
           <img
             src={tokenIcon}
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || 'Protocol'} logo`}
-            className={`${isMeteora ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+            className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
             style={{
               filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
             }}
@@ -1409,7 +1441,7 @@ const PulseTable = React.memo(function PulseTable({
     // { name: 'Jupiter Studio', icon: <TokenJUP variant="branded" size={16} className="rounded-full" />, color: '#8b5cf6' },
     { name: 'Moonit', icon: <Image src="/moonit.svg" alt="Moonit" width={16} height={16} className="rounded-full" />, color: '#fbbf24' },
     { name: 'Boop', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/36393.png" alt="Boop" width={16} height={16} className="rounded-full" />, color: '#3b82f6' },
-    { name: 'LaunchLab', icon: <TokenLAUNCH variant="branded" size={16} className="rounded-full" />, color: '#ef4444' },
+    { name: 'LaunchLab', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png" alt="LaunchLab" width={16} height={16} className="rounded-full" style={{ filter: 'hue-rotate(180deg) saturate(2) brightness(1.1)' }} />, color: '#3b82f6' },
     // { name: 'Dynamic BC', icon: <Image src="https://cdn.prod.website-files.com/626692727bba3f384e008e8a/67a5dca8b3ee5d0703f70040_icon-primary.webp" alt="Dynamic BC" width={16} height={16} className="rounded-full" />, color: '#f97316' },
     { name: 'Raydium', icon: <TokenRAY variant="branded" size={16} className="rounded-full" />, color: '#6b7280' },
     { name: 'Meteora AMM', icon: <Image src="/meteora.svg" alt="Meteora" width={16} height={16} className="rounded-full" />, color: '#92400e' },

@@ -322,9 +322,11 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
                 if (p.includes('pump')) return '#22c55e'; // Green for Pump.fun
                 if (p.includes('raydium')) return '#5c51f7'; // Purple for Raydium
                 if (p.includes('meteora')) return '#ff4662'; // Pink-red for Meteora
-                if (p.includes('moonit')) return '#74831f'; // Green-brown for Moonit
+                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) return '#eab308'; // Yellow for Moonit/Moonshot
                 if (p.includes('boop')) return '#134577'; // Dark blue for Boop
-                if (p.includes('launch')) return '#ef4444'; // Red for LaunchLab
+                if (p.includes('bonk')) return '#ff6b35'; // Orange for Bonk
+                if (p.includes('bags')) return '#22c55e'; // Green for Bags
+                if (p.includes('launch')) return '#3b82f6'; // Blue for LaunchLab (portfolio doesn't have column type, use default blue)
                 return '#22c55e'; // Default to green
               };
 
@@ -347,11 +349,24 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
                 }
                 
                 if (p.includes('boop')) {
-                  return 'https://dropsearn.fra1.cdn.digitaloceanspaces.com/media/projects/logos/boopfun_logo_1746246162.webp';
+                  return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
                 }
                 
-                if (p.includes('moonit')) {
-                  return 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6_LEZppFrAkKMqApIwCM_R5n0-b4XC8Aluw&s';
+                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) {
+                  return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+                }
+                
+                if (p.includes('bonk')) {
+                  return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+                }
+                
+                if (p.includes('bags')) {
+                  return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
+                }
+                
+                if (p.includes('launch')) {
+                  // LaunchLab uses Raydium icon
+                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
                 }
                 
                 // Default to pump.fun icon for unknown protocols
@@ -359,7 +374,12 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
               };
 
               const tokenIcon = getProtocolIcon(metadata?.protocol);
-              const isMeteora = metadata?.protocol?.toLowerCase().includes('meteora');
+              const p = metadata?.protocol?.toLowerCase() || '';
+              const isMeteora = p.includes('meteora');
+              const isBonk = p.includes('bonk');
+              const isBags = p.includes('bags');
+              const isMoonit = p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot');
+              const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
               const isHidden = hiddenTokens.has(pos.tokenAddress);
               
               return (
@@ -417,7 +437,7 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
                           alt={`${metadata?.protocol || 'Protocol'} logo`}
                           width={16}
                           height={16}
-                          className={`${isMeteora ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+                          className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
                         />
                       </div>
                     </div>
