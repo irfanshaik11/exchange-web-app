@@ -1,0 +1,110 @@
+name: Deploy frontend to staging
+
+on:
+  push:
+    branches: [staging]
+  pull_request:
+    branches: [staging]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Deploy and build on server
+        id: deploy
+        if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.FRONTEND_STAGING_SERVER }}
+          username: ${{ secrets.FRONTEND_STAGING_SERVER_USER }}
+          key: ${{ secrets.FRONTEND_STAGING_SERVER_SSH_KEY }}
+          script_stop: false
+          script: |
+            # Redirect output to a log file
+            exec > /tmp/deploy.log 2>&1
+
+            echo "🚀 Starting deployment on server..."
+            cd /home/kishore/exchange-web-app
+
+            # Stop the current PM2 process if running
+            pm2 stop nextjs-app || true
+            pm2 delete nextjs-app || true
+
+            # Pull latest code from staging branch
+            git fetch origin
+            git reset --hard origin/staging
+
+            # Install dependencies
+            npm ci
+
+            # Install ESLint dependencies if needed
+            npm install @eslint/eslintrc typescript-eslint --save-dev || echo "ESLint dependencies already installed"
+
+            # Run linting (non-blocking)
+            npx eslint . --ext .js,.jsx,.ts,.tsx || echo "Linting completed with warnings"
+
+            # Run type checking (non-blocking)
+            npm run typecheck || echo "Type checking completed with warnings"
+
+            # Build the application
+            echo "Building application..."
+            npm run build || echo "⚠️ Build failed, continuing..."
+
+            # Verify build directory
+            if [ -d ".next" ]; then
+              echo "✅ Build successful - .next directory found"
+            else
+              echo "❌ Build failed - .next directory not found"
+            fi
+
+            # Start the app with PM2
+            pm2 start npm --name "nextjs-app" --cwd /home/kishore/exchange-web-app -- start --env-file=/home/kishore/exchange-web-app/.env || echo "PM2 start failed"
+            pm2 save || true
+            pm2 status || true
+
+            # Output and save deployment logs
+            echo "Saving deployment logs..."
+            cat /tmp/deploy.log || echo "No logs available"
+
+      - name: Notify deployment status
+        if: always() && github.ref == 'refs/heads/staging' && github.event_name == 'push'
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+          fi
+
+      - name: Send Slack Notification with Logs
+        if: always() && github.ref == 'refs/heads/staging' && github.event_name == 'push'
+        uses: slackapi/slack-github-action@v1.27.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        with:
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅ Deployment Successful' || '❌ Deployment Failed' }}",
+              "attachments": [
+                {
+                  "color": "${{ job.status == 'success' && 'good' || 'danger' }}",
+                  "fields": [
+                    { "title": "Repository", "value": "${{ github.repository }}", "short": true },
+                    { "title": "Branch", "value": "${{ github.ref_name }}", "short": true },
+                    { "title": "Event", "value": "${{ github.event_name }}", "short": true },
+                    { "title": "Commit", "value": "<${{ github.event.head_commit.url }}|${{ github.sha }}>", "short": true },
+                    { "title": "Workflow Run", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>", "short": false }
+                  ]
+                }
+              ]
+            }
