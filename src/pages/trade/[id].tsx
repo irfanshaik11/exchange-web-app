@@ -219,22 +219,22 @@ export default function TradePage() {
           </div>
         )}
 
-        <div className="flex flex-1 w-full">
+        <div className="flex flex-1 w-full max-w-full overflow-hidden">
           {/* LEFT: chart + tables */}
           <div
             ref={containerRef}
-            className="flex-1 min-w-0 flex flex-col pb-3"
+            className="flex-1 min-w-0 max-w-full flex flex-col pb-3"
             style={{ borderRight: `1px solid ${AX.border}` }}
           >
             {/* TOP pane - Chart in top left */}
             <div className="flex-shrink-0 flex flex-col" style={{ height: topPanePx }}>
               {/* TradeHeader includes name + the ONLY icon cluster */}
-              <div className="px-2">
+              <div className="px-2 flex-shrink-0">
                 <TradeHeader token={token} />
               </div>
 
-              {/* Chart in top left corner */}
-              <div className="flex-1 min-h-[240px] relative chart-wrapper" style={{ zIndex: 50, width: '100%', maxWidth: '1200px' }}>
+              {/* Chart - fully responsive */}
+              <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden pb-4">
                 {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 ? (
                   <BackendOHLCChart
                     pairAddress={resolvedPairAddress}
@@ -253,7 +253,7 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Resizer */}
+            {/* Resizer - positioned between chart and tabs */}
             <div
               role="separator"
               aria-orientation="horizontal"
@@ -287,22 +287,27 @@ export default function TradePage() {
                 window.addEventListener("pointermove", onMove, { capture: true });
                 window.addEventListener("pointerup", onUp as any, { capture: true });
               }}
-              className="relative z-10 h-4 cursor-row-resize select-none touch-none"
-              style={{ touchAction: "none" }}
+              className="relative h-4 cursor-row-resize select-none touch-none flex-shrink-0 "
+              style={{ 
+                touchAction: "none",
+                zIndex: 1,
+                background: AX.bg
+              }}
             >
               <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px" style={{ background: AX.border }} />
               <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 px-2 py-1 rounded-full transition-all duration-200 hover:scale-105"
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 px-2 py-1 rounded-full transition-all duration-200 hover:scale-110 hover:opacity-100"
                 style={{ 
-                  background: 'rgba(61, 220, 132, 0.08)',
-                  border: `1px solid rgba(61, 220, 132, 0.2)`,
-                  maxWidth: '32px',
-                  maxHeight: '12px'
+                  background: 'rgba(61, 220, 132, 0.12)',
+                  border: `1px solid rgba(61, 220, 132, 0.3)`,
+                  width: '32px',
+                  height: '12px',
+                  opacity: 0.8
                 }}
               >
-                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.6 }} />
-                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.6 }} />
-                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.6 }} />
+                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.8 }} />
+                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.8 }} />
+                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.8 }} />
               </div>
             </div>
 
@@ -366,6 +371,35 @@ export default function TradePage() {
           image-rendering: pixelated;
           image-rendering: -moz-crisp-edges;
           image-rendering: crisp-edges;
+        }
+
+        /* Chart wrapper responsive behavior */
+        .chart-wrapper {
+          display: flex;
+          flex-direction: column;
+          position: relative;
+          max-width: 100%;
+        }
+
+        .chart-wrapper > * {
+          max-width: 100%;
+        }
+
+        /* Prevent layout overflow on large screens */
+        @media (min-width: 1920px) {
+          .chart-wrapper {
+            max-width: 100%;
+          }
+        }
+
+        /* Ensure resizer doesn't interfere with chart */
+        [role="separator"] {
+          pointer-events: auto;
+          position: relative;
+        }
+
+        [role="separator"]:hover {
+          opacity: 1;
         }
       `}</style>
     </>

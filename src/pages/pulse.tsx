@@ -855,7 +855,7 @@ export default function PulsePage() {
           <div className="mb-2">
             <div className="flex items-center justify-between">
               <h1 className="text-2xl font-bold">Pulse</h1>
-              <PulseControlBar className="mb-0.5" />
+              {/* <PulseControlBar className="mb-0.5" /> */}
             </div>
           </div>
 

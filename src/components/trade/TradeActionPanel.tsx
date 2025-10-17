@@ -731,7 +731,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       cursor: pointer;
                       border: none;
                       outline: none;
-                      z-index: 50;
+                      z-index: 2;
                     }
                     .slider::-moz-range-thumb {
                       width: 16px;
@@ -741,7 +741,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       cursor: pointer;
                       border: none;
                       outline: none;
-                      z-index: 50;
+                      z-index: 2;
                     }
                     .slider::-webkit-slider-track {
                       background: transparent;
