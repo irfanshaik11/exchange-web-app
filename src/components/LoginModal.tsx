@@ -188,14 +188,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
 
       // Create message and sign it
       const message = `Login to Interstate with nonce: ${Date.now()}`;
-      let signResult: { publicKey: string; signature: string; message: string } | { error: string };
-      try {
-        signResult = await phantomWallet.signMessage(message);
-      } catch (signError: any) {
-        console.error('Phantom signMessage error in LoginModal:', signError);
-        setWalletError('User rejected the signing request');
-        return;
-      }
+      const signResult = await phantomWallet.signMessage(message);
       
       // Check if signing failed
       if ('error' in signResult) {
