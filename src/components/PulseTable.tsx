@@ -1858,6 +1858,47 @@ const PulseTable = React.memo(function PulseTable({
       });
     }
 
+    // Apply social media filters
+    if (filters.hasWebsite) {
+      filtered = filtered.filter(token => {
+        const website = (token as any).website ?? (token as any).website_url ?? '';
+        return website && website.trim().length > 0;
+      });
+    }
+
+    if (filters.hasTwitter) {
+      filtered = filtered.filter(token => {
+        const twitter = (token as any).twitter ?? (token as any).twitter_url ?? (token as any).x ?? (token as any).x_url ?? '';
+        return twitter && twitter.trim().length > 0;
+      });
+    }
+
+    if (filters.hasTelegram) {
+      filtered = filtered.filter(token => {
+        const telegram = (token as any).telegram ?? (token as any).telegram_url ?? '';
+        return telegram && telegram.trim().length > 0;
+      });
+    }
+
+    if (filters.atLeastOneSocial) {
+      filtered = filtered.filter(token => {
+        const website = (token as any).website ?? (token as any).website_url ?? '';
+        const twitter = (token as any).twitter ?? (token as any).twitter_url ?? (token as any).x ?? (token as any).x_url ?? '';
+        const telegram = (token as any).telegram ?? (token as any).telegram_url ?? '';
+        return (website && website.trim().length > 0) || 
+               (twitter && twitter.trim().length > 0) || 
+               (telegram && telegram.trim().length > 0);
+      });
+    }
+
+    if (filters.onlyPumpLive) {
+      filtered = filtered.filter(token => {
+        const protocol = getTokenProtocol(token)?.toLowerCase() || '';
+        const isLive = (token as any).is_live ?? (token as any).isLive ?? true;
+        return protocol.includes('pump') && isLive;
+      });
+    }
+
     // Sort tokens
     filtered.sort((a, b) => {
       let aValue, bValue;
@@ -1943,7 +1984,7 @@ const PulseTable = React.memo(function PulseTable({
     });
 
     return filtered;
-  }, [tokens, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.sortBy, filters.sortOrder]);
+  }, [tokens, title, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.hasWebsite, filters.hasTwitter, filters.hasTelegram, filters.atLeastOneSocial, filters.onlyPumpLive, filters.sortBy, filters.sortOrder]);
 
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => filteredAndSortedTokens, [filteredAndSortedTokens]);
@@ -2255,7 +2296,7 @@ const PulseTable = React.memo(function PulseTable({
               </div>
 
               {/* Filter Tabs */}
-              <div className="flex border-b items-center justify-between" style={{ borderColor: AX.border }}>
+              {/* <div className="flex border-b items-center justify-between" style={{ borderColor: AX.border }}>
                 <div className="flex">
                 {['New Pairs', 'Final Stretch', 'Migrated'].map((tab) => (
                   <button
@@ -2272,7 +2313,8 @@ const PulseTable = React.memo(function PulseTable({
                     {tab}
                   </button>
                 ))}
-                </div>
+                </div> */}
+                <div className="flex border-b items-center justify-end" style={{ borderColor: AX.border }}>
                 <button 
                   className="p-2 rounded hover:bg-gray-700 transition-colors mr-2 cursor-pointer"
                   onClick={() => {
@@ -2636,7 +2678,7 @@ const PulseTable = React.memo(function PulseTable({
                     </div>
 
                     {/* Snipers % */}
-                    <div>
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Snipers %</label>
                       <div className="flex gap-1">
                         <input
@@ -2682,10 +2724,10 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Insiders % */}
-                    <div>
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Insiders %</label>
                       <div className="flex gap-1">
                         <input
@@ -2731,10 +2773,10 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Bundle % */}
-                    <div>
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Bundle %</label>
                       <div className="flex gap-1">
                         <input
@@ -2780,7 +2822,7 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Holders */}
                     <div>
@@ -4648,7 +4690,7 @@ const PulseTable = React.memo(function PulseTable({
                   </span>
                   
                   {/* Snipe percentage - Red */}
-                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                  {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: '#EF4444',
                           fontSize: '11px',
@@ -4687,10 +4729,10 @@ const PulseTable = React.memo(function PulseTable({
                         );
                       }
                     })()}
-                  </span>
+                  </span> */}
                   
                   {/* Ghost percentage (Insider Holdings) - Green */}
-                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                  {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -4699,15 +4741,11 @@ const PulseTable = React.memo(function PulseTable({
                           backgroundColor: 'transparent'
                         }}>
                     <RiGhostLine size={13} />
-                    {/* <SolanaTokenAnalytics 
-                      mintAddress={mintAddress}
-                      metricType="insider"
-                    /> */}
                     <span className="text-xs text-gray-500">-</span>
-                  </span>
+                  </span> */}
                   
-                  {/* Three Dice percentage (Dev Holdings) - Green */}
-                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                  {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
+                  {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -4716,12 +4754,8 @@ const PulseTable = React.memo(function PulseTable({
                           backgroundColor: 'transparent'
                         }}>
                     <FaDice size={13} />
-                    {/* <SolanaTokenAnalytics 
-                      mintAddress={mintAddress}
-                      metricType="dev"
-                    /> */}
                     <span className="text-xs text-gray-500">-</span>
-                  </span>
+                  </span> */}
                 </div>
               </div>
             );
