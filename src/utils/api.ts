@@ -241,6 +241,10 @@ export const tradeBuy = (params: BuyParams, authToken: string) =>
 type SellPercentageParams = {
   tokenAddress: string;
   percentageToSell: number;
+  poolAddress: string; // required by backend
+  baseMint: string;
+  quoteMint: string;
+  poolType?: string;
 };
 
 export const tradeSellPercentage = (

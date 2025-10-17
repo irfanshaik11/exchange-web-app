@@ -64,7 +64,7 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
   const [solPrice, setSolPrice] = useState<number>(0);
   const router = useRouter();
   
-  // Fetch SOL price using Pyth Network
+  // Fetch SOL price using Pyth Network with improved error handling
   useEffect(() => {
     const fetchSolPrice = async () => {
       try {
@@ -72,25 +72,60 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
         const SOL_USD_FEED = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
         const response = await fetch(
           `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
-          { signal: AbortSignal.timeout(5000) }
+          { 
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+            signal: AbortSignal.timeout(10000) // 10 second timeout
+          }
         );
         
-        if (response.ok) {
-          const data = await response.json();
-          const priceData = data.parsed?.[0]?.price;
-          if (priceData?.price && priceData?.expo) {
-            const price = Number(priceData.price) * Math.pow(10, priceData.expo);
-            setSolPrice(price);
-            return;
-          }
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const priceData = data.parsed?.[0]?.price;
+        if (priceData?.price && priceData?.expo) {
+          const price = Number(priceData.price) * Math.pow(10, priceData.expo);
+          setSolPrice(price);
+          return;
+        } else {
+          throw new Error('Invalid response format from Pyth');
         }
       } catch (error) {
         console.error('Error fetching SOL price from Pyth:', error);
+        
+        // Fallback to CoinGecko if Pyth fails
+        try {
+          const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+            signal: AbortSignal.timeout(10000), // 10 second timeout
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          if (data?.solana?.usd) {
+            setSolPrice(data.solana.usd);
+            return;
+          } else {
+            throw new Error('Invalid response format from CoinGecko');
+          }
+        } catch (fallbackError) {
+          console.error('Error fetching SOL price from CoinGecko fallback:', fallbackError);
+          // Use a reasonable fallback price
+          setSolPrice(150);
+        }
       }
-      
-      // Fallback to static price if Pyth fails
-      setSolPrice(150);
     };
+    
     fetchSolPrice();
     // Refresh price every 60 seconds
     const interval = setInterval(fetchSolPrice, 60000);

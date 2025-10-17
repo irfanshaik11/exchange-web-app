@@ -7,7 +7,7 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
-import { createLimitOrder, tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { createLimitOrder, tradeBuy, tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
@@ -1015,12 +1015,26 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 mevMode: tradeParams.mevMode,
                 autoFee: tradeParams.autoFee,
               });
-              const tr = await tradeBuy(tradeParams, user.bearerToken)
-                .catch((err) => {
-                  // Capture error without throwing to prevent Next.js overlay
-                  tradingError = err;
-                  return null;
-                });
+              const tr = mode === "buy" 
+                ? await tradeBuy(tradeParams, user.bearerToken)
+                    .catch((err) => {
+                      // Capture error without throwing to prevent Next.js overlay
+                      tradingError = err;
+                      return null;
+                    })
+                : await tradeSellPercentage({
+                    tokenAddress: token.mint,
+                    percentageToSell: 100, // Sell 100% of tokens
+                    poolAddress: effectivePoolAddress,
+                    baseMint: token.mint,
+                    quoteMint: SOL_MINT_ADDRESS,
+                    poolType,
+                  }, user.bearerToken)
+                    .catch((err) => {
+                      // Capture error without throwing to prevent Next.js overlay
+                      tradingError = err;
+                      return null;
+                    });
               
               if (!tradingError) {
                 const txHash = tr?.hash || tr?.txid;
