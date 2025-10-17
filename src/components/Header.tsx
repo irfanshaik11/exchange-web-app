@@ -25,7 +25,7 @@ const AX = {
 
 const navLinks = [
   // { name: "Discover", href: "/" },
-  { name: "Pulse", href: "/" },
+  { name: "Pulse", href: "/pulse" },
   // { name: "Trackers", href: "/trackers" },
   //{ name: "Perpetuals", href: "#" },
   //{ name: "Yield", href: "#" },
