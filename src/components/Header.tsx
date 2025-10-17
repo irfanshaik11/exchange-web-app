@@ -24,13 +24,13 @@ const AX = {
 };
 
 const navLinks = [
-  // { name: "Discover", href: "/" },
+  { name: "Discover", href: "/construction" },
   { name: "Pulse", href: "/pulse" },
-  // { name: "Trackers", href: "/trackers" },
-  //{ name: "Perpetuals", href: "#" },
-  //{ name: "Yield", href: "#" },
+  { name: "Trackers", href: "/construction" },
+  { name: "Perpetuals", href: "/construction" },
+  { name: "Yield", href: "/construction" },
   { name: "Portfolio", href: "/portfolio" },
-  //{ name: "Rewards", href: "#" },
+  { name: "Rewards", href: "/construction" },
 ];
 
 interface HeaderProps {
