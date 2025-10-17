@@ -175,13 +175,21 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
 
       container.innerHTML = '';
 
+      // Dynamically adjust precision based on container width
+      const containerWidth = container.clientWidth || 600;
+      const precision = containerWidth > 1600 ? 6 : 8;
+
       const chart = createChart(container, {
-        width: container.clientWidth || 600,
+        width: containerWidth,
         height: container.clientHeight || 400,
         layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#d1d4dc' },
         grid:   { vertLines: { color: '#2B2B43' }, horzLines: { color: '#2B2B43' } },
         crosshair: { mode: 1 },
-        rightPriceScale: { borderColor: '#2B2B43', scaleMargins: { top: 0.1, bottom: 0.1 } },
+        rightPriceScale: { 
+          borderColor: '#2B2B43', 
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+          autoScale: true,
+        },
         leftPriceScale: { visible: false },
         timeScale: {
           borderColor: '#2B2B43',
@@ -190,10 +198,20 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
           rightOffset: 12,
           barSpacing: 1,        // thin bars
           minBarSpacing: 1,
+          fixLeftEdge: false,
+          fixRightEdge: false,
         },
         handleScroll: { mouseWheel: true, pressedMouseMove: true },
         handleScale:  { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
-        localization: { timeFormatter: (t: any) => new Date(t * 1000).toLocaleString() },
+        localization: { 
+          timeFormatter: (t: any) => new Date(t * 1000).toLocaleString(),
+          priceFormatter: (price: number) => {
+            // Better number formatting for large displays
+            if (price >= 1) return price.toFixed(4);
+            if (price >= 0.01) return price.toFixed(6);
+            return price.toFixed(8);
+          }
+        },
       });
 
       const series = chart.addSeries(CandlestickSeries, {
@@ -203,7 +221,7 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
         borderUpColor: '#26a69a',
         wickDownColor: '#ef5350',
         wickUpColor: '#26a69a',
-        priceFormat: { type: 'price', precision: 8, minMove: 1e-8 },
+        priceFormat: { type: 'price', precision: precision, minMove: 1e-8 },
         lastValueVisible: true,
         priceLineVisible: true,
       });
@@ -300,7 +318,7 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
   }, [candles, setDefaultLogicalRange]);
 
   return (
-    <div className={`relative ${className}`} style={{ height, width, zIndex: 100 }}>
+    <div className={`relative ${className}`} style={{ height, width, zIndex: 1 }}>
       <div
         ref={containerRef}
         className="w-full h-full chart-container"
@@ -308,14 +326,14 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
           height: '100%',
           width: '100%',
           position: 'relative',
-          zIndex: 100,
+          zIndex: 1,
           backgroundColor: 'transparent',
           // no maxWidth cap; let it breathe
         }}
       />
 
       {isLoading && firstLoadRef.current && (
-        <div className="absolute inset-0 grid place-items-center bg-gray-900/60" style={{ zIndex: 150 }}>
+        <div className="absolute inset-0 grid place-items-center bg-gray-900/60" style={{ zIndex: 3 }}>
           <div className="flex flex-col items-center gap-3">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-400" />
             <div className="text-white text-sm">Loading OHLC data from backend…</div>
@@ -324,7 +342,7 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
       )}
 
       {!isLoading && error && (
-        <div className="absolute bottom-2 left-2 bg-red-900/90 text-white text-xs rounded px-2 py-1" style={{ zIndex: 200 }}>
+        <div className="absolute bottom-2 left-2 bg-red-900/90 text-white text-xs rounded px-2 py-1" style={{ zIndex: 4 }}>
           ⚠️ {error}
         </div>
       )}

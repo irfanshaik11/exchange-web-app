@@ -38,8 +38,8 @@ import { env } from "../env";
 import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 
 const navLinks = [
-  { name: "Discover", href: "/" },
-  { name: "Pulse", href: "/pulse" },
+  { name: "Discover", href: "/discover" },
+  { name: "Pulse", href: "/" },
   { name: "Trackers", href: "#" },
   { name: "Perpetuals", href: "#" },
   { name: "Yield", href: "#" },
@@ -67,11 +67,6 @@ export type Timeframe = "1m" | "5m" | "30m" | "1h";
 
 export default function Home() {
   const router = useRouter();
-  
-  // Redirect to Pulse page immediately
-  useEffect(() => {
-    router.push('/pulse');
-  }, [router]);
 
   const [search, setSearch] = useState("");
   // Populate search state if we arrived with ?search= in the URL
