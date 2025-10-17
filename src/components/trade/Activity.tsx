@@ -4,6 +4,7 @@ import type { TradeRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
 import FastImage from '../FastImage';
 import { FaExternalLinkAlt } from 'react-icons/fa';
+import Image from 'next/image';
 
 interface ActivityProps {
   trades: TradeRow[];
@@ -151,29 +152,50 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
               
               const metadata = tokenMetadata[trade.tokenAddress];
               
-              // Protocol color mapping
+              // Protocol color mapping - matches PulseTable
               const getProtocolColor = (protocol?: string) => {
                 const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '#8B5CF6'; // Purple for Pump.fun
-                if (p.includes('raydium')) return '#00D4AA'; // Teal for Raydium
-                if (p.includes('meteora')) return '#FF6B6B'; // Red for Meteora
-                if (p.includes('launch')) return '#FFA500'; // Orange for LaunchLab
-                return '#6B7280'; // Gray default
+                if (p.includes('pump')) return '#22c55e'; // Green for Pump.fun
+                if (p.includes('raydium')) return '#5c51f7'; // Purple for Raydium
+                if (p.includes('meteora')) return '#ff4662'; // Pink-red for Meteora
+                if (p.includes('moonit')) return '#74831f'; // Green-brown for Moonit
+                if (p.includes('boop')) return '#134577'; // Dark blue for Boop
+                if (p.includes('launch')) return '#ef4444'; // Red for LaunchLab
+                return '#22c55e'; // Default to green
               };
 
               const protocolColor = getProtocolColor(metadata?.protocol);
               
-              // Protocol icon mapping
-              const getProtocolIcon = (protocol?: string) => {
+              // Protocol icon mapping - returns image URL
+              const getProtocolIcon = (protocol?: string): string => {
                 const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '💊';
-                if (p.includes('raydium')) return '🌊';
-                if (p.includes('meteora')) return '☄️';
-                if (p.includes('launch')) return '🚀';
-                return '🔷';
+                
+                if (p.includes('pump')) {
+                  return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                }
+                
+                if (p.includes('meteora')) {
+                  return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
+                }
+                
+                if (p.includes('raydium')) {
+                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                }
+                
+                if (p.includes('boop')) {
+                  return 'https://dropsearn.fra1.cdn.digitaloceanspaces.com/media/projects/logos/boopfun_logo_1746246162.webp';
+                }
+                
+                if (p.includes('moonit')) {
+                  return 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6_LEZppFrAkKMqApIwCM_R5n0-b4XC8Aluw&s';
+                }
+                
+                // Default to pump.fun icon for unknown protocols
+                return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
               };
 
               const tokenIcon = getProtocolIcon(metadata?.protocol);
+              const isMeteora = metadata?.protocol?.toLowerCase().includes('meteora');
               
               // Calculate age based on trade time
               const age = formatAge(trade.tradeTime || trade.createdAt);
@@ -244,13 +266,19 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
                         <div 
                           className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/4 translate-y-1/4 z-10"
                           style={{ 
-                            width: 16, 
-                            height: 16,
+                            width: 20, 
+                            height: 20,
                             border: `2px solid ${protocolColor}`,
                             boxShadow: `0 0 4px ${protocolColor}60`
                           }}
                         >
-                          <span className="text-xs">{tokenIcon}</span>
+                          <Image
+                            src={tokenIcon}
+                            alt={`${metadata?.protocol || 'Protocol'} logo`}
+                            width={16}
+                            height={16}
+                            className={`${isMeteora ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+                          />
                         </div>
                       </div>
                       <div className="flex flex-col min-w-0">

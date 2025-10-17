@@ -30,6 +30,11 @@ const config = {
       { protocol: 'https', hostname: 'cdn.pump.fun' },
       { protocol: 'https', hostname: 'moonitcdn.io' },
       { protocol: 'https', hostname: 'metadata.pumployer.fun' },
+      { protocol: 'https', hostname: 'logos-world.net' },
+      { protocol: 'https', hostname: 's1.coincarp.com' },
+      { protocol: 'https', hostname: 's2.coinmarketcap.com' },
+      { protocol: 'https', hostname: 'dropsearn.fra1.cdn.digitaloceanspaces.com' },
+      { protocol: 'https', hostname: 'encrypted-tbn0.gstatic.com' },
     ],
   },
 
