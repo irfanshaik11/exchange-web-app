@@ -42,6 +42,16 @@ const config = {
     locales: ["en"],
     defaultLocale: "en",
   },
+
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/pulse',
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default config;

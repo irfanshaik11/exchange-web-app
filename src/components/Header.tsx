@@ -24,9 +24,9 @@ const AX = {
 };
 
 const navLinks = [
-  { name: "Discover", href: "/" },
-  { name: "Pulse", href: "/pulse" },
-  { name: "Trackers", href: "/trackers" },
+  // { name: "Discover", href: "/" },
+  { name: "Pulse", href: "/" },
+  // { name: "Trackers", href: "/trackers" },
   //{ name: "Perpetuals", href: "#" },
   //{ name: "Yield", href: "#" },
   { name: "Portfolio", href: "/portfolio" },
@@ -182,7 +182,7 @@ export default function Header({
             >
               Deposit
             </button>
-            <button
+            {/* <button
               onClick={() => setWatchlistOpen(true)}
               className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
               style={{ 
@@ -206,7 +206,7 @@ export default function Header({
               }}
             >
               <FaStar size={14} />
-            </button>
+            </button> */}
             <button
               onClick={() => setNotificationOpen(true)}
               className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
@@ -297,7 +297,7 @@ export default function Header({
           </div>
         </div>
         <div className="flex items-center gap-2 px-3 py-0.5">
-          <div className="group relative">
+          {/* <div className="group relative">
             <button
               onClick={() => setWatchlistOpen(true)}
               className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
@@ -317,7 +317,6 @@ export default function Header({
             >
               <FiStar size={14} />
             </button>
-            {/* Custom tooltip for Watchlist */}
             <div className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
                  style={{ 
                    backgroundColor: AX.surface, 
@@ -326,11 +325,10 @@ export default function Header({
                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
                  }}>
               Watchlist
-              {/* Tooltip arrow pointing left */}
               <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent"
                    style={{ borderRightColor: AX.surface }}></div>
             </div>
-          </div>
+          </div> */}
           
           <div className="group relative">
             <button 
