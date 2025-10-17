@@ -112,15 +112,15 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
   }, [trades, onTokenNamesChange]);
 
   return (
-    <div className="w-full h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+    <div className="w-full">
       {loading ? (
         <div className="py-8 text-center text-[#9CA3AF]">Loading...</div>
       ) : trades.length === 0 ? (
         <div className="py-8 text-center text-[#9CA3AF]">No activity found.</div>
       ) : (
-        <div>
-          {/* Header Row */}
-          <div className="grid gap-4 px-6 py-2 border-b border-[#2A2B33] text-xs text-[#9CA3AF] sticky top-0 bg-[#1E1F26] z-10" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
+        <div className="relative">
+          {/* Header Row - Fixed */}
+          <div className="grid gap-4 px-6 py-2 border-b border-[#2A2B33] text-xs text-[#9CA3AF] bg-[#1E1F26]" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
             <div>Type</div>
             <div>Token</div>
             <div>Amount</div>
@@ -129,10 +129,18 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
             <div>Explorer</div>
           </div>
           
-          {/* Data Rows */}
-          <div className="space-y-0">
-          {
-            trades.map((trade, idx) => {
+          {/* Scrollable Data Rows */}
+          <div 
+            className="overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
+            style={{ 
+              maxHeight: '500px',
+              scrollBehavior: 'smooth',
+              WebkitOverflowScrolling: 'touch'
+            } as React.CSSProperties}
+          >
+            <div className="space-y-0 pb-12">
+            {
+              trades.map((trade, idx) => {
               const handleRowClick = () => {
                 // Navigate to token trade page using originalPairAddress (same as Positions)
                 const navigateAddress = trade.originalPairAddress || trade.pairAddress || trade.tokenAddress;
@@ -287,6 +295,7 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
               );
             })
           }
+            </div>
           </div>
         </div>
       )}
