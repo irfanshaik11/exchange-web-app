@@ -2618,7 +2618,8 @@ const PulseTable = React.memo(function PulseTable({
 
                 {/* Category Tabs */}
                 <div className="flex border-b mb-4" style={{ borderColor: AX.border }}>
-                  {['Audit', '$ Metrics', 'Socials'].map((tab) => (
+                  {/* Socials tab commented out - filters work but rarely used */}
+                  {['Audit', '$ Metrics'].map((tab) => (
                     <button
                       key={tab}
                       className={`px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
@@ -2639,7 +2640,8 @@ const PulseTable = React.memo(function PulseTable({
                 {activeCategoryTab === 'Audit' && (
                   <div className="space-y-3">
                     {/* Existing checkboxes */}
-                    <div className="flex items-center gap-2">
+                    {/* Dex Paid - COMMENTED OUT: Filter not implemented (always returns true) */}
+                    {/* <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         id="dexPaid"
@@ -2648,8 +2650,9 @@ const PulseTable = React.memo(function PulseTable({
                         className="rounded cursor-pointer"
                       />
                       <label htmlFor="dexPaid" className="text-sm" style={{ color: AX.text }}>Dex Paid</label>
-                    </div>
-                    <div className="flex items-center gap-2">
+                    </div> */}
+                    {/* CA ends in 'pump' - COMMENTED OUT: Rarely useful filter */}
+                    {/* <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         id="caEndsInPump"
@@ -2658,10 +2661,10 @@ const PulseTable = React.memo(function PulseTable({
                         className="rounded cursor-pointer"
                       />
                       <label htmlFor="caEndsInPump" className="text-sm" style={{ color: AX.text }}>CA ends in 'pump'</label>
-                    </div>
+                    </div> */}
 
-                    {/* Dev Holding % */}
-                    <div>
+                    {/* Dev Holding % - COMMENTED OUT: Filter not implemented in filter logic */}
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Dev Holding %</label>
                       <div className="flex gap-1">
                         <input
@@ -2707,7 +2710,7 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Snipers % */}
                     {/* <div>
@@ -3129,8 +3132,8 @@ const PulseTable = React.memo(function PulseTable({
                       </div>
                     </div>
 
-                    {/* Top 10 Holders % (existing) */}
-                    <div>
+                    {/* Top 10 Holders % - COMMENTED OUT: Filter not implemented (always returns true) */}
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Top 10 Holders %</label>
                       <input
                         type="number"
@@ -3153,7 +3156,7 @@ const PulseTable = React.memo(function PulseTable({
                             e.target.style.borderColor = AX.border;
                         }}
                       />
-                    </div>
+                    </div> */}
 
                   </div>
                 )}
@@ -3555,7 +3558,8 @@ const PulseTable = React.memo(function PulseTable({
                   </div>
                 )}
 
-                {activeCategoryTab === 'Socials' && (
+                {/* SOCIALS TAB - COMMENTED OUT: Filters work but rarely used */}
+                {false && activeCategoryTab === 'Socials' && (
                   <div className="space-y-3">
                     {/* Twitter Reuses */}
                     <div>
@@ -3767,6 +3771,7 @@ const PulseTable = React.memo(function PulseTable({
 
                   </div>
                 )}
+                {/* END OF SOCIALS TAB COMMENT */}
               </div>
 
               {/* Footer */}
