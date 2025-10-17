@@ -50,6 +50,7 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
     winningTrades: 0,
     losingTrades: 0,
   });
+  const [chartData, setChartData] = useState<{ x: number; y: number }[]>([]);
 
   // Fetch SOL price using Pyth Network
   useEffect(() => {
@@ -104,6 +105,33 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
           // Calculate total value (simplified)
           const totalUsdValue = (solBalance || 0) * solPrice + (usdcBalance || 0);
           setTotalValue(totalUsdValue);
+
+          // Generate chart data from trade history
+          if (history.length > 0) {
+            // Sort trades by timestamp
+            const sortedTrades = [...history].sort((a, b) => {
+              const timeA = new Date(a.tradeTime || a.createdAt).getTime();
+              const timeB = new Date(b.tradeTime || b.createdAt).getTime();
+              return timeA - timeB;
+            });
+
+            // Calculate cumulative PnL over time
+            let cumulativePnl = 0;
+            const dataPoints = sortedTrades.map((trade, index) => {
+              cumulativePnl += trade.pnl || 0;
+              return {
+                x: index,
+                y: cumulativePnl
+              };
+            });
+
+            // Add starting point at 0
+            const chartPoints = [{ x: 0, y: 0 }, ...dataPoints.map((p, i) => ({ x: i + 1, y: p.y }))];
+            setChartData(chartPoints);
+          } else {
+            // No trades, show flat line at 0
+            setChartData([{ x: 0, y: 0 }, { x: 1, y: 0 }]);
+          }
 
         } catch (error) {
           console.error('Error fetching trade data:', error);
@@ -190,31 +218,85 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
       {/* Chart Section */}
       <div className="p-6">
         <div className="h-24 bg-gradient-to-r from-gray-900 to-gray-800 rounded-lg p-4 relative overflow-hidden">
-          {/* Red line chart */}
+          {/* Real PnL chart */}
           <svg className="w-full h-full" viewBox="0 0 300 60">
             <defs>
-              <linearGradient id="redLine" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#ff4d7f" stopOpacity="0.8"/>
-                <stop offset="100%" stopColor="#ff4d7f" stopOpacity="0.3"/>
+              <linearGradient id="pnlGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor={timeframeMetrics.realizedPnl >= 0 ? "#22c55e" : "#ff4d7f"} stopOpacity="0.8"/>
+                <stop offset="100%" stopColor={timeframeMetrics.realizedPnl >= 0 ? "#22c55e" : "#ff4d7f"} stopOpacity="0.3"/>
               </linearGradient>
             </defs>
-            {/* Downward trending red line */}
-            <path
-              d="M 10 15 Q 75 25 150 35 T 290 50"
-              stroke="url(#redLine)"
-              strokeWidth="2"
-              fill="none"
-              strokeLinecap="round"
-            />
-            {/* Additional subtle lines for depth */}
-            <path
-              d="M 10 20 Q 75 30 150 40 T 290 55"
-              stroke="#ff4d7f"
-              strokeWidth="1"
-              fill="none"
-              strokeLinecap="round"
-              opacity="0.3"
-            />
+            
+            {/* Reference line at y=0 */}
+            <line x1="10" y1="30" x2="290" y2="30" stroke="#2a2a2a" strokeWidth="1" strokeDasharray="2,2" opacity="0.5" />
+            
+            {chartData.length > 1 ? (() => {
+              // Calculate min and max PnL for scaling
+              const yValues = chartData.map(p => p.y);
+              const minY = Math.min(...yValues, 0);
+              const maxY = Math.max(...yValues, 0);
+              const range = maxY - minY || 1; // Avoid division by zero
+              
+              // Scale points to fit in the SVG viewBox
+              const padding = 10;
+              const width = 280;
+              const height = 50;
+              const xScale = width / Math.max(chartData.length - 1, 1);
+              
+              const scaleY = (y: number) => {
+                // Invert Y axis (SVG Y increases downward)
+                const normalized = (y - minY) / range;
+                return height - (normalized * height) + 5; // 5px padding from edges
+              };
+              
+              // Create SVG path
+              const pathData = chartData.map((point, i) => {
+                const x = padding + (point.x * xScale);
+                const y = scaleY(point.y);
+                return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
+              }).join(' ');
+              
+              // Create area fill path (same as line but closes to bottom)
+              const areaPathData = pathData + ` L ${padding + ((chartData.length - 1) * xScale)} 55 L ${padding} 55 Z`;
+              
+              return (
+                <>
+                  {/* Area fill under the line */}
+                  <path
+                    d={areaPathData}
+                    fill={`url(#pnlGradient)`}
+                    opacity="0.1"
+                  />
+                  {/* Main PnL line */}
+                  <path
+                    d={pathData}
+                    stroke={`url(#pnlGradient)`}
+                    strokeWidth="2"
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  {/* Dots at each data point */}
+                  {chartData.map((point, i) => {
+                    const x = padding + (point.x * xScale);
+                    const y = scaleY(point.y);
+                    return (
+                      <circle
+                        key={i}
+                        cx={x}
+                        cy={y}
+                        r="2"
+                        fill={timeframeMetrics.realizedPnl >= 0 ? "#22c55e" : "#ff4d7f"}
+                        opacity="0.6"
+                      />
+                    );
+                  })}
+                </>
+              );
+            })() : (
+              // No data - show flat line
+              <line x1="10" y1="30" x2="290" y2="30" stroke="#666" strokeWidth="2" opacity="0.3" />
+            )}
           </svg>
         </div>
       </div>
