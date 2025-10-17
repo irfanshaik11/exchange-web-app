@@ -86,10 +86,10 @@ export default function Header({
         <div className="flex max-w-full items-center justify-between border-b px-4 py-2.5" style={{ backgroundColor: '#000000', borderColor: AX.border }}>
           <div className="flex min-w-0 items-center gap-3">
             <Link
-              href="/"
+              href="/pulse"
               className="flex items-center text-xl tracking-tight select-none"
               style={{ color: AX.text }}
-              title="Go to homepage"
+              title="Go to Pulse"
             >
               <img
                 src="/logo.png"
