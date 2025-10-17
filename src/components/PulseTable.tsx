@@ -4543,11 +4543,17 @@ const PulseTable = React.memo(function PulseTable({
                               duration={300}
                             />
                           </span>
-                          <div className="w-8 h-1 bg-gray-700 rounded-full overflow-hidden ml-1">
+                          <div className="w-8 h-1 bg-gray-700 rounded-full overflow-hidden ml-1 flex">
                             <div 
-                              className="h-full bg-green-400 rounded-full"
+                              className="h-full bg-green-400"
                               style={{
-                                width: `${Math.min(100, Math.max(10, ((token.total_buys_5m ?? 0) / Math.max(1, (token.total_buys_5m ?? 0) + (token.total_sells_5m ?? 0))) * 100))}%`
+                                width: `${Math.min(100, Math.max(0, ((token.total_buys_5m ?? 0) / Math.max(1, (token.total_buys_5m ?? 0) + (token.total_sells_5m ?? 0))) * 100))}%`
+                              }}
+                            ></div>
+                            <div 
+                              className="h-full bg-red-400"
+                              style={{
+                                width: `${Math.min(100, Math.max(0, ((token.total_sells_5m ?? 0) / Math.max(1, (token.total_buys_5m ?? 0) + (token.total_sells_5m ?? 0))) * 100))}%`
                               }}
                             ></div>
                           </div>
