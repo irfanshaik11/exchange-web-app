@@ -72,6 +72,7 @@ import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
 import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
+import { useSolPrice } from "~/components/SolPriceContext";
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { toast } from "react-hot-toast";
@@ -1172,6 +1173,7 @@ const PulseTable = React.memo(function PulseTable({
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
   const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Wave animation for migrating tokens
+  const { solPrice } = useSolPrice(); // Use shared SOL price from Footer context
   const isNewPairs = title.toLowerCase().includes('new');
   
   const [filters, setFilters] = useState({
@@ -1327,6 +1329,7 @@ const PulseTable = React.memo(function PulseTable({
   useEffect(() => {
     setHasPendingChanges(JSON.stringify(filters) !== JSON.stringify(pendingFilters));
   }, [filters, pendingFilters]);
+
   const router = useRouter();
   
   // Quick buy functionality
@@ -4500,7 +4503,29 @@ const PulseTable = React.memo(function PulseTable({
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
                             }}
                           >
-                            {((token as any).liquidity_usd && formatSmartNumber((token as any).liquidity_usd)) || '0.024'}
+                            {(() => {
+                              // Try to get actual liquidity data from multiple possible fields
+                              const liquidityUsd = (token as any).liquidity_usd ?? 
+                                                   (token as any).total_liquidity_usd ?? 
+                                                   (token as any).liquidity ?? 0;
+                              
+                              // If we have actual liquidity data and SOL price, show it
+                              if (liquidityUsd > 0 && solPrice && solPrice > 0) {
+                                const liquiditySol = liquidityUsd / solPrice;
+                                return formatSmartNumber(liquiditySol);
+                              }
+                              
+                              // Fallback: Estimate from market cap
+                              // Bonding curve tokens typically have ~10% of market cap as liquidity
+                              const marketCap = (token as any).fully_diluted_value ?? 
+                                               (token as any).market_cap_usd ?? 0;
+                              if (marketCap > 0 && solPrice && solPrice > 0) {
+                                const estimatedLiquiditySol = (marketCap * 0.1) / solPrice;
+                                return `${formatSmartNumber(estimatedLiquiditySol)}`;
+                              }
+                              
+                              return '-';
+                            })()}
                           </span>
                           <span className="text-xs">TX</span>{" "}
                           <span 
