@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { useQuickBuy } from "./QuickBuyContext";
 import type { QuickBuySettings } from "./QuickBuyContext";
 import VerticalInput from "./VerticalInput";
@@ -27,9 +27,78 @@ interface QuickBuyProps {
   sideProp?: "buy" | "sell";
   onContinue?: () => void;
   className?: string;
+  showDebugInfo?: boolean; // Show current query parameters for debugging
+  onSettingsChange?: (queryParams: URLSearchParams, tradeParams: any, limitOrderParams: any) => void;
 }
 
-const QuickBuy: React.FC<QuickBuyProps> = ({ hideActionButton = false, sideProp, onContinue, className }) => {
+// Query parameter mapping functions for backend communication
+export const mapSettingsToQueryParams = (settings: QuickBuySettings, side: "buy" | "sell") => {
+  const params = new URLSearchParams();
+  
+  // Core trading parameters
+  params.set('side', side);
+  params.set('maxSlippage', (settings.maxSlippage * 100).toString()); // Convert to percentage
+  params.set('priority', settings.priority.toString());
+  params.set('bribe', settings.bribe.toString());
+  
+  // MEV Protection (convert to backend format: 0 = off, 1 = on/reduced)
+  const mevProtection = settings.mevMode === 'off' ? '0' : '1';
+  params.set('mevProtection', mevProtection);
+  params.set('mevMode', settings.mevMode);
+  
+  // Auto fee settings
+  params.set('autoFee', settings.autoFee.toString());
+  if (settings.autoFee && settings.maxFee > 0) {
+    params.set('maxFee', settings.maxFee.toString());
+  }
+  
+  // RPC endpoint
+  if (settings.rpc) {
+    params.set('rpc', settings.rpc);
+  }
+  
+  return params;
+};
+
+// Convert settings to trade API parameters
+export const mapSettingsToTradeParams = (settings: QuickBuySettings, side: "buy" | "sell") => {
+  return {
+    side,
+    maxSlippage: settings.maxSlippage,
+    priority: settings.priority,
+    bribe: settings.bribe,
+    mevProtection: settings.mevMode === 'off' ? 0 : 1 as 0 | 1,
+    mevMode: settings.mevMode,
+    autoFee: settings.autoFee,
+    maxFee: settings.maxFee,
+    rpc: settings.rpc,
+  };
+};
+
+// Convert settings to limit order parameters
+export const mapSettingsToLimitOrderParams = (settings: QuickBuySettings, side: "buy" | "sell") => {
+  return {
+    type: side === "buy" ? "Buy" as const : "Sell" as const,
+    direction: "Above" as const, // Default direction for limit orders
+    maxSlippage: settings.maxSlippage,
+    priority: settings.priority,
+    bribe: settings.bribe,
+    mevProtection: settings.mevMode === 'off' ? 0 : 1 as 0 | 1,
+    mevMode: settings.mevMode,
+    autoFee: settings.autoFee,
+    maxFee: settings.maxFee,
+    rpc: settings.rpc,
+  };
+};
+
+const QuickBuy: React.FC<QuickBuyProps> = ({ 
+  hideActionButton = false, 
+  sideProp, 
+  onContinue, 
+  className, 
+  showDebugInfo = false,
+  onSettingsChange 
+}) => {
   const {
     presets,
     setPresets,
@@ -66,6 +135,31 @@ const QuickBuy: React.FC<QuickBuyProps> = ({ hideActionButton = false, sideProp,
       ? presets[activePreset].quickBuySettings
       : presets[activePreset].quickSellSettings;
 
+  // Get current settings as query parameters for backend communication
+  const getCurrentQueryParams = useCallback(() => {
+    return mapSettingsToQueryParams(settings, side);
+  }, [settings, side]);
+
+  // Get current settings as trade API parameters
+  const getCurrentTradeParams = useCallback(() => {
+    return mapSettingsToTradeParams(settings, side);
+  }, [settings, side]);
+
+  // Get current settings as limit order parameters
+  const getCurrentLimitOrderParams = useCallback(() => {
+    return mapSettingsToLimitOrderParams(settings, side);
+  }, [settings, side]);
+
+  // Notify parent component when settings change
+  React.useEffect(() => {
+    if (onSettingsChange) {
+      const queryParams = getCurrentQueryParams();
+      const tradeParams = getCurrentTradeParams();
+      const limitOrderParams = getCurrentLimitOrderParams();
+      onSettingsChange(queryParams, tradeParams, limitOrderParams);
+    }
+  }, [settings, side, onSettingsChange, getCurrentQueryParams, getCurrentTradeParams, getCurrentLimitOrderParams]);
+
   // Determine the wrapper className
   const defaultClass = "flex flex-col gap-2 rounded-xl border border-neutral-700/90 bg-neutral-900 px-3 py-3 text-neutral-100";
   // If className disables border/bg/rounded, use only className, else merge
@@ -74,11 +168,11 @@ const QuickBuy: React.FC<QuickBuyProps> = ({ hideActionButton = false, sideProp,
   return (
     <div className={wrapperClass}>
       {/* Presets */}
-      <div className="mb-4 flex gap-2 rounded-xl border border-neutral-700/90 px-1 py-1">
+      <div className="flex gap-2 rounded-xl border border-[#2A2B33] px-1 py-1 bg-[#17191E]">
         {presetLabels.map((label, i) => (
           <button
             key={label}
-            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? "bg-emerald-300/20 text-emerald-200" : "bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200"}`}
+            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${activePreset === i ? "bg-[#4B5563] text-[#70E0B0]" : "bg-transparent text-[#9CA3AF] hover:bg-[#1E1F26] hover:text-[#70E0B0]"}`}
             onClick={() => {
               setActivePreset(i);
               setExpanded(true);
@@ -88,44 +182,82 @@ const QuickBuy: React.FC<QuickBuyProps> = ({ hideActionButton = false, sideProp,
           </button>
         ))}
       </div>
+      
+      {/* Grey line separator - extends beyond container */}
+      <div className="h-px bg-[#2A2B33] w-screen -mx-3"></div>
+      
       {/* Only show the rest if expanded */}
       {expanded && (
         <>
         {/* Buy/Sell Tabs */}
-        <div className="flex gap-2 rounded-xl border border-neutral-700/90 px-1 py-1">
+        <div className="flex gap-1 rounded-lg px-1   ">
           <button
-            className={`flex-1 rounded-md px-3 py-1.5 text-xs uppercase transition-colors ${side === "buy" ? "bg-emerald-400/20 text-emerald-200" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
+            className={`flex-1 rounded-md px-2 py-1 text-[10px] uppercase transition-colors ${side === "buy" ? "bg-[#182a27] text-[#31e3ac]" : "bg-transparent text-[#9CA3AF] hover:bg-[#1E1F26] hover:text-[#E6E7EA]"}`}
             onClick={() => setSide("buy")}
           >
             Buy Settings
           </button>
           <button
-            className={`flex-1 rounded-md px-3 py-1.5 text-xs uppercase transition-colors ${side === "sell" ? "bg-red-400/80 text-red-50" : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"}`}
+            className={`flex-1 rounded-md px-2 py-1 text-[10px] uppercase transition-colors ${side === "sell" ? "bg-[#2c1720] text-[#ed3a7a]" : "bg-transparent text-[#9CA3AF] hover:bg-[#1E1F26] hover:text-[#E6E7EA]"}`}
             onClick={() => setSide("sell")}
           >
             Sell Settings
           </button>
         </div>
+        
+        {/* Bottom grey line separator - extends beyond container */}
+        <div className="h-px bg-[#2A2B33] w-screen -mx-3"></div>
         {/* Settings Inputs */}
-        <div className="mb-4 grid grid-cols-3 gap-2 px-2">
-          <VerticalInput
-            label="SLIPPAGE"
-            value={settings.maxSlippage}
-            setValue={v => updateSetting('maxSlippage', v)}
-            icon={<FaRunning />}
-          />
-          <VerticalInput
-            label="PRIORITY"
-            value={settings.priority}
-            setValue={v => updateSetting('priority', v)}
-            icon={<FaGasPump />}
-          />
-          <VerticalInput
-            label="BRIBE"
-            value={settings.bribe}
-            setValue={v => updateSetting('bribe', v)}
-            icon={<FaCoins />}
-          />
+        <div className="mb-4 grid grid-cols-3 gap-3 px-2">
+          <div className="flex flex-col items-center rounded-lg border border-[#2A2B33] overflow-hidden">
+            <div className="relative w-full flex items-center justify-center bg-[#17191E]">
+              <input
+                type="number"
+                className="w-full bg-[#17191E] text-center text-[#E6E7EA] py-2 text-sm outline-none border-b border-[#2A2B33] rounded-t-lg [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                style={{ textAlign: 'center', lineHeight: '1.5' }}
+                value={settings.maxSlippage * 100}
+                onChange={e => updateSetting('maxSlippage', Number(e.target.value) / 100)}
+                onWheel={e => (e.target as HTMLInputElement).blur()}
+              />
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#9CA3AF]">%</span>
+            </div>
+            <span className="text-[10px] text-[#9CA3AF] flex items-center gap-1 rounded-b-lg bg-[#0f1012] px-2 py-1 w-full justify-center">
+              <FaRunning className="text-[8px]" />
+              SLIPPAGE
+            </span>
+          </div>
+          <div className="flex flex-col items-center rounded-lg border border-[#2A2B33] overflow-hidden">
+            <div className="w-full flex items-center justify-center bg-[#17191E]">
+              <input
+                type="number"
+                className="w-full bg-[#17191E] text-center text-[#E6E7EA] py-2 text-sm outline-none border-b border-[#2A2B33] rounded-t-lg [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                style={{ textAlign: 'center', lineHeight: '1.5' }}
+                value={settings.priority}
+                onChange={e => updateSetting('priority', Number(e.target.value))}
+                onWheel={e => (e.target as HTMLInputElement).blur()}
+              />
+            </div>
+            <span className="text-[10px] text-[#9CA3AF] flex items-center gap-1 rounded-b-lg bg-[#0f1012] px-2 py-1 w-full justify-center">
+              <FaGasPump className="text-[8px]" />
+              PRIORITY
+            </span>
+          </div>
+          <div className="flex flex-col items-center rounded-lg border border-[#2A2B33] overflow-hidden">
+            <div className="w-full flex items-center justify-center bg-[#17191E]">
+              <input
+                type="number"
+                className="w-full bg-[#17191E] text-center text-[#E6E7EA] py-2 text-sm outline-none border-b border-[#2A2B33] rounded-t-lg [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                style={{ textAlign: 'center', lineHeight: '1.5' }}
+                value={settings.bribe}
+                onChange={e => updateSetting('bribe', Number(e.target.value))}
+                onWheel={e => (e.target as HTMLInputElement).blur()}
+              />
+            </div>
+            <span className="text-[10px] text-[#9CA3AF] flex items-center gap-1 rounded-b-lg bg-[#0f1012] px-2 py-1 w-full justify-center">
+              <FaCoins className="text-[8px]" />
+              BRIBE
+            </span>
+          </div>
         </div>
         {/* Auto Fee and Max Fee */}
         <div className="mb-4 flex items-center justify-between gap-2 px-2">
@@ -193,18 +325,20 @@ const QuickBuy: React.FC<QuickBuyProps> = ({ hideActionButton = false, sideProp,
               MEV Mode <FaInfoCircle className="ml-1" />
             </span>
           </InterstateTooltip>
-          {mevModes.map((mode) => (
-            <button
-              key={mode.value}
-              className={`flex items-center gap-1 rounded border px-2 py-1 text-xs font-semibold ${settings.mevMode === mode.value ? "text-black bg-neutral-100" : "text-neutral-300 bg-neutral-800 hover:bg-neutral-700"} border border-neutral-100`}
-              onClick={() => updateSetting('mevMode', mode.value as any)}
-            >
-              {mode.value === "off" && <FaBan />}
-              {mode.value === "reduced" && <FaShieldAlt />}
-              {mode.value === "on" && <FaLock />}
-              {mode.label}
-            </button>
-          ))}
+          <div className="flex gap-1 rounded-lg border border-[#2A2B33] px-1 py-1 bg-[#17191E]">
+            {mevModes.map((mode) => (
+              <button
+                key={mode.value}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition-colors ${settings.mevMode === mode.value ? "bg-[#1a1f38] text-[#526fff]" : "bg-transparent text-[#9CA3AF] hover:bg-[#1E1F26] hover:text-[#E6E7EA]"}`}
+                onClick={() => updateSetting('mevMode', mode.value as any)}
+              >
+                {mode.value === "off" && <FaBan />}
+                {mode.value === "reduced" && <FaShieldAlt />}
+                {mode.value === "on" && <FaLock />}
+                {mode.label}
+              </button>
+            ))}
+          </div>
         </div>
         {/* RPC Input */}
         <div className="mb-2 flex flex-row items-center rounded-3xl border border-neutral-700/90 pl-2 px-2">
@@ -224,8 +358,52 @@ const QuickBuy: React.FC<QuickBuyProps> = ({ hideActionButton = false, sideProp,
         )}
         </>
       )}
+      
+      {/* Debug Information - Show current query parameters */}
+      {showDebugInfo && (
+        <div className="mt-4 p-3 bg-gray-800 rounded-lg border border-gray-600">
+          <h4 className="text-sm font-bold text-gray-300 mb-2">Current Settings (Backend Query Parameters):</h4>
+          <div className="text-xs text-gray-400 space-y-1">
+            <div><strong>Query String:</strong> {getCurrentQueryParams().toString()}</div>
+            <div><strong>Trade Params:</strong> {JSON.stringify(getCurrentTradeParams(), null, 2)}</div>
+            <div><strong>Limit Order Params:</strong> {JSON.stringify(getCurrentLimitOrderParams(), null, 2)}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
+};
+
+// Hook to get current settings as query parameters
+export const useQuickBuyQueryParams = () => {
+  const { presets, activePreset } = useQuickBuy();
+  const [side, setSide] = useState<"buy" | "sell">("buy");
+  
+  const settings = side === "buy" 
+    ? presets[activePreset].quickBuySettings 
+    : presets[activePreset].quickSellSettings;
+
+  const getQueryParams = useCallback(() => {
+    return mapSettingsToQueryParams(settings, side);
+  }, [settings, side]);
+
+  const getTradeParams = useCallback(() => {
+    return mapSettingsToTradeParams(settings, side);
+  }, [settings, side]);
+
+  const getLimitOrderParams = useCallback(() => {
+    return mapSettingsToLimitOrderParams(settings, side);
+  }, [settings, side]);
+
+  return {
+    settings,
+    side,
+    setSide,
+    getQueryParams,
+    getTradeParams,
+    getLimitOrderParams,
+    queryString: getQueryParams().toString(),
+  };
 };
 
 export default QuickBuy; 

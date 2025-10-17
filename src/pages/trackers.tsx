@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import Header from '../components/Header';
+import Footer from '../components/Footer';
 import { getActivePositionsByUser, getStoredWallets, storeWallets } from '~/utils/functions';
 import type { PositionRow, Wallet } from '~/utils/functions';
 import AddWalletModal from '../components/AddWalletModal';
@@ -306,6 +307,7 @@ export default function TrackersPage() {
           <span className="text-neutral-400 hover:text-white transition-colors duration-300 cursor-pointer">Docs</span>
         </div>
       </div>
+      <Footer />
     </>
   );
 } 

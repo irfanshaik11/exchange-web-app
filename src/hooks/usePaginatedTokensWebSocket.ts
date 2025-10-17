@@ -115,7 +115,7 @@ export default function usePaginatedTokensWebSocket({
         dataRef.current = arr;
         setData(arr);
         setState(prev => ({ ...prev, loading: false }));
-      }, 120, { leading: true, trailing: true });
+      }, 50, { leading: true, trailing: true }); // Reduced from 120ms to 50ms for faster updates
     }
   }
 
@@ -128,17 +128,24 @@ export default function usePaginatedTokensWebSocket({
       
       const pollData = async () => {
         try {
-          const queryParams = new URLSearchParams({
-            filter: filter || 'marketcap',
-            order: order || 'desc',
-            offset: (offset || 0).toString(),
-            limit: (limit || 20).toString(),
-          });
-          
           const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
             ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
             : env.NEXT_PUBLIC_GO_SERVICE_URL;
-          const url = `${baseUrl}/v1/tokens?${queryParams}`;
+          
+          // Use specialized pulse endpoints for 'new' filter, otherwise use getAllTokens
+          let url: string;
+          if (filter === 'new') {
+            url = `${baseUrl}/v1/pulse/new?limit=${limit || 30}&t=${Date.now()}`;
+          } else {
+            const queryParams = new URLSearchParams({
+              filter: filter || 'marketcap',
+              order: order || 'desc',
+              offset: (offset || 0).toString(),
+              limit: (limit || 20).toString(),
+            });
+            url = `${baseUrl}/api/token-service/getAllTokens?${queryParams}`;
+          }
+          
           const response = await fetch(url);
           
           if (response.ok) {
@@ -173,8 +180,8 @@ export default function usePaginatedTokensWebSocket({
       // Initial fetch
       pollData();
       
-      // Set up polling interval
-      const interval = setInterval(pollData, 5000); // Poll every 5 seconds
+      // Set up polling interval - faster for real-time updates
+      const interval = setInterval(pollData, filter === 'new' ? 1500 : 3000); // Poll every 1.5s for new tokens, 3s for others
       
       return () => {
         clearInterval(interval);

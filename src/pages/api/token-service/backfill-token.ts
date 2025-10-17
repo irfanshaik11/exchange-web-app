@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     }
 
     // Call the Go backend to backfill the token
-    const backendUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+    const backendUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
     const backfillResponse = await fetch(`${backendUrl}/v1/tokens/backfill`, {
       method: 'POST',
       headers: {

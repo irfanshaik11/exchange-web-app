@@ -85,12 +85,18 @@ export type Token = {
   total_fully_diluted_valuation: number;
   total_snipers: number;
   pair_address: string;
+  migrated_pool_address?: string; // Migrated pool address for tokens that have been migrated
   total_holders: number;
   created_at: string; // ISO timestamp
   updated_at: string; // ISO timestamp
   bonding_curve_progress: number | string;
   bonding_pct?: number; // Bonding percentage for fallback
   uri?: string; // IPFS metadata URI
+  // Protocol/AMM information
+  launchpad_protocol?: string; // Backend protocol field
+  protocol?: string; // Alternative protocol field
+  amm_id?: string; // AMM identifier
+  launchpadProtocol?: string; // Alternative protocol field name
 };
 
 /**

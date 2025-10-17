@@ -14,20 +14,25 @@ interface CodexDevToken {
 }
 
 interface CodexDevTokensResponse {
-  data: {
-    filterTokens: {
-      results: CodexDevToken[];
-    };
+  filterTokens: {
+    results: CodexDevToken[];
   };
 }
 
-export default function useCodexDevTokens(creatorAddress?: string) {
+interface UseCodexDevTokensOptions {
+  limit?: number;
+}
+
+export default function useCodexDevTokens(
+  tokenAddress: string | undefined,
+  options: UseCodexDevTokensOptions = {}
+) {
   const [tokens, setTokens] = useState<CodexDevToken[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!creatorAddress) {
+    if (!tokenAddress) {
       setTokens([]);
       setIsLoading(false);
       return;
@@ -36,44 +41,22 @@ export default function useCodexDevTokens(creatorAddress?: string) {
     const fetchDevTokens = async () => {
       try {
         setIsLoading(true);
-        const apiKey = process.env.NEXT_PUBLIC_CODEX_API_KEY;
+        setError(null);
         
-        const response = await fetch('https://graph.codex.io/graphql', {
-          method: 'POST',
+        // Set default values for parameters
+        const limit = options.limit || 10;
+        const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+        
+        // Build the URL with query parameters
+        const url = new URL(`${baseUrl}/v1/tokens/dev`);
+        url.searchParams.set('tokenAddress', tokenAddress);
+        url.searchParams.set('limit', limit.toString());
+        
+        const response = await fetch(url.toString(), {
+          method: 'GET',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': apiKey || '',
           },
-          body: JSON.stringify({
-            query: `
-              query {
-                filterTokens(
-                  filters: {
-                    network: [1399811149]
-                    creatorAddress: "${creatorAddress}"
-                  }
-                  rankings: {
-                    attribute: createdAt
-                    direction: DESC
-                  }
-                  limit: 50
-                ) {
-                  results {
-                    token {
-                      address
-                      name
-                      symbol
-                      createdAt
-                      creatorAddress
-                    }
-                    marketCap
-                    liquidity
-                    volume24
-                  }
-                }
-              }
-            `
-          })
         });
 
         if (!response.ok) {
@@ -82,9 +65,12 @@ export default function useCodexDevTokens(creatorAddress?: string) {
 
         const result: CodexDevTokensResponse = await response.json();
         
-        if (result.data?.filterTokens?.results) {
-          setTokens(result.data.filterTokens.results);
-          console.log(`Fetched ${result.data.filterTokens.results.length} dev tokens`);
+        if (result.filterTokens?.results) {
+          setTokens(result.filterTokens.results);
+          console.log(`Fetched ${result.filterTokens.results.length} dev tokens`);
+        } else {
+          setTokens([]);
+          console.log('No dev tokens found');
         }
       } catch (err) {
         console.error('Failed to fetch dev tokens:', err);
@@ -95,7 +81,7 @@ export default function useCodexDevTokens(creatorAddress?: string) {
     };
 
     fetchDevTokens();
-  }, [creatorAddress]);
+  }, [tokenAddress, options.limit]);
 
   return { tokens, isLoading, error };
 }

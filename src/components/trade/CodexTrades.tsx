@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useCodexTradesWebSocket from '../../hooks/useCodexTradesWebSocket';
+import useTradeEventsWebSocket from '../../hooks/useTradeEventsWebSocket';
 import type { Token } from '~/utils/db';
 
 interface CodexTradesProps {
@@ -97,18 +98,35 @@ function getMarketCap(token0SwapValueUsd: string, token1SwapValueUsd: string) {
 }
 
 const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
-  const { trades, isConnected, error, isLoading } = useCodexTradesWebSocket(token.mint);
+  const { trades: codexTrades, isConnected: codexConnected, error: codexError, isLoading: codexLoading } = useCodexTradesWebSocket(token.mint);
+  
+  // WebSocket hook for real-time trade events
+  const {
+    isConnected: wsConnected,
+    loading: wsLoading,
+    error: wsError,
+    trades: wsTrades,
+    getTradeStats,
+    fetchMoreTrades,
+  } = useTradeEventsWebSocket({
+    pairAddress: token.pair_address,
+    enabled: true,
+  });
+
+  // Use WebSocket trades if available, otherwise fallback to Codex trades
+  const displayTrades = wsTrades.length > 0 ? wsTrades : codexTrades;
+  const isConnected = wsConnected || codexConnected;
+  const error = wsError || codexError;
+  const isLoading = wsLoading || codexLoading;
 
   return (
-    <div className="w-full">
-      {error && (
-        <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
-      )}
+    <div className="w-full h-full flex flex-col">
+      
+      {/* Removed WebSocket error messages for seamless experience */}
 
-      <table className="w-full text-xs">
-        <thead>
+      <div className="flex-1 overflow-y-auto">
+        <table className="w-full text-xs">
+        <thead className="sticky top-0 bg-gray-900 z-10">
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Age ↓</th>
             <th className="px-2 py-2 text-left">Type</th>
@@ -125,46 +143,75 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
                 Loading trades...
               </td>
             </tr>
-          ) : !trades || trades.length === 0 ? (
+          ) : !displayTrades || displayTrades.length === 0 ? (
             <tr>
               <td colSpan={6} className="text-center py-6 text-neutral-500">
                 {isConnected ? 'No trades found.' : 'Connecting...'}
               </td>
             </tr>
           ) : (
-            trades.slice(10).map((trade, idx) => {
-              const { type, color } = getTradeType(trade.eventDisplayType);
-              const amount = getAmount(trade.data, trade.eventDisplayType);
-              const totalUSD = getTotalUSD(trade.token0SwapValueUsd, trade.token1SwapValueUsd, trade.eventDisplayType);
-              const age = getAge(trade.timestamp);
-              const trader = shortAddr(trade.maker);
-              const marketCap = getMarketCap(trade.token0SwapValueUsd, trade.token1SwapValueUsd);
-              
-              return (
-                <tr key={trade.transactionHash + idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
-                  <td className="px-2 py-2 text-neutral-300">{age}</td>
-                  <td className={`px-2 py-2 font-semibold ${color}`}>{type}</td>
-                  <td className="px-2 py-2 text-neutral-300">{marketCap}</td>
-                  <td className="px-2 py-2 text-neutral-300">{formatSmartNumber(amount)}</td>
-                  <td className={`px-2 py-2 font-semibold ${color}`}>
-                    {type === 'Buy' || type === 'Add' ? '+' : '-'}${formatSmartNumber(totalUSD)}
-                  </td>
-                  <td className="px-2 py-2 text-neutral-300 flex items-center space-x-1">
-                    <span>{trader}</span>
-                    <span className="text-xs text-neutral-500">1</span>
-                    <svg className="w-3 h-3 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    <svg className="w-3 h-3 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                    </svg>
-                  </td>
-                </tr>
-              );
+            displayTrades.slice(0, 200).map((trade: any, idx) => {
+              // Check if it's a WebSocket trade event
+              if (trade.side && trade.amount && trade.price && trade.pair_address) {
+                // WebSocket trade event format
+                const type = trade.side === 'buy' ? 'Buy' : 'Sell';
+                const color = trade.side === 'buy' ? 'text-emerald-400' : 'text-red-400';
+                const age = getAge(new Date(trade.timestamp).getTime() / 1000);
+                const amount = parseFloat(trade.amount);
+                const price = parseFloat(trade.price);
+                const value = amount * price;
+                
+                return (
+                  <tr key={trade.pair_address + idx + trade.timestamp} className="border-b border-neutral-800 hover:bg-neutral-800/60">
+                    <td className="px-2 py-2 text-neutral-300">{age}</td>
+                    <td className={`px-2 py-2 font-semibold ${color}`}>{type}</td>
+                    <td className="px-2 py-2 text-neutral-300">-</td>
+                    <td className="px-2 py-2 text-neutral-300">{formatSmartNumber(amount)}</td>
+                    <td className={`px-2 py-2 font-semibold ${color}`}>
+                      {type === 'Buy' ? '+' : '-'}${formatSmartNumber(value)}
+                    </td>
+                    <td className="px-2 py-2 text-neutral-300 flex items-center space-x-1">
+                      <span>{shortAddr(trade.maker || trade.pair_address)}</span>
+                      {wsConnected && <span className="text-xs text-green-400">●</span>}
+                    </td>
+                  </tr>
+                );
+              } else {
+                // Codex trade format
+                const { type, color } = getTradeType(trade.eventDisplayType);
+                const amount = getAmount(trade.data, trade.eventDisplayType);
+                const totalUSD = getTotalUSD(trade.token0SwapValueUsd, trade.token1SwapValueUsd, trade.eventDisplayType);
+                const age = getAge(trade.timestamp);
+                const trader = shortAddr(trade.maker);
+                const marketCap = getMarketCap(trade.token0SwapValueUsd, trade.token1SwapValueUsd);
+                
+                return (
+                  <tr key={trade.transactionHash + idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
+                    <td className="px-2 py-2 text-neutral-300">{age}</td>
+                    <td className={`px-2 py-2 font-semibold ${color}`}>{type}</td>
+                    <td className="px-2 py-2 text-neutral-300">{marketCap}</td>
+                    <td className="px-2 py-2 text-neutral-300">{formatSmartNumber(amount)}</td>
+                    <td className={`px-2 py-2 font-semibold ${color}`}>
+                      {type === 'Buy' || type === 'Add' ? '+' : '-'}${formatSmartNumber(totalUSD)}
+                    </td>
+                    <td className="px-2 py-2 text-neutral-300 flex items-center space-x-1">
+                      <span>{trader}</span>
+                      <span className="text-xs text-neutral-500">1</span>
+                      <svg className="w-3 h-3 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      <svg className="w-3 h-3 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                      </svg>
+                    </td>
+                  </tr>
+                );
+              }
             })
           )}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   );
 };

@@ -17,8 +17,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:9000';
-  const nodeBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+  const nodeBase = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   const fetchWithTimeout = async (url: string, timeoutMs = 2000) => {
     const ctrl = new AbortController();

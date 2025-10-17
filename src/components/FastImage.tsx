@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ImageBubble from './ImageBubble';
 
 interface FastImageProps {
   src?: string | null;
@@ -10,6 +11,8 @@ interface FastImageProps {
   priority?: boolean; // For new pairs tokens
   symbol?: string; // Token symbol for fallback letter
   name?: string; // Token name for fallback letter
+  showBubble?: boolean; // Whether to show the pump logo bubble
+  bubbleSrc?: string; // Custom bubble image source
 }
 
 // Direct image loading - no proxy or domain checking needed
@@ -24,6 +27,8 @@ export default function FastImage({
   priority = false,
   symbol,
   name,
+  showBubble = true,
+  bubbleSrc,
 }: FastImageProps) {
   // Load images directly from URI - no optimization needed for speed
   const finalSrc = src || fallbackSrc;
@@ -63,10 +68,11 @@ export default function FastImage({
   if (!imageUrl || imageError) {
     return (
       <div
-        className={`${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg`}
+        className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg`}
         style={{ width, height }}
       >
         <span className="text-lg">{getFirstLetter()}</span>
+        {showBubble && <ImageBubble src={bubbleSrc} />}
       </div>
     );
   }
@@ -94,6 +100,9 @@ export default function FastImage({
         loading={priority ? 'eager' : 'lazy'} // Eager loading for priority images
         decoding="async"
       />
+      
+      {/* Pump logo bubble */}
+      {showBubble && <ImageBubble src={bubbleSrc} />}
     </div>
   );
 }

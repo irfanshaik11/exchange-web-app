@@ -10,7 +10,7 @@ import { FiBarChart, FiStar } from "react-icons/fi";
 import SearchModal from "./SearchModal";
 import type { Timeframe } from "../pages/index";
 
-/* ---- Axiom palette ---- */
+/* ---- style palette ---- */
 const AX = {
   bg: "#101114",
   surface: "#1E1F26",
@@ -100,39 +100,37 @@ export default function Header({
               Interstate
             </Link>
             <nav className="ml-6 flex items-center gap-5">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  className={`px-1.5 py-0.5 text-sm font-medium transition-all duration-300 ease-out rounded ${
-                    link.name === "Discover" && isDiscover
-                      ? "border-current"
-                      : ""
-                  }`}
-                  style={{
-                    color: link.name === "Discover" && isDiscover ? AX.mint : AX.text,
-                    borderColor: link.name === "Discover" && isDiscover ? AX.mint : "transparent"
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!(link.name === "Discover" && isDiscover)) {
-                      e.currentTarget.style.color = '#3b82f6';
-                      e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.08)';
-                      e.currentTarget.style.boxShadow = '0 0 6px rgba(59, 130, 246, 0.25), 0 0 12px rgba(59, 130, 246, 0.12)';
-                      e.currentTarget.style.transform = 'scale(1.02)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!(link.name === "Discover" && isDiscover)) {
-                      e.currentTarget.style.color = AX.text;
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                      e.currentTarget.style.boxShadow = 'none';
-                      e.currentTarget.style.transform = 'scale(1)';
-                    }
-                  }}
-                >
-                  {link.name}
-                </Link>
-              ))}
+              {navLinks.map((link) => {
+                const isActive = router.pathname === link.href || 
+                  (link.name === "Pulse" && router.pathname.startsWith("/trade/"));
+                return (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    className={`px-1.5 py-0.5 text-sm font-medium transition-all duration-300 ease-out rounded ${
+                      isActive ? "border-current" : ""
+                    }`}
+                    style={{
+                      color: isActive ? AX.mint : AX.text,
+                      borderColor: isActive ? AX.mint : "transparent"
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.mint;
+                        e.currentTarget.style.backgroundColor = 'rgba(112, 224, 176, 0.1)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.text;
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    {link.name}
+                  </Link>
+                );
+              })}
             </nav>
           </div>
           <div className="flex min-w-0 items-center gap-2">

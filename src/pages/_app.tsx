@@ -18,6 +18,28 @@ import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
 import { FilterProvider } from '../components/FilterContext';
 
+// Suppress Next.js error overlay for caught errors in development
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  window.addEventListener('error', (event) => {
+    // Check if this is an ApiError that we've already handled
+    if (event.error?.name === 'ApiError') {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log('[Error Suppressed] ApiError caught and handled by application');
+      return false;
+    }
+  });
+  
+  window.addEventListener('unhandledrejection', (event) => {
+    // Check if this is an ApiError from our API
+    if (event.reason?.name === 'ApiError') {
+      event.preventDefault();
+      console.log('[Error Suppressed] Unhandled ApiError rejection caught');
+      return false;
+    }
+  });
+}
+
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "YOUR_PROJECT_ID", // TODO: Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in your environment

@@ -72,7 +72,8 @@ export default function QuickBuySettingsModal({
       open={open}
       onClose={onClose}
       align="center"
-      className="relative flex max-w-96 flex-col gap-2 border border-neutral-600 bg-neutral-900 text-neutral-100 shadow-2xl"
+      overlayClassName="items-start -mt-180"
+      className="relative flex w-full max-w-md mx-auto flex-col gap-2 border border-neutral-600 bg-neutral-900 text-neutral-100 shadow-2xl rounded-lg"
     >
       <div className="flex items-center justify-between border-b border-neutral-600 px-4 py-2 text-lg text-neutral-300">
         Trading Settings

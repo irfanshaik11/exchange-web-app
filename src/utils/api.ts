@@ -12,6 +12,31 @@ interface RequestOptions extends RequestInit {
 }
 
 /**
+ * Custom error class for structured API errors from backend
+ */
+export class ApiError extends Error {
+  code?: string;
+  details?: any;
+  suggestions?: string[];
+  status?: number;
+
+  constructor(
+    message: string,
+    code?: string,
+    details?: any,
+    suggestions?: string[],
+    status?: number
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.details = details;
+    this.suggestions = suggestions;
+    this.status = status;
+  }
+}
+
+/**
  * Low-level helper that wraps `fetch` with sane defaults:
  *  – Prepends `NEXT_PUBLIC_BACKEND_URL`
  *  – Sets `Content-Type: application/json`
@@ -38,6 +63,18 @@ async function apiFetch<T = unknown>(
   const data = await res.json().catch(() => undefined);
 
   if (!res.ok) {
+    // Check if backend returned a structured error
+    if (data && typeof data === 'object') {
+      const message = data.message || data.error || res.statusText;
+      const code = data.code;
+      const details = data.details;
+      const suggestions = data.suggestions;
+      
+      // Throw structured error with all info
+      throw new ApiError(message, code, details, suggestions, res.status);
+    }
+    
+    // Fallback to simple error
     const message =
       (data as any)?.message || (data as any)?.error || res.statusText;
     throw new Error(message);
@@ -103,6 +140,15 @@ interface CreateLimitOrderParams {
   type: "Buy" | "Sell";
   direction: "Above" | "Below";
   targetMC: number;
+  // Optional context data from frontend (for better logging and validation)
+  currentPrice?: number | string;
+  currentMarketCap?: number | string;
+  tokenName?: string;
+  tokenSymbol?: string;
+  tokenDecimals?: number;
+  poolAddress?: string; // For trading execution (migrated_pool_address || pair_address)
+  pairAddress?: string; // For market cap tracking (always pair_address)
+  poolType?: string;
 }
 
 interface LimitOrder {
@@ -155,13 +201,24 @@ export const updateLimitOrder = (
 /*                               Trade endpoints                              */
 /* -------------------------------------------------------------------------- */
 
-type BuyParams = {
+export type BuyParams = {
   poolAddress: string;
   baseMint: string;
   quoteMint: string;
   amount: number;
   mevProtection?: 0 | 1;
-  poolType: "PumpAmm" | "Raydium CPMM" | "";
+  poolType: "PumpAmm" | "Raydium CPMM" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "bags" | "MoonShoot" | "";
+  // Preset trading parameters
+  slippage?: number; // e.g., 0.4 for 40%
+  priorityFee?: number; // in SOL, e.g., 0.001
+  bribe?: number; // in SOL, e.g., 0.001
+  mevMode?: 'off' | 'reduced' | 'on';
+  autoFee?: boolean;
+  maxFee?: number; // in SOL
+  rpc?: string;
+  // Optional debugging metadata
+  tokenName?: string;
+  tokenSymbol?: string;
 };
 
 export const tradeBuy = (params: BuyParams, authToken: string) =>

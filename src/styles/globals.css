@@ -1,6 +1,41 @@
 @import "tailwindcss";
 @import './interstate.css';
 
+/* TradingView Widget Styling - Official Look */
+.tradingview-widget-container {
+  background-color: #131722 !important;
+  border-radius: 0 !important;
+  overflow: hidden !important;
+}
+
+.tradingview-widget-container__widget {
+  background-color: #131722 !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.tradingview-widget-copyright {
+  display: none !important;
+}
+
+/* Ensure TradingView has full control over styling */
+.tradingview-widget-container iframe {
+  border: none !important;
+  border-radius: 0 !important;
+  background-color: #131722 !important;
+}
+
+/* Remove any custom styling that might interfere */
+.tradingview-widget-container * {
+  font-family: inherit !important;
+}
+
+/* Lightweight Charts Styling */
+.lightweight-chart-container {
+  background-color: #131722;
+  border-radius: 0;
+  overflow: hidden;
+}
 @theme {
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";

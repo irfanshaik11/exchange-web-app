@@ -19,8 +19,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Only set default limit if no limit is provided
   if (!params.get('limit')) params.set('limit', '30');
 
-  const primaryBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
-  const fallbackBase = process.env.NEXT_PUBLIC_GO_FALLBACK_URL || 'http://localhost:9000';
+  const primaryBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+  const fallbackBase = process.env.NEXT_PUBLIC_GO_FALLBACK_URL;
 
   const fetchWithTimeout = async (url: string, timeoutMs = 2000) => {
     const ctrl = new AbortController();
@@ -54,6 +54,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             token.graduation_percent = parseFloat(token.graduation_percent ?? 0); // graduation_percent for hover display
             token.bonding_pct = parseFloat(token.bonding_pct ?? 0); // Also include raw bonding_pct for fallback
             token.image = token.uri || token.image || null;
+            token.migrated_time = token.migrated_time || null; // Pass through migration timestamp
+            token.created_at = token.launch_time || token.created_at || null; // Ensure created_at is set
+            token.launchpad_protocol = token.launchpad_protocol || null; // Pass through protocol for filtering and colors
             
             // Ensure TX data fields are available (they should come from backend)
             token.total_buy_volume_5m = token.total_buy_volume_5m ?? 0;

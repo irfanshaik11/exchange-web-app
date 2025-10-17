@@ -136,7 +136,7 @@ export default function useCodexHolders(tokenAddress: string | undefined) {
     // DISABLED: External Codex WebSocket - using only backend data
     console.log('🚫 Codex Holders WebSocket disabled - using only backend data');
     setIsConnected(false);
-    setError('External WebSocket disabled - using backend data only');
+    setError(null);
     setIsLoading(false);
     return;
 

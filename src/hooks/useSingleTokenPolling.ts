@@ -75,9 +75,19 @@ export default function useSingleTokenPolling(address: string | undefined) {
   const loadData = useCallback(async () => {
     if (!resolvedPairAddress) return;
     
+    // Validate pair address format
+    if (typeof resolvedPairAddress !== 'string' || resolvedPairAddress.length < 32) {
+      console.warn('Invalid pair address format:', resolvedPairAddress);
+      setToken(null);
+      setState(prev => ({ ...prev, loading: false }));
+      return;
+    }
+    
     try {
       console.log('Loading data for pair_address:', resolvedPairAddress);
-      const url = `/api/token-service/trade-view?pair_address=${resolvedPairAddress}`;
+      // Call backend directly instead of going through Next.js API route
+      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+      const url = `${baseUrl}/v1/trade/view?pair_address=${resolvedPairAddress}`;
       console.log('API URL:', url);
       
       const response = await fetch(url);
@@ -86,6 +96,13 @@ export default function useSingleTokenPolling(address: string | undefined) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('API Error Response:', errorText);
+        // Don't throw error for 404 - just log and return empty data
+        if (response.status === 404) {
+          console.warn(`Token not found for pair_address: ${resolvedPairAddress}`);
+          setToken(null);
+          setState(prev => ({ ...prev, loading: false }));
+          return;
+        }
         throw new Error(`Failed to load data: ${response.status} - ${errorText}`);
       }
       
@@ -202,6 +219,7 @@ export default function useSingleTokenPolling(address: string | undefined) {
     loading: state.loading,
     error: state.error,
     isHydrating,
+    resolvedPairAddress,
     // Expose manual refresh function
     refresh: loadData,
   };

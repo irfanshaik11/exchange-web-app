@@ -114,7 +114,7 @@ export default function useCodexTradesWebSocket(tokenAddress: string | undefined
     // DISABLED: External Codex WebSocket - using only backend data
     console.log('🚫 Codex WebSocket disabled - using only backend trade data');
     setIsConnected(false);
-    setError('External WebSocket disabled - using backend data only');
+    setError(null);
     setIsLoading(false);
     return;
 

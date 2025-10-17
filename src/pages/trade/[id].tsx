@@ -5,8 +5,10 @@ import { Toaster } from "react-hot-toast";
 import { useWallet } from "../../components/useWallet";
 import { useUser } from "../../components/UserContext";
 import Header from "../../components/Header";
+import Footer from "../../components/Footer";
 import TradeHeader from "../../components/trade/TradeHeader";
-import PriceChartWidget from "../../components/PriceChartWidget";
+import CustomSolanaChart from "../../components/CustomSolanaChart";
+
 import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
 import CodexTrades from "../../components/trade/CodexTrades";
@@ -14,7 +16,11 @@ import CodexTopTraders from "../../components/trade/CodexTopTraders";
 import CodexDevTokens from "../../components/trade/CodexDevTokens";
 import CodexHolders from "../../components/trade/CodexHolders";
 import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
-
+import { useQuickBuyQueryParams } from "../../components/QuickBuy";
+import { useTradePageQueryParams } from "../../utils/queryParams";
+import dynamic from 'next/dynamic';
+const BirdeyeChart = dynamic(() => import('../../components/BirdeyeChart'), { ssr: false });
+const BackendOHLCChart = dynamic(() => import('../../components/BackendOHLCChart'), { ssr: false });
 /* ---------- AXIOM palette ---------- */
 const AX = {
   bg: "#101114",
@@ -33,6 +39,13 @@ const AX = {
 export default function TradePage() {
   const router = useRouter();
   const { id } = router.query;
+  
+  // Debug logging
+  console.log('TradePage Debug:', {
+    id,
+    idType: typeof id,
+    isString: typeof id === "string"
+  });
 
   const [showSkeleton, setShowSkeleton] = useState(true);
   const { isConnected } = useWallet();
@@ -40,8 +53,38 @@ export default function TradePage() {
   const [selectedTab, setSelectedTab] = useState("Trades");
   const [search, setSearch] = useState("");
 
-  const { token, isPolling, loading: pollingLoading, isHydrating } =
+  // Query parameter handling for trade settings
+  const { 
+    queryString, 
+    getQueryParams, 
+    getTradeParams, 
+    getLimitOrderParams,
+    settings: quickBuySettings,
+    side: quickBuySide 
+  } = useQuickBuyQueryParams();
+
+  // Trade page specific parameters
+  const { 
+    params: tradeParams, 
+    setParams: setTradeParams, 
+    getQueryString: getTradeQueryString,
+    getApiParams: getTradeApiParams,
+    isReady: tradeParamsReady 
+  } = useTradePageQueryParams();
+
+  const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
     useSingleTokenPolling(typeof id === "string" ? id : undefined);
+
+  // Debug: Log the pair addresses
+  useEffect(() => {
+    if (resolvedPairAddress || token?.pair_address) {
+      console.log('[Trade Page] Pair addresses:', {
+        resolvedPairAddress,
+        tokenPairAddress: token?.pair_address,
+        match: resolvedPairAddress === token?.pair_address
+      });
+    }
+  }, [resolvedPairAddress, token?.pair_address]);
 
   // ---------------- drag-to-resize for left column ----------------
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -183,19 +226,30 @@ export default function TradePage() {
             className="flex-1 min-w-0 flex flex-col pb-3"
             style={{ borderRight: `1px solid ${AX.border}` }}
           >
-            {/* TOP pane */}
+            {/* TOP pane - Chart in top left */}
             <div className="flex-shrink-0 flex flex-col" style={{ height: topPanePx }}>
               {/* TradeHeader includes name + the ONLY icon cluster */}
               <div className="px-2">
                 <TradeHeader token={token} />
               </div>
 
-              {/* Chart — hide TradingView top toolbar to avoid extra icons */}
-              <div className="flex-1 min-h-[240px] tv-hide-toolbar">
-                <PriceChartWidget
-                  token={token}
-                  pairAddress={typeof id === "string" ? id : undefined}
-                />
+              {/* Chart in top left corner */}
+              <div className="flex-1 min-h-[240px] relative chart-wrapper" style={{ zIndex: 50, width: '100%', maxWidth: '1200px' }}>
+                {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 ? (
+                  <BackendOHLCChart
+                    pairAddress={resolvedPairAddress}
+                    interval="1m"
+                    timeframe="24h"
+                    height="100%"
+                    width="100%"
+                    baseRefreshMs={30000}
+                    className="relative"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
+                    {isHydrating ? 'Resolving pair address...' : 'No pair address available'}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -238,19 +292,26 @@ export default function TradePage() {
             >
               <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px" style={{ background: AX.border }} />
               <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 px-1 py-0.5 rounded-full"
-                style={{ background: AX.bg }}
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 px-2 py-1 rounded-full transition-all duration-200 hover:scale-105"
+                style={{ 
+                  background: 'rgba(61, 220, 132, 0.08)',
+                  border: `1px solid rgba(61, 220, 132, 0.2)`,
+                  maxWidth: '32px',
+                  maxHeight: '12px'
+                }}
               >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: AX.mint, opacity: 0.8 }} />
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: AX.mint, opacity: 0.8 }} />
-                <span className="h-1.5 w-1.5 rounded-full" style={{ background: AX.mint, opacity: 0.8 }} />
+                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.6 }} />
+                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.6 }} />
+                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.6 }} />
               </div>
             </div>
 
             {/* BOTTOM pane */}
             <div className="flex-1 min-h-[120px] flex flex-col">
-              <hr style={{ borderColor: AX.border }} />
-              <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
+              <TradeTabs 
+                selectedTab={selectedTab} 
+                setSelectedTab={setSelectedTab}
+              />
               <div className="flex-1 min-h-0">
                 {selectedTab === "Trades" && <CodexTrades token={token} />}
                 {selectedTab === "Top Traders" && <CodexTopTraders token={token} />}
@@ -262,18 +323,50 @@ export default function TradePage() {
 
           {/* RIGHT: action panel */}
           <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px]">
-            <TradeActionPanel token={token} />
+            <TradeActionPanel 
+              token={token} 
+              tradeParams={tradeParams}
+              setTradeParams={setTradeParams}
+              quickBuySettings={quickBuySettings}
+              quickBuySide={quickBuySide}
+            />
           </div>
         </div>
       </div>
+      <Footer />
 
-      {/* Hide TradingView top toolbar inside this page */}
+      {/* Lightweight Charts styling */}
       <style jsx global>{`
-        .tv-hide-toolbar .chart-controls-bar,
-        .tv-hide-toolbar .layout__area--top,
-        .tv-hide-toolbar .toolbar-2po1G0-,
-        .tv-hide-toolbar .chart-page .header-chart-panel,
-        .tv-hide-toolbar .button-3SuA8iQk { display: none !important; }
+        /* Ensure lightweight charts fit properly in our layout */
+        .lightweight-chart-container {
+          width: 100% !important;
+          height: 100% !important;
+          background: rgba(0, 0, 0, 1) !important;
+        }
+        
+        /* Make chart bars thinner and more spaced */
+        .ohlc-chart-container {
+          width: 100% !important;
+          height: 100% !important;
+        }
+        
+        /* Ensure proper chart spacing */
+        .tv-lightweight-charts {
+          width: 100% !important;
+          height: 100% !important;
+        }
+        
+        /* Make candlesticks appear thinner */
+        .tv-lightweight-charts .pane {
+          overflow: visible !important;
+        }
+        
+        /* Reduce candlestick width visually */
+        .tv-lightweight-charts canvas {
+          image-rendering: pixelated;
+          image-rendering: -moz-crisp-edges;
+          image-rendering: crisp-edges;
+        }
       `}</style>
     </>
   );

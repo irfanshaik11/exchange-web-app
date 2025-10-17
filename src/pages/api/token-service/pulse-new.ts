@@ -2,11 +2,25 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 // import { ImageSearchService } from '~/utils/imageSearch'; // REMOVED - not used
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Disable caching for realtime freshness
-  res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-  try { res.removeHeader('ETag'); } catch {}
+  // Set appropriate cache headers for better performance
+  const isFresh = req.query.fresh === '1';
+  
+  if (isFresh) {
+    // Disable caching for fresh requests
+    res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  } else {
+    // Allow short-term caching for regular requests
+    res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
+    res.setHeader('ETag', `"pulse-new-${Date.now()}"`);
+  }
+  
+  try { 
+    if (!isFresh) {
+      res.removeHeader('ETag'); 
+    }
+  } catch {}
 
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(req.query)) {
@@ -18,7 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Only set default limit if no limit is provided
   if (!params.get('limit')) params.set('limit', '30');
 
-  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
 
   const fetchWithTimeout = async (url: string, timeoutMs = 2500) => {
     const ctrl = new AbortController();
@@ -57,6 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           bonding_pct: parseFloat(r.bonding_pct ?? 0), // Also include raw bonding_pct for fallback
           created_at: r.launch_time || r.created_at || null,
           launch_time: r.launch_time || null,
+          launchpad_protocol: r.launchpad_protocol || null, // Pass through protocol for filtering and colors
           // Optional extra fields used by the UI
           logo: r.logo || r.uri || r.image || null,
           image: r.image || r.uri || r.logo || null,

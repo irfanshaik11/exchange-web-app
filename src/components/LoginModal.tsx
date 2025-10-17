@@ -7,6 +7,8 @@ import InterstateButton from './InterstateButton';
 import bs58 from 'bs58';
 import { toast } from 'react-hot-toast';
 import { useWallet } from "./useWallet";
+import { usePhantomWallet } from '../hooks/usePhantomWallet';
+import { useMetaMaskWallet } from '../hooks/useMetaMaskWallet';
 
 interface LoginModalProps {
   open: boolean;
@@ -28,7 +30,13 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
-  const [loading, setLoading] = useState(false);
+  
+  // Separate loading states for each login method
+  const [loading, setLoading] = useState(false); // For email/password login
+  const [phantomLoading, setPhantomLoading] = useState(false);
+  const [metamaskLoading, setMetamaskLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  
   const [error, setError] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -36,10 +44,31 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const [wiggle, setWiggle] = useState(false);
   const { connectors, connectWith, connecting } = useWallet();
   const [showWalletOptions, setShowWalletOptions] = useState(false);
+  
+  // Use the new wallet hooks
+  const phantomWallet = usePhantomWallet();
+  const metaMaskWallet = useMetaMaskWallet();
+
+  // Helper function to clear all loading states
+  const clearAllLoadingStates = () => {
+    setPhantomLoading(false);
+    setMetamaskLoading(false);
+    setGoogleLoading(false);
+    setError(null);
+    setWalletError(null);
+  };
+
 
   useEffect(() => {
     if (open) {
       setShow(true);
+      // Refresh wallet connection state when modal opens
+      phantomWallet.refreshConnection();
+      
+      // Clear MetaMask connection state to ensure fresh start
+      localStorage.removeItem('metamask_connected');
+      metaMaskWallet.refreshConnection();
+      
       // Check for token in cookies and refresh user if not already authenticated
       const token = Cookies.get('token');
       if (token && !user && !userLoading) {
@@ -53,10 +82,14 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
         }).catch(() => setLoading(false));
       }
     } else {
+      // Clear all loading states when modal is closed
+      clearAllLoadingStates();
+      setSuccess(null);
+      
       const timeout = setTimeout(() => setShow(false), 220);
       return () => clearTimeout(timeout);
     }
-  }, [open]);
+  }, [open, phantomWallet, metaMaskWallet, refreshUser, user, userLoading]);
 
   if (!open && !show) return null;
 
@@ -112,7 +145,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   // Google Login handler
   async function handleGoogleLogin(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setGoogleLoading(true);
     setError(null);
     setSuccess(null);
     try {
@@ -120,109 +153,129 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
     } catch (err) {
       setError('Login failed');
     } finally {
-      setLoading(false);
+      setGoogleLoading(false);
     }
   }
 
-  // Phantom Wallet Login handler
+  // Phantom Wallet Login handler - Enhanced with proper connection management
   async function handlePhantomLogin() {
-    setLoading(true);
+    setPhantomLoading(true);
     setError(null);
     setWalletError(null);
     setSuccess(null);
-    const provider = window.solana;
-    if (!provider) {
-      alert('Phantom not found');
-      setLoading(false);
-      return;
-    }
+    
     try {
-      // Ensure connection
-      if (!provider.isConnected) {
-        await provider.connect();
+      // Check if Phantom is installed
+      if (!phantomWallet.isInstalled) {
+        setWalletError('Phantom wallet not found. Please install Phantom wallet.');
+        return;
       }
+
+      // Connect to Phantom wallet (this handles reconnection properly)
+      let connected;
+      try {
+        connected = await phantomWallet.connect();
+      } catch (connectError: any) {
+        console.error('Phantom connect error in LoginModal:', connectError);
+        setWalletError('User rejected the connection request');
+        return;
+      }
+      
+      if (!connected) {
+        setWalletError(phantomWallet.error || 'Failed to connect to Phantom wallet');
+        return;
+      }
+
+      // Create message and sign it
       const message = `Login to Interstate with nonce: ${Date.now()}`;
-      const encodedMessage = new TextEncoder().encode(message);
-      const signed = await provider.signMessage(encodedMessage);
-      const publicKey = signed.publicKey.toBase58 ? signed.publicKey.toBase58() : signed.publicKey.toString();
-      const signature = bs58.encode(signed.signature);
-      const { token } = await apiPhantomLogin(publicKey, signature, message);
+      let signResult: { publicKey: string; signature: string; message: string } | { error: string };
+      try {
+        signResult = await phantomWallet.signMessage(message);
+      } catch (signError: any) {
+        console.error('Phantom signMessage error in LoginModal:', signError);
+        setWalletError('User rejected the signing request');
+        return;
+      }
+      
+      // Check if signing failed
+      if ('error' in signResult) {
+        setWalletError((signResult as { error: string }).error);
+        return;
+      }
+      
+      // Send to backend for verification
+      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message);
+      
       if (token) {
         Cookies.set('token', token, { expires: 7, path: '/' });
         await refreshUser();
-        setSuccess('login successful!');
+        setSuccess('Login successful!');
         setTimeout(() => {
           setSuccess(null);
           onClose();
         }, 1200);
       } else {
-        setError('Phantom login failed');
+        setError('Phantom login failed - no token received');
       }
     } catch (error: any) {
-      if (error && error.code === 4001) {
-        setWalletError('You must approve the request in Phantom.');
+      console.error('Phantom login error:', error);
+      
+      // Handle different types of errors
+      if (error.message?.includes('Internal server error')) {
+        setWalletError('Backend server error. Please try again later.');
+      } else if (error.message?.includes('Signature verification failed')) {
+        setWalletError('Signature verification failed. Please try again.');
+      } else if (error.message?.includes('Missing required fields')) {
+        setWalletError('Missing required data. Please try again.');
       } else {
         setWalletError(error?.message || 'Phantom login failed');
       }
     } finally {
-      setLoading(false);
+      setPhantomLoading(false);
     }
   }
 
-  // MetaMask Wallet Login handler
+  // MetaMask Wallet Login handler - Enhanced with proper connection management
   async function handleMetamaskLogin() {
-    
-    setLoading(true);
+    console.log('MetaMask login started...');
+    setMetamaskLoading(true);
     setError(null);
     setWalletError(null);
     setSuccess(null);
     
-    // Get the specific MetaMask provider
-    let metamaskProvider = null;
-    
-    // Check if we have multiple providers
-    if (window.ethereum?.providers) {
-      metamaskProvider = window.ethereum.providers.find(provider => provider.isMetaMask);
-      if (!metamaskProvider) {
-        alert('MetaMask wallet not found! Please install MetaMask extension.');
-        setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
-        setLoading(false);
-        return;
-      }
-    } else if (window.ethereum?.isMetaMask) {
-      // Single provider that is MetaMask
-      console.log('Single MetaMask provider detected');
-      metamaskProvider = window.ethereum;
-    } else {
-      console.log('No MetaMask provider found');
-      alert('MetaMask wallet not found! Please install MetaMask extension');
-      setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
-      setLoading(false);
-      return;
-    }
-    
-    
     try {
-      console.log('Requesting MetaMask accounts...');
-      
-      // Request accounts from MetaMask specifically
-      const accounts = await metamaskProvider.request({ method: 'eth_requestAccounts' });
-      const address = accounts[0];
-      
-      if (!address) {
-        setLoading(false);
+      // Check if MetaMask is installed
+      if (!metaMaskWallet.isInstalled) {
+        console.log('MetaMask not installed');
+        setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
         return;
       }
-     
+
+      console.log('MetaMask is installed, attempting to connect...');
+      // Connect to MetaMask wallet (this handles connection properly)
+      const connected = await metaMaskWallet.connect();
+      if (!connected) {
+        console.log('MetaMask connection failed:', metaMaskWallet.error);
+        setWalletError(metaMaskWallet.error || 'Failed to connect to MetaMask wallet');
+        return;
+      }
+
+      console.log('MetaMask connected successfully, attempting to sign message...');
+
+      // Create message and sign it
       const message = `Login to Interstate with nonce: ${Date.now()}`;
+      console.log('About to call metaMaskWallet.signMessage...');
+      const signResult = await metaMaskWallet.signMessage(message);
+      console.log('metaMaskWallet.signMessage completed:', signResult);
       
-      const signature = await metamaskProvider.request({
-        method: 'personal_sign',
-        params: [message, address]
-      });
+      // Check if signing failed
+      if ('error' in signResult) {
+        setWalletError((signResult as { error: string }).error);
+        return;
+      }
       
-   
-      const { token } = await apiMetamaskLogin(address, signature, message);
+      // Send to backend for verification
+      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message);
       
       if (token) {
         Cookies.set('token', token, { expires: 7, path: '/' });
@@ -233,20 +286,28 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
           onClose();
         }, 1200);
       } else {
-        setWalletError('MetaMask login failed - no token received');
+        setError('MetaMask login failed - no token received');
       }
     } catch (error: any) {
-      if (error && error.code === 4001) {
-        setWalletError('You must approve the request in MetaMask.');
-      } else if (error?.code === -32002) {
-        setWalletError('Please check MetaMask - request is pending.');
-      } else if (error?.message) {
-        setWalletError(error.message);
+      console.error('MetaMask backend error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      
+      // Handle different types of backend errors
+      if (error.message?.includes('Internal server error')) {
+        setWalletError('Backend server error. Please try again later.');
+      } else if (error.message?.includes('Signature verification failed')) {
+        setWalletError('Signature verification failed. Please try again.');
+      } else if (error.message?.includes('Missing required fields')) {
+        setWalletError('Missing required data. Please try again.');
       } else {
-        setWalletError('MetaMask login failed. Please try again.');
+        setWalletError(error?.message || 'MetaMask login failed');
       }
     } finally {
-      setLoading(false);
+      setMetamaskLoading(false);
     }
   }
 
@@ -365,8 +426,12 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
           fullWidth
           variant="secondary"
           className="mb-1"
-          onClick={handleGoogleLogin}
-          disabled={loading}
+          onClick={(e) => {
+            setPhantomLoading(false);
+            setMetamaskLoading(false);
+            handleGoogleLogin(e);
+          }}
+          disabled={googleLoading}
         >
           <span className="flex items-center justify-center gap-2 font-normal text-sm">
             <img src="https://img.icons8.com/color/512/google-logo.png" alt="Google" className="w-6 h-6" />
@@ -378,8 +443,11 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
           type="button"
           fullWidth
           variant="secondary"
-          onClick={() => setShowWalletOptions(!showWalletOptions)}
-          disabled={loading}
+          onClick={() => {
+            clearAllLoadingStates();
+            setShowWalletOptions(!showWalletOptions);
+          }}
+          disabled={phantomLoading || metamaskLoading}
           className="flex items-center justify-between hover:bg-neutral-800 transition-colors"
         >
           <span className="flex items-center gap-2 font-normal text-sm">
@@ -406,27 +474,75 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
               {/* MetaMask */}
               <button
                 type="button"
-                className="w-full flex items-center justify-between p-3 rounded-lg bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 transition-all duration-200"
-                onClick={handleMetamaskLogin}
-                disabled={loading}
+                className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
+                  metaMaskWallet.isConnected 
+                    ? 'bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50' 
+                    : 'bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50'
+                } ${metamaskLoading || metaMaskWallet.connecting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={() => {
+                  setPhantomLoading(false);
+                  setGoogleLoading(false);
+                  handleMetamaskLogin();
+                }}
+                disabled={metamaskLoading || metaMaskWallet.connecting}
               >
                 <div className="flex items-center gap-3">
                   <img src="/MetaMask-icon-fox.svg" alt="MetaMask" className="w-5 h-5" />
-                  <span className="font-medium text-sm">MetaMask</span>
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium text-sm">MetaMask</span>
+                    {metaMaskWallet.isConnected && metaMaskWallet.address && (
+                      <span className="text-xs text-green-400">
+                        Connected: {metaMaskWallet.address.slice(0, 6)}...{metaMaskWallet.address.slice(-4)}
+                      </span>
+                    )}
+                    {metaMaskWallet.connecting && (
+                      <span className="text-xs text-yellow-400">Connecting...</span>
+                    )}
+                    {metaMaskWallet.error && !metaMaskWallet.isInstalled && (
+                      <span className="text-xs text-red-400">Not installed</span>
+                    )}
+                  </div>
                 </div>
+                {metaMaskWallet.isConnected && (
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                )}
               </button>
 
               {/* Phantom */}
               <button
                 type="button"
-                className="w-full flex items-center justify-between p-3 rounded-lg bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50 transition-all duration-200"
-                onClick={handlePhantomLogin}
-                disabled={loading}
+                className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
+                  phantomWallet.isConnected 
+                    ? 'bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50' 
+                    : 'bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50'
+                } ${phantomLoading || phantomWallet.connecting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                onClick={() => {
+                  setMetamaskLoading(false);
+                  setGoogleLoading(false);
+                  handlePhantomLogin();
+                }}
+                disabled={phantomLoading || phantomWallet.connecting}
               >
                 <div className="flex items-center gap-3">
                   <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-5 h-5 rounded-full" />
-                  <span className="font-medium text-sm">Phantom</span>
+                  <div className="flex flex-col items-start">
+                    <span className="font-medium text-sm">Phantom</span>
+                    {phantomWallet.isConnected && phantomWallet.publicKey && (
+                      <span className="text-xs text-green-400">
+                        Connected: {phantomWallet.publicKey.slice(0, 4)}...{phantomWallet.publicKey.slice(-4)}
+                      </span>
+                    )}
+                    {phantomWallet.connecting && (
+                      <span className="text-xs text-yellow-400">Connecting...</span>
+                    )}
+                    {phantomWallet.error && !phantomWallet.isInstalled && (
+                      <span className="text-xs text-red-400">Not installed</span>
+                    )}
+                  </div>
                 </div>
+                {phantomWallet.isConnected && (
+                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                )}
               </button>
 
             </div>
