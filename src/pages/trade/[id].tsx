@@ -92,7 +92,7 @@ export default function TradePage() {
   const startYRef = useRef(0);
   const startTopPxRef = useRef(0);
   const rafRef = useRef<number | null>(null);
-  const MIN_TOP = 220;
+  const MIN_TOP = 280;
   const MIN_BOTTOM = 180;
 
   const [topPanePx, setTopPanePx] = useState<number>(() => {
