@@ -79,21 +79,15 @@ function getTotalUSD(token0SwapValueUsd: string, token1SwapValueUsd: string, eve
   return token0Value;
 }
 
-function getMarketCap(token0SwapValueUsd: string, token1SwapValueUsd: string) {
-  // This is a simplified calculation - in reality you'd need more data
-  // For now, we'll use a placeholder or calculate based on available data
-  const token0Value = parseFloat(token0SwapValueUsd);
-  const token1Value = parseFloat(token1SwapValueUsd);
+function formatMarketCap(marketCapUsd: number) {
+  if (!marketCapUsd || marketCapUsd === 0) return '-';
   
-  // This is a rough estimate - you might want to get actual market cap from your API
-  const estimatedMC = token0Value * 1000; // Rough multiplier based on token value
-  
-  if (estimatedMC >= 1000000) {
-    return `$${(estimatedMC / 1000000).toFixed(2)}M`;
-  } else if (estimatedMC >= 1000) {
-    return `$${(estimatedMC / 1000).toFixed(2)}K`;
+  if (marketCapUsd >= 1000000) {
+    return `$${(marketCapUsd / 1000000).toFixed(2)}M`;
+  } else if (marketCapUsd >= 1000) {
+    return `$${(marketCapUsd / 1000).toFixed(2)}K`;
   } else {
-    return `$${estimatedMC.toFixed(2)}`;
+    return `$${marketCapUsd.toFixed(2)}`;
   }
 }
 
@@ -158,14 +152,14 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
                 const color = trade.side === 'buy' ? 'text-emerald-400' : 'text-red-400';
                 const age = getAge(new Date(trade.timestamp).getTime() / 1000);
                 const amount = parseFloat(trade.amount);
-                const price = parseFloat(trade.price);
-                const value = amount * price;
+                // Use totalUSD if available, otherwise use the price field (which is actually the total USD value)
+                const value = trade.totalUSD !== undefined ? trade.totalUSD : parseFloat(trade.price);
                 
                 return (
                   <tr key={trade.pair_address + idx + trade.timestamp} className="border-b border-neutral-800 hover:bg-neutral-800/60">
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>{type}</td>
-                    <td className="px-2 py-2 text-neutral-300">-</td>
+                    <td className="px-2 py-2 text-neutral-300">{formatMarketCap(token.market_cap_usd)}</td>
                     <td className="px-2 py-2 text-neutral-300">{formatSmartNumber(amount)}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>
                       {type === 'Buy' ? '+' : '-'}${formatSmartNumber(value)}
@@ -189,13 +183,12 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
                 const totalUSD = getTotalUSD(trade.token0SwapValueUsd, trade.token1SwapValueUsd, trade.eventDisplayType);
                 const age = getAge(trade.timestamp);
                 const trader = shortAddr(trade.maker);
-                const marketCap = getMarketCap(trade.token0SwapValueUsd, trade.token1SwapValueUsd);
                 
                 return (
                   <tr key={trade.transactionHash + idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>{type}</td>
-                    <td className="px-2 py-2 text-neutral-300">{marketCap}</td>
+                    <td className="px-2 py-2 text-neutral-300">{formatMarketCap(token.market_cap_usd)}</td>
                     <td className="px-2 py-2 text-neutral-300">{formatSmartNumber(amount)}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>
                       {type === 'Buy' || type === 'Add' ? '+' : '-'}${formatSmartNumber(totalUSD)}

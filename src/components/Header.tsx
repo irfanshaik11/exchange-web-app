@@ -24,12 +24,12 @@ const AX = {
 };
 
 const navLinks = [
-  { name: "Discover", href: "/construction" },
-  { name: "Pulse", href: "/pulse" },
+  { name: "Trenches", href: "/pulse" },
+  { name: "Portfolio", href: "/portfolio" },
+  { name: "Trending", href: "/construction" },
   { name: "Trackers", href: "/construction" },
   { name: "Perpetuals", href: "/construction" },
   { name: "Yield", href: "/construction" },
-  { name: "Portfolio", href: "/portfolio" },
   { name: "Rewards", href: "/construction" },
 ];
 
@@ -89,20 +89,18 @@ export default function Header({
               href="/pulse"
               className="flex items-center text-xl tracking-tight select-none"
               style={{ color: AX.text }}
-              title="Go to Pulse"
+              title="Go to Trenches"
             >
               <img
-                src="/logo.png"
-                alt="Interstate logo"
-                className="h-auto w-10"
+                src="/narrative-logo.png"
+                alt="Narrative logo"
+                className="h-auto w-15 "
               />
-              <span className="mr-1 inline-block rounded-full" />
-              Interstate
             </Link>
             <nav className="ml-6 flex items-center gap-5">
               {navLinks.map((link) => {
                 const isActive = router.pathname === link.href || 
-                  (link.name === "Pulse" && router.pathname.startsWith("/trade/"));
+                  (link.name === "Trenches" && router.pathname.startsWith("/trade/"));
                 return (
                   <Link
                     key={link.name}
