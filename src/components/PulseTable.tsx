@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber } from "~/utils/db";
 import {
@@ -1206,6 +1206,10 @@ const PulseTable = React.memo(function PulseTable({
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
   const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Wave animation for migrating tokens
   const { solPrice } = useSolPrice(); // Use shared SOL price from Footer context
+  
+  // State for filtered tokens from API
+  const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
+  const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes('new');
   
   const [filters, setFilters] = useState({
@@ -1286,6 +1290,73 @@ const PulseTable = React.memo(function PulseTable({
     setHasPendingChanges(false);
     setShowFilters(false);
   };
+
+  // Fetch filtered tokens from API when protocols are selected
+  const fetchFilteredTokens = useCallback(async (protocols: string[]) => {
+    if (protocols.length === 0) {
+      setFilteredTokens([]);
+      return;
+    }
+
+    setIsFetchingFiltered(true);
+    try {
+      // Map frontend protocol names to backend protocol names
+      const mapProtocolToBackend = (protocol: string): string[] => {
+        switch (protocol) {
+          case 'Pump':
+            return ['pump.fun'];
+          case 'Pump AMM':
+            return ['pump.fun'];
+          case 'Raydium':
+            return ['raydium', 'raydiumlaunchpad'];
+          case 'Meteora AMM':
+            return ['meteora'];
+          case 'Meteora AMM V2':
+            return ['meteora'];
+          case 'Bonk':
+            return ['bonk'];
+          case 'LaunchLab':
+            return ['launchlab'];
+          default:
+            return [protocol.toLowerCase()];
+        }
+      };
+
+      const backendProtocols = protocols.flatMap(mapProtocolToBackend);
+      const protocolsParam = backendProtocols.join(',');
+      
+      // Determine the endpoint based on column type
+      let endpoint = '/api/token-service/pulse-new';
+      if (title.toLowerCase().includes('final stretch')) {
+        endpoint = '/api/token-service/pulse-final-stretch';
+      } else if (title.toLowerCase().includes('migrated')) {
+        endpoint = '/api/token-service/pulse-migrated';
+      }
+
+      const response = await fetch(`${endpoint}?limit=50&protocols=${encodeURIComponent(protocolsParam)}&t=${Date.now()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setFilteredTokens(Array.isArray(data) ? data : []);
+      } else {
+        console.error('Failed to fetch filtered tokens:', response.status);
+        setFilteredTokens([]);
+      }
+    } catch (error) {
+      console.error('Error fetching filtered tokens:', error);
+      setFilteredTokens([]);
+    } finally {
+      setIsFetchingFiltered(false);
+    }
+  }, [title]);
+
+  // Fetch filtered tokens when protocols change
+  useEffect(() => {
+    if (filters.protocols.length > 0) {
+      fetchFilteredTokens(filters.protocols);
+    } else {
+      setFilteredTokens([]);
+    }
+  }, [filters.protocols, fetchFilteredTokens]);
 
   const handleResetFilters = () => {
     const defaultFilters = {
@@ -1566,91 +1637,20 @@ const PulseTable = React.memo(function PulseTable({
 
   // Filter and sort tokens
   const filteredAndSortedTokens = useMemo(() => {
-    let filtered = [...tokens];
+    // Use filtered tokens from API if protocols are selected, otherwise use original tokens
+    let filtered = filters.protocols.length > 0 ? [...filteredTokens] : [...tokens];
 
     // Filter out tokens without migrated_pool_address in the Migrated column
-    if (title.toLowerCase().includes('migrated')) {
+    // Skip this filter when protocol filtering is applied (API already returns valid migrated tokens)
+    if (title.toLowerCase().includes('migrated') && filters.protocols.length === 0) {
       filtered = filtered.filter(token => {
         const hasMigratedPoolAddress = !!(token as any).migrated_pool_address;
         return hasMigratedPoolAddress;
       });
     }
 
-    // Apply protocol filters
-    if (filters.protocols.length > 0) {
-      const beforeCount = filtered.length;
-      filtered = filtered.filter(token => {
-        const tokenProtocol = getTokenProtocol(token);
-        
-        // Get bonding curve progress to determine if token has migrated
-        const bondingProgress = typeof token.bonding_curve_progress === 'number' 
-          ? token.bonding_curve_progress 
-          : parseFloat(String(token.bonding_curve_progress || '0'));
-        const bondingPct = (token as any).bonding_pct || 0;
-        const isMigrated = bondingProgress >= 0.85 || bondingPct >= 85;
-        const isFinalStretch = (bondingProgress >= 0.6 && bondingProgress < 0.85) || (bondingPct >= 60 && bondingPct < 85);
-        
-        // Check if token's protocol matches any of the selected protocols
-        const matches = filters.protocols.some(selectedProtocol => {
-          const backendProtocols = mapProtocolToBackend(selectedProtocol);
-          
-          // Special handling for Pump-related filters on migrated/final stretch tokens
-          // These tokens originated from Pump.fun even if they've migrated to another protocol
-          if (selectedProtocol === 'Pump' || selectedProtocol === 'Pump AMM') {
-            // In Migrated column: tokens have moved from Pump to AMMs (Raydium/Meteora)
-            if (isMigrated) {
-              if (selectedProtocol === 'Pump') {
-                // Show all migrated tokens when filtering by "Pump" since they all came from Pump
-                return true;
-              }
-              if (selectedProtocol === 'Pump AMM') {
-                // Show migrated tokens that moved to AMMs
-                if (tokenProtocol) {
-                  return tokenProtocol.toLowerCase().includes('raydium') ||
-                         tokenProtocol.toLowerCase().includes('meteora') ||
-                         tokenProtocol.toLowerCase().includes('orca');
-                }
-              }
-            }
-            
-            // In Final Stretch column: tokens are still on Pump but approaching migration
-            if (isFinalStretch) {
-              // Show all final stretch tokens when filtering by "Pump"
-              return selectedProtocol === 'Pump';
-            }
-            
-            // In New Pairs column: standard Pump protocol matching
-            if (!isMigrated && !isFinalStretch && tokenProtocol) {
-              return backendProtocols.some(backendProtocol => 
-                tokenProtocol.toLowerCase().includes(backendProtocol.toLowerCase()) ||
-                backendProtocol.toLowerCase().includes(tokenProtocol.toLowerCase())
-              );
-            }
-          }
-          
-          // For non-Pump protocols (Raydium, Meteora, etc.), use standard matching
-          // This allows filtering migrated tokens by their CURRENT protocol
-          if (!tokenProtocol) return false;
-          
-          return backendProtocols.some(backendProtocol => 
-            tokenProtocol.toLowerCase().includes(backendProtocol.toLowerCase()) ||
-            backendProtocol.toLowerCase().includes(tokenProtocol.toLowerCase())
-          );
-        });
-        
-        // Debug logging
-        if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_FILTER__) {
-          console.log(`[Protocol Filter] Token ${token.symbol} (${tokenProtocol}) - bonding: ${bondingProgress}% - migrated: ${isMigrated} - matches ${filters.protocols}:`, matches);
-        }
-        
-        return matches;
-      });
-      
-      // Debug logging
-      if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_FILTER__) {
-        console.log(`[Protocol Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for protocols:`, filters.protocols);
-      }
-    }
+    // Protocol filtering is now handled by the API, so we skip client-side filtering
+    // when protocols are selected (filteredTokens already contains the filtered results)
 
     // Apply keyword filters
     if (filters.searchKeywords.trim()) {
@@ -2016,7 +2016,7 @@ const PulseTable = React.memo(function PulseTable({
     });
 
     return filtered;
-  }, [tokens, title, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.hasWebsite, filters.hasTwitter, filters.hasTelegram, filters.atLeastOneSocial, filters.onlyPumpLive, filters.sortBy, filters.sortOrder]);
+  }, [tokens, filteredTokens, title, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.hasWebsite, filters.hasTwitter, filters.hasTelegram, filters.atLeastOneSocial, filters.onlyPumpLive, filters.sortBy, filters.sortOrder]);
 
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => filteredAndSortedTokens, [filteredAndSortedTokens]);
