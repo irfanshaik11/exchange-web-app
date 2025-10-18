@@ -216,51 +216,80 @@ export function usePhantomWallet(): UsePhantomWalletReturn {
       const encodedMessage = new TextEncoder().encode(message);
       
       // Try a different approach - use the provider's request method if available
-      let signPromise;
-      if (provider.request) {
-        // Use request method if available (similar to MetaMask)
-        signPromise = provider.request({
-          method: 'signMessage',
-          params: {
-            message: encodedMessage,
-          },
+      try {
+        let signPromise;
+        if (provider.request) {
+          // Use request method if available (similar to MetaMask)
+          signPromise = provider.request({
+            method: 'signMessage',
+            params: {
+              message: encodedMessage,
+            },
+          });
+        } else {
+          // Fallback to direct signMessage call
+          signPromise = provider.signMessage(encodedMessage);
+        }
+        
+        // Race between signing and timeout - wrap in try-catch to handle rejections
+        const result = await Promise.race([signPromise, timeoutPromise]).catch((err: any) => {
+          // Handle rejection from Promise.race
+          console.log('Promise.race caught error:', err);
+          
+          // Check for user rejection (multiple possible formats)
+          if (
+            err.code === 4001 || 
+            err.code === -32603 || // Some wallets use this code
+            err.message?.toLowerCase().includes('user rejected') || 
+            err.message?.toLowerCase().includes('rejected the request') ||
+            err.message?.toLowerCase().includes('user denied') ||
+            err.message?.toLowerCase().includes('cancelled')
+          ) {
+            return { error: 'You canceled the signature request' };
+          }
+          
+          // Don't throw, return error instead
+          return { error: err.message || 'Failed to sign message' };
         });
-      } else {
-        // Fallback to direct signMessage call
-        signPromise = provider.signMessage(encodedMessage);
+        
+        // Check if result is an error object from catch
+        if (typeof result === 'object' && result !== null && 'error' in result) {
+          return result as { error: string };
+        }
+        
+        // Check if we got a timeout
+        if (result === 'TIMEOUT') {
+          return { error: 'Signing request timed out. Please check Phantom and try again.' };
+        }
+        
+        const signed = result as any;
+        
+        const publicKey = signed.publicKey.toBase58 ? signed.publicKey.toBase58() : signed.publicKey.toString();
+        // Encode signature to base58 as expected by backend
+        const signature = bs58.encode(signed.signature);
+        
+        console.log('Message signed successfully:', { publicKey, message });
+        
+        return {
+          publicKey,
+          signature,
+          message,
+        };
+      } catch (error: any) {
+        console.error('Phantom signing error:', error);
+        
+        // Handle user rejection
+        if (error.code === 4001 || error.message?.includes('User rejected') || error.message?.includes('rejected the request')) {
+          return { error: 'You canceled the signature request' };
+        } else if (error.message?.includes('timed out')) {
+          return { error: 'Signing request timed out. Please check Phantom and try again.' };
+        } else {
+          return { error: error.message || 'Failed to sign message' };
+        }
       }
-      
-      // Race between signing and timeout
-      const result = await Promise.race([signPromise, timeoutPromise]);
-      
-      // Check if we got a timeout
-      if (result === 'TIMEOUT') {
-        return { error: 'Signing request timed out. Please check Phantom and try again.' };
-      }
-      
-      const signed = result as any;
-      
-      const publicKey = signed.publicKey.toBase58 ? signed.publicKey.toBase58() : signed.publicKey.toString();
-      // Encode signature to base58 as expected by backend
-      const signature = bs58.encode(signed.signature);
-      
-      console.log('Message signed successfully:', { publicKey, message });
-      
-      return {
-        publicKey,
-        signature,
-        message,
-      };
     } catch (error: any) {
-      console.error('Phantom signing error:', error);
-      
-      if (error.code === 4001) {
-        return { error: 'User rejected the signing request' };
-      } else if (error.message?.includes('timed out')) {
-        return { error: 'Signing request timed out. Please check Phantom and try again.' };
-      } else {
-        return { error: error.message || 'Failed to sign message' };
-      }
+      console.error('Unexpected Phantom error:', error);
+      return { error: 'An unexpected error occurred. Please try again.' };
     }
   }, []);
 

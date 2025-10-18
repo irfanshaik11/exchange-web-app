@@ -17,6 +17,7 @@ import { env } from '../env';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
 import { FilterProvider } from '../components/FilterContext';
+import { SolPriceProvider } from '../components/SolPriceContext';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -150,14 +151,16 @@ const MyApp: AppType = ({ Component, pageProps }) => {
             <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
               <UserProvider>
                 <TokenHandler />
-                <QuickBuyProvider>
-                  <WatchlistProvider>
-                    <FilterProvider>
-                      <Component {...pageProps} />
-                    </FilterProvider>
-                  </WatchlistProvider>
-                </QuickBuyProvider>
-                <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                <SolPriceProvider>
+                  <QuickBuyProvider>
+                    <WatchlistProvider>
+                      <FilterProvider>
+                        <Component {...pageProps} />
+                      </FilterProvider>
+                    </WatchlistProvider>
+                  </QuickBuyProvider>
+                  <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                </SolPriceProvider>
               </UserProvider>
             </RainbowKitProvider>
           </QueryClientProvider>

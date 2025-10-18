@@ -409,9 +409,9 @@ export default function PulsePage() {
 
   // Combine regular tokens with launchpad tokens and HTTP tokens (stable refs)
   const combinedNewPairs = useMemo(() => [...newPairs, ...launchpadNewPairs], [newPairs, launchpadNewPairs]);
-  // Don't use launchpad data for Final Stretch and Migrated - use HTTP polling only
-  const combinedFinalStretch = useMemo(() => [], []);
-  const combinedMigrated = useMemo(() => [], []);
+  // Use HTTP polling data for Final Stretch and Migrated columns
+  const combinedFinalStretch = useMemo(() => [...finalStretch], [finalStretch]);
+  const combinedMigrated = useMemo(() => [...migrated], [migrated]);
 
   // Memoize the loading state to prevent unnecessary re-renders
   const isLoading = useMemo(() => {

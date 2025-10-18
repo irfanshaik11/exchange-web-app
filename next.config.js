@@ -30,6 +30,15 @@ const config = {
       { protocol: 'https', hostname: 'cdn.pump.fun' },
       { protocol: 'https', hostname: 'moonitcdn.io' },
       { protocol: 'https', hostname: 'metadata.pumployer.fun' },
+      { protocol: 'https', hostname: 'logos-world.net' },
+      { protocol: 'https', hostname: 's1.coincarp.com' },
+      { protocol: 'https', hostname: 's2.coinmarketcap.com' },
+      { protocol: 'https', hostname: 's3.coinmarketcap.com' },
+      { protocol: 'https', hostname: 'dropsearn.fra1.cdn.digitaloceanspaces.com' },
+      { protocol: 'https', hostname: 'encrypted-tbn0.gstatic.com' },
+      { protocol: 'https', hostname: 'play-lh.googleusercontent.com' },
+      { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
+      { protocol: 'https', hostname: 'api.phantom.app' },
     ],
   },
 
@@ -41,6 +50,16 @@ const config = {
   i18n: {
     locales: ["en"],
     defaultLocale: "en",
+  },
+
+  async redirects() {
+    return [
+      {
+        source: '/',
+        destination: '/pulse',
+        permanent: false,
+      },
+    ];
   },
 };
 

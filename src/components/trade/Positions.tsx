@@ -8,6 +8,7 @@ import FastImage from '../FastImage';
 import InterstateTooltip from '~/components/InterstateTooltip';
 import { FaArrowUp, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
+import Image from 'next/image';
 
 interface PositionsProps {
   userId: string;
@@ -64,7 +65,7 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
   const [solPrice, setSolPrice] = useState<number>(0);
   const router = useRouter();
   
-  // Fetch SOL price using Pyth Network
+  // Fetch SOL price using Pyth Network with improved error handling
   useEffect(() => {
     const fetchSolPrice = async () => {
       try {
@@ -72,25 +73,60 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
         const SOL_USD_FEED = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
         const response = await fetch(
           `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
-          { signal: AbortSignal.timeout(5000) }
+          { 
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+            signal: AbortSignal.timeout(10000) // 10 second timeout
+          }
         );
         
-        if (response.ok) {
-          const data = await response.json();
-          const priceData = data.parsed?.[0]?.price;
-          if (priceData?.price && priceData?.expo) {
-            const price = Number(priceData.price) * Math.pow(10, priceData.expo);
-            setSolPrice(price);
-            return;
-          }
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const priceData = data.parsed?.[0]?.price;
+        if (priceData?.price && priceData?.expo) {
+          const price = Number(priceData.price) * Math.pow(10, priceData.expo);
+          setSolPrice(price);
+          return;
+        } else {
+          throw new Error('Invalid response format from Pyth');
         }
       } catch (error) {
         console.error('Error fetching SOL price from Pyth:', error);
+        
+        // Fallback to CoinGecko if Pyth fails
+        try {
+          const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+            signal: AbortSignal.timeout(10000), // 10 second timeout
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          if (data?.solana?.usd) {
+            setSolPrice(data.solana.usd);
+            return;
+          } else {
+            throw new Error('Invalid response format from CoinGecko');
+          }
+        } catch (fallbackError) {
+          console.error('Error fetching SOL price from CoinGecko fallback:', fallbackError);
+          // Use a reasonable fallback price
+          setSolPrice(150);
+        }
       }
-      
-      // Fallback to static price if Pyth fails
-      setSolPrice(150);
     };
+    
     fetchSolPrice();
     // Refresh price every 60 seconds
     const interval = setInterval(fetchSolPrice, 60000);
@@ -315,29 +351,70 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
               
               const metadata = tokenMetadata[pos.tokenAddress];
               
-              // Protocol color mapping
+              // Protocol color mapping - matches PulseTable
               const getProtocolColor = (protocol?: string) => {
                 const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '#8B5CF6'; // Purple for Pump.fun
-                if (p.includes('raydium')) return '#00D4AA'; // Teal for Raydium
-                if (p.includes('meteora')) return '#FF6B6B'; // Red for Meteora
-                if (p.includes('launch')) return '#FFA500'; // Orange for LaunchLab
-                return '#6B7280'; // Gray default
+                if (p.includes('pump')) return '#22c55e'; // Green for Pump.fun
+                if (p.includes('raydium')) return '#5c51f7'; // Purple for Raydium
+                if (p.includes('meteora')) return '#ff4662'; // Pink-red for Meteora
+                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) return '#eab308'; // Yellow for Moonit/Moonshot
+                if (p.includes('boop')) return '#134577'; // Dark blue for Boop
+                if (p.includes('bonk')) return '#ff6b35'; // Orange for Bonk
+                if (p.includes('bags')) return '#22c55e'; // Green for Bags
+                if (p.includes('launch')) return '#3b82f6'; // Blue for LaunchLab (portfolio doesn't have column type, use default blue)
+                return '#22c55e'; // Default to green
               };
 
               const protocolColor = getProtocolColor(metadata?.protocol);
               
-              // Protocol icon mapping
-              const getProtocolIcon = (protocol?: string) => {
+              // Protocol icon mapping - returns image URL
+              const getProtocolIcon = (protocol?: string): string => {
                 const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '💊';
-                if (p.includes('raydium')) return '🌊';
-                if (p.includes('meteora')) return '☄️';
-                if (p.includes('launch')) return '🚀';
-                return '🔷';
+                
+                if (p.includes('pump')) {
+                  return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                }
+                
+                if (p.includes('meteora')) {
+                  return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
+                }
+                
+                if (p.includes('raydium')) {
+                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                }
+                
+                if (p.includes('boop')) {
+                  return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
+                }
+                
+                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) {
+                  return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+                }
+                
+                if (p.includes('bonk')) {
+                  return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+                }
+                
+                if (p.includes('bags')) {
+                  return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
+                }
+                
+                if (p.includes('launch')) {
+                  // LaunchLab uses Raydium icon
+                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                }
+                
+                // Default to pump.fun icon for unknown protocols
+                return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
               };
 
               const tokenIcon = getProtocolIcon(metadata?.protocol);
+              const p = metadata?.protocol?.toLowerCase() || '';
+              const isMeteora = p.includes('meteora');
+              const isBonk = p.includes('bonk');
+              const isBags = p.includes('bags');
+              const isMoonit = p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot');
+              const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
               const isHidden = hiddenTokens.has(pos.tokenAddress);
               
               return (
@@ -384,13 +461,19 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
                       <div 
                         className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/4 translate-y-1/4 z-10"
                         style={{ 
-                          width: 16, 
-                          height: 16,
+                          width: 20, 
+                          height: 20,
                           border: `2px solid ${protocolColor}`,
                           boxShadow: `0 0 4px ${protocolColor}60`
                         }}
                       >
-                        <span className="text-xs">{tokenIcon}</span>
+                        <Image
+                          src={tokenIcon}
+                          alt={`${metadata?.protocol || 'Protocol'} logo`}
+                          width={16}
+                          height={16}
+                          className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+                        />
                       </div>
                     </div>
                     <div className="flex flex-col min-w-0">
