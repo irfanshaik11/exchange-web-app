@@ -22,7 +22,6 @@
     "@t3-oss/env-nextjs": "^0.12.0",
     "@tanstack/react-query": "^5.77.1",
     "@types/qrcode": "^1.5.5",
-    "@web3icons/react": "^4.0.25",
     "bs58": "^6.0.0",
     "framer-motion": "^12.23.19",
     "js-cookie": "^3.0.5",
@@ -64,5 +63,11 @@
   "ct3aMetadata": {
     "initVersion": "7.39.3"
   },
-  "packageManager": "npm@10.7.0"
+  "packageManager": "npm@10.7.0",
+  "resolutions": {
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "use-sync-external-store": "1.2.0",
+    "@web3icons/react/react": "19.2.0"
+  }
 }

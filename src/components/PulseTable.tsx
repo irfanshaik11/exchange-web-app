@@ -38,7 +38,7 @@ import {
   MdDynamicFeed
 } from "react-icons/md";
 import { SiSolana } from "react-icons/si";
-import { TokenRAY, TokenSOL, TokenJUP, TokenMSOL, TokenUSDC, TokenLAUNCH, TokenDAO, TokenCUSDC, TokenDOBO } from '@web3icons/react';
+// Removed @web3icons/react to fix React version conflict
 import Image from 'next/image';
 
 /* ---- Enhanced Axiom AI Palette ---- */
@@ -1501,7 +1501,7 @@ const PulseTable = React.memo(function PulseTable({
   // Protocol and quote token data with official icons from web3icons
   const protocols = [
     { name: 'Pump', icon: <Image src="/pump.svg" alt="Pump" width={16} height={16} className="rounded-full" />, color: '#00ff88' },
-    { name: 'Bonk', icon: <TokenDOBO variant="branded" size={16} className="rounded-full" />, color: '#ff6b35' },
+    { name: 'Bonk', icon: <div className="w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold">B</div>, color: '#ff6b35' },
     { name: 'Bags', icon: <Image src="https://bags.fm/assets/images/bags-icon.png" alt="Bags" width={16} height={16} className="rounded-full" />, color: '#00d4aa' },
     // { name: 'Moonshot', icon: <Image src="https://play-lh.googleusercontent.com/bmv_OqsfmlR2Tfd7-4I2HS1twZdiJmmyX0warik6UxhUdSfegPMegeIRxxj9LGUBAQM" alt="Moonshot" width={16} height={16} className="rounded-full" />, color: '#a855f7' },
     // { name: 'Heaven', icon: <Image src="data:image/png;base64,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" alt="Heaven" width={16} height={16} className="rounded-full" />, color: '#8b5cf6' },
@@ -1514,7 +1514,7 @@ const PulseTable = React.memo(function PulseTable({
     { name: 'Boop', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/36393.png" alt="Boop" width={16} height={16} className="rounded-full" />, color: '#3b82f6' },
     { name: 'LaunchLab', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png" alt="LaunchLab" width={16} height={16} className="rounded-full" style={{ filter: 'hue-rotate(180deg) saturate(2) brightness(1.1)' }} />, color: '#3b82f6' },
     // { name: 'Dynamic BC', icon: <Image src="https://cdn.prod.website-files.com/626692727bba3f384e008e8a/67a5dca8b3ee5d0703f70040_icon-primary.webp" alt="Dynamic BC" width={16} height={16} className="rounded-full" />, color: '#f97316' },
-    { name: 'Raydium', icon: <TokenRAY variant="branded" size={16} className="rounded-full" />, color: '#6b7280' },
+    { name: 'Raydium', icon: <div className="w-4 h-4 bg-gray-500 rounded-full flex items-center justify-center text-white text-xs font-bold">R</div>, color: '#6b7280' },
     { name: 'Meteora AMM', icon: <Image src="/meteora.svg" alt="Meteora" width={16} height={16} className="rounded-full" />, color: '#92400e' },
     { name: 'Meteora AMM V2', icon: <Image src="/meteora.svg" alt="Meteora V2" width={16} height={16} className="rounded-full" />, color: '#a16207' },
     // { name: 'Pump AMM', icon: <Image src="/pump.svg" alt="Pump AMM" width={16} height={16} className="rounded-full" />, color: '#64748b' },
@@ -1522,8 +1522,8 @@ const PulseTable = React.memo(function PulseTable({
   ];
 
   const quoteTokens = [
-    { name: 'SOL', icon: <TokenSOL variant="branded" size={16} className="rounded-full" />, color: '#00ff88' },
-    { name: 'USDC', icon: <TokenUSDC variant="branded" size={16} className="rounded-full" />, color: '#06b6d4' },
+    { name: 'SOL', icon: <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-bold">S</div>, color: '#00ff88' },
+    { name: 'USDC', icon: <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold">U</div>, color: '#06b6d4' },
     { name: 'USD1', icon: <span className="w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center text-xs font-bold text-black">1</span>, color: '#fbbf24' }
   ];
 
