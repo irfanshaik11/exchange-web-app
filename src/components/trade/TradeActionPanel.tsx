@@ -201,6 +201,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
+  const [creatorAddress, setCreatorAddress] = useState<string>("");
 
   // WebSocket hook for real-time token stats
   const {
@@ -337,6 +338,29 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   // Extract stats for easier access
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
+
+  // Fetch creator address from token-service
+  useEffect(() => {
+    const fetchCreatorAddress = async () => {
+      try {
+        const response = await fetch(
+          `http://157.180.71.112:8080/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.filterTokens?.results?.[0]?.token?.creatorAddress) {
+            setCreatorAddress(data.filterTokens.results[0].token.creatorAddress);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch creator address:", error);
+      }
+    };
+    
+    if (token.mint) {
+      fetchCreatorAddress();
+    }
+  }, [token.mint]);
 
   // amount presets
   const [amountPresets, setAmountPresets] = useState<number[]>([0.01, 0.1, 0.5, 1]);
@@ -1405,21 +1429,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           tooltip="Contract Address - The token's smart contract address on Solana"
         />
         
-        {/* Dev Address - Commented out for now */}
-        {/* 
-        <AddressDisplay
-          label="DA"
-          address={creatorAddress}
-          icon={
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          }
-          solscanUrl={`https://solscan.io/account/${creatorAddress}`}
-          tooltip="Dev Address - The address of the token creator/developer"
-        />
-        */}
+        {/* Dev Address */}
+        {creatorAddress && (
+          <AddressDisplay
+            label="DA"
+            address={creatorAddress}
+            icon={
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            }
+            solscanUrl={`https://solscan.io/account/${creatorAddress}`}
+            tooltip="Dev Address - The address of the token creator/developer"
+          />
+        )}
       </div>
     </div>
   );
