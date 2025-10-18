@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { tradeSellPercentage } from '~/utils/api';
 import { formatSmartNumber } from '~/utils/db';
 import { getActivePositionsByUser } from '~/utils/functions';
 import type { PositionRow } from '~/utils/functions';
@@ -539,18 +538,15 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
                       </button>
                     </InterstateTooltip>
                     
-                    {/* Sell Arrow Icon */}
+                    {/* Trade Button - Navigate to trade page */}
                     {pos.actions === 'sell' && (
-                      <InterstateTooltip label="Sell">
+                      <InterstateTooltip label="Trade">
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
-                            tradeSellPercentage({
-                              tokenAddress: pos.tokenAddress,
-                              percentageToSell: 100,
-                            }, bearerToken)
+                            router.push(`/trade/${pos.tokenAddress}`);
                           }} 
-                          className="p-1.5 rounded hover:bg-red-600/20 transition-colors text-neutral-400 hover:text-red-500"
+                          className="p-1.5 rounded hover:bg-blue-600/20 transition-colors text-neutral-400 hover:text-blue-500"
                         >
                           <FaArrowUp className="text-sm" />
                         </button>
