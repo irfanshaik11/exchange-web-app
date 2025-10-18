@@ -13,6 +13,7 @@ import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -166,7 +167,7 @@ interface TradeActionPanelProps {
   token: Token;
   tradeParams?: {
     mode: "buy" | "sell";
-    tab: "market" | "limit" | "adv";
+    tab: "market" | "limit" | "adv" | "analytics";
     timeRange: "5m" | "1h" | "12h" | "24h";
     amount: string;
     targetMC: string;
@@ -191,7 +192,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   // Internal state with fallback to external props
   const [mode, setMode] = useState<"buy" | "sell">(externalTradeParams?.mode || "buy");
-  const [tab, setTab] = useState<"market" | "limit" | "adv">(externalTradeParams?.tab || "market");
+  const [tab, setTab] = useState<"market" | "limit" | "adv" | "analytics">(externalTradeParams?.tab || "market");
   const [timeRange, setTimeRange] = useState<TimeRange>(externalTradeParams?.timeRange as TimeRange || "5m");
   const [amount, setAmount] = useState(externalTradeParams?.amount || "");
   const [targetMC, setTargetMC] = useState(externalTradeParams?.targetMC || "");
@@ -500,7 +501,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       {/* ===== D. Tabs ===== */}
       <div className="px-3 pt-1 pb-1.5 border-b border-[#2A2B33]">
         <div className="flex items-center gap-6">
-          {(["market", "limit", "adv"] as const).map((t) => (
+          {(["market", "limit", "adv", "analytics"] as const).map((t) => (
             <button
               key={t}
               className={cx(tabBtn, "hover:text-[#E6E7EA]", tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]")}
@@ -866,8 +867,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         </div>
       )}
 
+      {/* ===== G. ANALYTICS TAB ===== */}
+      {tab === "analytics" && (
+        <div className="px-3 pt-2 pb-4">
+          <TokenAnalyticsPanel
+            mintAddress={token.mint}
+            tokenInfo={{
+              symbol: token.symbol,
+              name: token.name,
+              pool: effectivePoolAddress,
+              dex: getPoolTypeFromToken(token),
+            }}
+          />
+        </div>
+      )}
+
       {/* ===== Settings ===== */}
-      <div className="mx-3 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#E6E7EA]">
+      {tab !== "analytics" && (
+        <div className="mx-3 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#E6E7EA]">
         <InterstateTooltip label="Max Slippage">
           <span className="flex items-center gap-1 text-[#9CA3AF]">
             <FaRunning className="opacity-80" /> {settings.maxSlippage * 100}%
@@ -897,10 +914,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             {settings.mevMode === "off" ? "Off" : settings.mevMode === "reduced" ? "Reduced" : "Secure"}
           </span>
         </InterstateTooltip>
-      </div>
+        </div>
+      )}
 
       {/* Feedback */}
-      {message && (
+      {tab !== "analytics" && message && (
         <div
           className={cx(
             "mx-3 mt-2 rounded-md p-2 text-center text-[11px] font-bold",
@@ -912,7 +930,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       )}
 
       {/* Helper line */}
-      <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
+      {tab !== "analytics" && (
+        <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
         {amount ? (
           <>
             You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span> 
@@ -939,11 +958,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
           </>
         ) : null}
-      </div>
-
+        </div>
+      )}
 
       {/* Primary action */}
-      <div className="px-3 py-2">
+      {tab !== "analytics" && (
+        <div className="px-3 py-2">
         <button
           type="button"
           className={cx(
@@ -1248,7 +1268,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </span>
           )}
         </button>
-      </div>
+        </div>
+      )}
 
       {/* footer mini stats */}
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>

@@ -10,15 +10,11 @@ const config = {
   output: "standalone",
   // Disable error overlay in development (errors still logged to console)
   devIndicators: {
-    buildActivityPosition: "bottom-right",
+    position: "bottom-right",
   },
-  // Suppress runtime errors in development overlay
-  experimental: {
-    // This prevents caught errors from showing in the overlay
-    turbo: {
-      // Turbopack settings
-    },
-    esmExternals: "loose",
+  // Turbopack configuration
+  turbopack: {
+    // Turbopack settings
   },
   webpack: (config, { isServer }) => {
     // Handle CommonJS modules that don't support named exports
