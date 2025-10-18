@@ -68,6 +68,7 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "use-sync-external-store": "1.2.0",
-    "@web3icons/react/react": "19.2.0"
+    "@web3icons/react/react": "19.2.0",
+    "@vanilla-extract/sprinkles": "1.6.4"
   }
 }
