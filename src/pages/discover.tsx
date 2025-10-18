@@ -461,7 +461,23 @@ export default function Home() {
               <span className="mr-2 text-sm text-neutral-400">
                 Quick Buy
               </span>
-              <input value={quickBuyAmount} onChange={(e) => setQuickBuyAmount(e.target.value as unknown as number)} className="text-sm text-neutral-200 focus:outline-none outline-none w-12" />
+              <input 
+                value={quickBuyAmount} 
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Only allow numbers and decimal point
+                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                    setQuickBuyAmount(Number(value) || 0);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  // Prevent non-numeric characters except decimal point
+                  if (!/[0-9.]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
+                className="text-sm text-neutral-200 focus:outline-none outline-none w-12" 
+              />
               <img
                 src="https://axiom.trade/images/sol-fill.svg"
                 alt="Solana"
