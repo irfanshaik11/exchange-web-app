@@ -284,6 +284,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     return clamp(Math.round(((t - baseMarketCap) / baseMarketCap) * 100), -100, 100);
   }, [targetMC, baseMarketCap]);
 
+  // Initialize target market cap on entering Limit tab if empty/zero
+  useEffect(() => {
+    if (tab === "limit" && baseMarketCap > 0) {
+      const t = Number(targetMC);
+      if (!Number.isFinite(t) || t === 0) {
+        setTargetMC(String(Math.round(baseMarketCap)));
+        setSliderPct(0);
+      }
+    }
+  }, [tab, baseMarketCap]);
+
   // Sync slider percentage when market cap changes (e.g., from typing)
   useEffect(() => {
     if (baseMarketCap && targetMC) {
