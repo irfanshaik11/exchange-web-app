@@ -412,7 +412,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     const fetchCreatorAddress = async () => {
       try {
         const response = await fetch(
-          `http://157.180.71.112:8080/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
+          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
         );
         if (response.ok) {
           const data = await response.json();
