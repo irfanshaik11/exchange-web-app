@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FaSearch, FaStar, FaBell } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
@@ -66,6 +66,41 @@ export default function Header({
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+
+  // Toggle Search modal with Tab and '/' (outside of inputs)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!showSearch) return;
+      const isPlain = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+
+      // Close on Tab when open
+      if (e.key === "Tab" && isPlain) {
+        // If modal is open, close it immediately on Tab
+        if (searchModalOpen) {
+          e.preventDefault();
+          setSearchModalOpen(false);
+          return;
+        }
+        // Else, only open when focus isn't in an editable element
+        const t = (document.activeElement as HTMLElement) || null;
+        const isEditable = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t as any).isContentEditable);
+        if (isEditable) return; // allow normal tabbing in forms
+        e.preventDefault();
+        setSearchModalOpen(true);
+      }
+
+      // Toggle on '/' (slash). Some keyboards send '?' with Shift+'/'; we support both.
+      if ((e.key === '/' || e.key === '?') && isPlain) {
+        const t = (document.activeElement as HTMLElement) || null;
+        const isEditable = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t as any).isContentEditable);
+        if (isEditable) return; // do not steal from inputs
+        e.preventDefault();
+        setSearchModalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showSearch, searchModalOpen]);
 
   // Handles opening the deposit modal
   const handleDepositClick = () => {
@@ -133,31 +168,39 @@ export default function Header({
           </div>
           <div className="flex min-w-0 items-center gap-2">
             {showSearch && (
-              <button
-                onClick={() => setSearchModalOpen(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
-                style={{ 
-                  backgroundColor: AX.surface, 
-                  borderColor: AX.border,
-                  color: AX.muted 
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.08)';
-                  e.currentTarget.style.borderColor = '#22c55e';
-                  e.currentTarget.style.color = '#22c55e';
-                  e.currentTarget.style.boxShadow = '0 0 8px rgba(34, 197, 94, 0.3), 0 0 16px rgba(34, 197, 94, 0.15)';
-                  e.currentTarget.style.transform = 'scale(1.02)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = AX.surface;
-                  e.currentTarget.style.borderColor = AX.border;
-                  e.currentTarget.style.color = AX.muted;
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                <FaSearch size={14} />
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Pill-style search trigger with keycap hint (desktop) */}
+                <button
+                  onClick={() => setSearchModalOpen(true)}
+                  className="hidden md:flex items-center gap-2 h-8 rounded-full border px-3 pr-2 transition-all duration-300 ease-out"
+                  style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.muted }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.08)';
+                    e.currentTarget.style.borderColor = '#22c55e';
+                    e.currentTarget.style.boxShadow = '0 0 8px rgba(34, 197, 94, 0.3), 0 0 16px rgba(34, 197, 94, 0.15)';
+                    e.currentTarget.style.transform = 'scale(1.01)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  <FaSearch size={14} />
+                  <span className="text-xs text-neutral-400">Search by token or CA…</span>
+                  <span className="ml-auto rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">Tab</span>
+                </button>
+
+                {/* Compact icon-only trigger on small screens */}
+                <button
+                  onClick={() => setSearchModalOpen(true)}
+                  className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
+                  style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.muted }}
+                >
+                  <FaSearch size={14} />
+                </button>
+              </div>
             )}
             <button
               onClick={handleDepositClick}
