@@ -208,6 +208,7 @@ export type BuyParams = {
   amount: number;
   mevProtection?: 0 | 1;
   poolType: "PumpAmm" | "Raydium CPMM" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "bags" | "MoonShoot" | "";
+  originalPairAddress?: string; // Original pair address from token-service for trade history
   // Preset trading parameters
   slippage?: number; // e.g., 0.4 for 40%
   priorityFee?: number; // in SOL, e.g., 0.001
@@ -245,6 +246,7 @@ type SellPercentageParams = {
   baseMint: string;
   quoteMint: string;
   poolType?: string;
+  originalPairAddress?: string; // Original pair address from token-service for trade history
 };
 
 export const tradeSellPercentage = (
@@ -270,5 +272,130 @@ export const tradeSellExactAmount = (params: SellExactAmountParams) =>
     method: "POST",
     body: params,
   });
+
+/* -------------------------------------------------------------------------- */
+/*                       Token Analytics endpoints (Rust)                     */
+/* -------------------------------------------------------------------------- */
+
+const ANALYTICS_BASE_URL = process.env.NEXT_PUBLIC_ANALYTICS_URL || "http://localhost:4000";
+
+export interface TokenMetrics {
+  sniper_holding_percentage?: number;
+  insider_holding_percentage?: number;
+  bundle_holding_percentage?: number;
+  dev_holding_percentage?: number;
+  whale_holding_percentage?: number;
+  small_holding_percentage?: number;
+  total_holders_count?: number;
+  holder_distribution?: {
+    whales: number;
+    sharks: number;
+    fish: number;
+    shrimps: number;
+    holders?: Array<{
+      wallet: string;
+      amount: string;
+      pct: number;
+    }>;
+  };
+}
+
+/**
+ * Register a token with the analytics backend
+ */
+export const registerToken = async (params: {
+  mint: string;
+  symbol?: string;
+  name?: string;
+  pool?: string;
+  dex?: string;
+}) => {
+  const res = await fetch(`${ANALYTICS_BASE_URL}/tokens`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to register token: ${error}`);
+  }
+  
+  return res.json();
+};
+
+/**
+ * Get a specific metric for a token
+ */
+export const getTokenMetric = async (
+  mint: string,
+  metricKey: string,
+  refresh = false
+) => {
+  const url = `${ANALYTICS_BASE_URL}/metrics/${mint}/${metricKey}${refresh ? "?refresh=true" : ""}`;
+  
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  
+  if (!res.ok) {
+    if (res.status === 404) {
+      return null;
+    }
+    const error = await res.text();
+    throw new Error(`Failed to get metric: ${error}`);
+  }
+  
+  return res.json();
+};
+
+/**
+ * Get all metrics for a token
+ */
+export const getTokenMetrics = async (
+  mint: string,
+  refresh = false
+): Promise<{ mint: string; metrics: TokenMetrics }> => {
+  const url = `${ANALYTICS_BASE_URL}/tokens/${mint}/metrics${refresh ? "?refresh=true" : ""}`;
+  
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  
+  if (!res.ok) {
+    if (res.status === 404) {
+      return { mint, metrics: {} };
+    }
+    const error = await res.text();
+    throw new Error(`Failed to get metrics: ${error}`);
+  }
+  
+  return res.json();
+};
+
+/**
+ * Get holders list for a token
+ */
+export const getTokenHolders = async (
+  mint: string,
+  page = 1,
+  pageSize = 50
+) => {
+  const url = `${ANALYTICS_BASE_URL}/tokens/${mint}/holders?page=${page}&page_size=${pageSize}`;
+  
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to get holders: ${error}`);
+  }
+  
+  return res.json();
+};
 
 export { apiFetch };

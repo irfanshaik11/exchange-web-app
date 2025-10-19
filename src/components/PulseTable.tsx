@@ -40,6 +40,8 @@ import {
 import { SiSolana } from "react-icons/si";
 // Removed @web3icons/react to fix React version conflict
 import Image from 'next/image';
+import InterstatePopout from './InterstatePopout';
+import VerticalInput from './VerticalInput';
 
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
@@ -347,9 +349,10 @@ function TokenImage({
   // Use uri field from deployed service, fallback to image field, then token.logo
   const imageUrl = (token as any).uri || (token as any).image || token.logo;
 
-  // Calculate migration progress for border color (only for New Pairs)
+  // Calculate migration progress for border color (only for New Pairs, NOT for migrated)
   const getMigrationProgress = (token: Token): number => {
-    if (!isNewPairs) return 0; // Only apply to New Pairs
+    // Don't apply bonding progress to migrated column
+    if (!isNewPairs || columnType === 'migrated') return 0;
     
     // Priority order: bonding_pct, bonding_curve_progress, graduationPercent, market cap / 70k
     const bondingPct = (token as any).bonding_pct;
@@ -622,6 +625,12 @@ function TokenImage({
     target.style.boxShadow = 'none';
     target.style.transform = 'scale(1)';
   };
+
+  // Check if this is a high bonding Meteora token (only for Final Stretch, NOT for migrated)
+  const isFinalStretch = columnType === 'final-stretch';
+  const bondingPct = (token as any).bonding_pct ?? 0;
+  const isMigratedColumn = columnType === 'migrated';
+  const isHighBondingMeteora = isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
 
   return (
     <>
@@ -1197,6 +1206,11 @@ const PulseTable = React.memo(function PulseTable({
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showSnipeModal, setShowSnipeModal] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+  const [slippage, setSlippage] = useState(0);
+  const [priority, setPriority] = useState(0);
+  const [bribe, setBribe] = useState(0);
   const [activeFilterTab, setActiveFilterTab] = useState('New Pairs');
   const [activeCategoryTab, setActiveCategoryTab] = useState('Audit');
   const [selectedPill, setSelectedPill] = useState('P1');
@@ -1454,15 +1468,36 @@ const PulseTable = React.memo(function PulseTable({
 
     try {
       const poolType = getPoolTypeFromToken(token);
-      console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
+      console.log(`🔍 Quick Buy ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
+      
+      const settings = presets[activePreset].quickBuySettings;
+      console.log(`🎯 Quick Buy with presets:`, {
+        slippage: `${(settings.maxSlippage * 100).toFixed(1)}%`,
+        priorityFee: `${settings.priority} SOL`,
+        bribe: `${settings.bribe} SOL`,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+      });
       
       const data = await tradeBuy({
-        poolAddress: token.pair_address,
+        poolAddress: effectivePoolAddress,
         baseMint: token.mint,
         quoteMint: SOL_MINT_ADDRESS,
         amount: buyAmount,
-        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
+        mevProtection: settings.mevMode === "off" ? 0 : 1,
         poolType: poolType,
+        originalPairAddress: token.pair_address, // Original pair address from token-service
+        // Preset trading parameters
+        slippage: settings.maxSlippage || 0.4,
+        priorityFee: settings.priority || 0.0001,
+        bribe: settings.bribe || 0,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee || false,
+        maxFee: settings.maxFee || 0,
+        rpc: settings.rpc,
+        // Debugging metadata
         tokenName: token.name,
         tokenSymbol: token.symbol,
       }, user.bearerToken);
@@ -1933,6 +1968,56 @@ const PulseTable = React.memo(function PulseTable({
 
     // Sort tokens
     filtered.sort((a, b) => {
+      // Special sorting for Final Stretch: prioritize high bonding Meteora tokens by newest + highest bonding
+      if (title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch")) {
+        const aLaunchpadProtocol = (a as any).launchpad_protocol?.toLowerCase() || '';
+        const bLaunchpadProtocol = (b as any).launchpad_protocol?.toLowerCase() || '';
+        const aIsMeteora = aLaunchpadProtocol.includes('meteora');
+        const bIsMeteora = bLaunchpadProtocol.includes('meteora');
+        const aBondingPct = (a as any).bonding_pct ?? 0;
+        const bBondingPct = (b as any).bonding_pct ?? 0;
+        const aIsHighBondingMeteora = aIsMeteora && aBondingPct > 98.6;
+        const bIsHighBondingMeteora = bIsMeteora && bBondingPct > 98.6;
+        
+        // High bonding Meteora tokens go to top
+        if (aIsHighBondingMeteora && !bIsHighBondingMeteora) return -1;
+        if (!aIsHighBondingMeteora && bIsHighBondingMeteora) return 1;
+        
+        // If both are high bonding Meteora, sort by timestamp (newest first), then bonding percentage
+        if (aIsHighBondingMeteora && bIsHighBondingMeteora) {
+          // Get timestamps
+          const getTimestamp = (token: any): number => {
+            const ts = token?.launch_time ?? token?.launchTime ?? 
+                      token?.created_at ?? token?.createdAt ?? 
+                      token?.firstSeen ?? token?.first_seen ?? 
+                      token?.pair_created_at ?? token?.pairCreatedAt ?? 
+                      token?.timestamp ?? token?.ts ?? null;
+            
+            if (!ts) return 0;
+            if (typeof ts === 'number') return ts > 1e12 ? ts : ts > 1e9 ? ts * 1000 : 0;
+            if (typeof ts === 'string') {
+              const n = Number(ts);
+              if (!Number.isNaN(n) && n > 0) return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
+              const d = Date.parse(ts);
+              return Number.isNaN(d) ? 0 : d;
+            }
+            return 0;
+          };
+          
+          const aTimestamp = getTimestamp(a);
+          const bTimestamp = getTimestamp(b);
+          
+          // Sort by newest first (higher timestamp = newer)
+          const timestampDiff = bTimestamp - aTimestamp;
+          if (Math.abs(timestampDiff) > 60000) { // If timestamps differ by more than 1 minute
+            return timestampDiff;
+          }
+          
+          // If timestamps are similar, sort by bonding percentage (highest first)
+          return bBondingPct - aBondingPct;
+        }
+      }
+      
       let aValue, bValue;
       
       // Debug log for sort method
@@ -2021,30 +2106,27 @@ const PulseTable = React.memo(function PulseTable({
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => filteredAndSortedTokens, [filteredAndSortedTokens]);
 
-  // Add top 3 final stretch tokens to wave animation
+  // Add wave animation for all Meteora tokens with bonding_pct > 98.6% in Final Stretch only
   useEffect(() => {
     const isFinalStretch = title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch");
-    console.log(`[Wave Animation] Title: "${title}", isFinalStretch: ${isFinalStretch}, tokens: ${memoizedTokens.length}`);
+    const newWaveTokens = new Set<number>();
     
-    if (isFinalStretch && memoizedTokens.length > 0) {
-      // Add only top 3 final stretch tokens to wave animation set
-      const newWaveTokens = new Set<number>();
-      const topThreeCount = Math.min(3, memoizedTokens.length);
-      for (let i = 0; i < topThreeCount; i++) {
-        newWaveTokens.add(i);
-      }
-      console.log(`[Wave Animation] Setting wave tokens:`, Array.from(newWaveTokens));
-      setWaveTokens(newWaveTokens);
-      
-      // Keep animation running continuously for final stretch tokens
-      return () => {
-        // Don't clear the animation for final stretch tokens
-      };
-    } else {
-      // Clear animation for non-final-stretch tables
-      console.log(`[Wave Animation] Clearing wave tokens`);
-      setWaveTokens(new Set());
+    if (isFinalStretch) {
+      // Add ALL Meteora tokens with high bonding (they're now sorted to the top)
+      memoizedTokens.forEach((token, idx) => {
+        const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+        const isMeteora = launchpadProtocol.includes('meteora');
+        const bondingPct = (token as any).bonding_pct ?? 0;
+        
+        if (isMeteora && bondingPct > 98.6) {
+          newWaveTokens.add(idx);
+          console.log(`[Wave Animation] Adding Meteora token ${token.symbol} (bonding: ${bondingPct}%)`);
+        }
+      });
     }
+    
+    console.log(`[Wave Animation] Setting wave tokens for Final Stretch:`, Array.from(newWaveTokens));
+    setWaveTokens(newWaveTokens);
   }, [memoizedTokens, title]);
 
   const shortAddr = (token: any): string => {
@@ -4016,14 +4098,8 @@ const PulseTable = React.memo(function PulseTable({
                     title.toLowerCase().includes("stretch");
                   const isMigrated = title.toLowerCase().includes("migrated");
                   
-                  // Check if token is Meteora
+                  // Get launchpad protocol
                   const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
-                  const isMeteora = launchpadProtocol.includes('meteora');
-
-                  // Don't render the status popup at all for Meteora tokens
-                  if (isMeteora) {
-                    return null;
-                  }
 
                   return (
                     <span
@@ -4057,19 +4133,42 @@ const PulseTable = React.memo(function PulseTable({
                             </span>
                           );
                         } else if (isFinalStretch) {
-                          // Show "migrating" for final stretch
+                          // Show "Migrating" for final stretch tokens
                           return (
                             <span style={{ color: AX.aiCyan }}>
                               Migrating
                             </span>
                           );
                         } else if (isMigrated) {
-                          // Show "migrated" for migrated tokens
-                          return (
-                            <span style={{ color: AX.aiBlue }}>
-                              Migrated
-                            </span>
-                          );
+                          // Show protocol-specific text for migrated tokens
+                          if (launchpadProtocol.includes('meteora')) {
+                            return (
+                              <span style={{ color: AX.aiBlue }}>
+                                Virtual Curve
+                              </span>
+                            );
+                          } else if (launchpadProtocol.includes('pump')) {
+                            return (
+                              <span style={{ color: AX.aiBlue }}>
+                                PumpV1
+                              </span>
+                            );
+                          } else if (launchpadProtocol.includes('bonk') || 
+                                     launchpadProtocol.includes('raydium') || 
+                                     launchpadProtocol.includes('launchlab')) {
+                            return (
+                              <span style={{ color: AX.aiBlue }}>
+                                LaunchLab
+                              </span>
+                            );
+                          } else {
+                            // Fallback to "Migrated" for unknown protocols
+                            return (
+                              <span style={{ color: AX.aiBlue }}>
+                                Migrated
+                              </span>
+                            );
+                          }
                         } else {
                           // Fallback to bonding curve progress
                           const bondingProgress =
@@ -4693,7 +4792,7 @@ const PulseTable = React.memo(function PulseTable({
                         </span> */}
                       </div>
                       <button 
-                        className="flex cursor-pointer items-center gap-1 rounded-full px-0.5 py-0.5 text-[10px] font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100"
+                        className="flex cursor-pointer items-center gap-2 rounded-full px-1 py-1 text-sm font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100 z-50"
                         style={{ 
                           backgroundColor: AX.aiGreen, 
                           color: '#000000' 
@@ -4706,11 +4805,70 @@ const PulseTable = React.memo(function PulseTable({
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleQuickBuy(token);
+                          // For migrated column, don't check bonding/snipe logic - just quick buy
+                          const isMigratedColumn = title.toLowerCase().includes('migrated');
+                          
+                          if (isMigratedColumn) {
+                            handleQuickBuy(token);
+                          } else {
+                            // For other columns, check for high bonding Meteora tokens
+                            const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+                            const isMeteora = launchpadProtocol.includes('meteora');
+                            const bondingPct = (token as any).bonding_pct ?? 0;
+                            const isHighBondingMeteora = isMeteora && bondingPct > 98.6;
+                            
+                            if (isHighBondingMeteora) {
+                              setSelectedToken(token);
+                              setShowSnipeModal(true);
+                            } else {
+                              handleQuickBuy(token);
+                            }
+                          }
                         }}
                       >
-                        <HiLightningBolt className="text-black" size={12} /> {thunderAmount || '0'}
-                        SOL
+                        {(() => {
+                          const isMigratedColumn = title.toLowerCase().includes('migrated');
+                          
+                          // For migrated column, always show regular thunder (no snipe icon)
+                          if (isMigratedColumn) {
+                            return (
+                              <>
+                                <HiLightningBolt className="text-black" size={12} /> {thunderAmount || '0'}
+                                SOL
+                              </>
+                            );
+                          }
+                          
+                          // For other columns, check for high bonding Meteora tokens
+                          const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+                          const isMeteora = launchpadProtocol.includes('meteora');
+                          const bondingPct = (token as any).bonding_pct ?? 0;
+                          const isHighBondingMeteora = isMeteora && bondingPct > 98.6;
+                          
+                          if (isHighBondingMeteora) {
+                            // Snipe logo for high bonding Meteora tokens - bigger and darker
+                            return (
+                              <>
+                                <img 
+                                  src="https://static.thenounproject.com/png/2098274-200.png" 
+                                  alt="Snipe" 
+                                  width="18" 
+                                  height="18" 
+                                  style={{ filter: 'brightness(0.3)' }}
+                                />
+                                {thunderAmount || '0'} SOL
+                              </>
+                            );
+                          } else {
+                            // Regular thunder for other tokens
+                            return (
+                              <>
+                                <HiLightningBolt className="text-black" size={12} /> {thunderAmount || '0'}
+                                SOL
+                              </>
+                            );
+                          }
+                        })()}
                       </button>
                     </div>
                   </div>
@@ -4810,6 +4968,78 @@ const PulseTable = React.memo(function PulseTable({
                     <span className="text-xs text-gray-500">-</span>
                   </span> */}
                 </div>
+                
+                {/* Red Meteora -> Arrows -> Yellow Meteora for High Bonding Tokens - Bottom-right of full row */}
+                {(() => {
+                  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+                  const isMeteora = launchpadProtocol.includes('meteora');
+                  const bondingPct = (token as any).bonding_pct ?? 0;
+                  const isFinalStretch = title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch");
+                  const isMigratedColumn = title.toLowerCase().includes('migrated');
+                  const isHighBondingMeteora = isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
+                  
+                  if (isHighBondingMeteora) {
+                    return (
+                      <div className="absolute bottom-2 right-2 flex items-center gap-0.5 z-0">
+                        {/* Red Meteora Logo (left) */}
+                        <div 
+                          className="w-4 h-4 rounded-full overflow-hidden flex items-center justify-center relative" 
+                          style={{ 
+                            border: '0.5px solid #ff4662',
+                            backgroundColor: 'transparent'
+                          }}
+                        >
+                          <img 
+                            src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+                            alt="Meteora" 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        
+                        {/* 3 Green Chevron Arrows */}
+                        {[0, 1, 2].map((i) => (
+                          <svg
+                            key={i}
+                            width="3"
+                            height="4"
+                            viewBox="0 0 3 4"
+                            fill="none"
+                            className="animate-pulse"
+                            style={{
+                              animationDelay: `${i * 0.2}s`,
+                              animationDuration: '1s'
+                            }}
+                          >
+                            <path
+                              d="M0.5 0.5L2.5 2L0.5 3.5"
+                              stroke="#22c55e"
+                              strokeWidth="1"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ))}
+                        
+                        {/* Yellow Meteora Logo (right) */}
+                        <div 
+                          className="w-4 h-4 rounded-full overflow-hidden flex items-center justify-center relative" 
+                          style={{ 
+                            border: '0.5px solid #fbbf24',
+                            backgroundColor: 'transparent'
+                          }}
+                        >
+                          <img 
+                            src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+                            alt="Meteora" 
+                            className="w-full h-full object-cover"
+                            style={{ filter: 'sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)' }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             );
           })
@@ -4894,6 +5124,135 @@ const PulseTable = React.memo(function PulseTable({
             <span className="text-sm font-medium">Copied to clipboard!</span>
           </div>
         </div>
+      )}
+
+      {/* Snipe on Migration Modal */}
+      {showSnipeModal && selectedToken && (
+        <InterstatePopout
+          open={showSnipeModal}
+          onClose={() => setShowSnipeModal(false)}
+          align="center"
+          className="relative flex w-full max-w-md mx-auto flex-col gap-2 border border-neutral-600 bg-neutral-900 text-neutral-100 shadow-2xl rounded-lg"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-neutral-600 px-4 py-2 text-lg text-neutral-300">
+            Snipe on Migration
+            <button
+              onClick={() => setShowSnipeModal(false)}
+              className="text-2xl text-neutral-400 hover:text-white"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* SNIPE AMOUNT Section - Matching TradeActionPanel */}
+          <div className="mx-3 mb-4">
+            <div className="relative rounded-lg border border-neutral-700/90 bg-neutral-800">
+              <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Amount</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.,]?[0-9]*"
+                    className="h-8 w-20 bg-transparent border-none text-left pl-2
+                               text-[12px] font-normal text-[#E6E7EA] tabular-nums
+                               placeholder:text-[#9CA3AF] focus:outline-none"
+                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                    placeholder="0.00"
+                    value={thunderAmount}
+                    onChange={(e) => setThunderAmount(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <SiSolana className="text-[#9CA3AF]" size={16} />
+                  <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">SOL</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              {['0.01', '0.1', '1', '10'].map((amount) => (
+                <button
+                  key={amount}
+                  onClick={() => setThunderAmount(amount)}
+                  className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded text-white text-sm hover:bg-neutral-700 transition-colors"
+                >
+                  {amount}
+                </button>
+              ))}
+              <button className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded text-white text-sm hover:bg-neutral-700 transition-colors">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 20h9"></path>
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Buy Button - Matching preset popup */}
+          <div className="mx-4 mb-4">
+            <button
+              onClick={() => {
+                handleQuickBuy(selectedToken);
+                setShowSnipeModal(false);
+              }}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
+            >
+              Buy {selectedToken.symbol} {thunderAmount || '0'}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          {/* Settings Inputs - Matching preset popup */}
+          <div className="mb-4 grid grid-cols-3 gap-2 px-4">
+            <VerticalInput
+              label="SLIPPAGE"
+              value={slippage}
+              setValue={setSlippage}
+              icon={<FaRunning />}
+            />
+            <VerticalInput
+              label="PRIORITY"
+              value={priority}
+              setValue={setPriority}
+              icon={<FaGasPump />}
+            />
+            <VerticalInput
+              label="BRIBE"
+              value={bribe}
+              setValue={setBribe}
+              icon={<FaCoins />}
+            />
+          </div>
+
+          {/* MEV Mode - Matching preset popup */}
+          <div className="mx-4 mb-4 flex gap-2 rounded-lg border border-neutral-700/90 px-1 py-1">
+            <button className="flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors bg-emerald-300/20 text-emerald-200">
+              Off
+            </button>
+            <button className="flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200">
+              Reduced
+            </button>
+            <button className="flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200">
+              Secure
+            </button>
+          </div>
+
+          {/* RPC - Matching preset popup */}
+          <div className="mx-4 mb-4">
+            <label className="block text-neutral-400 text-xs mb-2">RPC</label>
+            <input
+              type="text"
+              value="https://api.mainnet-beta.solana.com"
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              readOnly
+            />
+          </div>
+        </InterstatePopout>
       )}
 
     </div>

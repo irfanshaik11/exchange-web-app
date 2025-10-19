@@ -67,7 +67,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           volume_24h: r.volume_24h ?? 0,
           price_percent_change_1h: r.price_change_1h ?? 0,
           bonding_curve_progress: parseFloat(r.bonding_pct ?? 0), // bonding_pct is already a percentage
-          graduation_percent: parseFloat(r.graduation_percent ?? 0), // graduation_percent for hover display
+          graduation_percent: parseFloat(r.graduation_percent ?? 0), // graduation_percent for hover display (snake_case)
+          graduationPercent: parseFloat(r.graduation_percent ?? 0), // graduation_percent for hover display (camelCase for compatibility)
           bonding_pct: parseFloat(r.bonding_pct ?? 0), // Also include raw bonding_pct for fallback
           created_at: r.launch_time || r.created_at || null,
           launch_time: r.launch_time || null,

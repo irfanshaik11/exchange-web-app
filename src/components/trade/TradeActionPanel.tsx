@@ -13,6 +13,7 @@ import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+// import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -162,11 +163,71 @@ const formatCompactNumber = (n: number): string => {
   return Math.round(n).toString();
 };
 
+// Meteora Migration Logo Component
+const MeteoraMigrationLogo: React.FC = () => (
+  <div className="flex items-center justify-center gap-1 mb-4">
+    {/* Red Meteora Logo (left) */}
+    <div 
+      className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center relative" 
+      style={{ 
+        border: '0.5px solid #ff4662',
+        backgroundColor: 'transparent'
+      }}
+    >
+      <img 
+        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+        alt="Meteora" 
+        className="w-full h-full object-cover"
+      />
+    </div>
+    
+    {/* 3 Green Chevron Arrows */}
+    {[0, 1, 2].map((i) => (
+      <svg
+        key={i}
+        width="4"
+        height="5"
+        viewBox="0 0 4 5"
+        fill="none"
+        className="animate-pulse"
+        style={{
+          animationDelay: `${i * 0.2}s`,
+          animationDuration: '1s'
+        }}
+      >
+        <path
+          d="M0.5 0.5L3.5 2.5L0.5 4.5"
+          stroke="#22c55e"
+          strokeWidth="1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ))}
+    
+    {/* Yellow Meteora Logo (right) */}
+    <div 
+      className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center relative" 
+      style={{ 
+        border: '0.5px solid #fbbf24',
+        backgroundColor: 'transparent'
+      }}
+    >
+      <img 
+        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+        alt="Meteora" 
+        className="w-full h-full object-cover"
+        style={{ filter: 'sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)' }}
+      />
+    </div>
+  </div>
+);
+
 interface TradeActionPanelProps {
   token: Token;
   tradeParams?: {
     mode: "buy" | "sell";
-    tab: "market" | "limit" | "adv";
+    tab: "market" | "limit" | "adv"; // | "analytics";
     timeRange: "5m" | "1h" | "12h" | "24h";
     amount: string;
     targetMC: string;
@@ -200,6 +261,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
+  const [creatorAddress, setCreatorAddress] = useState<string>("");
+
+  // Check if this is a high bonding Meteora token that should show migration UI
+  const isMigratingToken = useMemo(() => {
+    const launchpadProtocol = token.launchpad_protocol?.toLowerCase() || '';
+    const isMeteora = launchpadProtocol.includes('meteora');
+    const bondingPct = token.bonding_pct ?? 0;
+    return isMeteora && bondingPct > 98.6;
+  }, [token.launchpad_protocol, token.bonding_pct]);
 
   // WebSocket hook for real-time token stats
   const {
@@ -347,6 +417,29 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   // Extract stats for easier access
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
+
+  // Fetch creator address from token-service
+  useEffect(() => {
+    const fetchCreatorAddress = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.filterTokens?.results?.[0]?.token?.creatorAddress) {
+            setCreatorAddress(data.filterTokens.results[0].token.creatorAddress);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch creator address:", error);
+      }
+    };
+    
+    if (token.mint) {
+      fetchCreatorAddress();
+    }
+  }, [token.mint]);
 
   // amount presets
   const [amountPresets, setAmountPresets] = useState<number[]>([0.01, 0.1, 0.5, 1]);
@@ -514,14 +607,35 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           {(["market", "limit", "adv"] as const).map((t) => (
             <button
               key={t}
-              className={cx(tabBtn, "hover:text-[#E6E7EA]", tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]")}
-              onClick={() => setTab(t)}
+              className={cx(
+                tabBtn, 
+                "hover:text-[#E6E7EA]", 
+                tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]",
+                isMigratingToken && t === "market" && "opacity-50 cursor-not-allowed blur-sm"
+              )}
+              onClick={() => {
+                if (isMigratingToken && t === "market") return; // Disable market tab for migrating tokens
+                setTab(t);
+              }}
+              disabled={isMigratingToken && t === "market"}
             >
               {t === "adv" ? "Adv." : t[0].toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
       </div>
+
+      {/* ===== Migration Message for High Bonding Meteora Tokens ===== */}
+      {isMigratingToken && (
+        <div className="px-3 pt-4 pb-2">
+          <div className="text-center">
+            <MeteoraMigrationLogo />
+            <p className="text-white text-sm leading-relaxed">
+              This pair is currently migrating. This may take up to 30 minutes. In the meantime, you can still place limit orders, and buy or sell on migration!
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ===== E. Migration/Dev Sell Toggle ===== */}
       {tab === "adv" && (
@@ -877,6 +991,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         </div>
       )}
 
+      {/* ===== G. ANALYTICS TAB ===== */}
+      {/* Analytics panel commented out
+      {tab === "analytics" && (
+        <div className="px-3 pt-2 pb-4">
+          <TokenAnalyticsPanel
+            mintAddress={token.mint}
+            tokenInfo={{
+              symbol: token.symbol,
+              name: token.name,
+              pool: effectivePoolAddress,
+              dex: getPoolTypeFromToken(token),
+            }}
+          />
+        </div>
+      */}
+
       {/* ===== Settings ===== */}
       <div className="mx-3 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#E6E7EA]">
         <InterstateTooltip label="Max Slippage">
@@ -908,7 +1038,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             {settings.mevMode === "off" ? "Off" : settings.mevMode === "reduced" ? "Reduced" : "Secure"}
           </span>
         </InterstateTooltip>
-      </div>
+        </div>
 
       {/* Feedback */}
       {message && (
@@ -950,8 +1080,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
           </>
         ) : null}
-      </div>
-
+        </div>
 
       {/* Primary action */}
       <div className="px-3 py-2">
@@ -1110,6 +1239,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     baseMint: token.mint,
                     quoteMint: SOL_MINT_ADDRESS,
                     poolType,
+                    originalPairAddress: token.pair_address, // Original pair address from token-service
                   }, user.bearerToken)
                     .catch((err) => {
                       // Capture error without throwing to prevent Next.js overlay
@@ -1249,7 +1379,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             "Processing..."
           ) : (
             <span className="inline-flex items-center gap-1">
-              {mode === "buy" ? "Buy" : "Sell"} {token.symbol}
+              {isMigratingToken && mode === "buy" ? "Snipe" : mode === "buy" ? "Buy" : "Sell"} {token.symbol}
               {prettyAmt(amount) && (
                 <>
                   {" "}{prettyAmt(amount)}
@@ -1259,7 +1389,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </span>
           )}
         </button>
-      </div>
+        </div>
 
       {/* footer mini stats */}
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
@@ -1395,21 +1525,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           tooltip="Contract Address - The token's smart contract address on Solana"
         />
         
-        {/* Dev Address - Commented out for now */}
-        {/* 
-        <AddressDisplay
-          label="DA"
-          address={creatorAddress}
-          icon={
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
-            </svg>
-          }
-          solscanUrl={`https://solscan.io/account/${creatorAddress}`}
-          tooltip="Dev Address - The address of the token creator/developer"
-        />
-        */}
+        {/* Dev Address */}
+        {creatorAddress && (
+          <AddressDisplay
+            label="DA"
+            address={creatorAddress}
+            icon={
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            }
+            solscanUrl={`https://solscan.io/account/${creatorAddress}`}
+            tooltip="Dev Address - The address of the token creator/developer"
+          />
+        )}
       </div>
     </div>
   );

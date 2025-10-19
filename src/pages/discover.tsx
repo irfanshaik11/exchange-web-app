@@ -34,6 +34,7 @@ import FilterPopout from '../components/FilterPopout';
 import throttle from 'lodash.throttle';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
+import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 import { env } from "../env";
 
 const navLinks = [
@@ -262,13 +263,31 @@ export default function Home() {
       return;
     }
     try {
+      const poolType = getPoolTypeFromToken(token);
+      const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
+      console.log(`🔍 Quick Buy ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
+      
+      const settings = presets[activePreset].quickBuySettings;
       const data = await tradeBuy({
-        poolAddress: token.pair_address,
-        baseMint: token.mint, // Use token.mint as baseMint
-        quoteMint: SOL_MINT_ADDRESS, // Always SOL
+        poolAddress: effectivePoolAddress,
+        baseMint: token.mint,
+        quoteMint: SOL_MINT_ADDRESS,
         amount: quickBuyAmount,
-        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
-        poolType: "PumpAmm" // Assuming this is a PumpAmm pool
+        mevProtection: settings.mevMode === "off" ? 0 : 1,
+        poolType: poolType,
+        originalPairAddress: token.pair_address, // Original pair address from token-service
+        // Preset trading parameters
+        slippage: settings.maxSlippage || 0.4,
+        priorityFee: settings.priority || 0.0001,
+        bribe: settings.bribe || 0,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee || false,
+        maxFee: settings.maxFee || 0,
+        rpc: settings.rpc,
+        // Debugging metadata
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
       }, user.bearerToken);
       
       // Handle different response formats from backend

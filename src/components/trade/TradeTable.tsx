@@ -47,9 +47,9 @@ interface TradeTableProps {
 
 const TradeTable: React.FC<TradeTableProps> = ({ trades, loading }) => {
   return (
-    <div className="w-full h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+    <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
       <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-[#1E1F26] z-10">
+        <thead className="sticky top-0 bg-[#1E1F26] z-20">
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Age</th>
             <th className="px-2 py-2 text-left">Type</th>
@@ -92,6 +92,12 @@ const TradeTable: React.FC<TradeTableProps> = ({ trades, loading }) => {
                 </tr>
               );
             })
+          )}
+          {/* Spacer row for bottom padding to ensure last item is scrollable */}
+          {!loading && trades && trades.length > 0 && (
+            <tr style={{ height: '48px' }}>
+              <td colSpan={6}></td>
+            </tr>
           )}
         </tbody>
       </table>

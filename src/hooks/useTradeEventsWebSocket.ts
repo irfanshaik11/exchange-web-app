@@ -93,6 +93,8 @@ export default function useTradeEventsWebSocket({
             timestamp: timestamp,
             maker: event.maker,
             transactionHash: event.transactionHash,
+            // Total USD value of the trade
+            totalUSD: parseFloat(String(event.token0SwapValueUsd)),
             // Keep original data for reference
             originalEvent: event,
           };
