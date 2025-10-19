@@ -349,9 +349,10 @@ function TokenImage({
   // Use uri field from deployed service, fallback to image field, then token.logo
   const imageUrl = (token as any).uri || (token as any).image || token.logo;
 
-  // Calculate migration progress for border color (only for New Pairs)
+  // Calculate migration progress for border color (only for New Pairs, NOT for migrated)
   const getMigrationProgress = (token: Token): number => {
-    if (!isNewPairs) return 0; // Only apply to New Pairs
+    // Don't apply bonding progress to migrated column
+    if (!isNewPairs || columnType === 'migrated') return 0;
     
     // Priority order: bonding_pct, bonding_curve_progress, graduationPercent, market cap / 70k
     const bondingPct = (token as any).bonding_pct;
@@ -625,10 +626,11 @@ function TokenImage({
     target.style.transform = 'scale(1)';
   };
 
-  // Check if this is a high bonding Meteora token (only for Final Stretch)
+  // Check if this is a high bonding Meteora token (only for Final Stretch, NOT for migrated)
   const isFinalStretch = columnType === 'final-stretch';
   const bondingPct = (token as any).bonding_pct ?? 0;
-  const isHighBondingMeteora = isFinalStretch && isMeteora && bondingPct > 98.6;
+  const isMigratedColumn = columnType === 'migrated';
+  const isHighBondingMeteora = isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
 
   return (
     <>
@@ -1470,13 +1472,32 @@ const PulseTable = React.memo(function PulseTable({
       console.log(`🔍 Quick Buy ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
       console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
       
+      const settings = presets[activePreset].quickBuySettings;
+      console.log(`🎯 Quick Buy with presets:`, {
+        slippage: `${(settings.maxSlippage * 100).toFixed(1)}%`,
+        priorityFee: `${settings.priority} SOL`,
+        bribe: `${settings.bribe} SOL`,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+      });
+      
       const data = await tradeBuy({
         poolAddress: effectivePoolAddress,
         baseMint: token.mint,
         quoteMint: SOL_MINT_ADDRESS,
         amount: buyAmount,
-        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
+        mevProtection: settings.mevMode === "off" ? 0 : 1,
         poolType: poolType,
+        originalPairAddress: token.pair_address, // Original pair address from token-service
+        // Preset trading parameters
+        slippage: settings.maxSlippage || 0.4,
+        priorityFee: settings.priority || 0.0001,
+        bribe: settings.bribe || 0,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee || false,
+        maxFee: settings.maxFee || 0,
+        rpc: settings.rpc,
+        // Debugging metadata
         tokenName: token.name,
         tokenSymbol: token.symbol,
       }, user.bearerToken);
@@ -4771,7 +4792,7 @@ const PulseTable = React.memo(function PulseTable({
                         </span> */}
                       </div>
                       <button 
-                        className="flex cursor-pointer items-center gap-1 rounded-full px-0.5 py-0.5 text-[10px] font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100 z-50"
+                        className="flex cursor-pointer items-center gap-2 rounded-full px-1 py-1 text-sm font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100 z-50"
                         style={{ 
                           backgroundColor: AX.aiGreen, 
                           color: '#000000' 
@@ -4784,20 +4805,41 @@ const PulseTable = React.memo(function PulseTable({
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
-                          const isMeteora = launchpadProtocol.includes('meteora');
-                          const bondingPct = (token as any).bonding_pct ?? 0;
-                          const isHighBondingMeteora = isMeteora && bondingPct > 98.6;
+                          // For migrated column, don't check bonding/snipe logic - just quick buy
+                          const isMigratedColumn = title.toLowerCase().includes('migrated');
                           
-                          if (isHighBondingMeteora) {
-                            setSelectedToken(token);
-                            setShowSnipeModal(true);
-                          } else {
+                          if (isMigratedColumn) {
                             handleQuickBuy(token);
+                          } else {
+                            // For other columns, check for high bonding Meteora tokens
+                            const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+                            const isMeteora = launchpadProtocol.includes('meteora');
+                            const bondingPct = (token as any).bonding_pct ?? 0;
+                            const isHighBondingMeteora = isMeteora && bondingPct > 98.6;
+                            
+                            if (isHighBondingMeteora) {
+                              setSelectedToken(token);
+                              setShowSnipeModal(true);
+                            } else {
+                              handleQuickBuy(token);
+                            }
                           }
                         }}
                       >
                         {(() => {
+                          const isMigratedColumn = title.toLowerCase().includes('migrated');
+                          
+                          // For migrated column, always show regular thunder (no snipe icon)
+                          if (isMigratedColumn) {
+                            return (
+                              <>
+                                <HiLightningBolt className="text-black" size={12} /> {thunderAmount || '0'}
+                                SOL
+                              </>
+                            );
+                          }
+                          
+                          // For other columns, check for high bonding Meteora tokens
                           const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
                           const isMeteora = launchpadProtocol.includes('meteora');
                           const bondingPct = (token as any).bonding_pct ?? 0;
@@ -4933,7 +4975,8 @@ const PulseTable = React.memo(function PulseTable({
                   const isMeteora = launchpadProtocol.includes('meteora');
                   const bondingPct = (token as any).bonding_pct ?? 0;
                   const isFinalStretch = title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch");
-                  const isHighBondingMeteora = isFinalStretch && isMeteora && bondingPct > 98.6;
+                  const isMigratedColumn = title.toLowerCase().includes('migrated');
+                  const isHighBondingMeteora = isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
                   
                   if (isHighBondingMeteora) {
                     return (

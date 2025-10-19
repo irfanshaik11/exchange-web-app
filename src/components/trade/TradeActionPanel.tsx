@@ -1228,6 +1228,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     baseMint: token.mint,
                     quoteMint: SOL_MINT_ADDRESS,
                     poolType,
+                    originalPairAddress: token.pair_address, // Original pair address from token-service
                   }, user.bearerToken)
                     .catch((err) => {
                       // Capture error without throwing to prevent Next.js overlay
