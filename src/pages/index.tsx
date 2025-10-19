@@ -260,12 +260,17 @@ export default function Home() {
 
   // QUICK BUY handler
   async function handleQuickBuy(token: Token) {
+    console.log("🎯 handleQuickBuy called for token:", token.symbol);
+    
     if (!user) {
+      console.log("❌ No user found");
       return;
     }
     try {
       const poolType = getPoolTypeFromToken(token);
+      
       console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      console.log("💰 Buy amount:", quickBuyAmount);
       
       const data = await tradeBuy({
         poolAddress: token.pair_address,
@@ -274,6 +279,14 @@ export default function Home() {
         amount: quickBuyAmount,
         mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
         poolType: poolType,
+        // Trading parameters from presets
+        slippage: presets[activePreset].quickBuySettings.maxSlippage,
+        priorityFee: presets[activePreset].quickBuySettings.priority,
+        bribe: presets[activePreset].quickBuySettings.bribe,
+        mevMode: presets[activePreset].quickBuySettings.mevMode,
+        autoFee: presets[activePreset].quickBuySettings.autoFee,
+        maxFee: presets[activePreset].quickBuySettings.maxFee,
+        rpc: presets[activePreset].quickBuySettings.rpc,
         // Debugging metadata
         tokenName: token.name,
         tokenSymbol: token.symbol,
@@ -294,6 +307,13 @@ export default function Home() {
       }
     } catch (e: any) {
       console.error('Quick Buy error:', e);
+      console.error('Error details:', {
+        message: e?.message,
+        code: e?.code,
+        status: e?.status,
+        details: e?.details,
+        fullError: e
+      });
       
       // Handle structured API errors
       if (e instanceof ApiError) {

@@ -258,17 +258,33 @@ export default function Home() {
 
   // QUICK BUY handler
   async function handleQuickBuy(token: Token) {
+    console.log("🎯 handleQuickBuy called for token:", token.symbol);
+    
     if (!user) {
+      console.log("❌ No user found");
       return;
     }
     try {
+      console.log("💰 Buy amount:", quickBuyAmount);
+      
       const data = await tradeBuy({
         poolAddress: token.pair_address,
         baseMint: token.mint, // Use token.mint as baseMint
         quoteMint: SOL_MINT_ADDRESS, // Always SOL
         amount: quickBuyAmount,
         mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
-        poolType: "PumpAmm" // Assuming this is a PumpAmm pool
+        poolType: "PumpAmm", // Assuming this is a PumpAmm pool
+        // Trading parameters from presets
+        slippage: presets[activePreset].quickBuySettings.maxSlippage,
+        priorityFee: presets[activePreset].quickBuySettings.priority,
+        bribe: presets[activePreset].quickBuySettings.bribe,
+        mevMode: presets[activePreset].quickBuySettings.mevMode,
+        autoFee: presets[activePreset].quickBuySettings.autoFee,
+        maxFee: presets[activePreset].quickBuySettings.maxFee,
+        rpc: presets[activePreset].quickBuySettings.rpc,
+        // Debugging metadata
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
       }, user.bearerToken);
       
       // Handle different response formats from backend
@@ -286,6 +302,13 @@ export default function Home() {
       }
     } catch (e: any) {
       console.error('Quick Buy error:', e);
+      console.error('Error details:', {
+        message: e?.message,
+        code: e?.code,
+        status: e?.status,
+        details: e?.details,
+        fullError: e
+      });
       toast.error(`❌ Quick Buy failed: ${e.message || "Unknown error"}`);
     }
   }

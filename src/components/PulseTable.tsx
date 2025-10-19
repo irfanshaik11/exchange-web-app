@@ -1199,7 +1199,7 @@ const PulseTable = React.memo(function PulseTable({
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilterTab, setActiveFilterTab] = useState('New Pairs');
   const [activeCategoryTab, setActiveCategoryTab] = useState('Audit');
-  const [selectedPill, setSelectedPill] = useState('P1');
+  const [selectedPill, setSelectedPill] = useState('P1'); // Each column has its own preset selection
   const [thunderAmount, setThunderAmount] = useState('0.0');
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
@@ -1437,32 +1437,54 @@ const PulseTable = React.memo(function PulseTable({
   
   // Quick buy functionality
   const { user } = useUser();
-  const { presets, activePreset } = useQuickBuy();
+  const { presets, activePreset, setActivePreset } = useQuickBuy();
+  
+  // Get the preset index from the selected pill for this column
+  const getPresetIndex = () => {
+    return parseInt(selectedPill.replace('P', '')) - 1;
+  };
   
   // QUICK BUY handler
   const handleQuickBuy = async (token: Token) => {
+    console.log("🎯 handleQuickBuy called for token:", token.symbol);
+    
     if (!user) {
+      console.log("❌ No user found");
       toast.error("⚠️ Please connect your wallet to trade");
       return;
     }
 
     const buyAmount = parseFloat(thunderAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
+      console.log("❌ Invalid buy amount:", thunderAmount);
       toast.error("⚠️ Please enter a valid SOL amount");
       return;
     }
 
     try {
       const poolType = getPoolTypeFromToken(token);
+      const presetIndex = getPresetIndex();
+      const preset = presets[presetIndex];
+      
       console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      console.log("💰 Buy amount:", buyAmount);
+      console.log("⚙️ Using preset:", selectedPill, "index:", presetIndex);
       
       const data = await tradeBuy({
         poolAddress: token.pair_address,
         baseMint: token.mint,
         quoteMint: SOL_MINT_ADDRESS,
         amount: buyAmount,
-        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
+        mevProtection: preset.quickBuySettings.mevMode === "off" ? 0 : 1,
         poolType: poolType,
+        // Trading parameters from the selected preset for this column
+        slippage: preset.quickBuySettings.maxSlippage,
+        priorityFee: preset.quickBuySettings.priority,
+        bribe: preset.quickBuySettings.bribe,
+        mevMode: preset.quickBuySettings.mevMode,
+        autoFee: preset.quickBuySettings.autoFee,
+        maxFee: preset.quickBuySettings.maxFee,
+        rpc: preset.quickBuySettings.rpc,
         tokenName: token.name,
         tokenSymbol: token.symbol,
       }, user.bearerToken);
@@ -1482,6 +1504,13 @@ const PulseTable = React.memo(function PulseTable({
       }
     } catch (e: any) {
       console.error('Quick Buy error:', e);
+      console.error('Error details:', {
+        message: e?.message,
+        code: e?.code,
+        status: e?.status,
+        details: e?.details,
+        fullError: e
+      });
       
       if (e instanceof ApiError) {
         if (e.code === 'NO_ACTIVE_POOL') {
@@ -2201,8 +2230,9 @@ const PulseTable = React.memo(function PulseTable({
                     selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-white'
                   }`}
                   onClick={() => {
+                    // Update local preset selection for this column only
                     setSelectedPill(pill);
-                    console.log(`Selected ${pill}`);
+                    console.log(`Selected ${pill} in ${title} column`);
                   }}
                   onMouseEnter={() => setShowPillTooltip(pill)}
                   onMouseLeave={() => setShowPillTooltip(null)}
@@ -2211,41 +2241,53 @@ const PulseTable = React.memo(function PulseTable({
                 </button>
                 
                 {/* Tooltip for each pill */}
-                {showPillTooltip === pill && (
-                  <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
-                       style={{ 
-                         backgroundColor: 'rgba(15, 16, 18, 0.95)',
-                         borderColor: AX.border 
-                       }}>
-                    <div className="p-2 space-y-1.5">
-                      {/* Slippage - Running person icon */}
-                      <div className="flex items-center gap-1.5">
-                        <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
-                        <span className="text-gray-300 text-xs font-light">20%</span>
-                      </div>
-                      
-                      {/* Priority Fee - Gas pump icon with yellow styling */}
-                      <div className="flex items-center gap-1.5">
-                        <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                        <span className="text-yellow-400 text-xs font-light">0.001</span>
-                        <span className="text-red-500 text-xs font-light">⚠</span>
-                      </div>
-                      
-                      {/* Bribe - Coins icon with yellow styling */}
-                      <div className="flex items-center gap-1.5">
-                        <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                        <span className="text-yellow-400 text-xs font-light">0.05</span>
-                        <span className="text-red-500 text-xs font-light">⚠</span>
-                      </div>
-                      
-                      {/* MEV Protection - Ban icon */}
-                      <div className="flex items-center gap-1.5">
-                        <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
-                        <span className="text-gray-300 text-xs font-light">Off</span>
+                {showPillTooltip === pill && (() => {
+                  // Get preset index from pill (P1 = 0, P2 = 1, P3 = 2)
+                  const presetIndex = parseInt(pill.replace('P', '')) - 1;
+                  const preset = presets[presetIndex];
+                  const settings = preset?.quickBuySettings;
+                  
+                  if (!settings) return null;
+                  
+                  return (
+                    <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
+                         style={{ 
+                           backgroundColor: 'rgba(15, 16, 18, 0.95)',
+                           borderColor: AX.border 
+                         }}>
+                      <div className="p-2 space-y-1.5">
+                        {/* Slippage - Running person icon */}
+                        <div className="flex items-center gap-1.5">
+                          <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
+                          <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
+                        </div>
+                        
+                        {/* Priority Fee - Gas pump icon with yellow styling */}
+                        <div className="flex items-center gap-1.5">
+                          <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                          <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
+                          <span className="text-red-500 text-xs font-light">⚠</span>
+                        </div>
+                        
+                        {/* Bribe - Coins icon with yellow styling */}
+                        <div className="flex items-center gap-1.5">
+                          <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                          <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
+                          <span className="text-red-500 text-xs font-light">⚠</span>
+                        </div>
+                        
+                        {/* MEV Protection - Ban icon */}
+                        <div className="flex items-center gap-1.5">
+                          <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
+                          <span className="text-gray-300 text-xs font-light">
+                            {settings.mevMode === 'off' ? 'Off' : 
+                             settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             ))}
           </div>
