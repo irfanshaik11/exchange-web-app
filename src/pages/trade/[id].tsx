@@ -52,6 +52,15 @@ export default function TradePage() {
   const { user } = useUser();
   const [selectedTab, setSelectedTab] = useState("Trades");
   const [search, setSearch] = useState("");
+  const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
+  const [isClosingModal, setIsClosingModal] = useState(false);
+  
+  // Drag functionality for mobile modal
+  const modalDragRef = useRef<HTMLDivElement | null>(null);
+  const dragStartY = useRef(0);
+  const dragCurrentY = useRef(0);
+  const isDragging = useRef(false);
+  const modalTransform = useRef(0);
 
   // Query parameter handling for trade settings
   const { 
@@ -166,6 +175,125 @@ export default function TradePage() {
     const t = setTimeout(() => setShowSkeleton(false), 1000);
     return () => clearTimeout(t);
   }, [id]);
+
+  // Prevent body scroll when mobile modal is open
+  useEffect(() => {
+    if (showMobileTradeModal) {
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.classList.remove('modal-open');
+    }
+    
+    return () => {
+      document.body.classList.remove('modal-open');
+    };
+  }, [showMobileTradeModal]);
+
+  // Close modal with animation
+  const closeModal = useCallback(() => {
+    setIsClosingModal(true);
+    setTimeout(() => {
+      setShowMobileTradeModal(false);
+      setIsClosingModal(false);
+    }, 300); // Match animation duration
+  }, []);
+
+  // Drag functionality for modal
+  const handleDragStart = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    dragStartY.current = clientY;
+    isDragging.current = true;
+    modalTransform.current = 0;
+  }, []);
+
+  const handleDragMove = useCallback((e: React.TouchEvent | React.MouseEvent) => {
+    if (!isDragging.current) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    dragCurrentY.current = clientY;
+    const deltaY = dragCurrentY.current - dragStartY.current;
+    
+    // Only allow downward dragging
+    if (deltaY > 0) {
+      modalTransform.current = deltaY;
+      if (modalDragRef.current) {
+        modalDragRef.current.style.transform = `translateY(${deltaY}px)`;
+        // Add opacity effect as user drags
+        const opacity = Math.max(0.7, 1 - (deltaY / 300));
+        modalDragRef.current.style.opacity = String(opacity);
+      }
+    }
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    
+    const threshold = 100; // Minimum drag distance to close
+    if (modalTransform.current > threshold) {
+      closeModal();
+    } else {
+      // Snap back to original position with animation
+      if (modalDragRef.current) {
+        modalDragRef.current.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
+        modalDragRef.current.style.transform = 'translateY(0px)';
+        modalDragRef.current.style.opacity = '1';
+        // Remove transition after animation completes
+        setTimeout(() => {
+          if (modalDragRef.current) {
+            modalDragRef.current.style.transition = '';
+          }
+        }, 200);
+      }
+    }
+    modalTransform.current = 0;
+  }, [closeModal]);
+
+  // Global mouse event listeners for drag functionality
+  useEffect(() => {
+    if (!showMobileTradeModal) return;
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (isDragging.current) {
+        handleDragMove(e as any);
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (isDragging.current) {
+        handleDragEnd();
+      }
+    };
+
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (isDragging.current) {
+        handleDragMove(e as any);
+      }
+    };
+
+    const handleGlobalTouchEnd = () => {
+      if (isDragging.current) {
+        handleDragEnd();
+      }
+    };
+
+    // Add global event listeners
+    document.addEventListener('mousemove', handleGlobalMouseMove, { passive: false });
+    document.addEventListener('mouseup', handleGlobalMouseUp, { passive: false });
+    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    document.addEventListener('touchend', handleGlobalTouchEnd, { passive: false });
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      document.removeEventListener('touchmove', handleGlobalTouchMove);
+      document.removeEventListener('touchend', handleGlobalTouchEnd);
+    };
+  }, [showMobileTradeModal, handleDragMove, handleDragEnd]);
 
   if (showSkeleton) {
     return (
@@ -327,7 +455,7 @@ export default function TradePage() {
           </div>
 
           {/* RIGHT: action panel */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px]">
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:block">
             <TradeActionPanel 
               token={token} 
               tradeParams={tradeParams}
@@ -336,8 +464,77 @@ export default function TradePage() {
               quickBuySide={quickBuySide}
             />
           </div>
+
+          {/* Trade button for mobile */}
+          <div className="fixed bottom-0 left-0 w-full p-4 z-50 lg:hidden mb-10">
+            <button 
+              className="w-full bg-emerald-500 text-white p-2 rounded-lg cursor-pointer"
+              onClick={() => setShowMobileTradeModal(true)}
+            >
+              Trade
+            </button>
+          </div>
         </div>
       </div>
+      
+      {/* Mobile Trade Modal */}
+      {showMobileTradeModal && (
+        <div className="fixed inset-0 z-[100] lg:hidden">
+          {/* Backdrop */}
+          <div 
+            className={`absolute inset-0 bg-black/70 bg-opacity-50 transition-opacity duration-300 ${
+              isClosingModal ? 'opacity-0' : 'opacity-100'
+            }`}
+            onClick={closeModal}
+          />
+          
+          {/* Bottom Sheet */}
+          <div 
+            ref={modalDragRef}
+            className={`absolute bottom-0 left-0 right-0 bg-[#0f1012] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${
+              isClosingModal ? 'mobile-trade-modal-closing' : 'mobile-trade-modal'
+            }`}
+            style={{ touchAction: 'none' }}
+          >
+            {/* Handle bar - draggable area */}
+            <div 
+              className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing select-none"
+              onTouchStart={handleDragStart}
+              onTouchMove={handleDragMove}
+              onTouchEnd={handleDragEnd}
+              onMouseDown={handleDragStart}
+              style={{ touchAction: 'none' }}
+            >
+              <div className="w-12 h-1 bg-[#2A2B33] rounded-full" />
+            </div>
+            
+            {/* Close button */}
+            <div className="flex justify-end pr-4 pb-2">
+              <button
+                onClick={closeModal}
+                className="w-8 h-8 rounded-full bg-[#2A2B33] flex items-center justify-center text-[#9CA3AF] hover:bg-[#1E1F26] transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            
+            {/* TradeActionPanel content */}
+            <div className="flex-1 overflow-y-auto">
+              <TradeActionPanel 
+                token={token} 
+                tradeParams={tradeParams}
+                setTradeParams={setTradeParams}
+                quickBuySettings={quickBuySettings}
+                quickBuySide={quickBuySide}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      
       <Footer />
 
       {/* Lightweight Charts styling */}
@@ -400,6 +597,87 @@ export default function TradePage() {
 
         [role="separator"]:hover {
           opacity: 1;
+        }
+
+        /* Mobile Trade Modal Styles */
+        .mobile-trade-modal {
+          animation: slideUp 0.3s ease-out;
+        }
+
+        .mobile-trade-modal-closing {
+          animation: slideDown 0.3s ease-in;
+        }
+
+        @keyframes slideUp {
+          from {
+            transform: translateY(100%);
+          }
+          to {
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes slideDown {
+          from {
+            transform: translateY(0);
+          }
+          to {
+            transform: translateY(100%);
+          }
+        }
+
+        .mobile-trade-backdrop {
+          animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        @keyframes fadeOut {
+          from {
+            opacity: 1;
+          }
+          to {
+            opacity: 0;
+          }
+        }
+
+        /* Prevent body scroll when modal is open */
+        body.modal-open {
+          overflow: hidden;
+        }
+
+        /* Drag improvements */
+        .cursor-grab {
+          cursor: grab;
+        }
+
+        .cursor-grab:active {
+          cursor: grabbing;
+        }
+
+        /* Prevent text selection during drag */
+        .select-none {
+          user-select: none;
+          -webkit-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+        }
+
+        /* Smooth transitions for drag states */
+        .mobile-trade-modal {
+          transition: transform 0.3s ease-out;
+        }
+
+        /* Disable transitions during drag */
+        .mobile-trade-modal.dragging {
+          transition: none;
         }
       `}</style>
     </>
