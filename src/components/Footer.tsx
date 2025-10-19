@@ -12,7 +12,8 @@ import {
   FaFileAlt,
   FaChevronDown,
   FaCog,
-  FaBars
+  FaBars,
+  FaTelegram
 } from 'react-icons/fa';
 import QuickBuySettingsModal from './QuickBuySettingsModal';
 import PnLModal from './PnLModal';
@@ -98,6 +99,7 @@ export default function Footer() {
   const socialLinks = [
     { icon: FaDiscord, href: "https://discord.gg/sACYQmCsTJ", tooltip: "Discord", text: undefined },
     { icon: XIcon, href: "https://x.com/narrative_hq", tooltip: "Twitter", text: undefined },
+    { icon: FaTelegram, href: "https://t.me/+DDXGrsJoe3szYTAx", tooltip: "Telegram", text: undefined },
     // { icon: FaFileAlt, href: "/docs", tooltip: "Docs", text: "Docs" },
   ];
 

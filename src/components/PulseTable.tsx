@@ -4670,7 +4670,7 @@ const PulseTable = React.memo(function PulseTable({
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
-                          <span className="text-xs">F</span>{" "}
+                          {/* <span className="text-xs">F</span>{" "}
                           <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none" className="ml-1">
                             <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana)"/>
                             <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana)"/>
@@ -4720,7 +4720,7 @@ const PulseTable = React.memo(function PulseTable({
                               
                               return '-';
                             })()}
-                          </span>
+                          </span> */}
                           <span className="text-xs">TX</span>{" "}
                           <span 
                             className="text-xs font-semibold"
