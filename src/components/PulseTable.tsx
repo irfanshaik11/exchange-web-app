@@ -4188,7 +4188,7 @@ const PulseTable = React.memo(function PulseTable({
                   );
                 })()}
                 {/* Profile Picture & Address */}
-                <div className="flex flex-col items-center relative">
+                <div className="flex flex-col items-center relative pt-1">
                     <TokenImage
                       token={token}
                       priority={title === "New Pairs"}
@@ -4218,10 +4218,10 @@ const PulseTable = React.memo(function PulseTable({
                     {/* Left: Token Info & Socials */}
                     <div className="flex min-w-0 flex-col">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="font-semibold text-xs flex-shrink-0" style={{ color: AX.text }}>
+                        <span className="font-semibold text-base flex-shrink-0" style={{ color: AX.text }}>
                           {token.symbol}
                         </span>
-                        <span className="text-[10px] truncate" style={{ color: AX.muted }}>
+                        <span className="text-sm truncate" style={{ color: AX.muted }}>
                           {token.name}
                         </span>
                         <div className="relative ml-1">
@@ -4632,7 +4632,7 @@ const PulseTable = React.memo(function PulseTable({
                       <div className="justify-right flex flex-col text-xs">
                          <span style={{ color: AX.muted }}>
                            MC{" "}
-                           <SmartColor token={token} metricType="marketCap" className="text-base font-semibold">
+                           <SmartColor token={token} metricType="marketCap" className="text-base font-medium">
                              <SmoothNumber
                                value={
                                  (token as any).fully_diluted_value ??
@@ -4647,7 +4647,7 @@ const PulseTable = React.memo(function PulseTable({
                         <span style={{ color: AX.muted }}>
                           <span className="text-xs">V</span>{" "}
                           <span 
-                            className="text-sm font-semibold"
+                            className="text-sm font-medium"
                             style={{ 
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
@@ -4672,7 +4672,7 @@ const PulseTable = React.memo(function PulseTable({
                         <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
                           {/* <span className="text-xs">F</span>{" "}
                           <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none" className="ml-1">
-                            <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana)"/>
+                            <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint0_linear_solana)"/>
                             <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana)"/>
                             <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana)"/>
                             <defs>
@@ -4691,7 +4691,7 @@ const PulseTable = React.memo(function PulseTable({
                             </defs>
                           </svg>
                           <span 
-                            className="text-xs font-semibold"
+                            className="text-xs font-medium"
                             style={{ 
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
@@ -4723,7 +4723,7 @@ const PulseTable = React.memo(function PulseTable({
                           </span> */}
                           <span className="text-xs">TX</span>{" "}
                           <span 
-                            className="text-xs font-semibold"
+                            className="text-xs font-medium"
                             style={{ 
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
@@ -4792,16 +4792,21 @@ const PulseTable = React.memo(function PulseTable({
                         </span> */}
                       </div>
                       <button 
-                        className="flex cursor-pointer items-center gap-2 rounded-full px-1 py-1 text-sm font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100 z-50"
+                        className="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100 z-50 shadow-sm"
                         style={{ 
                           backgroundColor: AX.aiGreen, 
-                          color: '#000000' 
+                          color: '#000000',
+                          border: '1px solid rgba(0,0,0,0.15)'
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.backgroundColor = AX.aiGreenHover;
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 4px 14px rgba(112, 224, 176, 0.25)';
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = AX.aiGreen;
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = 'none';
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -4833,7 +4838,7 @@ const PulseTable = React.memo(function PulseTable({
                           if (isMigratedColumn) {
                             return (
                               <>
-                                <HiLightningBolt className="text-black" size={12} /> {thunderAmount || '0'}
+                                <HiLightningBolt className="text-black" size={14} /> {thunderAmount || '0'}
                                 SOL
                               </>
                             );
@@ -4863,7 +4868,7 @@ const PulseTable = React.memo(function PulseTable({
                             // Regular thunder for other tokens
                             return (
                               <>
-                                <HiLightningBolt className="text-black" size={12} /> {thunderAmount || '0'}
+                                <HiLightningBolt className="text-black" size={14} /> {thunderAmount || '0'}
                                 SOL
                               </>
                             );
