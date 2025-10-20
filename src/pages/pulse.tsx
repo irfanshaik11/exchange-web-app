@@ -40,6 +40,34 @@ interface LaunchpadData {
 
 // FEATURE FLAG: To re-enable the 5 bubble metrics, change showBubbleMetrics={false} to showBubbleMetrics={true} in all PulseTable components below
 export default function PulsePage() {
+  // Tab navigation state
+  const [activeTab, setActiveTab] = useState<'new' | 'final-stretch' | 'migrated'>('new');
+
+  // Keyboard navigation for tabs (mobile only)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only enable keyboard navigation on mobile devices (when tabs are visible)
+      if (window.innerWidth < 1024 && (event.ctrlKey || event.metaKey)) {
+        switch (event.key) {
+          case '1':
+            event.preventDefault();
+            setActiveTab('new');
+            break;
+          case '2':
+            event.preventDefault();
+            setActiveTab('final-stretch');
+            break;
+          case '3':
+            event.preventDefault();
+            setActiveTab('migrated');
+            break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   // Use cached hooks for immediate data display
   const { 
     tokens, 
@@ -883,13 +911,78 @@ export default function PulsePage() {
               <h1 className="text-2xl font-bold">Pulse</h1>
               {/* <PulseControlBar className="mb-0.5" /> */}
             </div>
+            
+            {/* Tab Navigation - Mobile Only */}
+            <div className="mt-4 mb-6 lg:hidden">
+              <div className="flex space-x-1 bg-neutral-800/30 backdrop-blur-sm p-1.5 rounded-xl border border-neutral-700/50 shadow-lg">
+                <button
+                  onClick={() => setActiveTab('new')}
+                  className={`flex-1 px-3 py-2.5 text-xs lg:text-sm font-semibold rounded-lg transition-all duration-300 ease-out cursor-pointer ${
+                    activeTab === 'new'
+                      ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25 transform scale-[1.02]'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-700/40 hover:transform hover:scale-[1.01]'
+                  }`}
+                  title="New Pairs (Mobile: Ctrl+1)"
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-current opacity-60"></span>
+                    <span>New Pairs</span>
+                    <span className="ml-1 text-xs opacity-75">({enrichedNewPairsToShow.length})</span>
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('final-stretch')}
+                  className={`flex-1 px-3 py-2.5 text-xs lg:text-sm font-semibold rounded-lg transition-all duration-300 ease-out cursor-pointer ${
+                    activeTab === 'final-stretch'
+                      ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25 transform scale-[1.02]'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-700/40 hover:transform hover:scale-[1.01]'
+                  }`}
+                  title="Final Stretch (Mobile: Ctrl+2)"
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-current opacity-60"></span>
+                    <span>Final Stretch</span>
+                    <span className="ml-1 text-xs opacity-75">({enrichedFinalStretch.length})</span>
+                  </span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('migrated')}
+                  className={`flex-1 px-3 py-2.5 text-xs lg:text-sm font-semibold rounded-lg transition-all duration-300 ease-out cursor-pointer ${
+                    activeTab === 'migrated'
+                      ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/25 transform scale-[1.02]'
+                      : 'text-neutral-400 hover:text-white hover:bg-neutral-700/40 hover:transform hover:scale-[1.01]'
+                  }`}
+                  title="Migrated (Mobile: Ctrl+3)"
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-current opacity-60"></span>
+                    <span>Migrated</span>
+                    <span className="ml-1 text-xs opacity-75">({enrichedMigrated.length})</span>
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
 
           {isLoading ? (
-            <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
-              <PulseTable title="New Pairs" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="first" showBubbleMetrics={false} />
-              <PulseTable title="Final Stretch" tokens={[]} loading skeletonRowCount={10} showBubbleMetrics={false} />
-              <PulseTable title="Migrated" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="last" showBubbleMetrics={false} />
+            <div className="w-full">
+              {/* Mobile: Single table based on active tab */}
+              <div className="lg:hidden">
+                <PulseTable 
+                  title={activeTab === 'new' ? "New Pairs" : activeTab === 'final-stretch' ? "Final Stretch" : "Migrated"} 
+                  tokens={[]} 
+                  loading 
+                  skeletonRowCount={10} 
+                  isFirstOrLast="only" 
+                  showBubbleMetrics={false} 
+                />
+              </div>
+              {/* Desktop: All tables horizontally */}
+              <div className="hidden lg:flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+                <PulseTable title="New Pairs" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="first" showBubbleMetrics={false} />
+                <PulseTable title="Final Stretch" tokens={[]} loading skeletonRowCount={10} showBubbleMetrics={false} />
+                <PulseTable title="Migrated" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="last" showBubbleMetrics={false} />
+              </div>
             </div>
           ) : hasError ? (
             <div className="text-center text-red-400 py-10">
@@ -898,10 +991,43 @@ export default function PulsePage() {
               <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors">Retry</button>
             </div>
           ) : (
-            <div className="flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
-              <PulseTable title="New Pairs" tokens={enrichedNewPairsToShow as any} loading={newPairsLoading} isFirstOrLast="first" showBubbleMetrics={false} />
-              <PulseTable title="Final Stretch" tokens={enrichedFinalStretch as any} showBubbleMetrics={false} />
-              <PulseTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" showBubbleMetrics={false} />
+            <div className="w-full">
+              {/* Mobile: Single table based on active tab */}
+              <div className="lg:hidden">
+                <div className="transition-all duration-300 ease-in-out">
+                  {activeTab === 'new' && (
+                    <PulseTable 
+                      title="New Pairs" 
+                      tokens={enrichedNewPairsToShow as any} 
+                      loading={newPairsLoading} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                  {activeTab === 'final-stretch' && (
+                    <PulseTable 
+                      title="Final Stretch" 
+                      tokens={enrichedFinalStretch as any} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                  {activeTab === 'migrated' && (
+                    <PulseTable 
+                      title="Migrated" 
+                      tokens={enrichedMigrated as any} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                </div>
+              </div>
+              {/* Desktop: All tables horizontally */}
+              <div className="hidden lg:flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+                <PulseTable title="New Pairs" tokens={enrichedNewPairsToShow as any} loading={newPairsLoading} isFirstOrLast="first" showBubbleMetrics={false} />
+                <PulseTable title="Final Stretch" tokens={enrichedFinalStretch as any} showBubbleMetrics={false} />
+                <PulseTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" showBubbleMetrics={false} />
+              </div>
             </div>
           )}
         </div>
