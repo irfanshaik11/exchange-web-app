@@ -150,7 +150,7 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
   // Tune these two:
   const PX_PER_BAR   = 2.2;   // smaller => thinner bars (try 2.0–2.6)
   const MIN_BARS     = 420;   // safety floor (ensure thin even on narrow screens)
-  const RIGHT_PAD    = 4;     // small breathing room on the right (in bars)
+  const RIGHT_PAD    = 14;     // small breathing room on the right (in bars)
 
   const width        = containerRef.current.clientWidth || 800;
   const targetBars   = Math.max(Math.floor(width / PX_PER_BAR), MIN_BARS);
