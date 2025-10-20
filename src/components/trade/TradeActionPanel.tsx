@@ -236,6 +236,7 @@ interface TradeActionPanelProps {
   setTradeParams?: (params: any) => void;
   quickBuySettings?: any;
   quickBuySide?: "buy" | "sell";
+  initialStats?: any; // Initial stats from REST API
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ 
@@ -243,7 +244,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   tradeParams: externalTradeParams,
   setTradeParams: setExternalTradeParams,
   quickBuySettings: externalQuickBuySettings,
-  quickBuySide: externalQuickBuySide
+  quickBuySide: externalQuickBuySide,
+  initialStats
 }) => {
   // Determine the pool address to use: migrated_pool_address if available, otherwise pair_address
   const effectivePoolAddress = useMemo(() => {
@@ -282,6 +284,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     pairAddress: effectivePoolAddress,
     tokenAddress: token.mint,
     enabled: true,
+    initialStats: initialStats,
   });
 
   // Update internal state when external props change (only on mount)

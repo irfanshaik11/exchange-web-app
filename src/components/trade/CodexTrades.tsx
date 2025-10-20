@@ -6,6 +6,7 @@ import type { Token } from '~/utils/db';
 
 interface CodexTradesProps {
   token: Token;
+  initialTrades?: any[];
 }
 
 function getAge(timestamp: number) {
@@ -60,23 +61,36 @@ function getAmount(data: { amount0: string; amount1: string }, eventDisplayType:
   return Math.abs(amount0);
 }
 
-function getTotalUSD(token0SwapValueUsd: string, token1SwapValueUsd: string, eventDisplayType: string) {
-  const token0Value = parseFloat(token0SwapValueUsd);
-  const token1Value = parseFloat(token1SwapValueUsd);
+function getTotalUSD(
+  amount0: string,
+  amount1: string,
+  token0SwapValueUsd: string,
+  token1SwapValueUsd: string,
+  eventDisplayType: string
+) {
+  const amt0 = Math.abs(parseFloat(amount0));
+  const amt1 = Math.abs(parseFloat(amount1));
+  const usd0 = parseFloat(token0SwapValueUsd);
+  const usd1 = parseFloat(token1SwapValueUsd);
   
-  // For Buy: token0SwapValueUsd is the USD value of the token trade
-  // For Sell: token0SwapValueUsd is the USD value of the token trade
-  // For Add: both values represent the liquidity added
+  // Determine which token is SOL by checking which USD value is larger
+  // SOL price (~$100-$250) will be much larger than memecoin prices
+  // The larger USD value likely represents the quote token (SOL)
   
-  if (eventDisplayType === 'Buy') {
-    return token0Value; // USD value of the token trade
-  } else if (eventDisplayType === 'Sell') {
-    return token0Value; // USD value of the token trade
-  } else if (eventDisplayType === 'Add') {
-    return token0Value + token1Value; // Total liquidity added
+  if (usd0 > usd1 && usd0 > 10) {
+    // token0 appears to be SOL (higher price)
+    // Use token0 USD value or calculate from amount0
+    const solAmount = amt0 / 1e9;
+    return solAmount * usd0;
+  } else if (usd1 > usd0 && usd1 > 10) {
+    // token1 appears to be SOL (higher price)
+    // Use token1 USD value or calculate from amount1
+    const solAmount = amt1 / 1e9;
+    return solAmount * usd1;
+  } else {
+    // Both values are small, use the larger one as total value
+    return Math.max(usd0, usd1);
   }
-  
-  return token0Value;
 }
 
 function formatMarketCap(marketCapUsd: number) {
@@ -91,8 +105,8 @@ function formatMarketCap(marketCapUsd: number) {
   }
 }
 
-const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
-  const { trades: codexTrades, isConnected: codexConnected, error: codexError, isLoading: codexLoading } = useCodexTradesWebSocket(token.mint);
+const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
+  const { trades: codexTrades, isConnected: codexConnected, error: codexError, isLoading: codexLoading } = useCodexTradesWebSocket(token.mint, initialTrades);
   
   // WebSocket hook for real-time trade events
   const {
@@ -105,6 +119,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
   } = useTradeEventsWebSocket({
     pairAddress: token.pair_address,
     enabled: true,
+    initialTrades: initialTrades,
   });
 
   // Use WebSocket trades if available, otherwise fallback to Codex trades
@@ -180,7 +195,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token }) => {
                 // Codex trade format
                 const { type, color } = getTradeType(trade.eventDisplayType);
                 const amount = getAmount(trade.data, trade.eventDisplayType);
-                const totalUSD = getTotalUSD(trade.token0SwapValueUsd, trade.token1SwapValueUsd, trade.eventDisplayType);
+                const totalUSD = getTotalUSD(
+                  trade.data.amount0,
+                  trade.data.amount1,
+                  trade.token0SwapValueUsd,
+                  trade.token1SwapValueUsd,
+                  trade.eventDisplayType
+                );
                 const age = getAge(trade.timestamp);
                 const trader = shortAddr(trade.maker);
                 

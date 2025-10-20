@@ -11,16 +11,31 @@ import CustomSolanaChart from "../../components/CustomSolanaChart";
 
 import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
-import CodexTrades from "../../components/trade/CodexTrades";
-import CodexTopTraders from "../../components/trade/CodexTopTraders";
-import CodexDevTokens from "../../components/trade/CodexDevTokens";
-import CodexHolders from "../../components/trade/CodexHolders";
 import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
+import useInitialTradeData from "../../hooks/useInitialTradeData";
 import { useQuickBuyQueryParams } from "../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../utils/queryParams";
 import dynamic from 'next/dynamic';
+
+// Lazy load heavy components to reduce initial bundle size
 const BirdeyeChart = dynamic(() => import('../../components/BirdeyeChart'), { ssr: false });
 const BackendOHLCChart = dynamic(() => import('../../components/BackendOHLCChart'), { ssr: false });
+const CodexTrades = dynamic(() => import('../../components/trade/CodexTrades'), { 
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-32 text-gray-400">Loading trades...</div>
+});
+const CodexTopTraders = dynamic(() => import('../../components/trade/CodexTopTraders'), { 
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-32 text-gray-400">Loading traders...</div>
+});
+const CodexDevTokens = dynamic(() => import('../../components/trade/CodexDevTokens'), { 
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-32 text-gray-400">Loading tokens...</div>
+});
+const CodexHolders = dynamic(() => import('../../components/trade/CodexHolders'), { 
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center h-32 text-gray-400">Loading holders...</div>
+});
 /* ---------- AXIOM palette ---------- */
 const AX = {
   bg: "#101114",
@@ -84,7 +99,15 @@ export default function TradePage() {
   const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
     useSingleTokenPolling(typeof id === "string" ? id : undefined);
 
-  // Debug: Log the pair addresses
+  // Pre-fetch initial trade data with caching for instant/fast loading
+  const { 
+    data: initialTradeData, 
+    loading: initialDataLoading, 
+    error: initialDataError,
+    isFromCache 
+  } = useInitialTradeData(resolvedPairAddress, token?.mint);
+
+  // Debug: Log the pair addresses and initial data status
   useEffect(() => {
     if (resolvedPairAddress || token?.pair_address) {
       console.log('[Trade Page] Pair addresses:', {
@@ -94,6 +117,52 @@ export default function TradePage() {
       });
     }
   }, [resolvedPairAddress, token?.pair_address]);
+
+  useEffect(() => {
+    if (initialTradeData) {
+      console.log('[Trade Page] Initial data loaded:', {
+        tradesCount: initialTradeData.trades?.length || 0,
+        hasStats: !!initialTradeData.stats,
+        isFromCache,
+        loading: initialDataLoading,
+      });
+    }
+  }, [initialTradeData, isFromCache, initialDataLoading]);
+
+  // Calculate optimal OHLC interval and timeframe based on token age
+  const getOHLCParams = useCallback(() => {
+    if (!token?.created_at && !token?.createdAt) {
+      // Default for tokens without creation time
+      return { interval: '15m' as const, timeframe: '7d' as const };
+    }
+
+    const createdAt = token.created_at || token.createdAt;
+    const createdDate = new Date(createdAt);
+    const now = new Date();
+    const ageInHours = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
+    const ageInDays = ageInHours / 24;
+
+    console.log('[Trade Page] Token age calculation:', {
+      createdAt,
+      ageInHours,
+      ageInDays
+    });
+
+    // For very new tokens (< 24 hours)
+    if (ageInDays < 1) {
+      return { interval: '1m' as const, timeframe: '24h' as const };
+    }
+    // For tokens 1-7 days old
+    else if (ageInDays < 7) {
+      return { interval: '15m' as const, timeframe: '7d' as const };
+    }
+    // For older tokens (> 7 days)
+    else {
+      return { interval: '1h' as const, timeframe: '30d' as const };
+    }
+  }, [token?.created_at, token?.createdAt]);
+
+  const ohlcParams = getOHLCParams();
 
   // ---------------- drag-to-resize for left column ----------------
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -172,7 +241,7 @@ export default function TradePage() {
   useEffect(() => () => (rafRef.current ? cancelAnimationFrame(rafRef.current) : undefined), []);
   useEffect(() => {
     setShowSkeleton(true);
-    const t = setTimeout(() => setShowSkeleton(false), 1000);
+    const t = setTimeout(() => setShowSkeleton(false), 300);
     return () => clearTimeout(t);
   }, [id]);
 
@@ -362,12 +431,12 @@ export default function TradePage() {
               </div>
 
               {/* Chart - fully responsive */}
-              <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden pb-4">
+              <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden pb-1">
                 {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 ? (
                   <BackendOHLCChart
                     pairAddress={resolvedPairAddress}
-                    interval="1m"
-                    timeframe="24h"
+                    interval={ohlcParams.interval}
+                    timeframe={ohlcParams.timeframe}
                     height="100%"
                     width="100%"
                     baseRefreshMs={30000}
@@ -446,7 +515,12 @@ export default function TradePage() {
                 setSelectedTab={setSelectedTab}
               />
               <div className="flex-1 min-h-0">
-                {selectedTab === "Trades" && <CodexTrades token={token} />}
+                {selectedTab === "Trades" && (
+                  <CodexTrades 
+                    token={token} 
+                    initialTrades={initialTradeData?.trades || []}
+                  />
+                )}
                 {selectedTab === "Top Traders" && <CodexTopTraders token={token} />}
                 {selectedTab === "Holders" && <CodexHolders token={token} />}
                 {selectedTab === "Dev Tokens" && <CodexDevTokens token={token} />}
@@ -462,6 +536,7 @@ export default function TradePage() {
               setTradeParams={setTradeParams}
               quickBuySettings={quickBuySettings}
               quickBuySide={quickBuySide}
+              initialStats={initialTradeData?.stats}
             />
           </div>
 
