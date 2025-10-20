@@ -33,8 +33,8 @@ export interface UseBirdeyeOHLCOptions {
   onError?: (error: Error) => void;
 }
 
-const BIRDEYE_API_KEY = '991c6f84ed954e4e90fa72c7871c08a6';
-const BIRDEYE_API_URL = 'https://public-api.birdeye.so/defi/v3/ohlcv/pair';
+// Use our secure proxy endpoint instead of calling BirdEye directly
+const BIRDEYE_PROXY_URL = '/api/birdeye-ohlcv-pair';
 
 /**
  * Custom hook to fetch OHLC data from Birdeye API
@@ -81,19 +81,18 @@ export function useBirdeyeOHLC({
       setIsLoading(true);
       setError(null);
 
-      const url = new URL(BIRDEYE_API_URL);
+      const url = new URL(BIRDEYE_PROXY_URL, window.location.origin);
       url.searchParams.append('address', pairAddress);
       url.searchParams.append('type', timeframe);
       url.searchParams.append('limit', '1000');
 
-      console.log('useBirdeyeOHLC: Fetching data', { pairAddress, timeframe });
+      console.log('useBirdeyeOHLC: Fetching data from proxy', { pairAddress, timeframe });
 
       const response = await fetch(url.toString(), {
         method: 'GET',
         headers: {
           'accept': 'application/json',
           'x-chain': 'solana',
-          'x-api-key': BIRDEYE_API_KEY,
         },
         signal: abortControllerRef.current.signal,
       });
