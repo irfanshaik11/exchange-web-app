@@ -556,7 +556,7 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
         const fallback: Record<string,string> = { '1s':'1m','15s':'1m','30s':'5m','1m':'5m','5m':'15m','15m':'1h' };
         const next = fallback[tf];
         if (next) {
-          const url2 = new URL(BIRDEYE_PAIR_URL);
+          const url2 = new URL(BIRDEYE_PROXY_URL, window.location.origin);
           url2.searchParams.set('address', pairAddress);
           url2.searchParams.set('type', next);
           url2.searchParams.set('mode', 'count');
