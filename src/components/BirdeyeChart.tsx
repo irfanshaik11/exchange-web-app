@@ -428,8 +428,8 @@ export interface BirdeyePairChartProps {
 }
 
 /** Get API key from environment variables */
-const BIRDEYE_API_KEY = process.env.NEXT_PUBLIC_BIRDEYE_API_KEY || '';
-const BIRDEYE_PAIR_URL = 'https://public-api.birdeye.so/defi/v3/ohlcv/pair';
+// Use our secure proxy endpoint instead of calling BirdEye directly
+const BIRDEYE_PROXY_URL = '/api/birdeye-ohlcv-pair';
 const VALID_TF: BirdeyeTF[] = ['1s','15s','30s','1m','5m','15m','1h','4h','1d'];
 
 /** Wait until an element is visible and non-zero sized */
@@ -476,9 +476,9 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
   const firstLoadRef       = useRef(true);
   const moRef              = useRef<MutationObserver | null>(null);
 
-  /** Build the Birdeye request URL according to mode */
+  /** Build the proxy request URL according to mode */
   const buildUrl = (m: Mode) => {
-    const url = new URL(BIRDEYE_PAIR_URL);
+    const url = new URL(BIRDEYE_PROXY_URL, window.location.origin);
     url.searchParams.set('address', pairAddress);
     url.searchParams.set('type', tf);
     url.searchParams.set('padding', 'true');  // keep empty candles to stabilize scale
@@ -536,7 +536,6 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
         headers: {
           accept: 'application/json',
           'x-chain': 'solana',
-          'X-API-KEY': BIRDEYE_API_KEY,
         },
       });
       let body: any = null;

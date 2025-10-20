@@ -1,10 +1,8 @@
 /**
  * Birdeye API utilities
  * Functions to get pair addresses, token info, and markets
+ * All API calls go through secure proxy endpoints
  */
-
-const BIRDEYE_API_KEY = 'ff0bcb7c34704869b6af6f740775898f';
-const BIRDEYE_BASE_URL = 'https://public-api.birdeye.so';
 
 export interface BirdeyeMarket {
   address: string; // This is the pair/pool address!
@@ -34,13 +32,12 @@ export async function getTokenMarkets(
   mintAddress: string
 ): Promise<BirdeyeMarket[]> {
   try {
-    const url = `${BIRDEYE_BASE_URL}/defi/v3/token/market-data?address=${mintAddress}`;
+    const url = `/api/birdeye-market-data?address=${encodeURIComponent(mintAddress)}`;
     
     const response = await fetch(url, {
       headers: {
         'accept': 'application/json',
         'x-chain': 'solana',
-        'X-API-KEY': BIRDEYE_API_KEY,
       },
     });
 
@@ -104,13 +101,12 @@ export async function getTokenInfo(
   mintAddress: string
 ): Promise<BirdeyeTokenInfo | null> {
   try {
-    const url = `${BIRDEYE_BASE_URL}/defi/token_overview?address=${mintAddress}`;
+    const url = `/api/birdeye-token-info?address=${encodeURIComponent(mintAddress)}`;
     
     const response = await fetch(url, {
       headers: {
         'accept': 'application/json',
         'x-chain': 'solana',
-        'X-API-KEY': BIRDEYE_API_KEY,
       },
     });
 

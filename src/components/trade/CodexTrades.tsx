@@ -195,19 +195,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                 // Codex trade format
                 const { type, color } = getTradeType(trade.eventDisplayType);
                 const amount = getAmount(trade.data, trade.eventDisplayType);
-                
-                // DEBUG: Log raw trade data to understand the structure
-                if (Math.random() < 0.1) { // Log 10% of trades to avoid spam
-                  console.log('RAW TRADE DATA:', {
-                    amount0: trade.data.amount0,
-                    amount1: trade.data.amount1,
-                    token0SwapValueUsd: trade.token0SwapValueUsd,
-                    token1SwapValueUsd: trade.token1SwapValueUsd,
-                    eventDisplayType: trade.eventDisplayType,
-                    maker: trade.maker.slice(0, 8) + '...'
-                  });
-                }
-                
                 const totalUSD = getTotalUSD(
                   trade.data.amount0,
                   trade.data.amount1,
