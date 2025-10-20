@@ -7,6 +7,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
+import { usePulseWebSocket } from '../hooks/usePulseWebSocket';
 // import { PriorityImageSearcher } from '../utils/imageSearch'; // DISABLED - no external image searches
 import { useImagePreloader } from '../hooks/useImagePreloader';
 import { useCachedPulseTokens, useCachedLaunchpadData } from '../hooks/useCachedTokens';
@@ -72,7 +73,21 @@ export default function PulsePage() {
   //   isStale: migratedStale 
   // } = useCachedMigratedTokens();
 
-  const [httpNew, setHttpNew] = useState<any[]>([]);
+  const [httpNew, setHttpNew] = useState<any[]>(() => {
+    // Initialize with cached data immediately for instant display
+    try {
+      const cached = localStorage.getItem('cached_pulse_new');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.data && parsed.timestamp && (now - parsed.timestamp < 5 * 60 * 1000)) {
+          console.log(`[Pulse] Loaded ${parsed.data.length} cached new tokens`);
+          return parsed.data;
+        }
+      }
+    } catch {}
+    return [];
+  });
   const [httpNewTick, setHttpNewTick] = useState(0);
   const [httpMigrated, setHttpMigrated] = useState<any[]>(() => {
     // Initialize with cached data immediately
@@ -111,7 +126,102 @@ export default function PulsePage() {
   const newPairsTokens: any[] = [];
   const wsLoading = false;
 
-  // Fast polling fallback for New Pairs (cache-bypass)
+  // WebSocket for instant token notifications (all categories)
+  const {
+    newTokens: wsNewTokens,
+    finalStretchTokens: wsFinalStretchTokens,
+    migratedTokens: wsMigratedTokens,
+    connected: wsPulseConnected,
+    error: wsPulseError
+  } = usePulseWebSocket({
+    enabled: true, // Always enabled for instant updates
+  });
+
+  // Merge WebSocket new tokens into httpNew immediately for instant updates
+  useEffect(() => {
+    if (wsNewTokens.length > 0) {
+      setHttpNew(prev => {
+        // Create a map of existing tokens by mint
+        const existingMints = new Set(prev.map(t => t.mint));
+
+        // Add only new tokens from WebSocket that aren't already in the list
+        const newFromWs = wsNewTokens.filter(t => !existingMints.has(t.mint));
+
+        if (newFromWs.length > 0) {
+          console.log(`[Pulse] 🔔 WebSocket added ${newFromWs.length} new tokens instantly`);
+          const merged = [...newFromWs, ...prev];
+
+          // Cache updated list
+          try {
+            localStorage.setItem('cached_pulse_new', JSON.stringify({
+              data: merged,
+              timestamp: Date.now()
+            }));
+          } catch {}
+
+          return merged;
+        }
+        return prev;
+      });
+      setHttpNewTick((t) => t + 1);
+    }
+  }, [wsNewTokens]);
+
+  // Merge WebSocket final stretch tokens
+  useEffect(() => {
+    if (wsFinalStretchTokens.length > 0) {
+      setHttpFinalStretch(prev => {
+        const existingMints = new Set(prev.map(t => t.mint));
+        const newFromWs = wsFinalStretchTokens.filter(t => !existingMints.has(t.mint));
+
+        if (newFromWs.length > 0) {
+          console.log(`[Pulse] 🔔 WebSocket added ${newFromWs.length} final stretch tokens instantly`);
+          const merged = [...newFromWs, ...prev];
+
+          // Cache updated list
+          try {
+            localStorage.setItem('cached_pulse_final_stretch', JSON.stringify({
+              data: merged,
+              timestamp: Date.now()
+            }));
+          } catch {}
+
+          return merged;
+        }
+        return prev;
+      });
+      setHttpFinalStretchTick((t) => t + 1);
+    }
+  }, [wsFinalStretchTokens]);
+
+  // Merge WebSocket migrated tokens
+  useEffect(() => {
+    if (wsMigratedTokens.length > 0) {
+      setHttpMigrated(prev => {
+        const existingMints = new Set(prev.map(t => t.mint));
+        const newFromWs = wsMigratedTokens.filter(t => !existingMints.has(t.mint));
+
+        if (newFromWs.length > 0) {
+          console.log(`[Pulse] 🔔 WebSocket added ${newFromWs.length} migrated tokens instantly`);
+          const merged = [...newFromWs, ...prev];
+
+          // Cache updated list
+          try {
+            localStorage.setItem('cached_pulse_migrated', JSON.stringify({
+              data: merged,
+              timestamp: Date.now()
+            }));
+          } catch {}
+
+          return merged;
+        }
+        return prev;
+      });
+      setHttpMigratedTick((t) => t + 1);
+    }
+  }, [wsMigratedTokens]);
+
+  // Fast polling fallback for New Pairs (cache-bypass) - reduced to 1s for faster updates
   useEffect(() => {
     let alive = true;
     const poll = async () => {
@@ -128,13 +238,20 @@ export default function PulsePage() {
             if (data.length > 0) {
               setHttpNew(data as any[]);
               setHttpNewTick((t) => t + 1);
+              // Cache to localStorage for next page load
+              try {
+                localStorage.setItem('cached_pulse_new', JSON.stringify({
+                  data: data,
+                  timestamp: Date.now()
+                }));
+              } catch {}
             }
           }
         }
       } catch {}
     };
     poll();
-    const id = setInterval(poll, 2000); // Poll every 2 seconds for real-time updates
+    const id = setInterval(poll, 1000); // Poll every 1 second for faster real-time updates
     return () => { alive = false; clearInterval(id); };
   }, []);
 
@@ -142,8 +259,8 @@ export default function PulsePage() {
   useEffect(() => {
     const immediatePoll = async () => {
       try {
-        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/')
+          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1)
           : env.NEXT_PUBLIC_GO_SERVICE_URL;
         const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
           ? `${baseUrl}/v1/pulse/new?limit=30&t=${Date.now()}`
@@ -162,7 +279,7 @@ export default function PulsePage() {
         console.log('Immediate poll failed:', error);
       }
     };
-    
+
     immediatePoll();
   }, []);
 
@@ -200,7 +317,7 @@ export default function PulsePage() {
     immediatePoll();
   }, []);
 
-  // Fast polling for Migrated tokens (cache-bypass)
+  // Fast polling fallback for Migrated tokens (cache-bypass) - same as New Pairs
   useEffect(() => {
     let alive = true;
     const poll = async () => {
@@ -208,33 +325,29 @@ export default function PulsePage() {
         // Always use Next.js API proxy to avoid CORS issues
         const apiUrl = `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
 
-        const res = await fetch(apiUrl, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
+        const res = await fetch(apiUrl);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
+            // Only replace when we have non-empty fresh data to avoid flicker
             if (data.length > 0) {
-              console.log(`[Migrated Polling] Received ${data.length} tokens. Top 3:`, data.slice(0, 3).map((t: any) => ({ symbol: t.symbol, migrated_time: t.migrated_time })));
               setHttpMigrated(data as any[]);
               setHttpMigratedTick((t) => t + 1);
-              // Cache the data
+              // Cache to localStorage for next page load
               try {
-                localStorage.setItem('cached_pulse_migrated', JSON.stringify({ data, timestamp: Date.now() }));
+                localStorage.setItem('cached_pulse_migrated', JSON.stringify({
+                  data: data,
+                  timestamp: Date.now()
+                }));
               } catch {}
             }
           }
-
         }
       } catch {}
     };
     poll();
-    const id = setInterval(poll, 2000); // Poll every 2 seconds for migrated
+    const id = setInterval(poll, 1000); // Poll every 1 second - same as new pairs
     return () => { alive = false; clearInterval(id); };
   }, []);
 
@@ -272,7 +385,7 @@ export default function PulsePage() {
     immediatePoll();
   }, []);
 
-  // Fast polling for Final Stretch tokens (cache-bypass)
+  // Fast polling fallback for Final Stretch tokens (cache-bypass) - same as New Pairs
   useEffect(() => {
     let alive = true;
     const poll = async () => {
@@ -280,33 +393,29 @@ export default function PulsePage() {
         // Always use Next.js API proxy to avoid CORS issues
         const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
 
-        const res = await fetch(apiUrl, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
+        const res = await fetch(apiUrl);
         if (!alive) return;
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
+            // Only replace when we have non-empty fresh data to avoid flicker
             if (data.length > 0) {
-              console.log(`[Final Stretch Polling] Received ${data.length} tokens`);
               setHttpFinalStretch(data as any[]);
               setHttpFinalStretchTick((t) => t + 1);
-              // Cache the data
+              // Cache to localStorage for next page load
               try {
-                localStorage.setItem('cached_pulse_final_stretch', JSON.stringify({ data, timestamp: Date.now() }));
+                localStorage.setItem('cached_pulse_final_stretch', JSON.stringify({
+                  data: data,
+                  timestamp: Date.now()
+                }));
               } catch {}
             }
           }
-
         }
       } catch {}
     };
     poll();
-    const id = setInterval(poll, 2000); // Poll every 2 seconds for final stretch
+    const id = setInterval(poll, 1000); // Poll every 1 second - same as new pairs
     return () => { alive = false; clearInterval(id); };
   }, []);
 
@@ -483,18 +592,18 @@ export default function PulsePage() {
   };
 
   const buildNewPairs = (): any[] => {
-    // Prefer HTTP pulse-new (authoritative by launch_time); fallback to WS; finally fallback to combined
+    // Use httpNew directly - show all tokens immediately
     const source = httpNew.length ? httpNew : (wsNewEnriched.length ? wsNewEnriched : combinedNewPairs);
     if (typeof window !== 'undefined') {
       try {
         const srcName = httpNew.length ? 'http' : (wsNewEnriched.length ? 'ws' : 'combined');
         console.log(`[Pulse] new-pairs source=${srcName} sizes http=${httpNew.length} ws=${wsNewEnriched.length} combined=${combinedNewPairs.length}`);
         if (httpNew.length > 0) {
-          console.log(`[Pulse] httpNew sample:`, httpNew.slice(0, 3).map(t => ({ 
-            name: t.name, 
-            symbol: t.symbol, 
+          console.log(`[Pulse] httpNew sample:`, httpNew.slice(0, 3).map(t => ({
+            name: t.name,
+            symbol: t.symbol,
             bonding_curve_progress: t.bonding_curve_progress,
-            bonding_pct: t.bonding_pct 
+            bonding_pct: t.bonding_pct
           })));
         }
       } catch {}
@@ -653,7 +762,7 @@ export default function PulsePage() {
     return result;
   };
 
-  const newPairsData = useMemo(() => buildNewPairs(), [httpNewTick, wsNewEnriched, combinedNewPairs]);
+  const newPairsData = useMemo(() => buildNewPairs(), [httpNewTick, httpNew, wsNewEnriched, combinedNewPairs]);
   const migratedData = useMemo(() => buildMigrated(), [httpMigratedTick, httpMigrated]);
   const finalStretchData = useMemo(() => buildFinalStretch(), [httpFinalStretchTick, httpFinalStretch]);
   

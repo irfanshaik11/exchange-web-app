@@ -76,6 +76,8 @@ import { useSolPrice } from "~/components/SolPriceContext";
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { toast } from "react-hot-toast";
+import { TokenAge } from "./TokenAge";
+import { prefetchTradeData } from "~/utils/tokenCache";
 
 interface PulseTableProps {
   title: string;
@@ -3980,20 +3982,23 @@ const PulseTable = React.memo(function PulseTable({
           memoizedTokens.map((token, idx) => {
             const pairAddress = (token as any)?.pair_address;
             const mintAddress = (token as any)?.mint;
+            const address = pairAddress || mintAddress;
 
-            const handleTokenClick = () => {
-              // Navigate immediately with pair_address or mint - trade page will handle resolution
-              const address = pairAddress || mintAddress;
-              if (address) {
-                router.push(`/trade/${address}`);
-              }
-            };
+            // Build query params for optimistic UI
+            const queryParams = new URLSearchParams({
+              _name: (token as any)?.name || (token as any)?.symbol || '',
+              _symbol: (token as any)?.symbol || '',
+              _price: String((token as any)?.price_usd || (token as any)?.priceUsd || ''),
+              _mcap: String((token as any)?.market_cap_usd || (token as any)?.marketCapUsd || ''),
+              _image: (token as any)?.image || (token as any)?.uri || '',
+            }).toString();
 
             return (
-              <div
+              <Link
+                href={`/trade/${address}?${queryParams}`}
                 key={`${pairAddress || mintAddress || "noaddr"}-${idx}`}
                 className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1  transition-all duration-300 ease-out"
-                style={{ 
+                style={{
                   borderColor: AX.border,
                   backgroundColor: 'transparent'
                 }}
@@ -4008,6 +4013,10 @@ const PulseTable = React.memo(function PulseTable({
                     popup.style.top = `${rect.top - 30}px`;
                     popup.style.transform = 'translateX(-50%)';
                   }
+                  // Prefetch trade data on hover for instant navigation
+                  if (address) {
+                    prefetchTradeData(address, pairAddress);
+                  }
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';
@@ -4017,7 +4026,6 @@ const PulseTable = React.memo(function PulseTable({
                     popup.style.display = 'none';
                   }
                 }}
-                onClick={handleTokenClick}
               >
                 {/* Subtle wave animation for top 3 final stretch tokens */}
                 {waveTokens.has(idx) && (
@@ -4220,7 +4228,7 @@ const PulseTable = React.memo(function PulseTable({
                       </div>
                       </div>
                       <div className="mt-1 flex items-center gap-2 text-xs" style={{ color: AX.aiGreen }}>
-                        <span>{getAgeLabel(token)}</span>
+                        <span><TokenAge createdAt={(token as any).created_at || (token as any).launch_time} /></span>
                         {/* Socials */}
                         <div className="relative flex items-center gap-2">
                           {/* Pump.fun Link - only show for pump tokens */}
@@ -4649,18 +4657,29 @@ const PulseTable = React.memo(function PulseTable({
                             })()}
                           </span>
                           <span className="text-xs">TX</span>{" "}
-                          <span 
+                          <span
                             className="text-xs font-semibold"
-                            style={{ 
+                            style={{
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
                             }}
                           >
                             <SmoothNumber
-                              value={
-                                (token.total_buys_5m ?? 0) +
-                                (token.total_sells_5m ?? 0)
-                              }
+                              value={(() => {
+                                const buys = token.total_buys_5m ?? 0;
+                                const sells = token.total_sells_5m ?? 0;
+                                const total = buys + sells;
+                                // Debug logging
+                                if (token.symbol === 'HEAVEN' || total < 20) {
+                                  console.log(`[PulseTable TX] ${token.symbol}:`, {
+                                    total_buys_5m: token.total_buys_5m,
+                                    total_sells_5m: token.total_sells_5m,
+                                    calculated: total,
+                                    mint: token.mint
+                                  });
+                                }
+                                return total;
+                              })()}
                               duration={300}
                             />
                           </span>
@@ -4765,7 +4784,7 @@ const PulseTable = React.memo(function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <LuChefHat size={13} /> DS <span style={{ color: '#ffffff' }}>{getAgeLabel(token)}</span>
+                    <LuChefHat size={13} /> DS <span style={{ color: '#ffffff' }}><TokenAge createdAt={(token as any).created_at || (token as any).launch_time} /></span>
                   </span>
                   
                   {/* Snipe percentage - Red */}
@@ -4836,7 +4855,7 @@ const PulseTable = React.memo(function PulseTable({
                     <span className="text-xs text-gray-500">-</span>
                   </span> */}
                 </div>
-              </div>
+              </Link>
             );
           })
         )}

@@ -259,7 +259,7 @@ const MetricRow: React.FC<{
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <InterstateTooltip content={tooltip}>
+        <InterstateTooltip label={tooltip}>
           <span className="text-sm text-gray-400 cursor-help">{label}</span>
         </InterstateTooltip>
       </div>

@@ -1,5 +1,5 @@
 import { useRouter } from "next/router";
-import { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Head from "next/head";
 import { Toaster } from "react-hot-toast";
 import { useWallet } from "../../components/useWallet";
@@ -38,13 +38,28 @@ const AX = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id } = router.query;
-  
+  const { id, _name, _symbol, _price, _mcap, _image } = router.query;
+
+  // Optimistic token data from query params for instant display
+  const optimisticToken = React.useMemo(() => {
+    if (_name || _symbol) {
+      return {
+        name: _name as string || '',
+        symbol: _symbol as string || '',
+        price_usd: _price ? parseFloat(_price as string) : undefined,
+        market_cap_usd: _mcap ? parseFloat(_mcap as string) : undefined,
+        image: _image as string || undefined,
+      };
+    }
+    return null;
+  }, [_name, _symbol, _price, _mcap, _image]);
+
   // Debug logging
   console.log('TradePage Debug:', {
     id,
     idType: typeof id,
-    isString: typeof id === "string"
+    isString: typeof id === "string",
+    optimisticToken
   });
 
   const [showSkeleton, setShowSkeleton] = useState(true);
@@ -54,26 +69,29 @@ export default function TradePage() {
   const [search, setSearch] = useState("");
 
   // Query parameter handling for trade settings
-  const { 
-    queryString, 
-    getQueryParams, 
-    getTradeParams, 
+  const {
+    queryString,
+    getQueryParams,
+    getTradeParams,
     getLimitOrderParams,
     settings: quickBuySettings,
-    side: quickBuySide 
+    side: quickBuySide
   } = useQuickBuyQueryParams();
 
   // Trade page specific parameters
-  const { 
-    params: tradeParams, 
-    setParams: setTradeParams, 
+  const {
+    params: tradeParams,
+    setParams: setTradeParams,
     getQueryString: getTradeQueryString,
     getApiParams: getTradeApiParams,
-    isReady: tradeParamsReady 
+    isReady: tradeParamsReady
   } = useTradePageQueryParams();
 
-  const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
+  const { token: fetchedToken, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
     useSingleTokenPolling(typeof id === "string" ? id : undefined);
+
+  // Use fetched token if available, otherwise use optimistic token
+  const token = fetchedToken || optimisticToken;
 
   // Debug: Log the pair addresses
   useEffect(() => {
