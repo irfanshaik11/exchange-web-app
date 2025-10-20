@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import './interstate.css';
 
+/* make the scrollbar hidden */
+::-webkit-scrollbar {
+  display: none;
+}
+
 /* TradingView Widget Styling - Official Look */
 .tradingview-widget-container {
   background-color: #131722 !important;

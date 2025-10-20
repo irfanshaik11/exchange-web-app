@@ -264,6 +264,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
   const [creatorAddress, setCreatorAddress] = useState<string>("");
+  
+  // Position data for this token
+  const [positionData, setPositionData] = useState<{
+    bought: number;
+    boughtUsdValue: number;
+    sold: number;
+    soldUsdValue: number;
+    remaining: number;
+    remainingUsdValue: number;
+    pnl: number;
+    pnlPercentage: number;
+  } | null>(null);
 
   // Check if this is a high bonding Meteora token that should show migration UI
   const isMigratingToken = useMemo(() => {
@@ -324,6 +336,132 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   const { presets: qbPresets, activePreset } = useQuickBuy();
   const { user, solBalance } = useUser();
+  
+  // Fetch position data for this token
+  useEffect(() => {
+    const STORAGE_KEY = `position_${token?.mint}_${user?.id}`;
+    
+    // Load from localStorage on mount
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Check if data is less than 24 hours old
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+          setPositionData(parsed.data);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading cached position:', e);
+    }
+    
+    const fetchPositionData = async () => {
+      if (!user?.id || !token?.mint) {
+        const emptyData = {
+          bought: 0,
+          boughtUsdValue: 0,
+          sold: 0,
+          soldUsdValue: 0,
+          remaining: 0,
+          remainingUsdValue: 0,
+          pnl: 0,
+          pnlPercentage: 0,
+        };
+        setPositionData(emptyData);
+        return;
+      }
+      
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${user.id}`
+        );
+        
+        if (!response.ok) return;
+        
+        const positions = await response.json();
+        
+        // Find position for this specific token
+        const position = Array.isArray(positions) 
+          ? positions.find((p: any) => 
+              p.tokenAddress?.toLowerCase() === token.mint?.toLowerCase()
+            )
+          : null;
+        
+        if (position) {
+          // Update with active position data
+          const newData = {
+            bought: position.bought || 0,
+            boughtUsdValue: position.boughtUsdValue || 0,
+            sold: position.sold || 0,
+            soldUsdValue: position.soldUsdValue || 0,
+            remaining: position.remaining || 0,
+            remainingUsdValue: position.remainingUsdValue || 0,
+            pnl: position.pnl || 0,
+            pnlPercentage: position.pnlPercentage || 0,
+          };
+          setPositionData(newData);
+          
+          // Save to localStorage
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+              data: newData,
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            console.error('Error saving position to cache:', e);
+          }
+        } else {
+          // Position not found in active positions - it might be closed
+          // Keep previous values if they exist (don't reset closed positions to 0)
+          setPositionData(prev => {
+            // If we had a position before, keep showing it (it's closed)
+            if (prev && (prev.boughtUsdValue > 0 || prev.soldUsdValue > 0)) {
+              // Update localStorage with closed position
+              try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                  data: prev,
+                  timestamp: Date.now()
+                }));
+              } catch (e) {
+                console.error('Error saving closed position:', e);
+              }
+              return prev;
+            }
+            // Otherwise set to zeros (never had a position)
+            return {
+              bought: 0,
+              boughtUsdValue: 0,
+              sold: 0,
+              soldUsdValue: 0,
+              remaining: 0,
+              remainingUsdValue: 0,
+              pnl: 0,
+              pnlPercentage: 0,
+            };
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching position data:', error);
+        // On error, keep previous data if available
+        setPositionData(prev => prev || {
+          bought: 0,
+          boughtUsdValue: 0,
+          sold: 0,
+          soldUsdValue: 0,
+          remaining: 0,
+          remainingUsdValue: 0,
+          pnl: 0,
+          pnlPercentage: 0,
+        });
+      }
+    };
+    
+    fetchPositionData();
+    
+    // Refresh position data every 10 seconds
+    const interval = setInterval(fetchPositionData, 10000);
+    return () => clearInterval(interval);
+  }, [user?.id, token?.mint]);
   
   // Use external QuickBuy settings if available, otherwise use internal context
   const settings = externalQuickBuySettings || (
@@ -1048,7 +1186,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         <div
           className={cx(
             "mx-3 mt-2 rounded-md p-2 text-center text-[11px] font-bold",
-            message.type === "success" ? "bg-[#70E0B0] text-black" : "bg-[#FF4D7F] text-black"
+            message.type === "success" 
+              ? mode === "buy" 
+                ? "bg-[#70E0B0] text-black"  // Green for successful buy
+                : "bg-[#FF4D7F] text-black"  // Red for successful sell
+              : "bg-[#FF4D7F] text-black"    // Red for errors
           )}
         >
           {message.text}
@@ -1420,7 +1562,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[12px] font-semibold">0</span>
+            <span className="text-[#70E0B0] text-[12px] font-semibold">
+              ${positionData ? formatCompactNumber(positionData.boughtUsdValue) : '0'}
+            </span>
           </div>
         </div>
         <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
@@ -1447,7 +1591,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#FF4D7F] text-[12px] font-semibold">0</span>
+            <span className="text-[#FF4D7F] text-[12px] font-semibold">
+              ${positionData ? formatCompactNumber(positionData.soldUsdValue) : '0'}
+            </span>
           </div>
         </div>
         <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
@@ -1474,7 +1620,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#E6E7EA] text-[12px] font-semibold">0</span>
+            <span className="text-[#E6E7EA] text-[12px] font-semibold">
+              ${positionData ? formatCompactNumber(positionData.remainingUsdValue) : '0'}
+            </span>
           </div>
         </div>
         <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
@@ -1501,7 +1649,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[12px] font-semibold">0(+0%)</span>
+            <span className={`text-[12px] font-semibold ${positionData && positionData.pnl >= 0 ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
+              {positionData 
+                ? `${positionData.pnl >= 0 ? '+' : ''}$${formatCompactNumber(Math.abs(positionData.pnl))}(${positionData.pnl >= 0 ? '+' : ''}${positionData.pnlPercentage.toFixed(1)}%)`
+                : '$0(+0%)'}
+            </span>
           </div>
         </div>
       </div>

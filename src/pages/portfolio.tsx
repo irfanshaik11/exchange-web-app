@@ -56,8 +56,20 @@ const SolIcon = () => (
 );
 
 
-const spotTabs = ["Active Positions", "History", "Top 100", "Activity"];
+const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity"];
 
+
+// Token metadata cache interface
+interface TokenMetadataCache {
+  imageUrl?: string;
+  protocol?: string;
+  name?: string;
+  symbol?: string;
+  timestamp: number; // When it was cached
+}
+
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
+const CACHE_KEY = 'tokenMetadataCache';
 
 export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
@@ -83,6 +95,67 @@ export default function PortfolioPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
   const [solPrice, setSolPrice] = useState(0);
+  
+  // Shared token metadata cache across all tabs
+  const [tokenMetadataCache, setTokenMetadataCache] = useState<Record<string, TokenMetadataCache>>({});
+  
+  // Load cache from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedCache = localStorage.getItem(CACHE_KEY);
+      if (savedCache) {
+        const parsed: Record<string, TokenMetadataCache> = JSON.parse(savedCache);
+        // Filter out expired entries
+        const now = Date.now();
+        const validCache: Record<string, TokenMetadataCache> = {};
+        Object.entries(parsed).forEach(([key, value]) => {
+          if (now - value.timestamp < CACHE_TTL) {
+            validCache[key] = value;
+          }
+        });
+        if (Object.keys(validCache).length > 0) {
+          setTokenMetadataCache(validCache);
+          console.log(`📦 Loaded ${Object.keys(validCache).length} cached tokens from localStorage`);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading token cache:', error);
+    }
+  }, []);
+  
+  // Save cache to localStorage when it changes (debounced)
+  useEffect(() => {
+    if (Object.keys(tokenMetadataCache).length === 0) return;
+    
+    const timeoutId = setTimeout(() => {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(tokenMetadataCache));
+        console.log(`💾 Saved ${Object.keys(tokenMetadataCache).length} tokens to cache`);
+      } catch (error) {
+        console.error('Error saving token cache:', error);
+      }
+    }, 1000); // Debounce saves by 1 second
+    
+    return () => clearTimeout(timeoutId);
+  }, [tokenMetadataCache]);
+  
+  // Helper function to update cache
+  const updateTokenMetadataCache = (tokenAddress: string, metadata: Omit<TokenMetadataCache, 'timestamp'>) => {
+    setTokenMetadataCache(prev => ({
+      ...prev,
+      [tokenAddress]: {
+        ...metadata,
+        timestamp: Date.now()
+      }
+    }));
+  };
+  
+  // Helper function to check if cache entry is valid
+  const isCacheValid = (tokenAddress: string): boolean => {
+    const cached = tokenMetadataCache[tokenAddress];
+    if (!cached) return false;
+    return Date.now() - cached.timestamp < CACHE_TTL;
+  };
   
   // Fetch SOL price using Pyth Network
   useEffect(() => {
@@ -152,19 +225,20 @@ export default function PortfolioPage() {
     fetchTradeHistory();
   }, [user?.id]);
 
-  // Fetch trade activity only when on Activity tab
+  // Fetch trade activity only when on Activity tab (index 2 after History commented out)
   useEffect(() => {
     let isInitialLoad = true;
     
     const fetchTradeActivity = async () => {
-      if (user?.id && activeSpotTab === 3) {
+      if (user?.id && activeSpotTab === 2) {
         // Only show loading state on initial load, not on refreshes
         if (isInitialLoad) {
           setLoadingTradeActivity(true);
         }
         try {
           const activity = await getTradeActivityByUser(user.id);
-          setTradeActivity(activity);
+          // Reverse array so newest trades appear at the top
+          setTradeActivity([...activity].reverse());
         } catch (error) {
           console.error("Failed to fetch trade activity:", error);
           setTradeActivity([]);
@@ -180,7 +254,7 @@ export default function PortfolioPage() {
     fetchTradeActivity();
     
     // Auto-refresh every 5 seconds when on Activity tab
-    if (user?.id && activeSpotTab === 3) {
+    if (user?.id && activeSpotTab === 2) {
       const intervalId = setInterval(() => {
         fetchTradeActivity();
       }, 5000);
@@ -689,9 +763,9 @@ export default function PortfolioPage() {
                         {(() => {
                           const activeTab = activeSpotTab;
                           if (activeTab === 0) return `${filteredPositions.length} of ${positions.length} positions`;
-                          if (activeTab === 1) return `${filteredTradeHistory.length} of ${tradeHistory.length} trades`;
-                          if (activeTab === 2) return `${filteredTop100Positions.length} of ${top100Positions.length} positions`;
-                          if (activeTab === 3) return `${filteredTradeActivity.length} of ${tradeActivity.length} activities`;
+                          // History tab (index 1) is commented out
+                          if (activeTab === 1) return `${filteredTop100Positions.length} of ${top100Positions.length} positions`;
+                          if (activeTab === 2) return `${filteredTradeActivity.length} of ${tradeActivity.length} activities`;
                           return '';
                         })()}
                       </div>
@@ -765,33 +839,38 @@ export default function PortfolioPage() {
                        Please log in to view your positions.
                      </div>
                    ) : (
-                     <Positions
-                       bearerToken={user.bearerToken}
-                       userId={user.id}
-                       onPositionsChange={setPositions}
-                       onTokenNamesChange={setTokenNames}
-                       preloadedPositions={filteredPositions}
-                       skipFetch={searchQuery.trim() !== ""}
-                       showHidden={showHidden}
-                       showInSOL={sortByUSD}
-                     />
+                    <Positions
+                      bearerToken={user.bearerToken}
+                      userId={user.id}
+                      onPositionsChange={setPositions}
+                      onTokenNamesChange={setTokenNames}
+                      preloadedPositions={filteredPositions}
+                      skipFetch={searchQuery.trim() !== ""}
+                      showHidden={showHidden}
+                      showInSOL={sortByUSD}
+                      tokenMetadataCache={tokenMetadataCache}
+                      onUpdateCache={updateTokenMetadataCache}
+                      isCacheValid={isCacheValid}
+                    />
                    ))}
-                 {activeSpotTab === 1 &&
-                   (userLoading || loadingTradeHistory ? (
-                     <div className="py-8 text-center text-[#9CA3AF]">
-                       Loading...
-                     </div>
-                   ) : !user?.id ? (
-                     <div className="py-8 text-center text-[#9CA3AF]">
-                       Please log in to view your trade history.
-                     </div>
-                   ) : (
-                     <TradeTable
-                       trades={filteredTradeHistory}
-                       loading={loadingTradeHistory}
-                     />
-                   ))}
-                  {activeSpotTab === 2 &&
+                  {/* History tab commented out */}
+                  {/* {activeSpotTab === 1 &&
+                    (userLoading || loadingTradeHistory ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Loading...
+                      </div>
+                    ) : !user?.id ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Please log in to view your trade history.
+                      </div>
+                    ) : (
+                      <TradeTable
+                        trades={filteredTradeHistory}
+                        loading={loadingTradeHistory}
+                        onTokenNamesChange={setTokenNames}
+                      />
+                    ))} */}
+                  {activeSpotTab === 1 &&
                     (userLoading ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
@@ -814,9 +893,12 @@ export default function PortfolioPage() {
                         skipFetch={true}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
+                        tokenMetadataCache={tokenMetadataCache}
+                        onUpdateCache={updateTokenMetadataCache}
+                        isCacheValid={isCacheValid}
                       />
                     ))}
-                  {activeSpotTab === 3 &&
+                  {activeSpotTab === 2 &&
                     (userLoading || loadingTradeActivity ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
@@ -831,6 +913,9 @@ export default function PortfolioPage() {
                         trades={filteredTradeActivity}
                         loading={loadingTradeActivity}
                         onTokenNamesChange={setTokenNames}
+                        tokenMetadataCache={tokenMetadataCache}
+                        onUpdateCache={updateTokenMetadataCache}
+                        isCacheValid={isCacheValid}
                       />
                       </div>
                     ))}
