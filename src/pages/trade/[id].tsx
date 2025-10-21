@@ -414,6 +414,7 @@ export default function TradePage() {
         <Header search={search} setSearch={setSearch} />
 
         {/* little live banners */}
+        {/* Commented out: Live data updating banner
         {isPolling && (
           <div
             className="text-center text-xs px-2 py-1.5"
@@ -422,6 +423,7 @@ export default function TradePage() {
             Live data updating every 3 seconds…
           </div>
         )}
+        */}
         {isHydrating && (
           <div
             className="text-center text-xs px-2 py-1.5"

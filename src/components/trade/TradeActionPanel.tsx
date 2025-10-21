@@ -8,6 +8,7 @@ import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt } from 
 import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
 import { createLimitOrder, tradeBuy, tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { getTradeActivityByUser } from "~/utils/functions";
 import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
@@ -159,6 +160,10 @@ const formatCompactNumber = (n: number): string => {
   }
   if (abs >= 1_000) {
     return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  }
+  // For small numbers, show decimal places instead of rounding to 0
+  if (abs < 1) {
+    return n.toFixed(4).replace(/\.?0+$/, ""); // Show up to 4 decimal places, remove trailing zeros
   }
   return Math.round(n).toString();
 };
@@ -337,25 +342,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const { presets: qbPresets, activePreset } = useQuickBuy();
   const { user, solBalance } = useUser();
   
-  // Fetch position data for this token
+  // Calculate position data from trade activity (like Activity tab does)
   useEffect(() => {
-    const STORAGE_KEY = `position_${token?.mint}_${user?.id}`;
-    
-    // Load from localStorage on mount
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Check if data is less than 24 hours old
-        if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
-          setPositionData(parsed.data);
-        }
-      }
-    } catch (e) {
-      console.error('Error loading cached position:', e);
-    }
-    
-    const fetchPositionData = async () => {
+    const calculatePositionFromTrades = async () => {
       if (!user?.id || !token?.mint) {
         const emptyData = {
           bought: 0,
@@ -372,78 +361,86 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       }
       
       try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${user.id}`
+        // Get all trade activity for this user (like Activity tab)
+        const trades = await getTradeActivityByUser(user.id.toString());
+        
+        console.log('🔍 TradeActionPanel - Fetched trade activity:', trades.length, 'trades');
+        console.log('🔍 TradeActionPanel - Looking for token:', token.mint);
+        
+        // Filter trades for this specific token
+        const tokenTrades = trades.filter((trade: any) => 
+          trade.tokenAddress?.toLowerCase() === token.mint?.toLowerCase()
         );
         
-        if (!response.ok) return;
+        console.log('🔍 TradeActionPanel - Found', tokenTrades.length, 'trades for this token');
         
-        const positions = await response.json();
-        
-        // Find position for this specific token
-        const position = Array.isArray(positions) 
-          ? positions.find((p: any) => 
-              p.tokenAddress?.toLowerCase() === token.mint?.toLowerCase()
-            )
-          : null;
-        
-        if (position) {
-          // Update with active position data
-          const newData = {
-            bought: position.bought || 0,
-            boughtUsdValue: position.boughtUsdValue || 0,
-            sold: position.sold || 0,
-            soldUsdValue: position.soldUsdValue || 0,
-            remaining: position.remaining || 0,
-            remainingUsdValue: position.remainingUsdValue || 0,
-            pnl: position.pnl || 0,
-            pnlPercentage: position.pnlPercentage || 0,
-          };
-          setPositionData(newData);
+        if (tokenTrades.length > 0) {
+          // Calculate position from individual trades
+          let bought = 0;
+          let boughtUsdValue = 0;
+          let sold = 0;
+          let soldUsdValue = 0;
           
-          // Save to localStorage
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({
-              data: newData,
-              timestamp: Date.now()
-            }));
-          } catch (e) {
-            console.error('Error saving position to cache:', e);
-          }
-        } else {
-          // Position not found in active positions - it might be closed
-          // Keep previous values if they exist (don't reset closed positions to 0)
-          setPositionData(prev => {
-            // If we had a position before, keep showing it (it's closed)
-            if (prev && (prev.boughtUsdValue > 0 || prev.soldUsdValue > 0)) {
-              // Update localStorage with closed position
-              try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                  data: prev,
-                  timestamp: Date.now()
-                }));
-              } catch (e) {
-                console.error('Error saving closed position:', e);
-              }
-              return prev;
+          tokenTrades.forEach((trade: any) => {
+            if (trade.type === 'Buy') {
+              bought += Number(trade.tokenAmount) || 0;
+              boughtUsdValue += Number(trade.usdValue) || 0;
+            } else if (trade.type === 'Sell') {
+              sold += Number(trade.tokenAmount) || 0;
+              soldUsdValue += Number(trade.usdValue) || 0;
             }
-            // Otherwise set to zeros (never had a position)
-            return {
-              bought: 0,
-              boughtUsdValue: 0,
-              sold: 0,
-              soldUsdValue: 0,
-              remaining: 0,
-              remainingUsdValue: 0,
-              pnl: 0,
-              pnlPercentage: 0,
-            };
           });
+          
+          const remaining = bought - sold;
+          
+          // Calculate PnL: (sold value + remaining value) - bought value
+          // For remaining value, we'll use the average price of remaining tokens
+          const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
+          const remainingUsdValue = remaining * avgBoughtPrice;
+          const pnl = (soldUsdValue + remainingUsdValue) - boughtUsdValue;
+          const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
+          
+          const newData = {
+            bought,
+            boughtUsdValue,
+            sold,
+            soldUsdValue,
+            remaining,
+            remainingUsdValue,
+            pnl,
+            pnlPercentage,
+          };
+          
+          setPositionData(newData);
+          console.log('✅ TradeActionPanel - Calculated position from trades:', newData);
+          console.log('🔍 Sample trades:', tokenTrades.slice(0, 3));
+          console.log('🔍 Position data set:', {
+            bought: newData.bought,
+            boughtUsdValue: newData.boughtUsdValue,
+            sold: newData.sold,
+            soldUsdValue: newData.soldUsdValue,
+            remaining: newData.remaining,
+            remainingUsdValue: newData.remainingUsdValue,
+            pnl: newData.pnl,
+            pnlPercentage: newData.pnlPercentage
+          });
+        } else {
+          // No trades found for this token
+          setPositionData({
+            bought: 0,
+            boughtUsdValue: 0,
+            sold: 0,
+            soldUsdValue: 0,
+            remaining: 0,
+            remainingUsdValue: 0,
+            pnl: 0,
+            pnlPercentage: 0,
+          });
+          console.log('ℹ️ TradeActionPanel - No trades found for token:', token.mint);
         }
       } catch (error) {
-        console.error('Error fetching position data:', error);
-        // On error, keep previous data if available
-        setPositionData(prev => prev || {
+        console.error('Error calculating position from trades:', error);
+        setPositionData({
           bought: 0,
           boughtUsdValue: 0,
           sold: 0,
@@ -456,10 +453,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       }
     };
     
-    fetchPositionData();
+    calculatePositionFromTrades();
     
     // Refresh position data every 10 seconds
-    const interval = setInterval(fetchPositionData, 10000);
+    const interval = setInterval(calculatePositionFromTrades, 10000);
     return () => clearInterval(interval);
   }, [user?.id, token?.mint]);
   
@@ -1448,6 +1445,57 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 } else {
                   setMessage({ type: "error", text: "❌ Trade failed. Please try again." });
                 }
+                
+                // Refresh position data after successful trade by recalculating from trade activity
+                if (tr && txHash) {
+                  setTimeout(async () => {
+                    try {
+                      const trades = await getTradeActivityByUser(user.id.toString());
+                      const tokenTrades = trades.filter((trade: any) => 
+                        trade.tokenAddress?.toLowerCase() === token.mint?.toLowerCase()
+                      );
+                      
+                      if (tokenTrades.length > 0) {
+                        let bought = 0;
+                        let boughtUsdValue = 0;
+                        let sold = 0;
+                        let soldUsdValue = 0;
+                        
+                        tokenTrades.forEach((trade: any) => {
+                          if (trade.type === 'Buy') {
+                            bought += Number(trade.tokenAmount) || 0;
+                            boughtUsdValue += Number(trade.usdValue) || 0;
+                          } else if (trade.type === 'Sell') {
+                            sold += Number(trade.tokenAmount) || 0;
+                            soldUsdValue += Number(trade.usdValue) || 0;
+                          }
+                        });
+                        
+                        const remaining = bought - sold;
+                        const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
+                        const remainingUsdValue = remaining * avgBoughtPrice;
+                        const pnl = (soldUsdValue + remainingUsdValue) - boughtUsdValue;
+                        const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
+                        
+                        const newData = {
+                          bought,
+                          boughtUsdValue,
+                          sold,
+                          soldUsdValue,
+                          remaining,
+                          remainingUsdValue,
+                          pnl,
+                          pnlPercentage,
+                        };
+                        
+                        setPositionData(newData);
+                        console.log('🔄 TradeActionPanel - Position data refreshed after trade:', newData);
+                      }
+                    } catch (error) {
+                      console.error('Error refreshing position data:', error);
+                    }
+                  }, 2000); // Wait 2 seconds for backend to process
+                }
               }
             } catch (error: any) {
               // Catch any other errors
@@ -1587,11 +1635,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       {/* footer mini stats */}
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
-        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+            <div className="w-2.5 h-2.5">
+              <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
                 <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_bought)"/>
                 <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_bought)"/>
                 <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_bought)"/>
@@ -1611,16 +1659,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[12px] font-semibold">
+            <span className="text-[#70E0B0] text-[10px] font-semibold">
               ${positionData ? formatCompactNumber(positionData.boughtUsdValue) : '0'}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+            <div className="w-2.5 h-2.5">
+              <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
                 <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_sold)"/>
                 <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_sold)"/>
                 <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_sold)"/>
@@ -1640,16 +1688,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#FF4D7F] text-[12px] font-semibold">
+            <span className="text-[#FF4D7F] text-[10px] font-semibold">
               ${positionData ? formatCompactNumber(positionData.soldUsdValue) : '0'}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+            <div className="w-2.5 h-2.5">
+              <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
                 <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_holding)"/>
                 <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_holding)"/>
                 <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_holding)"/>
@@ -1669,16 +1717,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#E6E7EA] text-[12px] font-semibold">
+            <span className="text-[#E6E7EA] text-[10px] font-semibold">
               ${positionData ? formatCompactNumber(positionData.remainingUsdValue) : '0'}
             </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">PnL</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">PnL</span>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+            <div className="w-2.5 h-2.5">
+              <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
                 <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_pnl)"/>
                 <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_pnl)"/>
                 <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_pnl)"/>
@@ -1698,7 +1746,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className={`text-[12px] font-semibold ${positionData && positionData.pnl >= 0 ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
+            <span className={`text-[9px] font-semibold ${positionData && positionData.pnl >= 0 ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
               {positionData 
                 ? `${positionData.pnl >= 0 ? '+' : ''}$${formatCompactNumber(Math.abs(positionData.pnl))}(${positionData.pnl >= 0 ? '+' : ''}${positionData.pnlPercentage.toFixed(1)}%)`
                 : '$0(+0%)'}
