@@ -33,10 +33,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const refreshBalance = async () => {
     if (user?.publicKey) {
-      const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(user.publicKey)}`);
-      const data = await response.json();
-      setSolBalance(data.data.balance);
-      setUsdcBalance(data.data.usdBalance);
+      try {
+        const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(user.publicKey)}`);
+        if (!response.ok) {
+          return;
+        }
+        const data = await response.json();
+        if (data.data?.balance !== undefined) {
+          setSolBalance(data.data.balance);
+          setUsdcBalance(data.data.usdBalance || 0);
+        }
+      } catch (error) {
+        // Silently fail to prevent polling from breaking
+      }
     }
   };
 

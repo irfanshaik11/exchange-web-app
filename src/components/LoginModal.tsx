@@ -66,9 +66,9 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       setShow(true);
       // Refresh wallet connection state when modal opens
       phantomWallet.refreshConnection();
-      
-      // Clear MetaMask connection state to ensure fresh start
-      localStorage.removeItem('metamask_connected');
+
+      // Don't clear MetaMask connection state - let the hook manage it properly
+      // Clearing this was preventing MetaMask from opening when locked
       metaMaskWallet.refreshConnection();
       
       // Check for token in cookies and refresh user if not already authenticated
@@ -232,36 +232,36 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
 
   // MetaMask Wallet Login handler - Enhanced with proper connection management
   async function handleMetamaskLogin() {
-    console.log('MetaMask login started...');
     setMetamaskLoading(true);
     setError(null);
     setWalletError(null);
     setSuccess(null);
-    
+
     try {
       // Check if MetaMask is installed
       if (!metaMaskWallet.isInstalled) {
-        console.log('MetaMask not installed');
         setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
         return;
       }
 
-      console.log('MetaMask is installed, attempting to connect...');
       // Connect to MetaMask wallet (this handles connection properly)
-      const connected = await metaMaskWallet.connect();
+      let connected = await metaMaskWallet.connect();
+
+      // If connection failed due to pending request, wait and retry once
+      if (!connected && metaMaskWallet.error?.includes('already')) {
+        setWalletError('MetaMask is busy. Retrying in 2 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        connected = await metaMaskWallet.connect();
+      }
+
       if (!connected) {
-        console.log('MetaMask connection failed:', metaMaskWallet.error);
         setWalletError(metaMaskWallet.error || 'Failed to connect to MetaMask wallet');
         return;
       }
 
-      console.log('MetaMask connected successfully, attempting to sign message...');
-
       // Create message and sign it
       const message = `Login to Interstate with nonce: ${Date.now()}`;
-      console.log('About to call metaMaskWallet.signMessage...');
       const signResult = await metaMaskWallet.signMessage(message);
-      console.log('metaMaskWallet.signMessage completed:', signResult);
       
       // Check if signing failed
       if ('error' in signResult) {
@@ -284,13 +284,8 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
         setError('MetaMask login failed - no token received');
       }
     } catch (error: any) {
-      console.error('MetaMask backend error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        stack: error.stack
-      });
-      
+      console.error('MetaMask login error:', error);
+
       // Handle different types of backend errors
       if (error.message?.includes('Internal server error')) {
         setWalletError('Backend server error. Please try again later.');
@@ -469,8 +464,8 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
               <button
                 type="button"
                 className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
-                  metaMaskWallet.isConnected 
-                    ? 'bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50' 
+                  metaMaskWallet.isConnected
+                    ? 'bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50'
                     : 'bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50'
                 } ${metamaskLoading || metaMaskWallet.connecting ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
