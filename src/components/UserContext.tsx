@@ -31,6 +31,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [solBalance, setSolBalance] = useState(0);
   const [usdcBalance, setUsdcBalance] = useState(0);
+  const [lastNotifiedBalance, setLastNotifiedBalance] = useState(0);
 
   const refreshBalance = async () => {
     if (user?.publicKey) {
@@ -40,9 +41,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const newBalance = data.data.balance;
         const newUsdBalance = data.data.usdBalance;
         
-        // Check if balance increased (deposit detected)
-        if (newBalance > solBalance && solBalance > 0) {
-          const depositAmount = newBalance - solBalance;
+        // Check if balance increased (deposit detected) and we haven't notified for this balance yet
+        if (newBalance > lastNotifiedBalance && lastNotifiedBalance >= 0) {
+          const depositAmount = newBalance - lastNotifiedBalance;
+          console.log(`Deposit detected: ${depositAmount.toFixed(4)} SOL (from ${lastNotifiedBalance.toFixed(4)} to ${newBalance.toFixed(4)})`);
           toast.success(`🎉 Deposit received! +${depositAmount.toFixed(4)} SOL`, {
             duration: 5000,
             style: {
@@ -50,6 +52,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
               color: '#fff',
             },
           });
+          // Update the last notified balance to prevent duplicate notifications
+          setLastNotifiedBalance(newBalance);
         }
         
         setSolBalance(newBalance);
@@ -88,6 +92,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     Cookies.remove('token');
     setUser(null);
     setSolBalance(0);
+    setLastNotifiedBalance(0);
   };
 
   useEffect(() => {
@@ -98,6 +103,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (user) {
       refreshBalance();
       
+      // Initialize lastNotifiedBalance to current balance to prevent false notifications
+      const initializeBalance = async () => {
+        try {
+          const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(user.publicKey)}`);
+          const data = await response.json();
+          setLastNotifiedBalance(data.data.balance);
+        } catch (error) {
+          console.error('Failed to initialize balance:', error);
+        }
+      };
+      initializeBalance();
+      
       // Set up automatic balance polling every 10 seconds
       const interval = setInterval(() => {
         refreshBalance();
@@ -107,7 +124,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         clearInterval(interval);
       };
     }
-  }, [user]);
+  }, [user?.publicKey]); // Only depend on publicKey to avoid unnecessary re-runs
 
   return (
     <UserContext.Provider value={{ user, loading, solBalance, refreshUser, refreshBalance, setUser, logout, usdcBalance }}>
