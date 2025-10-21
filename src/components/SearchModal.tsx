@@ -393,7 +393,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
         }
       };
     }
-  }, [open, fetchTokens]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // No need to re-run search when sort changes - we sort on the frontend now
 

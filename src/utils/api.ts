@@ -184,6 +184,26 @@ export const getMyLimitOrders = (authToken: string) =>
     authToken,
   });
 
+// Withdrawal functions
+interface WithdrawParams {
+  amount: number;
+  destinationAddress: string;
+}
+
+export const withdrawSOL = (params: WithdrawParams, authToken: string) =>
+  apiFetch<{ 
+    message: string; 
+    txHash?: string;
+    txSignature?: string;
+    amount: number;
+    destinationAddress: string;
+    newBalance?: number;
+  }>("/api/users/withdraw", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
 export const updateLimitOrder = (
   params: UpdateLimitOrderParams,
   authToken: string,
