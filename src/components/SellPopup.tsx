@@ -58,7 +58,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
     return getPoolTypeFromToken({
       mint: position.tokenAddress,
       pair_address: position.pairAddress,
-    });
+    } as any);
   }, [position.tokenAddress, position.pairAddress]);
 
   // Update slider when amount changes
@@ -116,8 +116,8 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
         originalPairAddress: position.pairAddress,
       }, user.bearerToken);
 
-      if (result?.hash || result?.txid) {
-        const txHash = result.hash || result.txid;
+      if (result?.hash || (result as any)?.txid) {
+        const txHash = result.hash || (result as any).txid;
         setMessage({
           type: "success",
           text: `✅ Sold ${amount}% successfully! Tx: ${String(txHash).slice(0, 8)}...`,
