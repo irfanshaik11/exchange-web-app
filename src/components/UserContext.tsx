@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import type { ReactNode } from 'react';
 import Cookies from 'js-cookie';
 import { getUserById } from '../utils/api';
 import { getSolBalance } from '~/utils/functions';
+import toast from 'react-hot-toast';
 
 export interface UserInfo {
   id: string;
@@ -33,10 +34,29 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const refreshBalance = async () => {
     if (user?.publicKey) {
-      const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(user.publicKey)}`);
-      const data = await response.json();
-      setSolBalance(data.data.balance);
-      setUsdcBalance(data.data.usdBalance);
+      try {
+        const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(user.publicKey)}`);
+        const data = await response.json();
+        const newBalance = data.data.balance;
+        const newUsdBalance = data.data.usdBalance;
+        
+        // Check if balance increased (deposit detected)
+        if (newBalance > solBalance && solBalance > 0) {
+          const depositAmount = newBalance - solBalance;
+          toast.success(`🎉 Deposit received! +${depositAmount.toFixed(4)} SOL`, {
+            duration: 5000,
+            style: {
+              background: '#10B981',
+              color: '#fff',
+            },
+          });
+        }
+        
+        setSolBalance(newBalance);
+        setUsdcBalance(newUsdBalance);
+      } catch (error) {
+        console.error('Failed to refresh balance:', error);
+      }
     }
   };
 
@@ -77,6 +97,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user) {
       refreshBalance();
+      
+      // Set up automatic balance polling every 10 seconds
+      const interval = setInterval(() => {
+        refreshBalance();
+      }, 10000); // Poll every 10 seconds
+      
+      return () => {
+        clearInterval(interval);
+      };
     }
   }, [user]);
 
