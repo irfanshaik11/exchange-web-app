@@ -568,12 +568,20 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         );
         if (response.ok) {
           const data = await response.json();
+          console.log('📊 Creator address data received:', data);
+          
           if (data?.filterTokens?.results?.[0]?.token?.creatorAddress) {
-            setCreatorAddress(data.filterTokens.results[0].token.creatorAddress);
+            const creatorAddr = data.filterTokens.results[0].token.creatorAddress;
+            console.log('✅ Creator address found:', creatorAddr);
+            setCreatorAddress(creatorAddr);
+          } else {
+            console.log('⚠️ No creator address found in response');
           }
+        } else {
+          console.warn('⚠️ Creator address fetch failed with status:', response.status);
         }
       } catch (error) {
-        console.error("Failed to fetch creator address:", error);
+        console.error("❌ Failed to fetch creator address:", error);
       }
     };
     
@@ -1352,9 +1360,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
                 poolType,
                 // Preset trading parameters
-                slippage: settings.maxSlippage || 0.4, // Default 40%
-                priorityFee: settings.priority || 0.0001, // Default 0.0001 SOL
-                bribe: settings.bribe || 0, // Default 0
+                slippage: settings.maxSlippage || 0.2, // Default 20%
+                priorityFee: settings.priority || 0.001, // Default 0.001 SOL
+                bribe: settings.bribe || 0.05, // Default 0.05 SOL
                 mevMode: settings.mevMode,
                 autoFee: settings.autoFee || false,
                 maxFee: settings.maxFee || 0,

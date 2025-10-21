@@ -285,6 +285,58 @@ export async function batchCacheOperations<T>(
   const promises = operations.map(({ endpoint, params, fetcher, ttl }) =>
     tokenCache.get(endpoint, params || {}, fetcher, ttl)
   );
-  
+
   return Promise.all(promises);
+}
+
+/**
+ * Prefetch token data for trade page
+ * Non-blocking - fires and forgets
+ */
+export async function prefetchTradeData(address: string, pairAddress?: string): Promise<void> {
+  if (!address) return;
+
+  try {
+    console.log('[TokenCache] Prefetching trade data for:', address);
+
+    // Use preload method for non-blocking cache population
+    const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+
+    await tokenCache.preload(
+      '/v1/trade/view',
+      { pair_address: pairAddress || address },
+      async () => {
+        const response = await fetch(`${baseUrl}/v1/trade/view?pair_address=${pairAddress || address}`);
+        if (!response.ok) throw new Error('Failed to fetch');
+        return response.json();
+      },
+      CACHE_CONFIGS.FREQUENT.ttl
+    );
+  } catch (error) {
+    console.warn('[TokenCache] Prefetch failed for:', address, error);
+    // Silent fail - prefetch is best-effort
+  }
+}
+
+/**
+ * Get cached trade data if available
+ */
+export async function getCachedTradeData(pairAddress: string): Promise<any | null> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+
+    return await tokenCache.get(
+      '/v1/trade/view',
+      { pair_address: pairAddress },
+      async () => {
+        const response = await fetch(`${baseUrl}/v1/trade/view?pair_address=${pairAddress}`);
+        if (!response.ok) throw new Error('Failed to fetch');
+        return response.json();
+      },
+      CACHE_CONFIGS.FREQUENT.ttl
+    );
+  } catch (error) {
+    console.error('[TokenCache] Failed to get trade data:', error);
+    return null;
+  }
 }

@@ -78,6 +78,8 @@ import { useSolPrice } from "~/components/SolPriceContext";
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { toast } from "react-hot-toast";
+import { TokenAge } from "./TokenAge";
+import { prefetchTradeData } from "~/utils/tokenCache";
 
 interface PulseTableProps {
   title: string;
@@ -1213,7 +1215,7 @@ const PulseTable = React.memo(function PulseTable({
   const [bribe, setBribe] = useState(0);
   const [activeFilterTab, setActiveFilterTab] = useState('New Pairs');
   const [activeCategoryTab, setActiveCategoryTab] = useState('Audit');
-  const [selectedPill, setSelectedPill] = useState('P1');
+  const [selectedPill, setSelectedPill] = useState('P1'); // Each column has its own preset selection
   const [thunderAmount, setThunderAmount] = useState('0.0');
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
@@ -1451,17 +1453,26 @@ const PulseTable = React.memo(function PulseTable({
   
   // Quick buy functionality
   const { user } = useUser();
-  const { presets, activePreset } = useQuickBuy();
+  const { presets, activePreset, setActivePreset } = useQuickBuy();
+  
+  // Get the preset index from the selected pill for this column
+  const getPresetIndex = () => {
+    return parseInt(selectedPill.replace('P', '')) - 1;
+  };
   
   // QUICK BUY handler
   const handleQuickBuy = async (token: Token) => {
+    console.log("🎯 handleQuickBuy called for token:", token.symbol);
+    
     if (!user) {
+      console.log("❌ No user found");
       toast.error("⚠️ Please connect your wallet to trade");
       return;
     }
 
     const buyAmount = parseFloat(thunderAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
+      console.log("❌ Invalid buy amount:", thunderAmount);
       toast.error("⚠️ Please enter a valid SOL amount");
       return;
     }
@@ -1517,6 +1528,13 @@ const PulseTable = React.memo(function PulseTable({
       }
     } catch (e: any) {
       console.error('Quick Buy error:', e);
+      console.error('Error details:', {
+        message: e?.message,
+        code: e?.code,
+        status: e?.status,
+        details: e?.details,
+        fullError: e
+      });
       
       if (e instanceof ApiError) {
         if (e.code === 'NO_ACTIVE_POOL') {
@@ -2303,8 +2321,9 @@ const PulseTable = React.memo(function PulseTable({
                     selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-white'
                   }`}
                   onClick={() => {
+                    // Update local preset selection for this column only
                     setSelectedPill(pill);
-                    console.log(`Selected ${pill}`);
+                    console.log(`Selected ${pill} in ${title} column`);
                   }}
                   onMouseEnter={() => setShowPillTooltip(pill)}
                   onMouseLeave={() => setShowPillTooltip(null)}
@@ -2313,41 +2332,53 @@ const PulseTable = React.memo(function PulseTable({
                 </button>
                 
                 {/* Tooltip for each pill */}
-                {showPillTooltip === pill && (
-                  <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
-                       style={{ 
-                         backgroundColor: 'rgba(15, 16, 18, 0.95)',
-                         borderColor: AX.border 
-                       }}>
-                    <div className="p-2 space-y-1.5">
-                      {/* Slippage - Running person icon */}
-                      <div className="flex items-center gap-1.5">
-                        <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
-                        <span className="text-gray-300 text-xs font-light">20%</span>
-                      </div>
-                      
-                      {/* Priority Fee - Gas pump icon with yellow styling */}
-                      <div className="flex items-center gap-1.5">
-                        <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                        <span className="text-yellow-400 text-xs font-light">0.001</span>
-                        <span className="text-red-500 text-xs font-light">⚠</span>
-                      </div>
-                      
-                      {/* Bribe - Coins icon with yellow styling */}
-                      <div className="flex items-center gap-1.5">
-                        <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                        <span className="text-yellow-400 text-xs font-light">0.05</span>
-                        <span className="text-red-500 text-xs font-light">⚠</span>
-                      </div>
-                      
-                      {/* MEV Protection - Ban icon */}
-                      <div className="flex items-center gap-1.5">
-                        <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
-                        <span className="text-gray-300 text-xs font-light">Off</span>
+                {showPillTooltip === pill && (() => {
+                  // Get preset index from pill (P1 = 0, P2 = 1, P3 = 2)
+                  const presetIndex = parseInt(pill.replace('P', '')) - 1;
+                  const preset = presets[presetIndex];
+                  const settings = preset?.quickBuySettings;
+                  
+                  if (!settings) return null;
+                  
+                  return (
+                    <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
+                         style={{ 
+                           backgroundColor: 'rgba(15, 16, 18, 0.95)',
+                           borderColor: AX.border 
+                         }}>
+                      <div className="p-2 space-y-1.5">
+                        {/* Slippage - Running person icon */}
+                        <div className="flex items-center gap-1.5">
+                          <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
+                          <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
+                        </div>
+                        
+                        {/* Priority Fee - Gas pump icon with yellow styling */}
+                        <div className="flex items-center gap-1.5">
+                          <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                          <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
+                          <span className="text-red-500 text-xs font-light">⚠</span>
+                        </div>
+                        
+                        {/* Bribe - Coins icon with yellow styling */}
+                        <div className="flex items-center gap-1.5">
+                          <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                          <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
+                          <span className="text-red-500 text-xs font-light">⚠</span>
+                        </div>
+                        
+                        {/* MEV Protection - Ban icon */}
+                        <div className="flex items-center gap-1.5">
+                          <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
+                          <span className="text-gray-300 text-xs font-light">
+                            {settings.mevMode === 'off' ? 'Off' : 
+                             settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             ))}
           </div>
@@ -4040,17 +4071,20 @@ const PulseTable = React.memo(function PulseTable({
           memoizedTokens.map((token, idx) => {
             const pairAddress = (token as any)?.pair_address;
             const mintAddress = (token as any)?.mint;
+            const address = pairAddress || mintAddress;
 
-            const handleTokenClick = () => {
-              // Navigate immediately with pair_address or mint - trade page will handle resolution
-              const address = pairAddress || mintAddress;
-              if (address) {
-                router.push(`/trade/${address}`);
-              }
-            };
+            // Build query params for optimistic UI
+            const queryParams = new URLSearchParams({
+              _name: (token as any)?.name || (token as any)?.symbol || '',
+              _symbol: (token as any)?.symbol || '',
+              _price: String((token as any)?.price_usd || (token as any)?.priceUsd || ''),
+              _mcap: String((token as any)?.market_cap_usd || (token as any)?.marketCapUsd || ''),
+              _image: (token as any)?.image || (token as any)?.uri || '',
+            }).toString();
 
             return (
-              <div
+              <Link
+                href={`/trade/${address}?${queryParams}`}
                 key={`${pairAddress || mintAddress || "noaddr"}-${idx}`}
                 className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 transition-all duration-300 ease-out"
                 style={{ 
@@ -4068,6 +4102,10 @@ const PulseTable = React.memo(function PulseTable({
                     popup.style.top = `${rect.top - 30}px`;
                     popup.style.transform = 'translateX(-50%)';
                   }
+                  // Prefetch trade data on hover for instant navigation
+                  if (address) {
+                    prefetchTradeData(address, pairAddress);
+                  }
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';
@@ -4077,7 +4115,6 @@ const PulseTable = React.memo(function PulseTable({
                     popup.style.display = 'none';
                   }
                 }}
-                onClick={handleTokenClick}
               >
                 {/* Subtle wave animation for top 3 final stretch tokens */}
                 {waveTokens.has(idx) && (
@@ -4734,10 +4771,21 @@ const PulseTable = React.memo(function PulseTable({
                             }}
                           >
                             <SmoothNumber
-                              value={
-                                (token.total_buys_5m ?? 0) +
-                                (token.total_sells_5m ?? 0)
-                              }
+                              value={(() => {
+                                const buys = token.total_buys_5m ?? 0;
+                                const sells = token.total_sells_5m ?? 0;
+                                const total = buys + sells;
+                                // Debug logging
+                                if (token.symbol === 'HEAVEN' || total < 20) {
+                                  console.log(`[PulseTable TX] ${token.symbol}:`, {
+                                    total_buys_5m: token.total_buys_5m,
+                                    total_sells_5m: token.total_sells_5m,
+                                    calculated: total,
+                                    mint: token.mint
+                                  });
+                                }
+                                return total;
+                              })()}
                               duration={300}
                             />
                           </span>
@@ -4906,7 +4954,7 @@ const PulseTable = React.memo(function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <LuChefHat size={13} /> DS <span style={{ color: '#ffffff' }}>{getAgeLabel(token)}</span>
+                    <LuChefHat size={13} /> DS <span style={{ color: '#ffffff' }}><TokenAge createdAt={(token as any).created_at || (token as any).launch_time} /></span>
                   </span>
                   
                   {/* Snipe percentage - Red */}
@@ -5049,7 +5097,7 @@ const PulseTable = React.memo(function PulseTable({
                   }
                   return null;
                 })()}
-              </div>
+              </Link>
             );
           })
         )}

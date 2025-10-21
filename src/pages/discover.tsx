@@ -259,7 +259,10 @@ export default function Home() {
 
   // QUICK BUY handler
   async function handleQuickBuy(token: Token) {
+    console.log("🎯 handleQuickBuy called for token:", token.symbol);
+    
     if (!user) {
+      console.log("❌ No user found");
       return;
     }
     try {
@@ -305,6 +308,13 @@ export default function Home() {
       }
     } catch (e: any) {
       console.error('Quick Buy error:', e);
+      console.error('Error details:', {
+        message: e?.message,
+        code: e?.code,
+        status: e?.status,
+        details: e?.details,
+        fullError: e
+      });
       toast.error(`❌ Quick Buy failed: ${e.message || "Unknown error"}`);
     }
   }

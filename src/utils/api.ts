@@ -210,7 +210,7 @@ export type BuyParams = {
   poolType: "PumpAmm" | "Raydium CPMM" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "bags" | "MoonShoot" | "";
   originalPairAddress?: string; // Original pair address from token-service for trade history
   // Preset trading parameters
-  slippage?: number; // e.g., 0.4 for 40%
+  slippage?: number; // e.g., 0.2 for 20%
   priorityFee?: number; // in SOL, e.g., 0.001
   bribe?: number; // in SOL, e.g., 0.001
   mevMode?: 'off' | 'reduced' | 'on';
@@ -222,8 +222,12 @@ export type BuyParams = {
   tokenSymbol?: string;
 };
 
-export const tradeBuy = (params: BuyParams, authToken: string) =>
-  apiFetch<{ 
+export const tradeBuy = (params: BuyParams, authToken: string) => {
+  console.log("🚀 tradeBuy called with params:", params);
+  console.log("🔗 Backend URL:", env.NEXT_PUBLIC_BACKEND_URL);
+  console.log("🎯 Full URL:", `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/buy`);
+  
+  return apiFetch<{ 
     message: string; 
     txid: string; 
     tokenAddress: string; 
@@ -238,6 +242,7 @@ export const tradeBuy = (params: BuyParams, authToken: string) =>
     body: params,
     authToken,
   });
+};
 
 type SellPercentageParams = {
   tokenAddress: string;
