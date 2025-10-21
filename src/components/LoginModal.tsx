@@ -10,7 +10,7 @@ import { useWallet } from "./useWallet";
 import { usePhantomWallet } from '../hooks/usePhantomWallet';
 import { useMetaMaskWallet } from '../hooks/useMetaMaskWallet';
 
-const ENABLE_EMAIL_AUTH = true;
+const ENABLE_EMAIL_AUTH = false;
 
 interface LoginModalProps {
   open: boolean;
