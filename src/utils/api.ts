@@ -198,9 +198,28 @@ export const withdrawSOL = (params: WithdrawParams, authToken: string) =>
     amount: number;
     destinationAddress: string;
     newBalance?: number;
+    transactionId?: number;
   }>("/api/users/withdraw", {
     method: "POST",
     body: params,
+    authToken,
+  });
+
+interface WithdrawalTransaction {
+  id: number;
+  amount: number | string; // PostgreSQL DECIMAL returns as string
+  destinationAddress?: string;
+  txSignature?: string;
+  status: 'pending' | 'completed' | 'failed';
+  fee: number | string; // PostgreSQL DECIMAL returns as string
+  errorMessage?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export const getWithdrawalHistory = (authToken: string) =>
+  apiFetch<{ transactions: WithdrawalTransaction[] }>("/api/users/withdrawal-history", {
+    method: "GET",
     authToken,
   });
 
@@ -424,3 +443,4 @@ export const getTokenHolders = async (
 };
 
 export { apiFetch };
+
