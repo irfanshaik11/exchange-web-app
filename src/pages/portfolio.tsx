@@ -378,19 +378,23 @@ export default function PortfolioPage() {
      let between0AndMinus50 = 0;
      let belowMinus50 = 0;
 
-     // Count winning/losing positions and categorize by PNL percentage
-     positions.forEach(pos => {
-       if (pos.pnl > 0) {
-         winningTrades++;
-       } else if (pos.pnl < 0) {
-         losingTrades++;
-       }
-       // Calculate realized PNL from sold positions
-       if (pos.sold > 0) {
-         totalRealizedPnl += pos.pnl * (pos.sold / (pos.bought || 1));
-       }
+    // Count winning/losing positions and categorize by PNL percentage
+    positions.forEach(pos => {
+      if (pos.pnl > 0) {
+        winningTrades++;
+      } else if (pos.pnl < 0) {
+        losingTrades++;
+      }
+      
+      // Calculate realized PNL from sold positions
+      // Realized PnL = Money received from selling - Cost basis of sold tokens
+      if (pos.sold > 0 && pos.bought > 0) {
+        const costBasisOfSold = pos.boughtUsdValue * (pos.sold / pos.bought);
+        const realizedPnl = pos.soldUsdValue - costBasisOfSold;
+        totalRealizedPnl += realizedPnl;
+      }
 
-       // Categorize by PNL percentage
+      // Categorize by PNL percentage
        const pnlPercent = pos.pnlPercentage;
        if (pnlPercent > 500) {
          above500++;
@@ -605,13 +609,13 @@ export default function PortfolioPage() {
                     <div className="text-2xl font-light mb-2" style={{ color: timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F' }}>
                       {sortByUSD && solPrice > 0
                         ? <><SolIcon />{formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl) / solPrice)}</>
-                        : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                        : `${timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}$${formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl))}`
                       }
                     </div>
                     {/* Dynamic PNL chart */}
                     <div className="relative w-full flex-1">
                       <svg className="w-full h-full" viewBox="0 0 300 80" preserveAspectRatio="none">
-                        {/* Horizontal reference line */}
+                        {/* Horizontal reference line (neutral/zero) */}
                         <line 
                           x1="0" 
                           y1="40" 
@@ -620,22 +624,62 @@ export default function PortfolioPage() {
                           stroke="#2A2B33" 
                           strokeWidth="1"
                         />
+                        
+                        {/* Dashed reference lines for visual context */}
+                        <line 
+                          x1="0" 
+                          y1="20" 
+                          x2="300" 
+                          y2="20" 
+                          stroke="#4A4B53" 
+                          strokeWidth="1"
+                          strokeDasharray="4,3"
+                          opacity="0.7"
+                        />
+                        <line 
+                          x1="0" 
+                          y1="60" 
+                          x2="300" 
+                          y2="60" 
+                          stroke="#4A4B53" 
+                          strokeWidth="1"
+                          strokeDasharray="4,3"
+                          opacity="0.7"
+                        />
+                        
                         {/* Dynamic PNL line */}
                         <path
                           d={(() => {
                             const pnl = timeframeMetrics.realizedPnl;
-                            const absMaxPnl = Math.max(Math.abs(pnl), 100);
-                            const normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
+                            
+                            // More aggressive scaling for small values to make slope visible
+                            let normalizedPnl;
+                            if (Math.abs(pnl) < 0.01) {
+                              // For very small values, use much more aggressive scaling
+                              normalizedPnl = Math.max(-1, Math.min(1, pnl * 5000)); // Scale up by 5000x
+                            } else if (Math.abs(pnl) < 1) {
+                              // For small-medium values, moderate scaling
+                              normalizedPnl = Math.max(-1, Math.min(1, pnl * 100)); // Scale up by 100x
+                            } else {
+                              // For larger values, use the original logic
+                              const absMaxPnl = Math.max(Math.abs(pnl), 100);
+                              normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
+                            }
+                            
                             const endY = 40 - (normalizedPnl * 30);
                             
-                            // Create a line that trends up/down based on PNL
-                            return `M 0 40 L 50 ${40 - (normalizedPnl * 10)} L 100 ${40 - (normalizedPnl * 15)} L 150 ${40 - (normalizedPnl * 20)} L 200 ${40 - (normalizedPnl * 25)} L 300 ${endY}`;
+                            // Create a more dramatic line that trends up/down based on PNL
+                            return `M 0 40 L 60 ${40 - (normalizedPnl * 12)} L 120 ${40 - (normalizedPnl * 18)} L 180 ${40 - (normalizedPnl * 24)} L 240 ${40 - (normalizedPnl * 27)} L 300 ${endY}`;
                           })()}
                           stroke={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'}
-                          strokeWidth="2"
+                          strokeWidth="2.5"
                           fill="none"
                           style={{ transition: 'all 0.3s ease' }}
                         />
+                        
+                        {/* Start and end points for clarity */}
+                        <circle cx="0" cy="40" r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
+                        <circle cx="300" cy={40 - (Math.max(-1, Math.min(1, timeframeMetrics.realizedPnl * (Math.abs(timeframeMetrics.realizedPnl) < 0.01 ? 5000 : Math.abs(timeframeMetrics.realizedPnl) < 1 ? 100 : 1)))) * 30} r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
                       </svg>
                     </div>
                   </div>
@@ -664,7 +708,7 @@ export default function PortfolioPage() {
                       <span className="text-white font-light">
                         {sortByUSD && solPrice > 0
                           ? <><SolIcon />{formatSmartNumber(timeframeMetrics.realizedPnl / solPrice)}</>
-                          : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                          : `${timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}$${formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl))}`
                         }
                       </span>
                     </div>
@@ -879,18 +923,14 @@ export default function PortfolioPage() {
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Please log in to view your positions.
                       </div>
-                    ) : filteredTop100Positions.length === 0 ? (
-                      <div className="py-8 text-center text-[#9CA3AF]">
-                        {searchQuery.trim() ? "No positions found matching your search." : "No positions found."}
-                      </div>
                     ) : (
                       <Positions
                         bearerToken={user.bearerToken}
                         userId={user.id}
-                        onPositionsChange={() => {}} // No-op since we're using preloaded positions
+                        onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
-                        preloadedPositions={filteredTop100Positions}
-                        skipFetch={true}
+                        preloadedPositions={searchQuery.trim() ? filteredTop100Positions : undefined}
+                        skipFetch={searchQuery.trim() !== ""}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}
