@@ -23,6 +23,9 @@ interface UsePulseWebSocketOptions {
   url?: string;
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
+  onNewToken?: (token: PulseToken) => void;
+  onFinalStretchToken?: (token: PulseToken) => void;
+  onMigratedToken?: (token: PulseToken) => void;
 }
 
 interface UsePulseWebSocketReturn {
@@ -46,6 +49,9 @@ export function usePulseWebSocket(
     url = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/stream`,
     reconnectInterval = 2000,
     maxReconnectAttempts = 10,
+    onNewToken,
+    onFinalStretchToken,
+    onMigratedToken,
   } = options;
 
   const [newTokens, setNewTokens] = useState<PulseToken[]>([]);
@@ -101,38 +107,77 @@ export function usePulseWebSocket(
         if (!mountedRef.current) return;
 
         try {
-          const message: WebSocketMessage = JSON.parse(event.data);
+          // DEBUG: Log all incoming messages
+          console.log('[usePulseWebSocket] Raw message received:', event.data);
 
-          if (message.type === 'new_token' && message.data) {
-            console.log('[usePulseWebSocket] New token received:', message.data);
+          // Backend may batch multiple JSON messages separated by newlines
+          const messages = event.data.split('\n').filter((msg: string) => msg.trim());
+          console.log(`[usePulseWebSocket] Parsed ${messages.length} message(s) from batch`);
 
-            // Prepend new token to the list
-            setNewTokens((prev) => {
-              // Deduplicate by mint address
-              const filtered = prev.filter(t => t.mint !== message.data.mint);
-              return [message.data, ...filtered].slice(0, 50); // Keep only latest 50
-            });
-          } else if (message.type === 'final_stretch_token' && message.data) {
-            console.log('[usePulseWebSocket] Final stretch token received:', message.data);
+          for (const msgStr of messages) {
+            try {
+              const message: WebSocketMessage = JSON.parse(msgStr);
+              console.log('[usePulseWebSocket] Parsed message:', { type: message.type, data: message.data });
 
-            // Prepend final stretch token to the list
-            setFinalStretchTokens((prev) => {
-              // Deduplicate by mint address
-              const filtered = prev.filter(t => t.mint !== message.data.mint);
-              return [message.data, ...filtered].slice(0, 50); // Keep only latest 50
-            });
-          } else if (message.type === 'migrated_token' && message.data) {
-            console.log('[usePulseWebSocket] Migrated token received:', message.data);
+              if (message.type === 'new_token' && message.data) {
+                console.log('[usePulseWebSocket] ✅ New token received:', message.data);
 
-            // Prepend migrated token to the list
-            setMigratedTokens((prev) => {
-              // Deduplicate by mint address
-              const filtered = prev.filter(t => t.mint !== message.data.mint);
-              return [message.data, ...filtered].slice(0, 50); // Keep only latest 50
-            });
+                // Call callback immediately for instant updates
+                if (onNewToken) {
+                  console.log('[usePulseWebSocket] Calling onNewToken callback');
+                  onNewToken(message.data);
+                } else {
+                  console.warn('[usePulseWebSocket] onNewToken callback not provided');
+                }
+
+                // Prepend new token to the list
+                setNewTokens((prev) => {
+                  // Deduplicate by mint address
+                  const filtered = prev.filter(t => t.mint !== message.data.mint);
+                  const updated = [message.data, ...filtered].slice(0, 50); // Keep only latest 50
+                  console.log('[usePulseWebSocket] Updated newTokens, count:', updated.length);
+                  return updated;
+                });
+              } else if (message.type === 'final_stretch_token' && message.data) {
+                console.log('[usePulseWebSocket] ✅ Final stretch token received:', message.data);
+
+                // Call callback immediately for instant updates
+                if (onFinalStretchToken) {
+                  console.log('[usePulseWebSocket] Calling onFinalStretchToken callback');
+                  onFinalStretchToken(message.data);
+                }
+
+                // Prepend final stretch token to the list
+                setFinalStretchTokens((prev) => {
+                  // Deduplicate by mint address
+                  const filtered = prev.filter(t => t.mint !== message.data.mint);
+                  return [message.data, ...filtered].slice(0, 50); // Keep only latest 50
+                });
+              } else if (message.type === 'migrated_token' && message.data) {
+                console.log('[usePulseWebSocket] ✅ Migrated token received:', message.data);
+
+                // Call callback immediately for instant updates
+                if (onMigratedToken) {
+                  console.log('[usePulseWebSocket] Calling onMigratedToken callback');
+                  onMigratedToken(message.data);
+                }
+
+                // Prepend migrated token to the list
+                setMigratedTokens((prev) => {
+                  // Deduplicate by mint address
+                  const filtered = prev.filter(t => t.mint !== message.data.mint);
+                  return [message.data, ...filtered].slice(0, 50); // Keep only latest 50
+                });
+              } else {
+                console.warn('[usePulseWebSocket] Unknown message type or missing data:', { type: message.type, hasData: !!message.data });
+              }
+            } catch (parseErr) {
+              console.error('[usePulseWebSocket] Failed to parse individual message:', msgStr, parseErr);
+            }
           }
         } catch (err) {
-          console.error('[usePulseWebSocket] Failed to parse message:', err);
+          console.error('[usePulseWebSocket] Failed to process message:', err);
+          console.error('[usePulseWebSocket] Raw data was:', event.data);
         }
       };
 

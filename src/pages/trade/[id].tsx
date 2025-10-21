@@ -111,7 +111,7 @@ export default function TradePage() {
     isReady: tradeParamsReady
   } = useTradePageQueryParams();
 
-  const { token: fetchedToken, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
+  const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
     useSingleTokenPolling(typeof id === "string" ? id : undefined);
 
   // Pre-fetch initial trade data with caching for instant/fast loading

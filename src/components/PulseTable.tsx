@@ -5097,7 +5097,7 @@ const PulseTable = React.memo(function PulseTable({
                   }
                   return null;
                 })()}
-              </div>
+              </Link>
             );
           })
         )}
