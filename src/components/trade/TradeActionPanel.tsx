@@ -13,7 +13,7 @@ import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
-import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
+// import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -163,11 +163,71 @@ const formatCompactNumber = (n: number): string => {
   return Math.round(n).toString();
 };
 
+// Meteora Migration Logo Component
+const MeteoraMigrationLogo: React.FC = () => (
+  <div className="flex items-center justify-center gap-1 mb-4">
+    {/* Red Meteora Logo (left) */}
+    <div 
+      className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center relative" 
+      style={{ 
+        border: '0.5px solid #ff4662',
+        backgroundColor: 'transparent'
+      }}
+    >
+      <img 
+        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+        alt="Meteora" 
+        className="w-full h-full object-cover"
+      />
+    </div>
+    
+    {/* 3 Green Chevron Arrows */}
+    {[0, 1, 2].map((i) => (
+      <svg
+        key={i}
+        width="4"
+        height="5"
+        viewBox="0 0 4 5"
+        fill="none"
+        className="animate-pulse"
+        style={{
+          animationDelay: `${i * 0.2}s`,
+          animationDuration: '1s'
+        }}
+      >
+        <path
+          d="M0.5 0.5L3.5 2.5L0.5 4.5"
+          stroke="#22c55e"
+          strokeWidth="1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ))}
+    
+    {/* Yellow Meteora Logo (right) */}
+    <div 
+      className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center relative" 
+      style={{ 
+        border: '0.5px solid #fbbf24',
+        backgroundColor: 'transparent'
+      }}
+    >
+      <img 
+        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+        alt="Meteora" 
+        className="w-full h-full object-cover"
+        style={{ filter: 'sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)' }}
+      />
+    </div>
+  </div>
+);
+
 interface TradeActionPanelProps {
   token: Token;
   tradeParams?: {
     mode: "buy" | "sell";
-    tab: "market" | "limit" | "adv" | "analytics";
+    tab: "market" | "limit" | "adv"; // | "analytics";
     timeRange: "5m" | "1h" | "12h" | "24h";
     amount: string;
     targetMC: string;
@@ -176,6 +236,7 @@ interface TradeActionPanelProps {
   setTradeParams?: (params: any) => void;
   quickBuySettings?: any;
   quickBuySide?: "buy" | "sell";
+  initialStats?: any; // Initial stats from REST API
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ 
@@ -183,7 +244,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   tradeParams: externalTradeParams,
   setTradeParams: setExternalTradeParams,
   quickBuySettings: externalQuickBuySettings,
-  quickBuySide: externalQuickBuySide
+  quickBuySide: externalQuickBuySide,
+  initialStats
 }) => {
   // Determine the pool address to use: migrated_pool_address if available, otherwise pair_address
   const effectivePoolAddress = useMemo(() => {
@@ -192,7 +254,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   // Internal state with fallback to external props
   const [mode, setMode] = useState<"buy" | "sell">(externalTradeParams?.mode || "buy");
-  const [tab, setTab] = useState<"market" | "limit" | "adv" | "analytics">(externalTradeParams?.tab || "market");
+  const [tab, setTab] = useState<"market" | "limit" | "adv">(externalTradeParams?.tab || "market");
   const [timeRange, setTimeRange] = useState<TimeRange>(externalTradeParams?.timeRange as TimeRange || "5m");
   const [amount, setAmount] = useState(externalTradeParams?.amount || "");
   const [targetMC, setTargetMC] = useState(externalTradeParams?.targetMC || "");
@@ -202,6 +264,26 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
   const [creatorAddress, setCreatorAddress] = useState<string>("");
+  
+  // Position data for this token
+  const [positionData, setPositionData] = useState<{
+    bought: number;
+    boughtUsdValue: number;
+    sold: number;
+    soldUsdValue: number;
+    remaining: number;
+    remainingUsdValue: number;
+    pnl: number;
+    pnlPercentage: number;
+  } | null>(null);
+
+  // Check if this is a high bonding Meteora token that should show migration UI
+  const isMigratingToken = useMemo(() => {
+    const launchpadProtocol = token.launchpad_protocol?.toLowerCase() || '';
+    const isMeteora = launchpadProtocol.includes('meteora');
+    const bondingPct = token.bonding_pct ?? 0;
+    return isMeteora && bondingPct > 98.6;
+  }, [token.launchpad_protocol, token.bonding_pct]);
 
   // WebSocket hook for real-time token stats
   const {
@@ -214,6 +296,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     pairAddress: effectivePoolAddress,
     tokenAddress: token.mint,
     enabled: true,
+    initialStats: initialStats,
   });
 
   // Update internal state when external props change (only on mount)
@@ -254,6 +337,132 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const { presets: qbPresets, activePreset } = useQuickBuy();
   const { user, solBalance } = useUser();
   
+  // Fetch position data for this token
+  useEffect(() => {
+    const STORAGE_KEY = `position_${token?.mint}_${user?.id}`;
+    
+    // Load from localStorage on mount
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Check if data is less than 24 hours old
+        if (parsed.timestamp && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+          setPositionData(parsed.data);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading cached position:', e);
+    }
+    
+    const fetchPositionData = async () => {
+      if (!user?.id || !token?.mint) {
+        const emptyData = {
+          bought: 0,
+          boughtUsdValue: 0,
+          sold: 0,
+          soldUsdValue: 0,
+          remaining: 0,
+          remainingUsdValue: 0,
+          pnl: 0,
+          pnlPercentage: 0,
+        };
+        setPositionData(emptyData);
+        return;
+      }
+      
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${user.id}`
+        );
+        
+        if (!response.ok) return;
+        
+        const positions = await response.json();
+        
+        // Find position for this specific token
+        const position = Array.isArray(positions) 
+          ? positions.find((p: any) => 
+              p.tokenAddress?.toLowerCase() === token.mint?.toLowerCase()
+            )
+          : null;
+        
+        if (position) {
+          // Update with active position data
+          const newData = {
+            bought: position.bought || 0,
+            boughtUsdValue: position.boughtUsdValue || 0,
+            sold: position.sold || 0,
+            soldUsdValue: position.soldUsdValue || 0,
+            remaining: position.remaining || 0,
+            remainingUsdValue: position.remainingUsdValue || 0,
+            pnl: position.pnl || 0,
+            pnlPercentage: position.pnlPercentage || 0,
+          };
+          setPositionData(newData);
+          
+          // Save to localStorage
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+              data: newData,
+              timestamp: Date.now()
+            }));
+          } catch (e) {
+            console.error('Error saving position to cache:', e);
+          }
+        } else {
+          // Position not found in active positions - it might be closed
+          // Keep previous values if they exist (don't reset closed positions to 0)
+          setPositionData(prev => {
+            // If we had a position before, keep showing it (it's closed)
+            if (prev && (prev.boughtUsdValue > 0 || prev.soldUsdValue > 0)) {
+              // Update localStorage with closed position
+              try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                  data: prev,
+                  timestamp: Date.now()
+                }));
+              } catch (e) {
+                console.error('Error saving closed position:', e);
+              }
+              return prev;
+            }
+            // Otherwise set to zeros (never had a position)
+            return {
+              bought: 0,
+              boughtUsdValue: 0,
+              sold: 0,
+              soldUsdValue: 0,
+              remaining: 0,
+              remainingUsdValue: 0,
+              pnl: 0,
+              pnlPercentage: 0,
+            };
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching position data:', error);
+        // On error, keep previous data if available
+        setPositionData(prev => prev || {
+          bought: 0,
+          boughtUsdValue: 0,
+          sold: 0,
+          soldUsdValue: 0,
+          remaining: 0,
+          remainingUsdValue: 0,
+          pnl: 0,
+          pnlPercentage: 0,
+        });
+      }
+    };
+    
+    fetchPositionData();
+    
+    // Refresh position data every 10 seconds
+    const interval = setInterval(fetchPositionData, 10000);
+    return () => clearInterval(interval);
+  }, [user?.id, token?.mint]);
+  
   // Use external QuickBuy settings if available, otherwise use internal context
   const settings = externalQuickBuySettings || (
     mode === "buy"
@@ -285,6 +494,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
     return clamp(Math.round(((t - baseMarketCap) / baseMarketCap) * 100), -100, 100);
   }, [targetMC, baseMarketCap]);
+
+  // Initialize target market cap on entering Limit tab if empty/zero
+  useEffect(() => {
+    if (tab === "limit" && baseMarketCap > 0) {
+      const t = Number(targetMC);
+      if (!Number.isFinite(t) || t === 0) {
+        setTargetMC(String(Math.round(baseMarketCap)));
+        setSliderPct(0);
+      }
+    }
+  }, [tab, baseMarketCap]);
 
   // Sync slider percentage when market cap changes (e.g., from typing)
   useEffect(() => {
@@ -343,15 +563,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   useEffect(() => {
     const fetchCreatorAddress = async () => {
       try {
-        // Use environment variable for the service URL
-        const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
-        const url = `${baseUrl}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`;
-        
-        console.log('🔍 Fetching creator address from:', url);
-        const response = await fetch(url);
-        
-        console.log('📡 Creator address response status:', response.status);
-        
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
+        );
         if (response.ok) {
           const data = await response.json();
           console.log('📊 Creator address data received:', data);
@@ -539,17 +753,38 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       {/* ===== D. Tabs ===== */}
       <div className="px-3 pt-1 pb-1.5 border-b border-[#2A2B33]">
         <div className="flex items-center gap-6">
-          {(["market", "limit", "adv", "analytics"] as const).map((t) => (
+          {(["market", "limit", "adv"] as const).map((t) => (
             <button
               key={t}
-              className={cx(tabBtn, "hover:text-[#E6E7EA]", tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]")}
-              onClick={() => setTab(t)}
+              className={cx(
+                tabBtn, 
+                "hover:text-[#E6E7EA]", 
+                tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]",
+                isMigratingToken && t === "market" && "opacity-50 cursor-not-allowed blur-sm"
+              )}
+              onClick={() => {
+                if (isMigratingToken && t === "market") return; // Disable market tab for migrating tokens
+                setTab(t);
+              }}
+              disabled={isMigratingToken && t === "market"}
             >
               {t === "adv" ? "Adv." : t[0].toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
       </div>
+
+      {/* ===== Migration Message for High Bonding Meteora Tokens ===== */}
+      {isMigratingToken && (
+        <div className="px-3 pt-4 pb-2">
+          <div className="text-center">
+            <MeteoraMigrationLogo />
+            <p className="text-white text-sm leading-relaxed">
+              This pair is currently migrating. This may take up to 30 minutes. In the meantime, you can still place limit orders, and buy or sell on migration!
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ===== E. Migration/Dev Sell Toggle ===== */}
       {tab === "adv" && (
@@ -906,6 +1141,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       )}
 
       {/* ===== G. ANALYTICS TAB ===== */}
+      {/* Analytics panel commented out
       {tab === "analytics" && (
         <div className="px-3 pt-2 pb-4">
           <TokenAnalyticsPanel
@@ -918,11 +1154,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             }}
           />
         </div>
-      )}
+      */}
 
       {/* ===== Settings ===== */}
-      {tab !== "analytics" && (
-        <div className="mx-3 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#E6E7EA]">
+      <div className="mx-3 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#E6E7EA]">
         <InterstateTooltip label="Max Slippage">
           <span className="flex items-center gap-1 text-[#9CA3AF]">
             <FaRunning className="opacity-80" /> {settings.maxSlippage * 100}%
@@ -953,14 +1188,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           </span>
         </InterstateTooltip>
         </div>
-      )}
 
       {/* Feedback */}
-      {tab !== "analytics" && message && (
+      {message && (
         <div
           className={cx(
             "mx-3 mt-2 rounded-md p-2 text-center text-[11px] font-bold",
-            message.type === "success" ? "bg-[#70E0B0] text-black" : "bg-[#FF4D7F] text-black"
+            message.type === "success" 
+              ? mode === "buy" 
+                ? "bg-[#70E0B0] text-black"  // Green for successful buy
+                : "bg-[#FF4D7F] text-black"  // Red for successful sell
+              : "bg-[#FF4D7F] text-black"    // Red for errors
           )}
         >
           {message.text}
@@ -968,8 +1206,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       )}
 
       {/* Helper line */}
-      {tab !== "analytics" && (
-        <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
+      <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
         {amount ? (
           <>
             You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span> 
@@ -997,11 +1234,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           </>
         ) : null}
         </div>
-      )}
 
       {/* Primary action */}
-      {tab !== "analytics" && (
-        <div className="px-3 py-2">
+      <div className="px-3 py-2">
         <button
           type="button"
           className={cx(
@@ -1157,6 +1392,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     baseMint: token.mint,
                     quoteMint: SOL_MINT_ADDRESS,
                     poolType,
+                    originalPairAddress: token.pair_address, // Original pair address from token-service
                   }, user.bearerToken)
                     .catch((err) => {
                       // Capture error without throwing to prevent Next.js overlay
@@ -1296,7 +1532,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             "Processing..."
           ) : (
             <span className="inline-flex items-center gap-1">
-              {mode === "buy" ? "Buy" : "Sell"} {token.symbol}
+              {isMigratingToken && mode === "buy" ? "Snipe" : mode === "buy" ? "Buy" : "Sell"} {token.symbol}
               {prettyAmt(amount) && (
                 <>
                   {" "}{prettyAmt(amount)}
@@ -1307,7 +1543,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           )}
         </button>
         </div>
-      )}
 
       {/* footer mini stats */}
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
@@ -1335,7 +1570,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[12px] font-semibold">0</span>
+            <span className="text-[#70E0B0] text-[12px] font-semibold">
+              ${positionData ? formatCompactNumber(positionData.boughtUsdValue) : '0'}
+            </span>
           </div>
         </div>
         <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
@@ -1362,7 +1599,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#FF4D7F] text-[12px] font-semibold">0</span>
+            <span className="text-[#FF4D7F] text-[12px] font-semibold">
+              ${positionData ? formatCompactNumber(positionData.soldUsdValue) : '0'}
+            </span>
           </div>
         </div>
         <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
@@ -1389,7 +1628,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#E6E7EA] text-[12px] font-semibold">0</span>
+            <span className="text-[#E6E7EA] text-[12px] font-semibold">
+              ${positionData ? formatCompactNumber(positionData.remainingUsdValue) : '0'}
+            </span>
           </div>
         </div>
         <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
@@ -1416,7 +1657,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[12px] font-semibold">0(+0%)</span>
+            <span className={`text-[12px] font-semibold ${positionData && positionData.pnl >= 0 ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
+              {positionData 
+                ? `${positionData.pnl >= 0 ? '+' : ''}$${formatCompactNumber(Math.abs(positionData.pnl))}(${positionData.pnl >= 0 ? '+' : ''}${positionData.pnlPercentage.toFixed(1)}%)`
+                : '$0(+0%)'}
+            </span>
           </div>
         </div>
       </div>

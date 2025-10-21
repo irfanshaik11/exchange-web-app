@@ -9,6 +9,14 @@ import { FaArrowUp, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
 import Image from 'next/image';
 
+interface TokenMetadata {
+  imageUrl?: string;
+  protocol?: string;
+  name?: string;
+  symbol?: string;
+  timestamp?: number;
+}
+
 interface PositionsProps {
   userId: string;
   bearerToken: string;
@@ -19,13 +27,9 @@ interface PositionsProps {
   showHidden?: boolean; // Optional: whether to show hidden tokens
   onHiddenTokensChange?: (hiddenTokens: Set<string>) => void; // Optional: callback to pass hidden tokens to parent
   showInSOL?: boolean; // Optional: whether to show values in SOL instead of USD
-}
-
-interface TokenMetadata {
-  imageUrl?: string;
-  protocol?: string;
-  name?: string;
-  symbol?: string;
+  tokenMetadataCache?: Record<string, TokenMetadata>; // Optional: shared cache
+  onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
+  isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
 }
 
 function shortAddr(addr: string) {
@@ -56,13 +60,33 @@ const SolIcon = () => (
   </>
 );
 
-const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsChange, preloadedPositions, skipFetch, onTokenNamesChange, showHidden = false, onHiddenTokensChange, showInSOL = false }) => {
+const Positions: React.FC<PositionsProps> = ({ 
+  userId, 
+  bearerToken, 
+  onPositionsChange, 
+  preloadedPositions, 
+  skipFetch, 
+  onTokenNamesChange, 
+  showHidden = false, 
+  onHiddenTokensChange, 
+  showInSOL = false,
+  tokenMetadataCache,
+  onUpdateCache,
+  isCacheValid
+}) => {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [hiddenTokens, setHiddenTokens] = useState<Set<string>>(new Set());
   const [solPrice, setSolPrice] = useState<number>(0);
   const router = useRouter();
+  
+  // Initialize local metadata from cache if available
+  useEffect(() => {
+    if (tokenMetadataCache && Object.keys(tokenMetadataCache).length > 0) {
+      setTokenMetadata(tokenMetadataCache);
+    }
+  }, [tokenMetadataCache]);
   
   // Fetch SOL price using Pyth Network with improved error handling
   useEffect(() => {
@@ -172,54 +196,97 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
       setPositions(preloadedPositions);
       setLoading(false);
       
-      // Fetch token metadata for preloaded positions
-      preloadedPositions.forEach(async (pos) => {
-        try {
-          const pairAddress = pos.pairAddress || pos.tokenAddress;
-          console.log(`Fetching token data for pair: ${pairAddress}`);
-          
-          const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`);
-          
-          if (!response.ok) {
-            console.error(`Failed to fetch token data for ${pairAddress}:`, response.status);
-            return;
-          }
-          
-          const data = await response.json();
-          const tokenData = data?.token;
-          
-          if (tokenData) {
-            setTokenMetadata(prev => {
-              const updated = {
-                ...prev,
-                [pos.tokenAddress]: {
+      // Fetch token metadata for preloaded positions in parallel
+      const fetchAllMetadata = async () => {
+        // Deduplicate tokens before fetching to avoid race conditions
+        const uniqueTokens = Array.from(new Set(preloadedPositions.map(p => p.tokenAddress)));
+        
+        // Filter out tokens that are already cached and valid
+        const tokensToFetch = uniqueTokens.filter(token => 
+          !isCacheValid || !isCacheValid(token)
+        );
+        
+        if (tokensToFetch.length === 0) {
+          console.log('✅ All tokens loaded from cache');
+          return;
+        }
+        
+        console.log(`🔄 Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
+        
+        // Fetch all tokens in parallel for maximum speed
+        await Promise.allSettled(
+          tokensToFetch.map(async (tokenAddress) => {
+            // Find the position to get the pair address
+            const pos = preloadedPositions.find(p => p.tokenAddress === tokenAddress);
+            if (!pos) return;
+            
+            // For positions: backend stores the originalPairAddress value in pairAddress field
+            const pairAddress = pos.pairAddress || pos.tokenAddress;
+            
+            try {
+              // Reduced timeout to 3s for faster failures
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 3000);
+              
+              const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`, {
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+              }
+              
+              const data = await response.json();
+              const tokenData = data?.token;
+              
+              if (tokenData) {
+                const metadata = {
                   imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
                   protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
                   name: tokenData.name || '',
                   symbol: tokenData.symbol || '',
+                };
+                
+                // Update local state
+                setTokenMetadata(prev => ({
+                  ...prev,
+                  [tokenAddress]: metadata
+                }));
+                
+                // Update shared cache
+                if (onUpdateCache) {
+                  onUpdateCache(tokenAddress, metadata);
                 }
-              };
-              
-              // Pass token names to parent if callback is provided
-              if (onTokenNamesChange) {
-                const tokenNames: Record<string, string> = {};
-                Object.keys(updated).forEach(key => {
-                  if (updated[key]?.name) {
-                    tokenNames[key] = updated[key].name!;
-                  }
-                });
-                onTokenNamesChange(tokenNames);
+                
+                // Pass token names to parent if callback is provided
+                if (onTokenNamesChange) {
+                  const tokenNames: Record<string, string> = { [tokenAddress]: metadata.name || '' };
+                  onTokenNamesChange(tokenNames);
+                }
               }
-              
-              return updated;
-            });
-          }
-        } catch (error) {
-          console.error(`Error fetching token data for ${pos.pairAddress || pos.tokenAddress}:`, error);
-        }
-      });
+            } catch (error) {
+              // Set fallback metadata immediately so token doesn't stay at "Loading..."
+              const fallback = {
+                imageUrl: '',
+                protocol: '',
+                name: shortAddr(tokenAddress),
+                symbol: '???',
+              };
+              setTokenMetadata(prev => ({
+                ...prev,
+                [tokenAddress]: fallback
+              }));
+              // Don't cache failed fetches
+            }
+          })
+        );
+      };
+      
+      // Don't await - let it load in background
+      fetchAllMetadata();
     }
-  }, [preloadedPositions, skipFetch]);
+  }, [preloadedPositions, skipFetch, onTokenNamesChange]);
 
   useEffect(() => {
     if (skipFetch) return; // Skip fetch if using preloaded positions
@@ -248,52 +315,94 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
         onPositionsChange(positions);
 
         // Fetch token data from token-service using pairAddress (originalPairAddress)
-        positions.forEach(async (pos) => {
-          try {
-            // Use pairAddress (which is originalPairAddress from backend) to get token data
-            const pairAddress = pos.pairAddress || pos.tokenAddress;
-            console.log(`Fetching token data for pair: ${pairAddress}`);
-            
-            const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`);
-            
-            if (!response.ok) {
-              console.error(`Failed to fetch token data for ${pairAddress}:`, response.status);
-              return;
-            }
-            
-            const data = await response.json();
-            const tokenData = data?.token;
-            
-            if (tokenData) {
-              setTokenMetadata(prev => {
-                const updated = {
-                  ...prev,
-                  [pos.tokenAddress]: {
+        const fetchAllMetadata = async () => {
+          // Deduplicate tokens before fetching to avoid race conditions
+          const uniqueTokens = Array.from(new Set(positions.map(p => p.tokenAddress)));
+          
+          // Filter out tokens that are already cached and valid
+          const tokensToFetch = uniqueTokens.filter(token => 
+            !isCacheValid || !isCacheValid(token)
+          );
+          
+          if (tokensToFetch.length === 0) {
+            console.log('✅ All tokens loaded from cache');
+            return;
+          }
+          
+          console.log(`🔄 Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
+          
+          // Fetch all tokens in parallel using Promise.all for maximum speed
+          await Promise.allSettled(
+            tokensToFetch.map(async (tokenAddress) => {
+              // Find the position to get the pair address
+              const pos = positions.find(p => p.tokenAddress === tokenAddress);
+              if (!pos) return;
+              
+              // For positions: backend stores the originalPairAddress value in pairAddress field
+              const pairAddress = pos.pairAddress || pos.tokenAddress;
+              
+              try {
+                // Reduced timeout to 3s for faster failures
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                
+                const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`, {
+                  signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const tokenData = data?.token;
+                
+                if (tokenData) {
+                  const metadata = {
                     imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
                     protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
                     name: tokenData.name || '',
                     symbol: tokenData.symbol || '',
+                  };
+                  
+                  // Update local state
+                  setTokenMetadata(prev => ({
+                    ...prev,
+                    [tokenAddress]: metadata
+                  }));
+                  
+                  // Update shared cache
+                  if (onUpdateCache) {
+                    onUpdateCache(tokenAddress, metadata);
                   }
-                };
-                
-                // Pass token names to parent if callback is provided
-                if (onTokenNamesChange) {
-                  const tokenNames: Record<string, string> = {};
-                  Object.keys(updated).forEach(key => {
-                    if (updated[key]?.name) {
-                      tokenNames[key] = updated[key].name!;
-                    }
-                  });
-                  onTokenNamesChange(tokenNames);
+                  
+                  // Pass token names to parent if callback is provided
+                  if (onTokenNamesChange) {
+                    const tokenNames: Record<string, string> = { [tokenAddress]: metadata.name || '' };
+                    onTokenNamesChange(tokenNames);
+                  }
                 }
-                
-                return updated;
-              });
-            }
-          } catch (error) {
-            console.error(`Error fetching token data for ${pos.pairAddress || pos.tokenAddress}:`, error);
-          }
-        });
+              } catch (error) {
+                // Set fallback metadata immediately so token doesn't stay at "Loading..."
+                const fallback = {
+                  imageUrl: '',
+                  protocol: '',
+                  name: shortAddr(tokenAddress),
+                  symbol: '???',
+                };
+                setTokenMetadata(prev => ({
+                  ...prev,
+                  [tokenAddress]: fallback
+                }));
+                // Don't cache failed fetches
+              }
+            })
+          );
+        };
+        
+        // Don't await - let it load in background
+        fetchAllMetadata();
       } catch (error) {
         console.error('❌ Error fetching positions:', error);
       } finally {
@@ -315,9 +424,9 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
   }, [userId, onPositionsChange, skipFetch, onTokenNamesChange]);
 
   return (
-    <div className="w-full h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+    <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
       <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-[#1E1F26] z-10">
+        <thead className="sticky top-0 bg-[#1E1F26] z-20">
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Token</th>
             <th className="px-2 py-2 text-left">Bought</th>
@@ -333,12 +442,12 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
           ) : positions.length === 0 ? (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions found.</td></tr>
           ) : (
-            positions
+            [...positions]
+              .reverse() // Reverse so newest/most recent positions appear at the top
               .filter(pos => showHidden || !hiddenTokens.has(pos.tokenAddress))
               .map((pos, idx) => {
-              // Use pairAddress if available, otherwise fall back to tokenAddress
+              // For positions: backend stores originalPairAddress value in pairAddress field
               const navigateAddress = pos.pairAddress || pos.tokenAddress;
-              // Display pairAddress if available, otherwise show tokenAddress
               const displayAddress = pos.pairAddress || pos.tokenAddress;
               
               const handleRowClick = () => {
@@ -538,15 +647,15 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
                       </button>
                     </InterstateTooltip>
                     
-                    {/* Trade Button - Navigate to trade page */}
+                    {/* Sell Button - Navigate to trade page with sell mode */}
                     {pos.actions === 'sell' && (
-                      <InterstateTooltip label="Trade">
+                      <InterstateTooltip label="Sell">
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/trade/${pos.tokenAddress}`);
+                            router.push(`/trade/${pos.pairAddress || pos.tokenAddress}?mode=sell`);
                           }} 
-                          className="p-1.5 rounded hover:bg-blue-600/20 transition-colors text-neutral-400 hover:text-blue-500"
+                          className="p-1.5 rounded hover:bg-red-600/20 transition-colors text-neutral-400 hover:text-red-500"
                         >
                           <FaArrowUp className="text-sm" />
                         </button>
@@ -557,6 +666,12 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
               </tr>
               );
             })
+          )}
+          {/* Spacer row for bottom padding to ensure last item is scrollable */}
+          {!loading && positions.length > 0 && (
+            <tr style={{ height: '48px' }}>
+              <td colSpan={6}></td>
+            </tr>
           )}
         </tbody>
       </table>

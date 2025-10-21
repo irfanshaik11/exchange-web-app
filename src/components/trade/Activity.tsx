@@ -6,18 +6,22 @@ import FastImage from '../FastImage';
 import { FaExternalLinkAlt } from 'react-icons/fa';
 import Image from 'next/image';
 
-interface ActivityProps {
-  trades: TradeRow[];
-  loading: boolean;
-  onTokenNamesChange?: (tokenNames: Record<string, string>) => void; // Optional: callback to pass token names to parent
-}
-
 interface TokenMetadata {
   imageUrl?: string;
   protocol?: string;
   name?: string;
   symbol?: string;
   createdAt?: number; // Token creation timestamp
+  timestamp?: number;
+}
+
+interface ActivityProps {
+  trades: TradeRow[];
+  loading: boolean;
+  onTokenNamesChange?: (tokenNames: Record<string, string>) => void; // Optional: callback to pass token names to parent
+  tokenMetadataCache?: Record<string, TokenMetadata>; // Optional: shared cache
+  onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
+  isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
 }
 
 function shortAddr(addr: string) {
@@ -48,68 +52,113 @@ function formatAge(timestamp: number | string): string {
   }
 }
 
-const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange }) => {
+const Activity: React.FC<ActivityProps> = ({ 
+  trades, 
+  loading, 
+  onTokenNamesChange,
+  tokenMetadataCache,
+  onUpdateCache,
+  isCacheValid
+}) => {
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const router = useRouter();
+  
+  // Initialize local metadata from cache if available
+  useEffect(() => {
+    if (tokenMetadataCache && Object.keys(tokenMetadataCache).length > 0) {
+      setTokenMetadata(tokenMetadataCache);
+    }
+  }, [tokenMetadataCache]);
 
   useEffect(() => {
     if (!trades || trades.length === 0) return;
     
-    // Fetch token data for each unique token in trades - use same pattern as Positions
-    const uniqueTokens = Array.from(new Set(trades.map(t => t.tokenAddress)));
-    
-    uniqueTokens.forEach(async (tokenAddress, idx) => {
-      try {
-        // Find the trade to get originalPairAddress (backend stores this for token-service lookups)
-        const trade = trades.find(t => t.tokenAddress === tokenAddress);
-        const pairAddress = trade?.originalPairAddress || trade?.pairAddress || tokenAddress;
-        
-        console.log(`Fetching token data for pair: ${pairAddress} (tokenAddress: ${tokenAddress})`);
-        
-        // Use originalPairAddress to get token data (same as Positions component)
-        const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`);
-        
-        if (!response.ok) {
-          console.error(`Failed to fetch token data for ${pairAddress}:`, response.status);
-          return;
-        }
-        
-        const data = await response.json();
-        const tokenData = data?.token;
-        
-        console.log(`Token data received for ${pairAddress}:`, tokenData);
-        
-        if (tokenData) {
-          setTokenMetadata(prev => {
-            const updated = {
-              ...prev,
-              [tokenAddress]: {
+    // Fetch token data for each unique token in trades in parallel
+    const fetchAllMetadata = async () => {
+      const uniqueTokens = Array.from(new Set(trades.map(t => t.tokenAddress)));
+      
+      // Filter out tokens that are already cached and valid
+      const tokensToFetch = uniqueTokens.filter(token => 
+        !isCacheValid || !isCacheValid(token)
+      );
+      
+      if (tokensToFetch.length === 0) {
+        console.log('✅ All tokens loaded from cache (Activity)');
+        return;
+      }
+      
+      console.log(`🔄 Fetching ${tokensToFetch.length} tokens for Activity (${uniqueTokens.length - tokensToFetch.length} from cache)`);
+      
+      // Fetch all tokens in parallel using Promise.all for maximum speed
+      await Promise.allSettled(
+        tokensToFetch.map(async (tokenAddress) => {
+          try {
+            // Find the trade to get originalPairAddress (backend stores this for token-service lookups)
+            const trade = trades.find(t => t.tokenAddress === tokenAddress);
+            const pairAddress = trade?.originalPairAddress || trade?.pairAddress || tokenAddress;
+            
+            // Reduced timeout to 3s for faster failures
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            
+            const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`, {
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const tokenData = data?.token;
+            
+            if (tokenData) {
+              const metadata = {
                 imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
                 protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
                 name: tokenData.name || '',
                 symbol: tokenData.symbol || '',
                 createdAt: tokenData.created_timestamp || tokenData.createdAt,
+              };
+              
+              // Update local state
+              setTokenMetadata(prev => ({
+                ...prev,
+                [tokenAddress]: metadata
+              }));
+              
+              // Update shared cache
+              if (onUpdateCache) {
+                onUpdateCache(tokenAddress, metadata);
               }
-            };
-            
-            // Pass token names to parent if callback is provided
-            if (onTokenNamesChange) {
-              const tokenNames: Record<string, string> = {};
-              Object.keys(updated).forEach(key => {
-                if (updated[key]?.name) {
-                  tokenNames[key] = updated[key].name!;
-                }
-              });
-              onTokenNamesChange(tokenNames);
+              
+              // Pass token names to parent if callback is provided
+              if (onTokenNamesChange) {
+                const tokenNames: Record<string, string> = { [tokenAddress]: metadata.name || '' };
+                onTokenNamesChange(tokenNames);
+              }
             }
-            
-            return updated;
-          });
-        }
-      } catch (error) {
-        console.error(`Error fetching token data for ${tokenAddress}:`, error);
-      }
-    });
+          } catch (error) {
+            // Set fallback metadata immediately so token doesn't stay at "Loading..."
+            const fallback = {
+              imageUrl: '',
+              protocol: '',
+              name: `Token ${tokenAddress.slice(0, 6)}...`,
+              symbol: '???',
+            };
+            setTokenMetadata(prev => ({
+              ...prev,
+              [tokenAddress]: fallback
+            }));
+            // Don't cache failed fetches
+          }
+        })
+      );
+    };
+    
+    // Don't await - let it load in background
+    fetchAllMetadata();
   }, [trades, onTokenNamesChange]);
 
   return (

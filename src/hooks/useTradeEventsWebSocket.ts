@@ -34,25 +34,42 @@ interface TradeEventsState {
 interface UseTradeEventsWebSocketParams {
   pairAddress?: string;
   enabled?: boolean;
+  initialTrades?: any[]; // Initial trades from REST API
 }
 
 export default function useTradeEventsWebSocket({
   pairAddress,
   enabled = true,
+  initialTrades = [],
 }: UseTradeEventsWebSocketParams) {
   const [state, setState] = useState<TradeEventsState>({
     isConnected: false,
     isReconnecting: false,
     error: null,
-    loading: true,
-    trades: [],
-    lastUpdate: null,
+    loading: initialTrades.length === 0, // Don't show loading if we have initial data
+    trades: initialTrades, // Start with initial trades
+    lastUpdate: initialTrades.length > 0 ? new Date().toISOString() : null,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
+  const hasSetInitialDataRef = useRef(false);
+
+  // Update trades when initialTrades are provided (from REST pre-fetch)
+  useEffect(() => {
+    if (initialTrades && initialTrades.length > 0 && !hasSetInitialDataRef.current) {
+      console.log('[useTradeEventsWebSocket] Using initial trades from pre-fetch:', initialTrades.length);
+      setState(prev => ({
+        ...prev,
+        trades: initialTrades,
+        loading: false,
+        lastUpdate: new Date().toISOString(),
+      }));
+      hasSetInitialDataRef.current = true;
+    }
+  }, [initialTrades]);
 
   const processMessage = useCallback((message: any) => {
     try {
@@ -85,14 +102,43 @@ export default function useTradeEventsWebSocket({
             timestamp = new Date().toISOString();
           }
           
+          // Calculate total USD value
+          // SOL can be either token0 or token1 depending on the pair
+          // Determine which is SOL by checking which USD value is larger
+          const amount0 = Math.abs(parseFloat(String(event.data.amount0)));
+          const amount1 = Math.abs(parseFloat(String(event.data.amount1)));
+          const usd0 = parseFloat(String(event.token0SwapValueUsd));
+          const usd1 = parseFloat(String(event.token1SwapValueUsd));
+          
+          let totalUSD: number;
+          let solPrice: number;
+          
+          if (usd0 > usd1 && usd0 > 10) {
+            // token0 appears to be SOL (higher price ~$100-$250)
+            solPrice = usd0;
+            const solAmount = amount0 / 1e9;
+            totalUSD = solAmount * solPrice;
+          } else if (usd1 > usd0 && usd1 > 10) {
+            // token1 appears to be SOL (higher price)
+            solPrice = usd1;
+            const solAmount = amount1 / 1e9;
+            totalUSD = solAmount * solPrice;
+          } else {
+            // Both values are small, use the larger one
+            solPrice = Math.max(usd0, usd1);
+            totalUSD = solPrice;
+          }
+          
           const convertedTrade = {
             pair_address: pairAddress || '',
             side: event.eventDisplayType.toLowerCase() as "buy" | "sell",
-            amount: Math.abs(parseFloat(String(event.data.amount0))).toString(),
-            price: String(event.token0SwapValueUsd),
+            amount: amount0.toString(),
+            price: String(solPrice),
             timestamp: timestamp,
             maker: event.maker,
             transactionHash: event.transactionHash,
+            // Total USD value of the trade
+            totalUSD: totalUSD,
             // Keep original data for reference
             originalEvent: event,
           };

@@ -208,6 +208,7 @@ export type BuyParams = {
   amount: number;
   mevProtection?: 0 | 1;
   poolType: "PumpAmm" | "Raydium CPMM" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "bags" | "MoonShoot" | "";
+  originalPairAddress?: string; // Original pair address from token-service for trade history
   // Preset trading parameters
   slippage?: number; // e.g., 0.2 for 20%
   priorityFee?: number; // in SOL, e.g., 0.001
@@ -250,6 +251,7 @@ type SellPercentageParams = {
   baseMint: string;
   quoteMint: string;
   poolType?: string;
+  originalPairAddress?: string; // Original pair address from token-service for trade history
 };
 
 export const tradeSellPercentage = (
