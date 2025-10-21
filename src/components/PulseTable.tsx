@@ -4380,6 +4380,7 @@ const PulseTable = React.memo(function PulseTable({
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
+                              e.preventDefault(); // Prevent Link navigation
                               const searchQuery = `${token.symbol} ${token.name}`.trim();
                               const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
                               window.open(twitterUrl, '_blank');
@@ -4418,6 +4419,7 @@ const PulseTable = React.memo(function PulseTable({
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                e.preventDefault(); // Prevent Link navigation
                                 // Open X profile in new tab
                                 const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || 'search'}`;
                                 window.open(profileUrl, '_blank');
@@ -4862,6 +4864,7 @@ const PulseTable = React.memo(function PulseTable({
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
+                          e.preventDefault(); // Prevent Link navigation
                           // For migrated column, don't check bonding/snipe logic - just quick buy
                           const isMigratedColumn = title.toLowerCase().includes('migrated');
                           
