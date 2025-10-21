@@ -44,6 +44,10 @@ const DepositModal = dynamic(() => import("./DepositModal"), {
   ssr: false, // NO SSR PLEASE
 });
 
+const WithdrawModal = dynamic(() => import("./WithdrawModal"), {
+  ssr: false,
+});
+
 const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
   ssr: false,
 });
@@ -63,6 +67,7 @@ export default function Header({
   const { user, loading: userLoading } = useUser();
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
@@ -109,6 +114,15 @@ export default function Header({
       // Optionally, refresh user here if needed
     }
     setDepositOpen(true);
+  };
+
+  // Handles opening the withdraw modal
+  const handleWithdrawClick = () => {
+    const token = Cookies.get("token");
+    if (token && !user && !userLoading) {
+      // Optionally, refresh user here if needed
+    }
+    setWithdrawOpen(true);
   };
 
   return (
@@ -222,6 +236,27 @@ export default function Header({
               }}
             >
               Deposit
+            </button>
+            <button
+              onClick={handleWithdrawClick}
+              className="ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
+              style={{
+                backgroundColor: AX.sell,
+                color: '#000000',
+                border: 'none'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#E63E6B';
+                e.currentTarget.style.boxShadow = '0 0 8px rgba(255, 77, 127, 0.3), 0 0 16px rgba(255, 77, 127, 0.15)';
+                e.currentTarget.style.transform = 'scale(1.02)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = AX.sell;
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
+              Withdraw
             </button>
             {/* <button
               onClick={() => setWatchlistOpen(true)}
@@ -412,6 +447,7 @@ export default function Header({
         </div>
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
+      <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
       <WatchlistModal open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
       <NotificationDropdown open={notificationOpen} onClose={() => setNotificationOpen(false)} />
       {/* Search Modal */}

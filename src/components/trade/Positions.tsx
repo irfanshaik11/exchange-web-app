@@ -8,6 +8,7 @@ import InterstateTooltip from '~/components/InterstateTooltip';
 import { FaArrowUp, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
 import Image from 'next/image';
+import SellPopup from '../SellPopup';
 
 interface TokenMetadata {
   imageUrl?: string;
@@ -78,8 +79,23 @@ const Positions: React.FC<PositionsProps> = ({
   const [loading, setLoading] = useState(true);
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [hiddenTokens, setHiddenTokens] = useState<Set<string>>(new Set());
+  const [showSellPopup, setShowSellPopup] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState<PositionRow | null>(null);
   const [solPrice, setSolPrice] = useState<number>(0);
   const router = useRouter();
+
+  // Function to refresh positions after a successful sell
+  const refreshPositions = async () => {
+    if (userId) {
+      try {
+        const updatedPositions = await getActivePositionsByUser(userId);
+        setPositions(updatedPositions);
+        onPositionsChange(updatedPositions);
+      } catch (error) {
+        console.error('Failed to refresh positions:', error);
+      }
+    }
+  };
   
   // Initialize local metadata from cache if available
   useEffect(() => {
@@ -650,10 +666,11 @@ const Positions: React.FC<PositionsProps> = ({
                     {/* Sell Button - Navigate to trade page with sell mode */}
                     {pos.actions === 'sell' && (
                       <InterstateTooltip label="Sell">
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            router.push(`/trade/${pos.pairAddress || pos.tokenAddress}?mode=sell`);
+                            setSelectedPosition(pos);
+                            setShowSellPopup(true);
                           }} 
                           className="p-1.5 rounded hover:bg-red-600/20 transition-colors text-neutral-400 hover:text-red-500"
                         >
@@ -675,6 +692,20 @@ const Positions: React.FC<PositionsProps> = ({
           )}
         </tbody>
       </table>
+      
+      {/* Sell Popup */}
+      {showSellPopup && selectedPosition && (
+        <SellPopup
+          isOpen={showSellPopup}
+          onClose={() => {
+            setShowSellPopup(false);
+            setSelectedPosition(null);
+          }}
+          position={selectedPosition}
+          tokenMetadata={tokenMetadata[selectedPosition.tokenAddress]}
+          onSellSuccess={refreshPositions}
+        />
+      )}
     </div>
   );
 };

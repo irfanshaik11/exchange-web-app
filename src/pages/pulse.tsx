@@ -952,39 +952,40 @@ export default function PulsePage() {
   });
 
   // Additional polling for more frequent updates
-  useEffect(() => {
-    if (realtimeAddrs.length === 0) return;
+  // COMMENTED OUT: Relying on WebSocket for real-time market data instead
+  // useEffect(() => {
+  //   if (realtimeAddrs.length === 0) return;
 
-    const pollMarketData = async () => {
-      try {
-        // Use deployed service directly when backend is deployed
-        const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
-          ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
-          : env.NEXT_PUBLIC_GO_SERVICE_URL;
-        const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
-          ? `${baseUrl}/v1/market-data`
-          : '/api/token-service/realtime-market-data';
+  //   const pollMarketData = async () => {
+  //     try {
+  //       // Use deployed service directly when backend is deployed
+  //       const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL.endsWith('/') 
+  //         ? env.NEXT_PUBLIC_GO_SERVICE_URL.slice(0, -1) 
+  //         : env.NEXT_PUBLIC_GO_SERVICE_URL;
+  //       const apiUrl = env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED
+  //         ? `${baseUrl}/v1/market-data`
+  //         : '/api/token-service/realtime-market-data';
 
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mints: realtimeAddrs.slice(0, 200) })
-        });
+  //       const response = await fetch(apiUrl, {
+  //         method: 'POST',
+  //         headers: { 'Content-Type': 'application/json' },
+  //         body: JSON.stringify({ mints: realtimeAddrs.slice(0, 200) })
+  //       });
 
-        if (response.ok) {
-          const data = await response.json();
-          // This will trigger the enrichWithMarketData to update
-          // The data will be picked up by the existing marketData state
-        }
-      } catch (error) {
-        console.log('Polling market data failed:', error);
-      }
-    };
+  //       if (response.ok) {
+  //         const data = await response.json();
+  //         // This will trigger the enrichWithMarketData to update
+  //         // The data will be picked up by the existing marketData state
+  //       }
+  //     } catch (error) {
+  //       console.log('Polling market data failed:', error);
+  //     }
+  //   };
 
-    // Poll every 3 seconds for additional updates (faster frequency for real-time)
-    const interval = setInterval(pollMarketData, 3000);
-    return () => clearInterval(interval);
-  }, [realtimeAddrs]);
+  //   // Poll every 3 seconds for additional updates (faster frequency for real-time)
+  //   const interval = setInterval(pollMarketData, 3000);
+  //   return () => clearInterval(interval);
+  // }, [realtimeAddrs]);
 
   const enrichWithMarketData = useCallback((arr: any[]): any[] => {
     if (!arr || arr.length === 0) return arr;

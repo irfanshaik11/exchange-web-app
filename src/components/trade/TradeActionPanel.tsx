@@ -590,10 +590,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
   }, [token.mint]);
 
-  // amount presets
-  const [amountPresets, setAmountPresets] = useState<number[]>([0.01, 0.1, 0.5, 1]);
+  // amount presets - different for buy vs sell
+  const buyPresets = [0.01, 0.1, 0.5, 1];
+  const sellPresets = [10, 25, 50, 100];
+  const [amountPresets, setAmountPresets] = useState<number[]>(buyPresets);
   const [editingPresets, setEditingPresets] = useState(false);
-  const [presetDrafts, setPresetDrafts] = useState<string[]>([0.01, 0.1, 0.5, 1].map(String));
+  const [presetDrafts, setPresetDrafts] = useState<string[]>(buyPresets.map(String));
+  
+  // Update presets when mode changes and clear amount
+  useEffect(() => {
+    const newPresets = mode === "sell" ? sellPresets : buyPresets;
+    setAmountPresets(newPresets);
+    setPresetDrafts(newPresets.map(String));
+    // Clear amount when switching modes to avoid confusion
+    setAmount("");
+  }, [mode]);
+  
   useEffect(() => setPresetDrafts(amountPresets.map(String)), [amountPresets]);
 
   const commitPresetDrafts = () => {
@@ -852,9 +864,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   if (allowDecimal(raw)) setAmount(raw);
                 }}
                 onBlur={(e) => {
-                  // When user finishes typing, check if amount meets minimum
+                  // When user finishes typing, check if amount meets minimum (buy mode only)
                   const value = Number(e.target.value);
-                  if (value > 0) {
+                  if (mode === "buy" && value > 0) {
                     const poolType = getPoolTypeFromToken(token);
                     const minimums: Record<string, number> = {
                       "meteora amm v2": 0.0001,
@@ -880,30 +892,36 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               />
             </div>
             <div className="flex items-center justify-center w-5 h-5">
-              <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
-                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
-                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear)"/>
-                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear)"/>
-                <defs>
-                  <linearGradient id="paint0_linear" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                  <linearGradient id="paint1_linear" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                  <linearGradient id="paint2_linear" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                </defs>
-              </svg>
+              {mode === "sell" ? (
+                // Show % symbol for sell mode
+                <span className="text-[14px] font-semibold text-[#E6E7EA]">%</span>
+              ) : (
+                // Show SOL logo for buy mode
+                <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
+                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
+                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear)"/>
+                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear)"/>
+                  <defs>
+                    <linearGradient id="paint0_linear" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint1_linear" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint2_linear" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              )}
             </div>
           </div>
           
-          {/* Minimum Amount Hint */}
-          {tab === "market" && (() => {
+          {/* Minimum Amount Hint - only for buy mode */}
+          {tab === "market" && mode === "buy" && (() => {
             const poolType = getPoolTypeFromToken(token);
             const minimums: Record<string, number> = {
               "meteora amm v2": 0.0001,
@@ -1209,28 +1227,32 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
         {amount ? (
           <>
-            You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span> 
-            <div className="inline-block w-3 h-3 ml-1 align-middle">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
-                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
-                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
-                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
-                <defs>
-                  <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                  <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                  <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                </defs>
-              </svg>
-            </div>
+            You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span>
+            {mode === "sell" ? (
+              <span className="text-[#E6E7EA] font-semibold">%</span>
+            ) : (
+              <div className="inline-block w-3 h-3 ml-1 align-middle">
+                <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
+                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
+                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
+                  <defs>
+                    <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+            )}
           </>
         ) : null}
         </div>
@@ -1340,6 +1362,21 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 toast.error("Less balance. Please fund your wallet.");
                 return;
               }
+            } else if (mode === "sell") {
+              // Validate sell percentage
+              const percentage = Number(amount || 0);
+              if (!percentage || percentage <= 0) {
+                setIsLoading(false);
+                setMessage({ type: "error", text: "Enter a valid percentage." });
+                toast.error("Enter a valid percentage");
+                return;
+              }
+              if (percentage > 100) {
+                setIsLoading(false);
+                setMessage({ type: "error", text: "Percentage cannot exceed 100%." });
+                toast.error("Percentage cannot exceed 100%");
+                return;
+              }
             }
 
             // Use shared pool type detection
@@ -1387,7 +1424,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     })
                 : await tradeSellPercentage({
                     tokenAddress: token.mint,
-                    percentageToSell: 100, // Sell 100% of tokens
+                    percentageToSell: Number(amount), // Use the percentage from input
                     poolAddress: effectivePoolAddress,
                     baseMint: token.mint,
                     quoteMint: SOL_MINT_ADDRESS,
@@ -1536,7 +1573,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               {prettyAmt(amount) && (
                 <>
                   {" "}{prettyAmt(amount)}
-                  <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                  {mode === "sell" ? (
+                    <span>%</span>
+                  ) : (
+                    <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                  )}
                 </>
               )}
             </span>

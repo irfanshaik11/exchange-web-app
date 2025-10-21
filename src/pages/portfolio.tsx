@@ -378,19 +378,23 @@ export default function PortfolioPage() {
      let between0AndMinus50 = 0;
      let belowMinus50 = 0;
 
-     // Count winning/losing positions and categorize by PNL percentage
-     positions.forEach(pos => {
-       if (pos.pnl > 0) {
-         winningTrades++;
-       } else if (pos.pnl < 0) {
-         losingTrades++;
-       }
-       // Calculate realized PNL from sold positions
-       if (pos.sold > 0) {
-         totalRealizedPnl += pos.pnl * (pos.sold / (pos.bought || 1));
-       }
+    // Count winning/losing positions and categorize by PNL percentage
+    positions.forEach(pos => {
+      if (pos.pnl > 0) {
+        winningTrades++;
+      } else if (pos.pnl < 0) {
+        losingTrades++;
+      }
+      
+      // Calculate realized PNL from sold positions
+      // Realized PnL = Money received from selling - Cost basis of sold tokens
+      if (pos.sold > 0 && pos.bought > 0) {
+        const costBasisOfSold = pos.boughtUsdValue * (pos.sold / pos.bought);
+        const realizedPnl = pos.soldUsdValue - costBasisOfSold;
+        totalRealizedPnl += realizedPnl;
+      }
 
-       // Categorize by PNL percentage
+      // Categorize by PNL percentage
        const pnlPercent = pos.pnlPercentage;
        if (pnlPercent > 500) {
          above500++;
@@ -426,6 +430,57 @@ export default function PortfolioPage() {
 
    calculateTimeframeMetrics();
  }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl]);
+
+ // Export performance data as CSV
+ const exportPerformanceData = () => {
+   // Create CSV content
+   const csvContent = [
+     // Header
+     ['Metric', 'Value'],
+     ['Timeframe', selectedTimeframe],
+     ['Export Date', new Date().toLocaleString()],
+     [''],
+     ['Performance Metrics', ''],
+     ['Unrealized PnL', timeframeMetrics.unrealizedPnl],
+     ['Realized PnL', timeframeMetrics.realizedPnl],
+     ['Winning Trades', timeframeMetrics.winningTrades],
+     ['Losing Trades', timeframeMetrics.losingTrades],
+     ['Total Trades', timeframeMetrics.winningTrades + timeframeMetrics.losingTrades],
+     [''],
+     ['Performance Breakdown', ''],
+     ['>500%', performanceBreakdown.above500],
+     ['200% - 500%', performanceBreakdown.between200And500],
+     ['0% - 200%', performanceBreakdown.between0And200],
+     ['0% - -50%', performanceBreakdown.between0AndMinus50],
+     ['< -50%', performanceBreakdown.belowMinus50],
+     [''],
+     ['Position Details', ''],
+     ['Token Address', 'Pair Address', 'Bought', 'Bought USD', 'Sold', 'Sold USD', 'Remaining', 'Remaining USD', 'PnL', 'PnL %'],
+     ...positions.map(pos => [
+       pos.tokenAddress,
+       pos.pairAddress,
+       pos.bought,
+       pos.boughtUsdValue,
+       pos.sold,
+       pos.soldUsdValue,
+       pos.remaining,
+       pos.remainingUsdValue,
+       pos.pnl,
+       pos.pnlPercentage
+     ])
+   ].map(row => row.join(',')).join('\n');
+
+   // Create and download file
+   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+   const link = document.createElement('a');
+   const url = URL.createObjectURL(blob);
+   link.setAttribute('href', url);
+   link.setAttribute('download', `portfolio-performance-${selectedTimeframe}-${new Date().toISOString().split('T')[0]}.csv`);
+   link.style.visibility = 'hidden';
+   document.body.appendChild(link);
+   link.click();
+   document.body.removeChild(link);
+ };
 
 
  return (
@@ -591,7 +646,8 @@ export default function PortfolioPage() {
                 <div className="bg-[#1E1F26] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
                     <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">Realized PNL</div>
-                    <InterstateTooltip label="View realized profit/loss over time">
+                    {/* Calendar icon commented out */}
+                    {/* <InterstateTooltip label="View realized profit/loss over time">
                       <svg className="w-4 h-4 text-[#9CA3AF] cursor-pointer hover:text-white transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                         <line x1="16" y1="2" x2="16" y2="6"/>
@@ -599,19 +655,19 @@ export default function PortfolioPage() {
                         <line x1="3" y1="10" x2="21" y2="10"/>
                         <rect x="7" y="14" width="3" height="3" fill="currentColor"/>
                       </svg>
-                    </InterstateTooltip>
+                    </InterstateTooltip> */}
                   </div>
                   <div className="flex flex-col h-32">
                     <div className="text-2xl font-light mb-2" style={{ color: timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F' }}>
                       {sortByUSD && solPrice > 0
                         ? <><SolIcon />{formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl) / solPrice)}</>
-                        : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                        : `${timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}$${formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl))}`
                       }
                     </div>
                     {/* Dynamic PNL chart */}
                     <div className="relative w-full flex-1">
                       <svg className="w-full h-full" viewBox="0 0 300 80" preserveAspectRatio="none">
-                        {/* Horizontal reference line */}
+                        {/* Horizontal reference line (neutral/zero) */}
                         <line 
                           x1="0" 
                           y1="40" 
@@ -620,22 +676,62 @@ export default function PortfolioPage() {
                           stroke="#2A2B33" 
                           strokeWidth="1"
                         />
+                        
+                        {/* Dashed reference lines for visual context */}
+                        <line 
+                          x1="0" 
+                          y1="20" 
+                          x2="300" 
+                          y2="20" 
+                          stroke="#4A4B53" 
+                          strokeWidth="1"
+                          strokeDasharray="4,3"
+                          opacity="0.7"
+                        />
+                        <line 
+                          x1="0" 
+                          y1="60" 
+                          x2="300" 
+                          y2="60" 
+                          stroke="#4A4B53" 
+                          strokeWidth="1"
+                          strokeDasharray="4,3"
+                          opacity="0.7"
+                        />
+                        
                         {/* Dynamic PNL line */}
                         <path
                           d={(() => {
                             const pnl = timeframeMetrics.realizedPnl;
-                            const absMaxPnl = Math.max(Math.abs(pnl), 100);
-                            const normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
+                            
+                            // More aggressive scaling for small values to make slope visible
+                            let normalizedPnl;
+                            if (Math.abs(pnl) < 0.01) {
+                              // For very small values, use much more aggressive scaling
+                              normalizedPnl = Math.max(-1, Math.min(1, pnl * 5000)); // Scale up by 5000x
+                            } else if (Math.abs(pnl) < 1) {
+                              // For small-medium values, moderate scaling
+                              normalizedPnl = Math.max(-1, Math.min(1, pnl * 100)); // Scale up by 100x
+                            } else {
+                              // For larger values, use the original logic
+                              const absMaxPnl = Math.max(Math.abs(pnl), 100);
+                              normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
+                            }
+                            
                             const endY = 40 - (normalizedPnl * 30);
                             
-                            // Create a line that trends up/down based on PNL
-                            return `M 0 40 L 50 ${40 - (normalizedPnl * 10)} L 100 ${40 - (normalizedPnl * 15)} L 150 ${40 - (normalizedPnl * 20)} L 200 ${40 - (normalizedPnl * 25)} L 300 ${endY}`;
+                            // Create a more dramatic line that trends up/down based on PNL
+                            return `M 0 40 L 60 ${40 - (normalizedPnl * 12)} L 120 ${40 - (normalizedPnl * 18)} L 180 ${40 - (normalizedPnl * 24)} L 240 ${40 - (normalizedPnl * 27)} L 300 ${endY}`;
                           })()}
                           stroke={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'}
-                          strokeWidth="2"
+                          strokeWidth="2.5"
                           fill="none"
                           style={{ transition: 'all 0.3s ease' }}
                         />
+                        
+                        {/* Start and end points for clarity */}
+                        <circle cx="0" cy="40" r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
+                        <circle cx="300" cy={40 - (Math.max(-1, Math.min(1, timeframeMetrics.realizedPnl * (Math.abs(timeframeMetrics.realizedPnl) < 0.01 ? 5000 : Math.abs(timeframeMetrics.realizedPnl) < 1 ? 100 : 1)))) * 30} r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
                       </svg>
                     </div>
                   </div>
@@ -645,8 +741,13 @@ export default function PortfolioPage() {
                 <div className="bg-[#1E1F26] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
                     <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">Performance</div>
-                    <InterstateTooltip label="Export performance data">
-                      <FaUpload className="text-[#9CA3AF] text-sm cursor-pointer hover:text-white transition-colors" />
+                    <InterstateTooltip label="Export">
+                      <button 
+                        onClick={exportPerformanceData}
+                        className="text-[#9CA3AF] text-sm cursor-pointer hover:text-white transition-colors"
+                      >
+                        <FaUpload />
+                      </button>
                     </InterstateTooltip>
                   </div>
                   <div className="space-y-3">
@@ -664,7 +765,7 @@ export default function PortfolioPage() {
                       <span className="text-white font-light">
                         {sortByUSD && solPrice > 0
                           ? <><SolIcon />{formatSmartNumber(timeframeMetrics.realizedPnl / solPrice)}</>
-                          : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                          : `${timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}$${formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl))}`
                         }
                       </span>
                     </div>
@@ -879,18 +980,14 @@ export default function PortfolioPage() {
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Please log in to view your positions.
                       </div>
-                    ) : filteredTop100Positions.length === 0 ? (
-                      <div className="py-8 text-center text-[#9CA3AF]">
-                        {searchQuery.trim() ? "No positions found matching your search." : "No positions found."}
-                      </div>
                     ) : (
                       <Positions
                         bearerToken={user.bearerToken}
                         userId={user.id}
-                        onPositionsChange={() => {}} // No-op since we're using preloaded positions
+                        onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
-                        preloadedPositions={filteredTop100Positions}
-                        skipFetch={true}
+                        preloadedPositions={searchQuery.trim() ? filteredTop100Positions : undefined}
+                        skipFetch={searchQuery.trim() !== ""}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}

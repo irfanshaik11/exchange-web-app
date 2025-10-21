@@ -14,7 +14,7 @@ interface DepositModalProps {
 }
 
 const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
-  const { user, loading: userLoading, refreshUser, solBalance, refreshBalance } = useUser();
+  const { user, loading: userLoading, refreshUser, refreshBalance, solBalance } = useUser();
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -27,24 +27,6 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
       return () => clearTimeout(timeout);
     }
   }, [open]);
-
-  // Auto-refresh balance every 5 seconds while modal is open
-  useEffect(() => {
-    if (open && user?.publicKey) {
-      // Initial refresh when modal opens
-      refreshBalance();
-
-      // Set up polling interval
-      const intervalId = setInterval(() => {
-        refreshBalance();
-      }, 5000); // Refresh every 5 seconds
-
-      // Cleanup interval when modal closes
-      return () => {
-        clearInterval(intervalId);
-      };
-    }
-  }, [open, user?.publicKey, refreshBalance]);
 
   useEffect(() => {
     if (user?.publicKey) {
@@ -113,10 +95,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
               </div>
               <div className="flex h-10 w-full flex-row items-center justify-between gap-2 rounded border border-neutral-600 p-2 text-sm">
                 <span className="text-neutral-500">Balance: </span>
-                <span className="flex items-center gap-1">
-                  {solBalance.toFixed(2)} SOL
-                  <span className="ml-1 h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" title="Auto-refreshing every 5s"></span>
-                </span>
+                <span className="text-white font-medium whitespace-nowrap">{solBalance.toFixed(4)} SOL</span>
               </div>
             </div>
             <label className="mb-3 block text-sm text-neutral-400">Only deposit SOL through the Solana Network for this address.</label>
@@ -150,8 +129,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
               </div>
             </div>
             <div className="mt-3 text-sm text-neutral-500">Don't have any Solana? <span className="text-blue-400">Buy through Coinbase.</span></div>
-
-            <div className="pt-4 space-y-2">
+            <hr className="-mx-6 mb-2 border-neutral-600" />
+            <div className="pt-4">
               <InterstateButton fullWidth onClick={() => copyToClipboard(user.publicKey)}>Copy Deposit Address</InterstateButton>
             </div>
           </>
