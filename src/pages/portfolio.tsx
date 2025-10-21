@@ -431,6 +431,57 @@ export default function PortfolioPage() {
    calculateTimeframeMetrics();
  }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl]);
 
+ // Export performance data as CSV
+ const exportPerformanceData = () => {
+   // Create CSV content
+   const csvContent = [
+     // Header
+     ['Metric', 'Value'],
+     ['Timeframe', selectedTimeframe],
+     ['Export Date', new Date().toLocaleString()],
+     [''],
+     ['Performance Metrics', ''],
+     ['Unrealized PnL', timeframeMetrics.unrealizedPnl],
+     ['Realized PnL', timeframeMetrics.realizedPnl],
+     ['Winning Trades', timeframeMetrics.winningTrades],
+     ['Losing Trades', timeframeMetrics.losingTrades],
+     ['Total Trades', timeframeMetrics.winningTrades + timeframeMetrics.losingTrades],
+     [''],
+     ['Performance Breakdown', ''],
+     ['>500%', performanceBreakdown.above500],
+     ['200% - 500%', performanceBreakdown.between200And500],
+     ['0% - 200%', performanceBreakdown.between0And200],
+     ['0% - -50%', performanceBreakdown.between0AndMinus50],
+     ['< -50%', performanceBreakdown.belowMinus50],
+     [''],
+     ['Position Details', ''],
+     ['Token Address', 'Pair Address', 'Bought', 'Bought USD', 'Sold', 'Sold USD', 'Remaining', 'Remaining USD', 'PnL', 'PnL %'],
+     ...positions.map(pos => [
+       pos.tokenAddress,
+       pos.pairAddress,
+       pos.bought,
+       pos.boughtUsdValue,
+       pos.sold,
+       pos.soldUsdValue,
+       pos.remaining,
+       pos.remainingUsdValue,
+       pos.pnl,
+       pos.pnlPercentage
+     ])
+   ].map(row => row.join(',')).join('\n');
+
+   // Create and download file
+   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+   const link = document.createElement('a');
+   const url = URL.createObjectURL(blob);
+   link.setAttribute('href', url);
+   link.setAttribute('download', `portfolio-performance-${selectedTimeframe}-${new Date().toISOString().split('T')[0]}.csv`);
+   link.style.visibility = 'hidden';
+   document.body.appendChild(link);
+   link.click();
+   document.body.removeChild(link);
+ };
+
 
  return (
    <>
@@ -595,7 +646,8 @@ export default function PortfolioPage() {
                 <div className="bg-[#1E1F26] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
                     <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">Realized PNL</div>
-                    <InterstateTooltip label="View realized profit/loss over time">
+                    {/* Calendar icon commented out */}
+                    {/* <InterstateTooltip label="View realized profit/loss over time">
                       <svg className="w-4 h-4 text-[#9CA3AF] cursor-pointer hover:text-white transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                         <line x1="16" y1="2" x2="16" y2="6"/>
@@ -603,7 +655,7 @@ export default function PortfolioPage() {
                         <line x1="3" y1="10" x2="21" y2="10"/>
                         <rect x="7" y="14" width="3" height="3" fill="currentColor"/>
                       </svg>
-                    </InterstateTooltip>
+                    </InterstateTooltip> */}
                   </div>
                   <div className="flex flex-col h-32">
                     <div className="text-2xl font-light mb-2" style={{ color: timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F' }}>
@@ -689,8 +741,13 @@ export default function PortfolioPage() {
                 <div className="bg-[#1E1F26] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
                     <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">Performance</div>
-                    <InterstateTooltip label="Export performance data">
-                      <FaUpload className="text-[#9CA3AF] text-sm cursor-pointer hover:text-white transition-colors" />
+                    <InterstateTooltip label="Export">
+                      <button 
+                        onClick={exportPerformanceData}
+                        className="text-[#9CA3AF] text-sm cursor-pointer hover:text-white transition-colors"
+                      >
+                        <FaUpload />
+                      </button>
                     </InterstateTooltip>
                   </div>
                   <div className="space-y-3">
