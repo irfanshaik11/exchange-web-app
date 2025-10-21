@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
-import { FaSearch, FaStar, FaBell } from "react-icons/fa";
+import { FaSearch, FaStar, FaBell, FaWallet } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import dynamic from "next/dynamic";
@@ -64,7 +64,7 @@ export default function Header({
 }: HeaderProps) {
   const router = useRouter();
   const isDiscover = router.pathname === "/";
-  const { user, loading: userLoading } = useUser();
+  const { user, loading: userLoading, solBalance } = useUser();
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
@@ -214,6 +214,35 @@ export default function Header({
                 >
                   <FaSearch size={14} />
                 </button>
+              </div>
+            )}
+            {/* SOL Balance Pill */}
+            {user && (
+              <div 
+                className="flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out cursor-default"
+                style={{ 
+                  backgroundColor: AX.surface, 
+                  borderColor: AX.border,
+                  color: AX.text 
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(112, 224, 176, 0.08)';
+                  e.currentTarget.style.borderColor = AX.mint;
+                  e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = AX.surface;
+                  e.currentTarget.style.borderColor = AX.border;
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <FaWallet size={12} style={{ color: AX.muted }} />
+                <span className="text-xs font-medium">{solBalance.toFixed(4)}</span>
+                <img 
+                  src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png" 
+                  alt="SOL" 
+                  className="w-3 h-3 rounded-full"
+                />
               </div>
             )}
             <button
