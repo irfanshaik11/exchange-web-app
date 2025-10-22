@@ -139,7 +139,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Age ↓</th>
             <th className="px-2 py-2 text-left">Type</th>
-            <th className="px-2 py-2 text-left">MC ⇅</th>
+            {/* <th className="px-2 py-2 text-left">MC ⇅</th> */}
             <th className="px-2 py-2 text-left">Amount</th>
             <th className="px-2 py-2 text-left">Total USD ⟳</th>
             <th className="px-2 py-2 text-left">Trader</th>
@@ -148,13 +148,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
         <tbody>
           {isLoading ? (
             <tr>
-              <td colSpan={6} className="text-center py-6 text-neutral-500">
+              <td colSpan={5} className="text-center py-6 text-neutral-500">
                 Loading trades...
               </td>
             </tr>
           ) : !displayTrades || displayTrades.length === 0 ? (
             <tr>
-              <td colSpan={6} className="text-center py-6 text-neutral-500">
+              <td colSpan={5} className="text-center py-6 text-neutral-500">
                 {isConnected ? 'No trades found.' : 'Connecting...'}
               </td>
             </tr>
@@ -174,7 +174,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                   <tr key={trade.pair_address + idx + trade.timestamp} className="border-b border-neutral-800 hover:bg-neutral-800/60">
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>{type}</td>
-                    <td className="px-2 py-2 text-neutral-300">{formatMarketCap(token.market_cap_usd)}</td>
+                    {/* <td className="px-2 py-2 text-neutral-300">{formatMarketCap(token.market_cap_usd)}</td> */}
                     <td className="px-2 py-2 text-neutral-300">{formatSmartNumber(amount)}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>
                       {type === 'Buy' ? '+' : '-'}${formatSmartNumber(value)}
@@ -209,7 +209,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                   <tr key={trade.transactionHash + idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>{type}</td>
-                    <td className="px-2 py-2 text-neutral-300">{formatMarketCap(token.market_cap_usd)}</td>
+                    {/* <td className="px-2 py-2 text-neutral-300">{formatMarketCap(token.market_cap_usd)}</td> */}
                     <td className="px-2 py-2 text-neutral-300">{formatSmartNumber(amount)}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>
                       {type === 'Buy' || type === 'Add' ? '+' : '-'}${formatSmartNumber(totalUSD)}
