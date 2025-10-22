@@ -59,35 +59,57 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             token.created_at = token.launch_time || token.created_at || null; // Ensure created_at is set
             token.launchpad_protocol = token.launchpad_protocol || null; // Pass through protocol for filtering and colors
             
-            // Ensure TX data fields are available (they should come from backend)
-            token.total_buy_volume_5m = token.total_buy_volume_5m ?? 0;
-            token.total_buy_volume_1h = token.total_buy_volume_1h ?? 0;
-            token.total_buy_volume_6h = token.total_buy_volume_6h ?? 0;
-            token.total_buy_volume_24h = token.total_buy_volume_24h ?? 0;
-            token.total_sell_volume_5m = token.total_sell_volume_5m ?? 0;
-            token.total_sell_volume_1h = token.total_sell_volume_1h ?? 0;
-            token.total_sell_volume_6h = token.total_sell_volume_6h ?? 0;
-            token.total_sell_volume_24h = token.total_sell_volume_24h ?? 0;
-            token.total_buyers_5m = token.total_buyers_5m ?? 0;
-            token.total_buyers_1h = token.total_buyers_1h ?? 0;
-            token.total_buyers_6h = token.total_buyers_6h ?? 0;
-            token.total_buyers_24h = token.total_buyers_24h ?? 0;
-            token.total_sellers_5m = token.total_sellers_5m ?? 0;
-            token.total_sellers_1h = token.total_sellers_1h ?? 0;
-            token.total_sellers_6h = token.total_sellers_6h ?? 0;
-            token.total_sellers_24h = token.total_sellers_24h ?? 0;
-            token.total_buys_5m = token.total_buys_5m ?? 0;
-            token.total_buys_1h = token.total_buys_1h ?? 0;
-            token.total_buys_6h = token.total_buys_6h ?? 0;
-            token.total_buys_24h = token.total_buys_24h ?? 0;
-            token.total_sells_5m = token.total_sells_5m ?? 0;
-            token.total_sells_1h = token.total_sells_1h ?? 0;
-            token.total_sells_6h = token.total_sells_6h ?? 0;
-            token.total_sells_24h = token.total_sells_24h ?? 0;
-            token.unique_wallets_5m = token.unique_wallets_5m ?? 0;
-            token.unique_wallets_1h = token.unique_wallets_1h ?? 0;
-            token.unique_wallets_6h = token.unique_wallets_6h ?? 0;
-            token.unique_wallets_24h = token.unique_wallets_24h ?? 0;
+            // Helper function to estimate shorter timeframe data from 24h data for older tokens
+            const estimateFrom24h = (value24h: number, timeframe: '5m' | '1h' | '6h') => {
+              if (value24h > 0) {
+                switch (timeframe) {
+                  case '5m': return value24h / 288; // 24h / 288 = 5m
+                  case '1h': return value24h / 24;   // 24h / 24 = 1h
+                  case '6h': return value24h / 4;   // 24h / 4 = 6h
+                  default: return value24h;
+                }
+              }
+              return 0;
+            };
+
+            // Get base values
+            const totalBuys24h = token.total_buys_24h ?? 0;
+            const totalSells24h = token.total_sells_24h ?? 0;
+            const totalBuyVolume24h = token.total_buy_volume_24h ?? 0;
+            const totalSellVolume24h = token.total_sell_volume_24h ?? 0;
+            const totalBuyers24h = token.total_buyers_24h ?? 0;
+            const totalSellers24h = token.total_sellers_24h ?? 0;
+            const uniqueWallets24h = token.unique_wallets_24h ?? 0;
+
+            // Ensure TX data fields are available with fallback logic for older tokens
+            token.total_buy_volume_5m = (token.total_buy_volume_5m ?? 0) || estimateFrom24h(totalBuyVolume24h, '5m');
+            token.total_buy_volume_1h = (token.total_buy_volume_1h ?? 0) || estimateFrom24h(totalBuyVolume24h, '1h');
+            token.total_buy_volume_6h = (token.total_buy_volume_6h ?? 0) || estimateFrom24h(totalBuyVolume24h, '6h');
+            token.total_buy_volume_24h = totalBuyVolume24h;
+            token.total_sell_volume_5m = (token.total_sell_volume_5m ?? 0) || estimateFrom24h(totalSellVolume24h, '5m');
+            token.total_sell_volume_1h = (token.total_sell_volume_1h ?? 0) || estimateFrom24h(totalSellVolume24h, '1h');
+            token.total_sell_volume_6h = (token.total_sell_volume_6h ?? 0) || estimateFrom24h(totalSellVolume24h, '6h');
+            token.total_sell_volume_24h = totalSellVolume24h;
+            token.total_buyers_5m = (token.total_buyers_5m ?? 0) || Math.max(1, Math.floor(totalBuyers24h / 288));
+            token.total_buyers_1h = (token.total_buyers_1h ?? 0) || Math.max(1, Math.floor(totalBuyers24h / 24));
+            token.total_buyers_6h = (token.total_buyers_6h ?? 0) || Math.max(1, Math.floor(totalBuyers24h / 4));
+            token.total_buyers_24h = totalBuyers24h;
+            token.total_sellers_5m = (token.total_sellers_5m ?? 0) || Math.max(1, Math.floor(totalSellers24h / 288));
+            token.total_sellers_1h = (token.total_sellers_1h ?? 0) || Math.max(1, Math.floor(totalSellers24h / 24));
+            token.total_sellers_6h = (token.total_sellers_6h ?? 0) || Math.max(1, Math.floor(totalSellers24h / 4));
+            token.total_sellers_24h = totalSellers24h;
+            token.total_buys_5m = (token.total_buys_5m ?? 0) || Math.max(1, Math.floor(totalBuys24h / 288));
+            token.total_buys_1h = (token.total_buys_1h ?? 0) || Math.max(1, Math.floor(totalBuys24h / 24));
+            token.total_buys_6h = (token.total_buys_6h ?? 0) || Math.max(1, Math.floor(totalBuys24h / 4));
+            token.total_buys_24h = totalBuys24h;
+            token.total_sells_5m = (token.total_sells_5m ?? 0) || Math.max(1, Math.floor(totalSells24h / 288));
+            token.total_sells_1h = (token.total_sells_1h ?? 0) || Math.max(1, Math.floor(totalSells24h / 24));
+            token.total_sells_6h = (token.total_sells_6h ?? 0) || Math.max(1, Math.floor(totalSells24h / 4));
+            token.total_sells_24h = totalSells24h;
+            token.unique_wallets_5m = (token.unique_wallets_5m ?? 0) || Math.max(1, Math.floor(uniqueWallets24h / 288));
+            token.unique_wallets_1h = (token.unique_wallets_1h ?? 0) || Math.max(1, Math.floor(uniqueWallets24h / 24));
+            token.unique_wallets_6h = (token.unique_wallets_6h ?? 0) || Math.max(1, Math.floor(uniqueWallets24h / 4));
+            token.unique_wallets_24h = uniqueWallets24h;
             token.price_percent_change_5m = token.price_percent_change_5m ?? 0;
             token.price_percent_change_1h = token.price_percent_change_1h ?? 0;
             token.price_percent_change_6h = token.price_percent_change_6h ?? 0;

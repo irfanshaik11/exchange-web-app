@@ -141,9 +141,9 @@ export default function Header({
               title="Go to Trenches"
             >
               <img
-                src="/narrative-logo.png"
-                alt="Narrative logo"
-                className="h-auto w-15 "
+                src="/interstate-logo.png"
+                alt="Interstate logo"
+                className="h-auto w-30 scale-90"
               />
             </Link>
             <nav className="ml-6 flex items-center gap-5">
@@ -202,7 +202,7 @@ export default function Header({
                   }}
                 >
                   <FaSearch size={14} />
-                  <span className="text-xs text-neutral-400">Search by token or CA…</span>
+                  <span className="text-xs text-neutral-400 whitespace-nowrap">Search tokens…</span>
                   <span className="ml-auto rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">Tab</span>
                 </button>
 

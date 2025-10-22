@@ -4778,34 +4778,34 @@ const PulseTable = React.memo(function PulseTable({
                           >
                             <SmoothNumber
                               value={(() => {
-                                const buys = token.total_buys_5m ?? 0;
-                                const sells = token.total_sells_5m ?? 0;
+                                const buys = token.total_buys_24h ?? 0;
+                                const sells = token.total_sells_24h ?? 0;
                                 const total = buys + sells;
                                 // Debug logging
                                 if (token.symbol === 'HEAVEN' || total < 20) {
                                   console.log(`[PulseTable TX] ${token.symbol}:`, {
-                                    total_buys_5m: token.total_buys_5m,
-                                    total_sells_5m: token.total_sells_5m,
+                                    total_buys_24h: token.total_buys_24h,
+                                    total_sells_24h: token.total_sells_24h,
                                     calculated: total,
                                     mint: token.mint
                                   });
                                 }
                                 return total;
                               })()}
-                              duration={300}
+                              duration={0}
                             />
                           </span>
                           <div className="w-8 h-1 bg-gray-700 rounded-full overflow-hidden ml-1 flex">
                             <div 
                               className="h-full bg-green-400"
                               style={{
-                                width: `${Math.min(100, Math.max(0, ((token.total_buys_5m ?? 0) / Math.max(1, (token.total_buys_5m ?? 0) + (token.total_sells_5m ?? 0))) * 100))}%`
+                                width: `${Math.min(100, Math.max(0, ((token.total_buys_24h ?? 0) / Math.max(1, (token.total_buys_24h ?? 0) + (token.total_sells_24h ?? 0))) * 100))}%`
                               }}
                             ></div>
                             <div 
                               className="h-full bg-red-400"
                               style={{
-                                width: `${Math.min(100, Math.max(0, ((token.total_sells_5m ?? 0) / Math.max(1, (token.total_buys_5m ?? 0) + (token.total_sells_5m ?? 0))) * 100))}%`
+                                width: `${Math.min(100, Math.max(0, ((token.total_sells_24h ?? 0) / Math.max(1, (token.total_buys_24h ?? 0) + (token.total_sells_24h ?? 0))) * 100))}%`
                               }}
                             ></div>
                           </div>
@@ -4838,13 +4838,13 @@ const PulseTable = React.memo(function PulseTable({
                           B/S{" "}
                           <span className="font-bold text-yellow-400">
                             <SmoothNumber
-                              value={token.total_buys_5m ?? 0}
-                              duration={300}
+                              value={token.total_buys_24h ?? 0}
+                              duration={0}
                             />
                             /
                             <SmoothNumber
-                              value={token.total_sells_5m ?? 0}
-                              duration={300}
+                              value={token.total_sells_24h ?? 0}
+                              duration={0}
                             />
                           </span>
                         </span> */}
