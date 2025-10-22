@@ -4068,24 +4068,28 @@ const PulseTable = React.memo(function PulseTable({
             No tokens found.
           </div>
         ) : (
-          memoizedTokens.map((token, idx) => {
-            const pairAddress = (token as any)?.pair_address;
-            const mintAddress = (token as any)?.mint;
-            const address = pairAddress || mintAddress;
+          memoizedTokens
+            .filter((token) => {
+              // Only show tokens that have a valid pair_address
+              const pairAddress = (token as any)?.pair_address;
+              return pairAddress && pairAddress.trim() !== '';
+            })
+            .map((token, idx) => {
+              const pairAddress = (token as any)?.pair_address;
 
-            // Build query params for optimistic UI
-            const queryParams = new URLSearchParams({
-              _name: (token as any)?.name || (token as any)?.symbol || '',
-              _symbol: (token as any)?.symbol || '',
-              _price: String((token as any)?.price_usd || (token as any)?.priceUsd || ''),
-              _mcap: String((token as any)?.market_cap_usd || (token as any)?.marketCapUsd || ''),
-              _image: (token as any)?.image || (token as any)?.uri || '',
-            }).toString();
+              // Build query params for optimistic UI
+              const queryParams = new URLSearchParams({
+                _name: (token as any)?.name || (token as any)?.symbol || '',
+                _symbol: (token as any)?.symbol || '',
+                _price: String((token as any)?.price_usd || (token as any)?.priceUsd || ''),
+                _mcap: String((token as any)?.market_cap_usd || (token as any)?.marketCapUsd || ''),
+                _image: (token as any)?.image || (token as any)?.uri || '',
+              }).toString();
 
-            return (
-              <Link
-                href={`/trade/${address}?${queryParams}`}
-                key={`${pairAddress || mintAddress || "noaddr"}-${idx}`}
+              return (
+                <Link
+                  href={`/trade/${pairAddress}?${queryParams}`}
+                  key={`${pairAddress}-${idx}`}
                 className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 transition-all duration-300 ease-out"
                 style={{ 
                   borderColor: AX.border,
@@ -4103,8 +4107,8 @@ const PulseTable = React.memo(function PulseTable({
                     popup.style.transform = 'translateX(-50%)';
                   }
                   // Prefetch trade data on hover for instant navigation
-                  if (address) {
-                    prefetchTradeData(address, pairAddress);
+                  if (pairAddress) {
+                    prefetchTradeData(pairAddress, pairAddress);
                   }
                 }}
                 onMouseLeave={(e) => {
