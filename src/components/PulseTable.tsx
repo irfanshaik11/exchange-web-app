@@ -1216,7 +1216,21 @@ const PulseTable = React.memo(function PulseTable({
   const [activeFilterTab, setActiveFilterTab] = useState('New Pairs');
   const [activeCategoryTab, setActiveCategoryTab] = useState('Audit');
   const [selectedPill, setSelectedPill] = useState('P1'); // Each column has its own preset selection
-  const [thunderAmount, setThunderAmount] = useState('0.0');
+  // Load thunderAmount from localStorage with fallback
+  const getInitialThunderAmount = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pulseTableThunderAmount');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed.toString();
+        }
+      }
+    }
+    return '0.0';
+  };
+  
+  const [thunderAmount, setThunderAmount] = useState(getInitialThunderAmount);
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
@@ -1373,6 +1387,13 @@ const PulseTable = React.memo(function PulseTable({
       setFilteredTokens([]);
     }
   }, [filters.protocols, fetchFilteredTokens]);
+
+  // Save thunderAmount to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pulseTableThunderAmount', thunderAmount);
+    }
+  }, [thunderAmount]);
 
   const handleResetFilters = () => {
     const defaultFilters = {
