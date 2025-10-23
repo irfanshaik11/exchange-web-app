@@ -19,20 +19,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Invalid parameter type' });
   }
 
+  // Type assertion after validation
+  const pairAddr = pair_address as string;
+  const mintAddr = mint_address as string;
+
   try {
     // Route to the correct backend endpoint based on parameter type
     let endpoint: string;
     let address: string;
 
-    if (mint_address) {
+    if (mintAddr) {
       // Query by mint address (token address) - better for graduated tokens
-      endpoint = `/v1/trade/view-by-mint?mint_address=${mint_address}`;
-      address = mint_address;
+      endpoint = `/v1/trade/view-by-mint?mint_address=${mintAddr}`;
+      address = mintAddr;
       console.log(`Fetching trade data by MINT address: ${GO_SERVICE_URL}${endpoint}`);
     } else {
       // Query by pair address (original behavior)
-      endpoint = `/v1/trade/view?pair_address=${pair_address}`;
-      address = pair_address;
+      endpoint = `/v1/trade/view?pair_address=${pairAddr}`;
+      address = pairAddr;
       console.log(`Fetching trade data by PAIR address: ${GO_SERVICE_URL}${endpoint}`);
     }
 
