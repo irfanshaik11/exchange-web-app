@@ -48,6 +48,28 @@ const defaultPresets: QuickBuyPreset[] = [
 
 const QuickBuyContext = createContext<QuickBuyContextType | undefined>(undefined);
 
+// Helper function to validate and clamp settings
+function validateSettings(settings: QuickBuySettings): QuickBuySettings {
+  const validated = { ...settings };
+
+  // Validate slippage: min 0.001 (0.1%), max 1.0 (100%), round to 4 decimals
+  if (validated.maxSlippage < 0.001) validated.maxSlippage = 0.001;
+  if (validated.maxSlippage > 1.0) validated.maxSlippage = 1.0;
+  validated.maxSlippage = Math.round(validated.maxSlippage * 10000) / 10000;
+
+  // Validate priority: min 0.0001 SOL, max 10.0 SOL, round to 6 decimals
+  if (validated.priority < 0.0001) validated.priority = 0.0001;
+  if (validated.priority > 10.0) validated.priority = 10.0;
+  validated.priority = Math.round(validated.priority * 1000000) / 1000000;
+
+  // Validate bribe: min 0 SOL (optional), max 10.0 SOL, round to 6 decimals
+  if (validated.bribe < 0) validated.bribe = 0;
+  if (validated.bribe > 10.0) validated.bribe = 10.0;
+  validated.bribe = Math.round(validated.bribe * 1000000) / 1000000;
+
+  return validated;
+}
+
 export function QuickBuyProvider({ children }: { children: ReactNode }) {
   // Load from localStorage if available
   const getInitialState = () => {
@@ -56,8 +78,14 @@ export function QuickBuyProvider({ children }: { children: ReactNode }) {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
+          // Validate loaded presets
+          const validatedPresets = (parsed.presets || [...defaultPresets]).map((preset: QuickBuyPreset) => ({
+            ...preset,
+            quickBuySettings: validateSettings(preset.quickBuySettings),
+            quickSellSettings: validateSettings(preset.quickSellSettings),
+          }));
           return {
-            presets: parsed.presets || [...defaultPresets],
+            presets: validatedPresets,
             activePreset: typeof parsed.activePreset === 'number' ? parsed.activePreset : 0,
           };
         } catch {
@@ -80,10 +108,35 @@ export function QuickBuyProvider({ children }: { children: ReactNode }) {
     }
   }, [presets, activePreset]);
 
-  // Optionally, add localStorage persistence here
+  // Wrapped setters with validation
+  const setQuickBuySettingsValidated = React.useCallback((settings: QuickBuySettings) => {
+    setQuickBuySettings(validateSettings(settings));
+  }, []);
+
+  const setQuickSellSettingsValidated = React.useCallback((settings: QuickBuySettings) => {
+    setQuickSellSettings(validateSettings(settings));
+  }, []);
+
+  const setPresetsValidated = React.useCallback((newPresets: QuickBuyPreset[]) => {
+    const validatedPresets = newPresets.map(preset => ({
+      ...preset,
+      quickBuySettings: validateSettings(preset.quickBuySettings),
+      quickSellSettings: validateSettings(preset.quickSellSettings),
+    }));
+    setPresets(validatedPresets);
+  }, []);
 
   return (
-    <QuickBuyContext.Provider value={{ quickBuySettings, setQuickBuySettings, quickSellSettings, setQuickSellSettings, presets, setPresets, activePreset, setActivePreset }}>
+    <QuickBuyContext.Provider value={{
+      quickBuySettings,
+      setQuickBuySettings: setQuickBuySettingsValidated,
+      quickSellSettings,
+      setQuickSellSettings: setQuickSellSettingsValidated,
+      presets,
+      setPresets: setPresetsValidated,
+      activePreset,
+      setActivePreset
+    }}>
       {children}
     </QuickBuyContext.Provider>
   );

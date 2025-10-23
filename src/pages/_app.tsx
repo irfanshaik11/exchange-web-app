@@ -21,24 +21,69 @@ import { SolPriceProvider } from '../components/SolPriceContext';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  // LAYER 1: Suppress console.error that triggers overlay
+  const originalConsoleError = console.error;
+  console.error = (...args) => {
+    const errorString = args[0]?.toString() || '';
+    const stackTrace = args[1]?.stack || '';
+
+    // Suppress Next.js dev overlay for handled ApiErrors and trade-related errors
+    if (
+      errorString.includes('ApiError') ||
+      errorString.includes('[Trade]') ||
+      errorString.includes('Trade validation failed') ||
+      errorString.includes('Insufficient') ||
+      stackTrace.includes('TradeActionPanel') ||
+      stackTrace.includes('api.ts')
+    ) {
+      // Still log to console for debugging, just don't trigger overlay
+      originalConsoleError('[Handled Error - No Overlay]', ...args);
+      return;
+    }
+    originalConsoleError(...args);
+  };
+
+  // LAYER 2: Intercept window error events (more aggressive)
   window.addEventListener('error', (event) => {
-    // Check if this is an ApiError that we've already handled
-    if (event.error?.name === 'ApiError') {
+    const error = event.error;
+    const errorMessage = error?.message || '';
+
+    // Check if this is an ApiError or trade-related error that we've already handled
+    if (
+      error?.name === 'ApiError' ||
+      error?.constructor?.name === 'ApiError' ||
+      errorMessage.includes('Trade validation failed') ||
+      errorMessage.includes('Insufficient') ||
+      errorMessage.includes('NO_HOLDINGS') ||
+      errorMessage.includes('AMOUNT_TOO_SMALL')
+    ) {
       event.preventDefault();
-      event.stopPropagation();
-      console.log('[Error Suppressed] ApiError caught and handled by application');
+      event.stopImmediatePropagation();
+      console.log('[Error Suppressed] ApiError caught and handled by application:', errorMessage);
       return false;
     }
-  });
-  
+  }, true); // Use capture phase to intercept early
+
+  // LAYER 3: Intercept unhandled promise rejections
   window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason;
+    const reasonMessage = reason?.message || '';
+
     // Check if this is an ApiError from our API
-    if (event.reason?.name === 'ApiError') {
+    if (
+      reason?.name === 'ApiError' ||
+      reason?.constructor?.name === 'ApiError' ||
+      reasonMessage.includes('Trade validation failed') ||
+      reasonMessage.includes('Insufficient') ||
+      reasonMessage.includes('NO_HOLDINGS') ||
+      reasonMessage.includes('AMOUNT_TOO_SMALL')
+    ) {
       event.preventDefault();
-      console.log('[Error Suppressed] Unhandled ApiError rejection caught');
+      event.stopImmediatePropagation();
+      console.log('[Error Suppressed] Unhandled ApiError rejection caught:', reasonMessage);
       return false;
     }
-  });
+  }, true); // Use capture phase to intercept early
 }
 
 const config = getDefaultConfig({

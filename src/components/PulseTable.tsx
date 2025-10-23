@@ -1522,7 +1522,7 @@ const PulseTable = React.memo(function PulseTable({
         poolType: poolType,
         originalPairAddress: token.pair_address, // Original pair address from token-service
         // Preset trading parameters
-        slippage: settings.maxSlippage || 0.4,
+        slippage: (settings.maxSlippage || 0.4) * 100, // Convert decimal to percentage (0.4 -> 40)
         priorityFee: settings.priority || 0.0001,
         bribe: settings.bribe || 0,
         mevMode: settings.mevMode,
@@ -1548,26 +1548,32 @@ const PulseTable = React.memo(function PulseTable({
         toast.error("❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
-      console.error('Quick Buy error:', e);
-      console.error('Error details:', {
-        message: e?.message,
-        code: e?.code,
-        status: e?.status,
-        details: e?.details,
-        fullError: e
-      });
-      
+      // Use console.warn for expected errors, console.error for unexpected
+      const logFn = (e as any)?.expected ? console.warn : console.error;
+      logFn('Quick Buy error:', e);
+
       if (e instanceof ApiError) {
+        // Show simplified user-friendly messages
         if (e.code === 'NO_ACTIVE_POOL') {
-          toast.error(`⚠️ Pool unavailable for ${token.symbol}. No active trading pools found.`, { duration: 5000 });
+          toast.error(`⚠️ Pool unavailable for ${token.symbol}`, { duration: 4000 });
         } else if (e.code === 'INSUFFICIENT_BALANCE') {
-          toast.error(`⚠️ Insufficient balance. You need ${buyAmount} SOL for this trade.`, { duration: 5000 });
+          toast.error(`⚠️ Insufficient balance`, { duration: 4000 });
+        } else if (e.code === 'TX_FAILED') {
+          toast.error(`❌ Trade failed. Try adjusting slippage or amount.`, { duration: 4000 });
+        } else if (e.code === 'NO_HOLDINGS') {
+          toast.error(`❌ No ${token.symbol} to sell`, { duration: 4000 });
+        } else if (e.code === 'AMOUNT_TOO_SMALL') {
+          toast.error(`❌ Amount too small (min 0.001 SOL)`, { duration: 4000 });
+        } else if (e.code === 'POOL_UNAVAILABLE') {
+          toast.error(`⚠️ Pool has insufficient liquidity`, { duration: 4000 });
         } else {
-          toast.error(`❌ ${e.message || 'Quick Buy failed'}`, { duration: 5000 });
+          // Generic error with shortened message
+          const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
+          toast.error(`❌ ${msg}`, { duration: 4000 });
         }
       } else {
-        const errorMsg = e?.message || e?.toString() || 'Unknown error';
-        toast.error(`❌ Quick Buy failed: ${errorMsg}`, { duration: 5000 });
+        // Unexpected error - show generic message
+        toast.error(`❌ Trade failed. Please try again.`, { duration: 4000 });
       }
     }
   };

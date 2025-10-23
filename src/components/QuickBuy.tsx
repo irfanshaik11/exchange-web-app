@@ -13,6 +13,7 @@ import {
 } from "react-icons/fa";
 import InterstateTooltip from "./InterstateTooltip";
 import InterstateButton from "./InterstateButton";
+import toast from "react-hot-toast";
 import CustomCheckbox from './CustomCheckbox';
 
 const presetLabels = ["PRESET 1", "PRESET 2", "PRESET 3"];
@@ -213,10 +214,29 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
             <div className="relative w-full flex items-center justify-center bg-[#17191E]">
               <input
                 type="number"
+                min={0.1}
+                max={100}
+                step={0.01}
                 className="w-full bg-[#17191E] text-center text-[#E6E7EA] py-2 text-sm outline-none border-b border-[#2A2B33] rounded-t-lg [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                 style={{ textAlign: 'center', lineHeight: '1.5' }}
                 value={settings.maxSlippage * 100}
-                onChange={e => updateSetting('maxSlippage', Number(e.target.value) / 100)}
+                onChange={e => {
+                  let val = Number(e.target.value);
+                  // Clamp between 0.1 and 100
+                  if (val < 0.1 && val !== 0) val = 0.1; // Allow 0 for typing, will be clamped on blur
+                  if (val > 100) val = 100;
+                  // Round to 2 decimal places
+                  val = Math.round(val * 100) / 100;
+                  updateSetting('maxSlippage', val / 100);
+                }}
+                onBlur={e => {
+                  // On blur, ensure minimum of 0.1%
+                  let val = Number(e.target.value);
+                  if (val < 0.1) {
+                    val = 0.1;
+                    updateSetting('maxSlippage', val / 100);
+                  }
+                }}
                 onWheel={e => (e.target as HTMLInputElement).blur()}
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#9CA3AF]">%</span>
@@ -230,10 +250,28 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
             <div className="w-full flex items-center justify-center bg-[#17191E]">
               <input
                 type="number"
+                min={0.0001}
+                max={10.0}
+                step={0.0001}
                 className="w-full bg-[#17191E] text-center text-[#E6E7EA] py-2 text-sm outline-none border-b border-[#2A2B33] rounded-t-lg [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                 style={{ textAlign: 'center', lineHeight: '1.5' }}
                 value={settings.priority}
-                onChange={e => updateSetting('priority', Number(e.target.value))}
+                onChange={e => {
+                  let val = Number(e.target.value);
+                  // Allow 0 during typing, clamp max
+                  if (val > 10.0) val = 10.0;
+                  // Round to 6 decimal places
+                  val = Math.round(val * 1000000) / 1000000;
+                  updateSetting('priority', val);
+                }}
+                onBlur={e => {
+                  let val = Number(e.target.value);
+                  if (val < 0.0001) {
+                    toast.error('Priority fee cannot be 0 or negative. Minimum is 0.0001 SOL');
+                    val = 0.0001;
+                    updateSetting('priority', val);
+                  }
+                }}
                 onWheel={e => (e.target as HTMLInputElement).blur()}
               />
             </div>
@@ -246,10 +284,29 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
             <div className="w-full flex items-center justify-center bg-[#17191E]">
               <input
                 type="number"
+                min={0}
+                max={10.0}
+                step={0.0001}
                 className="w-full bg-[#17191E] text-center text-[#E6E7EA] py-2 text-sm outline-none border-b border-[#2A2B33] rounded-t-lg [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                 style={{ textAlign: 'center', lineHeight: '1.5' }}
                 value={settings.bribe}
-                onChange={e => updateSetting('bribe', Number(e.target.value))}
+                onChange={e => {
+                  let val = Number(e.target.value);
+                  // Clamp max (allow 0 for bribe, it's optional)
+                  if (val < 0) val = 0;
+                  if (val > 10.0) val = 10.0;
+                  // Round to 6 decimal places
+                  val = Math.round(val * 1000000) / 1000000;
+                  updateSetting('bribe', val);
+                }}
+                onBlur={e => {
+                  let val = Number(e.target.value);
+                  if (val < 0) {
+                    toast.error('Bribe fee cannot be negative. Set to 0 SOL');
+                    val = 0;
+                    updateSetting('bribe', val);
+                  }
+                }}
                 onWheel={e => (e.target as HTMLInputElement).blur()}
               />
             </div>
