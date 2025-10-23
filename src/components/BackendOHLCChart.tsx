@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
 
-export type BackendInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
+export type BackendInterval = '1s' | '5s' | '15s' | '30s' | '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
 export type BackendTimeRange = '1h' | '4h' | '24h' | '7d' | '30d';
 
 export interface BackendOHLCData {
@@ -27,10 +27,10 @@ export interface BackendOHLCChartProps {
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-const VALID_INTERVALS: BackendInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
+const VALID_INTERVALS: BackendInterval[] = ['1s', '5s', '15s', '30s', '1m', '5m', '15m', '1h', '4h', '1d'];
 
 const SEC_PER_BAR: Record<BackendInterval, number> = {
-  '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400,
+  '1s': 1, '5s': 5, '15s': 15, '30s': 30, '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400,
 };
 
 function waitForVisibleContainer(el: HTMLElement): Promise<void> {
