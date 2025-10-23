@@ -229,20 +229,26 @@ const MeteoraMigrationLogo: React.FC = () => (
   </div>
 );
 
+interface TokenStats {
+  timeframes: {
+    [key: string]: {
+      buys: number;
+      sells: number;
+      volume: number;
+      buyVolume: number;
+      sellVolume: number;
+      change?: number;
+    };
+  };
+}
+
 interface TradeActionPanelProps {
   token: Token;
-  tradeParams?: {
-    mode: "buy" | "sell";
-    tab: "market" | "limit" | "adv"; // | "analytics";
-    timeRange: "5m" | "1h" | "12h" | "24h";
-    amount: string;
-    targetMC: string;
-    sliderPct: number;
-  };
+  tradeParams?: any; // Use any to match TradePageParams from queryParams
   setTradeParams?: (params: any) => void;
   quickBuySettings?: any;
   quickBuySide?: "buy" | "sell";
-  initialStats?: any; // Initial stats from REST API
+  initialStats?: TokenStats | null; // Initial stats from REST API
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ 
