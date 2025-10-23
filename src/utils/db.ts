@@ -119,19 +119,19 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
 
   const abs = Math.abs(num);
 
-  // Handle very small values (< $0.01) with more precision
+  // Handle very small values (< $0.01) with 3 decimal places
   if (abs > 0 && abs < 0.01) {
-    return `$${num.toFixed(6)}`;
+    return num.toFixed(3);
   }
 
-  // Handle small values (< $1) with 4 decimal places
+  // Handle small values (< $1) with 3 decimal places
   if (abs < 1) {
-    return `$${num.toFixed(4)}`;
+    return num.toFixed(3);
   }
 
-  // Handle values < $1000 with 2 decimal places
+  // Handle values < $1000 with 3 decimal places
   if (abs < 1000) {
-    return `$${num.toFixed(2)}`;
+    return num.toFixed(3);
   }
 
   const abbreviations = [
@@ -143,15 +143,15 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
 
   for (const { value, suffix } of abbreviations) {
     if (abs >= value) {
-      const formatted = (num / value).toFixed(2);
-      return formatted.endsWith(".00")
-        ? `$${parseInt(formatted)}${suffix}`
-        : `$${formatted}${suffix}`;
+      const formatted = (num / value).toFixed(3);
+      return formatted.endsWith(".000")
+        ? `${parseInt(formatted)}${suffix}`
+        : `${formatted}${suffix}`;
     }
   }
 
   // Fallback for values >= $1000 but < $1K (shouldn't happen with above logic)
-  return `$${num.toFixed(2)}`;
+  return num.toFixed(3);
 }
 
 
