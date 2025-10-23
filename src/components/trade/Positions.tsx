@@ -664,7 +664,7 @@ const Positions: React.FC<PositionsProps> = ({
                     </InterstateTooltip>
                     
                     {/* Sell Button - Navigate to trade page with sell mode */}
-                    {pos.actions === 'sell' && (
+                    {/* {pos.actions === 'sell' && (
                       <InterstateTooltip label="Sell">
                         <button
                           onClick={(e) => {
@@ -677,7 +677,7 @@ const Positions: React.FC<PositionsProps> = ({
                           <FaArrowUp className="text-sm" />
                         </button>
                       </InterstateTooltip>
-                    )}
+                    )} */}
                   </div>
                 </td>
               </tr>

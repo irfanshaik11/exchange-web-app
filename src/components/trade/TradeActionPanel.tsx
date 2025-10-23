@@ -1748,8 +1748,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
             <div className={`text-[9px] font-semibold ${positionData && positionData.pnl >= 0 ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
               {positionData ? (
-                <div className="flex flex-col items-center">
-                  <div>
+                <div className="flex flex-col items-center leading-tight">
+                  <div className="mb-0.5">
                     {positionData.pnl >= 0 ? '+' : ''}${formatCompactNumber(Math.abs(positionData.pnl))}
                   </div>
                   <div>
@@ -1757,8 +1757,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center">
-                  <div>$0</div>
+                <div className="flex flex-col items-center leading-tight">
+                  <div className="mb-0.5">$0</div>
                   <div>(+0%)</div>
                 </div>
               )}
