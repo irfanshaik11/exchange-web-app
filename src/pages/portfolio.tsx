@@ -266,12 +266,22 @@ export default function PortfolioPage() {
 
  useEffect(() => {
    if (positions.length > 0) {
-     const totalPnl = positions.reduce((acc, pos) => acc + pos.pnl, 0);
-     const totalRemainingValue = positions.reduce(
+     // Add validation to prevent extreme values
+     const validPositions = positions.filter(pos => 
+       isFinite(pos.pnl) && 
+       isFinite(pos.remainingUsdValue) && 
+       isFinite(pos.boughtUsdValue) &&
+       Math.abs(pos.pnl) < 1e12 && // Less than 1 trillion
+       Math.abs(pos.remainingUsdValue) < 1e12 &&
+       Math.abs(pos.boughtUsdValue) < 1e12
+     );
+
+     const totalPnl = validPositions.reduce((acc, pos) => acc + pos.pnl, 0);
+     const totalRemainingValue = validPositions.reduce(
        (acc, pos) => acc + pos.remainingUsdValue,
        0,
      );
-     const totalBoughtValue = positions.reduce(
+     const totalBoughtValue = validPositions.reduce(
        (acc, pos) => acc + pos.boughtUsdValue,
        0,
      );
@@ -282,7 +292,7 @@ export default function PortfolioPage() {
      setTotalValue(solBalance + totalRemainingValue);
 
      // Create top 100 positions sorted by USD value
-     const sortedByUsdValue = [...positions].sort((a, b) => {
+     const sortedByUsdValue = [...validPositions].sort((a, b) => {
        return b.remainingUsdValue - a.remainingUsdValue;
      });
      setTop100Positions(sortedByUsdValue.slice(0, 100));
@@ -388,10 +398,18 @@ export default function PortfolioPage() {
       
       // Calculate realized PNL from sold positions
       // Realized PnL = Money received from selling - Cost basis of sold tokens
-      if (pos.sold > 0 && pos.bought > 0) {
-        const costBasisOfSold = pos.boughtUsdValue * (pos.sold / pos.bought);
+      if (pos.sold > 0 && pos.bought > 0 && pos.boughtUsdValue > 0) {
+        // Calculate average cost per token
+        const avgCostPerToken = pos.boughtUsdValue / pos.bought;
+        // Cost basis of sold tokens = average cost * amount sold
+        const costBasisOfSold = avgCostPerToken * pos.sold;
+        // Realized PnL = money received - cost basis
         const realizedPnl = pos.soldUsdValue - costBasisOfSold;
-        totalRealizedPnl += realizedPnl;
+        
+        // Add validation to prevent extreme values
+        if (isFinite(realizedPnl) && Math.abs(realizedPnl) < 1e12) { // Less than 1 trillion
+          totalRealizedPnl += realizedPnl;
+        }
       }
 
       // Categorize by PNL percentage
