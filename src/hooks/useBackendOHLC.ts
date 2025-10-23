@@ -19,7 +19,7 @@ export interface BackendOHLCResponse {
 export interface UseBackendOHLCOptions {
   mint?: string;
   pairAddress?: string;
-  interval?: string;      // Candle size: '1m', '5m', '15m', '1h', '4h', '1d'
+  interval?: string;      // Candle size: '1s', '5s', '15s', '30s', '1m', '5m', '15m', '1h', '4h', '1d'
   timeframe?: string;     // Time range: '1h', '4h', '24h', '7d', '30d'
   enabled?: boolean;
   refreshInterval?: number; // in milliseconds
@@ -36,7 +36,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
  * ```tsx
  * const { data, isLoading, error, refetch } = useBackendOHLC({
  *   mint: 'TokenMintAddress123',
- *   interval: '15m',      // Candle size
+ *   interval: '1s',       // Candle size
  *   timeframe: '24h',     // Time range
  *   refreshInterval: 30000,
  * });

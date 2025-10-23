@@ -163,8 +163,16 @@ export default function TradePage() {
       ageInDays
     });
 
-    // For very new tokens (< 24 hours)
-    if (ageInDays < 1) {
+    // For very new tokens (< 1 hour) - use 1s intervals
+    if (ageInHours < 1) {
+      return { interval: '1m' as const, timeframe: '1h' as const };
+    }
+    // For very new tokens (< 6 hours) - use 5s intervals
+    else if (ageInHours < 6) {
+      return { interval: '1m' as const, timeframe: '4h' as const };
+    }
+    // For new tokens (< 24 hours) - use 15s intervals
+    else if (ageInDays < 1) {
       return { interval: '1m' as const, timeframe: '24h' as const };
     }
     // For tokens 1-7 days old
