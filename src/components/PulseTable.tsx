@@ -1216,10 +1216,20 @@ const PulseTable = React.memo(function PulseTable({
   const [activeFilterTab, setActiveFilterTab] = useState('New Pairs');
   const [activeCategoryTab, setActiveCategoryTab] = useState('Audit');
   const [selectedPill, setSelectedPill] = useState('P1'); // Each column has its own preset selection
-  // Load thunderAmount from localStorage with fallback
+  // Load thunderAmount from localStorage with fallback - separate storage for each column
   const getInitialThunderAmount = () => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('pulseTableThunderAmount');
+      // Determine localStorage key based on column type
+      let storageKey = 'pulseTableThunderAmount';
+      if (title.toLowerCase().includes('final stretch')) {
+        storageKey = 'pulseTableThunderAmountFinalStretch';
+      } else if (title.toLowerCase().includes('migrated')) {
+        storageKey = 'pulseTableThunderAmountMigrated';
+      } else {
+        storageKey = 'pulseTableThunderAmountNewPairs';
+      }
+      
+      const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = parseFloat(saved);
         if (!isNaN(parsed) && parsed >= 0) {
@@ -1388,12 +1398,22 @@ const PulseTable = React.memo(function PulseTable({
     }
   }, [filters.protocols, fetchFilteredTokens]);
 
-  // Save thunderAmount to localStorage whenever it changes
+  // Save thunderAmount to localStorage whenever it changes - separate storage for each column
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('pulseTableThunderAmount', thunderAmount);
+      // Determine localStorage key based on column type
+      let storageKey = 'pulseTableThunderAmount';
+      if (title.toLowerCase().includes('final stretch')) {
+        storageKey = 'pulseTableThunderAmountFinalStretch';
+      } else if (title.toLowerCase().includes('migrated')) {
+        storageKey = 'pulseTableThunderAmountMigrated';
+      } else {
+        storageKey = 'pulseTableThunderAmountNewPairs';
+      }
+      
+      localStorage.setItem(storageKey, thunderAmount);
     }
-  }, [thunderAmount]);
+  }, [thunderAmount, title]);
 
   const handleResetFilters = () => {
     const defaultFilters = {
@@ -2308,7 +2328,7 @@ const PulseTable = React.memo(function PulseTable({
                   e.preventDefault();
                 }
               }}
-              className="bg-transparent border-none outline-none text-xs font-medium w-6 text-center"
+              className="bg-transparent border-none outline-none text-xs font-medium w-10 text-center"
               style={{ color: AX.text }}
             />
           </div>
