@@ -229,20 +229,26 @@ const MeteoraMigrationLogo: React.FC = () => (
   </div>
 );
 
+interface TokenStats {
+  timeframes: {
+    [key: string]: {
+      buys: number;
+      sells: number;
+      volume: number;
+      buyVolume: number;
+      sellVolume: number;
+      change?: number;
+    };
+  };
+}
+
 interface TradeActionPanelProps {
   token: Token;
-  tradeParams?: {
-    mode: "buy" | "sell";
-    tab: "market" | "limit" | "adv"; // | "analytics";
-    timeRange: "5m" | "1h" | "12h" | "24h";
-    amount: string;
-    targetMC: string;
-    sliderPct: number;
-  };
+  tradeParams?: any; // Use any to match TradePageParams from queryParams
   setTradeParams?: (params: any) => void;
   quickBuySettings?: any;
   quickBuySide?: "buy" | "sell";
-  initialStats?: any; // Initial stats from REST API
+  initialStats?: TokenStats | null; // Initial stats from REST API
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ 
@@ -303,6 +309,32 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     return isMeteora && bondingPct > 98.6;
   }, [token.launchpad_protocol, token.bonding_pct]);
 
+  // Convert initialStats to TokenStatsData format if available
+  const convertedInitialStats = useMemo(() => {
+    if (!initialStats) return null;
+    
+    // Ensure all timeframe objects have the required 'change' property
+    const processedTimeframes: { [key: string]: { buys: number; sells: number; volume: number; buyVolume: number; sellVolume: number; change: number; } } = {};
+    
+    for (const [timeframe, data] of Object.entries(initialStats.timeframes)) {
+      processedTimeframes[timeframe] = {
+        ...data,
+        change: data.change ?? 0, // Default to 0 if change is undefined
+      };
+    }
+    
+    return {
+      success: true,
+      tokenAddress: token.mint,
+      pairAddress: effectivePoolAddress || '',
+      dataSource: 'rest-api',
+      timestamp: new Date().toISOString(),
+      data: {
+        timeframes: processedTimeframes,
+      },
+    };
+  }, [initialStats, token.mint, effectivePoolAddress]);
+
   // WebSocket hook for real-time token stats
   const {
     isConnected: wsConnected,
@@ -314,7 +346,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     pairAddress: effectivePoolAddress,
     tokenAddress: token.mint,
     enabled: true,
-    initialStats: initialStats,
+    initialStats: convertedInitialStats,
   });
 
   // Update internal state when external props change (only on mount)

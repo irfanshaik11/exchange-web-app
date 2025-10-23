@@ -174,7 +174,7 @@ export const googleAuthUrl = `${env.NEXT_PUBLIC_BACKEND_URL}/api/users/auth/goog
 /*                              Limit Order endpoints                         */
 /* -------------------------------------------------------------------------- */
 
-interface CreateLimitOrderParams {
+export interface CreateLimitOrderParams {
   tokenAddress: string;
   amount: number;
   type: "Buy" | "Sell";
@@ -323,7 +323,7 @@ export const tradeBuy = (params: BuyParams, authToken: string) => {
   });
 };
 
-type SellPercentageParams = {
+export type SellPercentageParams = {
   tokenAddress: string;
   percentageToSell: number;
   poolAddress: string; // required by backend
