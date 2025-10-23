@@ -16,6 +16,7 @@ interface TokenMetadata {
   name?: string;
   symbol?: string;
   timestamp?: number;
+  migrated_pool_address?: string; // For graduated tokens (Meteora DBC -> permanent pool)
 }
 
 interface PositionsProps {
@@ -235,16 +236,15 @@ const Positions: React.FC<PositionsProps> = ({
             // Find the position to get the pair address
             const pos = preloadedPositions.find(p => p.tokenAddress === tokenAddress);
             if (!pos) return;
-            
-            // For positions: backend stores the originalPairAddress value in pairAddress field
-            const pairAddress = pos.pairAddress || pos.tokenAddress;
-            
+
             try {
               // Reduced timeout to 3s for faster failures
               const controller = new AbortController();
               const timeoutId = setTimeout(() => controller.abort(), 3000);
-              
-              const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`, {
+
+              // IMPORTANT: Query by mint address (token address) instead of pair address
+              // This ensures we get the correct migrated_pool_address for graduated tokens
+              const response = await fetch(`/api/token-service/trade-view?mint_address=${tokenAddress}`, {
                 signal: controller.signal
               });
               clearTimeout(timeoutId);
@@ -257,11 +257,21 @@ const Positions: React.FC<PositionsProps> = ({
               const tokenData = data?.token;
               
               if (tokenData) {
+                const migratedPool = tokenData.migrated_pool_address || '';
+
+                // Debug logging for migrated pool address
+                if (migratedPool && migratedPool !== '') {
+                  console.log(`🔄 [Positions] Token ${tokenData.symbol} has migrated pool: ${migratedPool}`);
+                } else {
+                  console.log(`📍 [Positions] Token ${tokenData.symbol} - no migrated pool (using pair_address)`);
+                }
+
                 const metadata = {
                   imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
                   protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
                   name: tokenData.name || '',
                   symbol: tokenData.symbol || '',
+                  migrated_pool_address: migratedPool, // For graduated tokens
                 };
                 
                 // Update local state
@@ -353,16 +363,15 @@ const Positions: React.FC<PositionsProps> = ({
               // Find the position to get the pair address
               const pos = positions.find(p => p.tokenAddress === tokenAddress);
               if (!pos) return;
-              
-              // For positions: backend stores the originalPairAddress value in pairAddress field
-              const pairAddress = pos.pairAddress || pos.tokenAddress;
-              
+
               try {
                 // Reduced timeout to 3s for faster failures
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 3000);
-                
-                const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`, {
+
+                // IMPORTANT: Query by mint address (token address) instead of pair address
+                // This ensures we get the correct migrated_pool_address for graduated tokens
+                const response = await fetch(`/api/token-service/trade-view?mint_address=${tokenAddress}`, {
                   signal: controller.signal
                 });
                 clearTimeout(timeoutId);

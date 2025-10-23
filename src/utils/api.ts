@@ -1,5 +1,7 @@
 // Centralized API client for backend calls related to authentication and trading
 import { env } from "../env";
+// Critical Fix #10: Network timeout handling
+import { fetchWithTimeout, isTimeoutError as checkTimeoutError } from "./fetchWithTimeout";
 
 // Constants
 export const SOL_MINT_ADDRESS = "So11111111111111111111111111111111111111112";
@@ -49,38 +51,76 @@ async function apiFetch<T = unknown>(
 ): Promise<T> {
   const { authToken, body, headers, ...rest } = options;
 
-  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}${endpoint}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      ...(headers || {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    ...rest,
-  });
+  try {
+    // Critical Fix #10: Use fetchWithTimeout instead of fetch (45s timeout for trade operations)
+    const res = await fetchWithTimeout(
+      `${env.NEXT_PUBLIC_BACKEND_URL}${endpoint}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          ...(headers || {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        ...rest,
+      },
+      45000  // 45 second timeout (accounts for backend retries: 30s × 2 attempts)
+    );
 
-  // Attempt to parse JSON – if this fails, we still throw for non-OK statuses
-  const data = await res.json().catch(() => undefined);
+    // Attempt to parse JSON – if this fails, we still throw for non-OK statuses
+    const data = await res.json().catch(() => undefined);
 
-  if (!res.ok) {
-    // Check if backend returned a structured error
-    if (data && typeof data === 'object') {
-      const message = data.message || data.error || res.statusText;
-      const code = data.code;
-      const details = data.details;
-      const suggestions = data.suggestions;
-      
-      // Throw structured error with all info
-      throw new ApiError(message, code, details, suggestions, res.status);
+    if (!res.ok) {
+      // Check if backend returned a structured error
+      if (data && typeof data === 'object') {
+        const message = data.message || data.error || res.statusText;
+        const code = data.code;
+        const details = data.details;
+        const suggestions = data.suggestions;
+
+        // Create structured error
+        const apiError = new ApiError(message, code, details, suggestions, res.status);
+
+        // Suppress console.error for expected validation errors to prevent Next.js dev overlay
+        const EXPECTED_ERROR_CODES = [
+          'NO_HOLDINGS', 'INSUFFICIENT_BALANCE', 'VALIDATION_ERROR',
+          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED'
+        ];
+        if (EXPECTED_ERROR_CODES.includes(code)) {
+          // Mark as expected error (won't trigger Next.js error overlay in dev)
+          (apiError as any).expected = true;
+        }
+
+        throw apiError;
+      }
+
+      // Fallback to simple error
+      const message =
+        (data as any)?.message || (data as any)?.error || res.statusText;
+      throw new Error(message);
     }
-    
-    // Fallback to simple error
-    const message =
-      (data as any)?.message || (data as any)?.error || res.statusText;
-    throw new Error(message);
-  }
 
-  return data as T;
+    return data as T;
+
+  } catch (error: any) {
+    // Critical Fix #10: Handle timeout errors with structured response
+    if (checkTimeoutError(error)) {
+      throw new ApiError(
+        'Request timed out. The server is taking too long to respond.',
+        'CLIENT_TIMEOUT',
+        { timeoutMs: 45000 },
+        [
+          'Try again in a few seconds',
+          'Check your internet connection',
+          'The network may be experiencing high congestion'
+        ],
+        408  // HTTP 408 Request Timeout
+      );
+    }
+
+    // Re-throw other errors
+    throw error;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -249,7 +289,7 @@ export type BuyParams = {
   poolType: "PumpAmm" | "Raydium CPMM" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "bags" | "MoonShoot" | "";
   originalPairAddress?: string; // Original pair address from token-service for trade history
   // Preset trading parameters
-  slippage?: number; // e.g., 0.2 for 20%
+  slippage?: number; // Percentage value (0.01-100), e.g., 20 for 20%
   priorityFee?: number; // in SOL, e.g., 0.001
   bribe?: number; // in SOL, e.g., 0.001
   mevMode?: 'off' | 'reduced' | 'on';
@@ -291,6 +331,10 @@ type SellPercentageParams = {
   quoteMint: string;
   poolType?: string;
   originalPairAddress?: string; // Original pair address from token-service for trade history
+  // Preset trading parameters
+  slippage?: number; // Percentage value (0.01-100), e.g., 20 for 20%
+  priorityFee?: number; // in SOL, e.g., 0.001
+  bribe?: number; // in SOL, e.g., 0.001
 };
 
 export const tradeSellPercentage = (

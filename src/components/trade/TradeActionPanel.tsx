@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { LuPencil, LuCheck } from "react-icons/lu";
 import { formatSmartNumber, type Token } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
@@ -14,6 +14,7 @@ import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
 // import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
@@ -269,7 +270,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
   const [creatorAddress, setCreatorAddress] = useState<string>("");
-  
+
+  // High slippage warning dialog state
+  const [showSlippageWarning, setShowSlippageWarning] = useState(false);
+  const [bypassSlippageCheck, setBypassSlippageCheck] = useState(false);
+  const tradeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // When user confirms high slippage, programmatically trigger the button click
+  useEffect(() => {
+    if (bypassSlippageCheck && tradeButtonRef.current) {
+      tradeButtonRef.current.click();
+    }
+  }, [bypassSlippageCheck]);
+
   // Position data for this token
   const [positionData, setPositionData] = useState<{
     bought: number;
@@ -619,6 +632,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     // Force re-render by updating the drafts
     setPresetDrafts(next.map(String));
   };
+
+  // High slippage warning handlers
+  const handleSlippageWarningContinue = useCallback(() => {
+    setShowSlippageWarning(false);
+    setBypassSlippageCheck(true); // Set flag to bypass check and continue with trade
+  }, []);
+
+  const handleSlippageWarningCancel = useCallback(() => {
+    setShowSlippageWarning(false);
+    setBypassSlippageCheck(false);
+    setIsLoading(false);
+  }, []);
 
   return (
     <div
@@ -1257,6 +1282,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       {/* Primary action */}
       <div className="px-3 py-2">
         <button
+          ref={tradeButtonRef}
           type="button"
           className={cx(
             baseBtn,
@@ -1269,6 +1295,25 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               setMessage({ type: "error", text: "Authentication required to create orders." });
               return;
             }
+
+            // Check for high slippage BEFORE executing market trades (not limit orders)
+            if (tab === "market" && !bypassSlippageCheck) {
+              const slippagePercent = (settings.maxSlippage || 0.2) * 100;
+              const HIGH_SLIPPAGE_THRESHOLD = 50;
+
+              if (slippagePercent >= HIGH_SLIPPAGE_THRESHOLD) {
+                setIsLoading(true); // Show loading state
+                setShowSlippageWarning(true);
+                return; // Don't execute yet, wait for user confirmation
+              }
+            }
+
+            // Reset bypass flag for next trade
+            if (bypassSlippageCheck) {
+              setBypassSlippageCheck(false);
+            }
+
+            // Continue with normal flow
             setIsLoading(true);
             setMessage(null);
 
@@ -1316,7 +1361,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             if (mode === "buy") {
               const requested = Number(amount || 0);
               const safetyBuffer = 0.003;
-              const required = requested + safetyBuffer;
+              const priorityFee = settings.priority || 0;
+              const bribeFee = settings.bribe || 0;
+              const totalFees = safetyBuffer + priorityFee + bribeFee;
+              const required = requested + totalFees;
+
               if (!requested || requested <= 0) {
                 setIsLoading(false);
                 setMessage({ type: "error", text: "Enter a valid amount." });
@@ -1354,9 +1403,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               if (solBalance < required) {
                 setIsLoading(false);
                 const need = Math.max(required - solBalance, 0);
-                const msg = `Less balance: need ~${required.toFixed(3)} SOL (missing ${need.toFixed(3)} SOL).`;
+                const msg = `Insufficient balance!\nTrade: ${requested.toFixed(4)} SOL\nFees: ${totalFees.toFixed(4)} SOL (priority: ${priorityFee.toFixed(4)}, bribe: ${bribeFee.toFixed(4)}, buffer: 0.003)\nTotal needed: ${required.toFixed(4)} SOL\nMissing: ${need.toFixed(4)} SOL`;
                 setMessage({ type: "error", text: msg });
-                toast.error("Less balance. Please fund your wallet.");
+                toast.error(`Insufficient balance! Need ${required.toFixed(4)} SOL (missing ${need.toFixed(4)} SOL). Please fund your wallet.`);
                 return;
               }
             } else if (mode === "sell") {
@@ -1394,7 +1443,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
                 poolType,
                 // Preset trading parameters
-                slippage: settings.maxSlippage || 0.2, // Default 20%
+                slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
                 priorityFee: settings.priority || 0.001, // Default 0.001 SOL
                 bribe: settings.bribe || 0.05, // Default 0.05 SOL
                 mevMode: settings.mevMode,
@@ -1406,16 +1455,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 tokenSymbol: token.symbol,
               };
               console.log(`🎯 Trading with presets:`, {
-                slippage: `${(tradeParams.slippage * 100).toFixed(1)}%`,
+                slippage: `${tradeParams.slippage.toFixed(2)}%`,
                 priorityFee: `${tradeParams.priorityFee} SOL`,
                 bribe: `${tradeParams.bribe} SOL`,
                 mevMode: tradeParams.mevMode,
                 autoFee: tradeParams.autoFee,
               });
-              const tr = mode === "buy" 
+              const tr = mode === "buy"
                 ? await tradeBuy(tradeParams, user.bearerToken)
                     .catch((err) => {
-                      // Capture error without throwing to prevent Next.js overlay
+                      // Use console.warn for expected errors, console.error for unexpected
+                      const logFn = (err as any)?.expected ? console.warn : console.error;
+                      logFn("[Trade] Buy error caught and handled:", err.message || err);
                       tradingError = err;
                       return null;
                     })
@@ -1427,9 +1478,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     quoteMint: SOL_MINT_ADDRESS,
                     poolType,
                     originalPairAddress: token.pair_address, // Original pair address from token-service
+                    // Preset trading parameters
+                    slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
+                    priorityFee: settings.priority || 0.001,
+                    bribe: settings.bribe || 0.05,
                   }, user.bearerToken)
                     .catch((err) => {
-                      // Capture error without throwing to prevent Next.js overlay
+                      // Use console.warn for expected errors, console.error for unexpected
+                      const logFn = (err as any)?.expected ? console.warn : console.error;
+                      logFn("[Trade] Sell error caught and handled:", err.message || err);
                       tradingError = err;
                       return null;
                     });
@@ -1505,8 +1562,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             // Handle errors outside try-catch to prevent Next.js overlay
             if (tradingError) {
               const error = tradingError;
-              // Prevent Next.js error overlay from showing
-              console.error("Trade error caught:", error);
+              // Use console.warn for expected validation errors, console.error for unexpected errors
+              const logFn = (error as any)?.expected ? console.warn : console.error;
+              logFn("Trade error caught:", error);
               
               let errorMessage = "Trade failed. Please try again.";
               let suggestions: string[] = [];
@@ -1526,10 +1584,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     `Minimum ${minAmount} SOL required for ${protocol}`,
                     { duration: 6000 }
                   );
-                  setMessage({ 
-                    type: "error", 
-                    text: `Minimum trade amount: ${minAmount} SOL for ${protocol}. Please increase your amount.` 
+                  setMessage({
+                    type: "error",
+                    text: `Minimum trade amount: ${minAmount} SOL for ${protocol}. Please increase your amount.`
                   });
+                  setIsLoading(false); // Critical Fix #12: Reset loading state before early return
                   return; // Don't show suggestions toast
                 } else if (error.code === 'NO_ACTIVE_POOL') {
                   errorMessage = `⚠️ Pool Unavailable: ${error.message}`;
@@ -1549,16 +1608,49 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 } else if (error.code === 'TX_FAILED') {
                   errorMessage = `❌ Transaction Failed: ${error.message}`;
                   toast.error(`Trade could not be completed. Try again or use a different token.`, { duration: 5000 });
+                } else if (error.code === 'NO_HOLDINGS') {
+                  // Critical Fix #5: No Holdings Check
+                  errorMessage = `❌ No ${token.symbol || 'tokens'} to Sell: You don't own any of this token.`;
+                  toast.error(`You don't own any ${token.symbol || 'tokens'}. Cannot sell.`, { duration: 5000 });
+                  setMessage({ type: "error", text: errorMessage });
+                  setIsLoading(false); // Critical Fix #12: Reset loading state before early return
+                  return; // Don't show suggestions toast
+                } else if (error.code === 'VALIDATION_ERROR') {
+                  // Critical Fix #7: Check if it's a minimum amount error
+                  if (error.details?.amount?.message?.includes('at least')) {
+                    errorMessage = `💰 Amount Too Small: ${error.details.amount.message}`;
+                    toast.error('Trade amount must be at least 0.001 SOL', { duration: 5000 });
+                    suggestions.push('Increase your trade amount to at least 0.001 SOL (~$0.20 USD)');
+                    suggestions.push('Smaller amounts may fail due to transaction fees');
+                  } else {
+                    // Generic validation error
+                    errorMessage = `❌ Validation Error: ${error.message}`;
+                    toast.error(`Invalid trade parameters`, { duration: 4000 });
+                  }
+                } else if (error.code === 'INVALID_POOL_TYPE') {
+                  // Critical Fix #6: Empty Pool Type Validation
+                  errorMessage = `⚠️ Pool Type Error: ${error.message || 'This token\'s trading pool is not supported'}`;
+                  toast.error('Trading pool not supported for this token', { duration: 5000 });
+                  if (error.suggestions && Array.isArray(error.suggestions)) {
+                    error.suggestions.forEach((s: string) => suggestions.push(s));
+                  }
                 }
               } else {
                 // Handle known error patterns from error message
-                if (error.message?.includes("AMOUNT_TOO_SMALL") || error.message?.includes("Amount too small")) {
-                  errorMessage = `💰 Amount Too Small: Minimum 0.0001 SOL required for this token`;
-                  toast.error("Trade amount too small. Increase your amount.", { duration: 6000 });
+                if (error.message?.includes("AMOUNT_TOO_SMALL") || error.message?.includes("Amount too small") || error.message?.includes("at least 0.001")) {
+                  // Critical Fix #7: Minimum Trade Amount Validation (fallback)
+                  errorMessage = `💰 Amount Too Small: Minimum 0.001 SOL required`;
+                  toast.error("Trade amount must be at least 0.001 SOL", { duration: 6000 });
+                  suggestions.push('Increase your trade amount to at least 0.001 SOL (~$0.20 USD)');
+                  suggestions.push('Smaller amounts may fail due to transaction fees');
                 } else if (error.message?.includes("Insufficient SOL balance") || error.message?.includes("INSUFFICIENT_BALANCE")) {
                   errorMessage = `💰 Insufficient SOL balance. Add SOL and try again.`;
                 } else if (error.message?.includes("insufficient funds")) {
                   errorMessage = `💰 Insufficient funds. Please add SOL.`;
+                } else if (error.message?.includes("NO_HOLDINGS") || error.message?.includes("no token account") || error.message?.includes("do not own") || error.message?.includes("Insufficient token holdings")) {
+                  // Critical Fix #5: No Holdings Check (fallback for non-structured errors)
+                  errorMessage = `❌ You don't own any ${token.symbol || 'tokens'}. Cannot sell.`;
+                  toast.error(`No ${token.symbol || 'tokens'} to sell`, { duration: 5000 });
                 } else if (error.message?.includes("Invalid account discriminator") || error.message?.includes("INVALID_POOL_ADDRESS")) {
                   errorMessage = `❌ Invalid pool address. The pool data may be outdated.`;
                   suggestions.push("Try refreshing the page to get updated pool information");
@@ -1569,6 +1661,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   errorMessage = `🎓 This pool has graduated and is no longer active.`;
                   suggestions.push("The token may have migrated to a new pool");
                   suggestions.push("Try refreshing to see if a new pool is available");
+                } else if (error.message?.includes('INVALID_POOL_TYPE') || error.message?.includes('Invalid pool') || error.message?.includes('Unsupported pool')) {
+                  // Critical Fix #6: Empty Pool Type Validation (fallback for non-structured errors)
+                  errorMessage = `⚠️ This token's trading pool is not supported`;
+                  toast.error('Pool type not supported', { duration: 4000 });
+                  suggestions.push('This token may not have a supported trading pool');
+                  suggestions.push('Try refreshing the page to get updated pool information');
                 }
               }
               
@@ -1805,6 +1903,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           />
         )}
       </div>
+
+      {/* High Slippage Warning Dialog */}
+      <HighSlippageWarningDialog
+        isOpen={showSlippageWarning}
+        slippagePercent={(settings.maxSlippage || 0.2) * 100}
+        onContinue={handleSlippageWarningContinue}
+        onCancel={handleSlippageWarningCancel}
+      />
     </div>
   );
 };
