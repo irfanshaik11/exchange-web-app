@@ -112,9 +112,9 @@ export default function useTradeEventsWebSocket({
           const usd0 = parseFloat(String(event.token0SwapValueUsd));
           const usd1 = parseFloat(String(event.token1SwapValueUsd));
           
-          // Convert raw amounts to actual token quantities by dividing by decimals
-          const actualAmount0 = rawAmount0 / Math.pow(10, tokenDecimals);
-          const actualAmount1 = rawAmount1 / Math.pow(10, tokenDecimals);
+          // Convert raw amounts to actual token quantities by dividing by decimals (for USD calculations)
+          const convertedAmount0 = rawAmount0 / Math.pow(10, tokenDecimals);
+          const convertedAmount1 = rawAmount1 / Math.pow(10, tokenDecimals);
           
           let totalUSD: number;
           let solPrice: number;
@@ -122,12 +122,12 @@ export default function useTradeEventsWebSocket({
           if (usd0 > usd1 && usd0 > 10) {
             // token0 appears to be SOL (higher price ~$100-$250)
             solPrice = usd0;
-            const solAmount = actualAmount0; // Already converted from raw amount
+            const solAmount = convertedAmount0; // Use converted amount for USD calculation
             totalUSD = solAmount * solPrice;
           } else if (usd1 > usd0 && usd1 > 10) {
             // token1 appears to be SOL (higher price)
             solPrice = usd1;
-            const solAmount = actualAmount1; // Already converted from raw amount
+            const solAmount = convertedAmount1; // Use converted amount for USD calculation
             totalUSD = solAmount * solPrice;
           } else {
             // Both values are small, use the larger one
@@ -138,7 +138,7 @@ export default function useTradeEventsWebSocket({
           const convertedTrade = {
             pair_address: pairAddress || '',
             side: event.eventDisplayType.toLowerCase() as "buy" | "sell",
-            amount: actualAmount0.toString(),
+            amount: rawAmount0.toString(), // Use raw amount for display
             price: String(solPrice),
             timestamp: timestamp,
             maker: event.maker,
