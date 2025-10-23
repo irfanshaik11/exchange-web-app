@@ -119,6 +119,21 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
 
   const abs = Math.abs(num);
 
+  // Handle very small values (< $0.01) with more precision
+  if (abs > 0 && abs < 0.01) {
+    return `$${num.toFixed(6)}`;
+  }
+
+  // Handle small values (< $1) with 4 decimal places
+  if (abs < 1) {
+    return `$${num.toFixed(4)}`;
+  }
+
+  // Handle values < $1000 with 2 decimal places
+  if (abs < 1000) {
+    return `$${num.toFixed(2)}`;
+  }
+
   const abbreviations = [
     { value: 1e12, suffix: "T" },
     { value: 1e9, suffix: "B" },
@@ -130,18 +145,14 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
     if (abs >= value) {
       const formatted = (num / value).toFixed(2);
       return formatted.endsWith(".00")
-        ? `${parseInt(formatted)}${suffix}`
-        : `${formatted}${suffix}`;
+        ? `$${parseInt(formatted)}${suffix}`
+        : `$${formatted}${suffix}`;
     }
   }
 
-  // Show full precision for very small values < 0.01
-  if (abs > 0 && abs < 0.01) {
-    return num.toPrecision(2);
-  }
-
-  // Normal decimal formatting for values >= 0.01
-  return num.toFixed(2);
+  // Fallback for values >= $1000 but < $1K (shouldn't happen with above logic)
+  return `$${num.toFixed(2)}`;
 }
+
 
 
