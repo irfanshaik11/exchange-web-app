@@ -144,48 +144,147 @@ export default function TradePage() {
     }
   }, [initialTradeData, isFromCache, initialDataLoading]);
 
-  // Calculate optimal OHLC interval and timeframe based on token age
+  // Fetch correct token data from database (same as search modal)
+  const [correctTokenData, setCorrectTokenData] = useState<any>(null);
+  
+  useEffect(() => {
+    const fetchCorrectTokenData = async () => {
+      if (!token?.mint) return;
+      
+      try {
+        // Use the same search endpoint that search modal uses
+        const response = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(token.mint)}&limit=1`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.tokens && data.tokens.length > 0) {
+            const correctToken = data.tokens[0];
+            const createdAt = correctToken.created_at;
+            // Handle Unix timestamp in seconds (convert to milliseconds)
+            let timestamp = createdAt;
+            if (typeof createdAt === 'number' && createdAt < 10000000000) {
+              timestamp = createdAt * 1000;
+              console.log('[Trade Page] Converted Unix seconds to milliseconds:', { original: createdAt, converted: timestamp });
+            }
+            
+            const createdDate = new Date(timestamp);
+            const now = new Date();
+            const diffMs = now.getTime() - createdDate.getTime();
+            const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            
+            console.log('[Trade Page] Correct token data from search API:', {
+              mint: correctToken.mint,
+              name: correctToken.name,
+              created_at: createdAt,
+              created_at_type: typeof createdAt,
+              createdDate: createdDate.toISOString(),
+              createdDate_valid: !isNaN(createdDate.getTime()),
+              now: now.toISOString(),
+              diffMs,
+              ageInDays,
+              ageInYears: Math.floor(ageInDays / 365)
+            });
+            setCorrectTokenData(correctToken);
+          }
+        }
+      } catch (error) {
+        console.error('[Trade Page] Failed to fetch correct token data:', error);
+      }
+    };
+    
+    fetchCorrectTokenData();
+  }, [token?.mint]);
+
+  // Calculate optimal OHLC interval and timeframe based on CORRECT token age
   const getOHLCParams = useCallback(() => {
-    if (!token?.created_at && !token?.createdAt) {
+    // Use correct token data if available, otherwise fall back to trade service data
+    const tokenForAge = correctTokenData || token;
+    const createdAt = tokenForAge?.created_at || tokenForAge?.createdAt || (tokenForAge as any)?.CreatedAt;
+    
+    if (!createdAt) {
       // Default for tokens without creation time
-      return { interval: '15m' as const, timeframe: '7d' as const };
+      return { interval: '15m' as const, timeframe: '7d' as const, optimize: false };
     }
 
-    const createdAt = token.created_at || token.createdAt;
-    const createdDate = new Date(createdAt);
+    // Handle Unix timestamp in seconds (convert to milliseconds)
+    let timestamp = createdAt;
+    if (typeof createdAt === 'number' && createdAt < 10000000000) {
+      timestamp = createdAt * 1000;
+      console.log('[Trade Page] OHLC: Converted Unix seconds to milliseconds:', { original: createdAt, converted: timestamp });
+    }
+    
+    const createdDate = new Date(timestamp);
     const now = new Date();
-    const ageInHours = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60);
-    const ageInDays = ageInHours / 24;
+    const diffMs = now.getTime() - createdDate.getTime();
+    const ageInHours = diffMs / (1000 * 60 * 60);
+    const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)); // Use integer days like search modal
 
-    console.log('[Trade Page] Token age calculation:', {
+    console.log('[Trade Page] Token age calculation (using correct data):', {
       createdAt,
+      createdAt_type: typeof createdAt,
+      createdDate: createdDate.toISOString(),
+      createdDate_valid: !isNaN(createdDate.getTime()),
       ageInHours,
-      ageInDays
+      ageInDays,
+      ageInYears: Math.floor(ageInDays / 365),
+      diffMs,
+      dataSource: correctTokenData ? 'search-api' : 'trade-service',
+      tokenForAge_keys: Object.keys(tokenForAge || {}).filter(k => k.includes('created') || k.includes('time'))
     });
 
-    // For very new tokens (< 1 hour) - use 1s intervals
+    // For very new tokens (< 1 hour) - use 1m intervals
     if (ageInHours < 1) {
-      return { interval: '1m' as const, timeframe: '1h' as const };
+      return { interval: '1m' as const, timeframe: '1h' as const, optimize: false };
     }
-    // For very new tokens (< 6 hours) - use 5s intervals
+    // For very new tokens (< 6 hours) - use 1m intervals
     else if (ageInHours < 6) {
-      return { interval: '1m' as const, timeframe: '4h' as const };
+      return { interval: '1m' as const, timeframe: '4h' as const, optimize: false };
     }
-    // For new tokens (< 24 hours) - use 15s intervals
+    // For new tokens (< 24 hours) - use 1m intervals
     else if (ageInDays < 1) {
-      return { interval: '1m' as const, timeframe: '24h' as const };
+      return { interval: '1m' as const, timeframe: '24h' as const, optimize: false };
     }
     // For tokens 1-7 days old
     else if (ageInDays < 7) {
-      return { interval: '15m' as const, timeframe: '7d' as const };
+      return { interval: '15m' as const, timeframe: '7d' as const, optimize: false };
     }
-    // For older tokens (> 7 days)
+    // For tokens 7-30 days old
+    else if (ageInDays < 30) {
+      return { interval: '1h' as const, timeframe: '30d' as const, optimize: false };
+    }
+    // For tokens 30-90 days old
+    else if (ageInDays < 90) {
+      return { interval: '1d' as const, timeframe: '90d' as const, optimize: true };
+    }
+    // For tokens 90-180 days old
+    else if (ageInDays < 180) {
+      return { interval: '1d' as const, timeframe: '180d' as const, optimize: true };
+    }
+    // For tokens 180-365 days old
+    else if (ageInDays < 365) {
+      return { interval: '1d' as const, timeframe: '365d' as const, optimize: true };
+    }
+    // For very old tokens (> 1 year)
     else {
-      return { interval: '1h' as const, timeframe: '30d' as const };
+      return { interval: '7d' as const, timeframe: '365d' as const, optimize: true };
     }
-  }, [token?.created_at, token?.createdAt]);
+  }, [correctTokenData, token]);
 
   const ohlcParams = getOHLCParams();
+
+  // Debug: Log token data to understand the discrepancy
+  useEffect(() => {
+    if (token) {
+      console.log('[Trade Page] Token data debug:', {
+        created_at: token.created_at,
+        createdAt: token.createdAt,
+        CreatedAt: (token as any).CreatedAt,
+        hasCreatedAt: !!token.createdAt,
+        hasCreated_at: !!token.created_at,
+        hasCreatedAtCamel: !!(token as any).CreatedAt,
+        tokenKeys: Object.keys(token).filter(key => key.includes('created') || key.includes('Created'))
+      });
+    }
+  }, [token]);
 
   // ---------------- drag-to-resize for left column ----------------
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -452,7 +551,7 @@ export default function TradePage() {
             <div className="flex-shrink-0 flex flex-col" style={{ height: topPanePx }}>
               {/* TradeHeader includes name + the ONLY icon cluster */}
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={token} />
+                <TradeHeader token={correctTokenData || token} />
               </div>
 
               {/* Chart - fully responsive */}
@@ -462,6 +561,7 @@ export default function TradePage() {
                     pairAddress={resolvedPairAddress}
                     interval={ohlcParams.interval}
                     timeframe={ohlcParams.timeframe}
+                    optimize={ohlcParams.optimize}
                     height="100%"
                     width="100%"
                     baseRefreshMs={30000}
