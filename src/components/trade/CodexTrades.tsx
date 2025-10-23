@@ -39,7 +39,7 @@ function getTradeType(eventDisplayType: string) {
   }
 }
 
-function getAmount(data: { amount0: string; amount1: string }, eventDisplayType: string) {
+function getAmount(data: { amount0: string; amount1: string }, eventDisplayType: string, tokenDecimals: number = 9) {
   // For Buy: amount0 is negative (token out), amount1 is positive (SOL in)
   // For Sell: amount0 is positive (token in), amount1 is negative (SOL out)
   // For Add: both are positive (adding liquidity)
@@ -47,18 +47,22 @@ function getAmount(data: { amount0: string; amount1: string }, eventDisplayType:
   const amount0 = parseFloat(data.amount0);
   const amount1 = parseFloat(data.amount1);
   
+  // Convert raw amounts to actual token quantities by dividing by decimals
+  const actualAmount0 = Math.abs(amount0) / Math.pow(10, tokenDecimals);
+  const actualAmount1 = Math.abs(amount1) / Math.pow(10, tokenDecimals);
+  
   if (eventDisplayType === 'Buy') {
     // Show the amount of tokens bought (positive amount0)
-    return Math.abs(amount0);
+    return actualAmount0;
   } else if (eventDisplayType === 'Sell') {
     // Show the amount of tokens sold (positive amount0)
-    return Math.abs(amount0);
+    return actualAmount0;
   } else if (eventDisplayType === 'Add') {
     // Show the amount of tokens added (positive amount0)
-    return Math.abs(amount0);
+    return actualAmount0;
   }
   
-  return Math.abs(amount0);
+  return actualAmount0;
 }
 
 function getTotalUSD(
@@ -120,6 +124,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     pairAddress: token.pair_address,
     enabled: true,
     initialTrades: initialTrades,
+    tokenDecimals: token.decimals,
   });
 
   // Use WebSocket trades if available, otherwise fallback to Codex trades
@@ -194,7 +199,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
               } else {
                 // Codex trade format
                 const { type, color } = getTradeType(trade.eventDisplayType);
-                const amount = getAmount(trade.data, trade.eventDisplayType);
+                const amount = getAmount(trade.data, trade.eventDisplayType, token.decimals);
                 const totalUSD = getTotalUSD(
                   trade.data.amount0,
                   trade.data.amount1,

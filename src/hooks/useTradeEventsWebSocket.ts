@@ -35,12 +35,14 @@ interface UseTradeEventsWebSocketParams {
   pairAddress?: string;
   enabled?: boolean;
   initialTrades?: any[]; // Initial trades from REST API
+  tokenDecimals?: number; // Token decimals for proper amount calculation
 }
 
 export default function useTradeEventsWebSocket({
   pairAddress,
   enabled = true,
   initialTrades = [],
+  tokenDecimals = 9, // Default to 9 decimals (common for Solana tokens)
 }: UseTradeEventsWebSocketParams) {
   const [state, setState] = useState<TradeEventsState>({
     isConnected: false,
@@ -105,10 +107,14 @@ export default function useTradeEventsWebSocket({
           // Calculate total USD value
           // SOL can be either token0 or token1 depending on the pair
           // Determine which is SOL by checking which USD value is larger
-          const amount0 = Math.abs(parseFloat(String(event.data.amount0)));
-          const amount1 = Math.abs(parseFloat(String(event.data.amount1)));
+          const rawAmount0 = Math.abs(parseFloat(String(event.data.amount0)));
+          const rawAmount1 = Math.abs(parseFloat(String(event.data.amount1)));
           const usd0 = parseFloat(String(event.token0SwapValueUsd));
           const usd1 = parseFloat(String(event.token1SwapValueUsd));
+          
+          // Convert raw amounts to actual token quantities by dividing by decimals
+          const actualAmount0 = rawAmount0 / Math.pow(10, tokenDecimals);
+          const actualAmount1 = rawAmount1 / Math.pow(10, tokenDecimals);
           
           let totalUSD: number;
           let solPrice: number;
@@ -116,12 +122,12 @@ export default function useTradeEventsWebSocket({
           if (usd0 > usd1 && usd0 > 10) {
             // token0 appears to be SOL (higher price ~$100-$250)
             solPrice = usd0;
-            const solAmount = amount0 / 1e9;
+            const solAmount = actualAmount0; // Already converted from raw amount
             totalUSD = solAmount * solPrice;
           } else if (usd1 > usd0 && usd1 > 10) {
             // token1 appears to be SOL (higher price)
             solPrice = usd1;
-            const solAmount = amount1 / 1e9;
+            const solAmount = actualAmount1; // Already converted from raw amount
             totalUSD = solAmount * solPrice;
           } else {
             // Both values are small, use the larger one
@@ -132,7 +138,7 @@ export default function useTradeEventsWebSocket({
           const convertedTrade = {
             pair_address: pairAddress || '',
             side: event.eventDisplayType.toLowerCase() as "buy" | "sell",
-            amount: amount0.toString(),
+            amount: actualAmount0.toString(),
             price: String(solPrice),
             timestamp: timestamp,
             maker: event.maker,
