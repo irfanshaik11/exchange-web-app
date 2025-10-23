@@ -39,30 +39,11 @@ function getTradeType(eventDisplayType: string) {
   }
 }
 
-function getAmount(data: { amount0: string; amount1: string }, eventDisplayType: string, tokenDecimals: number = 9) {
-  // For Buy: amount0 is negative (token out), amount1 is positive (SOL in)
-  // For Sell: amount0 is positive (token in), amount1 is negative (SOL out)
-  // For Add: both are positive (adding liquidity)
-  
-  const amount0 = parseFloat(data.amount0);
-  const amount1 = parseFloat(data.amount1);
-  
-  // Convert raw amounts to actual token quantities by dividing by decimals
-  const actualAmount0 = Math.abs(amount0) / Math.pow(10, tokenDecimals);
-  const actualAmount1 = Math.abs(amount1) / Math.pow(10, tokenDecimals);
-  
-  if (eventDisplayType === 'Buy') {
-    // Show the amount of tokens bought (positive amount0)
-    return actualAmount0;
-  } else if (eventDisplayType === 'Sell') {
-    // Show the amount of tokens sold (positive amount0)
-    return actualAmount0;
-  } else if (eventDisplayType === 'Add') {
-    // Show the amount of tokens added (positive amount0)
-    return actualAmount0;
-  }
-  
-  return actualAmount0;
+function getAmount(data: { amount0: string; amount1: string }, eventDisplayType: string, tokenDecimals: number = 2) {
+  // Divide raw amount by 1,000 for display
+  const rawAmount = parseFloat(data.amount0);
+  const displayAmount = rawAmount / 1000;
+  return formatSmartNumber(displayAmount);
 }
 
 function getTotalUSD(
@@ -171,7 +152,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                 const type = trade.side === 'buy' ? 'Buy' : 'Sell';
                 const color = trade.side === 'buy' ? 'text-emerald-400' : 'text-red-400';
                 const age = getAge(new Date(trade.timestamp).getTime() / 1000);
-                const amount = parseFloat(trade.amount);
+                const amount = formatSmartNumber(parseFloat(trade.amount) / 1000);
                 // Use totalUSD if available, otherwise use the price field (which is actually the total USD value)
                 const value = trade.totalUSD !== undefined ? trade.totalUSD : parseFloat(trade.price);
                 
@@ -180,7 +161,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>{type}</td>
                     {/* <td className="px-2 py-2 text-neutral-300">{formatMarketCap(token.market_cap_usd)}</td> */}
-                    <td className="px-2 py-2 text-neutral-300">{formatSmartNumber(amount)}</td>
+                    <td className="px-2 py-2 text-neutral-300">{amount}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>
                       {type === 'Buy' ? '+' : '-'}${formatSmartNumber(value)}
                     </td>
@@ -215,7 +196,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>{type}</td>
                     {/* <td className="px-2 py-2 text-neutral-300">{formatMarketCap(token.market_cap_usd)}</td> */}
-                    <td className="px-2 py-2 text-neutral-300">{formatSmartNumber(amount)}</td>
+                    <td className="px-2 py-2 text-neutral-300">{amount}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>
                       {type === 'Buy' || type === 'Add' ? '+' : '-'}${formatSmartNumber(totalUSD)}
                     </td>

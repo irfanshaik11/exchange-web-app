@@ -146,10 +146,13 @@ export default function TradePage() {
 
   // Fetch correct token data from database (same as search modal)
   const [correctTokenData, setCorrectTokenData] = useState<any>(null);
+  const [isLoadingCorrectData, setIsLoadingCorrectData] = useState(false);
   
   useEffect(() => {
     const fetchCorrectTokenData = async () => {
       if (!token?.mint) return;
+      
+      setIsLoadingCorrectData(true);
       
       try {
         // Use the same search endpoint that search modal uses
@@ -188,6 +191,8 @@ export default function TradePage() {
         }
       } catch (error) {
         console.error('[Trade Page] Failed to fetch correct token data:', error);
+      } finally {
+        setIsLoadingCorrectData(false);
       }
     };
     
@@ -201,8 +206,8 @@ export default function TradePage() {
     const createdAt = tokenForAge?.created_at || tokenForAge?.createdAt || (tokenForAge as any)?.CreatedAt;
     
     if (!createdAt) {
-      // Default for tokens without creation time
-      return { interval: '15m' as const, timeframe: '7d' as const, optimize: false };
+      // Default for tokens without creation time - good default that works for most tokens
+      return { interval: '1h' as const, timeframe: '30d' as const, optimize: false };
     }
 
     // Handle Unix timestamp in seconds (convert to milliseconds)
@@ -267,9 +272,23 @@ export default function TradePage() {
     else {
       return { interval: '7d' as const, timeframe: '365d' as const, optimize: true };
     }
-  }, [correctTokenData, token]);
+  }, [correctTokenData, token, isLoadingCorrectData]);
 
   const ohlcParams = getOHLCParams();
+
+  // Debug: Log OHLC params calculation
+  useEffect(() => {
+    console.log('[Trade Page] OHLC params calculation:', {
+      ohlcParams,
+      hasCorrectTokenData: !!correctTokenData,
+      isLoadingCorrectData,
+      tokenMint: token?.mint,
+      tokenCreatedAt: token?.created_at || token?.createdAt || (token as any)?.CreatedAt,
+      correctTokenCreatedAt: correctTokenData?.created_at,
+      dataSource: correctTokenData ? 'search-api' : 'trade-service',
+      isOptimizing: isLoadingCorrectData && !correctTokenData
+    });
+  }, [ohlcParams, correctTokenData, isLoadingCorrectData, token]);
 
   // Debug: Log token data to understand the discrepancy
   useEffect(() => {
@@ -556,17 +575,29 @@ export default function TradePage() {
 
               {/* Chart - fully responsive */}
               <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden pb-1">
-                {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 ? (
-                  <BackendOHLCChart
-                    pairAddress={resolvedPairAddress}
-                    interval={ohlcParams.interval}
-                    timeframe={ohlcParams.timeframe}
-                    optimize={ohlcParams.optimize}
-                    height="100%"
-                    width="100%"
-                    baseRefreshMs={30000}
-                    className="relative"
-                  />
+                {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 && ohlcParams ? (
+                  <>
+                    <BackendOHLCChart
+                      key={`${ohlcParams.interval}-${ohlcParams.timeframe}-${ohlcParams.optimize}`}
+                      pairAddress={resolvedPairAddress}
+                      interval={ohlcParams.interval}
+                      timeframe={ohlcParams.timeframe}
+                      optimize={ohlcParams.optimize}
+                      height="100%"
+                      width="100%"
+                      baseRefreshMs={30000}
+                      className="relative"
+                    />
+                    {/* Subtle indicator when optimizing chart parameters */}
+                    {isLoadingCorrectData && (
+                      <div className="absolute top-2 right-2 text-xs opacity-60" style={{ color: AX.muted }}>
+                        <div className="flex items-center gap-1">
+                          <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse"></div>
+                          Optimizing...
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
                     {isHydrating ? 'Resolving pair address...' : 'No pair address available'}
