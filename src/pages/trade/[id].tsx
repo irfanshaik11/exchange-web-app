@@ -43,7 +43,7 @@ const AX = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
 
   // Optimistic token data from query params for instant display
   const optimisticToken = React.useMemo(() => {
@@ -64,6 +64,7 @@ export default function TradePage() {
     id,
     idType: typeof id,
     isString: typeof id === "string",
+    mintFromQuery: _mint,
     optimisticToken
   });
 
