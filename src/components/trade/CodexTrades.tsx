@@ -91,9 +91,7 @@ function formatMarketCap(marketCapUsd: number) {
 }
 
 const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
-  const { trades: codexTrades, isConnected: codexConnected, error: codexError, isLoading: codexLoading } = useCodexTradesWebSocket(token.mint, initialTrades);
-  
-  // Optimized WebSocket hook for real-time trade events with enhanced caching
+  // Simplified WebSocket connection - use only one WebSocket hook
   const {
     isConnected: wsConnected,
     loading: wsLoading,
@@ -106,21 +104,18 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     enabled: true,
     initialTrades: initialTrades,
     tokenDecimals: token.decimals,
-    maxTrades: 1000, // Limit memory usage
-    enableDeduplication: true, // Remove duplicate trades
+    maxTrades: 200, // Reduced for faster processing
+    enableDeduplication: true,
   });
 
-  // Use WebSocket trades if available, otherwise fallback to Codex trades
-  const displayTrades = wsTrades.length > 0 ? wsTrades : codexTrades;
-  const isConnected = wsConnected || codexConnected;
-  const error = wsError || codexError;
-  const isLoading = wsLoading || codexLoading;
+  // Use WebSocket trades if available, otherwise show initial trades immediately
+  const displayTrades = wsTrades.length > 0 ? wsTrades : initialTrades;
+  const isConnected = wsConnected || initialTrades.length > 0; // Consider connected if we have initial data
+  const error = wsError;
+  const isLoading = wsLoading && initialTrades.length === 0; // Only show loading if no initial data
 
   return (
     <div className="w-full h-full flex flex-col">
-      
-      {/* Removed WebSocket error messages for seamless experience */}
-
       <div className="flex-1 overflow-y-auto">
         <table className="w-full text-xs">
         <thead className="sticky top-0 bg-gray-900 z-10">
@@ -143,11 +138,11 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
           ) : !displayTrades || displayTrades.length === 0 ? (
             <tr>
               <td colSpan={5} className="text-center py-6 text-neutral-500">
-                {isConnected ? 'No trades found.' : 'Connecting...'}
+                {displayTrades.length > 0 ? 'No trades found.' : (isLoading ? 'Loading...' : 'No trades available.')}
               </td>
             </tr>
           ) : (
-            displayTrades.slice(0, 200).map((trade: any, idx) => {
+            displayTrades.slice(0, 100).map((trade: any, idx) => { // Reduced from 200 to 100 for faster rendering
               // Check if it's a WebSocket trade event
               if (trade.side && trade.amount && trade.price && trade.pair_address) {
                 // WebSocket trade event format

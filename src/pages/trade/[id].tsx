@@ -59,14 +59,16 @@ export default function TradePage() {
     return null;
   }, [_name, _symbol, _price, _mcap, _image]);
 
-  // Debug logging
-  console.log('TradePage Debug:', {
-    id,
-    idType: typeof id,
-    isString: typeof id === "string",
-    mintFromQuery: _mint,
-    optimisticToken
-  });
+  // Reduced debug logging for performance
+  if (process.env.NODE_ENV === 'development') {
+    console.log('TradePage Debug:', {
+      id,
+      idType: typeof id,
+      isString: typeof id === "string",
+      mintFromQuery: _mint,
+      optimisticToken
+    });
+  }
 
   const [showSkeleton, setShowSkeleton] = useState(true);
   const { isConnected } = useWallet();
@@ -105,7 +107,7 @@ export default function TradePage() {
   const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
     useSingleTokenPolling(typeof id === "string" ? id : undefined);
 
-  // Pre-fetch initial trade data with enhanced caching for instant/fast loading
+  // Optimized initial trade data loading - only load when we have resolved pair address
   const { 
     data: initialTradeData, 
     loading: initialDataLoading, 
@@ -115,35 +117,23 @@ export default function TradePage() {
     cleanupCache
   } = useInitialTradeData(resolvedPairAddress, token?.mint);
 
-  // Intelligent prefetching for related data
-  const { prefetchTradeData, getCachedData, getStats: getPrefetchStats } = useTradePagePrefetch(
-    resolvedPairAddress,
-    token?.mint
-  );
+  // Disabled prefetching to reduce initial load time
+  // const { prefetchTradeData, getCachedData, getStats: getPrefetchStats } = useTradePagePrefetch(
+  //   resolvedPairAddress,
+  //   token?.mint
+  // );
 
-  // Debug: Log the pair addresses and initial data status
-  useEffect(() => {
-    if (resolvedPairAddress || token?.pair_address) {
-      console.log('[Trade Page] Pair addresses:', {
-        resolvedPairAddress,
-        tokenPairAddress: token?.pair_address,
-        match: resolvedPairAddress === token?.pair_address
-      });
-    }
-  }, [resolvedPairAddress, token?.pair_address]);
 
+  // Reduced debug logging for performance
   useEffect(() => {
-    if (initialTradeData) {
+    if (initialTradeData && process.env.NODE_ENV === 'development') {
       console.log('[Trade Page] Initial data loaded:', {
         tradesCount: initialTradeData.trades?.length || 0,
-        hasStats: !!initialTradeData.stats,
         isFromCache,
         loading: initialDataLoading,
-        cacheStats,
-        prefetchStats: getPrefetchStats(),
       });
     }
-  }, [initialTradeData, isFromCache, initialDataLoading, cacheStats, getPrefetchStats]);
+  }, [initialTradeData, isFromCache, initialDataLoading]);
 
   // Fetch correct token data from database (same as search modal)
   const [correctTokenData, setCorrectTokenData] = useState<any>(null);
@@ -280,6 +270,7 @@ export default function TradePage() {
   );
 
   const ohlcParams = getOHLCParams;
+
 
   // Debug: Log OHLC params calculation
   useEffect(() => {
@@ -526,6 +517,30 @@ export default function TradePage() {
     return null;
   }
 
+  // Show loading state if token is not loaded yet (with timeout fallback)
+  if (!token && (isHydrating || pollingLoading)) {
+    return (
+      <div className="min-h-screen" style={{ backgroundColor: AX.bg }}>
+        <Head>
+          <title>Loading...</title>
+        </Head>
+        <Header />
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+            <p style={{ color: AX.muted }}>
+              {isHydrating ? 'Resolving token address...' : 'Loading token data...'}
+            </p>
+            <p className="text-xs mt-2" style={{ color: AX.muted }}>
+              This may take a few seconds...
+            </p>
+          </div>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
   if (!token) {
     return <div className="mt-20 text-center text-2xl" style={{ color: AX.sell }}>Token not found</div>;
   }
@@ -578,7 +593,7 @@ export default function TradePage() {
                 <TradeHeader token={correctTokenData || token} />
               </div>
 
-              {/* Chart - fully responsive */}
+              {/* Chart - fully responsive with fast-loading data */}
               <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden pb-1">
                 {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 && ohlcParams ? (
                   <>
@@ -590,18 +605,9 @@ export default function TradePage() {
                       optimize={ohlcParams.optimize}
                       height="100%"
                       width="100%"
-                      baseRefreshMs={30000}
+                      baseRefreshMs={15000} // Slightly faster refresh rate
                       className="relative"
                     />
-                    {/* Subtle indicator when optimizing chart parameters */}
-                    {isLoadingCorrectData && (
-                      <div className="absolute top-2 right-2 text-xs opacity-60" style={{ color: AX.muted }}>
-                        <div className="flex items-center gap-1">
-                          <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse"></div>
-                          Optimizing...
-                        </div>
-                      </div>
-                    )}
                   </>
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
@@ -678,7 +684,7 @@ export default function TradePage() {
               <div className="flex-1 min-h-0">
                 {selectedTab === "Trades" && (
                   <CodexTrades 
-                    token={token} 
+                    token={correctTokenData || token} 
                     initialTrades={initialTradeData?.trades || []}
                   />
                 )}

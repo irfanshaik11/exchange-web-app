@@ -147,10 +147,13 @@ export default function useOptimizedTradeEventsWebSocket({
     return sortedTrades.slice(0, maxTrades);
   }, [maxTrades]);
 
-  // Update trades when initialTrades are provided
+  // Update trades when initialTrades are provided - immediate display
   useEffect(() => {
     if (initialTrades && initialTrades.length > 0 && !hasSetInitialDataRef.current) {
-      console.log('[useOptimizedTradeEventsWebSocket] Using initial trades from pre-fetch:', initialTrades.length);
+      // Reduced logging for performance
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[useOptimizedTradeEventsWebSocket] Using initial trades from pre-fetch:', initialTrades.length);
+      }
       
       const processedTrades = initialTrades.map(processTradeEvent);
       const deduplicatedTrades = deduplicateTrades(processedTrades);
@@ -165,6 +168,7 @@ export default function useOptimizedTradeEventsWebSocket({
         ...prev,
         trades: managedTrades,
         loading: false,
+        isConnected: true, // Mark as connected when we have initial data
         lastUpdate: new Date().toISOString(),
       }));
       hasSetInitialDataRef.current = true;
@@ -173,19 +177,26 @@ export default function useOptimizedTradeEventsWebSocket({
 
   const processMessage = useCallback((message: any) => {
     try {
-      console.log('Trade events websocket message received:', message);
+      // Reduced logging for performance
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Trade events websocket message received:', message);
+      }
       
       let events: any[] = [];
       
       // Handle initial trades response (getTokenEvents format)
       if (message.data && message.data.getTokenEvents && message.data.getTokenEvents.items) {
         events = message.data.getTokenEvents.items;
-        console.log('Processing initial trades:', events.length, 'events');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Processing initial trades:', events.length, 'events');
+        }
       }
       // Handle real-time updates (onEventsCreated format)
       else if (message.data && message.data.onEventsCreated && message.data.onEventsCreated.events) {
         events = message.data.onEventsCreated.events;
-        console.log('Processing real-time events:', events.length, 'events');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Processing real-time events:', events.length, 'events');
+        }
       }
       
       if (events.length > 0) {
@@ -209,12 +220,16 @@ export default function useOptimizedTradeEventsWebSocket({
             if (message.data && message.data.getTokenEvents) {
               // Initial trades - replace existing trades
               updatedTrades = newTrades;
-              console.log('Replaced trades with initial data:', updatedTrades.length);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Replaced trades with initial data:', updatedTrades.length);
+              }
             } else {
               // Real-time updates - prepend to existing trades
               const combinedTrades = [...newTrades, ...prev.trades];
               updatedTrades = manageTradesMemory(deduplicateTrades(combinedTrades));
-              console.log('Added new trades to existing:', updatedTrades.length);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Added new trades to existing:', updatedTrades.length);
+              }
             }
             
             return {
@@ -245,7 +260,20 @@ export default function useOptimizedTradeEventsWebSocket({
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
+      // Set connection timeout to 3 seconds for faster failure
+      const connectionTimeout = setTimeout(() => {
+        if (ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+          setState(prev => ({
+            ...prev,
+            error: 'WebSocket connection timeout',
+            loading: false,
+          }));
+        }
+      }, 3000);
+
       ws.onopen = () => {
+        clearTimeout(connectionTimeout);
         setState(prev => ({
           ...prev,
           isConnected: true,
@@ -307,18 +335,19 @@ export default function useOptimizedTradeEventsWebSocket({
       };
 
       ws.onclose = (event) => {
+        clearTimeout(connectionTimeout); // Clear connection timeout
         setState(prev => ({
           ...prev,
           isConnected: false,
           loading: false,
         }));
 
-        // Attempt reconnection if not a clean close
+        // Attempt reconnection if not a clean close - faster reconnection
         if (event.code !== 1000 && reconnectAttemptRef.current < maxReconnectAttempts) {
           reconnectAttemptRef.current++;
           setState(prev => ({ ...prev, isReconnecting: true }));
           
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
+          const delay = Math.min(200 * Math.pow(1.2, reconnectAttemptRef.current), 2000); // Much faster reconnection
           reconnectTimeoutRef.current = setTimeout(() => {
             connectWebSocket();
           }, delay);
@@ -364,6 +393,20 @@ export default function useOptimizedTradeEventsWebSocket({
 
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
 
+    // Set loading timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      setState(prev => {
+        if (prev.loading && !prev.isConnected) {
+          return {
+            ...prev,
+            loading: false,
+            error: 'WebSocket connection timeout',
+          };
+        }
+        return prev;
+      });
+    }, 2000); // 2-second timeout for loading state
+
     // Clean up existing connection
     if (wsRef.current) {
       wsRef.current.close();
@@ -379,6 +422,7 @@ export default function useOptimizedTradeEventsWebSocket({
 
     // Cleanup function
     return () => {
+      clearTimeout(loadingTimeout); // Clear loading timeout
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

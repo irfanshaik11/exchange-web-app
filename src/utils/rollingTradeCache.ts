@@ -113,8 +113,8 @@ class RollingTradeCacheManager {
    * Preload trade data for multiple tokens in parallel
    */
   private async preloadTokens(tokens: Token[]): Promise<void> {
-    // Increased concurrency since backend is slow - better to load faster
-    const BATCH_SIZE = 10;
+    // Reduced concurrency to prevent overwhelming the backend
+    const BATCH_SIZE = 3;
 
     for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
       const batch = tokens.slice(i, i + BATCH_SIZE);
@@ -126,11 +126,14 @@ class RollingTradeCacheManager {
       const successful = results.filter(r => r.status === 'fulfilled').length;
       const failed = results.filter(r => r.status === 'rejected').length;
 
-      console.log(`[RollingCache] Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${successful} success, ${failed} failed`);
+      // Reduced logging for performance
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[RollingCache] Batch ${Math.floor(i / BATCH_SIZE) + 1}: ${successful} success, ${failed} failed`);
+      }
 
-      // Reduced delay since we need faster preloading
+      // Increased delay to reduce backend load
       if (i + BATCH_SIZE < tokens.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
   }
@@ -159,14 +162,17 @@ class RollingTradeCacheManager {
       const pairAddress = token.pair_address;
       const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key';
 
-      console.log(`[RollingCache] 📥 Preloading ${token.symbol}`, {
-        mint: token.mint.slice(0, 8) + '...',
-        pair_address: pairAddress.slice(0, 8) + '...'
-      });
+      // Reduced logging for performance
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[RollingCache] 📥 Preloading ${token.symbol}`);
+      }
 
       // Fetch trade data (only /v1/trade/view, skip stats endpoint - it's optional and failing)
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000); // Increased to 30s due to slow backend
+      const timeout = setTimeout(() => {
+        controller.abort();
+        console.warn(`[RollingCache] Request timeout for ${token.symbol} after 3 seconds`);
+      }, 3000); // Reduced timeout to 3 seconds for faster loading
 
       const tradesRes = await fetch(`${baseUrl}/v1/trade/view?pair_address=${pairAddress}`, {
         headers: {
@@ -185,9 +191,15 @@ class RollingTradeCacheManager {
       if (tradesRes && tradesRes.ok) {
         const tradesData = await tradesRes.json();
         trades = tradesData.recentTrades || [];
-        console.log(`[RollingCache] ✅ Fetched ${trades.length} trades for ${token.symbol}`);
+        // Reduced logging for performance
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[RollingCache] ✅ Fetched ${trades.length} trades for ${token.symbol}`);
+        }
       } else {
-        console.log(`[RollingCache] ❌ No trade data for ${token.symbol} (${tradesRes?.status || 'timeout'})`);
+        // Reduced logging for performance
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[RollingCache] ❌ No trade data for ${token.symbol} (${tradesRes?.status || 'timeout'})`);
+        }
         return; // Don't cache if no data
       }
 
@@ -211,8 +223,12 @@ class RollingTradeCacheManager {
       };
 
       this.cache.set(token.mint, cachedData);
-      this.saveToLocalStorage(); // Save after each successful preload
-      console.log(`[RollingCache] ✅ Cached ${token.symbol}`);
+      // Defer localStorage save to avoid blocking
+      setTimeout(() => this.saveToLocalStorage(), 0);
+      // Reduced logging for performance
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[RollingCache] ✅ Cached ${token.symbol}`);
+      }
 
     } catch (error: any) {
       console.warn(`[RollingCache] ⚠️  Failed to preload ${token.symbol}:`, error.message);
@@ -224,30 +240,24 @@ class RollingTradeCacheManager {
    */
   getCachedTradeData(mintAddress: string): CachedTradeData | null {
     if (!mintAddress) {
-      console.log(`[RollingCache] ❌ No mint address provided`);
       return null;
     }
-
-    console.log(`[RollingCache] 🔍 Looking for ${mintAddress.slice(0, 8)}... in cache (size: ${this.cache.size})`);
 
     const cached = this.cache.get(mintAddress);
 
     if (!cached) {
-      console.log(`[RollingCache] ❌ Cache miss for ${mintAddress.slice(0, 8)}...`);
-      console.log(`[RollingCache] Current cache keys:`, Array.from(this.cache.keys()).map(k => k.slice(0, 8) + '...'));
       return null;
     }
 
     // Check if cache is expired
     const age = Date.now() - cached.cachedAt;
     if (age > this.CACHE_TTL) {
-      console.log(`[RollingCache] ⏰ Cache expired for ${mintAddress.slice(0, 8)}... (age: ${Math.round(age / 1000)}s)`);
       this.cache.delete(mintAddress);
-      this.saveToLocalStorage();
+      // Defer localStorage save to avoid blocking
+      setTimeout(() => this.saveToLocalStorage(), 0);
       return null;
     }
 
-    console.log(`[RollingCache] ✅ Cache hit for ${mintAddress.slice(0, 8)}... (age: ${Math.round(age / 1000)}s)`);
     return cached;
   }
 
