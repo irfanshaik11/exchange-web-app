@@ -1,0 +1,76 @@
+name: Deploy to GCP Prod MIG
+
+on:
+  push:
+    branches: [ prod ]
+
+permissions:
+  contents: read
+  id-token: write  # Required for OIDC authentication
+
+env:
+  PROJECT_ID: "interstate-dev"
+  WORKLOAD_IDENTITY_PROVIDER: "projects/486942555299/locations/global/workloadIdentityPools/github-cicd-pool/providers/github"
+  SERVICE_ACCOUNT: "github-cicd@interstate-dev.iam.gserviceaccount.com"
+  ZONE: "europe-west3-a"
+  REGION: "europe-west3"
+  MIG_NAME: "interstate-narrative-frontend-prod"
+  STARTUP_SCRIPT: "deployment/startup-script/gcp_frontend_startup.sh"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Authenticate to GCP using Workload Identity Federation (OIDC)
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          create_credentials_file: true
+          export_environment_variables: true
+
+      # Step 3: Setup gcloud
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      # Step 4: Create new instance template based on commit SHA
+      - name: Create new instance template
+        run: |
+          TEMPLATE_NAME="interstate-narrative-frontend-prod-${GITHUB_SHA::8}"
+          echo "Creating template: $TEMPLATE_NAME from scratch"
+          gcloud compute instance-templates create $TEMPLATE_NAME \
+            --project=$PROJECT_ID \
+            --machine-type=c4-standard-16 \
+            --network-interface=network-tier=PREMIUM,nic-type=GVNIC,stack-type=IPV4_ONLY,subnet=prod-subnet-1 \
+            --instance-template-region=$REGION \
+            --maintenance-policy=MIGRATE \
+            --provisioning-model=STANDARD \
+            --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/trace.append \
+            --service-account=486942555299-compute@developer.gserviceaccount.com \
+            --region=$REGION \
+            --tags=http-server,https-server,lb-health-check \
+            --create-disk=auto-delete=yes,boot=yes,device-name=interstate-narrative-frontend-prod,image=projects/interstate-dev/global/images/interstate-narrative-frontend-prod-image,mode=rw,provisioned-iops=3600,provisioned-throughput=290,size=100,type=hyperdisk-balanced \
+            --create-disk=device-name=persistent-disk-1,mode=rw,size=100,type=hyperdisk-balanced \
+            --no-shielded-secure-boot \
+            --shielded-vtpm \
+            --shielded-integrity-monitoring \
+            --reservation-affinity=any \
+            --metadata-from-file=startup-script=$STARTUP_SCRIPT
+          echo "TEMPLATE_NAME=$TEMPLATE_NAME" >> $GITHUB_ENV
+
+      # Step 5: Rolling update MIG to new template
+      - name: Rolling update instance group
+        run: |
+          echo "Updating $MIG_NAME to template $TEMPLATE_NAME"
+          sleep 15
+          gcloud compute instance-groups managed rolling-action start-update $MIG_NAME \
+            --version template=projects/${PROJECT_ID}/regions/${REGION}/instanceTemplates/${TEMPLATE_NAME} \
+            --zone=$ZONE
