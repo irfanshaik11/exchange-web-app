@@ -33,7 +33,7 @@ export interface QuickBuyPreset {
 const defaultSettings: QuickBuySettings = {
   maxSlippage: 0.2,
   priority: 0.001,
-  bribe: 0.05,
+  bribe: 0.00,
   mevMode: 'off',
   autoFee: false,
   maxFee: 0,
@@ -71,10 +71,18 @@ function validateSettings(settings: QuickBuySettings): QuickBuySettings {
 }
 
 export function QuickBuyProvider({ children }: { children: ReactNode }) {
+  // TEMPORARY: Force reset localStorage to use new defaults BEFORE loading
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('quickBuySettings');
+    console.log('🧹 Cleared localStorage quickBuySettings');
+    console.log('🔧 Default settings:', defaultSettings);
+  }
+
   // Load from localStorage if available
   const getInitialState = () => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('quickBuySettings');
+      console.log('📦 Saved settings from localStorage:', saved);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
