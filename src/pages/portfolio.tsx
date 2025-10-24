@@ -356,6 +356,13 @@ export default function PortfolioPage() {
  // Calculate metrics based on selected timeframe
  useEffect(() => {
    const calculateTimeframeMetrics = () => {
+     console.log('🔄 Calculating timeframe metrics...', {
+       selectedTimeframe,
+       positionsCount: positions.length,
+       tradeHistoryCount: tradeHistory.length,
+       unrealizedPnl
+     });
+     
      const now = Date.now();
      let timeframeDays = 0;
      
@@ -399,16 +406,47 @@ export default function PortfolioPage() {
       // Calculate realized PNL from sold positions
       // Realized PnL = Money received from selling - Cost basis of sold tokens
       if (pos.sold > 0 && pos.bought > 0 && pos.boughtUsdValue > 0) {
+        // Detect unit mismatch: if sold amount is much larger than bought amount
+        // This indicates the backend is storing sold amount in wrong units
+        let correctedSold = pos.sold;
+        
+        if (pos.sold > pos.bought * 1000) {
+          // Likely unit mismatch - sold amount is probably in smaller units
+          // Try to correct by scaling down
+          correctedSold = pos.sold / 1000000; // Scale down by 1 million
+          console.warn('Unit mismatch detected - correcting sold amount:', {
+            tokenAddress: pos.tokenAddress,
+            originalSold: pos.sold,
+            correctedSold: correctedSold,
+            bought: pos.bought
+          });
+        }
+        
         // Calculate average cost per token
         const avgCostPerToken = pos.boughtUsdValue / pos.bought;
-        // Cost basis of sold tokens = average cost * amount sold
-        const costBasisOfSold = avgCostPerToken * pos.sold;
+        // Cost basis of sold tokens = average cost * amount sold (corrected)
+        const costBasisOfSold = avgCostPerToken * correctedSold;
         // Realized PnL = money received - cost basis
         const realizedPnl = pos.soldUsdValue - costBasisOfSold;
+        
+        // Debug logging for PNL calculation
+        console.log('PNL calculation debug:', {
+          tokenAddress: pos.tokenAddress,
+          bought: pos.bought,
+          boughtUsdValue: pos.boughtUsdValue,
+          sold: pos.sold,
+          correctedSold: correctedSold,
+          soldUsdValue: pos.soldUsdValue,
+          avgCostPerToken: avgCostPerToken,
+          costBasisOfSold: costBasisOfSold,
+          realizedPnl: realizedPnl
+        });
         
         // Add validation to prevent extreme values
         if (isFinite(realizedPnl) && Math.abs(realizedPnl) < 1e12) { // Less than 1 trillion
           totalRealizedPnl += realizedPnl;
+        } else {
+          console.warn('Invalid realized PNL value:', realizedPnl, 'for token:', pos.tokenAddress);
         }
       }
 
@@ -430,6 +468,14 @@ export default function PortfolioPage() {
      // For now, use the overall unrealized PNL since positions don't have timestamps
      const unrealizedPnlForTimeframe = unrealizedPnl;
 
+     console.log('📊 Final timeframe metrics:', {
+       unrealizedPnl: unrealizedPnlForTimeframe,
+       realizedPnl: totalRealizedPnl,
+       winningTrades,
+       losingTrades,
+       totalRealizedPnl
+     });
+     
      setTimeframeMetrics({
        unrealizedPnl: unrealizedPnlForTimeframe,
        realizedPnl: totalRealizedPnl,

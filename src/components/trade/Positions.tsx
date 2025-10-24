@@ -629,7 +629,14 @@ const Positions: React.FC<PositionsProps> = ({
                   </span>
                 </td>
                 <td className="px-2 py-2">
-                  {formatSmartNumber(pos.sold)}
+                  {(() => {
+                    // Apply same unit correction as in PNL calculation
+                    let correctedSold = pos.sold;
+                    if (pos.sold > pos.bought * 1000) {
+                      correctedSold = pos.sold / 1000000; // Scale down by 1 million
+                    }
+                    return formatSmartNumber(correctedSold);
+                  })()}
                   <span className="ml-1 text-neutral-400">
                     {showInSOL && solPrice > 0
                       ? <>(<SolIcon />{formatSmartNumber(pos.soldUsdValue / solPrice)})</>
@@ -638,7 +645,15 @@ const Positions: React.FC<PositionsProps> = ({
                   </span>
                 </td>
                 <td className="px-2 py-2">
-                  {formatSmartNumber(pos.remaining)}
+                  {(() => {
+                    // Apply same unit correction for remaining amount
+                    let correctedRemaining = pos.remaining;
+                    if (pos.sold > pos.bought * 1000) {
+                      // If sold amount had unit mismatch, remaining likely does too
+                      correctedRemaining = pos.remaining / 1000000; // Scale down by 1 million
+                    }
+                    return formatSmartNumber(correctedRemaining);
+                  })()}
                   <span className="ml-1 text-neutral-400">
                     {showInSOL && solPrice > 0
                       ? <>(<SolIcon />{formatSmartNumber(pos.remainingUsdValue / solPrice)})</>

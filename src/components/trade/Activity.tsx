@@ -29,17 +29,82 @@ function shortAddr(addr: string) {
   return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
-function formatAge(timestamp: number | string): string {
+function formatAge(timestamp: number | string, currentTime: number): string {
   try {
-    const date = typeof timestamp === 'string' ? new Date(timestamp) : new Date(timestamp);
-    const now = Date.now();
-    const diff = now - date.getTime();
+    let date: Date;
     
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    const months = Math.floor(diff / 2592000000);
-    const years = Math.floor(diff / 31536000000);
+    if (typeof timestamp === 'string') {
+      // Handle different string formats
+      if (timestamp.includes('T') || timestamp.includes(' ')) {
+        // ISO string format
+        date = new Date(timestamp);
+      } else if (!isNaN(Number(timestamp))) {
+        // Numeric string (could be seconds or milliseconds)
+        const num = Number(timestamp);
+        // If it's in seconds (less than year 2001), convert to milliseconds
+        date = new Date(num < 1000000000 ? num * 1000 : num);
+      } else {
+        // Try parsing as date
+        date = new Date(timestamp);
+      }
+    } else {
+      // Numeric timestamp
+      // If it's in seconds (less than year 2001), convert to milliseconds
+      date = new Date(timestamp < 1000000000 ? timestamp * 1000 : timestamp);
+    }
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid timestamp:', timestamp);
+      return 'Unknown';
+    }
+    
+    const diff = currentTime - date.getTime();
+    
+    // TEMPORARY FIX: Handle timezone mismatch by adjusting for common timezone differences
+    // If the difference is negative (future date), try adjusting for timezone
+    let adjustedDiff = diff;
+    if (diff < 0) {
+      // Common timezone adjustments (in milliseconds)
+      const timezoneAdjustments = [
+        6 * 60 * 60 * 1000,  // +6 hours (common backend timezone)
+        5 * 60 * 60 * 1000,  // +5 hours
+        7 * 60 * 60 * 1000,  // +7 hours
+        8 * 60 * 60 * 1000,  // +8 hours
+      ];
+      
+      for (const adjustment of timezoneAdjustments) {
+        const testDiff = diff + adjustment;
+        if (testDiff > 0) {
+          adjustedDiff = testDiff;
+          console.log('Applied timezone adjustment:', {
+            timestamp,
+            originalDiff: diff,
+            adjustment: adjustment / (60 * 60 * 1000) + ' hours',
+            adjustedDiff: adjustedDiff
+          });
+          break;
+        }
+      }
+    }
+    
+    const minutes = Math.floor(adjustedDiff / 60000);
+    const hours = Math.floor(adjustedDiff / 3600000);
+    const days = Math.floor(adjustedDiff / 86400000);
+    const months = Math.floor(adjustedDiff / 2592000000);
+    const years = Math.floor(adjustedDiff / 31536000000);
+    
+    // If still negative after adjustments, show as "Just now"
+    if (adjustedDiff < 0) {
+      console.warn('Future timestamp detected (even after timezone adjustment):', {
+        timestamp,
+        currentTime: new Date(currentTime).toISOString(),
+        tradeTime: date.toISOString(),
+        originalDiff: diff,
+        adjustedDiff: adjustedDiff
+      });
+      return 'Just now';
+    }
     
     if (years > 0) return `${years}y`;
     if (months > 0) return `${months}mo`;
@@ -48,6 +113,7 @@ function formatAge(timestamp: number | string): string {
     if (minutes > 0) return `${minutes}m`;
     return 'Just now';
   } catch (error) {
+    console.warn('Error formatting age:', error, 'for timestamp:', timestamp);
     return 'Unknown';
   }
 }
@@ -61,7 +127,17 @@ const Activity: React.FC<ActivityProps> = ({
   isCacheValid
 }) => {
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
+  const [currentTime, setCurrentTime] = useState(Date.now());
   const router = useRouter();
+  
+  // Update current time every minute to refresh age calculations
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 60000); // Update every minute
+    
+    return () => clearInterval(interval);
+  }, []);
   
   // Initialize local metadata from cache if available
   useEffect(() => {
@@ -267,12 +343,72 @@ const Activity: React.FC<ActivityProps> = ({
               const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
               
               // Calculate age based on trade time
-              const age = formatAge(trade.tradeTime || trade.createdAt);
+              // Since tradeTime only contains time (e.g., "15:04:16") without date,
+              // we'll use createdAt which has the full timestamp
+              // TODO: Backend should store full timestamp in tradeTime field
+              const timestamp = trade.createdAt;
+              const age = formatAge(timestamp, currentTime);
+              
+              // Debug logging for age calculation
+              console.log('Age calculation debug:', {
+                tokenAddress: trade.tokenAddress,
+                tradeTime: trade.tradeTime,
+                createdAt: trade.createdAt,
+                timestamp: timestamp,
+                age: age,
+                currentTime: new Date().toISOString()
+              });
+              
+              // Debug backend data inconsistency for same token
+              console.log('Backend data analysis:', {
+                tokenAddress: trade.tokenAddress,
+                type: trade.type,
+                marketCap: trade.marketCap,
+                tokenAmount: trade.tokenAmount,
+                usdValue: trade.usdValue,
+                solAmount: trade.solAmount,
+                transactionHash: trade.transactionHash
+              });
               
               // Format market cap
-              const marketCapValue = typeof trade.marketCap === 'string' 
+              // Handle inconsistent market cap units from backend
+              let marketCapValue = typeof trade.marketCap === 'string' 
                 ? parseFloat(trade.marketCap) 
                 : trade.marketCap;
+              
+              // TEMPORARY FIX: For same token, use the highest market cap value
+              // This addresses backend inconsistency where same token has different market caps for buy/sell
+              const sameTokenTrades = trades.filter(t => t.tokenAddress === trade.tokenAddress);
+              const marketCaps = sameTokenTrades
+                .map(t => typeof t.marketCap === 'string' ? parseFloat(t.marketCap) : t.marketCap)
+                .filter(mc => mc && mc > 0);
+              
+              if (marketCaps.length > 0) {
+                const maxMarketCap = Math.max(...marketCaps);
+                if (maxMarketCap > marketCapValue) {
+                  console.log('Using max market cap for consistency:', {
+                    tokenAddress: trade.tokenAddress,
+                    originalMarketCap: marketCapValue,
+                    maxMarketCap: maxMarketCap,
+                    allMarketCaps: marketCaps
+                  });
+                  marketCapValue = maxMarketCap;
+                }
+              }
+              
+              // If market cap is still suspiciously low (< $1), show "N/A"
+              if (marketCapValue && marketCapValue < 1) {
+                console.warn('Suspiciously low market cap detected:', {
+                  tokenAddress: trade.tokenAddress,
+                  type: trade.type,
+                  marketCap: trade.marketCap,
+                  marketCapValue: marketCapValue,
+                  usdValue: trade.usdValue
+                });
+                
+                marketCapValue = null;
+              }
+              
               const formattedMarketCap = marketCapValue ? `$${formatSmartNumber(marketCapValue)}` : 'N/A';
               
               // Format amount (USD value)
@@ -280,6 +416,24 @@ const Activity: React.FC<ActivityProps> = ({
                 ? parseFloat(trade.usdValue) 
                 : trade.usdValue;
               const formattedAmount = amountValue ? `$${formatSmartNumber(amountValue)}` : 'N/A';
+              
+              // Format token amount with unit correction
+              let tokenAmountValue = typeof trade.tokenAmount === 'string' 
+                ? parseFloat(trade.tokenAmount) 
+                : trade.tokenAmount;
+              
+              // Apply same unit correction as in Positions component
+              if (tokenAmountValue && tokenAmountValue > 1000000) {
+                tokenAmountValue = tokenAmountValue / 1000000; // Scale down by 1 million
+                console.log('Token amount unit correction applied:', {
+                  tokenAddress: trade.tokenAddress,
+                  type: trade.type,
+                  originalAmount: trade.tokenAmount,
+                  correctedAmount: tokenAmountValue
+                });
+              }
+              
+              const formattedTokenAmount = tokenAmountValue ? formatSmartNumber(tokenAmountValue) : 'N/A';
               
               return (
                 <div 
@@ -363,11 +517,7 @@ const Activity: React.FC<ActivityProps> = ({
                   <div className="flex flex-col justify-center">
                     <div className="font-medium text-white text-sm">{formattedAmount}</div>
                     <div className="text-xs text-neutral-400">
-                      {formatSmartNumber(
-                        typeof trade.tokenAmount === 'string' 
-                          ? parseFloat(trade.tokenAmount) 
-                          : trade.tokenAmount
-                      )} tokens
+                      {formattedTokenAmount} tokens
                     </div>
                   </div>
                   <div className="flex items-center text-neutral-300 text-sm">
