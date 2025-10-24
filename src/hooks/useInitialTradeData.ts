@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { rollingTradeCache } from '../utils/rollingTradeCache';
 
 interface TradeData {
   pair_address: string;
@@ -198,25 +199,48 @@ export default function useInitialTradeData(
       setLoading(true);
       setError(null);
 
-      // Step 1: Check cache first (instant if available)
+      // Step 0: Check rolling cache first (INSTANT - 0ms for pulse tokens)
+      console.log('[useInitialTradeData] Checking cache for:', { pairAddress, tokenAddress });
+
+      if (tokenAddress) {
+        const rollingCached = rollingTradeCache.getCachedTradeData(tokenAddress);
+        if (rollingCached && mounted) {
+          console.log('[useInitialTradeData] 🚀 INSTANT LOAD from rolling cache');
+          setData({
+            trades: rollingCached.trades,
+            stats: rollingCached.stats ? { timeframes: rollingCached.stats } : null,
+            recentTrades: rollingCached.trades,
+          });
+          setIsFromCache(true);
+          setLoading(false);
+          // Don't fetch fresh data - rolling cache is already fresh
+          return;
+        } else {
+          console.log('[useInitialTradeData] Rolling cache returned null, checking localStorage cache...');
+        }
+      } else {
+        console.log('[useInitialTradeData] No tokenAddress provided, skipping rolling cache');
+      }
+
+      // Step 1: Check localStorage cache (backup - 1ms)
       const cached = getCachedData(pairAddress);
       if (cached && mounted) {
-        console.log('[useInitialTradeData] Displaying cached data');
+        console.log('[useInitialTradeData] Displaying localStorage cached data');
         setData(cached);
         setIsFromCache(true);
         setLoading(false);
       }
 
-      // Step 2: Fetch fresh data (even if cached, to update)
+      // Step 2: Fetch fresh data if not in rolling cache
       try {
         const freshData = await fetchData(pairAddress, tokenAddress);
-        
+
         if (mounted) {
           setData(freshData);
           setIsFromCache(false);
           setLoading(false);
           setError(null);
-          
+
           // Cache the fresh data only if it has trades
           if (freshData.trades && freshData.trades.length > 0) {
             setCachedData(pairAddress, freshData);

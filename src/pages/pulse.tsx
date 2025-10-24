@@ -14,6 +14,7 @@ import { useCachedPulseTokens, useCachedLaunchpadData } from '../hooks/useCached
 // DISABLED: Using HTTP polling instead for real-time data
 // import { useCachedFinalStretchTokens, useCachedMigratedTokens } from '../hooks/useCachedTokensAdditional';
 import { env } from '~/env';
+import { rollingTradeCache } from '../utils/rollingTradeCache';
 
 interface LaunchpadToken {
   mint: string;
@@ -125,7 +126,12 @@ export default function PulsePage() {
         const parsed = JSON.parse(cached);
         const now = Date.now();
         if (parsed.data && parsed.timestamp && (now - parsed.timestamp < 5 * 60 * 1000)) {
-          return parsed.data;
+          // CRITICAL: Normalize cached data on load
+          const normalizedData = parsed.data.map((token: any) => ({
+            ...token,
+            pair_address: token.pair_address || token.migrated_pool_address
+          }));
+          return normalizedData;
         }
       }
     } catch {}
@@ -247,12 +253,18 @@ export default function PulsePage() {
         return filtered;
       });
 
+      // CRITICAL: Normalize token - ensure pair_address is set
+      const normalizedToken = {
+        ...token,
+        pair_address: token.pair_address || token.migrated_pool_address
+      };
+
       // Add to MIGRATED column
       setHttpMigrated(prev => {
         const existingMints = new Set(prev.map(t => t.mint));
-        if (!existingMints.has(token.mint)) {
-          console.log(`[Pulse] ⚡ INSTANT migrated token added:`, token.mint);
-          const merged = [token, ...prev];
+        if (!existingMints.has(normalizedToken.mint)) {
+          console.log(`[Pulse] ⚡ INSTANT migrated token added:`, normalizedToken.mint);
+          const merged = [normalizedToken, ...prev];
           try {
             localStorage.setItem('cached_pulse_migrated', JSON.stringify({
               data: merged,
@@ -364,12 +376,20 @@ export default function PulsePage() {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            setHttpMigrated(data as any[]);
+            // CRITICAL: Normalize data - ensure all migrated tokens have pair_address
+            // Backend sometimes returns migrated_pool_address but not pair_address
+            const normalizedData = data.map(token => ({
+              ...token,
+              pair_address: token.pair_address || token.migrated_pool_address
+            }));
+
+            console.log(`[Migrated] Immediate poll got ${data.length} tokens, normalized ${normalizedData.filter(t => !data.find((d: any) => d.mint === t.mint)?.pair_address).length} missing pair_address fields`);
+
+            setHttpMigrated(normalizedData as any[]);
             setHttpMigratedTick((t) => t + 1);
-            console.log(`[Migrated] Immediate poll got ${data.length} tokens`);
-            // Cache the data
+            // Cache the normalized data
             try {
-              localStorage.setItem('cached_pulse_migrated', JSON.stringify({ data, timestamp: Date.now() }));
+              localStorage.setItem('cached_pulse_migrated', JSON.stringify({ data: normalizedData, timestamp: Date.now() }));
             } catch {}
           }
         }
@@ -397,12 +417,18 @@ export default function PulsePage() {
           if (Array.isArray(data)) {
             // Only replace when we have non-empty fresh data to avoid flicker
             if (data.length > 0) {
-              setHttpMigrated(data as any[]);
+              // CRITICAL: Normalize data - ensure all migrated tokens have pair_address
+              const normalizedData = data.map(token => ({
+                ...token,
+                pair_address: token.pair_address || token.migrated_pool_address
+              }));
+
+              setHttpMigrated(normalizedData as any[]);
               setHttpMigratedTick((t) => t + 1);
-              // Cache to localStorage for next page load
+              // Cache normalized data to localStorage for next page load
               try {
                 localStorage.setItem('cached_pulse_migrated', JSON.stringify({
-                  data: data,
+                  data: normalizedData,
                   timestamp: Date.now()
                 }));
               } catch {}
@@ -842,6 +868,45 @@ export default function PulsePage() {
     }
   }, [newPairsData, preloadImages]);
 
+  // Sync rolling trade cache with visible pulse tokens
+  useEffect(() => {
+    const syncCache = async () => {
+      try {
+        // Only sync if we have data
+        if (!newPairsData || !finalStretchData || !migratedData) {
+          console.log('[Pulse] Waiting for data before syncing cache...');
+          return;
+        }
+
+        console.log('[Pulse] Starting cache sync with:', {
+          newPairs: newPairsData.length,
+          finalStretch: finalStretchData.length,
+          migrated: migratedData.length
+        });
+
+        await rollingTradeCache.syncWithPulseTokens(
+          newPairsData.slice(0, 30),
+          finalStretchData.slice(0, 30),
+          migratedData.slice(0, 30)
+        );
+      } catch (error) {
+        console.error('[Pulse] Failed to sync rolling cache:', error);
+      }
+    };
+
+    syncCache();
+  }, [newPairsData, finalStretchData, migratedData]);
+
+  // Log cache stats periodically for debugging
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const stats = rollingTradeCache.getStats();
+      console.log(`[RollingCache Stats] ${stats.size}/${stats.maxSize} tokens (${stats.utilization.toFixed(1)}% full)`);
+    }, 60000); // Every 60 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Keep last non-empty lists to prevent flicker when WS/HTTP blips (guard against needless updates)
   const [lastNonEmptyNewPairs, setLastNonEmptyNewPairs] = useState<any[]>([]);
   const [lastNonEmptyMigrated, setLastNonEmptyMigrated] = useState<any[]>([]);
@@ -1023,7 +1088,11 @@ export default function PulsePage() {
 
   const enrichedNewPairsToShow = useMemo(() => enrichWithMarketData(newPairsToShow as any), [enrichWithMarketData, newPairsToShow]);
   const enrichedFinalStretch = useMemo(() => enrichWithMarketData(finalStretchToShow as any), [enrichWithMarketData, finalStretchToShow]);
-  const enrichedMigrated = useMemo(() => enrichWithMarketData(migratedToShow as any), [enrichWithMarketData, migratedToShow]);
+  const enrichedMigrated = useMemo(() => {
+    const enriched = enrichWithMarketData(migratedToShow as any);
+    console.log(`[Pulse] enrichedMigrated count: ${enriched.length}, migratedToShow: ${(migratedToShow as any[])?.length || 0}, migratedData: ${migratedData?.length || 0}`);
+    return enriched;
+  }, [enrichWithMarketData, migratedToShow, migratedData]);
 
   if (typeof window !== 'undefined') {
     try {

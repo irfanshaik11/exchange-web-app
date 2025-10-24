@@ -4124,13 +4124,14 @@ const PulseTable = React.memo(function PulseTable({
             .map((token, idx) => {
               const pairAddress = (token as any)?.pair_address;
 
-              // Build query params for optimistic UI
+              // Build query params for optimistic UI + cache lookup
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || '',
                 _symbol: (token as any)?.symbol || '',
                 _price: String((token as any)?.price_usd || (token as any)?.priceUsd || ''),
-                _mcap: String((token as any)?.market_cap_usd || (token as any)?.marketCapUsd || ''),
-                _image: (token as any)?.image || (token as any)?.uri || '',
+                _mcap: String((token as any)?.market_cap_usd || (token as any)?.marketCapUSD || ''),
+                _image: (token as any)?.logo || (token as any)?.image || (token as any)?.uri || '',
+                _mint: (token as any)?.mint || '', // CRITICAL: Required for cache lookup
               }).toString();
 
               return (
@@ -4144,6 +4145,8 @@ const PulseTable = React.memo(function PulseTable({
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
+                  // Prefetch trade page for instant navigation
+                  router.prefetch(`/trade/${pairAddress}?${queryParams}`);
                   // Show and position the popup
                   const popup = e.currentTarget.querySelector('.status-popup') as HTMLElement;
                   if (popup) {
