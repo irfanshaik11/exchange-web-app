@@ -1,6 +1,28 @@
 @import "tailwindcss";
 @import './interstate.css';
 
+/* Prevent black screen flash */
+html, body {
+  background-color: #101114 !important;
+  color: white !important;
+}
+
+/* Instant page rendering */
+#__next {
+  background-color: #101114;
+  min-height: 100vh;
+}
+
+/* Remove any loading transitions */
+* {
+  transition: none !important;
+}
+
+/* Prevent layout shift */
+.layout-stable {
+  contain: layout;
+}
+
 /* make the scrollbar hidden */
 ::-webkit-scrollbar {
   display: none;

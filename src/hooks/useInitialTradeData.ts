@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { env } from '../env';
 
 interface TradeData {
   pair_address: string;
@@ -35,14 +36,24 @@ interface UseInitialTradeDataResult {
   error: string | null;
   isFromCache: boolean;
   refetch: () => void;
+  cacheStats: CacheStats;
+  cleanupCache: () => void;
 }
 
 const CACHE_KEY_PREFIX = 'trade_data_';
 const CACHE_EXPIRY_MS = 30000; // 30 seconds
+const BACKGROUND_REFRESH_THRESHOLD = 0.8; // Refresh when 80% of TTL has passed
 
 interface CachedData {
   data: InitialTradeDataResponse;
   timestamp: number;
+  version: number; // For cache invalidation
+}
+
+interface CacheStats {
+  hits: number;
+  misses: number;
+  backgroundRefreshes: number;
 }
 
 /**
@@ -58,7 +69,11 @@ export default function useInitialTradeData(
   const [error, setError] = useState<string | null>(null);
   const [isFromCache, setIsFromCache] = useState(false);
 
-  // Get cached data from localStorage
+  // Enhanced cache management with background refresh
+  const cacheStatsRef = useRef<CacheStats>({ hits: 0, misses: 0, backgroundRefreshes: 0 });
+  const backgroundRefreshPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
+
+  // Get cached data from localStorage with enhanced logic
   const getCachedData = useCallback((pair: string): InitialTradeDataResponse | null => {
     try {
       const cacheKey = `${CACHE_KEY_PREFIX}${pair}`;
@@ -70,26 +85,72 @@ export default function useInitialTradeData(
         
         // Return cached data if not expired
         if (age < CACHE_EXPIRY_MS) {
+          cacheStatsRef.current.hits++;
           console.log(`[useInitialTradeData] Cache hit for ${pair} (age: ${Math.round(age / 1000)}s)`);
+          
+          // Trigger background refresh if needed
+          if (age > CACHE_EXPIRY_MS * BACKGROUND_REFRESH_THRESHOLD) {
+            triggerBackgroundRefresh(pair, tokenAddress);
+          }
+          
           return parsed.data;
         } else {
           console.log(`[useInitialTradeData] Cache expired for ${pair}`);
           localStorage.removeItem(cacheKey);
         }
       }
+      
+      cacheStatsRef.current.misses++;
     } catch (err) {
       console.warn('[useInitialTradeData] Failed to read cache:', err);
+      cacheStatsRef.current.misses++;
     }
     return null;
+  }, [tokenAddress]);
+
+  // Background refresh function
+  const triggerBackgroundRefresh = useCallback(async (pair: string, token?: string) => {
+    const cacheKey = `${CACHE_KEY_PREFIX}${pair}`;
+    
+    // Avoid duplicate background refreshes
+    if (backgroundRefreshPromisesRef.current.has(cacheKey)) {
+      return;
+    }
+
+    const refreshPromise = (async () => {
+      try {
+        console.log(`[useInitialTradeData] Background refresh for ${pair}`);
+        cacheStatsRef.current.backgroundRefreshes++;
+        
+        const freshData = await fetchData(pair, token);
+        
+        // Update cache with fresh data
+        const cached: CachedData = {
+          data: freshData,
+          timestamp: Date.now(),
+          version: Date.now(), // Use timestamp as version
+        };
+        localStorage.setItem(cacheKey, JSON.stringify(cached));
+        
+        console.log(`[useInitialTradeData] Background refresh completed for ${pair}`);
+      } catch (err) {
+        console.warn(`[useInitialTradeData] Background refresh failed for ${pair}:`, err);
+      } finally {
+        backgroundRefreshPromisesRef.current.delete(cacheKey);
+      }
+    })();
+
+    backgroundRefreshPromisesRef.current.set(cacheKey, refreshPromise);
   }, []);
 
-  // Save data to cache
+  // Save data to cache with version
   const setCachedData = useCallback((pair: string, dataToCache: InitialTradeDataResponse) => {
     try {
       const cacheKey = `${CACHE_KEY_PREFIX}${pair}`;
       const cached: CachedData = {
         data: dataToCache,
         timestamp: Date.now(),
+        version: Date.now(),
       };
       localStorage.setItem(cacheKey, JSON.stringify(cached));
       console.log(`[useInitialTradeData] Cached data for ${pair}`);
@@ -100,7 +161,7 @@ export default function useInitialTradeData(
 
   // Fetch fresh data from API
   const fetchData = useCallback(async (pair: string, token?: string) => {
-    const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+    const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL;
     
     try {
       console.log(`[useInitialTradeData] Fetching fresh data for ${pair}`);
@@ -110,7 +171,7 @@ export default function useInitialTradeData(
         fetch(`${baseUrl}/v1/trade/view?pair_address=${pair}`, {
           headers: {
             'accept': 'application/json',
-            'X-API-Key': process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
+            'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
           },
         })
       ];
@@ -121,7 +182,7 @@ export default function useInitialTradeData(
           fetch(`${baseUrl}/v1/ws/token-stats?pair_address=${pair}&token_address=${token}`, {
             headers: {
               'accept': 'application/json',
-              'X-API-Key': process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
+              'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
             },
           })
         );
@@ -277,12 +338,45 @@ export default function useInitialTradeData(
       });
   }, [pairAddress, tokenAddress, fetchData, setCachedData]);
 
+  // Cache cleanup and stats
+  const cleanupCache = useCallback(() => {
+    try {
+      const keys = Object.keys(localStorage).filter(key => key.startsWith(CACHE_KEY_PREFIX));
+      const now = Date.now();
+      
+      keys.forEach(key => {
+        const cached = localStorage.getItem(key);
+        if (cached) {
+          try {
+            const parsed: CachedData = JSON.parse(cached);
+            if (now - parsed.timestamp > CACHE_EXPIRY_MS) {
+              localStorage.removeItem(key);
+            }
+          } catch {
+            localStorage.removeItem(key);
+          }
+        }
+      });
+      
+      console.log(`[useInitialTradeData] Cache cleanup completed. Stats:`, cacheStatsRef.current);
+    } catch (err) {
+      console.warn('[useInitialTradeData] Cache cleanup failed:', err);
+    }
+  }, []);
+
+  // Cleanup cache on mount
+  useEffect(() => {
+    cleanupCache();
+  }, [cleanupCache]);
+
   return {
     data,
     loading,
     error,
     isFromCache,
     refetch,
+    cacheStats: cacheStatsRef.current,
+    cleanupCache,
   };
 }
 

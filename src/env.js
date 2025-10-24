@@ -25,6 +25,7 @@ export const env = createEnv({
       z.boolean(),
     ),
     NEXT_PUBLIC_CODEX_API_KEY: z.string().optional(),
+    NEXT_PUBLIC_BACKEND_API_KEY: z.string().optional(),
     NEXT_PUBLIC_ANALYTICS_URL: z.string().url().optional(),
 
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
@@ -43,6 +44,7 @@ export const env = createEnv({
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED:
       process.env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED,
     NEXT_PUBLIC_CODEX_API_KEY: process.env.NEXT_PUBLIC_CODEX_API_KEY,
+    NEXT_PUBLIC_BACKEND_API_KEY: process.env.NEXT_PUBLIC_BACKEND_API_KEY,
     NEXT_PUBLIC_ANALYTICS_URL: process.env.NEXT_PUBLIC_ANALYTICS_URL,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },

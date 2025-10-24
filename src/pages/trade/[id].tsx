@@ -15,27 +15,17 @@ import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
 import useInitialTradeData from "../../hooks/useInitialTradeData";
 import { useQuickBuyQueryParams } from "../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../utils/queryParams";
+import { useTradePagePrefetch } from "../../hooks/usePrefetch";
+import { useComponentCache } from "../../hooks/useComponentCache";
 import dynamic from 'next/dynamic';
 
 // Lazy load heavy components to reduce initial bundle size
 const BirdeyeChart = dynamic(() => import('../../components/BirdeyeChart'), { ssr: false });
 const BackendOHLCChart = dynamic(() => import('../../components/BackendOHLCChart'), { ssr: false });
-const CodexTrades = dynamic(() => import('../../components/trade/CodexTrades'), { 
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center h-32 text-gray-400">Loading trades...</div>
-});
-const CodexTopTraders = dynamic(() => import('../../components/trade/CodexTopTraders'), { 
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center h-32 text-gray-400">Loading traders...</div>
-});
-const CodexDevTokens = dynamic(() => import('../../components/trade/CodexDevTokens'), { 
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center h-32 text-gray-400">Loading tokens...</div>
-});
-const CodexHolders = dynamic(() => import('../../components/trade/CodexHolders'), { 
-  ssr: false,
-  loading: () => <div className="flex items-center justify-center h-32 text-gray-400">Loading holders...</div>
-});
+const CodexTrades = dynamic(() => import('../../components/trade/CodexTrades'), { ssr: false });
+const CodexTopTraders = dynamic(() => import('../../components/trade/CodexTopTraders'), { ssr: false });
+const CodexDevTokens = dynamic(() => import('../../components/trade/CodexDevTokens'), { ssr: false });
+const CodexHolders = dynamic(() => import('../../components/trade/CodexHolders'), { ssr: false });
 /* ---------- AXIOM palette ---------- */
 const AX = {
   bg: "#101114",
@@ -114,13 +104,21 @@ export default function TradePage() {
   const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
     useSingleTokenPolling(typeof id === "string" ? id : undefined);
 
-  // Pre-fetch initial trade data with caching for instant/fast loading
+  // Pre-fetch initial trade data with enhanced caching for instant/fast loading
   const { 
     data: initialTradeData, 
     loading: initialDataLoading, 
     error: initialDataError,
-    isFromCache 
+    isFromCache,
+    cacheStats,
+    cleanupCache
   } = useInitialTradeData(resolvedPairAddress, token?.mint);
+
+  // Intelligent prefetching for related data
+  const { prefetchTradeData, getCachedData, getStats: getPrefetchStats } = useTradePagePrefetch(
+    resolvedPairAddress,
+    token?.mint
+  );
 
   // Debug: Log the pair addresses and initial data status
   useEffect(() => {
@@ -140,9 +138,11 @@ export default function TradePage() {
         hasStats: !!initialTradeData.stats,
         isFromCache,
         loading: initialDataLoading,
+        cacheStats,
+        prefetchStats: getPrefetchStats(),
       });
     }
-  }, [initialTradeData, isFromCache, initialDataLoading]);
+  }, [initialTradeData, isFromCache, initialDataLoading, cacheStats, getPrefetchStats]);
 
   // Fetch correct token data from database (same as search modal)
   const [correctTokenData, setCorrectTokenData] = useState<any>(null);
@@ -199,11 +199,14 @@ export default function TradePage() {
     fetchCorrectTokenData();
   }, [token?.mint]);
 
-  // Calculate optimal OHLC interval and timeframe based on CORRECT token age
-  const getOHLCParams = useCallback(() => {
-    // Use correct token data if available, otherwise fall back to trade service data
-    const tokenForAge = correctTokenData || token;
-    const createdAt = tokenForAge?.created_at || tokenForAge?.createdAt || (tokenForAge as any)?.CreatedAt;
+  // Calculate optimal OHLC interval and timeframe based on CORRECT token age (cached)
+  const getOHLCParams = useComponentCache(
+    'ohlc-params',
+    [correctTokenData, token, isLoadingCorrectData],
+    () => {
+      // Use correct token data if available, otherwise fall back to trade service data
+      const tokenForAge = correctTokenData || token;
+      const createdAt = tokenForAge?.created_at || tokenForAge?.createdAt || (tokenForAge as any)?.CreatedAt;
     
     if (!createdAt) {
       // Default for tokens without creation time - good default that works for most tokens
@@ -272,9 +275,10 @@ export default function TradePage() {
     else {
       return { interval: '7d' as const, timeframe: '365d' as const, optimize: true };
     }
-  }, [correctTokenData, token, isLoadingCorrectData]);
+    }
+  );
 
-  const ohlcParams = getOHLCParams();
+  const ohlcParams = getOHLCParams;
 
   // Debug: Log OHLC params calculation
   useEffect(() => {
@@ -518,7 +522,7 @@ export default function TradePage() {
   }
 
   if (pollingLoading) {
-    return <div className="mt-20 text-center text-2xl" style={{ color: AX.muted }}>Loading...</div>;
+    return null;
   }
 
   if (!token) {
