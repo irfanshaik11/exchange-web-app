@@ -236,7 +236,32 @@ const MyApp: AppType = ({ Component, pageProps }) => {
               </RainbowKitProvider>
             </QueryClientProvider>
           </WagmiProvider>
-          <Toaster position="top-right" />
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#1E1F26',
+                color: '#E6E7EA',
+                border: '1px solid #4B5563',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                maxWidth: '400px',
+                zIndex: 9999
+              },
+              success: {
+                style: {
+                  border: '1px solid #70E0B0',
+                },
+              },
+              error: {
+                style: {
+                  border: '1px solid #ff6b6b',
+                },
+              },
+            }}
+          />
         </MobileBlocker>
       </div>
     </>
