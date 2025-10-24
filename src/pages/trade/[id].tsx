@@ -53,7 +53,7 @@ const AX = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
 
   // Optimistic token data from query params for instant display
   const optimisticToken = React.useMemo(() => {
@@ -74,6 +74,7 @@ export default function TradePage() {
     id,
     idType: typeof id,
     isString: typeof id === "string",
+    mintFromQuery: _mint,
     optimisticToken
   });
 
@@ -115,12 +116,14 @@ export default function TradePage() {
     useSingleTokenPolling(typeof id === "string" ? id : undefined);
 
   // Pre-fetch initial trade data with caching for instant/fast loading
-  const { 
-    data: initialTradeData, 
-    loading: initialDataLoading, 
+  // Use mint from query params (instant) or wait for token polling (slower)
+  const mintAddress = (_mint as string) || token?.mint;
+  const {
+    data: initialTradeData,
+    loading: initialDataLoading,
     error: initialDataError,
-    isFromCache 
-  } = useInitialTradeData(resolvedPairAddress, token?.mint);
+    isFromCache
+  } = useInitialTradeData(resolvedPairAddress, mintAddress);
 
   // Debug: Log the pair addresses and initial data status
   useEffect(() => {
