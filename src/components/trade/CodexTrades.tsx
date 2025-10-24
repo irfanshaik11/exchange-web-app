@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useCodexTradesWebSocket from '../../hooks/useCodexTradesWebSocket';
-import useTradeEventsWebSocket from '../../hooks/useTradeEventsWebSocket';
+import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
 import type { Token } from '~/utils/db';
 
 interface CodexTradesProps {
@@ -93,19 +93,21 @@ function formatMarketCap(marketCapUsd: number) {
 const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
   const { trades: codexTrades, isConnected: codexConnected, error: codexError, isLoading: codexLoading } = useCodexTradesWebSocket(token.mint, initialTrades);
   
-  // WebSocket hook for real-time trade events
+  // Optimized WebSocket hook for real-time trade events with enhanced caching
   const {
     isConnected: wsConnected,
     loading: wsLoading,
     error: wsError,
     trades: wsTrades,
     getTradeStats,
-    fetchMoreTrades,
-  } = useTradeEventsWebSocket({
+    getMemoryStats,
+  } = useOptimizedTradeEventsWebSocket({
     pairAddress: token.pair_address,
     enabled: true,
     initialTrades: initialTrades,
     tokenDecimals: token.decimals,
+    maxTrades: 1000, // Limit memory usage
+    enableDeduplication: true, // Remove duplicate trades
   });
 
   // Use WebSocket trades if available, otherwise fallback to Codex trades

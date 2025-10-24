@@ -38,7 +38,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (user?.publicKey) {
       try {
         const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(user.publicKey)}`);
+        
+        if (!response.ok) {
+          console.warn('Failed to fetch SOL balance:', response.status, response.statusText);
+          return;
+        }
+        
         const data = await response.json();
+        
+        // Check if the response has the expected structure
+        if (!data || !data.data || typeof data.data.balance === 'undefined') {
+          console.warn('Invalid balance response structure:', data);
+          return;
+        }
+        
         const newBalance = data.data.balance;
         const newUsdBalance = data.data.usdBalance;
         
@@ -115,7 +128,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
         try {
           // First, get the current balance and set it as the last notified balance
           const response = await fetch(`/api/get-sol-bal?address=${encodeURIComponent(user.publicKey)}`);
+          
+          if (!response.ok) {
+            console.warn('Failed to fetch SOL balance:', response.status, response.statusText);
+            return;
+          }
+          
           const data = await response.json();
+          
+          // Check if the response has the expected structure
+          if (!data || !data.data || typeof data.data.balance === 'undefined') {
+            console.warn('Invalid balance response structure:', data);
+            return;
+          }
+          
           const currentBalance = data.data.balance;
           const currentUsdBalance = data.data.usdBalance;
           

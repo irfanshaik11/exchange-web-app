@@ -186,8 +186,8 @@ export default function useTradeEventsWebSocket({
     }
 
     try {
-      const baseUrl = (process.env.NEXT_PUBLIC_WEBSOCKET_URL || '').replace(/^https?:\/\//, '');
-      const protocol = process.env.NEXT_PUBLIC_WEBSOCKET_URL?.startsWith('https') ? 'wss' : 'ws';
+      const baseUrl = (env.NEXT_PUBLIC_WEBSOCKET_URL || '').replace(/^https?:\/\//, '');
+      const protocol = env.NEXT_PUBLIC_WEBSOCKET_URL?.startsWith('https') ? 'wss' : 'ws';
       const wsUrl = `${protocol}://${baseUrl}/v1/ws/trade-events?pair=${pairAddress}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -346,7 +346,7 @@ export default function useTradeEventsWebSocket({
       
       // Make multiple API calls to get all available trades
       const allTrades: any[] = [];
-      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+      const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL;
       
       // Try different endpoints and parameters to get more data
       const endpoints = [

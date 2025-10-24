@@ -8,9 +8,17 @@ import "./src/env.js";
 const config = {
   reactStrictMode: true,
   output: "standalone",
-  // Disable error overlay in development (errors still logged to console)
+  // Disable error overlay and loading indicators in development
   devIndicators: {
     position: "bottom-right",
+  },
+  // Optimize package imports for faster loading
+  experimental: {
+    optimizePackageImports: ['react-icons'],
+  },
+  // Disable page transitions and loading indicators
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
   },
   // Turbopack configuration
   turbopack: {
