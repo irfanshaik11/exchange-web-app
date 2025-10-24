@@ -260,20 +260,35 @@ export default function Home() {
 
   // QUICK BUY handler
   async function handleQuickBuy(token: Token) {
+    console.log("🎯 handleQuickBuy called for token:", token.symbol);
+    
     if (!user) {
+      console.log("❌ No user found");
       return;
     }
     try {
       const poolType = getPoolTypeFromToken(token);
-      console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
+      console.log(`🔍 Quick Buy ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
       
+      const settings = presets[activePreset].quickBuySettings;
       const data = await tradeBuy({
-        poolAddress: token.pair_address,
-        baseMint: token.mint, // Use token.mint as baseMint
-        quoteMint: SOL_MINT_ADDRESS, // Always SOL
+        poolAddress: effectivePoolAddress,
+        baseMint: token.mint,
+        quoteMint: SOL_MINT_ADDRESS,
         amount: quickBuyAmount,
-        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
+        mevProtection: settings.mevMode === "off" ? 0 : 1,
         poolType: poolType,
+        originalPairAddress: token.pair_address, // Original pair address from token-service
+        // Preset trading parameters
+        slippage: settings.maxSlippage || 0.4,
+        priorityFee: settings.priority || 0.0001,
+        bribe: settings.bribe || 0,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee || false,
+        maxFee: settings.maxFee || 0,
+        rpc: settings.rpc,
         // Debugging metadata
         tokenName: token.name,
         tokenSymbol: token.symbol,
@@ -294,6 +309,13 @@ export default function Home() {
       }
     } catch (e: any) {
       console.error('Quick Buy error:', e);
+      console.error('Error details:', {
+        message: e?.message,
+        code: e?.code,
+        status: e?.status,
+        details: e?.details,
+        fullError: e
+      });
       
       // Handle structured API errors
       if (e instanceof ApiError) {
@@ -429,7 +451,9 @@ export default function Home() {
       <Head>
         <title>Interstate Memeboard | Discover</title>
         <meta name="description" content="Interstate dashboard" />
-        <link rel="icon" href="/favicon.ico" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=2" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
       </Head>
       <div className="min-h-screen bg-neutral-950 text-neutral-100">
         {/* Header */}
@@ -493,7 +517,23 @@ export default function Home() {
               <span className="mr-2 text-sm text-neutral-400">
                 Quick Buy
               </span>
-              <input value={quickBuyAmount} onChange={(e) => setQuickBuyAmount(e.target.value as unknown as number)} className="text-sm text-neutral-200 focus:outline-none outline-none w-12" />
+              <input 
+                value={quickBuyAmount} 
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Only allow numbers and decimal point
+                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                    setQuickBuyAmount(Number(value) || 0);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  // Prevent non-numeric characters except decimal point
+                  if (!/[0-9.]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
+                className="text-sm text-neutral-200 focus:outline-none outline-none w-12" 
+              />
               <img
                 src="https://axiom.trade/images/sol-fill.svg"
                 alt="Solana"

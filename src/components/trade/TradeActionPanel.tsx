@@ -1,18 +1,21 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { LuPencil, LuCheck } from "react-icons/lu";
 import { formatSmartNumber, type Token } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
-import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
+import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
-import { createLimitOrder, tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { createLimitOrder, tradeBuy, tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { getTradeActivityByUser } from "~/utils/functions";
 import toast from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
+// import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -76,6 +79,76 @@ const prettyAmt = (s: string) => {
   return Number(n.toFixed(6)).toString();
 };
 
+// Helper function to truncate address
+const truncateAddress = (address: string, start = 4, end = 4) => {
+  if (!address) return "";
+  if (address.length <= start + end) return address;
+  return `${address.slice(0, start)}...${address.slice(-end)}`;
+};
+
+// Helper function to copy to clipboard
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard!");
+  } catch (err) {
+    toast.error("Failed to copy");
+  }
+};
+
+// Address display component
+const AddressDisplay: React.FC<{
+  label: string;
+  address: string;
+  icon: React.ReactNode;
+  solscanUrl: string;
+  tooltip: string;
+}> = ({ label, address, icon, solscanUrl, tooltip }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await copyToClipboard(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (!address) return null;
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2 border-b border-[#2A2B33]">
+      <div className="flex items-center gap-2">
+        <div className="text-[#9CA3AF]">{icon}</div>
+        <InterstateTooltip label={tooltip}>
+          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide cursor-help">
+            {label}:
+          </span>
+        </InterstateTooltip>
+        <span className="text-[#E6E7EA] text-[11px] font-mono">
+          {truncateAddress(address)}
+        </span>
+      </div>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={handleCopy}
+          className="p-1 hover:bg-[#2A2B33] rounded transition-colors"
+          title="Copy address"
+        >
+          <FaCopy className={`w-3 h-3 ${copied ? 'text-[#70E0B0]' : 'text-[#9CA3AF]'}`} />
+        </button>
+        <a
+          href={solscanUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-1 hover:bg-[#2A2B33] rounded transition-colors"
+          title="View on Solscan"
+        >
+          <FaExternalLinkAlt className="w-3 h-3 text-[#9CA3AF]" />
+        </a>
+      </div>
+    </div>
+  );
+};
+
 const formatCompactNumber = (n: number): string => {
   if (!Number.isFinite(n)) return "0";
   const abs = Math.abs(n);
@@ -89,22 +162,93 @@ const formatCompactNumber = (n: number): string => {
   if (abs >= 1_000) {
     return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
   }
+  // For small numbers, show decimal places instead of rounding to 0
+  if (abs < 1) {
+    return n.toFixed(4).replace(/\.?0+$/, ""); // Show up to 4 decimal places, remove trailing zeros
+  }
   return Math.round(n).toString();
 };
 
+// Meteora Migration Logo Component
+const MeteoraMigrationLogo: React.FC = () => (
+  <div className="flex items-center justify-center gap-1 mb-4">
+    {/* Red Meteora Logo (left) */}
+    <div 
+      className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center relative" 
+      style={{ 
+        border: '0.5px solid #ff4662',
+        backgroundColor: 'transparent'
+      }}
+    >
+      <img 
+        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+        alt="Meteora" 
+        className="w-full h-full object-cover"
+      />
+    </div>
+    
+    {/* 3 Green Chevron Arrows */}
+    {[0, 1, 2].map((i) => (
+      <svg
+        key={i}
+        width="4"
+        height="5"
+        viewBox="0 0 4 5"
+        fill="none"
+        className="animate-pulse"
+        style={{
+          animationDelay: `${i * 0.2}s`,
+          animationDuration: '1s'
+        }}
+      >
+        <path
+          d="M0.5 0.5L3.5 2.5L0.5 4.5"
+          stroke="#22c55e"
+          strokeWidth="1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ))}
+    
+    {/* Yellow Meteora Logo (right) */}
+    <div 
+      className="w-6 h-6 rounded-full overflow-hidden flex items-center justify-center relative" 
+      style={{ 
+        border: '0.5px solid #fbbf24',
+        backgroundColor: 'transparent'
+      }}
+    >
+      <img 
+        src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+        alt="Meteora" 
+        className="w-full h-full object-cover"
+        style={{ filter: 'sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)' }}
+      />
+    </div>
+  </div>
+);
+
+interface TokenStats {
+  timeframes: {
+    [key: string]: {
+      buys: number;
+      sells: number;
+      volume: number;
+      buyVolume: number;
+      sellVolume: number;
+      change?: number;
+    };
+  };
+}
+
 interface TradeActionPanelProps {
   token: Token;
-  tradeParams?: {
-    mode: "buy" | "sell";
-    tab: "market" | "limit" | "adv";
-    timeRange: "5m" | "1h" | "12h" | "24h";
-    amount: string;
-    targetMC: string;
-    sliderPct: number;
-  };
+  tradeParams?: any; // Use any to match TradePageParams from queryParams
   setTradeParams?: (params: any) => void;
   quickBuySettings?: any;
   quickBuySide?: "buy" | "sell";
+  initialStats?: TokenStats | null; // Initial stats from REST API
 }
 
 const TradeActionPanel: React.FC<TradeActionPanelProps> = ({ 
@@ -112,7 +256,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   tradeParams: externalTradeParams,
   setTradeParams: setExternalTradeParams,
   quickBuySettings: externalQuickBuySettings,
-  quickBuySide: externalQuickBuySide
+  quickBuySide: externalQuickBuySide,
+  initialStats
 }) => {
   // Determine the pool address to use: migrated_pool_address if available, otherwise pair_address
   const effectivePoolAddress = useMemo(() => {
@@ -130,6 +275,65 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
+  const [creatorAddress, setCreatorAddress] = useState<string>("");
+
+  // High slippage warning dialog state
+  const [showSlippageWarning, setShowSlippageWarning] = useState(false);
+  const [bypassSlippageCheck, setBypassSlippageCheck] = useState(false);
+  const tradeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // When user confirms high slippage, programmatically trigger the button click
+  useEffect(() => {
+    if (bypassSlippageCheck && tradeButtonRef.current) {
+      tradeButtonRef.current.click();
+    }
+  }, [bypassSlippageCheck]);
+
+  // Position data for this token
+  const [positionData, setPositionData] = useState<{
+    bought: number;
+    boughtUsdValue: number;
+    sold: number;
+    soldUsdValue: number;
+    remaining: number;
+    remainingUsdValue: number;
+    pnl: number;
+    pnlPercentage: number;
+  } | null>(null);
+
+  // Check if this is a high bonding Meteora token that should show migration UI
+  const isMigratingToken = useMemo(() => {
+    const launchpadProtocol = token.launchpad_protocol?.toLowerCase() || '';
+    const isMeteora = launchpadProtocol.includes('meteora');
+    const bondingPct = token.bonding_pct ?? 0;
+    return isMeteora && bondingPct > 98.6;
+  }, [token.launchpad_protocol, token.bonding_pct]);
+
+  // Convert initialStats to TokenStatsData format if available
+  const convertedInitialStats = useMemo(() => {
+    if (!initialStats) return null;
+    
+    // Ensure all timeframe objects have the required 'change' property
+    const processedTimeframes: { [key: string]: { buys: number; sells: number; volume: number; buyVolume: number; sellVolume: number; change: number; } } = {};
+    
+    for (const [timeframe, data] of Object.entries(initialStats.timeframes)) {
+      processedTimeframes[timeframe] = {
+        ...data,
+        change: data.change ?? 0, // Default to 0 if change is undefined
+      };
+    }
+    
+    return {
+      success: true,
+      tokenAddress: token.mint,
+      pairAddress: effectivePoolAddress || '',
+      dataSource: 'rest-api',
+      timestamp: new Date().toISOString(),
+      data: {
+        timeframes: processedTimeframes,
+      },
+    };
+  }, [initialStats, token.mint, effectivePoolAddress]);
 
   // WebSocket hook for real-time token stats
   const {
@@ -142,6 +346,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     pairAddress: effectivePoolAddress,
     tokenAddress: token.mint,
     enabled: true,
+    initialStats: convertedInitialStats,
   });
 
   // Update internal state when external props change (only on mount)
@@ -182,6 +387,124 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const { presets: qbPresets, activePreset } = useQuickBuy();
   const { user, solBalance } = useUser();
   
+  // Calculate position data from trade activity (like Activity tab does)
+  useEffect(() => {
+    const calculatePositionFromTrades = async () => {
+      if (!user?.id || !token?.mint) {
+        const emptyData = {
+          bought: 0,
+          boughtUsdValue: 0,
+          sold: 0,
+          soldUsdValue: 0,
+          remaining: 0,
+          remainingUsdValue: 0,
+          pnl: 0,
+          pnlPercentage: 0,
+        };
+        setPositionData(emptyData);
+        return;
+      }
+      
+      try {
+        // Get all trade activity for this user (like Activity tab)
+        const trades = await getTradeActivityByUser(user.id.toString());
+        
+        console.log('🔍 TradeActionPanel - Fetched trade activity:', trades.length, 'trades');
+        console.log('🔍 TradeActionPanel - Looking for token:', token.mint);
+        
+        // Filter trades for this specific token
+        const tokenTrades = trades.filter((trade: any) => 
+          trade.tokenAddress?.toLowerCase() === token.mint?.toLowerCase()
+        );
+        
+        console.log('🔍 TradeActionPanel - Found', tokenTrades.length, 'trades for this token');
+        
+        if (tokenTrades.length > 0) {
+          // Calculate position from individual trades
+          let bought = 0;
+          let boughtUsdValue = 0;
+          let sold = 0;
+          let soldUsdValue = 0;
+          
+          tokenTrades.forEach((trade: any) => {
+            if (trade.type === 'Buy') {
+              bought += Number(trade.tokenAmount) || 0;
+              boughtUsdValue += Number(trade.usdValue) || 0;
+            } else if (trade.type === 'Sell') {
+              sold += Number(trade.tokenAmount) || 0;
+              soldUsdValue += Number(trade.usdValue) || 0;
+            }
+          });
+          
+          const remaining = bought - sold;
+          
+          // Calculate PnL: (sold value + remaining value) - bought value
+          // For remaining value, we'll use the average price of remaining tokens
+          const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
+          const remainingUsdValue = remaining * avgBoughtPrice;
+          const pnl = (soldUsdValue + remainingUsdValue) - boughtUsdValue;
+          const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
+          
+          const newData = {
+            bought,
+            boughtUsdValue,
+            sold,
+            soldUsdValue,
+            remaining,
+            remainingUsdValue,
+            pnl,
+            pnlPercentage,
+          };
+          
+          setPositionData(newData);
+          console.log('✅ TradeActionPanel - Calculated position from trades:', newData);
+          console.log('🔍 Sample trades:', tokenTrades.slice(0, 3));
+          console.log('🔍 Position data set:', {
+            bought: newData.bought,
+            boughtUsdValue: newData.boughtUsdValue,
+            sold: newData.sold,
+            soldUsdValue: newData.soldUsdValue,
+            remaining: newData.remaining,
+            remainingUsdValue: newData.remainingUsdValue,
+            pnl: newData.pnl,
+            pnlPercentage: newData.pnlPercentage
+          });
+        } else {
+          // No trades found for this token
+          setPositionData({
+            bought: 0,
+            boughtUsdValue: 0,
+            sold: 0,
+            soldUsdValue: 0,
+            remaining: 0,
+            remainingUsdValue: 0,
+            pnl: 0,
+            pnlPercentage: 0,
+          });
+          console.log('ℹ️ TradeActionPanel - No trades found for token:', token.mint);
+        }
+      } catch (error) {
+        console.error('Error calculating position from trades:', error);
+        setPositionData({
+          bought: 0,
+          boughtUsdValue: 0,
+          sold: 0,
+          soldUsdValue: 0,
+          remaining: 0,
+          remainingUsdValue: 0,
+          pnl: 0,
+          pnlPercentage: 0,
+        });
+      }
+    };
+    
+    calculatePositionFromTrades();
+    
+    // Refresh position data every 10 seconds
+    const interval = setInterval(calculatePositionFromTrades, 10000);
+    return () => clearInterval(interval);
+  }, [user?.id, token?.mint]);
+  
   // Use external QuickBuy settings if available, otherwise use internal context
   const settings = externalQuickBuySettings || (
     mode === "buy"
@@ -213,6 +536,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
     return clamp(Math.round(((t - baseMarketCap) / baseMarketCap) * 100), -100, 100);
   }, [targetMC, baseMarketCap]);
+
+  // Initialize target market cap on entering Limit tab if empty/zero
+  useEffect(() => {
+    if (tab === "limit" && baseMarketCap > 0) {
+      const t = Number(targetMC);
+      if (!Number.isFinite(t) || t === 0) {
+        setTargetMC(String(Math.round(baseMarketCap)));
+        setSliderPct(0);
+      }
+    }
+  }, [tab, baseMarketCap]);
 
   // Sync slider percentage when market cap changes (e.g., from typing)
   useEffect(() => {
@@ -267,10 +601,53 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Extract stats for easier access
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
 
-  // amount presets
-  const [amountPresets, setAmountPresets] = useState<number[]>([0.01, 0.1, 0.5, 1]);
+  // Fetch creator address from token-service
+  useEffect(() => {
+    const fetchCreatorAddress = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          console.log('📊 Creator address data received:', data);
+          
+          if (data?.filterTokens?.results?.[0]?.token?.creatorAddress) {
+            const creatorAddr = data.filterTokens.results[0].token.creatorAddress;
+            console.log('✅ Creator address found:', creatorAddr);
+            setCreatorAddress(creatorAddr);
+          } else {
+            console.log('⚠️ No creator address found in response');
+          }
+        } else {
+          console.warn('⚠️ Creator address fetch failed with status:', response.status);
+        }
+      } catch (error) {
+        console.error("❌ Failed to fetch creator address:", error);
+      }
+    };
+    
+    if (token.mint) {
+      fetchCreatorAddress();
+    }
+  }, [token.mint]);
+
+  // amount presets - different for buy vs sell
+  const buyPresets = [0.01, 0.1, 0.5, 1];
+  const sellPresets = [10, 25, 50, 100];
+  const [amountPresets, setAmountPresets] = useState<number[]>(buyPresets);
   const [editingPresets, setEditingPresets] = useState(false);
-  const [presetDrafts, setPresetDrafts] = useState<string[]>([0.01, 0.1, 0.5, 1].map(String));
+  const [presetDrafts, setPresetDrafts] = useState<string[]>(buyPresets.map(String));
+  
+  // Update presets when mode changes and clear amount
+  useEffect(() => {
+    const newPresets = mode === "sell" ? sellPresets : buyPresets;
+    setAmountPresets(newPresets);
+    setPresetDrafts(newPresets.map(String));
+    // Clear amount when switching modes to avoid confusion
+    setAmount("");
+  }, [mode]);
+  
   useEffect(() => setPresetDrafts(amountPresets.map(String)), [amountPresets]);
 
   const commitPresetDrafts = () => {
@@ -287,6 +664,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     // Force re-render by updating the drafts
     setPresetDrafts(next.map(String));
   };
+
+  // High slippage warning handlers
+  const handleSlippageWarningContinue = useCallback(() => {
+    setShowSlippageWarning(false);
+    setBypassSlippageCheck(true); // Set flag to bypass check and continue with trade
+  }, []);
+
+  const handleSlippageWarningCancel = useCallback(() => {
+    setShowSlippageWarning(false);
+    setBypassSlippageCheck(false);
+    setIsLoading(false);
+  }, []);
 
   return (
     <div
@@ -433,14 +822,35 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           {(["market", "limit", "adv"] as const).map((t) => (
             <button
               key={t}
-              className={cx(tabBtn, "hover:text-[#E6E7EA]", tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]")}
-              onClick={() => setTab(t)}
+              className={cx(
+                tabBtn, 
+                "hover:text-[#E6E7EA]", 
+                tab === t && "text-[#70E0B0] border-b-2 border-[#70E0B0]",
+                isMigratingToken && t === "market" && "opacity-50 cursor-not-allowed blur-sm"
+              )}
+              onClick={() => {
+                if (isMigratingToken && t === "market") return; // Disable market tab for migrating tokens
+                setTab(t);
+              }}
+              disabled={isMigratingToken && t === "market"}
             >
               {t === "adv" ? "Adv." : t[0].toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
       </div>
+
+      {/* ===== Migration Message for High Bonding Meteora Tokens ===== */}
+      {isMigratingToken && (
+        <div className="px-3 pt-4 pb-2">
+          <div className="text-center">
+            <MeteoraMigrationLogo />
+            <p className="text-white text-sm leading-relaxed">
+              This pair is currently migrating. This may take up to 30 minutes. In the meantime, you can still place limit orders, and buy or sell on migration!
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ===== E. Migration/Dev Sell Toggle ===== */}
       {tab === "adv" && (
@@ -508,9 +918,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   if (allowDecimal(raw)) setAmount(raw);
                 }}
                 onBlur={(e) => {
-                  // When user finishes typing, check if amount meets minimum
+                  // When user finishes typing, check if amount meets minimum (buy mode only)
                   const value = Number(e.target.value);
-                  if (value > 0) {
+                  if (mode === "buy" && value > 0) {
                     const poolType = getPoolTypeFromToken(token);
                     const minimums: Record<string, number> = {
                       "meteora amm v2": 0.0001,
@@ -536,30 +946,36 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               />
             </div>
             <div className="flex items-center justify-center w-5 h-5">
-              <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
-                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
-                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear)"/>
-                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear)"/>
-                <defs>
-                  <linearGradient id="paint0_linear" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                  <linearGradient id="paint1_linear" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                  <linearGradient id="paint2_linear" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                </defs>
-              </svg>
+              {mode === "sell" ? (
+                // Show % symbol for sell mode
+                <span className="text-[14px] font-semibold text-[#E6E7EA]">%</span>
+              ) : (
+                // Show SOL logo for buy mode
+                <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
+                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
+                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear)"/>
+                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear)"/>
+                  <defs>
+                    <linearGradient id="paint0_linear" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint1_linear" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint2_linear" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              )}
             </div>
           </div>
           
-          {/* Minimum Amount Hint */}
-          {tab === "market" && (() => {
+          {/* Minimum Amount Hint - only for buy mode */}
+          {tab === "market" && mode === "buy" && (() => {
             const poolType = getPoolTypeFromToken(token);
             const minimums: Record<string, number> = {
               "meteora amm v2": 0.0001,
@@ -796,6 +1212,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         </div>
       )}
 
+      {/* ===== G. ANALYTICS TAB ===== */}
+      {/* Analytics panel commented out
+      {tab === "analytics" && (
+        <div className="px-3 pt-2 pb-4">
+          <TokenAnalyticsPanel
+            mintAddress={token.mint}
+            tokenInfo={{
+              symbol: token.symbol,
+              name: token.name,
+              pool: effectivePoolAddress,
+              dex: getPoolTypeFromToken(token),
+            }}
+          />
+        </div>
+      */}
+
       {/* ===== Settings ===== */}
       <div className="mx-3 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#E6E7EA]">
         <InterstateTooltip label="Max Slippage">
@@ -827,14 +1259,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             {settings.mevMode === "off" ? "Off" : settings.mevMode === "reduced" ? "Reduced" : "Secure"}
           </span>
         </InterstateTooltip>
-      </div>
+        </div>
 
       {/* Feedback */}
       {message && (
         <div
           className={cx(
             "mx-3 mt-2 rounded-md p-2 text-center text-[11px] font-bold",
-            message.type === "success" ? "bg-[#70E0B0] text-black" : "bg-[#FF4D7F] text-black"
+            message.type === "success" 
+              ? mode === "buy" 
+                ? "bg-[#70E0B0] text-black"  // Green for successful buy
+                : "bg-[#FF4D7F] text-black"  // Red for successful sell
+              : "bg-[#FF4D7F] text-black"    // Red for errors
           )}
         >
           {message.text}
@@ -845,36 +1281,40 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
         {amount ? (
           <>
-            You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span> 
-            <div className="inline-block w-3 h-3 ml-1 align-middle">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
-                <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
-                <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
-                <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
-                <defs>
-                  <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                  <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                  <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                    <stop offset="0" stopColor="#00FFA3"/>
-                    <stop offset="1" stopColor="#DC1FFF"/>
-                  </linearGradient>
-                </defs>
-              </svg>
-            </div>
+            You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span>
+            {mode === "sell" ? (
+              <span className="text-[#E6E7EA] font-semibold">%</span>
+            ) : (
+              <div className="inline-block w-3 h-3 ml-1 align-middle">
+                <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
+                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
+                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
+                  <defs>
+                    <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+            )}
           </>
         ) : null}
-      </div>
-
+        </div>
 
       {/* Primary action */}
       <div className="px-3 py-2">
         <button
+          ref={tradeButtonRef}
           type="button"
           className={cx(
             baseBtn,
@@ -887,6 +1327,25 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               setMessage({ type: "error", text: "Authentication required to create orders." });
               return;
             }
+
+            // Check for high slippage BEFORE executing market trades (not limit orders)
+            if (tab === "market" && !bypassSlippageCheck) {
+              const slippagePercent = (settings.maxSlippage || 0.2) * 100;
+              const HIGH_SLIPPAGE_THRESHOLD = 50;
+
+              if (slippagePercent >= HIGH_SLIPPAGE_THRESHOLD) {
+                setIsLoading(true); // Show loading state
+                setShowSlippageWarning(true);
+                return; // Don't execute yet, wait for user confirmation
+              }
+            }
+
+            // Reset bypass flag for next trade
+            if (bypassSlippageCheck) {
+              setBypassSlippageCheck(false);
+            }
+
+            // Continue with normal flow
             setIsLoading(true);
             setMessage(null);
 
@@ -934,7 +1393,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             if (mode === "buy") {
               const requested = Number(amount || 0);
               const safetyBuffer = 0.003;
-              const required = requested + safetyBuffer;
+              const priorityFee = settings.priority || 0;
+              const bribeFee = settings.bribe || 0;
+              const totalFees = safetyBuffer + priorityFee + bribeFee;
+              const required = requested + totalFees;
+
               if (!requested || requested <= 0) {
                 setIsLoading(false);
                 setMessage({ type: "error", text: "Enter a valid amount." });
@@ -972,9 +1435,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               if (solBalance < required) {
                 setIsLoading(false);
                 const need = Math.max(required - solBalance, 0);
-                const msg = `Less balance: need ~${required.toFixed(3)} SOL (missing ${need.toFixed(3)} SOL).`;
+                const msg = `Insufficient balance!\nTrade: ${requested.toFixed(4)} SOL\nFees: ${totalFees.toFixed(4)} SOL (priority: ${priorityFee.toFixed(4)}, bribe: ${bribeFee.toFixed(4)}, buffer: 0.003)\nTotal needed: ${required.toFixed(4)} SOL\nMissing: ${need.toFixed(4)} SOL`;
                 setMessage({ type: "error", text: msg });
-                toast.error("Less balance. Please fund your wallet.");
+                toast.error(`Insufficient balance! Need ${required.toFixed(4)} SOL (missing ${need.toFixed(4)} SOL). Please fund your wallet.`);
+                return;
+              }
+            } else if (mode === "sell") {
+              // Validate sell percentage
+              const percentage = Number(amount || 0);
+              if (!percentage || percentage <= 0) {
+                setIsLoading(false);
+                setMessage({ type: "error", text: "Enter a valid percentage." });
+                toast.error("Enter a valid percentage");
+                return;
+              }
+              if (percentage > 100) {
+                setIsLoading(false);
+                setMessage({ type: "error", text: "Percentage cannot exceed 100%." });
+                toast.error("Percentage cannot exceed 100%");
                 return;
               }
             }
@@ -997,9 +1475,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
                 poolType,
                 // Preset trading parameters
-                slippage: settings.maxSlippage || 0.4, // Default 40%
-                priorityFee: settings.priority || 0.0001, // Default 0.0001 SOL
-                bribe: settings.bribe || 0, // Default 0
+                slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
+                priorityFee: settings.priority || 0.001, // Default 0.001 SOL
+                bribe: settings.bribe || 0.05, // Default 0.05 SOL
                 mevMode: settings.mevMode,
                 autoFee: settings.autoFee || false,
                 maxFee: settings.maxFee || 0,
@@ -1009,18 +1487,41 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 tokenSymbol: token.symbol,
               };
               console.log(`🎯 Trading with presets:`, {
-                slippage: `${(tradeParams.slippage * 100).toFixed(1)}%`,
+                slippage: `${tradeParams.slippage.toFixed(2)}%`,
                 priorityFee: `${tradeParams.priorityFee} SOL`,
                 bribe: `${tradeParams.bribe} SOL`,
                 mevMode: tradeParams.mevMode,
                 autoFee: tradeParams.autoFee,
               });
-              const tr = await tradeBuy(tradeParams, user.bearerToken)
-                .catch((err) => {
-                  // Capture error without throwing to prevent Next.js overlay
-                  tradingError = err;
-                  return null;
-                });
+              const tr = mode === "buy"
+                ? await tradeBuy(tradeParams, user.bearerToken)
+                    .catch((err) => {
+                      // Use console.warn for expected errors, console.error for unexpected
+                      const logFn = (err as any)?.expected ? console.warn : console.error;
+                      logFn("[Trade] Buy error caught and handled:", err.message || err);
+                      tradingError = err;
+                      return null;
+                    })
+                : await tradeSellPercentage({
+                    tokenAddress: token.mint,
+                    percentageToSell: Number(amount), // Use the percentage from input
+                    poolAddress: effectivePoolAddress,
+                    baseMint: token.mint,
+                    quoteMint: SOL_MINT_ADDRESS,
+                    poolType,
+                    originalPairAddress: token.pair_address, // Original pair address from token-service
+                    // Preset trading parameters
+                    slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
+                    priorityFee: settings.priority || 0.001,
+                    bribe: settings.bribe || 0.05,
+                  }, user.bearerToken)
+                    .catch((err) => {
+                      // Use console.warn for expected errors, console.error for unexpected
+                      const logFn = (err as any)?.expected ? console.warn : console.error;
+                      logFn("[Trade] Sell error caught and handled:", err.message || err);
+                      tradingError = err;
+                      return null;
+                    });
               
               if (!tradingError) {
                 const txHash = tr?.hash || tr?.txid;
@@ -1033,6 +1534,57 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 } else {
                   setMessage({ type: "error", text: "❌ Trade failed. Please try again." });
                 }
+                
+                // Refresh position data after successful trade by recalculating from trade activity
+                if (tr && txHash) {
+                  setTimeout(async () => {
+                    try {
+                      const trades = await getTradeActivityByUser(user.id.toString());
+                      const tokenTrades = trades.filter((trade: any) => 
+                        trade.tokenAddress?.toLowerCase() === token.mint?.toLowerCase()
+                      );
+                      
+                      if (tokenTrades.length > 0) {
+                        let bought = 0;
+                        let boughtUsdValue = 0;
+                        let sold = 0;
+                        let soldUsdValue = 0;
+                        
+                        tokenTrades.forEach((trade: any) => {
+                          if (trade.type === 'Buy') {
+                            bought += Number(trade.tokenAmount) || 0;
+                            boughtUsdValue += Number(trade.usdValue) || 0;
+                          } else if (trade.type === 'Sell') {
+                            sold += Number(trade.tokenAmount) || 0;
+                            soldUsdValue += Number(trade.usdValue) || 0;
+                          }
+                        });
+                        
+                        const remaining = bought - sold;
+                        const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
+                        const remainingUsdValue = remaining * avgBoughtPrice;
+                        const pnl = (soldUsdValue + remainingUsdValue) - boughtUsdValue;
+                        const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
+                        
+                        const newData = {
+                          bought,
+                          boughtUsdValue,
+                          sold,
+                          soldUsdValue,
+                          remaining,
+                          remainingUsdValue,
+                          pnl,
+                          pnlPercentage,
+                        };
+                        
+                        setPositionData(newData);
+                        console.log('🔄 TradeActionPanel - Position data refreshed after trade:', newData);
+                      }
+                    } catch (error) {
+                      console.error('Error refreshing position data:', error);
+                    }
+                  }, 2000); // Wait 2 seconds for backend to process
+                }
               }
             } catch (error: any) {
               // Catch any other errors
@@ -1042,8 +1594,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             // Handle errors outside try-catch to prevent Next.js overlay
             if (tradingError) {
               const error = tradingError;
-              // Prevent Next.js error overlay from showing
-              console.error("Trade error caught:", error);
+              // Use console.warn for expected validation errors, console.error for unexpected errors
+              const logFn = (error as any)?.expected ? console.warn : console.error;
+              logFn("Trade error caught:", error);
               
               let errorMessage = "Trade failed. Please try again.";
               let suggestions: string[] = [];
@@ -1063,10 +1616,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     `Minimum ${minAmount} SOL required for ${protocol}`,
                     { duration: 6000 }
                   );
-                  setMessage({ 
-                    type: "error", 
-                    text: `Minimum trade amount: ${minAmount} SOL for ${protocol}. Please increase your amount.` 
+                  setMessage({
+                    type: "error",
+                    text: `Minimum trade amount: ${minAmount} SOL for ${protocol}. Please increase your amount.`
                   });
+                  setIsLoading(false); // Critical Fix #12: Reset loading state before early return
                   return; // Don't show suggestions toast
                 } else if (error.code === 'NO_ACTIVE_POOL') {
                   errorMessage = `⚠️ Pool Unavailable: ${error.message}`;
@@ -1086,16 +1640,49 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 } else if (error.code === 'TX_FAILED') {
                   errorMessage = `❌ Transaction Failed: ${error.message}`;
                   toast.error(`Trade could not be completed. Try again or use a different token.`, { duration: 5000 });
+                } else if (error.code === 'NO_HOLDINGS') {
+                  // Critical Fix #5: No Holdings Check
+                  errorMessage = `❌ No ${token.symbol || 'tokens'} to Sell: You don't own any of this token.`;
+                  toast.error(`You don't own any ${token.symbol || 'tokens'}. Cannot sell.`, { duration: 5000 });
+                  setMessage({ type: "error", text: errorMessage });
+                  setIsLoading(false); // Critical Fix #12: Reset loading state before early return
+                  return; // Don't show suggestions toast
+                } else if (error.code === 'VALIDATION_ERROR') {
+                  // Critical Fix #7: Check if it's a minimum amount error
+                  if (error.details?.amount?.message?.includes('at least')) {
+                    errorMessage = `💰 Amount Too Small: ${error.details.amount.message}`;
+                    toast.error('Trade amount must be at least 0.001 SOL', { duration: 5000 });
+                    suggestions.push('Increase your trade amount to at least 0.001 SOL (~$0.20 USD)');
+                    suggestions.push('Smaller amounts may fail due to transaction fees');
+                  } else {
+                    // Generic validation error
+                    errorMessage = `❌ Validation Error: ${error.message}`;
+                    toast.error(`Invalid trade parameters`, { duration: 4000 });
+                  }
+                } else if (error.code === 'INVALID_POOL_TYPE') {
+                  // Critical Fix #6: Empty Pool Type Validation
+                  errorMessage = `⚠️ Pool Type Error: ${error.message || 'This token\'s trading pool is not supported'}`;
+                  toast.error('Trading pool not supported for this token', { duration: 5000 });
+                  if (error.suggestions && Array.isArray(error.suggestions)) {
+                    error.suggestions.forEach((s: string) => suggestions.push(s));
+                  }
                 }
               } else {
                 // Handle known error patterns from error message
-                if (error.message?.includes("AMOUNT_TOO_SMALL") || error.message?.includes("Amount too small")) {
-                  errorMessage = `💰 Amount Too Small: Minimum 0.0001 SOL required for this token`;
-                  toast.error("Trade amount too small. Increase your amount.", { duration: 6000 });
+                if (error.message?.includes("AMOUNT_TOO_SMALL") || error.message?.includes("Amount too small") || error.message?.includes("at least 0.001")) {
+                  // Critical Fix #7: Minimum Trade Amount Validation (fallback)
+                  errorMessage = `💰 Amount Too Small: Minimum 0.001 SOL required`;
+                  toast.error("Trade amount must be at least 0.001 SOL", { duration: 6000 });
+                  suggestions.push('Increase your trade amount to at least 0.001 SOL (~$0.20 USD)');
+                  suggestions.push('Smaller amounts may fail due to transaction fees');
                 } else if (error.message?.includes("Insufficient SOL balance") || error.message?.includes("INSUFFICIENT_BALANCE")) {
                   errorMessage = `💰 Insufficient SOL balance. Add SOL and try again.`;
                 } else if (error.message?.includes("insufficient funds")) {
                   errorMessage = `💰 Insufficient funds. Please add SOL.`;
+                } else if (error.message?.includes("NO_HOLDINGS") || error.message?.includes("no token account") || error.message?.includes("do not own") || error.message?.includes("Insufficient token holdings")) {
+                  // Critical Fix #5: No Holdings Check (fallback for non-structured errors)
+                  errorMessage = `❌ You don't own any ${token.symbol || 'tokens'}. Cannot sell.`;
+                  toast.error(`No ${token.symbol || 'tokens'} to sell`, { duration: 5000 });
                 } else if (error.message?.includes("Invalid account discriminator") || error.message?.includes("INVALID_POOL_ADDRESS")) {
                   errorMessage = `❌ Invalid pool address. The pool data may be outdated.`;
                   suggestions.push("Try refreshing the page to get updated pool information");
@@ -1106,6 +1693,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   errorMessage = `🎓 This pool has graduated and is no longer active.`;
                   suggestions.push("The token may have migrated to a new pool");
                   suggestions.push("Try refreshing to see if a new pool is available");
+                } else if (error.message?.includes('INVALID_POOL_TYPE') || error.message?.includes('Invalid pool') || error.message?.includes('Unsupported pool')) {
+                  // Critical Fix #6: Empty Pool Type Validation (fallback for non-structured errors)
+                  errorMessage = `⚠️ This token's trading pool is not supported`;
+                  toast.error('Pool type not supported', { duration: 4000 });
+                  suggestions.push('This token may not have a supported trading pool');
+                  suggestions.push('Try refreshing the page to get updated pool information');
                 }
               }
               
@@ -1154,25 +1747,29 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             "Processing..."
           ) : (
             <span className="inline-flex items-center gap-1">
-              {mode === "buy" ? "Buy" : "Sell"} {token.symbol}
+              {isMigratingToken && mode === "buy" ? "Snipe" : mode === "buy" ? "Buy" : "Sell"} {token.symbol}
               {prettyAmt(amount) && (
                 <>
                   {" "}{prettyAmt(amount)}
-                  <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                  {mode === "sell" ? (
+                    <span>%</span>
+                  ) : (
+                    <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                  )}
                 </>
               )}
             </span>
           )}
         </button>
-      </div>
+        </div>
 
       {/* footer mini stats */}
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
-        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Bought</span>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+            <div className="w-2.5 h-2.5">
+              <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
                 <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_bought)"/>
                 <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_bought)"/>
                 <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_bought)"/>
@@ -1192,14 +1789,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[12px] font-semibold">0</span>
+            <span className="text-[#70E0B0] text-[10px] font-semibold">
+              ${positionData ? formatCompactNumber(positionData.boughtUsdValue) : '0'}
+            </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Sold</span>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+            <div className="w-2.5 h-2.5">
+              <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
                 <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_sold)"/>
                 <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_sold)"/>
                 <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_sold)"/>
@@ -1219,14 +1818,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#FF4D7F] text-[12px] font-semibold">0</span>
+            <span className="text-[#FF4D7F] text-[10px] font-semibold">
+              ${positionData ? formatCompactNumber(positionData.soldUsdValue) : '0'}
+            </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">Holding</span>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+            <div className="w-2.5 h-2.5">
+              <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
                 <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_holding)"/>
                 <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_holding)"/>
                 <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_holding)"/>
@@ -1246,14 +1847,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#E6E7EA] text-[12px] font-semibold">0</span>
+            <span className="text-[#E6E7EA] text-[10px] font-semibold">
+              ${positionData ? formatCompactNumber(positionData.remainingUsdValue) : '0'}
+            </span>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1 p-3 rounded-lg bg-[#17191E] border border-[#2A2B33]">
-          <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">PnL</span>
+        <div className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg bg-[#17191E] border border-[#2A2B33]">
+          <span className="text-[9px] text-[#9CA3AF] uppercase tracking-wide">PnL</span>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3">
-              <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+            <div className="w-2.5 h-2.5">
+              <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none">
                 <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_pnl)"/>
                 <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_pnl)"/>
                 <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_pnl)"/>
@@ -1273,7 +1876,23 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 </defs>
               </svg>
             </div>
-            <span className="text-[#70E0B0] text-[12px] font-semibold">0(+0%)</span>
+            <div className={`text-[9px] font-semibold ${positionData && positionData.pnl >= 0 ? 'text-[#70E0B0]' : 'text-[#FF4D7F]'}`}>
+              {positionData ? (
+                <div className="flex flex-col items-center leading-tight">
+                  <div className="mb-0.5">
+                    {positionData.pnl >= 0 ? '+' : ''}${formatCompactNumber(Math.abs(positionData.pnl))}
+                  </div>
+                  <div>
+                    ({positionData.pnl >= 0 ? '+' : ''}{positionData.pnlPercentage.toFixed(1)}%)
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center leading-tight">
+                  <div className="mb-0.5">$0</div>
+                  <div>(+0%)</div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1281,6 +1900,49 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       <div className="w-full overflow-hidden" style={{ borderTop: `1px solid ${AX.border}` }}>
         <QuickBuy hideActionButton className="rounded-none border-none bg-transparent" />
       </div>
+
+      {/* ===== Contract Address ===== */}
+      <div className="border-t border-[#2A2B33]">
+        <AddressDisplay
+          label="CA"
+          address={token.mint}
+          icon={
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14,2 14,8 20,8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10,9 9,9 8,9"/>
+            </svg>
+          }
+          solscanUrl={`https://solscan.io/token/${token.mint}`}
+          tooltip="Contract Address - The token's smart contract address on Solana"
+        />
+        
+        {/* Dev Address */}
+        {creatorAddress && (
+          <AddressDisplay
+            label="DA"
+            address={creatorAddress}
+            icon={
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            }
+            solscanUrl={`https://solscan.io/account/${creatorAddress}`}
+            tooltip="Dev Address - The address of the token creator/developer"
+          />
+        )}
+      </div>
+
+      {/* High Slippage Warning Dialog */}
+      <HighSlippageWarningDialog
+        isOpen={showSlippageWarning}
+        slippagePercent={(settings.maxSlippage || 0.2) * 100}
+        onContinue={handleSlippageWarningContinue}
+        onCancel={handleSlippageWarningCancel}
+      />
     </div>
   );
 };

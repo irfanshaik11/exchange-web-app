@@ -14,7 +14,7 @@ interface DepositModalProps {
 }
 
 const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
-  const { user, loading: userLoading, refreshUser, solBalance } = useUser();
+  const { user, loading: userLoading, refreshUser, refreshBalance, solBalance } = useUser();
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -95,7 +95,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
               </div>
               <div className="flex h-10 w-full flex-row items-center justify-between gap-2 rounded border border-neutral-600 p-2 text-sm">
                 <span className="text-neutral-500">Balance: </span>
-                <span className="">{solBalance.toFixed(2)} SOL</span>
+                <span className="text-white font-medium whitespace-nowrap">{solBalance.toFixed(4)} SOL</span>
               </div>
             </div>
             <label className="mb-3 block text-sm text-neutral-400">Only deposit SOL through the Solana Network for this address.</label>

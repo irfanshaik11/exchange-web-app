@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useUser } from '../components/UserContext';
-import { getTradeHistoryByUser } from '~/utils/functions';
+import { getTradeHistoryByUser, getActivePositionsByUser } from '~/utils/functions';
 import { formatSmartNumber } from '~/utils/db';
 import type { PositionRow, TradeRow } from '~/utils/functions';
 import { SiSolana } from 'react-icons/si';
@@ -50,6 +50,7 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
     winningTrades: 0,
     losingTrades: 0,
   });
+  const [chartData, setChartData] = useState<{ x: number; y: number }[]>([]);
 
   // Fetch SOL price using Pyth Network
   useEffect(() => {
@@ -81,32 +82,55 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
     fetchSolPrice();
   }, []);
 
-  // Fetch trade history and calculate metrics
+  // Fetch positions and calculate metrics (same as portfolio page)
   useEffect(() => {
     const fetchData = async () => {
-      if (user?.id) {
+      if (user?.id && user?.bearerToken) {
         try {
-          const history = await getTradeHistoryByUser(user.id);
-          setTradeHistory(history);
+          // Use the same data source as portfolio page
+          const positions = await getActivePositionsByUser(user.id);
+          setPositions(positions);
 
-          // Calculate metrics
-          const totalPnl = history.reduce((sum, trade) => sum + (trade.pnl || 0), 0);
-          const winningTrades = history.filter(trade => (trade.pnl || 0) > 0).length;
-          const losingTrades = history.filter(trade => (trade.pnl || 0) < 0).length;
+          // Calculate realized PnL using the same logic as portfolio page
+          let totalRealizedPnl = 0;
+          let winningTrades = 0;
+          let losingTrades = 0;
+
+          positions.forEach(pos => {
+            // Calculate realized PNL from sold positions
+            // Realized PnL = Money received from selling - Cost basis of sold tokens
+            if (pos.sold > 0 && pos.bought > 0) {
+              const costBasisOfSold = pos.boughtUsdValue * (pos.sold / pos.bought);
+              const realizedPnl = pos.soldUsdValue - costBasisOfSold;
+              totalRealizedPnl += realizedPnl;
+            }
+
+            // Count winning/losing positions
+            if (pos.pnl > 0) {
+              winningTrades++;
+            } else if (pos.pnl < 0) {
+              losingTrades++;
+            }
+          });
 
           setTimeframeMetrics({
-            unrealizedPnl: 0, // This would need position data
-            realizedPnl: totalPnl,
+            unrealizedPnl: positions.reduce((sum, pos) => sum + pos.pnl, 0),
+            realizedPnl: totalRealizedPnl,
             winningTrades,
             losingTrades,
           });
 
-          // Calculate total value (simplified)
-          const totalUsdValue = (solBalance || 0) * solPrice + (usdcBalance || 0);
+          // Calculate total value
+          const totalRemainingValue = positions.reduce((acc, pos) => acc + pos.remainingUsdValue, 0);
+          const totalUsdValue = (solBalance || 0) * solPrice + (usdcBalance || 0) + totalRemainingValue;
           setTotalValue(totalUsdValue);
 
+          // Generate chart data from positions (simplified for now)
+          // For now, just show the current realized PnL as a flat line
+          setChartData([{ x: 0, y: 0 }, { x: 1, y: totalRealizedPnl }]);
+
         } catch (error) {
-          console.error('Error fetching trade data:', error);
+          console.error('Error fetching position data:', error);
         }
       }
     };
@@ -114,7 +138,7 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
     if (isOpen) {
       fetchData();
     }
-  }, [user?.id, isOpen, solBalance, usdcBalance, solPrice]);
+  }, [user?.id, user?.bearerToken, isOpen, solBalance, usdcBalance, solPrice]);
 
   if (!isOpen) return null;
 
@@ -176,7 +200,7 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
             <SolanaIcon size={28} />
             <div>
               <div className={`font-bold text-3xl ${timeframeMetrics.realizedPnl >= 0 ? 'text-green-400' : 'text-pink-400'}`}>
-                {timeframeMetrics.realizedPnl >= 0 ? '+' : ''}{formatSmartNumber(timeframeMetrics.realizedPnl)}
+                {timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}${formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl))}
               </div>
               <div className="text-gray-300 text-lg">PNL</div>
             </div>
@@ -190,31 +214,73 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
       {/* Chart Section */}
       <div className="p-6">
         <div className="h-24 bg-gradient-to-r from-gray-900 to-gray-800 rounded-lg p-4 relative overflow-hidden">
-          {/* Red line chart */}
-          <svg className="w-full h-full" viewBox="0 0 300 60">
-            <defs>
-              <linearGradient id="redLine" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#ff4d7f" stopOpacity="0.8"/>
-                <stop offset="100%" stopColor="#ff4d7f" stopOpacity="0.3"/>
-              </linearGradient>
-            </defs>
-            {/* Downward trending red line */}
-            <path
-              d="M 10 15 Q 75 25 150 35 T 290 50"
-              stroke="url(#redLine)"
-              strokeWidth="2"
-              fill="none"
-              strokeLinecap="round"
-            />
-            {/* Additional subtle lines for depth */}
-            <path
-              d="M 10 20 Q 75 30 150 40 T 290 55"
-              stroke="#ff4d7f"
+          {/* Real PnL chart with same logic as portfolio */}
+          <svg className="w-full h-full" viewBox="0 0 300 80" preserveAspectRatio="none">
+            {/* Horizontal reference line (neutral/zero) */}
+            <line 
+              x1="0" 
+              y1="40" 
+              x2="300" 
+              y2="40" 
+              stroke="#2A2B33" 
               strokeWidth="1"
-              fill="none"
-              strokeLinecap="round"
-              opacity="0.3"
             />
+            
+            {/* Dashed reference lines for visual context */}
+            <line 
+              x1="0" 
+              y1="20" 
+              x2="300" 
+              y2="20" 
+              stroke="#4A4B53" 
+              strokeWidth="1"
+              strokeDasharray="4,3"
+              opacity="0.7"
+            />
+            <line 
+              x1="0" 
+              y1="60" 
+              x2="300" 
+              y2="60" 
+              stroke="#4A4B53" 
+              strokeWidth="1"
+              strokeDasharray="4,3"
+              opacity="0.7"
+            />
+            
+            {/* Dynamic PNL line */}
+            <path
+              d={(() => {
+                const pnl = timeframeMetrics.realizedPnl;
+                
+                // More aggressive scaling for small values to make slope visible
+                let normalizedPnl;
+                if (Math.abs(pnl) < 0.01) {
+                  // For very small values, use much more aggressive scaling
+                  normalizedPnl = Math.max(-1, Math.min(1, pnl * 5000)); // Scale up by 5000x
+                } else if (Math.abs(pnl) < 1) {
+                  // For small-medium values, moderate scaling
+                  normalizedPnl = Math.max(-1, Math.min(1, pnl * 100)); // Scale up by 100x
+                } else {
+                  // For larger values, use the original logic
+                  const absMaxPnl = Math.max(Math.abs(pnl), 100);
+                  normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
+                }
+                
+                const endY = 40 - (normalizedPnl * 30);
+                
+                // Create a more dramatic line that trends up/down based on PNL
+                return `M 0 40 L 60 ${40 - (normalizedPnl * 12)} L 120 ${40 - (normalizedPnl * 18)} L 180 ${40 - (normalizedPnl * 24)} L 240 ${40 - (normalizedPnl * 27)} L 300 ${endY}`;
+              })()}
+              stroke={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'}
+              strokeWidth="2.5"
+              fill="none"
+              style={{ transition: 'all 0.3s ease' }}
+            />
+            
+            {/* Start and end points for clarity */}
+            <circle cx="0" cy="40" r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
+            <circle cx="300" cy={40 - (Math.max(-1, Math.min(1, timeframeMetrics.realizedPnl * (Math.abs(timeframeMetrics.realizedPnl) < 0.01 ? 5000 : Math.abs(timeframeMetrics.realizedPnl) < 1 ? 100 : 1)))) * 30} r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
           </svg>
         </div>
       </div>

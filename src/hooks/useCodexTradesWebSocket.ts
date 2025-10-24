@@ -29,15 +29,29 @@ interface CodexQueryResponse {
   };
 }
 
-export default function useCodexTradesWebSocket(tokenAddress: string | undefined) {
-  const [trades, setTrades] = useState<CodexTradeEvent[]>([]);
+export default function useCodexTradesWebSocket(
+  tokenAddress: string | undefined,
+  initialTrades: CodexTradeEvent[] = []
+) {
+  const [trades, setTrades] = useState<CodexTradeEvent[]>(initialTrades);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(initialTrades.length === 0);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
+  const hasSetInitialDataRef = useRef(false);
+
+  // Update trades when initialTrades are provided (from REST pre-fetch)
+  useEffect(() => {
+    if (initialTrades && initialTrades.length > 0 && !hasSetInitialDataRef.current) {
+      console.log('[useCodexTradesWebSocket] Using initial trades from pre-fetch:', initialTrades.length);
+      setTrades(initialTrades);
+      setIsLoading(false);
+      hasSetInitialDataRef.current = true;
+    }
+  }, [initialTrades]);
 
   // Function to fetch initial trade data using GraphQL query
   const fetchInitialTrades = async (address: string) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { Token } from "~/utils/db";
 import { formatSmartNumber } from "~/utils/db";
 import {
@@ -38,8 +38,10 @@ import {
   MdDynamicFeed
 } from "react-icons/md";
 import { SiSolana } from "react-icons/si";
-import { TokenRAY, TokenSOL, TokenJUP, TokenMSOL, TokenUSDC, TokenLAUNCH, TokenDAO, TokenCUSDC, TokenDOBO } from '@web3icons/react';
+// Removed @web3icons/react to fix React version conflict
 import Image from 'next/image';
+import InterstatePopout from './InterstatePopout';
+import VerticalInput from './VerticalInput';
 
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
@@ -72,14 +74,17 @@ import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
 import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
+import { useSolPrice } from "~/components/SolPriceContext";
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { toast } from "react-hot-toast";
+import { TokenAge } from "./TokenAge";
+import { prefetchTradeData } from "~/utils/tokenCache";
 
 interface PulseTableProps {
   title: string;
   tokens: Token[];
-  isFirstOrLast?: "first" | "last";
+  isFirstOrLast?: "first" | "last" | "only";
   loading?: boolean;
   skeletonRowCount?: number;
   showBubbleMetrics?: boolean; // Feature flag for bubble metrics (Buyers, Sellers, Wallets, 24h TX, Vol 24h)
@@ -346,9 +351,10 @@ function TokenImage({
   // Use uri field from deployed service, fallback to image field, then token.logo
   const imageUrl = (token as any).uri || (token as any).image || token.logo;
 
-  // Calculate migration progress for border color (only for New Pairs)
+  // Calculate migration progress for border color (only for New Pairs, NOT for migrated)
   const getMigrationProgress = (token: Token): number => {
-    if (!isNewPairs) return 0; // Only apply to New Pairs
+    // Don't apply bonding progress to migrated column
+    if (!isNewPairs || columnType === 'migrated') return 0;
     
     // Priority order: bonding_pct, bonding_curve_progress, graduationPercent, market cap / 70k
     const bondingPct = (token as any).bonding_pct;
@@ -400,18 +406,20 @@ function TokenImage({
   const protocolColorMap: Record<string, string> = {
     'pump': '#22c55e',        // Green for pump.fun
     'pump.fun': '#22c55e',    // Green for pump.fun
-    'bonk': '#ff6b35',
-    'moonshot': '#a855f7',
+    'bonk': '#ff6b35',        // Orange for bonk
+    'bags': '#22c55e',        // Green for bags
+    'moonshot': '#eab308',    // Yellow for moonshot
+    'moonshoot': '#eab308',   // Yellow for moonshoot
+    'moonit': '#eab308',      // Yellow for moonit
     'heaven': '#8b5cf6',
     'daos.fun': '#06b6d4',
     'candle': '#f59e0b',
     'sugar': '#ec4899',
     'believe': '#10b981',
     'jupiter': '#8b5cf6',
-    'moonit': '#74831f',      // Green-brown for moonit
     'boop': '#134577',        // Dark blue for boopfun
     'boopfun': '#134577',     // Dark blue for boopfun
-    'launchlab': '#ef4444',
+    'launchlab': '#3b82f6',   // Blue for launchlab (default)
     'dynamic': '#526fff',
     'raydium': '#5c51f7',     // Purple for raydium
     'raydiumlaunchpad': '#5c51f7',  // Purple for raydiumlaunchpad
@@ -449,6 +457,15 @@ function TokenImage({
       }
     }
     
+    // Special handling for LaunchLab - blue in new pairs and final stretch, yellow in migrated
+    if (launchpadProtocol.includes('launch')) {
+      if (columnType === 'migrated') {
+        return '#eab308'; // Yellow for migrated
+      } else {
+        return '#3b82f6'; // Blue for new pairs and final stretch
+      }
+    }
+    
     // Direct match first
     if (protocolColorMap[launchpadProtocol]) {
       return protocolColorMap[launchpadProtocol];
@@ -458,8 +475,8 @@ function TokenImage({
       return '#5c51f7'; // Purple for raydium
     }
     
-    if (launchpadProtocol.includes('moonit')) {
-      return '#74831f'; // Green-brown for moonit
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot')) {
+      return '#eab308'; // Yellow for moonit/moonshot/moonshoot
     }
     
     if (launchpadProtocol.includes('boop')) {
@@ -468,6 +485,10 @@ function TokenImage({
     
     if (launchpadProtocol.includes('bonk')) {
       return protocolColorMap['bonk'];
+    }
+    
+    if (launchpadProtocol.includes('bags')) {
+      return '#22c55e'; // Green for bags
     }
     
     if (launchpadProtocol.includes('orca')) {
@@ -505,11 +526,24 @@ function TokenImage({
     }
     
     if (launchpadProtocol.includes('boop')) {
-      return 'https://dropsearn.fra1.cdn.digitaloceanspaces.com/media/projects/logos/boopfun_logo_1746246162.webp';
+      return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
     }
     
-    if (launchpadProtocol.includes('moonit')) {
-      return 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6_LEZppFrAkKMqApIwCM_R5n0-b4XC8Aluw&s';
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot')) {
+      return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+    }
+    
+    if (launchpadProtocol.includes('bonk')) {
+      return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+    }
+    
+    if (launchpadProtocol.includes('bags')) {
+      return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
+    }
+    
+    if (launchpadProtocol.includes('launch')) {
+      // LaunchLab uses Raydium icon
+      return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
     }
     
     // Default to pump.fun icon for unknown protocols
@@ -520,9 +554,13 @@ function TokenImage({
   const protocolColor = getProtocolColor(token);
   const migrationProgress = getMigrationProgress(token);
   
-  // Check if token is Meteora
+  // Check if token should have full circle image (no white space)
   const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
   const isMeteora = launchpadProtocol.includes('meteora');
+  const isBonk = launchpadProtocol.includes('bonk');
+  const isBags = launchpadProtocol.includes('bags');
+  const isMoonit = launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot');
+  const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
 
   // Debug logging for protocol detection
   if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_ICONS__) {
@@ -589,6 +627,12 @@ function TokenImage({
     target.style.boxShadow = 'none';
     target.style.transform = 'scale(1)';
   };
+
+  // Check if this is a high bonding Meteora token (only for Final Stretch, NOT for migrated)
+  const isFinalStretch = columnType === 'final-stretch';
+  const bondingPct = (token as any).bonding_pct ?? 0;
+  const isMigratedColumn = columnType === 'migrated';
+  const isHighBondingMeteora = isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
 
   return (
     <>
@@ -674,7 +718,7 @@ function TokenImage({
           <img
             src={tokenIcon}
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || 'Protocol'} logo`}
-            className={`${isMeteora ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+            className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
             style={{
               filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
             }}
@@ -1164,14 +1208,48 @@ const PulseTable = React.memo(function PulseTable({
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [showSnipeModal, setShowSnipeModal] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+  const [slippage, setSlippage] = useState(0);
+  const [priority, setPriority] = useState(0);
+  const [bribe, setBribe] = useState(0);
   const [activeFilterTab, setActiveFilterTab] = useState('New Pairs');
   const [activeCategoryTab, setActiveCategoryTab] = useState('Audit');
-  const [selectedPill, setSelectedPill] = useState('P1');
-  const [thunderAmount, setThunderAmount] = useState('0.0');
+  const [selectedPill, setSelectedPill] = useState('P1'); // Each column has its own preset selection
+  // Load thunderAmount from localStorage with fallback - separate storage for each column
+  const getInitialThunderAmount = () => {
+    if (typeof window !== 'undefined') {
+      // Determine localStorage key based on column type
+      let storageKey = 'pulseTableThunderAmount';
+      if (title.toLowerCase().includes('final stretch')) {
+        storageKey = 'pulseTableThunderAmountFinalStretch';
+      } else if (title.toLowerCase().includes('migrated')) {
+        storageKey = 'pulseTableThunderAmountMigrated';
+      } else {
+        storageKey = 'pulseTableThunderAmountNewPairs';
+      }
+      
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed.toString();
+        }
+      }
+    }
+    return '0.0';
+  };
+  
+  const [thunderAmount, setThunderAmount] = useState(getInitialThunderAmount);
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
   const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Wave animation for migrating tokens
+  const { solPrice } = useSolPrice(); // Use shared SOL price from Footer context
+  
+  // State for filtered tokens from API
+  const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
+  const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes('new');
   
   const [filters, setFilters] = useState({
@@ -1253,6 +1331,90 @@ const PulseTable = React.memo(function PulseTable({
     setShowFilters(false);
   };
 
+  // Fetch filtered tokens from API when protocols are selected
+  const fetchFilteredTokens = useCallback(async (protocols: string[]) => {
+    if (protocols.length === 0) {
+      setFilteredTokens([]);
+      return;
+    }
+
+    setIsFetchingFiltered(true);
+    try {
+      // Map frontend protocol names to backend protocol names
+      const mapProtocolToBackend = (protocol: string): string[] => {
+        switch (protocol) {
+          case 'Pump':
+            return ['pump.fun'];
+          case 'Pump AMM':
+            return ['pump.fun'];
+          case 'Raydium':
+            return ['raydium', 'raydiumlaunchpad'];
+          case 'Meteora AMM':
+            return ['meteora'];
+          case 'Meteora AMM V2':
+            return ['meteora'];
+          case 'Bonk':
+            return ['bonk'];
+          case 'LaunchLab':
+            return ['launchlab'];
+          default:
+            return [protocol.toLowerCase()];
+        }
+      };
+
+      const backendProtocols = protocols.flatMap(mapProtocolToBackend);
+      const protocolsParam = backendProtocols.join(',');
+      
+      // Determine the endpoint based on column type
+      let endpoint = '/api/token-service/pulse-new';
+      if (title.toLowerCase().includes('final stretch')) {
+        endpoint = '/api/token-service/pulse-final-stretch';
+      } else if (title.toLowerCase().includes('migrated')) {
+        endpoint = '/api/token-service/pulse-migrated';
+      }
+
+      const response = await fetch(`${endpoint}?limit=50&protocols=${encodeURIComponent(protocolsParam)}&t=${Date.now()}`);
+      if (response.ok) {
+        const data = await response.json();
+        setFilteredTokens(Array.isArray(data) ? data : []);
+      } else {
+        console.error('Failed to fetch filtered tokens:', response.status);
+        setFilteredTokens([]);
+      }
+    } catch (error) {
+      console.error('Error fetching filtered tokens:', error);
+      setFilteredTokens([]);
+    } finally {
+      setIsFetchingFiltered(false);
+    }
+  }, [title]);
+
+  // Fetch filtered tokens when protocols change
+  useEffect(() => {
+    if (filters.protocols.length > 0) {
+      fetchFilteredTokens(filters.protocols);
+    } else {
+      setFilteredTokens([]);
+    }
+  }, [filters.protocols, fetchFilteredTokens]);
+
+  // Save thunderAmount to localStorage whenever it changes - separate storage for each column
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Determine localStorage key based on column type
+      let storageKey = 'pulseTableThunderAmount';
+      if (title.toLowerCase().includes('final stretch')) {
+        storageKey = 'pulseTableThunderAmountFinalStretch';
+      } else if (title.toLowerCase().includes('migrated')) {
+        storageKey = 'pulseTableThunderAmountMigrated';
+      } else {
+        storageKey = 'pulseTableThunderAmountNewPairs';
+      }
+      
+      localStorage.setItem(storageKey, thunderAmount);
+    }
+  }, [thunderAmount, title]);
+
   const handleResetFilters = () => {
     const defaultFilters = {
       protocols: [] as string[],
@@ -1327,36 +1489,67 @@ const PulseTable = React.memo(function PulseTable({
   useEffect(() => {
     setHasPendingChanges(JSON.stringify(filters) !== JSON.stringify(pendingFilters));
   }, [filters, pendingFilters]);
+
   const router = useRouter();
   
   // Quick buy functionality
   const { user } = useUser();
-  const { presets, activePreset } = useQuickBuy();
+  const { presets, activePreset, setActivePreset } = useQuickBuy();
+  
+  // Get the preset index from the selected pill for this column
+  const getPresetIndex = () => {
+    return parseInt(selectedPill.replace('P', '')) - 1;
+  };
   
   // QUICK BUY handler
   const handleQuickBuy = async (token: Token) => {
+    console.log("🎯 handleQuickBuy called for token:", token.symbol);
+    
     if (!user) {
+      console.log("❌ No user found");
       toast.error("⚠️ Please connect your wallet to trade");
       return;
     }
 
     const buyAmount = parseFloat(thunderAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
+      console.log("❌ Invalid buy amount:", thunderAmount);
       toast.error("⚠️ Please enter a valid SOL amount");
       return;
     }
 
     try {
       const poolType = getPoolTypeFromToken(token);
-      console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
+      console.log(`🔍 Quick Buy ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
+      
+      const settings = presets[activePreset].quickBuySettings;
+      console.log(`🎯 Quick Buy with presets:`, {
+        slippage: `${(settings.maxSlippage * 100).toFixed(1)}%`,
+        priorityFee: `${settings.priority} SOL`,
+        bribe: `${settings.bribe} SOL`,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee,
+      });
       
       const data = await tradeBuy({
-        poolAddress: token.pair_address,
+        poolAddress: effectivePoolAddress,
         baseMint: token.mint,
         quoteMint: SOL_MINT_ADDRESS,
         amount: buyAmount,
-        mevProtection: presets[activePreset].quickBuySettings.mevMode === "off" ? 0 : 1,
+        mevProtection: settings.mevMode === "off" ? 0 : 1,
         poolType: poolType,
+        originalPairAddress: token.pair_address, // Original pair address from token-service
+        // Preset trading parameters
+        slippage: (settings.maxSlippage || 0.4) * 100, // Convert decimal to percentage (0.4 -> 40)
+        priorityFee: settings.priority || 0.0001,
+        bribe: settings.bribe || 0,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee || false,
+        maxFee: settings.maxFee || 0,
+        rpc: settings.rpc,
+        // Debugging metadata
         tokenName: token.name,
         tokenSymbol: token.symbol,
       }, user.bearerToken);
@@ -1375,19 +1568,32 @@ const PulseTable = React.memo(function PulseTable({
         toast.error("❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
-      console.error('Quick Buy error:', e);
-      
+      // Use console.warn for expected errors, console.error for unexpected
+      const logFn = (e as any)?.expected ? console.warn : console.error;
+      logFn('Quick Buy error:', e);
+
       if (e instanceof ApiError) {
+        // Show simplified user-friendly messages
         if (e.code === 'NO_ACTIVE_POOL') {
-          toast.error(`⚠️ Pool unavailable for ${token.symbol}. No active trading pools found.`, { duration: 5000 });
+          toast.error(`⚠️ Pool unavailable for ${token.symbol}`, { duration: 4000 });
         } else if (e.code === 'INSUFFICIENT_BALANCE') {
-          toast.error(`⚠️ Insufficient balance. You need ${buyAmount} SOL for this trade.`, { duration: 5000 });
+          toast.error(`⚠️ Insufficient balance`, { duration: 4000 });
+        } else if (e.code === 'TX_FAILED') {
+          toast.error(`❌ Trade failed. Try adjusting slippage or amount.`, { duration: 4000 });
+        } else if (e.code === 'NO_HOLDINGS') {
+          toast.error(`❌ No ${token.symbol} to sell`, { duration: 4000 });
+        } else if (e.code === 'AMOUNT_TOO_SMALL') {
+          toast.error(`❌ Amount too small (min 0.001 SOL)`, { duration: 4000 });
+        } else if (e.code === 'POOL_UNAVAILABLE') {
+          toast.error(`⚠️ Pool has insufficient liquidity`, { duration: 4000 });
         } else {
-          toast.error(`❌ ${e.message || 'Quick Buy failed'}`, { duration: 5000 });
+          // Generic error with shortened message
+          const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
+          toast.error(`❌ ${msg}`, { duration: 4000 });
         }
       } else {
-        const errorMsg = e?.message || e?.toString() || 'Unknown error';
-        toast.error(`❌ Quick Buy failed: ${errorMsg}`, { duration: 5000 });
+        // Unexpected error - show generic message
+        toast.error(`❌ Trade failed. Please try again.`, { duration: 4000 });
       }
     }
   };
@@ -1395,29 +1601,29 @@ const PulseTable = React.memo(function PulseTable({
   // Protocol and quote token data with official icons from web3icons
   const protocols = [
     { name: 'Pump', icon: <Image src="/pump.svg" alt="Pump" width={16} height={16} className="rounded-full" />, color: '#00ff88' },
-    { name: 'Bonk', icon: <TokenDOBO variant="branded" size={16} className="rounded-full" />, color: '#ff6b35' },
+    { name: 'Bonk', icon: <div className="w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold">B</div>, color: '#ff6b35' },
     { name: 'Bags', icon: <Image src="https://bags.fm/assets/images/bags-icon.png" alt="Bags" width={16} height={16} className="rounded-full" />, color: '#00d4aa' },
-    { name: 'Moonshot', icon: <Image src="https://play-lh.googleusercontent.com/bmv_OqsfmlR2Tfd7-4I2HS1twZdiJmmyX0warik6UxhUdSfegPMegeIRxxj9LGUBAQM" alt="Moonshot" width={16} height={16} className="rounded-full" />, color: '#a855f7' },
-    { name: 'Heaven', icon: <Image src="data:image/png;base64,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" alt="Heaven" width={16} height={16} className="rounded-full" />, color: '#8b5cf6' },
-    { name: 'Daos.fun', icon: <TokenDAO variant="branded" size={16} className="rounded-full" />, color: '#06b6d4' },
-    { name: 'Candle', icon: <Image src="data:image/png;base64,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" alt="Candle" width={16} height={16} className="rounded-full" />, color: '#f59e0b' },
-    { name: 'Sugar', icon: <Image src="https://cdn.vectorstock.com/i/1000v/28/93/sugar-donut-icon-vector-9992893.jpg" alt="Sugar" width={16} height={16} className="rounded-full" />, color: '#ec4899' },
-    { name: 'Believe', icon: <Image src="https://cryptoast.fr/wp-content/uploads/2025/05/believe-launchcoin-logo.png" alt="Believe" width={16} height={16} className="rounded-full" />, color: '#10b981' },
-    { name: 'Jupiter Studio', icon: <TokenJUP variant="branded" size={16} className="rounded-full" />, color: '#8b5cf6' },
+    // { name: 'Moonshot', icon: <Image src="https://play-lh.googleusercontent.com/bmv_OqsfmlR2Tfd7-4I2HS1twZdiJmmyX0warik6UxhUdSfegPMegeIRxxj9LGUBAQM" alt="Moonshot" width={16} height={16} className="rounded-full" />, color: '#a855f7' },
+    // { name: 'Heaven', icon: <Image src="data:image/png;base64,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" alt="Heaven" width={16} height={16} className="rounded-full" />, color: '#8b5cf6' },
+    // { name: 'Daos.fun', icon: <TokenDAO variant="branded" size={16} className="rounded-full" />, color: '#06b6d4' },
+    // { name: 'Candle', icon: <Image src="data:image/png;base64,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" alt="Candle" width={16} height={16} className="rounded-full" />, color: '#f59e0b' },
+    // { name: 'Sugar', icon: <Image src="https://cdn.vectorstock.com/i/1000v/28/93/sugar-donut-icon-vector-9992893.jpg" alt="Sugar" width={16} height={16} className="rounded-full" />, color: '#ec4899' },
+    // { name: 'Believe', icon: <Image src="https://cryptoast.fr/wp-content/uploads/2025/05/believe-launchcoin-logo.png" alt="Believe" width={16} height={16} className="rounded-full" />, color: '#10b981' },
+    // { name: 'Jupiter Studio', icon: <TokenJUP variant="branded" size={16} className="rounded-full" />, color: '#8b5cf6' },
     { name: 'Moonit', icon: <Image src="/moonit.svg" alt="Moonit" width={16} height={16} className="rounded-full" />, color: '#fbbf24' },
     { name: 'Boop', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/36393.png" alt="Boop" width={16} height={16} className="rounded-full" />, color: '#3b82f6' },
-    { name: 'LaunchLab', icon: <TokenLAUNCH variant="branded" size={16} className="rounded-full" />, color: '#ef4444' },
-    { name: 'Dynamic BC', icon: <Image src="https://cdn.prod.website-files.com/626692727bba3f384e008e8a/67a5dca8b3ee5d0703f70040_icon-primary.webp" alt="Dynamic BC" width={16} height={16} className="rounded-full" />, color: '#f97316' },
-    { name: 'Raydium', icon: <TokenRAY variant="branded" size={16} className="rounded-full" />, color: '#6b7280' },
+    { name: 'LaunchLab', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png" alt="LaunchLab" width={16} height={16} className="rounded-full" style={{ filter: 'hue-rotate(180deg) saturate(2) brightness(1.1)' }} />, color: '#3b82f6' },
+    // { name: 'Dynamic BC', icon: <Image src="https://cdn.prod.website-files.com/626692727bba3f384e008e8a/67a5dca8b3ee5d0703f70040_icon-primary.webp" alt="Dynamic BC" width={16} height={16} className="rounded-full" />, color: '#f97316' },
+    { name: 'Raydium', icon: <div className="w-4 h-4 bg-gray-500 rounded-full flex items-center justify-center text-white text-xs font-bold">R</div>, color: '#6b7280' },
     { name: 'Meteora AMM', icon: <Image src="/meteora.svg" alt="Meteora" width={16} height={16} className="rounded-full" />, color: '#92400e' },
     { name: 'Meteora AMM V2', icon: <Image src="/meteora.svg" alt="Meteora V2" width={16} height={16} className="rounded-full" />, color: '#a16207' },
-    { name: 'Pump AMM', icon: <Image src="/pump.svg" alt="Pump AMM" width={16} height={16} className="rounded-full" />, color: '#64748b' },
-    { name: 'Orca', icon: <Image src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT9zFRQAbDsrkXwAJkZYVE-AIO3OyfVxYYm9w&s" alt="Orca" width={16} height={16} className="rounded-full" />, color: '#0ea5e9' }
+    // { name: 'Pump AMM', icon: <Image src="/pump.svg" alt="Pump AMM" width={16} height={16} className="rounded-full" />, color: '#64748b' },
+    // { name: 'Orca', icon: <Image src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT9zFRQAbDsrkXwAJkZYVE-AIO3OyfVxYYm9w&s" alt="Orca" width={16} height={16} className="rounded-full" />, color: '#0ea5e9' }
   ];
 
   const quoteTokens = [
-    { name: 'SOL', icon: <TokenSOL variant="branded" size={16} className="rounded-full" />, color: '#00ff88' },
-    { name: 'USDC', icon: <TokenUSDC variant="branded" size={16} className="rounded-full" />, color: '#06b6d4' },
+    { name: 'SOL', icon: <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-bold">S</div>, color: '#00ff88' },
+    { name: 'USDC', icon: <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold">U</div>, color: '#06b6d4' },
     { name: 'USD1', icon: <span className="w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center text-xs font-bold text-black">1</span>, color: '#fbbf24' }
   ];
 
@@ -1531,91 +1737,20 @@ const PulseTable = React.memo(function PulseTable({
 
   // Filter and sort tokens
   const filteredAndSortedTokens = useMemo(() => {
-    let filtered = [...tokens];
+    // Use filtered tokens from API if protocols are selected, otherwise use original tokens
+    let filtered = filters.protocols.length > 0 ? [...filteredTokens] : [...tokens];
 
     // Filter out tokens without migrated_pool_address in the Migrated column
-    if (title.toLowerCase().includes('migrated')) {
+    // Skip this filter when protocol filtering is applied (API already returns valid migrated tokens)
+    if (title.toLowerCase().includes('migrated') && filters.protocols.length === 0) {
       filtered = filtered.filter(token => {
         const hasMigratedPoolAddress = !!(token as any).migrated_pool_address;
         return hasMigratedPoolAddress;
       });
     }
 
-    // Apply protocol filters
-    if (filters.protocols.length > 0) {
-      const beforeCount = filtered.length;
-      filtered = filtered.filter(token => {
-        const tokenProtocol = getTokenProtocol(token);
-        
-        // Get bonding curve progress to determine if token has migrated
-        const bondingProgress = typeof token.bonding_curve_progress === 'number' 
-          ? token.bonding_curve_progress 
-          : parseFloat(String(token.bonding_curve_progress || '0'));
-        const bondingPct = (token as any).bonding_pct || 0;
-        const isMigrated = bondingProgress >= 0.85 || bondingPct >= 85;
-        const isFinalStretch = (bondingProgress >= 0.6 && bondingProgress < 0.85) || (bondingPct >= 60 && bondingPct < 85);
-        
-        // Check if token's protocol matches any of the selected protocols
-        const matches = filters.protocols.some(selectedProtocol => {
-          const backendProtocols = mapProtocolToBackend(selectedProtocol);
-          
-          // Special handling for Pump-related filters on migrated/final stretch tokens
-          // These tokens originated from Pump.fun even if they've migrated to another protocol
-          if (selectedProtocol === 'Pump' || selectedProtocol === 'Pump AMM') {
-            // In Migrated column: tokens have moved from Pump to AMMs (Raydium/Meteora)
-            if (isMigrated) {
-              if (selectedProtocol === 'Pump') {
-                // Show all migrated tokens when filtering by "Pump" since they all came from Pump
-                return true;
-              }
-              if (selectedProtocol === 'Pump AMM') {
-                // Show migrated tokens that moved to AMMs
-                if (tokenProtocol) {
-                  return tokenProtocol.toLowerCase().includes('raydium') ||
-                         tokenProtocol.toLowerCase().includes('meteora') ||
-                         tokenProtocol.toLowerCase().includes('orca');
-                }
-              }
-            }
-            
-            // In Final Stretch column: tokens are still on Pump but approaching migration
-            if (isFinalStretch) {
-              // Show all final stretch tokens when filtering by "Pump"
-              return selectedProtocol === 'Pump';
-            }
-            
-            // In New Pairs column: standard Pump protocol matching
-            if (!isMigrated && !isFinalStretch && tokenProtocol) {
-              return backendProtocols.some(backendProtocol => 
-                tokenProtocol.toLowerCase().includes(backendProtocol.toLowerCase()) ||
-                backendProtocol.toLowerCase().includes(tokenProtocol.toLowerCase())
-              );
-            }
-          }
-          
-          // For non-Pump protocols (Raydium, Meteora, etc.), use standard matching
-          // This allows filtering migrated tokens by their CURRENT protocol
-          if (!tokenProtocol) return false;
-          
-          return backendProtocols.some(backendProtocol => 
-            tokenProtocol.toLowerCase().includes(backendProtocol.toLowerCase()) ||
-            backendProtocol.toLowerCase().includes(tokenProtocol.toLowerCase())
-          );
-        });
-        
-        // Debug logging
-        if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_FILTER__) {
-          console.log(`[Protocol Filter] Token ${token.symbol} (${tokenProtocol}) - bonding: ${bondingProgress}% - migrated: ${isMigrated} - matches ${filters.protocols}:`, matches);
-        }
-        
-        return matches;
-      });
-      
-      // Debug logging
-      if (typeof window !== 'undefined' && (window as any).__DEBUG_PROTOCOL_FILTER__) {
-        console.log(`[Protocol Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for protocols:`, filters.protocols);
-      }
-    }
+    // Protocol filtering is now handled by the API, so we skip client-side filtering
+    // when protocols are selected (filteredTokens already contains the filtered results)
 
     // Apply keyword filters
     if (filters.searchKeywords.trim()) {
@@ -1855,8 +1990,99 @@ const PulseTable = React.memo(function PulseTable({
       });
     }
 
+    // Apply social media filters
+    if (filters.hasWebsite) {
+      filtered = filtered.filter(token => {
+        const website = (token as any).website ?? (token as any).website_url ?? '';
+        return website && website.trim().length > 0;
+      });
+    }
+
+    if (filters.hasTwitter) {
+      filtered = filtered.filter(token => {
+        const twitter = (token as any).twitter ?? (token as any).twitter_url ?? (token as any).x ?? (token as any).x_url ?? '';
+        return twitter && twitter.trim().length > 0;
+      });
+    }
+
+    if (filters.hasTelegram) {
+      filtered = filtered.filter(token => {
+        const telegram = (token as any).telegram ?? (token as any).telegram_url ?? '';
+        return telegram && telegram.trim().length > 0;
+      });
+    }
+
+    if (filters.atLeastOneSocial) {
+      filtered = filtered.filter(token => {
+        const website = (token as any).website ?? (token as any).website_url ?? '';
+        const twitter = (token as any).twitter ?? (token as any).twitter_url ?? (token as any).x ?? (token as any).x_url ?? '';
+        const telegram = (token as any).telegram ?? (token as any).telegram_url ?? '';
+        return (website && website.trim().length > 0) || 
+               (twitter && twitter.trim().length > 0) || 
+               (telegram && telegram.trim().length > 0);
+      });
+    }
+
+    if (filters.onlyPumpLive) {
+      filtered = filtered.filter(token => {
+        const protocol = getTokenProtocol(token)?.toLowerCase() || '';
+        const isLive = (token as any).is_live ?? (token as any).isLive ?? true;
+        return protocol.includes('pump') && isLive;
+      });
+    }
+
     // Sort tokens
     filtered.sort((a, b) => {
+      // Special sorting for Final Stretch: prioritize high bonding Meteora tokens by newest + highest bonding
+      if (title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch")) {
+        const aLaunchpadProtocol = (a as any).launchpad_protocol?.toLowerCase() || '';
+        const bLaunchpadProtocol = (b as any).launchpad_protocol?.toLowerCase() || '';
+        const aIsMeteora = aLaunchpadProtocol.includes('meteora');
+        const bIsMeteora = bLaunchpadProtocol.includes('meteora');
+        const aBondingPct = (a as any).bonding_pct ?? 0;
+        const bBondingPct = (b as any).bonding_pct ?? 0;
+        const aIsHighBondingMeteora = aIsMeteora && aBondingPct > 98.6;
+        const bIsHighBondingMeteora = bIsMeteora && bBondingPct > 98.6;
+        
+        // High bonding Meteora tokens go to top
+        if (aIsHighBondingMeteora && !bIsHighBondingMeteora) return -1;
+        if (!aIsHighBondingMeteora && bIsHighBondingMeteora) return 1;
+        
+        // If both are high bonding Meteora, sort by timestamp (newest first), then bonding percentage
+        if (aIsHighBondingMeteora && bIsHighBondingMeteora) {
+          // Get timestamps
+          const getTimestamp = (token: any): number => {
+            const ts = token?.launch_time ?? token?.launchTime ?? 
+                      token?.created_at ?? token?.createdAt ?? 
+                      token?.firstSeen ?? token?.first_seen ?? 
+                      token?.pair_created_at ?? token?.pairCreatedAt ?? 
+                      token?.timestamp ?? token?.ts ?? null;
+            
+            if (!ts) return 0;
+            if (typeof ts === 'number') return ts > 1e12 ? ts : ts > 1e9 ? ts * 1000 : 0;
+            if (typeof ts === 'string') {
+              const n = Number(ts);
+              if (!Number.isNaN(n) && n > 0) return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
+              const d = Date.parse(ts);
+              return Number.isNaN(d) ? 0 : d;
+            }
+            return 0;
+          };
+          
+          const aTimestamp = getTimestamp(a);
+          const bTimestamp = getTimestamp(b);
+          
+          // Sort by newest first (higher timestamp = newer)
+          const timestampDiff = bTimestamp - aTimestamp;
+          if (Math.abs(timestampDiff) > 60000) { // If timestamps differ by more than 1 minute
+            return timestampDiff;
+          }
+          
+          // If timestamps are similar, sort by bonding percentage (highest first)
+          return bBondingPct - aBondingPct;
+        }
+      }
+      
       let aValue, bValue;
       
       // Debug log for sort method
@@ -1940,35 +2166,32 @@ const PulseTable = React.memo(function PulseTable({
     });
 
     return filtered;
-  }, [tokens, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.sortBy, filters.sortOrder]);
+  }, [tokens, filteredTokens, title, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.hasWebsite, filters.hasTwitter, filters.hasTelegram, filters.atLeastOneSocial, filters.onlyPumpLive, filters.sortBy, filters.sortOrder]);
 
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => filteredAndSortedTokens, [filteredAndSortedTokens]);
 
-  // Add top 3 final stretch tokens to wave animation
+  // Add wave animation for all Meteora tokens with bonding_pct > 98.6% in Final Stretch only
   useEffect(() => {
     const isFinalStretch = title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch");
-    console.log(`[Wave Animation] Title: "${title}", isFinalStretch: ${isFinalStretch}, tokens: ${memoizedTokens.length}`);
+    const newWaveTokens = new Set<number>();
     
-    if (isFinalStretch && memoizedTokens.length > 0) {
-      // Add only top 3 final stretch tokens to wave animation set
-      const newWaveTokens = new Set<number>();
-      const topThreeCount = Math.min(3, memoizedTokens.length);
-      for (let i = 0; i < topThreeCount; i++) {
-        newWaveTokens.add(i);
-      }
-      console.log(`[Wave Animation] Setting wave tokens:`, Array.from(newWaveTokens));
-      setWaveTokens(newWaveTokens);
-      
-      // Keep animation running continuously for final stretch tokens
-      return () => {
-        // Don't clear the animation for final stretch tokens
-      };
-    } else {
-      // Clear animation for non-final-stretch tables
-      console.log(`[Wave Animation] Clearing wave tokens`);
-      setWaveTokens(new Set());
+    if (isFinalStretch) {
+      // Add ALL Meteora tokens with high bonding (they're now sorted to the top)
+      memoizedTokens.forEach((token, idx) => {
+        const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+        const isMeteora = launchpadProtocol.includes('meteora');
+        const bondingPct = (token as any).bonding_pct ?? 0;
+        
+        if (isMeteora && bondingPct > 98.6) {
+          newWaveTokens.add(idx);
+          console.log(`[Wave Animation] Adding Meteora token ${token.symbol} (bonding: ${bondingPct}%)`);
+        }
+      });
     }
+    
+    console.log(`[Wave Animation] Setting wave tokens for Final Stretch:`, Array.from(newWaveTokens));
+    setWaveTokens(newWaveTokens);
   }, [memoizedTokens, title]);
 
   const shortAddr = (token: any): string => {
@@ -2053,7 +2276,12 @@ const PulseTable = React.memo(function PulseTable({
 
   return (
     <div
-      className={`flex w-full min-w-[340px] flex-1 flex-col shadow-lg ${isFirstOrLast === "first" ? "border-r border-l border-t rounded-tl-lg" : isFirstOrLast === "last" ? "border-r border-t rounded-tr-lg" : "border-r border-t"}`}
+      className={`flex w-full lg:min-w-[340px] flex-1 flex-col shadow-lg mb-10 ${
+        isFirstOrLast === "first" ? "border-r border-l border-t rounded-tl-lg lg:rounded-tl-lg" : 
+        isFirstOrLast === "last" ? "border-r border-t rounded-tr-lg lg:rounded-tr-lg" : 
+        isFirstOrLast === "only" ? "border border-t border-l border-r rounded-lg" : 
+        "border-r border-t"
+      }`}
       style={{ 
         backgroundColor: 'rgba(30, 31, 38, 0.3)',
         borderColor: AX.border 
@@ -2067,16 +2295,15 @@ const PulseTable = React.memo(function PulseTable({
           color: AX.text 
         }}
       >
-        <span style={{ 
+        <span className="text-sm lg:text-base" style={{ 
           fontWeight: '300',
-          letterSpacing: '0.5px',
-          fontSize: '16px'
+          letterSpacing: '0.5px'
         }}>{title}</span>
         
         {/* Right side container for pill and filter */}
         <div className="flex items-center gap-2">
           {/* P1 P2 P3 Pill with Thunder and Solana - Slick Border Only */}
-          <div className="flex items-center justify-center rounded-full px-3 py-1.5 gap-2 border"
+          <div className="hidden sm:flex items-center justify-center rounded-full px-3 py-1.5 gap-2 border"
                style={{ borderColor: AX.border }}>
           {/* Amount - Editable */}
           <div className="flex items-center justify-center gap-1">
@@ -2084,8 +2311,24 @@ const PulseTable = React.memo(function PulseTable({
             <input
               type="text"
               value={thunderAmount}
-              onChange={(e) => setThunderAmount(e.target.value)}
-              className="bg-transparent border-none outline-none text-xs font-medium w-6 text-center"
+              inputMode="decimal"
+              onChange={(e) => {
+                const value = e.target.value;
+                // Allow only digits and at most one decimal point
+                if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                  setThunderAmount(value);
+                }
+              }}
+              onKeyDown={(e) => {
+                // Block non-numeric keys except control/navigation keys and '.'
+                const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
+                if (allowedKeys.includes(e.key)) return;
+                if (e.key === '.') return;
+                if (!/^[0-9]$/.test(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              className="bg-transparent border-none outline-none text-xs font-medium w-10 text-center"
               style={{ color: AX.text }}
             />
           </div>
@@ -2125,8 +2368,9 @@ const PulseTable = React.memo(function PulseTable({
                     selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-white'
                   }`}
                   onClick={() => {
+                    // Update local preset selection for this column only
                     setSelectedPill(pill);
-                    console.log(`Selected ${pill}`);
+                    console.log(`Selected ${pill} in ${title} column`);
                   }}
                   onMouseEnter={() => setShowPillTooltip(pill)}
                   onMouseLeave={() => setShowPillTooltip(null)}
@@ -2135,41 +2379,53 @@ const PulseTable = React.memo(function PulseTable({
                 </button>
                 
                 {/* Tooltip for each pill */}
-                {showPillTooltip === pill && (
-                  <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
-                       style={{ 
-                         backgroundColor: 'rgba(15, 16, 18, 0.95)',
-                         borderColor: AX.border 
-                       }}>
-                    <div className="p-2 space-y-1.5">
-                      {/* Slippage - Running person icon */}
-                      <div className="flex items-center gap-1.5">
-                        <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
-                        <span className="text-gray-300 text-xs font-light">20%</span>
-                      </div>
-                      
-                      {/* Priority Fee - Gas pump icon with yellow styling */}
-                      <div className="flex items-center gap-1.5">
-                        <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                        <span className="text-yellow-400 text-xs font-light">0.001</span>
-                        <span className="text-red-500 text-xs font-light">⚠</span>
-                      </div>
-                      
-                      {/* Bribe - Coins icon with yellow styling */}
-                      <div className="flex items-center gap-1.5">
-                        <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                        <span className="text-yellow-400 text-xs font-light">0.05</span>
-                        <span className="text-red-500 text-xs font-light">⚠</span>
-                      </div>
-                      
-                      {/* MEV Protection - Ban icon */}
-                      <div className="flex items-center gap-1.5">
-                        <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
-                        <span className="text-gray-300 text-xs font-light">Off</span>
+                {showPillTooltip === pill && (() => {
+                  // Get preset index from pill (P1 = 0, P2 = 1, P3 = 2)
+                  const presetIndex = parseInt(pill.replace('P', '')) - 1;
+                  const preset = presets[presetIndex];
+                  const settings = preset?.quickBuySettings;
+                  
+                  if (!settings) return null;
+                  
+                  return (
+                    <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
+                         style={{ 
+                           backgroundColor: 'rgba(15, 16, 18, 0.95)',
+                           borderColor: AX.border 
+                         }}>
+                      <div className="p-2 space-y-1.5">
+                        {/* Slippage - Running person icon */}
+                        <div className="flex items-center gap-1.5">
+                          <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
+                          <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
+                        </div>
+                        
+                        {/* Priority Fee - Gas pump icon with yellow styling */}
+                        <div className="flex items-center gap-1.5">
+                          <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                          <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
+                          <span className="text-red-500 text-xs font-light">⚠</span>
+                        </div>
+                        
+                        {/* Bribe - Coins icon with yellow styling */}
+                        <div className="flex items-center gap-1.5">
+                          <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                          <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
+                          <span className="text-red-500 text-xs font-light">⚠</span>
+                        </div>
+                        
+                        {/* MEV Protection - Ban icon */}
+                        <div className="flex items-center gap-1.5">
+                          <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
+                          <span className="text-gray-300 text-xs font-light">
+                            {settings.mevMode === 'off' ? 'Off' : 
+                             settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             ))}
           </div>
@@ -2229,7 +2485,7 @@ const PulseTable = React.memo(function PulseTable({
               />
               {/* Modal */}
               <div 
-                className="filter-modal fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] rounded-lg shadow-xl border z-50"
+                className="filter-modal fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[95vw] max-w-[600px] rounded-lg shadow-xl border z-50 max-h-[90vh] overflow-y-auto"
               style={{
                 backgroundColor: AX.surface,
                 borderColor: AX.border,
@@ -2252,7 +2508,7 @@ const PulseTable = React.memo(function PulseTable({
               </div>
 
               {/* Filter Tabs */}
-              <div className="flex border-b items-center justify-between" style={{ borderColor: AX.border }}>
+              {/* <div className="flex border-b items-center justify-between" style={{ borderColor: AX.border }}>
                 <div className="flex">
                 {['New Pairs', 'Final Stretch', 'Migrated'].map((tab) => (
                   <button
@@ -2269,7 +2525,8 @@ const PulseTable = React.memo(function PulseTable({
                     {tab}
                   </button>
                 ))}
-                </div>
+                </div> */}
+                <div className="flex border-b items-center justify-end" style={{ borderColor: AX.border }}>
                 <button 
                   className="p-2 rounded hover:bg-gray-700 transition-colors mr-2 cursor-pointer"
                   onClick={() => {
@@ -2541,7 +2798,8 @@ const PulseTable = React.memo(function PulseTable({
 
                 {/* Category Tabs */}
                 <div className="flex border-b mb-4" style={{ borderColor: AX.border }}>
-                  {['Audit', '$ Metrics', 'Socials'].map((tab) => (
+                  {/* Socials tab commented out - filters work but rarely used */}
+                  {['Audit', '$ Metrics'].map((tab) => (
                     <button
                       key={tab}
                       className={`px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
@@ -2562,7 +2820,8 @@ const PulseTable = React.memo(function PulseTable({
                 {activeCategoryTab === 'Audit' && (
                   <div className="space-y-3">
                     {/* Existing checkboxes */}
-                    <div className="flex items-center gap-2">
+                    {/* Dex Paid - COMMENTED OUT: Filter not implemented (always returns true) */}
+                    {/* <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         id="dexPaid"
@@ -2571,8 +2830,9 @@ const PulseTable = React.memo(function PulseTable({
                         className="rounded cursor-pointer"
                       />
                       <label htmlFor="dexPaid" className="text-sm" style={{ color: AX.text }}>Dex Paid</label>
-                    </div>
-                    <div className="flex items-center gap-2">
+                    </div> */}
+                    {/* CA ends in 'pump' - COMMENTED OUT: Rarely useful filter */}
+                    {/* <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         id="caEndsInPump"
@@ -2581,10 +2841,10 @@ const PulseTable = React.memo(function PulseTable({
                         className="rounded cursor-pointer"
                       />
                       <label htmlFor="caEndsInPump" className="text-sm" style={{ color: AX.text }}>CA ends in 'pump'</label>
-                    </div>
+                    </div> */}
 
-                    {/* Dev Holding % */}
-                    <div>
+                    {/* Dev Holding % - COMMENTED OUT: Filter not implemented in filter logic */}
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Dev Holding %</label>
                       <div className="flex gap-1">
                         <input
@@ -2630,10 +2890,10 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Snipers % */}
-                    <div>
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Snipers %</label>
                       <div className="flex gap-1">
                         <input
@@ -2679,10 +2939,10 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Insiders % */}
-                    <div>
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Insiders %</label>
                       <div className="flex gap-1">
                         <input
@@ -2728,10 +2988,10 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Bundle % */}
-                    <div>
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Bundle %</label>
                       <div className="flex gap-1">
                         <input
@@ -2777,7 +3037,7 @@ const PulseTable = React.memo(function PulseTable({
                           }}
                         />
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Holders */}
                     <div>
@@ -3052,8 +3312,8 @@ const PulseTable = React.memo(function PulseTable({
                       </div>
                     </div>
 
-                    {/* Top 10 Holders % (existing) */}
-                    <div>
+                    {/* Top 10 Holders % - COMMENTED OUT: Filter not implemented (always returns true) */}
+                    {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Top 10 Holders %</label>
                       <input
                         type="number"
@@ -3076,7 +3336,7 @@ const PulseTable = React.memo(function PulseTable({
                             e.target.style.borderColor = AX.border;
                         }}
                       />
-                    </div>
+                    </div> */}
 
                   </div>
                 )}
@@ -3478,7 +3738,8 @@ const PulseTable = React.memo(function PulseTable({
                   </div>
                 )}
 
-                {activeCategoryTab === 'Socials' && (
+                {/* SOCIALS TAB - COMMENTED OUT: Filters work but rarely used */}
+                {false && activeCategoryTab === 'Socials' && (
                   <div className="space-y-3">
                     {/* Twitter Reuses */}
                     <div>
@@ -3690,6 +3951,7 @@ const PulseTable = React.memo(function PulseTable({
 
                   </div>
                 )}
+                {/* END OF SOCIALS TAB COMMENT */}
               </div>
 
               {/* Footer */}
@@ -3853,28 +4115,38 @@ const PulseTable = React.memo(function PulseTable({
             No tokens found.
           </div>
         ) : (
-          memoizedTokens.map((token, idx) => {
-            const pairAddress = (token as any)?.pair_address;
-            const mintAddress = (token as any)?.mint;
+          memoizedTokens
+            .filter((token) => {
+              // Only show tokens that have a valid pair_address
+              const pairAddress = (token as any)?.pair_address;
+              return pairAddress && pairAddress.trim() !== '';
+            })
+            .map((token, idx) => {
+              const pairAddress = (token as any)?.pair_address;
 
-            const handleTokenClick = () => {
-              // Navigate immediately with pair_address or mint - trade page will handle resolution
-              const address = pairAddress || mintAddress;
-              if (address) {
-                router.push(`/trade/${address}`);
-              }
-            };
+              // Build query params for optimistic UI + cache lookup
+              const queryParams = new URLSearchParams({
+                _name: (token as any)?.name || (token as any)?.symbol || '',
+                _symbol: (token as any)?.symbol || '',
+                _price: String((token as any)?.price_usd || (token as any)?.priceUsd || ''),
+                _mcap: String((token as any)?.market_cap_usd || (token as any)?.marketCapUSD || ''),
+                _image: (token as any)?.logo || (token as any)?.image || (token as any)?.uri || '',
+                _mint: (token as any)?.mint || '', // CRITICAL: Required for cache lookup
+              }).toString();
 
-            return (
-              <div
-                key={`${pairAddress || mintAddress || "noaddr"}-${idx}`}
-                className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1  transition-all duration-300 ease-out"
+              return (
+                <Link
+                  href={`/trade/${pairAddress}?${queryParams}`}
+                  key={`${pairAddress}-${idx}`}
+                className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 transition-all duration-300 ease-out"
                 style={{ 
                   borderColor: AX.border,
                   backgroundColor: 'transparent'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
+                  // Prefetch trade page for instant navigation
+                  router.prefetch(`/trade/${pairAddress}?${queryParams}`);
                   // Show and position the popup
                   const popup = e.currentTarget.querySelector('.status-popup') as HTMLElement;
                   if (popup) {
@@ -3883,6 +4155,10 @@ const PulseTable = React.memo(function PulseTable({
                     popup.style.left = `${rect.left + rect.width / 2}px`;
                     popup.style.top = `${rect.top - 30}px`;
                     popup.style.transform = 'translateX(-50%)';
+                  }
+                  // Prefetch trade data on hover for instant navigation
+                  if (pairAddress) {
+                    prefetchTradeData(pairAddress, pairAddress);
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -3893,7 +4169,6 @@ const PulseTable = React.memo(function PulseTable({
                     popup.style.display = 'none';
                   }
                 }}
-                onClick={handleTokenClick}
               >
                 {/* Subtle wave animation for top 3 final stretch tokens */}
                 {waveTokens.has(idx) && (
@@ -3918,14 +4193,8 @@ const PulseTable = React.memo(function PulseTable({
                     title.toLowerCase().includes("stretch");
                   const isMigrated = title.toLowerCase().includes("migrated");
                   
-                  // Check if token is Meteora
+                  // Get launchpad protocol
                   const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
-                  const isMeteora = launchpadProtocol.includes('meteora');
-
-                  // Don't render the status popup at all for Meteora tokens
-                  if (isMeteora) {
-                    return null;
-                  }
 
                   return (
                     <span
@@ -3959,19 +4228,42 @@ const PulseTable = React.memo(function PulseTable({
                             </span>
                           );
                         } else if (isFinalStretch) {
-                          // Show "migrating" for final stretch
+                          // Show "Migrating" for final stretch tokens
                           return (
                             <span style={{ color: AX.aiCyan }}>
                               Migrating
                             </span>
                           );
                         } else if (isMigrated) {
-                          // Show "migrated" for migrated tokens
-                          return (
-                            <span style={{ color: AX.aiBlue }}>
-                              Migrated
-                            </span>
-                          );
+                          // Show protocol-specific text for migrated tokens
+                          if (launchpadProtocol.includes('meteora')) {
+                            return (
+                              <span style={{ color: AX.aiBlue }}>
+                                Virtual Curve
+                              </span>
+                            );
+                          } else if (launchpadProtocol.includes('pump')) {
+                            return (
+                              <span style={{ color: AX.aiBlue }}>
+                                PumpV1
+                              </span>
+                            );
+                          } else if (launchpadProtocol.includes('bonk') || 
+                                     launchpadProtocol.includes('raydium') || 
+                                     launchpadProtocol.includes('launchlab')) {
+                            return (
+                              <span style={{ color: AX.aiBlue }}>
+                                LaunchLab
+                              </span>
+                            );
+                          } else {
+                            // Fallback to "Migrated" for unknown protocols
+                            return (
+                              <span style={{ color: AX.aiBlue }}>
+                                Migrated
+                              </span>
+                            );
+                          }
                         } else {
                           // Fallback to bonding curve progress
                           const bondingProgress =
@@ -3991,7 +4283,7 @@ const PulseTable = React.memo(function PulseTable({
                   );
                 })()}
                 {/* Profile Picture & Address */}
-                <div className="flex flex-col items-center relative">
+                <div className="flex flex-col items-center relative pt-1 flex-shrink-0">
                     <TokenImage
                       token={token}
                       priority={title === "New Pairs"}
@@ -4010,7 +4302,7 @@ const PulseTable = React.memo(function PulseTable({
                       totalTokens={memoizedTokens.length} 
                     />
                   </div> */}
-                  <span className="mt-2 mb-1 max-w-[70px] truncate font-mono text-[10px]" style={{ color: AX.muted }}>
+                  <span className="mt-2 mb-1 max-w-[60px] lg:max-w-[70px] truncate font-mono text-[9px] lg:text-[10px]" style={{ color: AX.muted }}>
                     {shortAddr(token)}
                   </span>
                 </div>
@@ -4021,10 +4313,10 @@ const PulseTable = React.memo(function PulseTable({
                     {/* Left: Token Info & Socials */}
                     <div className="flex min-w-0 flex-col">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="font-semibold text-xs flex-shrink-0" style={{ color: AX.text }}>
+                        <span className="font-semibold text-sm lg:text-base flex-shrink-0" style={{ color: AX.text }}>
                           {token.symbol}
                         </span>
-                        <span className="text-[10px] truncate" style={{ color: AX.muted }}>
+                        <span className="text-xs lg:text-sm truncate" style={{ color: AX.muted }}>
                           {token.name}
                         </span>
                         <div className="relative ml-1">
@@ -4091,14 +4383,14 @@ const PulseTable = React.memo(function PulseTable({
                               }
                             }}
                         >
-                          <FaRegCopy size={12} />
+                          <FaRegCopy size={10} className="lg:w-3 lg:h-3" />
                         </button>
                       </div>
                       </div>
-                      <div className="mt-1 flex items-center gap-2 text-xs" style={{ color: AX.aiGreen }}>
+                      <div className="mt-1 flex items-center gap-1 lg:gap-2 text-xs" style={{ color: AX.aiGreen }}>
                         <span>{getAgeLabel(token)}</span>
                         {/* Socials */}
-                        <div className="relative flex items-center gap-2">
+                        <div className="relative flex items-center gap-1 lg:gap-2">
                           {/* Pump.fun Link - only show for pump tokens */}
                           {token.mint.slice(-4) === "pump" && (
                           <Link
@@ -4117,7 +4409,7 @@ const PulseTable = React.memo(function PulseTable({
                                 if (tooltip) tooltip.style.opacity = '0';
                               }}
                             >
-                              <LuPill />
+                              <LuPill size={10} className="lg:w-3 lg:h-3" />
                           </Link>
                           )}
                           
@@ -4142,12 +4434,13 @@ const PulseTable = React.memo(function PulseTable({
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
+                              e.preventDefault(); // Prevent Link navigation
                               const searchQuery = `${token.symbol} ${token.name}`.trim();
                               const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
                               window.open(twitterUrl, '_blank');
                             }}
                           >
-                            <FaSearch size={12} />
+                            <FaSearch size={10} className="lg:w-3 lg:h-3" />
                           </button>
 
                           {/* X Profile Preview Button */}
@@ -4180,6 +4473,7 @@ const PulseTable = React.memo(function PulseTable({
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                e.preventDefault(); // Prevent Link navigation
                                 // Open X profile in new tab
                                 const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || 'search'}`;
                                 window.open(profileUrl, '_blank');
@@ -4431,11 +4725,11 @@ const PulseTable = React.memo(function PulseTable({
                       </div>
                     </div>
                     {/* Right: MC, V, F, TX */}
-                    <div className="items-right justify-right flex min-w-[140px] flex-col items-end gap-1 text-right">
-                      <div className="justify-right flex flex-col text-xs">
+                    <div className="items-right justify-right flex min-w-[100px] lg:min-w-[140px] flex-col items-end gap-1 text-right">
+                      <div className={'justify-right flex flex-col text-xs lg:text-xs'}>
                          <span style={{ color: AX.muted }}>
                            MC{" "}
-                           <SmartColor token={token} metricType="marketCap" className="text-base font-semibold">
+                           <SmartColor token={token} metricType="marketCap" className="text-sm lg:text-base font-medium">
                              <SmoothNumber
                                value={
                                  (token as any).fully_diluted_value ??
@@ -4450,7 +4744,7 @@ const PulseTable = React.memo(function PulseTable({
                         <span style={{ color: AX.muted }}>
                           <span className="text-xs">V</span>{" "}
                           <span 
-                            className="text-sm font-semibold"
+                            className="text-xs lg:text-sm font-medium"
                             style={{ 
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
@@ -4473,9 +4767,9 @@ const PulseTable = React.memo(function PulseTable({
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
-                          <span className="text-xs">F</span>{" "}
+                          {/* <span className="text-xs">F</span>{" "}
                           <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none" className="ml-1">
-                            <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana)"/>
+                            <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint0_linear_solana)"/>
                             <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana)"/>
                             <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana)"/>
                             <defs>
@@ -4494,35 +4788,74 @@ const PulseTable = React.memo(function PulseTable({
                             </defs>
                           </svg>
                           <span 
-                            className="text-xs font-semibold"
+                            className="text-xs font-medium"
                             style={{ 
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
                             }}
                           >
-                            {((token as any).liquidity_usd && formatSmartNumber((token as any).liquidity_usd)) || '0.024'}
-                          </span>
+                            {(() => {
+                              // Try to get actual liquidity data from multiple possible fields
+                              const liquidityUsd = (token as any).liquidity_usd ?? 
+                                                   (token as any).total_liquidity_usd ?? 
+                                                   (token as any).liquidity ?? 0;
+                              
+                              // If we have actual liquidity data and SOL price, show it
+                              if (liquidityUsd > 0 && solPrice && solPrice > 0) {
+                                const liquiditySol = liquidityUsd / solPrice;
+                                return formatSmartNumber(liquiditySol);
+                              }
+                              
+                              // Fallback: Estimate from market cap
+                              // Bonding curve tokens typically have ~10% of market cap as liquidity
+                              const marketCap = (token as any).fully_diluted_value ?? 
+                                               (token as any).market_cap_usd ?? 0;
+                              if (marketCap > 0 && solPrice && solPrice > 0) {
+                                const estimatedLiquiditySol = (marketCap * 0.1) / solPrice;
+                                return `${formatSmartNumber(estimatedLiquiditySol)}`;
+                              }
+                              
+                              return '-';
+                            })()}
+                          </span> */}
                           <span className="text-xs">TX</span>{" "}
                           <span 
-                            className="text-xs font-semibold"
+                            className="text-xs font-medium"
                             style={{ 
                               color: '#ffffff',
                               fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
                             }}
                           >
                             <SmoothNumber
-                              value={
-                                (token.total_buys_5m ?? 0) +
-                                (token.total_sells_5m ?? 0)
-                              }
-                              duration={300}
+                              value={(() => {
+                                const buys = token.total_buys_24h ?? 0;
+                                const sells = token.total_sells_24h ?? 0;
+                                const total = buys + sells;
+                                // Debug logging
+                                if (token.symbol === 'HEAVEN' || total < 20) {
+                                  console.log(`[PulseTable TX] ${token.symbol}:`, {
+                                    total_buys_24h: token.total_buys_24h,
+                                    total_sells_24h: token.total_sells_24h,
+                                    calculated: total,
+                                    mint: token.mint
+                                  });
+                                }
+                                return total;
+                              })()}
+                              duration={0}
                             />
                           </span>
-                          <div className="w-8 h-1 bg-gray-700 rounded-full overflow-hidden ml-1">
+                          <div className="w-8 h-1 bg-gray-700 rounded-full overflow-hidden ml-1 flex">
                             <div 
-                              className="h-full bg-green-400 rounded-full"
+                              className="h-full bg-green-400"
                               style={{
-                                width: `${Math.min(100, Math.max(10, ((token.total_buys_5m ?? 0) / Math.max(1, (token.total_buys_5m ?? 0) + (token.total_sells_5m ?? 0))) * 100))}%`
+                                width: `${Math.min(100, Math.max(0, ((token.total_buys_24h ?? 0) / Math.max(1, (token.total_buys_24h ?? 0) + (token.total_sells_24h ?? 0))) * 100))}%`
+                              }}
+                            ></div>
+                            <div 
+                              className="h-full bg-red-400"
+                              style={{
+                                width: `${Math.min(100, Math.max(0, ((token.total_sells_24h ?? 0) / Math.max(1, (token.total_buys_24h ?? 0) + (token.total_sells_24h ?? 0))) * 100))}%`
                               }}
                             ></div>
                           </div>
@@ -4555,36 +4888,101 @@ const PulseTable = React.memo(function PulseTable({
                           B/S{" "}
                           <span className="font-bold text-yellow-400">
                             <SmoothNumber
-                              value={token.total_buys_5m ?? 0}
-                              duration={300}
+                              value={token.total_buys_24h ?? 0}
+                              duration={0}
                             />
                             /
                             <SmoothNumber
-                              value={token.total_sells_5m ?? 0}
-                              duration={300}
+                              value={token.total_sells_24h ?? 0}
+                              duration={0}
                             />
                           </span>
                         </span> */}
                       </div>
                       <button 
-                        className="flex cursor-pointer items-center gap-1 rounded-full px-0.5 py-0.5 text-[10px] font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100"
+                        className="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100 z-50 shadow-sm"
                         style={{ 
                           backgroundColor: AX.aiGreen, 
-                          color: '#000000' 
+                          color: '#000000',
+                          border: '1px solid rgba(0,0,0,0.15)'
                         }}
                         onMouseEnter={(e) => {
                           e.currentTarget.style.backgroundColor = AX.aiGreenHover;
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.boxShadow = '0 4px 14px rgba(112, 224, 176, 0.25)';
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.backgroundColor = AX.aiGreen;
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = 'none';
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleQuickBuy(token);
+                          e.preventDefault(); // Prevent Link navigation
+                          // For migrated column, don't check bonding/snipe logic - just quick buy
+                          const isMigratedColumn = title.toLowerCase().includes('migrated');
+                          
+                          if (isMigratedColumn) {
+                            handleQuickBuy(token);
+                          } else {
+                            // For other columns, check for high bonding Meteora tokens
+                            const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+                            const isMeteora = launchpadProtocol.includes('meteora');
+                            const bondingPct = (token as any).bonding_pct ?? 0;
+                            const isHighBondingMeteora = isMeteora && bondingPct > 98.6;
+                            
+                            if (isHighBondingMeteora) {
+                              setSelectedToken(token);
+                              setShowSnipeModal(true);
+                            } else {
+                              handleQuickBuy(token);
+                            }
+                          }
                         }}
                       >
-                        <HiLightningBolt className="text-black" size={12} /> {thunderAmount || '0'}
-                        SOL
+                        {(() => {
+                          const isMigratedColumn = title.toLowerCase().includes('migrated');
+                          
+                          // For migrated column, always show regular thunder (no snipe icon)
+                          if (isMigratedColumn) {
+                            return (
+                              <>
+                                <HiLightningBolt className="text-black" size={14} /> {thunderAmount || '0'}
+                                SOL
+                              </>
+                            );
+                          }
+                          
+                          // For other columns, check for high bonding Meteora tokens
+                          const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+                          const isMeteora = launchpadProtocol.includes('meteora');
+                          const bondingPct = (token as any).bonding_pct ?? 0;
+                          const isHighBondingMeteora = isMeteora && bondingPct > 98.6;
+                          
+                          if (isHighBondingMeteora) {
+                            // Snipe logo for high bonding Meteora tokens - bigger and darker
+                            return (
+                              <>
+                                <img 
+                                  src="https://static.thenounproject.com/png/2098274-200.png" 
+                                  alt="Snipe" 
+                                  width="18" 
+                                  height="18" 
+                                  style={{ filter: 'brightness(0.3)' }}
+                                />
+                                {thunderAmount || '0'} SOL
+                              </>
+                            );
+                          } else {
+                            // Regular thunder for other tokens
+                            return (
+                              <>
+                                <HiLightningBolt className="text-black" size={14} /> {thunderAmount || '0'}
+                                SOL
+                              </>
+                            );
+                          }
+                        })()}
                       </button>
                     </div>
                   </div>
@@ -4613,11 +5011,11 @@ const PulseTable = React.memo(function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <LuChefHat size={13} /> DS <span style={{ color: '#ffffff' }}>{getAgeLabel(token)}</span>
+                    <LuChefHat size={13} /> DS <span style={{ color: '#ffffff' }}><TokenAge createdAt={(token as any).created_at || (token as any).launch_time} /></span>
                   </span>
                   
                   {/* Snipe percentage - Red */}
-                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                  {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: '#EF4444',
                           fontSize: '11px',
@@ -4656,10 +5054,10 @@ const PulseTable = React.memo(function PulseTable({
                         );
                       }
                     })()}
-                  </span>
+                  </span> */}
                   
                   {/* Ghost percentage (Insider Holdings) - Green */}
-                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                  {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -4668,15 +5066,11 @@ const PulseTable = React.memo(function PulseTable({
                           backgroundColor: 'transparent'
                         }}>
                     <RiGhostLine size={13} />
-                    {/* <SolanaTokenAnalytics 
-                      mintAddress={mintAddress}
-                      metricType="insider"
-                    /> */}
                     <span className="text-xs text-gray-500">-</span>
-                  </span>
+                  </span> */}
                   
-                  {/* Three Dice percentage (Dev Holdings) - Green */}
-                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                  {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
+                  {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -4685,14 +5079,82 @@ const PulseTable = React.memo(function PulseTable({
                           backgroundColor: 'transparent'
                         }}>
                     <FaDice size={13} />
-                    {/* <SolanaTokenAnalytics 
-                      mintAddress={mintAddress}
-                      metricType="dev"
-                    /> */}
                     <span className="text-xs text-gray-500">-</span>
-                  </span>
+                  </span> */}
                 </div>
-              </div>
+                
+                {/* Red Meteora -> Arrows -> Yellow Meteora for High Bonding Tokens - Bottom-right of full row */}
+                {(() => {
+                  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+                  const isMeteora = launchpadProtocol.includes('meteora');
+                  const bondingPct = (token as any).bonding_pct ?? 0;
+                  const isFinalStretch = title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch");
+                  const isMigratedColumn = title.toLowerCase().includes('migrated');
+                  const isHighBondingMeteora = isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
+                  
+                  if (isHighBondingMeteora) {
+                    return (
+                      <div className="absolute bottom-2 right-2 flex items-center gap-0.5 z-0">
+                        {/* Red Meteora Logo (left) */}
+                        <div 
+                          className="w-4 h-4 rounded-full overflow-hidden flex items-center justify-center relative" 
+                          style={{ 
+                            border: '0.5px solid #ff4662',
+                            backgroundColor: 'transparent'
+                          }}
+                        >
+                          <img 
+                            src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+                            alt="Meteora" 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        
+                        {/* 3 Green Chevron Arrows */}
+                        {[0, 1, 2].map((i) => (
+                          <svg
+                            key={i}
+                            width="3"
+                            height="4"
+                            viewBox="0 0 3 4"
+                            fill="none"
+                            className="animate-pulse"
+                            style={{
+                              animationDelay: `${i * 0.2}s`,
+                              animationDuration: '1s'
+                            }}
+                          >
+                            <path
+                              d="M0.5 0.5L2.5 2L0.5 3.5"
+                              stroke="#22c55e"
+                              strokeWidth="1"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ))}
+                        
+                        {/* Yellow Meteora Logo (right) */}
+                        <div 
+                          className="w-4 h-4 rounded-full overflow-hidden flex items-center justify-center relative" 
+                          style={{ 
+                            border: '0.5px solid #fbbf24',
+                            backgroundColor: 'transparent'
+                          }}
+                        >
+                          <img 
+                            src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013" 
+                            alt="Meteora" 
+                            className="w-full h-full object-cover"
+                            style={{ filter: 'sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)' }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </Link>
             );
           })
         )}
@@ -4776,6 +5238,135 @@ const PulseTable = React.memo(function PulseTable({
             <span className="text-sm font-medium">Copied to clipboard!</span>
           </div>
         </div>
+      )}
+
+      {/* Snipe on Migration Modal */}
+      {showSnipeModal && selectedToken && (
+        <InterstatePopout
+          open={showSnipeModal}
+          onClose={() => setShowSnipeModal(false)}
+          align="center"
+          className="relative flex w-full max-w-md mx-auto flex-col gap-2 border border-neutral-600 bg-neutral-900 text-neutral-100 shadow-2xl rounded-lg"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-neutral-600 px-4 py-2 text-lg text-neutral-300">
+            Snipe on Migration
+            <button
+              onClick={() => setShowSnipeModal(false)}
+              className="text-2xl text-neutral-400 hover:text-white"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* SNIPE AMOUNT Section - Matching TradeActionPanel */}
+          <div className="mx-3 mb-4">
+            <div className="relative rounded-lg border border-neutral-700/90 bg-neutral-800">
+              <div className="flex items-center justify-between gap-3 px-3 py-1.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Amount</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*[.,]?[0-9]*"
+                    className="h-8 w-20 bg-transparent border-none text-left pl-2
+                               text-[12px] font-normal text-[#E6E7EA] tabular-nums
+                               placeholder:text-[#9CA3AF] focus:outline-none"
+                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
+                    placeholder="0.00"
+                    value={thunderAmount}
+                    onChange={(e) => setThunderAmount(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <SiSolana className="text-[#9CA3AF]" size={16} />
+                  <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">SOL</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              {['0.01', '0.1', '1', '10'].map((amount) => (
+                <button
+                  key={amount}
+                  onClick={() => setThunderAmount(amount)}
+                  className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded text-white text-sm hover:bg-neutral-700 transition-colors"
+                >
+                  {amount}
+                </button>
+              ))}
+              <button className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded text-white text-sm hover:bg-neutral-700 transition-colors">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 20h9"></path>
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Buy Button - Matching preset popup */}
+          <div className="mx-4 mb-4">
+            <button
+              onClick={() => {
+                handleQuickBuy(selectedToken);
+                setShowSnipeModal(false);
+              }}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
+            >
+              Buy {selectedToken.symbol} {thunderAmount || '0'}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          {/* Settings Inputs - Matching preset popup */}
+          <div className="mb-4 grid grid-cols-3 gap-2 px-4">
+            <VerticalInput
+              label="SLIPPAGE"
+              value={slippage}
+              setValue={setSlippage}
+              icon={<FaRunning />}
+            />
+            <VerticalInput
+              label="PRIORITY"
+              value={priority}
+              setValue={setPriority}
+              icon={<FaGasPump />}
+            />
+            <VerticalInput
+              label="BRIBE"
+              value={bribe}
+              setValue={setBribe}
+              icon={<FaCoins />}
+            />
+          </div>
+
+          {/* MEV Mode - Matching preset popup */}
+          <div className="mx-4 mb-4 flex gap-2 rounded-lg border border-neutral-700/90 px-1 py-1">
+            <button className="flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors bg-emerald-300/20 text-emerald-200">
+              Off
+            </button>
+            <button className="flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200">
+              Reduced
+            </button>
+            <button className="flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200">
+              Secure
+            </button>
+          </div>
+
+          {/* RPC - Matching preset popup */}
+          <div className="mx-4 mb-4">
+            <label className="block text-neutral-400 text-xs mb-2">RPC</label>
+            <input
+              type="text"
+              value="https://api.mainnet-beta.solana.com"
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              readOnly
+            />
+          </div>
+        </InterstatePopout>
       )}
 
     </div>

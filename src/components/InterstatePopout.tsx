@@ -49,10 +49,12 @@ export default function InterstatePopout({
 
   if (!render) return null;
 
-  // Overlay classes for centering and background
-  const overlayBase = 'fixed inset-0 z-50';
-  const overlayCenter = 'flex items-center justify-center bg-black/40';
-  const overlayTopRight = 'flex items-start justify-end bg-black/40';
+  // Overlay classes for centering and background with blur + fade
+  const overlayBase = `fixed inset-0 z-50 transition-opacity duration-200 ${
+    isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+  }`;
+  const overlayCenter = 'flex items-center justify-center bg-black/40 backdrop-blur-sm';
+  const overlayTopRight = 'flex items-start justify-end bg-black/40 backdrop-blur-sm';
 
   return (
     <div
@@ -62,7 +64,7 @@ export default function InterstatePopout({
     >
       <div
         ref={contentRef}
-        className={`interstate-content ${isVisible ? 'visible' : ''} ${className}`}
+        className={`${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'} transition-all duration-200 ${className}`}
       >
         {children}
       </div>

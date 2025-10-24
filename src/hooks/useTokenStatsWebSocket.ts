@@ -34,26 +34,43 @@ export interface UseTokenStatsWebSocketParams {
   pairAddress?: string;
   tokenAddress?: string;
   enabled?: boolean;
+  initialStats?: TokenStatsData | null; // Initial stats from REST API
 }
 
 export default function useTokenStatsWebSocket({
   pairAddress,
   tokenAddress,
   enabled = true,
+  initialStats = null,
 }: UseTokenStatsWebSocketParams) {
   const [state, setState] = useState<TokenStatsState>({
     isConnected: false,
     isReconnecting: false,
     error: null,
-    loading: true,
-    data: null,
-    lastUpdate: null,
+    loading: !initialStats, // Don't show loading if we have initial data
+    data: initialStats, // Start with initial stats
+    lastUpdate: initialStats ? new Date().toISOString() : null,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
+  const hasSetInitialDataRef = useRef(false);
+
+  // Update stats when initialStats are provided (from REST pre-fetch)
+  useEffect(() => {
+    if (initialStats && !hasSetInitialDataRef.current) {
+      console.log('[useTokenStatsWebSocket] Using initial stats from pre-fetch');
+      setState(prev => ({
+        ...prev,
+        data: initialStats,
+        loading: false,
+        lastUpdate: new Date().toISOString(),
+      }));
+      hasSetInitialDataRef.current = true;
+    }
+  }, [initialStats]);
 
   const processMessage = useCallback((message: any) => {
     try {

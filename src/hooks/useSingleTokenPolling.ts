@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import throttle from "lodash.throttle";
+import { getCachedTradeData } from "~/utils/tokenCache";
 
 interface PollingState {
   isPolling: boolean;
@@ -71,10 +72,10 @@ export default function useSingleTokenPolling(address: string | undefined) {
     }
   }, [isMintAddress]);
 
-  // Load data from API
+  // Load data from API with caching
   const loadData = useCallback(async () => {
     if (!resolvedPairAddress) return;
-    
+
     // Validate pair address format
     if (typeof resolvedPairAddress !== 'string' || resolvedPairAddress.length < 32) {
       console.warn('Invalid pair address format:', resolvedPairAddress);
@@ -82,57 +83,43 @@ export default function useSingleTokenPolling(address: string | undefined) {
       setState(prev => ({ ...prev, loading: false }));
       return;
     }
-    
+
     try {
       console.log('Loading data for pair_address:', resolvedPairAddress);
-      // Call backend directly instead of going through Next.js API route
-      const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-      const url = `${baseUrl}/v1/trade/view?pair_address=${resolvedPairAddress}`;
-      console.log('API URL:', url);
-      
-      const response = await fetch(url);
-      console.log('Response status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error Response:', errorText);
-        // Don't throw error for 404 - just log and return empty data
-        if (response.status === 404) {
-          console.warn(`Token not found for pair_address: ${resolvedPairAddress}`);
-          setToken(null);
-          setState(prev => ({ ...prev, loading: false }));
-          return;
+
+      // Try to get cached data first for instant display
+      // getCachedTradeData will fetch if not cached, so this always returns data
+      const data = await getCachedTradeData(resolvedPairAddress);
+
+      if (data) {
+        console.log('Data received:', data);
+
+        // Set token data
+        if (data.token) {
+          console.log('Setting token data:', data.token);
+          throttledSetToken(data.token);
         }
-        throw new Error(`Failed to load data: ${response.status} - ${errorText}`);
+
+        // Set trades data
+        if (data.recentTrades) {
+          console.log('Setting trades data:', data.recentTrades);
+          setTrades(data.recentTrades);
+        }
+
+        setState(prev => ({ ...prev, error: null, loading: false }));
+      } else {
+        // No data available
+        console.warn(`No data available for pair_address: ${resolvedPairAddress}`);
+        setToken(null);
+        setState(prev => ({ ...prev, loading: false }));
       }
-      
-      const data = await response.json();
-      console.log('Data received:', data);
-      
-      // Set token data
-      if (data.token) {
-        console.log('Setting token data:', data.token);
-        console.log('Token name:', data.token.name);
-        console.log('Token symbol:', data.token.symbol);
-        console.log('Token uri:', data.token.uri);
-        throttledSetToken(data.token);
-      }
-      
-      // Set trades data
-      if (data.recentTrades) {
-        console.log('Setting trades data:', data.recentTrades);
-        setTrades(data.recentTrades);
-      }
-      
-      // Clear any previous errors
-      setState(prev => ({ ...prev, error: null }));
-      
+
     } catch (err: any) {
       console.error('Failed to load data:', err);
-      setState(prev => ({ 
-        ...prev, 
+      setState(prev => ({
+        ...prev,
         error: err.message || 'Failed to load data',
-        loading: false 
+        loading: false
       }));
     }
   }, [resolvedPairAddress, throttledSetToken]);
@@ -148,12 +135,12 @@ export default function useSingleTokenPolling(address: string | undefined) {
     
     // Load initial data immediately
     loadData();
-    
-    // Then poll every 3 seconds
+
+    // Then poll every 5 seconds (reduced from 3s for better performance)
     intervalRef.current = setInterval(() => {
       console.log('Polling data...');
       loadData();
-    }, 3000);
+    }, 5000);
   }, [resolvedPairAddress, loadData]);
 
   // Stop polling

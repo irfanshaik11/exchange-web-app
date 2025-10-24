@@ -19,8 +19,9 @@ export interface BackendOHLCResponse {
 export interface UseBackendOHLCOptions {
   mint?: string;
   pairAddress?: string;
-  interval?: string;      // Candle size: '1m', '5m', '15m', '1h', '4h', '1d'
-  timeframe?: string;     // Time range: '1h', '4h', '24h', '7d', '30d'
+  interval?: string;      // Candle size: '1s', '5s', '15s', '30s', '1m', '5m', '15m', '1h', '4h', '1d', '7d'
+  timeframe?: string;     // Time range: '1h', '4h', '24h', '7d', '30d', '90d', '180d', '365d'
+  optimize?: boolean;     // Enable automatic optimization for maximum data points
   enabled?: boolean;
   refreshInterval?: number; // in milliseconds
   onSuccess?: (data: BackendOHLCItem[]) => void;
@@ -36,7 +37,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
  * ```tsx
  * const { data, isLoading, error, refetch } = useBackendOHLC({
  *   mint: 'TokenMintAddress123',
- *   interval: '15m',      // Candle size
+ *   interval: '1s',       // Candle size
  *   timeframe: '24h',     // Time range
  *   refreshInterval: 30000,
  * });
@@ -47,6 +48,7 @@ export function useBackendOHLC({
   pairAddress,
   interval = '1m',
   timeframe = '24h',
+  optimize = false,
   enabled = true,
   refreshInterval = 30000,
   onSuccess,
@@ -92,8 +94,11 @@ export function useBackendOHLC({
       if (timeframe) {
         url.searchParams.append('timeframe', timeframe);
       }
+      if (optimize) {
+        url.searchParams.append('optimize', 'true');
+      }
 
-      console.log('useBackendOHLC: Fetching data', { mint, pairAddress, interval, timeframe, url: url.toString() });
+      console.log('useBackendOHLC: Fetching data', { mint, pairAddress, interval, timeframe, optimize, url: url.toString() });
 
       const response = await fetch(url.toString(), {
         method: 'GET',
@@ -161,7 +166,7 @@ export function useBackendOHLC({
         onError(error);
       }
     }
-  }, [mint, pairAddress, interval, timeframe, enabled, onSuccess, onError]);
+  }, [mint, pairAddress, interval, timeframe, optimize, enabled, onSuccess, onError]);
 
   // Initial fetch
   useEffect(() => {

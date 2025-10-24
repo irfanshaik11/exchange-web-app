@@ -1,28 +1,34 @@
-// COMMENTED OUT - Solana Token Analytics Component
-/*
 import React from 'react';
 import { useTokenAnalytics } from '../hooks/useTokenAnalytics';
 
 interface SolanaTokenAnalyticsProps {
   mintAddress?: string;
-  metricType: 'sniper' | 'insider' | 'dev' | 'whale' | 'bundle' | 'kol';
+  metricType: 'sniper' | 'insider' | 'dev' | 'whale' | 'bundle' | 'small';
   showDetails?: boolean;
+  tokenInfo?: {
+    symbol?: string;
+    name?: string;
+    pool?: string;
+    dex?: string;
+  };
 }
 
 const SolanaTokenAnalytics: React.FC<SolanaTokenAnalyticsProps> = ({ 
   mintAddress, 
   metricType,
-  showDetails = false 
+  showDetails = false,
+  tokenInfo
 }) => {
   // If no mint address provided, show dash
   if (!mintAddress) {
-    console.log('⚠️ No mint address provided for', metricType, 'metric');
     return <span className="text-xs text-gray-500">-</span>;
   }
 
   const { data, loading, error } = useTokenAnalytics({
     mintAddress,
     enabled: !!mintAddress,
+    autoRegister: true,
+    tokenInfo,
   });
 
   const formatPercentage = (num: number): string => {
@@ -38,16 +44,12 @@ const SolanaTokenAnalytics: React.FC<SolanaTokenAnalyticsProps> = ({
   }
 
   if (error) {
-    console.log('SolanaTokenAnalytics error for', mintAddress, ':', error);
-    return <span className="text-xs text-gray-500">0%</span>;
+    return <span className="text-xs text-gray-500">-</span>;
   }
 
   if (!data) {
-    return <span className="text-xs text-gray-500">0%</span>;
+    return <span className="text-xs text-gray-500">-</span>;
   }
-  
-  // Debug log
-  console.log('SolanaTokenAnalytics data for', mintAddress?.slice(0, 8), ':', data);
 
   // Get the appropriate metric value
   let value: number = 0;
@@ -74,17 +76,14 @@ const SolanaTokenAnalytics: React.FC<SolanaTokenAnalyticsProps> = ({
       value = data.bundle_holding_percentage || 0;
       label = 'Bundle';
       break;
-    case 'kol':
-      value = data.kols_percentage || 0;
-      label = 'KOL';
+    case 'small':
+      value = data.small_holding_percentage || 0;
+      label = 'Small Holders';
       break;
   }
-  
-  console.log(`${label} for ${mintAddress?.slice(0, 8)}: ${value}`);
 
   // For whale metric, always show the value (even 0% is important)
-  // For other metrics, show dash if value is very small
-  const shouldShowZero = metricType === 'whale';
+  const shouldShowZero = metricType === 'whale' || metricType === 'small';
   
   if (value < 0.1 && !shouldShowZero) {
     return <span className="text-xs text-gray-500">0%</span>;
@@ -97,11 +96,16 @@ const SolanaTokenAnalytics: React.FC<SolanaTokenAnalyticsProps> = ({
           <span className={value > 10 ? 'text-red-400' : 'text-green-400'}>
             {formatPercentage(value)}
           </span>
-          <span>{label}</span>
+          <span className="text-gray-400">{label}</span>
         </div>
         {metricType === 'whale' && (
-          <div className="text-xs text-gray-400">
+          <div className="text-xs text-gray-500">
             Top 10 holders
+          </div>
+        )}
+        {metricType === 'small' && (
+          <div className="text-xs text-gray-500">
+            &lt;1% each
           </div>
         )}
       </div>
@@ -117,7 +121,14 @@ const SolanaTokenAnalytics: React.FC<SolanaTokenAnalyticsProps> = ({
       return 'text-green-400';
     }
     
-    // For sniper, insider, dev, bundle, kol
+    if (metricType === 'small') {
+      // Higher is better for small holders
+      if (value > 50) return 'text-green-400';
+      if (value > 20) return 'text-yellow-400';
+      return 'text-red-400';
+    }
+    
+    // For sniper, insider, dev, bundle
     if (value > 15) return 'text-red-400';
     if (value > 5) return 'text-yellow-400';
     return 'text-green-400';
@@ -131,5 +142,3 @@ const SolanaTokenAnalytics: React.FC<SolanaTokenAnalyticsProps> = ({
 };
 
 export default SolanaTokenAnalytics;
-*/
-

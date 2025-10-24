@@ -38,13 +38,41 @@ const AX = {
 };
 
 /* ---------- helpers ---------- */
-function getTokenAge(createdAt: string) {
-  const createdDate = new Date(createdAt);
+function getTokenAge(createdAt: string | number) {
+  console.log('[TradeHeader] getTokenAge called with:', {
+    createdAt,
+    createdAt_type: typeof createdAt,
+    createdAt_length: createdAt?.toString().length
+  });
+  
+  // Handle Unix timestamp in seconds (convert to milliseconds)
+  let timestamp = createdAt;
+  if (typeof createdAt === 'number' && createdAt < 10000000000) {
+    // If it's a number less than 10 billion, it's likely Unix seconds
+    timestamp = createdAt * 1000;
+    console.log('[TradeHeader] Converted Unix seconds to milliseconds:', { original: createdAt, converted: timestamp });
+  }
+  
+  const createdDate = new Date(timestamp);
   const now = new Date();
   const diffMs = now.getTime() - createdDate.getTime();
   const diffMins = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  console.log('[TradeHeader] Age calculation:', {
+    createdAt,
+    timestamp,
+    createdDate: createdDate.toISOString(),
+    createdDate_valid: !isNaN(createdDate.getTime()),
+    now: now.toISOString(),
+    diffMs,
+    diffMins,
+    diffHours,
+    diffDays,
+    diffYears: Math.floor(diffDays / 365)
+  });
+  
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h`;
   return `${diffMins}m`;
@@ -718,7 +746,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm" style={{ color: AX.aiGreen }}>
-            <span className="font-light" style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}>{getTokenAge(token.created_at)}</span>
+            <span className="font-light" style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}>{getTokenAge(token.created_at || (token as any).CreatedAt)}</span>
             {/* Socials */}
             <div className="relative flex items-center gap-2">
               {/* Pump.fun Link - only show for pump tokens */}

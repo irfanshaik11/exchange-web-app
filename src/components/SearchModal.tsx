@@ -393,7 +393,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
         }
       };
     }
-  }, [open, fetchTokens]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // No need to re-run search when sort changes - we sort on the frontend now
 
@@ -408,8 +409,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
       open={open}
       onClose={onClose}
       align="center"
-      overlayClassName="bg-[#090909]/80 backdrop-blur-[2px]"
-      className="relative mx-4 w-full max-w-2xl -translate-y-8 rounded-md border border-neutral-700 bg-neutral-950 pb-4 text-neutral-100 shadow-2xl"
+      className="mx-auto w-[980px] max-w-[96vw] rounded-xl border border-neutral-800 bg-neutral-900 shadow-2xl transition-all duration-200"
+      disableClickOutside={false}
     >
       {/* Filter and Sort Controls */}
       <div className="flex items-center justify-between px-3 pt-3 text-xs font-medium">
@@ -480,9 +481,10 @@ const SearchModalContent = React.memo(function SearchModalContent({
           placeholder="Search by name, ticker, or CA… (live search)"
           className="w-full bg-transparent text-[20px] outline-none placeholder:text-neutral-500"
         />
-        <span className="absolute top-1/2 right-4 -translate-y-1/2 rounded bg-neutral-900 px-2 py-0.5 text-[10px] text-neutral-300">
-          {searchLoading ? '🔄 Searching...' : 'Type to search'}
-        </span>
+        <div className="absolute top-1/2 right-4 -translate-y-1/2 flex items-center gap-1">
+          <span className="rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">Tab</span>
+          <span className="rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">/</span>
+        </div>
       </div>
 
       {/* Token List */}

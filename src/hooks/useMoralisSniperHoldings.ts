@@ -60,8 +60,6 @@ export const useMoralisSniperHoldings = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const MORALIS_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6ImM2ZjA1Y2Y2LTJiZWItNDM5Yi1hOTg2LWZiNzliYjQzOTc2OSIsIm9yZ0lkIjoiNDc0OTI1IiwidXNlcklkIjoiNDg4NTc0IiwidHlwZUlkIjoiMTU2N2UxYWYtZGFlOS00NTA4LThmODYtODgxODg1YTcyOWQzIiwidHlwZSI6IlBST0pFQ1QiLCJpYXQiOjE3NTk5NjY2MjcsImV4cCI6NDkxNTcyNjYyN30.1lM_JN0QQGVsTRpspgzvy-T5Ae9XlyEEpYlYMGvVhCs';
-
   const fetchSniperHoldings = useCallback(async (address: string) => {
     if (!address || !enabled) return;
 
@@ -69,13 +67,13 @@ export const useMoralisSniperHoldings = ({
     setError(null);
 
     try {
-      const url = `https://deep-index.moralis.io/api/v2.2/pairs/${address}/snipers?chain=${chainId}&blocksAfterCreation=${blocksAfterCreation}`;
+      // Use our secure proxy endpoint instead of calling Moralis directly
+      const url = `/api/moralis-snipers?address=${encodeURIComponent(address)}&chain=${encodeURIComponent(chainId)}&blocksAfterCreation=${encodeURIComponent(blocksAfterCreation)}`;
       
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'accept': 'application/json',
-          'X-API-Key': MORALIS_API_KEY,
         },
       });
 

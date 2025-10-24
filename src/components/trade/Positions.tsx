@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { tradeSellPercentage } from '~/utils/api';
 import { formatSmartNumber } from '~/utils/db';
 import { getActivePositionsByUser } from '~/utils/functions';
 import type { PositionRow } from '~/utils/functions';
@@ -8,6 +7,17 @@ import FastImage from '../FastImage';
 import InterstateTooltip from '~/components/InterstateTooltip';
 import { FaArrowUp, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
+import Image from 'next/image';
+import SellPopup from '../SellPopup';
+
+interface TokenMetadata {
+  imageUrl?: string;
+  protocol?: string;
+  name?: string;
+  symbol?: string;
+  timestamp?: number;
+  migrated_pool_address?: string; // For graduated tokens (Meteora DBC -> permanent pool)
+}
 
 interface PositionsProps {
   userId: string;
@@ -19,13 +29,9 @@ interface PositionsProps {
   showHidden?: boolean; // Optional: whether to show hidden tokens
   onHiddenTokensChange?: (hiddenTokens: Set<string>) => void; // Optional: callback to pass hidden tokens to parent
   showInSOL?: boolean; // Optional: whether to show values in SOL instead of USD
-}
-
-interface TokenMetadata {
-  imageUrl?: string;
-  protocol?: string;
-  name?: string;
-  symbol?: string;
+  tokenMetadataCache?: Record<string, TokenMetadata>; // Optional: shared cache
+  onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
+  isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
 }
 
 function shortAddr(addr: string) {
@@ -56,15 +62,50 @@ const SolIcon = () => (
   </>
 );
 
-const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsChange, preloadedPositions, skipFetch, onTokenNamesChange, showHidden = false, onHiddenTokensChange, showInSOL = false }) => {
+const Positions: React.FC<PositionsProps> = ({ 
+  userId, 
+  bearerToken, 
+  onPositionsChange, 
+  preloadedPositions, 
+  skipFetch, 
+  onTokenNamesChange, 
+  showHidden = false, 
+  onHiddenTokensChange, 
+  showInSOL = false,
+  tokenMetadataCache,
+  onUpdateCache,
+  isCacheValid
+}) => {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [hiddenTokens, setHiddenTokens] = useState<Set<string>>(new Set());
+  const [showSellPopup, setShowSellPopup] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState<PositionRow | null>(null);
   const [solPrice, setSolPrice] = useState<number>(0);
   const router = useRouter();
+
+  // Function to refresh positions after a successful sell
+  const refreshPositions = async () => {
+    if (userId) {
+      try {
+        const updatedPositions = await getActivePositionsByUser(userId);
+        setPositions(updatedPositions);
+        onPositionsChange(updatedPositions);
+      } catch (error) {
+        console.error('Failed to refresh positions:', error);
+      }
+    }
+  };
   
-  // Fetch SOL price using Pyth Network
+  // Initialize local metadata from cache if available
+  useEffect(() => {
+    if (tokenMetadataCache && Object.keys(tokenMetadataCache).length > 0) {
+      setTokenMetadata(tokenMetadataCache);
+    }
+  }, [tokenMetadataCache]);
+  
+  // Fetch SOL price using Pyth Network with improved error handling
   useEffect(() => {
     const fetchSolPrice = async () => {
       try {
@@ -72,25 +113,60 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
         const SOL_USD_FEED = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
         const response = await fetch(
           `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
-          { signal: AbortSignal.timeout(5000) }
+          { 
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+            signal: AbortSignal.timeout(10000) // 10 second timeout
+          }
         );
         
-        if (response.ok) {
-          const data = await response.json();
-          const priceData = data.parsed?.[0]?.price;
-          if (priceData?.price && priceData?.expo) {
-            const price = Number(priceData.price) * Math.pow(10, priceData.expo);
-            setSolPrice(price);
-            return;
-          }
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const priceData = data.parsed?.[0]?.price;
+        if (priceData?.price && priceData?.expo) {
+          const price = Number(priceData.price) * Math.pow(10, priceData.expo);
+          setSolPrice(price);
+          return;
+        } else {
+          throw new Error('Invalid response format from Pyth');
         }
       } catch (error) {
         console.error('Error fetching SOL price from Pyth:', error);
+        
+        // Fallback to CoinGecko if Pyth fails
+        try {
+          const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd', {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+            },
+            signal: AbortSignal.timeout(10000), // 10 second timeout
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          if (data?.solana?.usd) {
+            setSolPrice(data.solana.usd);
+            return;
+          } else {
+            throw new Error('Invalid response format from CoinGecko');
+          }
+        } catch (fallbackError) {
+          console.error('Error fetching SOL price from CoinGecko fallback:', fallbackError);
+          // Use a reasonable fallback price
+          setSolPrice(150);
+        }
       }
-      
-      // Fallback to static price if Pyth fails
-      setSolPrice(150);
     };
+    
     fetchSolPrice();
     // Refresh price every 60 seconds
     const interval = setInterval(fetchSolPrice, 60000);
@@ -137,54 +213,106 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
       setPositions(preloadedPositions);
       setLoading(false);
       
-      // Fetch token metadata for preloaded positions
-      preloadedPositions.forEach(async (pos) => {
-        try {
-          const pairAddress = pos.pairAddress || pos.tokenAddress;
-          console.log(`Fetching token data for pair: ${pairAddress}`);
-          
-          const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`);
-          
-          if (!response.ok) {
-            console.error(`Failed to fetch token data for ${pairAddress}:`, response.status);
-            return;
-          }
-          
-          const data = await response.json();
-          const tokenData = data?.token;
-          
-          if (tokenData) {
-            setTokenMetadata(prev => {
-              const updated = {
-                ...prev,
-                [pos.tokenAddress]: {
+      // Fetch token metadata for preloaded positions in parallel
+      const fetchAllMetadata = async () => {
+        // Deduplicate tokens before fetching to avoid race conditions
+        const uniqueTokens = Array.from(new Set(preloadedPositions.map(p => p.tokenAddress)));
+        
+        // Filter out tokens that are already cached and valid
+        const tokensToFetch = uniqueTokens.filter(token => 
+          !isCacheValid || !isCacheValid(token)
+        );
+        
+        if (tokensToFetch.length === 0) {
+          console.log('✅ All tokens loaded from cache');
+          return;
+        }
+        
+        console.log(`🔄 Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
+        
+        // Fetch all tokens in parallel for maximum speed
+        await Promise.allSettled(
+          tokensToFetch.map(async (tokenAddress) => {
+            // Find the position to get the pair address
+            const pos = preloadedPositions.find(p => p.tokenAddress === tokenAddress);
+            if (!pos) return;
+
+            try {
+              // Reduced timeout to 3s for faster failures
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+              // IMPORTANT: Query by mint address (token address) instead of pair address
+              // This ensures we get the correct migrated_pool_address for graduated tokens
+              const response = await fetch(`/api/token-service/trade-view?mint_address=${tokenAddress}`, {
+                signal: controller.signal
+              });
+              clearTimeout(timeoutId);
+              
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+              }
+              
+              const data = await response.json();
+              const tokenData = data?.token;
+              
+              if (tokenData) {
+                const migratedPool = tokenData.migrated_pool_address || '';
+
+                // Debug logging for migrated pool address
+                if (migratedPool && migratedPool !== '') {
+                  console.log(`🔄 [Positions] Token ${tokenData.symbol} has migrated pool: ${migratedPool}`);
+                } else {
+                  console.log(`📍 [Positions] Token ${tokenData.symbol} - no migrated pool (using pair_address)`);
+                }
+
+                const metadata = {
                   imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
                   protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
                   name: tokenData.name || '',
                   symbol: tokenData.symbol || '',
+                  migrated_pool_address: migratedPool, // For graduated tokens
+                };
+                
+                // Update local state
+                setTokenMetadata(prev => ({
+                  ...prev,
+                  [tokenAddress]: metadata
+                }));
+                
+                // Update shared cache
+                if (onUpdateCache) {
+                  onUpdateCache(tokenAddress, metadata);
                 }
-              };
-              
-              // Pass token names to parent if callback is provided
-              if (onTokenNamesChange) {
-                const tokenNames: Record<string, string> = {};
-                Object.keys(updated).forEach(key => {
-                  if (updated[key]?.name) {
-                    tokenNames[key] = updated[key].name!;
-                  }
-                });
-                onTokenNamesChange(tokenNames);
+                
+                // Pass token names to parent if callback is provided
+                if (onTokenNamesChange) {
+                  const tokenNames: Record<string, string> = { [tokenAddress]: metadata.name || '' };
+                  onTokenNamesChange(tokenNames);
+                }
               }
-              
-              return updated;
-            });
-          }
-        } catch (error) {
-          console.error(`Error fetching token data for ${pos.pairAddress || pos.tokenAddress}:`, error);
-        }
-      });
+            } catch (error) {
+              // Set fallback metadata immediately so token doesn't stay at "Loading..."
+              const fallback = {
+                imageUrl: '',
+                protocol: '',
+                name: shortAddr(tokenAddress),
+                symbol: '???',
+              };
+              setTokenMetadata(prev => ({
+                ...prev,
+                [tokenAddress]: fallback
+              }));
+              // Don't cache failed fetches
+            }
+          })
+        );
+      };
+      
+      // Don't await - let it load in background
+      fetchAllMetadata();
     }
-  }, [preloadedPositions, skipFetch]);
+  }, [preloadedPositions, skipFetch, onTokenNamesChange]);
 
   useEffect(() => {
     if (skipFetch) return; // Skip fetch if using preloaded positions
@@ -213,52 +341,93 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
         onPositionsChange(positions);
 
         // Fetch token data from token-service using pairAddress (originalPairAddress)
-        positions.forEach(async (pos) => {
-          try {
-            // Use pairAddress (which is originalPairAddress from backend) to get token data
-            const pairAddress = pos.pairAddress || pos.tokenAddress;
-            console.log(`Fetching token data for pair: ${pairAddress}`);
-            
-            const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`);
-            
-            if (!response.ok) {
-              console.error(`Failed to fetch token data for ${pairAddress}:`, response.status);
-              return;
-            }
-            
-            const data = await response.json();
-            const tokenData = data?.token;
-            
-            if (tokenData) {
-              setTokenMetadata(prev => {
-                const updated = {
-                  ...prev,
-                  [pos.tokenAddress]: {
+        const fetchAllMetadata = async () => {
+          // Deduplicate tokens before fetching to avoid race conditions
+          const uniqueTokens = Array.from(new Set(positions.map(p => p.tokenAddress)));
+          
+          // Filter out tokens that are already cached and valid
+          const tokensToFetch = uniqueTokens.filter(token => 
+            !isCacheValid || !isCacheValid(token)
+          );
+          
+          if (tokensToFetch.length === 0) {
+            console.log('✅ All tokens loaded from cache');
+            return;
+          }
+          
+          console.log(`🔄 Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
+          
+          // Fetch all tokens in parallel using Promise.all for maximum speed
+          await Promise.allSettled(
+            tokensToFetch.map(async (tokenAddress) => {
+              // Find the position to get the pair address
+              const pos = positions.find(p => p.tokenAddress === tokenAddress);
+              if (!pos) return;
+
+              try {
+                // Reduced timeout to 3s for faster failures
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+                // IMPORTANT: Query by mint address (token address) instead of pair address
+                // This ensures we get the correct migrated_pool_address for graduated tokens
+                const response = await fetch(`/api/token-service/trade-view?mint_address=${tokenAddress}`, {
+                  signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                  throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const tokenData = data?.token;
+                
+                if (tokenData) {
+                  const metadata = {
                     imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
                     protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
                     name: tokenData.name || '',
                     symbol: tokenData.symbol || '',
+                  };
+                  
+                  // Update local state
+                  setTokenMetadata(prev => ({
+                    ...prev,
+                    [tokenAddress]: metadata
+                  }));
+                  
+                  // Update shared cache
+                  if (onUpdateCache) {
+                    onUpdateCache(tokenAddress, metadata);
                   }
-                };
-                
-                // Pass token names to parent if callback is provided
-                if (onTokenNamesChange) {
-                  const tokenNames: Record<string, string> = {};
-                  Object.keys(updated).forEach(key => {
-                    if (updated[key]?.name) {
-                      tokenNames[key] = updated[key].name!;
-                    }
-                  });
-                  onTokenNamesChange(tokenNames);
+                  
+                  // Pass token names to parent if callback is provided
+                  if (onTokenNamesChange) {
+                    const tokenNames: Record<string, string> = { [tokenAddress]: metadata.name || '' };
+                    onTokenNamesChange(tokenNames);
+                  }
                 }
-                
-                return updated;
-              });
-            }
-          } catch (error) {
-            console.error(`Error fetching token data for ${pos.pairAddress || pos.tokenAddress}:`, error);
-          }
-        });
+              } catch (error) {
+                // Set fallback metadata immediately so token doesn't stay at "Loading..."
+                const fallback = {
+                  imageUrl: '',
+                  protocol: '',
+                  name: shortAddr(tokenAddress),
+                  symbol: '???',
+                };
+                setTokenMetadata(prev => ({
+                  ...prev,
+                  [tokenAddress]: fallback
+                }));
+                // Don't cache failed fetches
+              }
+            })
+          );
+        };
+        
+        // Don't await - let it load in background
+        fetchAllMetadata();
       } catch (error) {
         console.error('❌ Error fetching positions:', error);
       } finally {
@@ -280,9 +449,9 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
   }, [userId, onPositionsChange, skipFetch, onTokenNamesChange]);
 
   return (
-    <div className="w-full h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+    <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
       <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-[#1E1F26] z-10">
+        <thead className="sticky top-0 bg-[#1E1F26] z-20">
           <tr className="text-neutral-400 border-b border-neutral-800">
             <th className="px-2 py-2 text-left">Token</th>
             <th className="px-2 py-2 text-left">Bought</th>
@@ -298,12 +467,12 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
           ) : positions.length === 0 ? (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions found.</td></tr>
           ) : (
-            positions
+            [...positions]
+              .reverse() // Reverse so newest/most recent positions appear at the top
               .filter(pos => showHidden || !hiddenTokens.has(pos.tokenAddress))
               .map((pos, idx) => {
-              // Use pairAddress if available, otherwise fall back to tokenAddress
+              // For positions: backend stores originalPairAddress value in pairAddress field
               const navigateAddress = pos.pairAddress || pos.tokenAddress;
-              // Display pairAddress if available, otherwise show tokenAddress
               const displayAddress = pos.pairAddress || pos.tokenAddress;
               
               const handleRowClick = () => {
@@ -315,29 +484,70 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
               
               const metadata = tokenMetadata[pos.tokenAddress];
               
-              // Protocol color mapping
+              // Protocol color mapping - matches PulseTable
               const getProtocolColor = (protocol?: string) => {
                 const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '#8B5CF6'; // Purple for Pump.fun
-                if (p.includes('raydium')) return '#00D4AA'; // Teal for Raydium
-                if (p.includes('meteora')) return '#FF6B6B'; // Red for Meteora
-                if (p.includes('launch')) return '#FFA500'; // Orange for LaunchLab
-                return '#6B7280'; // Gray default
+                if (p.includes('pump')) return '#22c55e'; // Green for Pump.fun
+                if (p.includes('raydium')) return '#5c51f7'; // Purple for Raydium
+                if (p.includes('meteora')) return '#ff4662'; // Pink-red for Meteora
+                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) return '#eab308'; // Yellow for Moonit/Moonshot
+                if (p.includes('boop')) return '#134577'; // Dark blue for Boop
+                if (p.includes('bonk')) return '#ff6b35'; // Orange for Bonk
+                if (p.includes('bags')) return '#22c55e'; // Green for Bags
+                if (p.includes('launch')) return '#3b82f6'; // Blue for LaunchLab (portfolio doesn't have column type, use default blue)
+                return '#22c55e'; // Default to green
               };
 
               const protocolColor = getProtocolColor(metadata?.protocol);
               
-              // Protocol icon mapping
-              const getProtocolIcon = (protocol?: string) => {
+              // Protocol icon mapping - returns image URL
+              const getProtocolIcon = (protocol?: string): string => {
                 const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '💊';
-                if (p.includes('raydium')) return '🌊';
-                if (p.includes('meteora')) return '☄️';
-                if (p.includes('launch')) return '🚀';
-                return '🔷';
+                
+                if (p.includes('pump')) {
+                  return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                }
+                
+                if (p.includes('meteora')) {
+                  return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
+                }
+                
+                if (p.includes('raydium')) {
+                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                }
+                
+                if (p.includes('boop')) {
+                  return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
+                }
+                
+                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) {
+                  return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+                }
+                
+                if (p.includes('bonk')) {
+                  return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+                }
+                
+                if (p.includes('bags')) {
+                  return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
+                }
+                
+                if (p.includes('launch')) {
+                  // LaunchLab uses Raydium icon
+                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                }
+                
+                // Default to pump.fun icon for unknown protocols
+                return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
               };
 
               const tokenIcon = getProtocolIcon(metadata?.protocol);
+              const p = metadata?.protocol?.toLowerCase() || '';
+              const isMeteora = p.includes('meteora');
+              const isBonk = p.includes('bonk');
+              const isBags = p.includes('bags');
+              const isMoonit = p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot');
+              const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
               const isHidden = hiddenTokens.has(pos.tokenAddress);
               
               return (
@@ -384,13 +594,19 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
                       <div 
                         className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/4 translate-y-1/4 z-10"
                         style={{ 
-                          width: 16, 
-                          height: 16,
+                          width: 20, 
+                          height: 20,
                           border: `2px solid ${protocolColor}`,
                           boxShadow: `0 0 4px ${protocolColor}60`
                         }}
                       >
-                        <span className="text-xs">{tokenIcon}</span>
+                        <Image
+                          src={tokenIcon}
+                          alt={`${metadata?.protocol || 'Protocol'} logo`}
+                          width={16}
+                          height={16}
+                          className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+                        />
                       </div>
                     </div>
                     <div className="flex flex-col min-w-0">
@@ -456,31 +672,49 @@ const Positions: React.FC<PositionsProps> = ({ userId, bearerToken, onPositionsC
                       </button>
                     </InterstateTooltip>
                     
-                    {/* Sell Arrow Icon */}
-                    {pos.actions === 'sell' && (
+                    {/* Sell Button - Navigate to trade page with sell mode */}
+                    {/* {pos.actions === 'sell' && (
                       <InterstateTooltip label="Sell">
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            tradeSellPercentage({
-                              tokenAddress: pos.tokenAddress,
-                              percentageToSell: 100,
-                            }, bearerToken)
+                            setSelectedPosition(pos);
+                            setShowSellPopup(true);
                           }} 
                           className="p-1.5 rounded hover:bg-red-600/20 transition-colors text-neutral-400 hover:text-red-500"
                         >
                           <FaArrowUp className="text-sm" />
                         </button>
                       </InterstateTooltip>
-                    )}
+                    )} */}
                   </div>
                 </td>
               </tr>
               );
             })
           )}
+          {/* Spacer row for bottom padding to ensure last item is scrollable */}
+          {!loading && positions.length > 0 && (
+            <tr style={{ height: '48px' }}>
+              <td colSpan={6}></td>
+            </tr>
+          )}
         </tbody>
       </table>
+      
+      {/* Sell Popup */}
+      {showSellPopup && selectedPosition && (
+        <SellPopup
+          isOpen={showSellPopup}
+          onClose={() => {
+            setShowSellPopup(false);
+            setSelectedPosition(null);
+          }}
+          position={selectedPosition}
+          tokenMetadata={tokenMetadata[selectedPosition.tokenAddress]}
+          onSellSuccess={refreshPositions}
+        />
+      )}
     </div>
   );
 };

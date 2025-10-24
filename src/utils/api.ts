@@ -1,5 +1,7 @@
 // Centralized API client for backend calls related to authentication and trading
 import { env } from "../env";
+// Critical Fix #10: Network timeout handling
+import { fetchWithTimeout, isTimeoutError as checkTimeoutError } from "./fetchWithTimeout";
 
 // Constants
 export const SOL_MINT_ADDRESS = "So11111111111111111111111111111111111111112";
@@ -49,38 +51,76 @@ async function apiFetch<T = unknown>(
 ): Promise<T> {
   const { authToken, body, headers, ...rest } = options;
 
-  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}${endpoint}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      ...(headers || {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    ...rest,
-  });
+  try {
+    // Critical Fix #10: Use fetchWithTimeout instead of fetch (45s timeout for trade operations)
+    const res = await fetchWithTimeout(
+      `${env.NEXT_PUBLIC_BACKEND_URL}${endpoint}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          ...(headers || {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        ...rest,
+      },
+      45000  // 45 second timeout (accounts for backend retries: 30s × 2 attempts)
+    );
 
-  // Attempt to parse JSON – if this fails, we still throw for non-OK statuses
-  const data = await res.json().catch(() => undefined);
+    // Attempt to parse JSON – if this fails, we still throw for non-OK statuses
+    const data = await res.json().catch(() => undefined);
 
-  if (!res.ok) {
-    // Check if backend returned a structured error
-    if (data && typeof data === 'object') {
-      const message = data.message || data.error || res.statusText;
-      const code = data.code;
-      const details = data.details;
-      const suggestions = data.suggestions;
-      
-      // Throw structured error with all info
-      throw new ApiError(message, code, details, suggestions, res.status);
+    if (!res.ok) {
+      // Check if backend returned a structured error
+      if (data && typeof data === 'object') {
+        const message = data.message || data.error || res.statusText;
+        const code = data.code;
+        const details = data.details;
+        const suggestions = data.suggestions;
+
+        // Create structured error
+        const apiError = new ApiError(message, code, details, suggestions, res.status);
+
+        // Suppress console.error for expected validation errors to prevent Next.js dev overlay
+        const EXPECTED_ERROR_CODES = [
+          'NO_HOLDINGS', 'INSUFFICIENT_BALANCE', 'VALIDATION_ERROR',
+          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED'
+        ];
+        if (EXPECTED_ERROR_CODES.includes(code)) {
+          // Mark as expected error (won't trigger Next.js error overlay in dev)
+          (apiError as any).expected = true;
+        }
+
+        throw apiError;
+      }
+
+      // Fallback to simple error
+      const message =
+        (data as any)?.message || (data as any)?.error || res.statusText;
+      throw new Error(message);
     }
-    
-    // Fallback to simple error
-    const message =
-      (data as any)?.message || (data as any)?.error || res.statusText;
-    throw new Error(message);
-  }
 
-  return data as T;
+    return data as T;
+
+  } catch (error: any) {
+    // Critical Fix #10: Handle timeout errors with structured response
+    if (checkTimeoutError(error)) {
+      throw new ApiError(
+        'Request timed out. The server is taking too long to respond.',
+        'CLIENT_TIMEOUT',
+        { timeoutMs: 45000 },
+        [
+          'Try again in a few seconds',
+          'Check your internet connection',
+          'The network may be experiencing high congestion'
+        ],
+        408  // HTTP 408 Request Timeout
+      );
+    }
+
+    // Re-throw other errors
+    throw error;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -134,7 +174,7 @@ export const googleAuthUrl = `${env.NEXT_PUBLIC_BACKEND_URL}/api/users/auth/goog
 /*                              Limit Order endpoints                         */
 /* -------------------------------------------------------------------------- */
 
-interface CreateLimitOrderParams {
+export interface CreateLimitOrderParams {
   tokenAddress: string;
   amount: number;
   type: "Buy" | "Sell";
@@ -184,6 +224,45 @@ export const getMyLimitOrders = (authToken: string) =>
     authToken,
   });
 
+// Withdrawal functions
+interface WithdrawParams {
+  amount: number;
+  destinationAddress: string;
+}
+
+export const withdrawSOL = (params: WithdrawParams, authToken: string) =>
+  apiFetch<{ 
+    message: string; 
+    txHash?: string;
+    txSignature?: string;
+    amount: number;
+    destinationAddress: string;
+    newBalance?: number;
+    transactionId?: number;
+  }>("/api/users/withdraw", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+interface WithdrawalTransaction {
+  id: number;
+  amount: number | string; // PostgreSQL DECIMAL returns as string
+  destinationAddress?: string;
+  txSignature?: string;
+  status: 'pending' | 'completed' | 'failed';
+  fee: number | string; // PostgreSQL DECIMAL returns as string
+  errorMessage?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export const getWithdrawalHistory = (authToken: string) =>
+  apiFetch<{ transactions: WithdrawalTransaction[] }>("/api/users/withdrawal-history", {
+    method: "GET",
+    authToken,
+  });
+
 export const updateLimitOrder = (
   params: UpdateLimitOrderParams,
   authToken: string,
@@ -208,8 +287,9 @@ export type BuyParams = {
   amount: number;
   mevProtection?: 0 | 1;
   poolType: "PumpAmm" | "Raydium CPMM" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "bags" | "MoonShoot" | "";
+  originalPairAddress?: string; // Original pair address from token-service for trade history
   // Preset trading parameters
-  slippage?: number; // e.g., 0.4 for 40%
+  slippage?: number; // Percentage value (0.01-100), e.g., 20 for 20%
   priorityFee?: number; // in SOL, e.g., 0.001
   bribe?: number; // in SOL, e.g., 0.001
   mevMode?: 'off' | 'reduced' | 'on';
@@ -221,8 +301,12 @@ export type BuyParams = {
   tokenSymbol?: string;
 };
 
-export const tradeBuy = (params: BuyParams, authToken: string) =>
-  apiFetch<{ 
+export const tradeBuy = (params: BuyParams, authToken: string) => {
+  console.log("🚀 tradeBuy called with params:", params);
+  console.log("🔗 Backend URL:", env.NEXT_PUBLIC_BACKEND_URL);
+  console.log("🎯 Full URL:", `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/buy`);
+  
+  return apiFetch<{ 
     message: string; 
     txid: string; 
     tokenAddress: string; 
@@ -237,10 +321,20 @@ export const tradeBuy = (params: BuyParams, authToken: string) =>
     body: params,
     authToken,
   });
+};
 
-type SellPercentageParams = {
+export type SellPercentageParams = {
   tokenAddress: string;
   percentageToSell: number;
+  poolAddress: string; // required by backend
+  baseMint: string;
+  quoteMint: string;
+  poolType?: string;
+  originalPairAddress?: string; // Original pair address from token-service for trade history
+  // Preset trading parameters
+  slippage?: number; // Percentage value (0.01-100), e.g., 20 for 20%
+  priorityFee?: number; // in SOL, e.g., 0.001
+  bribe?: number; // in SOL, e.g., 0.001
 };
 
 export const tradeSellPercentage = (
@@ -267,4 +361,130 @@ export const tradeSellExactAmount = (params: SellExactAmountParams) =>
     body: params,
   });
 
+/* -------------------------------------------------------------------------- */
+/*                       Token Analytics endpoints (Rust)                     */
+/* -------------------------------------------------------------------------- */
+
+const ANALYTICS_BASE_URL = process.env.NEXT_PUBLIC_ANALYTICS_URL || "http://localhost:4000";
+
+export interface TokenMetrics {
+  sniper_holding_percentage?: number;
+  insider_holding_percentage?: number;
+  bundle_holding_percentage?: number;
+  dev_holding_percentage?: number;
+  whale_holding_percentage?: number;
+  small_holding_percentage?: number;
+  total_holders_count?: number;
+  holder_distribution?: {
+    whales: number;
+    sharks: number;
+    fish: number;
+    shrimps: number;
+    holders?: Array<{
+      wallet: string;
+      amount: string;
+      pct: number;
+    }>;
+  };
+}
+
+/**
+ * Register a token with the analytics backend
+ */
+export const registerToken = async (params: {
+  mint: string;
+  symbol?: string;
+  name?: string;
+  pool?: string;
+  dex?: string;
+}) => {
+  const res = await fetch(`${ANALYTICS_BASE_URL}/tokens`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to register token: ${error}`);
+  }
+  
+  return res.json();
+};
+
+/**
+ * Get a specific metric for a token
+ */
+export const getTokenMetric = async (
+  mint: string,
+  metricKey: string,
+  refresh = false
+) => {
+  const url = `${ANALYTICS_BASE_URL}/metrics/${mint}/${metricKey}${refresh ? "?refresh=true" : ""}`;
+  
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  
+  if (!res.ok) {
+    if (res.status === 404) {
+      return null;
+    }
+    const error = await res.text();
+    throw new Error(`Failed to get metric: ${error}`);
+  }
+  
+  return res.json();
+};
+
+/**
+ * Get all metrics for a token
+ */
+export const getTokenMetrics = async (
+  mint: string,
+  refresh = false
+): Promise<{ mint: string; metrics: TokenMetrics }> => {
+  const url = `${ANALYTICS_BASE_URL}/tokens/${mint}/metrics${refresh ? "?refresh=true" : ""}`;
+  
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  
+  if (!res.ok) {
+    if (res.status === 404) {
+      return { mint, metrics: {} };
+    }
+    const error = await res.text();
+    throw new Error(`Failed to get metrics: ${error}`);
+  }
+  
+  return res.json();
+};
+
+/**
+ * Get holders list for a token
+ */
+export const getTokenHolders = async (
+  mint: string,
+  page = 1,
+  pageSize = 50
+) => {
+  const url = `${ANALYTICS_BASE_URL}/tokens/${mint}/holders?page=${page}&page_size=${pageSize}`;
+  
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`Failed to get holders: ${error}`);
+  }
+  
+  return res.json();
+};
+
 export { apiFetch };
+

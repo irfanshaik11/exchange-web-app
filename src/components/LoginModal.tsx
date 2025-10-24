@@ -10,6 +10,8 @@ import { useWallet } from "./useWallet";
 import { usePhantomWallet } from '../hooks/usePhantomWallet';
 import { useMetaMaskWallet } from '../hooks/useMetaMaskWallet';
 
+const ENABLE_EMAIL_AUTH = false;
+
 interface LoginModalProps {
   open: boolean;
   onClose: () => void;
@@ -64,9 +66,9 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       setShow(true);
       // Refresh wallet connection state when modal opens
       phantomWallet.refreshConnection();
-      
-      // Clear MetaMask connection state to ensure fresh start
-      localStorage.removeItem('metamask_connected');
+
+      // Don't clear MetaMask connection state - let the hook manage it properly
+      // Clearing this was preventing MetaMask from opening when locked
       metaMaskWallet.refreshConnection();
       
       // Check for token in cookies and refresh user if not already authenticated
@@ -188,14 +190,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
 
       // Create message and sign it
       const message = `Login to Interstate with nonce: ${Date.now()}`;
-      let signResult: { publicKey: string; signature: string; message: string } | { error: string };
-      try {
-        signResult = await phantomWallet.signMessage(message);
-      } catch (signError: any) {
-        console.error('Phantom signMessage error in LoginModal:', signError);
-        setWalletError('User rejected the signing request');
-        return;
-      }
+      const signResult = await phantomWallet.signMessage(message);
       
       // Check if signing failed
       if ('error' in signResult) {
@@ -237,36 +232,36 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
 
   // MetaMask Wallet Login handler - Enhanced with proper connection management
   async function handleMetamaskLogin() {
-    console.log('MetaMask login started...');
     setMetamaskLoading(true);
     setError(null);
     setWalletError(null);
     setSuccess(null);
-    
+
     try {
       // Check if MetaMask is installed
       if (!metaMaskWallet.isInstalled) {
-        console.log('MetaMask not installed');
         setWalletError('MetaMask wallet not found. Please install MetaMask extension.');
         return;
       }
 
-      console.log('MetaMask is installed, attempting to connect...');
       // Connect to MetaMask wallet (this handles connection properly)
-      const connected = await metaMaskWallet.connect();
+      let connected = await metaMaskWallet.connect();
+
+      // If connection failed due to pending request, wait and retry once
+      if (!connected && metaMaskWallet.error?.includes('already')) {
+        setWalletError('MetaMask is busy. Retrying in 2 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        connected = await metaMaskWallet.connect();
+      }
+
       if (!connected) {
-        console.log('MetaMask connection failed:', metaMaskWallet.error);
         setWalletError(metaMaskWallet.error || 'Failed to connect to MetaMask wallet');
         return;
       }
 
-      console.log('MetaMask connected successfully, attempting to sign message...');
-
       // Create message and sign it
       const message = `Login to Interstate with nonce: ${Date.now()}`;
-      console.log('About to call metaMaskWallet.signMessage...');
       const signResult = await metaMaskWallet.signMessage(message);
-      console.log('metaMaskWallet.signMessage completed:', signResult);
       
       // Check if signing failed
       if ('error' in signResult) {
@@ -289,13 +284,8 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
         setError('MetaMask login failed - no token received');
       }
     } catch (error: any) {
-      console.error('MetaMask backend error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        stack: error.stack
-      });
-      
+      console.error('MetaMask login error:', error);
+
       // Handle different types of backend errors
       if (error.message?.includes('Internal server error')) {
         setWalletError('Backend server error. Please try again later.');
@@ -337,9 +327,11 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
         ×
       </button>
       
-      {mode === 'login' ? (
+      <div className="text-xl font-bold mb-4 text-center">Login</div>
+
+      {ENABLE_EMAIL_AUTH && (
         <>
-          <div className="text-xl font-bold mb-4 text-center">Login</div>
+        {mode === 'login' ? (
           <form onSubmit={handleLogin}>
             <div className="mb-3">
               <label className="block text-xs mb-1">Email</label>
@@ -368,56 +360,53 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
             {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
             <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Login</InterstateButton>
           </form>
-          <div className="text-center flex flex-row items-center w-full text-xs mt-3 text-neutral-400 gap-1 justify-center">
-            Don't have an account?{' '}
-            <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('signup')}>Sign up</button>
-          </div>
+        ) : (
+          <form onSubmit={handleRegister}>
+            <div className="text-xl font-bold mb-4 text-center">Sign Up</div>
+            <div className="mb-3">
+              <label className="block text-xs mb-1">Username</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter username"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                required
+              />
+              <label className="block text-xs mb-1">Email</label>
+              <input
+                type="email"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+              <label className="block text-xs mb-1">Password</label>
+              <input
+                type="password"
+                className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                placeholder="Enter password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
+            {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
+            <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Sign Up</InterstateButton>
+            <div className="text-center text-xs mt-3 text-neutral-400">
+              Already have an account?{' '}
+              <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('login')}>Login</button>
+            </div>
+            <div className="text-xs text-neutral-500 mt-4 text-center">
+              By creating an account, you agree to Interstate's{' '}
+              <a href="#" className="underline">Privacy Policy</a> and{' '}
+              <a href="#" className="underline">Terms of Service</a>.
+            </div>
+          </form>
+        )}
         </>
-      ) : (
-        <form onSubmit={handleRegister}>
-          <div className="text-xl font-bold mb-4 text-center">Sign Up</div>
-          <div className="mb-3">
-            <label className="block text-xs mb-1">Username</label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="Enter username"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              required
-            />
-            <label className="block text-xs mb-1">Email</label>
-            <input
-              type="email"
-              className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="Enter email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
-            <label className="block text-xs mb-1">Password</label>
-            <input
-              type="password"
-              className="w-full px-3 py-2 rounded-3xl border border-neutral-700 text-xs mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="Enter password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          {error && <div className="text-xs text-red-400 mb-2 text-center">{error}</div>}
-          {success && <div className="text-xs text-emerald-400 mb-2 text-center">{success}</div>}
-          <InterstateButton type="submit" fullWidth loading={loading} className="mb-3">Sign Up</InterstateButton>
-          <div className="text-center text-xs mt-3 text-neutral-400">
-            Already have an account?{' '}
-            <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('login')}>Login</button>
-          </div>
-          <div className="text-xs text-neutral-500 mt-4 text-center">
-            By creating an account, you agree to Interstate's{' '}
-            <a href="#" className="underline">Privacy Policy</a> and{' '}
-            <a href="#" className="underline">Terms of Service</a>.
-          </div>
-        </form>
       )}
       <hr  className="mt-4 border-neutral-600"/>
       <div className="flex flex-col gap-2 mt-4">
@@ -475,8 +464,8 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
               <button
                 type="button"
                 className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
-                  metaMaskWallet.isConnected 
-                    ? 'bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50' 
+                  metaMaskWallet.isConnected
+                    ? 'bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50'
                     : 'bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50'
                 } ${metamaskLoading || metaMaskWallet.connecting ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {

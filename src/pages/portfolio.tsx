@@ -56,8 +56,20 @@ const SolIcon = () => (
 );
 
 
-const spotTabs = ["Active Positions", "History", "Top 100", "Activity"];
+const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity"];
 
+
+// Token metadata cache interface
+interface TokenMetadataCache {
+  imageUrl?: string;
+  protocol?: string;
+  name?: string;
+  symbol?: string;
+  timestamp: number; // When it was cached
+}
+
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
+const CACHE_KEY = 'tokenMetadataCache';
 
 export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
@@ -83,6 +95,67 @@ export default function PortfolioPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
   const [solPrice, setSolPrice] = useState(0);
+  
+  // Shared token metadata cache across all tabs
+  const [tokenMetadataCache, setTokenMetadataCache] = useState<Record<string, TokenMetadataCache>>({});
+  
+  // Load cache from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedCache = localStorage.getItem(CACHE_KEY);
+      if (savedCache) {
+        const parsed: Record<string, TokenMetadataCache> = JSON.parse(savedCache);
+        // Filter out expired entries
+        const now = Date.now();
+        const validCache: Record<string, TokenMetadataCache> = {};
+        Object.entries(parsed).forEach(([key, value]) => {
+          if (now - value.timestamp < CACHE_TTL) {
+            validCache[key] = value;
+          }
+        });
+        if (Object.keys(validCache).length > 0) {
+          setTokenMetadataCache(validCache);
+          console.log(`📦 Loaded ${Object.keys(validCache).length} cached tokens from localStorage`);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading token cache:', error);
+    }
+  }, []);
+  
+  // Save cache to localStorage when it changes (debounced)
+  useEffect(() => {
+    if (Object.keys(tokenMetadataCache).length === 0) return;
+    
+    const timeoutId = setTimeout(() => {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(tokenMetadataCache));
+        console.log(`💾 Saved ${Object.keys(tokenMetadataCache).length} tokens to cache`);
+      } catch (error) {
+        console.error('Error saving token cache:', error);
+      }
+    }, 1000); // Debounce saves by 1 second
+    
+    return () => clearTimeout(timeoutId);
+  }, [tokenMetadataCache]);
+  
+  // Helper function to update cache
+  const updateTokenMetadataCache = (tokenAddress: string, metadata: Omit<TokenMetadataCache, 'timestamp'>) => {
+    setTokenMetadataCache(prev => ({
+      ...prev,
+      [tokenAddress]: {
+        ...metadata,
+        timestamp: Date.now()
+      }
+    }));
+  };
+  
+  // Helper function to check if cache entry is valid
+  const isCacheValid = (tokenAddress: string): boolean => {
+    const cached = tokenMetadataCache[tokenAddress];
+    if (!cached) return false;
+    return Date.now() - cached.timestamp < CACHE_TTL;
+  };
   
   // Fetch SOL price using Pyth Network
   useEffect(() => {
@@ -152,19 +225,20 @@ export default function PortfolioPage() {
     fetchTradeHistory();
   }, [user?.id]);
 
-  // Fetch trade activity only when on Activity tab
+  // Fetch trade activity only when on Activity tab (index 2 after History commented out)
   useEffect(() => {
     let isInitialLoad = true;
     
     const fetchTradeActivity = async () => {
-      if (user?.id && activeSpotTab === 3) {
+      if (user?.id && activeSpotTab === 2) {
         // Only show loading state on initial load, not on refreshes
         if (isInitialLoad) {
           setLoadingTradeActivity(true);
         }
         try {
           const activity = await getTradeActivityByUser(user.id);
-          setTradeActivity(activity);
+          // Reverse array so newest trades appear at the top
+          setTradeActivity([...activity].reverse());
         } catch (error) {
           console.error("Failed to fetch trade activity:", error);
           setTradeActivity([]);
@@ -180,7 +254,7 @@ export default function PortfolioPage() {
     fetchTradeActivity();
     
     // Auto-refresh every 5 seconds when on Activity tab
-    if (user?.id && activeSpotTab === 3) {
+    if (user?.id && activeSpotTab === 2) {
       const intervalId = setInterval(() => {
         fetchTradeActivity();
       }, 5000);
@@ -192,12 +266,22 @@ export default function PortfolioPage() {
 
  useEffect(() => {
    if (positions.length > 0) {
-     const totalPnl = positions.reduce((acc, pos) => acc + pos.pnl, 0);
-     const totalRemainingValue = positions.reduce(
+     // Add validation to prevent extreme values
+     const validPositions = positions.filter(pos => 
+       isFinite(pos.pnl) && 
+       isFinite(pos.remainingUsdValue) && 
+       isFinite(pos.boughtUsdValue) &&
+       Math.abs(pos.pnl) < 1e12 && // Less than 1 trillion
+       Math.abs(pos.remainingUsdValue) < 1e12 &&
+       Math.abs(pos.boughtUsdValue) < 1e12
+     );
+
+     const totalPnl = validPositions.reduce((acc, pos) => acc + pos.pnl, 0);
+     const totalRemainingValue = validPositions.reduce(
        (acc, pos) => acc + pos.remainingUsdValue,
        0,
      );
-     const totalBoughtValue = positions.reduce(
+     const totalBoughtValue = validPositions.reduce(
        (acc, pos) => acc + pos.boughtUsdValue,
        0,
      );
@@ -208,7 +292,7 @@ export default function PortfolioPage() {
      setTotalValue(solBalance + totalRemainingValue);
 
      // Create top 100 positions sorted by USD value
-     const sortedByUsdValue = [...positions].sort((a, b) => {
+     const sortedByUsdValue = [...validPositions].sort((a, b) => {
        return b.remainingUsdValue - a.remainingUsdValue;
      });
      setTop100Positions(sortedByUsdValue.slice(0, 100));
@@ -304,19 +388,31 @@ export default function PortfolioPage() {
      let between0AndMinus50 = 0;
      let belowMinus50 = 0;
 
-     // Count winning/losing positions and categorize by PNL percentage
-     positions.forEach(pos => {
-       if (pos.pnl > 0) {
-         winningTrades++;
-       } else if (pos.pnl < 0) {
-         losingTrades++;
-       }
-       // Calculate realized PNL from sold positions
-       if (pos.sold > 0) {
-         totalRealizedPnl += pos.pnl * (pos.sold / (pos.bought || 1));
-       }
+    // Count winning/losing positions and categorize by PNL percentage
+    positions.forEach(pos => {
+      if (pos.pnl > 0) {
+        winningTrades++;
+      } else if (pos.pnl < 0) {
+        losingTrades++;
+      }
+      
+      // Calculate realized PNL from sold positions
+      // Realized PnL = Money received from selling - Cost basis of sold tokens
+      if (pos.sold > 0 && pos.bought > 0 && pos.boughtUsdValue > 0) {
+        // Calculate average cost per token
+        const avgCostPerToken = pos.boughtUsdValue / pos.bought;
+        // Cost basis of sold tokens = average cost * amount sold
+        const costBasisOfSold = avgCostPerToken * pos.sold;
+        // Realized PnL = money received - cost basis
+        const realizedPnl = pos.soldUsdValue - costBasisOfSold;
+        
+        // Add validation to prevent extreme values
+        if (isFinite(realizedPnl) && Math.abs(realizedPnl) < 1e12) { // Less than 1 trillion
+          totalRealizedPnl += realizedPnl;
+        }
+      }
 
-       // Categorize by PNL percentage
+      // Categorize by PNL percentage
        const pnlPercent = pos.pnlPercentage;
        if (pnlPercent > 500) {
          above500++;
@@ -352,6 +448,57 @@ export default function PortfolioPage() {
 
    calculateTimeframeMetrics();
  }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl]);
+
+ // Export performance data as CSV
+ const exportPerformanceData = () => {
+   // Create CSV content
+   const csvContent = [
+     // Header
+     ['Metric', 'Value'],
+     ['Timeframe', selectedTimeframe],
+     ['Export Date', new Date().toLocaleString()],
+     [''],
+     ['Performance Metrics', ''],
+     ['Unrealized PnL', timeframeMetrics.unrealizedPnl],
+     ['Realized PnL', timeframeMetrics.realizedPnl],
+     ['Winning Trades', timeframeMetrics.winningTrades],
+     ['Losing Trades', timeframeMetrics.losingTrades],
+     ['Total Trades', timeframeMetrics.winningTrades + timeframeMetrics.losingTrades],
+     [''],
+     ['Performance Breakdown', ''],
+     ['>500%', performanceBreakdown.above500],
+     ['200% - 500%', performanceBreakdown.between200And500],
+     ['0% - 200%', performanceBreakdown.between0And200],
+     ['0% - -50%', performanceBreakdown.between0AndMinus50],
+     ['< -50%', performanceBreakdown.belowMinus50],
+     [''],
+     ['Position Details', ''],
+     ['Token Address', 'Pair Address', 'Bought', 'Bought USD', 'Sold', 'Sold USD', 'Remaining', 'Remaining USD', 'PnL', 'PnL %'],
+     ...positions.map(pos => [
+       pos.tokenAddress,
+       pos.pairAddress,
+       pos.bought,
+       pos.boughtUsdValue,
+       pos.sold,
+       pos.soldUsdValue,
+       pos.remaining,
+       pos.remainingUsdValue,
+       pos.pnl,
+       pos.pnlPercentage
+     ])
+   ].map(row => row.join(',')).join('\n');
+
+   // Create and download file
+   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+   const link = document.createElement('a');
+   const url = URL.createObjectURL(blob);
+   link.setAttribute('href', url);
+   link.setAttribute('download', `portfolio-performance-${selectedTimeframe}-${new Date().toISOString().split('T')[0]}.csv`);
+   link.style.visibility = 'hidden';
+   document.body.appendChild(link);
+   link.click();
+   document.body.removeChild(link);
+ };
 
 
  return (
@@ -517,7 +664,8 @@ export default function PortfolioPage() {
                 <div className="bg-[#1E1F26] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
                     <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">Realized PNL</div>
-                    <InterstateTooltip label="View realized profit/loss over time">
+                    {/* Calendar icon commented out */}
+                    {/* <InterstateTooltip label="View realized profit/loss over time">
                       <svg className="w-4 h-4 text-[#9CA3AF] cursor-pointer hover:text-white transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
                         <line x1="16" y1="2" x2="16" y2="6"/>
@@ -525,19 +673,19 @@ export default function PortfolioPage() {
                         <line x1="3" y1="10" x2="21" y2="10"/>
                         <rect x="7" y="14" width="3" height="3" fill="currentColor"/>
                       </svg>
-                    </InterstateTooltip>
+                    </InterstateTooltip> */}
                   </div>
                   <div className="flex flex-col h-32">
                     <div className="text-2xl font-light mb-2" style={{ color: timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F' }}>
                       {sortByUSD && solPrice > 0
                         ? <><SolIcon />{formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl) / solPrice)}</>
-                        : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                        : `${timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}$${formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl))}`
                       }
                     </div>
                     {/* Dynamic PNL chart */}
                     <div className="relative w-full flex-1">
                       <svg className="w-full h-full" viewBox="0 0 300 80" preserveAspectRatio="none">
-                        {/* Horizontal reference line */}
+                        {/* Horizontal reference line (neutral/zero) */}
                         <line 
                           x1="0" 
                           y1="40" 
@@ -546,22 +694,62 @@ export default function PortfolioPage() {
                           stroke="#2A2B33" 
                           strokeWidth="1"
                         />
+                        
+                        {/* Dashed reference lines for visual context */}
+                        <line 
+                          x1="0" 
+                          y1="20" 
+                          x2="300" 
+                          y2="20" 
+                          stroke="#4A4B53" 
+                          strokeWidth="1"
+                          strokeDasharray="4,3"
+                          opacity="0.7"
+                        />
+                        <line 
+                          x1="0" 
+                          y1="60" 
+                          x2="300" 
+                          y2="60" 
+                          stroke="#4A4B53" 
+                          strokeWidth="1"
+                          strokeDasharray="4,3"
+                          opacity="0.7"
+                        />
+                        
                         {/* Dynamic PNL line */}
                         <path
                           d={(() => {
                             const pnl = timeframeMetrics.realizedPnl;
-                            const absMaxPnl = Math.max(Math.abs(pnl), 100);
-                            const normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
+                            
+                            // More aggressive scaling for small values to make slope visible
+                            let normalizedPnl;
+                            if (Math.abs(pnl) < 0.01) {
+                              // For very small values, use much more aggressive scaling
+                              normalizedPnl = Math.max(-1, Math.min(1, pnl * 5000)); // Scale up by 5000x
+                            } else if (Math.abs(pnl) < 1) {
+                              // For small-medium values, moderate scaling
+                              normalizedPnl = Math.max(-1, Math.min(1, pnl * 100)); // Scale up by 100x
+                            } else {
+                              // For larger values, use the original logic
+                              const absMaxPnl = Math.max(Math.abs(pnl), 100);
+                              normalizedPnl = Math.max(-1, Math.min(1, pnl / absMaxPnl));
+                            }
+                            
                             const endY = 40 - (normalizedPnl * 30);
                             
-                            // Create a line that trends up/down based on PNL
-                            return `M 0 40 L 50 ${40 - (normalizedPnl * 10)} L 100 ${40 - (normalizedPnl * 15)} L 150 ${40 - (normalizedPnl * 20)} L 200 ${40 - (normalizedPnl * 25)} L 300 ${endY}`;
+                            // Create a more dramatic line that trends up/down based on PNL
+                            return `M 0 40 L 60 ${40 - (normalizedPnl * 12)} L 120 ${40 - (normalizedPnl * 18)} L 180 ${40 - (normalizedPnl * 24)} L 240 ${40 - (normalizedPnl * 27)} L 300 ${endY}`;
                           })()}
                           stroke={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'}
-                          strokeWidth="2"
+                          strokeWidth="2.5"
                           fill="none"
                           style={{ transition: 'all 0.3s ease' }}
                         />
+                        
+                        {/* Start and end points for clarity */}
+                        <circle cx="0" cy="40" r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
+                        <circle cx="300" cy={40 - (Math.max(-1, Math.min(1, timeframeMetrics.realizedPnl * (Math.abs(timeframeMetrics.realizedPnl) < 0.01 ? 5000 : Math.abs(timeframeMetrics.realizedPnl) < 1 ? 100 : 1)))) * 30} r="2" fill={timeframeMetrics.realizedPnl >= 0 ? '#70E0B0' : '#FF4D7F'} />
                       </svg>
                     </div>
                   </div>
@@ -571,8 +759,13 @@ export default function PortfolioPage() {
                 <div className="bg-[#1E1F26] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
                     <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">Performance</div>
-                    <InterstateTooltip label="Export performance data">
-                      <FaUpload className="text-[#9CA3AF] text-sm cursor-pointer hover:text-white transition-colors" />
+                    <InterstateTooltip label="Export">
+                      <button 
+                        onClick={exportPerformanceData}
+                        className="text-[#9CA3AF] text-sm cursor-pointer hover:text-white transition-colors"
+                      >
+                        <FaUpload />
+                      </button>
                     </InterstateTooltip>
                   </div>
                   <div className="space-y-3">
@@ -590,7 +783,7 @@ export default function PortfolioPage() {
                       <span className="text-white font-light">
                         {sortByUSD && solPrice > 0
                           ? <><SolIcon />{formatSmartNumber(timeframeMetrics.realizedPnl / solPrice)}</>
-                          : `$${timeframeMetrics.realizedPnl.toFixed(2)}`
+                          : `${timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}$${formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl))}`
                         }
                       </span>
                     </div>
@@ -689,9 +882,9 @@ export default function PortfolioPage() {
                         {(() => {
                           const activeTab = activeSpotTab;
                           if (activeTab === 0) return `${filteredPositions.length} of ${positions.length} positions`;
-                          if (activeTab === 1) return `${filteredTradeHistory.length} of ${tradeHistory.length} trades`;
-                          if (activeTab === 2) return `${filteredTop100Positions.length} of ${top100Positions.length} positions`;
-                          if (activeTab === 3) return `${filteredTradeActivity.length} of ${tradeActivity.length} activities`;
+                          // History tab (index 1) is commented out
+                          if (activeTab === 1) return `${filteredTop100Positions.length} of ${top100Positions.length} positions`;
+                          if (activeTab === 2) return `${filteredTradeActivity.length} of ${tradeActivity.length} activities`;
                           return '';
                         })()}
                       </div>
@@ -765,33 +958,38 @@ export default function PortfolioPage() {
                        Please log in to view your positions.
                      </div>
                    ) : (
-                     <Positions
-                       bearerToken={user.bearerToken}
-                       userId={user.id}
-                       onPositionsChange={setPositions}
-                       onTokenNamesChange={setTokenNames}
-                       preloadedPositions={filteredPositions}
-                       skipFetch={searchQuery.trim() !== ""}
-                       showHidden={showHidden}
-                       showInSOL={sortByUSD}
-                     />
+                    <Positions
+                      bearerToken={user.bearerToken}
+                      userId={user.id}
+                      onPositionsChange={setPositions}
+                      onTokenNamesChange={setTokenNames}
+                      preloadedPositions={filteredPositions}
+                      skipFetch={searchQuery.trim() !== ""}
+                      showHidden={showHidden}
+                      showInSOL={sortByUSD}
+                      tokenMetadataCache={tokenMetadataCache}
+                      onUpdateCache={updateTokenMetadataCache}
+                      isCacheValid={isCacheValid}
+                    />
                    ))}
-                 {activeSpotTab === 1 &&
-                   (userLoading || loadingTradeHistory ? (
-                     <div className="py-8 text-center text-[#9CA3AF]">
-                       Loading...
-                     </div>
-                   ) : !user?.id ? (
-                     <div className="py-8 text-center text-[#9CA3AF]">
-                       Please log in to view your trade history.
-                     </div>
-                   ) : (
-                     <TradeTable
-                       trades={filteredTradeHistory}
-                       loading={loadingTradeHistory}
-                     />
-                   ))}
-                  {activeSpotTab === 2 &&
+                  {/* History tab commented out */}
+                  {/* {activeSpotTab === 1 &&
+                    (userLoading || loadingTradeHistory ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Loading...
+                      </div>
+                    ) : !user?.id ? (
+                      <div className="py-8 text-center text-[#9CA3AF]">
+                        Please log in to view your trade history.
+                      </div>
+                    ) : (
+                      <TradeTable
+                        trades={filteredTradeHistory}
+                        loading={loadingTradeHistory}
+                        onTokenNamesChange={setTokenNames}
+                      />
+                    ))} */}
+                  {activeSpotTab === 1 &&
                     (userLoading ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
@@ -800,23 +998,22 @@ export default function PortfolioPage() {
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Please log in to view your positions.
                       </div>
-                    ) : filteredTop100Positions.length === 0 ? (
-                      <div className="py-8 text-center text-[#9CA3AF]">
-                        {searchQuery.trim() ? "No positions found matching your search." : "No positions found."}
-                      </div>
                     ) : (
                       <Positions
                         bearerToken={user.bearerToken}
                         userId={user.id}
-                        onPositionsChange={() => {}} // No-op since we're using preloaded positions
+                        onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
-                        preloadedPositions={filteredTop100Positions}
-                        skipFetch={true}
+                        preloadedPositions={searchQuery.trim() ? filteredTop100Positions : undefined}
+                        skipFetch={searchQuery.trim() !== ""}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
+                        tokenMetadataCache={tokenMetadataCache}
+                        onUpdateCache={updateTokenMetadataCache}
+                        isCacheValid={isCacheValid}
                       />
                     ))}
-                  {activeSpotTab === 3 &&
+                  {activeSpotTab === 2 &&
                     (userLoading || loadingTradeActivity ? (
                       <div className="py-8 text-center text-[#9CA3AF]">
                         Loading...
@@ -831,6 +1028,9 @@ export default function PortfolioPage() {
                         trades={filteredTradeActivity}
                         loading={loadingTradeActivity}
                         onTokenNamesChange={setTokenNames}
+                        tokenMetadataCache={tokenMetadataCache}
+                        onUpdateCache={updateTokenMetadataCache}
+                        isCacheValid={isCacheValid}
                       />
                       </div>
                     ))}
@@ -1142,6 +1342,5 @@ export default function PortfolioPage() {
    </>
  );
 }
-
 
 

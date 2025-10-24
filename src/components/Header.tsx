@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useState } from "react";
-import { FaSearch, FaStar, FaBell } from "react-icons/fa";
+import { useEffect, useState } from "react";
+import { FaSearch, FaStar, FaBell, FaWallet } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import dynamic from "next/dynamic";
@@ -24,13 +24,13 @@ const AX = {
 };
 
 const navLinks = [
-  { name: "Discover", href: "/" },
-  { name: "Pulse", href: "/pulse" },
-  { name: "Trackers", href: "/trackers" },
-  //{ name: "Perpetuals", href: "#" },
-  //{ name: "Yield", href: "#" },
+  { name: "Trenches", href: "/pulse" },
   { name: "Portfolio", href: "/portfolio" },
-  //{ name: "Rewards", href: "#" },
+  { name: "Trending", href: "/construction" },
+  { name: "Trackers", href: "/construction" },
+  { name: "Perpetuals", href: "/construction" },
+  { name: "Yield", href: "/construction" },
+  { name: "Rewards", href: "/construction" },
 ];
 
 interface HeaderProps {
@@ -42,6 +42,10 @@ interface HeaderProps {
 
 const DepositModal = dynamic(() => import("./DepositModal"), {
   ssr: false, // NO SSR PLEASE
+});
+
+const WithdrawModal = dynamic(() => import("./WithdrawModal"), {
+  ssr: false,
 });
 
 const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
@@ -60,12 +64,48 @@ export default function Header({
 }: HeaderProps) {
   const router = useRouter();
   const isDiscover = router.pathname === "/";
-  const { user, loading: userLoading } = useUser();
+  const { user, loading: userLoading, solBalance } = useUser();
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+
+  // Toggle Search modal with Tab and '/' (outside of inputs)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!showSearch) return;
+      const isPlain = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+
+      // Close on Tab when open
+      if (e.key === "Tab" && isPlain) {
+        // If modal is open, close it immediately on Tab
+        if (searchModalOpen) {
+          e.preventDefault();
+          setSearchModalOpen(false);
+          return;
+        }
+        // Else, only open when focus isn't in an editable element
+        const t = (document.activeElement as HTMLElement) || null;
+        const isEditable = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t as any).isContentEditable);
+        if (isEditable) return; // allow normal tabbing in forms
+        e.preventDefault();
+        setSearchModalOpen(true);
+      }
+
+      // Toggle on '/' (slash). Some keyboards send '?' with Shift+'/'; we support both.
+      if ((e.key === '/' || e.key === '?') && isPlain) {
+        const t = (document.activeElement as HTMLElement) || null;
+        const isEditable = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t as any).isContentEditable);
+        if (isEditable) return; // do not steal from inputs
+        e.preventDefault();
+        setSearchModalOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showSearch, searchModalOpen]);
 
   // Handles opening the deposit modal
   const handleDepositClick = () => {
@@ -74,6 +114,15 @@ export default function Header({
       // Optionally, refresh user here if needed
     }
     setDepositOpen(true);
+  };
+
+  // Handles opening the withdraw modal
+  const handleWithdrawClick = () => {
+    const token = Cookies.get("token");
+    if (token && !user && !userLoading) {
+      // Optionally, refresh user here if needed
+    }
+    setWithdrawOpen(true);
   };
 
   return (
@@ -86,23 +135,21 @@ export default function Header({
         <div className="flex max-w-full items-center justify-between border-b px-4 py-2.5" style={{ backgroundColor: '#000000', borderColor: AX.border }}>
           <div className="flex min-w-0 items-center gap-3">
             <Link
-              href="/"
+              href="/pulse"
               className="flex items-center text-xl tracking-tight select-none"
               style={{ color: AX.text }}
-              title="Go to homepage"
+              title="Go to Trenches"
             >
               <img
-                src="/logo.png"
+                src="/interstate-logo.png"
                 alt="Interstate logo"
-                className="h-auto w-10"
+                className="h-auto w-30 scale-90"
               />
-              <span className="mr-1 inline-block rounded-full" />
-              Interstate
             </Link>
             <nav className="ml-6 flex items-center gap-5">
               {navLinks.map((link) => {
                 const isActive = router.pathname === link.href || 
-                  (link.name === "Pulse" && router.pathname.startsWith("/trade/"));
+                  (link.name === "Trenches" && router.pathname.startsWith("/trade/"));
                 return (
                   <Link
                     key={link.name}
@@ -135,31 +182,68 @@ export default function Header({
           </div>
           <div className="flex min-w-0 items-center gap-2">
             {showSearch && (
-              <button
-                onClick={() => setSearchModalOpen(true)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
+              <div className="flex items-center gap-2">
+                {/* Pill-style search trigger with keycap hint (desktop) */}
+                <button
+                  onClick={() => setSearchModalOpen(true)}
+                  className="hidden md:flex items-center gap-2 h-8 rounded-full border px-3 pr-2 transition-all duration-300 ease-out"
+                  style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.muted }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.08)';
+                    e.currentTarget.style.borderColor = '#22c55e';
+                    e.currentTarget.style.boxShadow = '0 0 8px rgba(34, 197, 94, 0.3), 0 0 16px rgba(34, 197, 94, 0.15)';
+                    e.currentTarget.style.transform = 'scale(1.01)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  <FaSearch size={14} />
+                  <span className="text-xs text-neutral-400 whitespace-nowrap">Search tokens…</span>
+                  <span className="ml-auto rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">Tab</span>
+                </button>
+
+                {/* Compact icon-only trigger on small screens */}
+                <button
+                  onClick={() => setSearchModalOpen(true)}
+                  className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
+                  style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.muted }}
+                >
+                  <FaSearch size={14} />
+                </button>
+              </div>
+            )}
+            {/* SOL Balance Pill */}
+            {user && (
+              <div 
+                className="flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out cursor-default"
                 style={{ 
                   backgroundColor: AX.surface, 
                   borderColor: AX.border,
-                  color: AX.muted 
+                  color: AX.text 
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.08)';
-                  e.currentTarget.style.borderColor = '#22c55e';
-                  e.currentTarget.style.color = '#22c55e';
-                  e.currentTarget.style.boxShadow = '0 0 8px rgba(34, 197, 94, 0.3), 0 0 16px rgba(34, 197, 94, 0.15)';
-                  e.currentTarget.style.transform = 'scale(1.02)';
+                  e.currentTarget.style.backgroundColor = 'rgba(112, 224, 176, 0.08)';
+                  e.currentTarget.style.borderColor = AX.mint;
+                  e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.2)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = AX.surface;
                   e.currentTarget.style.borderColor = AX.border;
-                  e.currentTarget.style.color = AX.muted;
                   e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.transform = 'scale(1)';
                 }}
               >
-                <FaSearch size={14} />
-              </button>
+                <FaWallet size={12} style={{ color: AX.muted }} />
+                <span className="text-xs font-medium">{solBalance.toFixed(4)}</span>
+                <img 
+                  src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png" 
+                  alt="SOL" 
+                  className="w-3 h-3 rounded-full"
+                />
+              </div>
             )}
             <button
               onClick={handleDepositClick}
@@ -183,6 +267,27 @@ export default function Header({
               Deposit
             </button>
             <button
+              onClick={handleWithdrawClick}
+              className="ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
+              style={{
+                backgroundColor: AX.sell,
+                color: '#000000',
+                border: 'none'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#E63E6B';
+                e.currentTarget.style.boxShadow = '0 0 8px rgba(255, 77, 127, 0.3), 0 0 16px rgba(255, 77, 127, 0.15)';
+                e.currentTarget.style.transform = 'scale(1.02)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = AX.sell;
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
+              Withdraw
+            </button>
+            {/* <button
               onClick={() => setWatchlistOpen(true)}
               className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
               style={{ 
@@ -206,7 +311,7 @@ export default function Header({
               }}
             >
               <FaStar size={14} />
-            </button>
+            </button> */}
             <button
               onClick={() => setNotificationOpen(true)}
               className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
@@ -297,7 +402,7 @@ export default function Header({
           </div>
         </div>
         <div className="flex items-center gap-2 px-3 py-0.5">
-          <div className="group relative">
+          {/* <div className="group relative">
             <button
               onClick={() => setWatchlistOpen(true)}
               className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
@@ -317,7 +422,6 @@ export default function Header({
             >
               <FiStar size={14} />
             </button>
-            {/* Custom tooltip for Watchlist */}
             <div className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
                  style={{ 
                    backgroundColor: AX.surface, 
@@ -326,11 +430,10 @@ export default function Header({
                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
                  }}>
               Watchlist
-              {/* Tooltip arrow pointing left */}
               <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent"
                    style={{ borderRightColor: AX.surface }}></div>
             </div>
-          </div>
+          </div> */}
           
           <div className="group relative">
             <button 
@@ -373,6 +476,7 @@ export default function Header({
         </div>
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
+      <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
       <WatchlistModal open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
       <NotificationDropdown open={notificationOpen} onClose={() => setNotificationOpen(false)} />
       {/* Search Modal */}

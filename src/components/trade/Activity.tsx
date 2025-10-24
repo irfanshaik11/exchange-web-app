@@ -4,12 +4,7 @@ import type { TradeRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
 import FastImage from '../FastImage';
 import { FaExternalLinkAlt } from 'react-icons/fa';
-
-interface ActivityProps {
-  trades: TradeRow[];
-  loading: boolean;
-  onTokenNamesChange?: (tokenNames: Record<string, string>) => void; // Optional: callback to pass token names to parent
-}
+import Image from 'next/image';
 
 interface TokenMetadata {
   imageUrl?: string;
@@ -17,6 +12,16 @@ interface TokenMetadata {
   name?: string;
   symbol?: string;
   createdAt?: number; // Token creation timestamp
+  timestamp?: number;
+}
+
+interface ActivityProps {
+  trades: TradeRow[];
+  loading: boolean;
+  onTokenNamesChange?: (tokenNames: Record<string, string>) => void; // Optional: callback to pass token names to parent
+  tokenMetadataCache?: Record<string, TokenMetadata>; // Optional: shared cache
+  onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
+  isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
 }
 
 function shortAddr(addr: string) {
@@ -47,80 +52,125 @@ function formatAge(timestamp: number | string): string {
   }
 }
 
-const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange }) => {
+const Activity: React.FC<ActivityProps> = ({ 
+  trades, 
+  loading, 
+  onTokenNamesChange,
+  tokenMetadataCache,
+  onUpdateCache,
+  isCacheValid
+}) => {
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const router = useRouter();
+  
+  // Initialize local metadata from cache if available
+  useEffect(() => {
+    if (tokenMetadataCache && Object.keys(tokenMetadataCache).length > 0) {
+      setTokenMetadata(tokenMetadataCache);
+    }
+  }, [tokenMetadataCache]);
 
   useEffect(() => {
     if (!trades || trades.length === 0) return;
     
-    // Fetch token data for each unique token in trades - use same pattern as Positions
-    const uniqueTokens = Array.from(new Set(trades.map(t => t.tokenAddress)));
-    
-    uniqueTokens.forEach(async (tokenAddress, idx) => {
-      try {
-        // Find the trade to get originalPairAddress (backend stores this for token-service lookups)
-        const trade = trades.find(t => t.tokenAddress === tokenAddress);
-        const pairAddress = trade?.originalPairAddress || trade?.pairAddress || tokenAddress;
-        
-        console.log(`Fetching token data for pair: ${pairAddress} (tokenAddress: ${tokenAddress})`);
-        
-        // Use originalPairAddress to get token data (same as Positions component)
-        const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`);
-        
-        if (!response.ok) {
-          console.error(`Failed to fetch token data for ${pairAddress}:`, response.status);
-          return;
-        }
-        
-        const data = await response.json();
-        const tokenData = data?.token;
-        
-        console.log(`Token data received for ${pairAddress}:`, tokenData);
-        
-        if (tokenData) {
-          setTokenMetadata(prev => {
-            const updated = {
-              ...prev,
-              [tokenAddress]: {
+    // Fetch token data for each unique token in trades in parallel
+    const fetchAllMetadata = async () => {
+      const uniqueTokens = Array.from(new Set(trades.map(t => t.tokenAddress)));
+      
+      // Filter out tokens that are already cached and valid
+      const tokensToFetch = uniqueTokens.filter(token => 
+        !isCacheValid || !isCacheValid(token)
+      );
+      
+      if (tokensToFetch.length === 0) {
+        console.log('✅ All tokens loaded from cache (Activity)');
+        return;
+      }
+      
+      console.log(`🔄 Fetching ${tokensToFetch.length} tokens for Activity (${uniqueTokens.length - tokensToFetch.length} from cache)`);
+      
+      // Fetch all tokens in parallel using Promise.all for maximum speed
+      await Promise.allSettled(
+        tokensToFetch.map(async (tokenAddress) => {
+          try {
+            // Find the trade to get originalPairAddress (backend stores this for token-service lookups)
+            const trade = trades.find(t => t.tokenAddress === tokenAddress);
+            const pairAddress = trade?.originalPairAddress || trade?.pairAddress || tokenAddress;
+            
+            // Reduced timeout to 3s for faster failures
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            
+            const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`, {
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const tokenData = data?.token;
+            
+            if (tokenData) {
+              const metadata = {
                 imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
                 protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
                 name: tokenData.name || '',
                 symbol: tokenData.symbol || '',
                 createdAt: tokenData.created_timestamp || tokenData.createdAt,
+              };
+              
+              // Update local state
+              setTokenMetadata(prev => ({
+                ...prev,
+                [tokenAddress]: metadata
+              }));
+              
+              // Update shared cache
+              if (onUpdateCache) {
+                onUpdateCache(tokenAddress, metadata);
               }
-            };
-            
-            // Pass token names to parent if callback is provided
-            if (onTokenNamesChange) {
-              const tokenNames: Record<string, string> = {};
-              Object.keys(updated).forEach(key => {
-                if (updated[key]?.name) {
-                  tokenNames[key] = updated[key].name!;
-                }
-              });
-              onTokenNamesChange(tokenNames);
+              
+              // Pass token names to parent if callback is provided
+              if (onTokenNamesChange) {
+                const tokenNames: Record<string, string> = { [tokenAddress]: metadata.name || '' };
+                onTokenNamesChange(tokenNames);
+              }
             }
-            
-            return updated;
-          });
-        }
-      } catch (error) {
-        console.error(`Error fetching token data for ${tokenAddress}:`, error);
-      }
-    });
+          } catch (error) {
+            // Set fallback metadata immediately so token doesn't stay at "Loading..."
+            const fallback = {
+              imageUrl: '',
+              protocol: '',
+              name: `Token ${tokenAddress.slice(0, 6)}...`,
+              symbol: '???',
+            };
+            setTokenMetadata(prev => ({
+              ...prev,
+              [tokenAddress]: fallback
+            }));
+            // Don't cache failed fetches
+          }
+        })
+      );
+    };
+    
+    // Don't await - let it load in background
+    fetchAllMetadata();
   }, [trades, onTokenNamesChange]);
 
   return (
-    <div className="w-full h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+    <div className="w-full">
       {loading ? (
         <div className="py-8 text-center text-[#9CA3AF]">Loading...</div>
       ) : trades.length === 0 ? (
         <div className="py-8 text-center text-[#9CA3AF]">No activity found.</div>
       ) : (
-        <div>
-          {/* Header Row */}
-          <div className="grid gap-4 px-6 py-2 border-b border-[#2A2B33] text-xs text-[#9CA3AF] sticky top-0 bg-[#1E1F26] z-10" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
+        <div className="relative">
+          {/* Header Row - Fixed */}
+          <div className="grid gap-4 px-6 py-2 border-b border-[#2A2B33] text-xs text-[#9CA3AF] bg-[#1E1F26]" style={{ gridTemplateColumns: '0.8fr 2fr 1.2fr 1.2fr 0.8fr 1fr' }}>
             <div>Type</div>
             <div>Token</div>
             <div>Amount</div>
@@ -129,10 +179,18 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
             <div>Explorer</div>
           </div>
           
-          {/* Data Rows */}
-          <div className="space-y-0">
-          {
-            trades.map((trade, idx) => {
+          {/* Scrollable Data Rows */}
+          <div 
+            className="overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800"
+            style={{ 
+              maxHeight: '500px',
+              scrollBehavior: 'smooth',
+              WebkitOverflowScrolling: 'touch'
+            } as React.CSSProperties}
+          >
+            <div className="space-y-0 pb-12">
+            {
+              trades.map((trade, idx) => {
               const handleRowClick = () => {
                 // Navigate to token trade page using originalPairAddress (same as Positions)
                 const navigateAddress = trade.originalPairAddress || trade.pairAddress || trade.tokenAddress;
@@ -143,29 +201,70 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
               
               const metadata = tokenMetadata[trade.tokenAddress];
               
-              // Protocol color mapping
+              // Protocol color mapping - matches PulseTable
               const getProtocolColor = (protocol?: string) => {
                 const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '#8B5CF6'; // Purple for Pump.fun
-                if (p.includes('raydium')) return '#00D4AA'; // Teal for Raydium
-                if (p.includes('meteora')) return '#FF6B6B'; // Red for Meteora
-                if (p.includes('launch')) return '#FFA500'; // Orange for LaunchLab
-                return '#6B7280'; // Gray default
+                if (p.includes('pump')) return '#22c55e'; // Green for Pump.fun
+                if (p.includes('raydium')) return '#5c51f7'; // Purple for Raydium
+                if (p.includes('meteora')) return '#ff4662'; // Pink-red for Meteora
+                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) return '#eab308'; // Yellow for Moonit/Moonshot
+                if (p.includes('boop')) return '#134577'; // Dark blue for Boop
+                if (p.includes('bonk')) return '#ff6b35'; // Orange for Bonk
+                if (p.includes('bags')) return '#22c55e'; // Green for Bags
+                if (p.includes('launch')) return '#3b82f6'; // Blue for LaunchLab (portfolio doesn't have column type, use default blue)
+                return '#22c55e'; // Default to green
               };
 
               const protocolColor = getProtocolColor(metadata?.protocol);
               
-              // Protocol icon mapping
-              const getProtocolIcon = (protocol?: string) => {
+              // Protocol icon mapping - returns image URL
+              const getProtocolIcon = (protocol?: string): string => {
                 const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '💊';
-                if (p.includes('raydium')) return '🌊';
-                if (p.includes('meteora')) return '☄️';
-                if (p.includes('launch')) return '🚀';
-                return '🔷';
+                
+                if (p.includes('pump')) {
+                  return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                }
+                
+                if (p.includes('meteora')) {
+                  return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
+                }
+                
+                if (p.includes('raydium')) {
+                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                }
+                
+                if (p.includes('boop')) {
+                  return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
+                }
+                
+                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) {
+                  return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+                }
+                
+                if (p.includes('bonk')) {
+                  return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+                }
+                
+                if (p.includes('bags')) {
+                  return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
+                }
+                
+                if (p.includes('launch')) {
+                  // LaunchLab uses Raydium icon
+                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                }
+                
+                // Default to pump.fun icon for unknown protocols
+                return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
               };
 
               const tokenIcon = getProtocolIcon(metadata?.protocol);
+              const p = metadata?.protocol?.toLowerCase() || '';
+              const isMeteora = p.includes('meteora');
+              const isBonk = p.includes('bonk');
+              const isBags = p.includes('bags');
+              const isMoonit = p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot');
+              const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
               
               // Calculate age based on trade time
               const age = formatAge(trade.tradeTime || trade.createdAt);
@@ -236,13 +335,19 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
                         <div 
                           className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/4 translate-y-1/4 z-10"
                           style={{ 
-                            width: 16, 
-                            height: 16,
+                            width: 20, 
+                            height: 20,
                             border: `2px solid ${protocolColor}`,
                             boxShadow: `0 0 4px ${protocolColor}60`
                           }}
                         >
-                          <span className="text-xs">{tokenIcon}</span>
+                          <Image
+                            src={tokenIcon}
+                            alt={`${metadata?.protocol || 'Protocol'} logo`}
+                            width={16}
+                            height={16}
+                            className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+                          />
                         </div>
                       </div>
                       <div className="flex flex-col min-w-0">
@@ -287,6 +392,7 @@ const Activity: React.FC<ActivityProps> = ({ trades, loading, onTokenNamesChange
               );
             })
           }
+            </div>
           </div>
         </div>
       )}

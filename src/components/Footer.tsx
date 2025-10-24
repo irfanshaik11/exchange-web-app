@@ -12,11 +12,13 @@ import {
   FaFileAlt,
   FaChevronDown,
   FaCog,
-  FaBars
+  FaBars,
+  FaTelegram
 } from 'react-icons/fa';
 import QuickBuySettingsModal from './QuickBuySettingsModal';
 import PnLModal from './PnLModal';
 import { useQuickBuy } from './QuickBuyContext';
+import { useSolPrice } from './SolPriceContext';
 
 // Custom X (Twitter) icon component
 const XIcon = ({ size = 14 }: { size?: number }) => (
@@ -71,41 +73,8 @@ export default function Footer() {
   const [showGlobalDropdown, setShowGlobalDropdown] = useState(false);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [showPnLModal, setShowPnLModal] = useState(false);
-  const [solPrice, setSolPrice] = useState<number>(0);
   const { activePreset } = useQuickBuy();
-
-  // Fetch SOL price using Pyth Network
-  useEffect(() => {
-    const fetchSolPrice = async () => {
-      try {
-        // Pyth Network price feed for SOL/USD
-        const SOL_USD_FEED = '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d';
-        const response = await fetch(
-          `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
-          { signal: AbortSignal.timeout(5000) }
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          const priceData = data.parsed?.[0]?.price;
-          if (priceData?.price && priceData?.expo) {
-            const price = Number(priceData.price) * Math.pow(10, priceData.expo);
-            setSolPrice(price);
-            return;
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching SOL price from Pyth:', error);
-      }
-      
-      // Fallback to static price if Pyth fails
-      setSolPrice(228.58);
-    };
-    
-    fetchSolPrice();
-    const interval = setInterval(fetchSolPrice, 60000); // Update every minute
-    return () => clearInterval(interval);
-  }, []);
+  const { solPrice } = useSolPrice(); // Use shared SOL price from context
 
   const navLinks = [
     // { name: "Wallet", href: "/wallet", icon: FaWallet },
@@ -130,6 +99,7 @@ export default function Footer() {
   const socialLinks = [
     { icon: FaDiscord, href: "https://discord.gg/sACYQmCsTJ", tooltip: "Discord", text: undefined },
     { icon: XIcon, href: "https://x.com/narrative_hq", tooltip: "Twitter", text: undefined },
+    { icon: FaTelegram, href: "https://t.me/+DDXGrsJoe3szYTAx", tooltip: "Telegram", text: undefined },
     // { icon: FaFileAlt, href: "/docs", tooltip: "Docs", text: "Docs" },
   ];
 

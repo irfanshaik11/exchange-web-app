@@ -34,25 +34,44 @@ interface TradeEventsState {
 interface UseTradeEventsWebSocketParams {
   pairAddress?: string;
   enabled?: boolean;
+  initialTrades?: any[]; // Initial trades from REST API
+  tokenDecimals?: number; // Token decimals for proper amount calculation
 }
 
 export default function useTradeEventsWebSocket({
   pairAddress,
   enabled = true,
+  initialTrades = [],
+  tokenDecimals = 9, // Default to 9 decimals (common for Solana tokens)
 }: UseTradeEventsWebSocketParams) {
   const [state, setState] = useState<TradeEventsState>({
     isConnected: false,
     isReconnecting: false,
     error: null,
-    loading: true,
-    trades: [],
-    lastUpdate: null,
+    loading: initialTrades.length === 0, // Don't show loading if we have initial data
+    trades: initialTrades, // Start with initial trades
+    lastUpdate: initialTrades.length > 0 ? new Date().toISOString() : null,
   });
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const reconnectAttemptRef = useRef(0);
+  const hasSetInitialDataRef = useRef(false);
+
+  // Update trades when initialTrades are provided (from REST pre-fetch)
+  useEffect(() => {
+    if (initialTrades && initialTrades.length > 0 && !hasSetInitialDataRef.current) {
+      console.log('[useTradeEventsWebSocket] Using initial trades from pre-fetch:', initialTrades.length);
+      setState(prev => ({
+        ...prev,
+        trades: initialTrades,
+        loading: false,
+        lastUpdate: new Date().toISOString(),
+      }));
+      hasSetInitialDataRef.current = true;
+    }
+  }, [initialTrades]);
 
   const processMessage = useCallback((message: any) => {
     try {
@@ -85,14 +104,47 @@ export default function useTradeEventsWebSocket({
             timestamp = new Date().toISOString();
           }
           
+          // Calculate total USD value
+          // SOL can be either token0 or token1 depending on the pair
+          // Determine which is SOL by checking which USD value is larger
+          const rawAmount0 = Math.abs(parseFloat(String(event.data.amount0)));
+          const rawAmount1 = Math.abs(parseFloat(String(event.data.amount1)));
+          const usd0 = parseFloat(String(event.token0SwapValueUsd));
+          const usd1 = parseFloat(String(event.token1SwapValueUsd));
+          
+          // Convert raw amounts to actual token quantities by dividing by decimals (for USD calculations)
+          const convertedAmount0 = rawAmount0 / Math.pow(10, tokenDecimals);
+          const convertedAmount1 = rawAmount1 / Math.pow(10, tokenDecimals);
+          
+          let totalUSD: number;
+          let solPrice: number;
+          
+          if (usd0 > usd1 && usd0 > 10) {
+            // token0 appears to be SOL (higher price ~$100-$250)
+            solPrice = usd0;
+            const solAmount = convertedAmount0; // Use converted amount for USD calculation
+            totalUSD = solAmount * solPrice;
+          } else if (usd1 > usd0 && usd1 > 10) {
+            // token1 appears to be SOL (higher price)
+            solPrice = usd1;
+            const solAmount = convertedAmount1; // Use converted amount for USD calculation
+            totalUSD = solAmount * solPrice;
+          } else {
+            // Both values are small, use the larger one
+            solPrice = Math.max(usd0, usd1);
+            totalUSD = solPrice;
+          }
+          
           const convertedTrade = {
             pair_address: pairAddress || '',
             side: event.eventDisplayType.toLowerCase() as "buy" | "sell",
-            amount: Math.abs(parseFloat(String(event.data.amount0))).toString(),
-            price: String(event.token0SwapValueUsd),
+            amount: rawAmount0.toString(), // Use raw amount for display
+            price: String(solPrice),
             timestamp: timestamp,
             maker: event.maker,
             transactionHash: event.transactionHash,
+            // Total USD value of the trade
+            totalUSD: totalUSD,
             // Keep original data for reference
             originalEvent: event,
           };
