@@ -1505,36 +1505,56 @@ const PulseTable = React.memo(function PulseTable({
   const handleQuickBuy = async (token: Token) => {
     console.log("🎯 handleQuickBuy called for token:", token.symbol);
     
+    // Fallback toast function for production issues
+    const showToast = (message: string, type: 'success' | 'error' = 'error') => {
+      try {
+        if (type === 'success') {
+          toast.success(message, {
+            duration: 5000,
+            style: {
+              background: '#1E1F26',
+              color: '#E6E7EA',
+              border: '1px solid #70E0B0',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              zIndex: 9999
+            }
+          });
+        } else {
+          toast.error(message, {
+            duration: 5000,
+            style: {
+              background: '#1E1F26',
+              color: '#E6E7EA',
+              border: '1px solid #ff6b6b',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              zIndex: 9999
+            }
+          });
+        }
+      } catch (error) {
+        // Fallback to console and alert if toast fails
+        console.error('Toast failed:', error);
+        console.log(`[${type.toUpperCase()}] ${message}`);
+        if (typeof window !== 'undefined' && window.alert) {
+          window.alert(message);
+        }
+      }
+    };
+    
     if (!user) {
       console.log("❌ No user found");
-      toast.error("⚠️ Please connect your wallet to trade", {
-        duration: 5000,
-        style: {
-          background: '#1E1F26',
-          color: '#E6E7EA',
-          border: '1px solid #ff6b6b',
-          borderRadius: '8px',
-          fontSize: '14px',
-          fontWeight: '500'
-        }
-      });
+      showToast("⚠️ Please connect your wallet to trade");
       return;
     }
 
     const buyAmount = parseFloat(thunderAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
       console.log("❌ Invalid buy amount:", thunderAmount);
-      toast.error("⚠️ Please enter a valid SOL amount (minimum 0.001 SOL)", { 
-        duration: 5000,
-        style: {
-          background: '#1E1F26',
-          color: '#E6E7EA',
-          border: '1px solid #ff6b6b',
-          borderRadius: '8px',
-          fontSize: '14px',
-          fontWeight: '500'
-        }
-      });
+      showToast("⚠️ Please enter a valid SOL amount (minimum 0.001 SOL)");
       return;
     }
 
@@ -1582,33 +1602,13 @@ const PulseTable = React.memo(function PulseTable({
 
       if (data && txHash) {
         console.log(`✅ Quick Buy successful! Hash: ${txHash}`);
-        toast.success(
+        showToast(
           `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`,
-          { 
-            duration: 6000,
-            style: {
-              background: '#1E1F26',
-              color: '#E6E7EA',
-              border: '1px solid #70E0B0',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '500'
-            }
-          }
+          'success'
         );
       } else {
         console.log('❌ Quick Buy failed - no transaction hash returned');
-        toast.error("❌ Quick Buy failed - no transaction hash returned", {
-          duration: 5000,
-          style: {
-            background: '#1E1F26',
-            color: '#E6E7EA',
-            border: '1px solid #ff6b6b',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: '500'
-          }
-        });
+        showToast("❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
       // Use console.warn for expected errors, console.error for unexpected
@@ -1627,35 +1627,25 @@ const PulseTable = React.memo(function PulseTable({
         };
         
         if (e.code === 'NO_ACTIVE_POOL') {
-          toast.error(`⚠️ Pool unavailable for ${token.symbol}`, { duration: 5000, style: toastStyle });
+          showToast(`⚠️ Pool unavailable for ${token.symbol}`);
         } else if (e.code === 'INSUFFICIENT_BALANCE') {
-          toast.error(`⚠️ Insufficient balance`, { duration: 5000, style: toastStyle });
+          showToast(`⚠️ Insufficient balance`);
         } else if (e.code === 'TX_FAILED') {
-          toast.error(`❌ Trade failed. Try adjusting slippage or amount.`, { duration: 5000, style: toastStyle });
+          showToast(`❌ Trade failed. Try adjusting slippage or amount.`);
         } else if (e.code === 'NO_HOLDINGS') {
-          toast.error(`❌ No ${token.symbol} to sell`, { duration: 5000, style: toastStyle });
+          showToast(`❌ No ${token.symbol} to sell`);
         } else if (e.code === 'AMOUNT_TOO_SMALL') {
-          toast.error(`❌ Amount too small (min 0.001 SOL)`, { duration: 5000, style: toastStyle });
+          showToast(`❌ Amount too small (min 0.001 SOL)`);
         } else if (e.code === 'POOL_UNAVAILABLE') {
-          toast.error(`⚠️ Pool has insufficient liquidity`, { duration: 5000, style: toastStyle });
+          showToast(`⚠️ Pool has insufficient liquidity`);
         } else {
           // Generic error with shortened message
           const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
-          toast.error(`❌ ${msg}`, { duration: 5000, style: toastStyle });
+          showToast(`❌ ${msg}`);
         }
       } else {
-        // Unexpected error - show generic message with enhanced styling
-        toast.error(`❌ Trade failed. Please try again.`, { 
-          duration: 5000,
-          style: {
-            background: '#1E1F26',
-            color: '#E6E7EA',
-            border: '1px solid #ff6b6b',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: '500'
-          }
-        });
+        // Unexpected error - show generic message
+        showToast(`❌ Trade failed. Please try again.`);
       }
     }
   };
