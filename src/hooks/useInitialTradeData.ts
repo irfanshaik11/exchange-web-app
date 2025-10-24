@@ -68,7 +68,7 @@ export default function useInitialTradeData(
   tokenAddress?: string
 ): UseInitialTradeDataResult {
   const [data, setData] = useState<InitialTradeDataResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false); // Start with false for faster initial render
   const [error, setError] = useState<string | null>(null);
   const [isFromCache, setIsFromCache] = useState(false);
 
@@ -89,7 +89,6 @@ export default function useInitialTradeData(
         // Return cached data if not expired
         if (age < CACHE_EXPIRY_MS) {
           cacheStatsRef.current.hits++;
-          console.log(`[useInitialTradeData] Cache hit for ${pair} (age: ${Math.round(age / 1000)}s)`);
           
           // Trigger background refresh if needed
           if (age > CACHE_EXPIRY_MS * BACKGROUND_REFRESH_THRESHOLD) {
@@ -98,7 +97,6 @@ export default function useInitialTradeData(
           
           return parsed.data;
         } else {
-          console.log(`[useInitialTradeData] Cache expired for ${pair}`);
           localStorage.removeItem(cacheKey);
         }
       }
@@ -165,17 +163,24 @@ export default function useInitialTradeData(
   // Fetch fresh data from API
   const fetchData = useCallback(async (pair: string, token?: string) => {
     const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      console.warn(`[useInitialTradeData] Request timeout for ${pair} after 5 seconds`);
+    }, 5000); // Reduced timeout to 5 seconds for faster loading
     
     try {
       console.log(`[useInitialTradeData] Fetching fresh data for ${pair}`);
       
-      // Fetch trade data and stats in parallel for speed
+      // Fetch trade data and stats in parallel for speed with timeout
+      
       const requests: Promise<Response>[] = [
         fetch(`${baseUrl}/v1/trade/view?pair_address=${pair}`, {
           headers: {
             'accept': 'application/json',
             'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
           },
+          signal: controller.signal,
         })
       ];
 
@@ -187,11 +192,13 @@ export default function useInitialTradeData(
               'accept': 'application/json',
               'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
             },
+            signal: controller.signal,
           })
         );
       }
 
       const responses = await Promise.all(requests);
+      clearTimeout(timeoutId); // Clear timeout after requests complete
       
       // Parse responses
       const [tradesResponse, statsResponse] = responses;
@@ -242,6 +249,14 @@ export default function useInitialTradeData(
       
       return result;
     } catch (err: any) {
+      clearTimeout(timeoutId); // Clear timeout on error
+      
+      // Handle AbortError gracefully
+      if (err.name === 'AbortError') {
+        console.warn(`[useInitialTradeData] Request aborted for ${pair} - likely timeout`);
+        throw new Error(`Request timeout for ${pair}. Please try again.`);
+      }
+      
       console.error('[useInitialTradeData] Fetch error:', err);
       throw err;
     }
@@ -263,12 +278,9 @@ export default function useInitialTradeData(
       setError(null);
 
       // Step 0: Check rolling cache first (INSTANT - 0ms for pulse tokens)
-      console.log('[useInitialTradeData] Checking cache for:', { pairAddress, tokenAddress });
-
       if (tokenAddress) {
         const rollingCached = rollingTradeCache.getCachedTradeData(tokenAddress);
         if (rollingCached && mounted) {
-          console.log('[useInitialTradeData] 🚀 INSTANT LOAD from rolling cache');
           setData({
             trades: rollingCached.trades,
             stats: rollingCached.stats ? { timeframes: rollingCached.stats } : null,
@@ -278,17 +290,12 @@ export default function useInitialTradeData(
           setLoading(false);
           // Don't fetch fresh data - rolling cache is already fresh
           return;
-        } else {
-          console.log('[useInitialTradeData] Rolling cache returned null, checking localStorage cache...');
         }
-      } else {
-        console.log('[useInitialTradeData] No tokenAddress provided, skipping rolling cache');
       }
 
       // Step 1: Check localStorage cache (backup - 1ms)
       const cached = getCachedData(pairAddress);
       if (cached && mounted) {
-        console.log('[useInitialTradeData] Displaying localStorage cached data');
         setData(cached);
         setIsFromCache(true);
         setLoading(false);
@@ -311,16 +318,23 @@ export default function useInitialTradeData(
         }
       } catch (err: any) {
         if (mounted) {
-          // Don't show error message for new tokens (404), just set empty data
+          // Handle different error types gracefully
           if (err.message && err.message.includes('404')) {
             console.log('[useInitialTradeData] New token detected, showing empty state');
             setData({ trades: [], stats: null, recentTrades: [] });
             setError(null);
+          } else if (err.message && err.message.includes('timeout')) {
+            console.warn('[useInitialTradeData] Request timeout, showing cached data if available');
+            setError('Connection timeout. Showing cached data if available.');
+            // Keep cached data if available, otherwise show empty state
+            if (!cached) {
+              setData({ trades: [], stats: null, recentTrades: [] });
+            }
           } else {
             setError(err.message || 'Failed to fetch initial data');
             // If we had cached data, keep showing it despite error
             if (!cached) {
-              setData(null);
+              setData({ trades: [], stats: null, recentTrades: [] });
             }
           }
           setLoading(false);

@@ -14,12 +14,13 @@ export default function useSingleTokenPolling(address: string | undefined) {
   const [state, setState] = useState<PollingState>({
     isPolling: false,
     error: null,
-    loading: true,
+    loading: false, // Start with false for faster initial render
   });
   const [isHydrating, setIsHydrating] = useState(false);
   const [resolvedPairAddress, setResolvedPairAddress] = useState<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const addressRef = useRef(address);
+  const hydrationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   addressRef.current = address;
 
   const throttledSetToken = useCallback(
@@ -39,22 +40,31 @@ export default function useSingleTokenPolling(address: string | undefined) {
     return addr.endsWith('pump');
   }, []);
 
-  // Resolve address to pair address
+  // Resolve address to pair address with timeout
   const resolveAddress = useCallback(async (addr: string) => {
     // If it's already a pair address, return it
     if (!isMintAddress(addr)) {
       return addr;
     }
 
-    // If it's a mint address, hydrate it
+    // If it's a mint address, hydrate it with timeout
     setIsHydrating(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      console.warn(`[useSingleTokenPolling] Hydration timeout for ${addr} after 5 seconds`);
+    }, 5000);
+
     try {
       console.log('Resolving mint address to pair address:', addr);
       const response = await fetch('/api/token-service/hydrate-pair', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mint: addr })
+        body: JSON.stringify({ mint: addr }),
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (response.ok) {
         const data = await response.json();
@@ -65,6 +75,11 @@ export default function useSingleTokenPolling(address: string | undefined) {
         return null;
       }
     } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.warn(`[useSingleTokenPolling] Hydration aborted for ${addr} - timeout`);
+        return null;
+      }
       console.error('Error resolving address:', error);
       return null;
     } finally {

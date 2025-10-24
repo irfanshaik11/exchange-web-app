@@ -100,7 +100,7 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
 
     const now = Date.now();
     const since = now - lastFetchAtRef.current;
-    if (since < 2000) await new Promise(r => setTimeout(r, 2000 - since));
+    if (since < 1000) await new Promise(r => setTimeout(r, 1000 - since));
     lastFetchAtRef.current = Date.now();
 
     const doFetch = async (u: URL) => {
@@ -277,13 +277,13 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
     };
   }, []);
 
-  // Polling with jittered backoff
+  // Polling with standard refresh
   useEffect(() => {
     mountedRef.current = true;
     fetchCandles();
 
     const backoff = Math.min(Math.pow(2, retryCount), 8);
-    const jitter  = Math.floor(Math.random() * 4000);
+    const jitter  = Math.floor(Math.random() * 2000);
     const intervalMs = baseRefreshMs * backoff + jitter;
 
     const id = setInterval(fetchCandles, intervalMs);

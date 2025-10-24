@@ -218,46 +218,23 @@ export function useTradePagePrefetch(
     try {
       const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL;
       
-      // Prefetch trade data
+      // Only prefetch trade data - skip stats and OHLC to reduce load
       await prefetchManager.prefetch(
         `trade-data-${pairAddress}`,
         `${baseUrl}/v1/trade/view?pair_address=${pairAddress}`,
         {
           enabled: true,
-          delay: 100, // Small delay to not interfere with initial load
+          delay: 1000, // Increased delay to not interfere with initial load
           priority: 'high',
-          timeout: 5000,
-        }
-      );
-
-      // Prefetch stats if token address is available (HTTP endpoint only)
-      if (tokenAddress) {
-        await prefetchManager.prefetch(
-          `token-stats-${pairAddress}`,
-          `${baseUrl}/v1/token/stats?pair_address=${pairAddress}&token_address=${tokenAddress}`,
-          {
-            enabled: true,
-            delay: 200,
-            priority: 'medium',
-            timeout: 5000,
-          }
-        );
-      }
-
-      // Prefetch OHLC data
-      await prefetchManager.prefetch(
-        `ohlc-data-${pairAddress}`,
-        `${baseUrl}/v1/trade/ohlc-data?pair_address=${pairAddress}&interval=1m&timeframe=24h`,
-        {
-          enabled: true,
-          delay: 300,
-          priority: 'medium',
-          timeout: 8000,
+          timeout: 3000, // Reduced timeout for faster failure
         }
       );
 
     } catch (error) {
-      console.warn('[useTradePagePrefetch] Prefetch failed:', error);
+      // Reduced logging for performance
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[useTradePagePrefetch] Prefetch failed:', error);
+      }
     }
   }, [pairAddress, tokenAddress]);
 
@@ -269,7 +246,7 @@ export function useTradePagePrefetch(
 
     prefetchTimeoutRef.current = setTimeout(() => {
       prefetchTradeData();
-    }, 500); // Debounce prefetch by 500ms
+    }, 2000); // Increased debounce to 2s to reduce load
 
     return () => {
       if (prefetchTimeoutRef.current) {
