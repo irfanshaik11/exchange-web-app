@@ -98,9 +98,9 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
       return;
     }
 
-    // Skip fetching if we have preloaded data and this is the first load
-    if (preloadedData && preloadedData.length > 0 && firstLoadRef.current) {
-      console.log('[BackendOHLCChart] Skipping fetch - using preloaded data');
+    // AGGRESSIVELY skip fetching if we have preloaded data
+    if (preloadedData && preloadedData.length > 0) {
+      console.log('[BackendOHLCChart] BLOCKING fetch - preloaded data available:', preloadedData.length, 'candles');
       setIsLoading(false);
       hasInitializedRef.current = true;
       return;
@@ -241,10 +241,22 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
         localization: { 
           timeFormatter: (t: any) => new Date(t * 1000).toLocaleString(),
           priceFormatter: (price: number) => {
-            // Better number formatting for large displays
-            if (price >= 1) return price.toFixed(4);
-            if (price >= 0.01) return price.toFixed(6);
-            return price.toFixed(8);
+            const abs = Math.abs(price);
+            
+            // For very large numbers, use K/M/B notation
+            if (abs >= 1000000000) {
+              return (price / 1000000000).toFixed(2).replace(/\.00$/, '') + 'B';
+            } else if (abs >= 1000000) {
+              return (price / 1000000).toFixed(2).replace(/\.00$/, '') + 'M';
+            } else if (abs >= 1000) {
+              return (price / 1000).toFixed(2).replace(/\.00$/, '') + 'K';
+            } else if (abs >= 1) {
+              return price.toFixed(2).replace(/\.00$/, '');
+            } else if (abs >= 0.01) {
+              return price.toFixed(3).replace(/\.000$/, '');
+            } else {
+              return price.toFixed(6).replace(/\.000000$/, '');
+            }
           }
         },
       });
@@ -309,7 +321,7 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
     };
   }, []);
 
-  // Update candles when preloaded data changes
+  // Update candles when preloaded data changes - PRIORITY DATA SOURCE
   useEffect(() => {
     if (preloadedData && preloadedData.length > 0) {
       // Only use preloaded data if we have valid mint or pairAddress
@@ -319,26 +331,33 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
         return;
       }
       
-      console.log('[BackendOHLCChart] Using preloaded data:', preloadedData.length, 'candles for mint:', mint, 'pairAddress:', pairAddress);
+      console.log('[BackendOHLCChart] PRIORITY: Using preloaded data:', preloadedData.length, 'candles for mint:', mint, 'pairAddress:', pairAddress);
       console.log('[BackendOHLCChart] First candle:', preloadedData[0]);
       console.log('[BackendOHLCChart] Last candle:', preloadedData[preloadedData.length - 1]);
+      
+      // Set preloaded data as the primary source and disable API fetching
       setCandles(preloadedData);
       lastGoodCandlesRef.current = preloadedData;
       setLastUpdate(new Date());
       setIsLoading(false);
       hasInitializedRef.current = true;
+      
+      // Mark that we're using preloaded data to prevent API conflicts
+      firstLoadRef.current = false;
+      
       onDataUpdate?.(preloadedData);
     }
   }, [preloadedData, onDataUpdate, mint, pairAddress]);
 
-  // Polling with standard refresh
+  // Polling with standard refresh - ONLY RUN IF NO PRELOADED DATA
   useEffect(() => {
-    // Skip polling if we have preloaded data and this is the first load
-    if (preloadedData && preloadedData.length > 0 && firstLoadRef.current) {
-      console.log('[BackendOHLCChart] Skipping polling - using preloaded data');
+    // AGGRESSIVELY skip polling if we have preloaded data
+    if (preloadedData && preloadedData.length > 0) {
+      console.log('[BackendOHLCChart] BLOCKING polling - preloaded data available:', preloadedData.length, 'candles');
       return;
     }
 
+    console.log('[BackendOHLCChart] Starting API polling - no preloaded data available');
     mountedRef.current = true;
     fetchCandles();
 
