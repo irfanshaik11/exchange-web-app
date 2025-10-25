@@ -5,6 +5,9 @@ interface TradeEventData {
   data: {
     amount0: string | number;
     amount1: string | number;
+    amountNonLiquidityToken?: string | number;
+    priceUsdTotal?: string | number;
+    priceUsd?: string | number;
   };
   eventDisplayType: "Buy" | "Sell";
   maker: string;
@@ -78,41 +81,62 @@ export default function useOptimizedTradeEventsWebSocket({
       timestamp = new Date().toISOString();
     }
     
-    // Calculate total USD value
-    const rawAmount0 = Math.abs(parseFloat(String(event.data.amount0)));
-    const rawAmount1 = Math.abs(parseFloat(String(event.data.amount1)));
-    const usd0 = parseFloat(String(event.token0SwapValueUsd));
-    const usd1 = parseFloat(String(event.token1SwapValueUsd));
+    // Use the pre-calculated values from the websocket data instead of manual conversion
+    // The websocket already provides correctly converted values
+    const tokenAmount = parseFloat(String(event.data?.amountNonLiquidityToken || event.data.amount0));
+    const totalUSD = parseFloat(String(event.data?.priceUsdTotal || '0'));
+    const pricePerToken = parseFloat(String(event.data?.priceUsd || event.token0SwapValueUsd));
     
-    // Convert raw amounts to actual token quantities
-    const convertedAmount0 = rawAmount0 / Math.pow(10, tokenDecimals);
-    const convertedAmount1 = rawAmount1 / Math.pow(10, tokenDecimals);
+    // Fallback calculation if pre-calculated values are not available
+    let finalTokenAmount = tokenAmount;
+    let finalTotalUSD = totalUSD;
+    let finalPricePerToken = pricePerToken;
     
-    let totalUSD: number;
-    let solPrice: number;
-    
-    if (usd0 > usd1 && usd0 > 10) {
-      solPrice = usd0;
-      const solAmount = convertedAmount0;
-      totalUSD = solAmount * solPrice;
-    } else if (usd1 > usd0 && usd1 > 10) {
-      solPrice = usd1;
-      const solAmount = convertedAmount1;
-      totalUSD = solAmount * solPrice;
-    } else {
-      solPrice = Math.max(usd0, usd1);
-      totalUSD = solPrice;
+    if (!tokenAmount || !totalUSD || !pricePerToken) {
+      // Calculate total USD value using the original method as fallback
+      const rawAmount0 = Math.abs(parseFloat(String(event.data.amount0)));
+      const rawAmount1 = Math.abs(parseFloat(String(event.data.amount1)));
+      const usd0 = parseFloat(String(event.token0SwapValueUsd));
+      const usd1 = parseFloat(String(event.token1SwapValueUsd));
+      
+      // Convert raw amounts to actual token quantities
+      const convertedAmount0 = rawAmount0 / Math.pow(10, tokenDecimals);
+      const convertedAmount1 = rawAmount1 / Math.pow(10, tokenDecimals);
+      
+      let calculatedTotalUSD: number;
+      let calculatedSolPrice: number;
+      
+      if (usd0 > usd1 && usd0 > 10) {
+        calculatedSolPrice = usd0;
+        const solAmount = convertedAmount0;
+        calculatedTotalUSD = solAmount * calculatedSolPrice;
+        finalTokenAmount = convertedAmount0;
+        finalPricePerToken = calculatedSolPrice;
+      } else if (usd1 > usd0 && usd1 > 10) {
+        calculatedSolPrice = usd1;
+        const solAmount = convertedAmount1;
+        calculatedTotalUSD = solAmount * calculatedSolPrice;
+        finalTokenAmount = convertedAmount1;
+        finalPricePerToken = calculatedSolPrice;
+      } else {
+        calculatedSolPrice = Math.max(usd0, usd1);
+        calculatedTotalUSD = calculatedSolPrice;
+        finalTokenAmount = convertedAmount0;
+        finalPricePerToken = calculatedSolPrice;
+      }
+      
+      finalTotalUSD = calculatedTotalUSD;
     }
     
     return {
       pair_address: pairAddress || '',
       side: event.eventDisplayType.toLowerCase() as "buy" | "sell",
-      amount: rawAmount0.toString(),
-      price: String(solPrice),
+      amount: finalTokenAmount.toString(),
+      price: String(finalPricePerToken),
       timestamp: timestamp,
       maker: event.maker,
       transactionHash: event.transactionHash,
-      totalUSD: totalUSD,
+      totalUSD: finalTotalUSD,
       originalEvent: event,
     };
   }, [pairAddress, tokenDecimals]);
@@ -147,31 +171,49 @@ export default function useOptimizedTradeEventsWebSocket({
     return sortedTrades.slice(0, maxTrades);
   }, [maxTrades]);
 
-  // Update trades when initialTrades are provided - immediate display
+  // Update trades when initialTrades are provided - but only if they look correct
+  // This prevents showing cached data with wrong decimal values before websocket provides correct data
   useEffect(() => {
     if (initialTrades && initialTrades.length > 0 && !hasSetInitialDataRef.current) {
-      // Reduced logging for performance
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[useOptimizedTradeEventsWebSocket] Using initial trades from pre-fetch:', initialTrades.length);
+      // Check if initial trades have the correct format (with pre-calculated values)
+      const hasCorrectFormat = initialTrades.some(trade => 
+        trade.data?.amountNonLiquidityToken || trade.data?.priceUsdTotal
+      );
+      
+      if (hasCorrectFormat) {
+        // Only use initial trades if they have the correct format
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[useOptimizedTradeEventsWebSocket] Using initial trades with correct format:', initialTrades.length);
+        }
+        
+        const processedTrades = initialTrades.map(processTradeEvent);
+        const deduplicatedTrades = deduplicateTrades(processedTrades);
+        const managedTrades = manageTradesMemory(deduplicatedTrades);
+        
+        // Update seen trades set
+        managedTrades.forEach(trade => {
+          seenTradesRef.current.add(`${trade.transactionHash}-${trade.timestamp}`);
+        });
+        
+        setState(prev => ({
+          ...prev,
+          trades: managedTrades,
+          loading: false,
+          isConnected: true,
+          lastUpdate: new Date().toISOString(),
+        }));
+        hasSetInitialDataRef.current = true;
+      } else {
+        // Skip initial trades if they don't have correct format - wait for websocket
+        // This prevents showing wrong decimal values from cached data
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[useOptimizedTradeEventsWebSocket] Skipping initial trades - incorrect format, waiting for websocket');
+        }
+        setState(prev => ({
+          ...prev,
+          loading: true, // Keep loading until websocket provides correct data
+        }));
       }
-      
-      const processedTrades = initialTrades.map(processTradeEvent);
-      const deduplicatedTrades = deduplicateTrades(processedTrades);
-      const managedTrades = manageTradesMemory(deduplicatedTrades);
-      
-      // Update seen trades set
-      managedTrades.forEach(trade => {
-        seenTradesRef.current.add(`${trade.transactionHash}-${trade.timestamp}`);
-      });
-      
-      setState(prev => ({
-        ...prev,
-        trades: managedTrades,
-        loading: false,
-        isConnected: true, // Mark as connected when we have initial data
-        lastUpdate: new Date().toISOString(),
-      }));
-      hasSetInitialDataRef.current = true;
     }
   }, [initialTrades?.length, processTradeEvent, deduplicateTrades, manageTradesMemory]);
 
@@ -253,6 +295,15 @@ export default function useOptimizedTradeEventsWebSocket({
       return;
     }
 
+    // Start loading immediately when connecting
+    setState(prev => ({ ...prev, loading: true }));
+
+    // Prevent multiple simultaneous connections
+    if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
+      console.log('[useOptimizedTradeEventsWebSocket] Connection already in progress, skipping');
+      return;
+    }
+
     try {
       const baseUrl = (env.NEXT_PUBLIC_WEBSOCKET_URL || '').replace(/^https?:\/\//, '');
       const protocol = env.NEXT_PUBLIC_WEBSOCKET_URL?.startsWith('https') ? 'wss' : 'ws';
@@ -260,7 +311,7 @@ export default function useOptimizedTradeEventsWebSocket({
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      // Set connection timeout to 3 seconds for faster failure
+      // Set connection timeout to 2 seconds for faster failure
       const connectionTimeout = setTimeout(() => {
         if (ws.readyState === WebSocket.CONNECTING) {
           ws.close();
@@ -270,7 +321,7 @@ export default function useOptimizedTradeEventsWebSocket({
             loading: false,
           }));
         }
-      }, 3000);
+      }, 2000);
 
       ws.onopen = () => {
         clearTimeout(connectionTimeout);
@@ -386,7 +437,8 @@ export default function useOptimizedTradeEventsWebSocket({
         ...prev,
         isConnected: false,
         loading: false,
-        trades: [],
+        // Don't clear trades if we have initial data - preserve them for better UX
+        trades: prev.trades.length > 0 ? prev.trades : [],
       }));
       return;
     }
