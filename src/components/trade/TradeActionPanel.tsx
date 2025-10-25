@@ -243,7 +243,7 @@ interface TokenStats {
 }
 
 interface TradeActionPanelProps {
-  token: Token;
+  token: Token | null;
   tradeParams?: any; // Use any to match TradePageParams from queryParams
   setTradeParams?: (params: any) => void;
   quickBuySettings?: any;
@@ -259,9 +259,27 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   quickBuySide: externalQuickBuySide,
   initialStats
 }) => {
+  // Only show skeleton if we have absolutely no token data (not even optimistic)
+  if (!token || (!token.name && !token.symbol)) {
+    return (
+      <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:block">
+        <div className="h-full bg-neutral-800/50 rounded-lg p-4">
+          <div className="animate-pulse">
+            <div className="h-6 w-32 bg-neutral-700 rounded mb-4" />
+            <div className="space-y-3">
+              <div className="h-4 w-full bg-neutral-700 rounded" />
+              <div className="h-4 w-3/4 bg-neutral-700 rounded" />
+              <div className="h-4 w-1/2 bg-neutral-700 rounded" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Determine the pool address to use: migrated_pool_address if available, otherwise pair_address
   const effectivePoolAddress = useMemo(() => {
-    return token.migrated_pool_address || token.pair_address;
+    return token.migrated_pool_address || token.pair_address || '';
   }, [token.migrated_pool_address, token.pair_address]);
 
   // Internal state with fallback to external props
@@ -325,7 +343,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     
     return {
       success: true,
-      tokenAddress: token.mint,
+      tokenAddress: token.mint || '' || '',
       pairAddress: effectivePoolAddress || '',
       dataSource: 'rest-api',
       timestamp: new Date().toISOString(),
@@ -333,7 +351,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         timeframes: processedTimeframes,
       },
     };
-  }, [initialStats, token.mint, effectivePoolAddress]);
+  }, [initialStats, token.mint || '' || '', effectivePoolAddress]);
 
   // WebSocket hook for real-time token stats
   const {
@@ -344,7 +362,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     getFormattedStats,
   } = useTokenStatsWebSocket({
     pairAddress: effectivePoolAddress,
-    tokenAddress: token.mint,
+    tokenAddress: token.mint || '',
     enabled: true,
     initialStats: convertedInitialStats,
   });
@@ -410,11 +428,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         const trades = await getTradeActivityByUser(user.id.toString());
         
         console.log('🔍 TradeActionPanel - Fetched trade activity:', trades.length, 'trades');
-        console.log('🔍 TradeActionPanel - Looking for token:', token.mint);
+        console.log('🔍 TradeActionPanel - Looking for token:', token.mint || '');
         
         // Filter trades for this specific token
         const tokenTrades = trades.filter((trade: any) => 
-          trade.tokenAddress?.toLowerCase() === token.mint?.toLowerCase()
+          trade.tokenAddress?.toLowerCase() === token.mint || ''?.toLowerCase()
         );
         
         console.log('🔍 TradeActionPanel - Found', tokenTrades.length, 'trades for this token');
@@ -481,7 +499,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             pnl: 0,
             pnlPercentage: 0,
           });
-          console.log('ℹ️ TradeActionPanel - No trades found for token:', token.mint);
+          console.log('ℹ️ TradeActionPanel - No trades found for token:', token.mint || '');
         }
       } catch (error) {
         console.error('Error calculating position from trades:', error);
@@ -606,7 +624,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     const fetchCreatorAddress = async () => {
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
+          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint || ''}&limit=1`
         );
         if (response.ok) {
           const data = await response.json();
@@ -627,10 +645,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       }
     };
     
-    if (token.mint) {
+    if (token.mint || '') {
       fetchCreatorAddress();
     }
-  }, [token.mint]);
+  }, [token.mint || '']);
 
   // amount presets - different for buy vs sell
   const buyPresets = [0.01, 0.1, 0.5, 1];
@@ -1217,7 +1235,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       {tab === "analytics" && (
         <div className="px-3 pt-2 pb-4">
           <TokenAnalyticsPanel
-            mintAddress={token.mint}
+            mintAddress={token.mint || ''}
             tokenInfo={{
               symbol: token.symbol,
               name: token.name,
@@ -1361,7 +1379,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               try {
                 await createLimitOrder(
                   {
-                    tokenAddress: token.mint, // Use token mint address, not pool address
+                    tokenAddress: token.mint || '', // Use token mint address, not pool address
                     amount: Number(amount),
                     type: mode === "buy" ? "Buy" : "Sell",
                     direction: "Above",
@@ -1373,7 +1391,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     tokenSymbol: token.symbol,
                     tokenDecimals: token.decimals,
                     poolAddress: effectivePoolAddress, // For trading: migrated_pool_address || pair_address
-                    pairAddress: token.pair_address, // For market cap tracking: always pair_address
+                    pairAddress: token.pair_address || '', // For market cap tracking: always pair_address
                     poolType: getPoolTypeFromToken(token),
                   },
                   user.bearerToken
@@ -1469,8 +1487,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               const tradeParams = {
                 amount: Number(amount),
                 poolAddress: effectivePoolAddress,
-                originalPairAddress: token.pair_address, // Original pair_address from token-service
-                baseMint: token.mint,
+                originalPairAddress: token.pair_address || '', // Original pair_address from token-service
+                baseMint: token.mint || '',
                 quoteMint: SOL_MINT_ADDRESS,
                 mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
                 poolType,
@@ -1503,13 +1521,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       return null;
                     })
                 : await tradeSellPercentage({
-                    tokenAddress: token.mint,
+                    tokenAddress: token.mint || '',
                     percentageToSell: Number(amount), // Use the percentage from input
                     poolAddress: effectivePoolAddress,
-                    baseMint: token.mint,
+                    baseMint: token.mint || '',
                     quoteMint: SOL_MINT_ADDRESS,
                     poolType,
-                    originalPairAddress: token.pair_address, // Original pair address from token-service
+                    originalPairAddress: token.pair_address || '', // Original pair address from token-service
                     // Preset trading parameters
                     slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
                     priorityFee: settings.priority || 0.001,
@@ -1541,7 +1559,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     try {
                       const trades = await getTradeActivityByUser(user.id.toString());
                       const tokenTrades = trades.filter((trade: any) => 
-                        trade.tokenAddress?.toLowerCase() === token.mint?.toLowerCase()
+                        trade.tokenAddress?.toLowerCase() === token.mint || ''?.toLowerCase()
                       );
                       
                       if (tokenTrades.length > 0) {
@@ -1905,7 +1923,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       <div className="border-t border-[#2A2B33]">
         <AddressDisplay
           label="CA"
-          address={token.mint}
+          address={token.mint || ''}
           icon={
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -1915,7 +1933,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               <polyline points="10,9 9,9 8,9"/>
             </svg>
           }
-          solscanUrl={`https://solscan.io/token/${token.mint}`}
+          solscanUrl={`https://solscan.io/token/${token.mint || ''}`}
           tooltip="Contract Address - The token's smart contract address on Solana"
         />
         

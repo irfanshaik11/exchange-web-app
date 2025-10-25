@@ -1,103 +1,43 @@
-import Head from "next/head";
-import Link from "next/link";
-import { useRouter } from "next/router";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useState, useEffect, useRef, useCallback } from "react";
-import {
-  FaGlobe,
-  FaUser,
-  FaSearch,
-  FaCheckCircle,
-  FaQuestionCircle,
-  FaPowerOff,
-  FaTimes,
-  FaCopy,
-  FaCog,
-  FaFilter,
-} from "react-icons/fa";
-import Image from "next/image";
-import { useUser } from "../components/UserContext";
-import Cookies from "js-cookie";
-import QRCode from "qrcode";
-import Header from "../components/Header";
-import Footer from "../components/Footer";
-import type { Token } from "~/utils/db";
-import InterstateButton from "../components/InterstateButton";
-import InterstateTable from "../components/InterstateTable";
-import toast from "react-hot-toast";
-import { formatSmartNumber } from "~/utils/db";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import Head from 'next/head';
+import InterstateTable from '../components/InterstateTable';
+import type { Token } from '~/utils/db';
+import Header from '../components/Header';
+import Footer from '../components/Footer';
+import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { FilterProvider, useFilter } from '../components/FilterContext';
-import InterstatePopout from '../components/InterstatePopout';
 import FilterPopout from '../components/FilterPopout';
-import throttle from 'lodash.throttle';
-import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
 import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 import { env } from "../env";
+import toast from "react-hot-toast";
+import { FaCog, FaFilter } from "react-icons/fa";
 
-const navLinks = [
-  { name: "Discover", href: "/" },
-  { name: "Pulse", href: "/pulse" },
-  { name: "Trackers", href: "#" },
-  { name: "Perpetuals", href: "#" },
-  { name: "Yield", href: "#" },
-  { name: "Portfolio", href: "#" },
-  { name: "Rewards", href: "#" },
-];
-
-function shuffleArray<T extends NonNullable<unknown>>(array: T[]): T[] {
-  const arr = array.slice();
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const temp = arr[i];
-    //@ts-ignore
-    arr[i] = arr[j];
-    //@ts-ignore
-    arr[j] = temp;
-  }
-  return arr;
-}
+export type Timeframe = "1m" | "5m" | "30m" | "1h";
 
 // Add this type extension after importing Token
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
-export type Timeframe = "1m" | "5m" | "30m" | "1h";
-
-export default function Home() {
-  const router = useRouter();
+export default function DiscoverPage() {
+  // Tab navigation state
+  const [activeTab, setActiveTab] = useState<'dex' | 'trending'>('trending');
+  const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
-  // Populate search state if we arrived with ?search= in the URL
-  useEffect(() => {
-    if (router.query.search && typeof router.query.search === "string") {
-      setSearch(router.query.search as string);
-    }
-  }, [router.query.search]);
-  const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
-  const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
-  const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
-  const isDiscover = router.pathname === "/";
-  const timeframes = ["1m", "5m", "30m", "1h"] as Timeframe[];
-  const [selectedTimeframe, setSelectedTimeframe] =
-    useState<Timeframe>("1h");
-  const { user, loading: userLoading, refreshUser } = useUser();
-  const [selectedTab, setSelectedTab] = useState<"dex" | "trending">("trending");
-  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [quickBuyAmount, setQuickBuyAmount] = useState(0.05);
-  const { quickBuySettings, presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter, setFilter, resetFilter } = useFilter();
+  const { quickBuySettings, presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
+  const [quickBuyAmount, setQuickBuyAmount] = useState(0.05);
   const [showSkeleton, setShowSkeleton] = useState(true);
+  const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
+  const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
+  const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
+  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   // WebSocket token service
-  console.log('🔧 About to call usePaginatedTokensWithFallback with:', { 
-    filter: selectedTab === 'dex' ? 'new' : 'trending', 
-    timeframe: selectedTimeframe 
-  });
-  console.log('🔧 selectedTimeframe value:', selectedTimeframe, 'type:', typeof selectedTimeframe);
   const {
     data: allTokens,
     loading: tokensLoading,
@@ -106,165 +46,14 @@ export default function Home() {
     isReconnecting,
     usingFallback,
   } = usePaginatedTokensWithFallback({
-    filter: selectedTab === 'dex' ? 'new' : 'trending',
+    filter: activeTab === 'dex' ? 'new' : 'trending',
     timeframe: selectedTimeframe
-  });  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
-  useEffect(() => {
-    console.log('🔧 allTokens changed:', { allTokens, isArray: Array.isArray(allTokens), length: Array.isArray(allTokens) ? allTokens.length : 'not array' });
-    if (Array.isArray(allTokens)) {
-      // Check for duplicates
-      const uniqueTokens = new Map();
-      allTokens.forEach((token, index) => {
-        if (uniqueTokens.has(token.pair_address)) {
-          console.log('🔧 DUPLICATE FOUND:', { 
-            index, 
-            pair_address: token.pair_address, 
-            name: token.name,
-            firstOccurrence: uniqueTokens.get(token.pair_address)
-          });
-        } else {
-          uniqueTokens.set(token.pair_address, { index, name: token.name });
-        }
-      });
-      console.log('🔧 Unique tokens count:', uniqueTokens.size, 'out of', allTokens.length);
-      let changed = false;
-      const map = tokenMapRef.current;
-      console.log('🔧 Processing tokens:', allTokens.length, 'tokens');
-      console.log('🔧 All tokens raw data:', allTokens.map((t, i) => ({ 
-        index: i,
-        name: t.name, 
-        symbol: t.symbol, 
-        pair_address: t.pair_address 
-      })));
-      for (let i = 0; i < allTokens.length; i++) {
-        const token = allTokens[i] as TokenWithDexPaid;
-        console.log(`🔧 Processing token ${i + 1}/${allTokens.length}:`, { 
-          name: token.name, 
-          symbol: token.symbol, 
-          pair_address: token.pair_address,
-          hasName: 'name' in token,
-          hasSymbol: 'symbol' in token,
-          hasPairAddress: 'pair_address' in token,
-          keys: Object.keys(token)
-        });
-        const prev = map.get(token.pair_address);
-        if (!prev || JSON.stringify(prev) !== JSON.stringify(token)) {
-          map.set(token.pair_address, token);
-          changed = true;
-          console.log('🔧 Added/updated token:', token.name);
-        } else {
-          console.log('🔧 Skipped token (no changes):', token.name);
-        }
-      }
-      // Optionally, remove tokens that are no longer present, but only when incoming list is reasonably sized
-      const allAddresses = new Set((allTokens as TokenWithDexPaid[]).map(t => t.pair_address));
-      const incomingLen = allTokens.length;
-      const minCount = Math.max(8, Math.floor(Math.min(map.size || 20, 20) * 0.6));
-      if (incomingLen >= minCount) {
-        for (const addr of Array.from(map.keys())) {
-          if (!allAddresses.has(addr)) {
-            map.delete(addr);
-            changed = true;
-          }
-        }
-      } else {
-        console.log('🛡️ Skipping deletions to keep table stable (incoming too small):', { incomingLen, minCount, currentSize: map.size });
-      }
-      if (changed) {
-        // Create a stable array for downstream use
-        const arr = Array.from(map.values());
-        console.log('🔧 Setting filteredTokens:', arr.length, 'tokens');
-        console.log('🔧 FilteredTokens data:', arr.map(t => ({ 
-          name: t.name, 
-          symbol: t.symbol, 
-          pair_address: t.pair_address 
-        })));
-        setFilteredTokens(arr);
-      }
-    }
-  }, [allTokens]);
-
-  // Helper for min/max input change
-  const handleMinMaxChange = (key: keyof typeof filter, value: string | number) => {
-    setFilter({ ...filter, [key]: value });
-  };
-
-  useEffect(() => {
-    console.log(sortKey);
-  }, [sortKey]);
-
-  // Filter tokens when search changes
-  // Fetch from backend /search endpoint when the search term changes
-/*   useEffect(() => {
-    const trimmed = search.trim();
-
-    // 1. Empty term ⇒ show everything we already have in memory
-    if (!trimmed) {
-      const arr = Array.from(tokenMapRef.current.values());
-      setFilteredTokens(arr);
-      setDisplayed(arr.slice(0, 10));
-      return;
-    }
-
-    // 2. Decide if we search by name/symbol (<10 chars) or by address
-    const isAddress = trimmed.length >= 10;
-    const param = isAddress ? "tokenaddress" : "name";
-
-    // In local dev, use Next.js API proxy to avoid CORS; in prod, hit service directly
-    const isLocalhost = typeof window !== "undefined" && window.location.hostname === "localhost";
-    const baseURL = env.NEXT_PUBLIC_WEBSOCKET_URL;
-
-    if (!baseURL) {
-      console.error("Token service URL missing – check env variables.");
-      return;
-    }
-
-    const url = `${baseURL}/search?${param}=${encodeURIComponent(trimmed)}`;
-
-    const controller = new AbortController();
-
-    fetch(url, { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Search failed: ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        const list: TokenWithDexPaid[] = Array.isArray(data?.result)
-          ? data.result
-          : Array.isArray(data)
-          ? data
-          : [];
-        setFilteredTokens(list);
-        setDisplayed(list.slice(0, 10));
-      })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error(err);
-        }
-      });
-
-    return () => controller.abort();
-  }, [search]); */
-
-  const handleTimeframeClick = (tf: string) => {
-    console.log('🔧 Timeframe clicked:', tf);
-    console.log('🔧 Current selectedTimeframe before change:', selectedTimeframe);
-    setSelectedTimeframe(tf as Timeframe);
-    setSortKey("volume");
-    setSortDirection("desc");
-    console.log('🔧 selectedTimeframe state updated to:', tf);
-    console.log('🔧 State update scheduled, hook should re-run soon');
-    // Let the hook handle data fetching and sorting
-  };
+  });
 
   // QUICK BUY handler
   async function handleQuickBuy(token: Token) {
     console.log("🎯 handleQuickBuy called for token:", token.symbol);
     
-    if (!user) {
-      console.log("❌ No user found");
-      return;
-    }
     try {
       const poolType = getPoolTypeFromToken(token);
       const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
@@ -279,8 +68,7 @@ export default function Home() {
         amount: quickBuyAmount,
         mevProtection: settings.mevMode === "off" ? 0 : 1,
         poolType: poolType,
-        originalPairAddress: token.pair_address, // Original pair address from token-service
-        // Preset trading parameters
+        originalPairAddress: token.pair_address,
         slippage: settings.maxSlippage || 0.4,
         priorityFee: settings.priority || 0.0001,
         bribe: settings.bribe || 0,
@@ -288,12 +76,10 @@ export default function Home() {
         autoFee: settings.autoFee || false,
         maxFee: settings.maxFee || 0,
         rpc: settings.rpc,
-        // Debugging metadata
         tokenName: token.name,
         tokenSymbol: token.symbol,
-      }, user.bearerToken);
+      }, '');
       
-      // Handle different response formats from backend
       const txHash = data?.hash || data?.txid;
       const tokenAmount = data?.amount || data?.tokenAmount;
 
@@ -308,16 +94,15 @@ export default function Home() {
       }
     } catch (e: any) {
       console.error('Quick Buy error:', e);
-      console.error('Error details:', {
-        message: e?.message,
-        code: e?.code,
-        status: e?.status,
-        details: e?.details,
-        fullError: e
-      });
       toast.error(`❌ Quick Buy failed: ${e.message || "Unknown error"}`);
     }
   }
+
+  const handleTimeframeClick = (tf: string) => {
+    setSelectedTimeframe(tf as Timeframe);
+    setSortKey("volume");
+    setSortDirection("desc");
+  };
 
   // Helper to compute volume by timeframe for sorting in trending view
   const getVolumeForTimeframe = useCallback((t: any, tf: Timeframe) => {
@@ -335,18 +120,38 @@ export default function Home() {
     return 0;
   }, []);
 
-  useEffect(() => {
-    if (selectedTab === "trending") {
-      setSortKey("volume");
+  // Sorting handler for table headers
+  const handleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
       setSortDirection("desc");
     }
-  }, [selectedTab]);
+  };
 
+  // Update token map when allTokens changes
   useEffect(() => {
-    if (selectedTab === "trending") {
+    if (allTokens && Array.isArray(allTokens)) {
+      const newMap = new Map<string, TokenWithDexPaid>();
+      allTokens.forEach((token: any) => {
+        const key = token.pair_address || token.mint;
+        if (key) {
+          newMap.set(key, token as TokenWithDexPaid);
+        }
+      });
+      tokenMapRef.current = newMap;
+      
+      // Update filtered tokens
       const arr = Array.from(tokenMapRef.current.values());
-      console.log('🔧 Setting displayed tokens for trending tab. TokenMapRef size:', tokenMapRef.current.size, 'arr length:', arr.length);
-      console.log('🔧 TokenMapRef contents:', arr.map(t => ({ name: t.name, symbol: t.symbol, pair_address: t.pair_address })));
+      setFilteredTokens(arr);
+    }
+  }, [allTokens]);
+
+  // Update displayed tokens based on active tab and sorting
+  useEffect(() => {
+    if (activeTab === "trending") {
+      const arr = Array.from(tokenMapRef.current.values());
       const sortedTokens = [...arr];
       sortedTokens.sort((a, b) => {
         let aVal = 0, bVal = 0;
@@ -366,57 +171,20 @@ export default function Home() {
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
       });
       setDisplayed(sortedTokens);
-      console.log('🔧 Set displayed to:', sortedTokens.length, 'tokens');
-      console.log('🔧 Displayed tokens:', sortedTokens.map(t => ({ 
-        name: t.name, 
-        symbol: t.symbol, 
-        pair_address: t.pair_address,
-        hasName: 'name' in t,
-        hasSymbol: 'symbol' in t,
-        hasPairAddress: 'pair_address' in t,
-        keys: Object.keys(t)
-      })));
-      console.log('🔧 Displayed state updated, should trigger re-render');
     } else {
-      console.log('🔧 Setting displayed tokens for dex tab. FilteredTokens length:', filteredTokens.length);
       setDisplayed(filteredTokens.slice(0, 10));
     }
-  }, [selectedTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, getVolumeForTimeframe]);
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, getVolumeForTimeframe]);
 
-  // Sorting handler for table headers
-  const handleSort = (key: typeof sortKey) => {
-    if (sortKey === key) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDirection("desc");
-    }
-  };
-
-  // When activePreset changes, update quickBuySettings to match preset
-  useEffect(() => {
-    if (presets && presets[activePreset]) {
-      // Optionally, update quickBuySettings globally if needed
-      // setQuickBuySettings(presets[activePreset].quickBuySettings);
-    }
-  }, [activePreset, presets]);
-
+  // Skeleton management
   useEffect(() => {
     setShowSkeleton(true);
     const timer = setTimeout(() => setShowSkeleton(false), 800);
     return () => clearTimeout(timer);
-  }, [selectedTab]);
+  }, [activeTab]);
 
-  // Hide skeleton when we have data or when loading is complete
   useEffect(() => {
-    console.log('🔧 Skeleton effect triggered:', {
-      allTokens: !!allTokens,
-      allTokensLength: Array.isArray(allTokens) ? allTokens.length : 'not array',
-      tokensLoading,
-      shouldHideSkeleton: (allTokens && Array.isArray(allTokens) && allTokens.length > 0) || tokensLoading === false
-    });
     if ((allTokens && Array.isArray(allTokens) && allTokens.length > 0) || tokensLoading === false) {
-      console.log('🔧 Hiding skeleton');
       setShowSkeleton(false);
     }
   }, [allTokens, tokensLoading]);
@@ -430,21 +198,22 @@ export default function Home() {
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
       </Head>
-      <div className="min-h-screen bg-neutral-950 text-neutral-100">
+      <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#0f1012' }}>
         {/* Header */}
         <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
+        
         {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-20">
           <div className="flex max-w-7xl items-center gap-6">
             <button
-              className={`text-lg font-semibold transition-colors ${selectedTab === "dex" ? "text-white" : "text-neutral-400"} cursor-pointer`}
-              onClick={() => setSelectedTab("dex")}
+              className={`text-lg font-semibold transition-colors ${activeTab === "dex" ? "text-white" : "text-neutral-400"} cursor-pointer`}
+              onClick={() => setActiveTab("dex")}
             >
               DEX Screener
             </button>
             <button
-              className={`text-lg font-semibold transition-colors ${selectedTab === "trending" ? "text-white" : "text-neutral-400"} cursor-pointer`}
-              onClick={() => setSelectedTab("trending")}
+              className={`text-lg font-semibold transition-colors ${activeTab === "trending" ? "text-white" : "text-neutral-400"} cursor-pointer`}
+              onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
@@ -460,7 +229,7 @@ export default function Home() {
             </div>
             {/* Timeframes Row (for both tabs) */}
             <div className="flex max-w-7xl items-center gap-4 text-sm font-medium">
-              {timeframes.map((tf: Timeframe) => (
+              {(["1m", "5m", "30m", "1h"] as Timeframe[]).map((tf: Timeframe) => (
                 <button
                   key={tf}
                   className={
@@ -535,22 +304,6 @@ export default function Home() {
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
-          {(() => {
-            console.log('🔧 Render conditions:', {
-              showSkeleton,
-              allTokens: !!allTokens,
-              allTokensLength: Array.isArray(allTokens) ? allTokens.length : 'not array',
-              tokenError,
-              displayedLength: displayed.length,
-              tokensLoading,
-              displayedTokens: displayed.map(t => ({ 
-                name: t.name, 
-                symbol: t.symbol, 
-                pair_address: t.pair_address 
-              }))
-            });
-            return null;
-          })()}
           {(showSkeleton || tokensLoading) ? (
             <div className="space-y-4">
               {Array.from({ length: 10 }).map((_, i) => (
@@ -567,26 +320,10 @@ export default function Home() {
             </div>
           ) : (
             <InterstateTable
-              rows={displayed.map((token, i) => {
-                // Debug: Check what token data looks like before passing to table
-                console.log(`🔧 Mapping token ${i + 1}/${displayed.length} for table:`, { 
-                  name: token.name, 
-                  symbol: token.symbol, 
-                  pair_address: token.pair_address 
-                });
-                if (i === 0) {
-                  console.log('🔧 First token being passed to table FULL OBJECT:', JSON.stringify(token, null, 2));
-                  console.log('🔧 First token being passed to table:', {
-                    name: token.name,
-                    symbol: token.symbol,
-                    usd_price: token.usd_price,
-                    fully_diluted_value: token.fully_diluted_value,
-                    total_liquidity_usd: token.total_liquidity_usd,
-                    keys: Object.keys(token)
-                  });
-                }
-                return { token, i };
-              })}
+              rows={displayed.map((token, i) => ({
+                token: token,
+                i: i,
+              }))}
               onQuickBuy={handleQuickBuy}
               sortKey={sortKey}
               sortDirection={sortDirection}
@@ -596,6 +333,7 @@ export default function Home() {
             />
           )}
         </main>
+        
         <Footer />
         <QuickBuySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       </div>

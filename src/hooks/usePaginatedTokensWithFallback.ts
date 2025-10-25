@@ -167,7 +167,13 @@ export default function usePaginatedTokensWithFallback({
         
         // If env is ws(s)://..., convert to http(s):// for REST polling
         // Always use same-origin proxy to avoid mixed-content/TLS issues
-        const url = `/api/token-service/getAllTokens?${queryParams}`;
+        let url = `/api/token-service/getAllTokens?${queryParams}`;
+        
+        // Use trending endpoint for trending filter
+        if (filter === 'trending') {
+          url = `/api/token-service/pulse-trending?${queryParams}`;
+        }
+        
         console.log('📡 Polling URL:', url);
         console.log('📡 Query params:', Object.fromEntries(queryParams.entries()));
         console.log('📡 Environment WEBSOCKET_URL (for WS only):', env.NEXT_PUBLIC_WEBSOCKET_URL);

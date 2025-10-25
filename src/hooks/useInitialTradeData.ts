@@ -31,6 +31,7 @@ interface InitialTradeDataResponse {
   trades: TradeData[];
   stats: TokenStats | null;
   recentTrades?: any[];
+  ohlcData?: any; // OHLC data for charts
 }
 
 interface UseInitialTradeDataResult {
@@ -41,6 +42,7 @@ interface UseInitialTradeDataResult {
   refetch: () => void;
   cacheStats: CacheStats;
   cleanupCache: () => void;
+  cachedTokenMetadata: any | null; // Cached token metadata for instant display
 }
 
 const CACHE_KEY_PREFIX = 'trade_data_';
@@ -71,10 +73,36 @@ export default function useInitialTradeData(
   const [loading, setLoading] = useState(false); // Start with false for faster initial render
   const [error, setError] = useState<string | null>(null);
   const [isFromCache, setIsFromCache] = useState(false);
+  const [cachedTokenMetadata, setCachedTokenMetadata] = useState<any | null>(null);
 
   // Enhanced cache management with background refresh
   const cacheStatsRef = useRef<CacheStats>({ hits: 0, misses: 0, backgroundRefreshes: 0 });
   const backgroundRefreshPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
+
+  // Get cached token metadata from localStorage
+  const getCachedTokenMetadata = useCallback((pair: string): any | null => {
+    try {
+      const cacheKey = `token_metadata_${pair}`;
+      const cached = localStorage.getItem(cacheKey);
+      
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const age = Date.now() - parsed.timestamp;
+        
+        // Return cached metadata if not expired (5 minutes)
+        if (age < 300000) {
+          console.log(`[useInitialTradeData] Using cached token metadata for ${pair}`);
+          return parsed;
+        } else {
+          localStorage.removeItem(cacheKey);
+        }
+      }
+    } catch (err) {
+      console.warn('[useInitialTradeData] Failed to read token metadata cache:', err);
+    }
+    
+    return null;
+  }, []);
 
   // Get cached data from localStorage with enhanced logic
   const getCachedData = useCallback((pair: string): InitialTradeDataResponse | null => {
@@ -160,21 +188,21 @@ export default function useInitialTradeData(
     }
   }, []);
 
-  // Fetch fresh data from API
+  // Fetch fresh data from API with parallel calls for maximum speed
   const fetchData = useCallback(async (pair: string, token?: string) => {
     const baseUrl = env.NEXT_PUBLIC_GO_SERVICE_URL;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
-      console.warn(`[useInitialTradeData] Request timeout for ${pair} after 5 seconds`);
-    }, 5000); // Reduced timeout to 5 seconds for faster loading
+      console.warn(`[useInitialTradeData] Request timeout for ${pair} after 3 seconds`);
+    }, 3000); // Reduced timeout to 3 seconds for faster loading
     
     try {
-      console.log(`[useInitialTradeData] Fetching fresh data for ${pair}`);
+      console.log(`[useInitialTradeData] Fetching fresh data for ${pair} in parallel`);
       
-      // Fetch trade data and stats in parallel for speed with timeout
-      
+      // Create all API requests in parallel for maximum speed
       const requests: Promise<Response>[] = [
+        // Trade data
         fetch(`${baseUrl}/v1/trade/view?pair_address=${pair}`, {
           headers: {
             'accept': 'application/json',
@@ -184,7 +212,7 @@ export default function useInitialTradeData(
         })
       ];
 
-      // Only fetch stats if we have token address
+      // Token stats (if we have token address)
       if (token) {
         requests.push(
           fetch(`${baseUrl}/v1/ws/token-stats?pair_address=${pair}&token_address=${token}`, {
@@ -197,11 +225,30 @@ export default function useInitialTradeData(
         );
       }
 
+      // OHLC data (if we have token address)
+      if (token) {
+        const ohlcUrl = new URL(`${baseUrl}/v1/trade/ohlc-data`);
+        ohlcUrl.searchParams.set('mint', token);
+        ohlcUrl.searchParams.set('interval', '1h');
+        ohlcUrl.searchParams.set('timeframe', '7d'); // Reduced timeframe for faster loading
+        
+        requests.push(
+          fetch(ohlcUrl.toString(), {
+            headers: {
+              'accept': 'application/json',
+              'X-API-Key': env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key',
+            },
+            signal: controller.signal,
+          })
+        );
+      }
+
+      // Execute all requests in parallel
       const responses = await Promise.all(requests);
-      clearTimeout(timeoutId); // Clear timeout after requests complete
+      clearTimeout(timeoutId);
       
       // Parse responses
-      const [tradesResponse, statsResponse] = responses;
+      const [tradesResponse, statsResponse, ohlcResponse] = responses;
       
       // Handle 404 gracefully - new tokens may not have trade data yet
       if (!tradesResponse.ok) {
@@ -219,12 +266,24 @@ export default function useInitialTradeData(
 
       const tradesData = await tradesResponse.json();
       let statsData = null;
+      let ohlcData = null;
 
+      // Parse stats data if available
       if (statsResponse && statsResponse.ok) {
         try {
           statsData = await statsResponse.json();
         } catch (err) {
           console.warn('[useInitialTradeData] Failed to parse stats:', err);
+        }
+      }
+
+      // Parse OHLC data if available
+      if (ohlcResponse && ohlcResponse.ok) {
+        try {
+          ohlcData = await ohlcResponse.json();
+          console.log(`[useInitialTradeData] Fetched ${ohlcData?.data?.items?.length || 0} OHLC candles`);
+        } catch (err) {
+          console.warn('[useInitialTradeData] Failed to parse OHLC data:', err);
         }
       }
 
@@ -243,6 +302,7 @@ export default function useInitialTradeData(
         trades,
         stats: formattedStats,
         recentTrades: tradesData.recentTrades,
+        ohlcData: ohlcData?.data?.items || null,
       };
 
       console.log(`[useInitialTradeData] Fetched ${trades.length} trades`);
@@ -277,7 +337,14 @@ export default function useInitialTradeData(
       setLoading(true);
       setError(null);
 
-      // Step 0: Check rolling cache first (INSTANT - 0ms for pulse tokens)
+      // Step 0: Load cached token metadata for instant display
+      const cachedMetadata = getCachedTokenMetadata(pairAddress);
+      if (cachedMetadata && mounted) {
+        setCachedTokenMetadata(cachedMetadata);
+        console.log(`[useInitialTradeData] Loaded cached token metadata for ${pairAddress}`);
+      }
+
+      // Step 1: Check rolling cache first (INSTANT - 0ms for pulse tokens)
       if (tokenAddress) {
         const rollingCached = rollingTradeCache.getCachedTradeData(tokenAddress);
         if (rollingCached && mounted) {
@@ -417,6 +484,7 @@ export default function useInitialTradeData(
     refetch,
     cacheStats: cacheStatsRef.current,
     cleanupCache,
+    cachedTokenMetadata,
   };
 }
 

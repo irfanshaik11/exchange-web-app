@@ -45,6 +45,12 @@ function getTokenAge(createdAt: string | number) {
     createdAt_length: createdAt?.toString().length
   });
   
+  // Validate input - return early if invalid
+  if (!createdAt || createdAt === null || createdAt === undefined) {
+    console.log('[TradeHeader] Invalid createdAt, returning "Unknown"');
+    return 'Unknown';
+  }
+  
   // Handle Unix timestamp in seconds (convert to milliseconds)
   let timestamp = createdAt;
   if (typeof createdAt === 'number' && createdAt < 10000000000) {
@@ -54,6 +60,13 @@ function getTokenAge(createdAt: string | number) {
   }
   
   const createdDate = new Date(timestamp);
+  
+  // Validate the date - return early if invalid
+  if (isNaN(createdDate.getTime())) {
+    console.log('[TradeHeader] Invalid date created, returning "Unknown"');
+    return 'Unknown';
+  }
+  
   const now = new Date();
   const diffMs = now.getTime() - createdDate.getTime();
   const diffMins = Math.floor(diffMs / (1000 * 60));
@@ -352,12 +365,27 @@ const Tooltip: React.FC<{ label: string; children: React.ReactNode }> = ({
 /* ===================================================================== */
 
 interface TradeHeaderProps {
-  token: Token;
+  token: Token | null;
 }
 
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
+  // Only show skeleton if we have absolutely no token data (not even optimistic)
+  if (!token || (!token.name && !token.symbol)) {
+    return (
+      <div className="px-2 flex-shrink-0">
+        <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: AX.surface }}>
+          <div className="h-10 w-10 rounded-md bg-neutral-800 animate-pulse" />
+          <div className="flex flex-col gap-1">
+            <div className="h-4 w-24 bg-neutral-800 animate-pulse rounded" />
+            <div className="h-3 w-16 bg-neutral-800 animate-pulse rounded" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
-  const isWatched = isInWatchlist(token.pair_address);
+  const isWatched = isInWatchlist(token.pair_address || '');
   const [showPreview, setShowPreview] = useState(false);
   const [showXPreview, setShowXPreview] = useState(false);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number, showBelow?: boolean} | null>(null);
@@ -371,8 +399,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
     data: wsData,
     getMarketData,
   } = useMarketDataWebSocket({
-    pairAddress: token.pair_address,
-    tokenAddress: token.mint,
+    pairAddress: token.pair_address || '',
+    tokenAddress: token.mint || '',
     enabled: true,
   });
 
@@ -382,7 +410,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   };
 
   const handleWatchlistClick = () => {
-    if (isWatched) removeFromWatchlist(token.pair_address);
+    if (isWatched) removeFromWatchlist(token.pair_address || '');
     else addToWatchlist(token);
   };
 
@@ -700,6 +728,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
                 }}
                 onClick={async (e) => {
                   e.stopPropagation();
+                  if (!token.mint) return;
                   try {
                     await navigator.clipboard.writeText(token.mint);
                     showCopyToast();
@@ -718,7 +747,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
                     console.error('Failed to copy to clipboard:', err);
                     // Fallback for older browsers
                     const textArea = document.createElement('textarea');
-                    textArea.value = token.mint;
+                    textArea.value = token.mint || '';
                     document.body.appendChild(textArea);
                     textArea.select();
                     try {
@@ -746,11 +775,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm" style={{ color: AX.aiGreen }}>
-            <span className="font-light" style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}>{getTokenAge(token.created_at || (token as any).CreatedAt)}</span>
+            <span className="font-light" style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}>
+              {getTokenAge(token.created_at || (token as any).CreatedAt || token.createdAt)}
+            </span>
             {/* Socials */}
             <div className="relative flex items-center gap-2">
               {/* Pump.fun Link - only show for pump tokens */}
-              {token.mint.slice(-4) === "pump" && (
+              {token.mint && token.mint.slice(-4) === "pump" && (
                 <Link
                   target="_blank"
                   href={`https://pump.fun/coin/${token.mint}`}
@@ -1107,7 +1138,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
       </div>
 
       {/* Pump.fun tooltip */}
-      {token.mint.slice(-4) === "pump" && (
+      {token.mint && token.mint.slice(-4) === "pump" && (
         <div
           id="pump-tooltip-header"
           className="fixed px-2 py-1 rounded text-xs font-medium opacity-0 transition-opacity duration-200 pointer-events-none whitespace-nowrap"

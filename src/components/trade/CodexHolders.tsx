@@ -2,10 +2,26 @@ import React, { useState } from 'react';
 import type { Token } from '~/utils/db';
 
 interface CodexHoldersProps {
-  token: Token;
+  token: Token | null;
 }
 
 const CodexHolders: React.FC<CodexHoldersProps> = ({ token }) => {
+  // Only show skeleton if we have absolutely no token data (not even optimistic)
+  if (!token || (!token.name && !token.symbol)) {
+    return (
+      <div className="flex-1 min-h-0 p-4">
+        <div className="animate-pulse">
+          <div className="h-6 w-32 bg-neutral-700 rounded mb-4" />
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-12 bg-neutral-700 rounded" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const [isLoading, setIsLoading] = useState(true);
 
   // Common chain IDs for InsightX Bubblemaps
