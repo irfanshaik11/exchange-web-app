@@ -173,7 +173,7 @@ export default function useOptimizedTradeEventsWebSocket({
       }));
       hasSetInitialDataRef.current = true;
     }
-  }, [initialTrades, processTradeEvent, deduplicateTrades, manageTradesMemory]);
+  }, [initialTrades?.length, processTradeEvent, deduplicateTrades, manageTradesMemory]);
 
   const processMessage = useCallback((message: any) => {
     try {
