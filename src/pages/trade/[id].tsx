@@ -129,28 +129,19 @@ export default function TradePage() {
   //   token?.mint
   // );
 
-
-  // Debug logging for trades data
-  useEffect(() => {
-    console.log('[Trade Page] Trades data debug:', {
-      initialTradeData: initialTradeData,
-      tradesCount: initialTradeData?.trades?.length || 0,
-      tradesData: initialTradeData?.trades,
-      isFromCache,
-      loading: initialDataLoading,
-      error: initialDataError,
-      resolvedPairAddress,
-      tokenMint: token?.mint
-    });
-  }, [initialTradeData, isFromCache, initialDataLoading, initialDataError, resolvedPairAddress, token?.mint]);
-
   // Fetch correct token data from database (same as search modal)
+  // Use cached metadata if available to avoid unnecessary API call
   const [correctTokenData, setCorrectTokenData] = useState<any>(null);
   const [isLoadingCorrectData, setIsLoadingCorrectData] = useState(false);
   
   useEffect(() => {
     const fetchCorrectTokenData = async () => {
       if (!token?.mint) return;
+      
+      // Skip if we already have correct data or if token already has created_at
+      if (correctTokenData?.mint === token.mint || token.created_at) {
+        return;
+      }
       
       setIsLoadingCorrectData(true);
       
@@ -160,33 +151,7 @@ export default function TradePage() {
         if (response.ok) {
           const data = await response.json();
           if (data.tokens && data.tokens.length > 0) {
-            const correctToken = data.tokens[0];
-            const createdAt = correctToken.created_at;
-            // Handle Unix timestamp in seconds (convert to milliseconds)
-            let timestamp = createdAt;
-            if (typeof createdAt === 'number' && createdAt < 10000000000) {
-              timestamp = createdAt * 1000;
-              console.log('[Trade Page] Converted Unix seconds to milliseconds:', { original: createdAt, converted: timestamp });
-            }
-            
-            const createdDate = new Date(timestamp);
-            const now = new Date();
-            const diffMs = now.getTime() - createdDate.getTime();
-            const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            
-            console.log('[Trade Page] Correct token data from search API:', {
-              mint: correctToken.mint,
-              name: correctToken.name,
-              created_at: createdAt,
-              created_at_type: typeof createdAt,
-              createdDate: createdDate.toISOString(),
-              createdDate_valid: !isNaN(createdDate.getTime()),
-              now: now.toISOString(),
-              diffMs,
-              ageInDays,
-              ageInYears: Math.floor(ageInDays / 365)
-            });
-            setCorrectTokenData(correctToken);
+            setCorrectTokenData(data.tokens[0]);
           }
         }
       } catch (error) {
@@ -197,7 +162,7 @@ export default function TradePage() {
     };
     
     fetchCorrectTokenData();
-  }, [token?.mint]);
+  }, [token?.mint, token?.created_at, correctTokenData?.mint]);
 
   // Calculate optimal OHLC interval and timeframe based on CORRECT token age (cached)
   const getOHLCParams = useComponentCache(
@@ -217,27 +182,13 @@ export default function TradePage() {
     let timestamp = createdAt;
     if (typeof createdAt === 'number' && createdAt < 10000000000) {
       timestamp = createdAt * 1000;
-      console.log('[Trade Page] OHLC: Converted Unix seconds to milliseconds:', { original: createdAt, converted: timestamp });
     }
     
     const createdDate = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - createdDate.getTime();
     const ageInHours = diffMs / (1000 * 60 * 60);
-    const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)); // Use integer days like search modal
-
-    console.log('[Trade Page] Token age calculation (using correct data):', {
-      createdAt,
-      createdAt_type: typeof createdAt,
-      createdDate: createdDate.toISOString(),
-      createdDate_valid: !isNaN(createdDate.getTime()),
-      ageInHours,
-      ageInDays,
-      ageInYears: Math.floor(ageInDays / 365),
-      diffMs,
-      dataSource: correctTokenData ? 'search-api' : 'trade-service',
-      tokenForAge_keys: Object.keys(tokenForAge || {}).filter(k => k.includes('created') || k.includes('time'))
-    });
+    const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
     // For very new tokens (< 1 hour) - use 1m intervals
     if (ageInHours < 1) {
@@ -284,50 +235,14 @@ export default function TradePage() {
   const defaultOHLCParams = { interval: '1h' as const, timeframe: '30d' as const, optimize: false };
   
   // Use optimized params if available, otherwise use defaults
-  const currentOHLCParams = ohlcParams || defaultOHLCParams;
+  // Memoize to prevent unnecessary chart remounts
+  const currentOHLCParams = React.useMemo(() => 
+    ohlcParams || defaultOHLCParams,
+    [ohlcParams?.interval, ohlcParams?.timeframe, ohlcParams?.optimize]
+  );
   
   // Ultra-fast OHLC loading - start immediately on mount
   const canStartOHLC = preloadComplete || (typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32);
-
-
-  // Debug: Log OHLC params calculation
-  useEffect(() => {
-    console.log('[Trade Page] OHLC params calculation (BACKGROUND PRELOAD):', {
-      currentOHLCParams,
-      optimizedParams: ohlcParams,
-      hasCorrectTokenData: !!correctTokenData,
-      isLoadingCorrectData,
-      tokenMint: token?.mint,
-      tokenCreatedAt: token?.created_at || token?.createdAt || (token as any)?.CreatedAt,
-      correctTokenCreatedAt: correctTokenData?.created_at,
-      dataSource: correctTokenData ? 'search-api' : 'trade-service',
-      isOptimizing: isLoadingCorrectData && !correctTokenData,
-      usingDefaults: !ohlcParams,
-      mintFromQuery: _mint,
-      resolvedPairAddress,
-      canStartOHLC,
-      backgroundOHLCData: backgroundOHLCData?.length || 0,
-      isPreloading,
-      preloadComplete,
-      ultraFastLoading: preloadComplete && !resolvedPairAddress,
-      loadingBeforeOptimistic: preloadComplete
-    });
-  }, [currentOHLCParams, ohlcParams, correctTokenData, isLoadingCorrectData, token, _mint, resolvedPairAddress, canStartOHLC, backgroundOHLCData, isPreloading, preloadComplete]);
-
-  // Debug: Log token data to understand the discrepancy
-  useEffect(() => {
-    if (token) {
-      console.log('[Trade Page] Token data debug:', {
-        created_at: token.created_at,
-        createdAt: token.createdAt,
-        CreatedAt: (token as any).CreatedAt,
-        hasCreatedAt: !!token.createdAt,
-        hasCreated_at: !!token.created_at,
-        hasCreatedAtCamel: !!(token as any).CreatedAt,
-        tokenKeys: Object.keys(token).filter(key => key.includes('created') || key.includes('Created'))
-      });
-    }
-  }, [token]);
 
   // ---------------- drag-to-resize for left column ----------------
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -593,7 +508,7 @@ export default function TradePage() {
               <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden pb-1">
                 {canStartOHLC || (typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32) ? (
                   <BackendOHLCChart
-                    key={`${currentOHLCParams.interval}-${currentOHLCParams.timeframe}-${currentOHLCParams.optimize}-${resolvedPairAddress || _mint}`}
+                    key={`chart-${resolvedPairAddress || _mint}`}
                     mint={typeof _mint === 'string' ? _mint : undefined}
                     pairAddress={resolvedPairAddress}
                     interval={currentOHLCParams.interval}
@@ -683,9 +598,21 @@ export default function TradePage() {
                     initialTrades={initialTradeData?.trades || []}
                   />
                 )}
-                {selectedTab === "Top Traders" && <CodexTopTraders token={displayToken} />}
-                {selectedTab === "Holders" && <CodexHolders token={displayToken} />}
-                {selectedTab === "Dev Tokens" && <CodexDevTokens token={displayToken} />}
+                {selectedTab === "Top Traders" && (
+                  <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
+                    <CodexTopTraders token={displayToken} />
+                  </React.Suspense>
+                )}
+                {selectedTab === "Holders" && (
+                  <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
+                    <CodexHolders token={displayToken} />
+                  </React.Suspense>
+                )}
+                {selectedTab === "Dev Tokens" && (
+                  <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
+                    <CodexDevTokens token={displayToken} />
+                  </React.Suspense>
+                )}
               </div>
             </div>
           </div>

@@ -98,7 +98,7 @@ function formatMarketCap(marketCapUsd: number) {
 }
 
 const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
-  // Stabilize token object to prevent hook parameter changes
+  // Stabilize token object to prevent hook parameter changes and unnecessary re-renders
   const stableToken = React.useMemo(() => {
     if (!token) return null;
     return {
@@ -110,6 +110,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
       ...token
     };
   }, [token?.pair_address, token?.decimals, token?.name, token?.symbol, token?.mint]);
+
+  // Stabilize initialTrades to prevent WebSocket re-initialization
+  const stableInitialTrades = React.useMemo(() => initialTrades, [initialTrades.length]);
 
   // CRITICAL: Call hooks BEFORE any conditional returns to prevent React hooks violation
   // Simplified WebSocket connection - use only one WebSocket hook
@@ -123,7 +126,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
   } = useOptimizedTradeEventsWebSocket({
     pairAddress: stableToken?.pair_address,
     enabled: !!stableToken?.pair_address,
-    initialTrades: initialTrades,
+    initialTrades: stableInitialTrades,
     tokenDecimals: stableToken?.decimals || 9,
     maxTrades: 200, // Reduced for faster processing
     enableDeduplication: true,
@@ -131,36 +134,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
 
   // Use WebSocket trades if available, otherwise show initial trades immediately
   // Prioritize WebSocket data but fallback to initial trades for better data persistence
-  const displayTrades = wsTrades.length > 0 ? wsTrades : initialTrades;
-  const isConnected = wsConnected || initialTrades.length > 0; // Consider connected if we have initial data
+  const displayTrades = wsTrades.length > 0 ? wsTrades : stableInitialTrades;
+  const isConnected = wsConnected || stableInitialTrades.length > 0; // Consider connected if we have initial data
   const error = wsError;
-  const isLoading = wsLoading && initialTrades.length === 0; // Only show loading if no initial data
-
-  // Debug logging to see what data we're receiving
-  React.useEffect(() => {
-    console.log('[CodexTrades] Component data:', {
-      token: stableToken,
-      initialTrades: initialTrades,
-      tradesCount: initialTrades?.length || 0,
-      tokenName: stableToken?.name,
-      tokenSymbol: stableToken?.symbol,
-      pairAddress: stableToken?.pair_address
-    });
-  }, [stableToken, initialTrades]);
-
-  // Debug logging for WebSocket data
-  React.useEffect(() => {
-    console.log('[CodexTrades] WebSocket data:', {
-      wsConnected,
-      wsLoading,
-      wsError,
-      wsTradesCount: wsTrades.length,
-      initialTradesCount: initialTrades.length,
-      displayTradesCount: displayTrades.length,
-      isConnected,
-      isLoading
-    });
-  }, [wsConnected, wsLoading, wsError, wsTrades.length, initialTrades.length, displayTrades.length, isConnected, isLoading]);
+  const isLoading = wsLoading && stableInitialTrades.length === 0; // Only show loading if no initial data
 
   // Only show skeleton if we have absolutely no token data (not even optimistic)
   if (!stableToken || (!stableToken.name && !stableToken.symbol)) {
@@ -206,10 +183,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
             </tr>
           ) : (
             displayTrades.slice(0, 100).map((trade: any, idx) => { // Reduced from 200 to 100 for faster rendering
-              // Debug logging for individual trades
-              if (idx === 0) {
-                console.log('[CodexTrades] First trade data:', trade);
-              }
               // Check if it's a WebSocket trade event
               if (trade.side && trade.amount && trade.price && trade.pair_address) {
                 // WebSocket trade event format
