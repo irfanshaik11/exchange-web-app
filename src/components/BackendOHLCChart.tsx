@@ -60,7 +60,8 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
   onDataUpdate,
   preloadedData,
 }) => {
-  const [selectedInterval] = useState<BackendInterval>(VALID_INTERVALS.includes(interval) ? interval : '1m');
+  // Use prop directly instead of state to respond to changes
+  const selectedInterval = VALID_INTERVALS.includes(interval) ? interval : '1m';
   const [isLoading, setIsLoading] = useState(!preloadedData || preloadedData.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [candles, setCandles] = useState<BackendOHLCData[]>(preloadedData || []);
@@ -322,6 +323,7 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
   }, []);
 
   // Update candles when preloaded data changes - PRIORITY DATA SOURCE
+  // Combined effect to prevent multiple reloads
   useEffect(() => {
     if (preloadedData && preloadedData.length > 0) {
       // Only use preloaded data if we have valid mint or pairAddress
@@ -331,9 +333,7 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
         return;
       }
       
-      console.log('[BackendOHLCChart] PRIORITY: Using preloaded data:', preloadedData.length, 'candles for mint:', mint, 'pairAddress:', pairAddress);
-      console.log('[BackendOHLCChart] First candle:', preloadedData[0]);
-      console.log('[BackendOHLCChart] Last candle:', preloadedData[preloadedData.length - 1]);
+      console.log('[BackendOHLCChart] PRIORITY: Using preloaded data:', preloadedData.length, 'candles');
       
       // Set preloaded data as the primary source and disable API fetching
       setCandles(preloadedData);
@@ -346,17 +346,12 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
       firstLoadRef.current = false;
       
       onDataUpdate?.(preloadedData);
-    }
-  }, [preloadedData, onDataUpdate, mint, pairAddress]);
-
-  // Polling with standard refresh - ONLY RUN IF NO PRELOADED DATA
-  useEffect(() => {
-    // AGGRESSIVELY skip polling if we have preloaded data
-    if (preloadedData && preloadedData.length > 0) {
-      console.log('[BackendOHLCChart] BLOCKING polling - preloaded data available:', preloadedData.length, 'candles');
+      
+      // Don't start polling when we have preloaded data
       return;
     }
 
+    // Only start polling if we don't have preloaded data
     console.log('[BackendOHLCChart] Starting API polling - no preloaded data available');
     mountedRef.current = true;
     fetchCandles();
@@ -371,7 +366,26 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
       mountedRef.current = false;
       clearInterval(id);
     };
-  }, [fetchCandles, retryCount, mint, pairAddress, selectedInterval, timeframe, baseRefreshMs, preloadedData]);
+  }, [fetchCandles, retryCount, mint, pairAddress, selectedInterval, timeframe, baseRefreshMs, preloadedData, onDataUpdate]);
+
+  // Handle prop changes - refetch data when interval/timeframe changes
+  const prevIntervalRef = useRef(selectedInterval);
+  const prevTimeframeRef = useRef(timeframe);
+  
+  useEffect(() => {
+    // Only refetch if parameters actually changed and we're not on initial load
+    if (hasInitializedRef.current && 
+        (prevIntervalRef.current !== selectedInterval || prevTimeframeRef.current !== timeframe)) {
+      console.log('[BackendOHLCChart] Parameters changed, refetching data');
+      prevIntervalRef.current = selectedInterval;
+      prevTimeframeRef.current = timeframe;
+      
+      // Reset and refetch with new parameters
+      hasInitializedRef.current = false;
+      firstLoadRef.current = true;
+      fetchCandles();
+    }
+  }, [selectedInterval, timeframe, fetchCandles]);
 
   // Draw data; default zoom-out once, then never fight user zoom
   useEffect(() => {
