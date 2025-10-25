@@ -111,6 +111,31 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     };
   }, [token?.pair_address, token?.decimals, token?.name, token?.symbol, token?.mint]);
 
+  // CRITICAL: Call hooks BEFORE any conditional returns to prevent React hooks violation
+  // Simplified WebSocket connection - use only one WebSocket hook
+  const {
+    isConnected: wsConnected,
+    loading: wsLoading,
+    error: wsError,
+    trades: wsTrades,
+    getTradeStats,
+    getMemoryStats,
+  } = useOptimizedTradeEventsWebSocket({
+    pairAddress: stableToken?.pair_address,
+    enabled: !!stableToken?.pair_address,
+    initialTrades: initialTrades,
+    tokenDecimals: stableToken?.decimals || 9,
+    maxTrades: 200, // Reduced for faster processing
+    enableDeduplication: true,
+  });
+
+  // Use WebSocket trades if available, otherwise show initial trades immediately
+  // Prioritize WebSocket data but fallback to initial trades for better data persistence
+  const displayTrades = wsTrades.length > 0 ? wsTrades : initialTrades;
+  const isConnected = wsConnected || initialTrades.length > 0; // Consider connected if we have initial data
+  const error = wsError;
+  const isLoading = wsLoading && initialTrades.length === 0; // Only show loading if no initial data
+
   // Debug logging to see what data we're receiving
   React.useEffect(() => {
     console.log('[CodexTrades] Component data:', {
@@ -122,6 +147,20 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
       pairAddress: stableToken?.pair_address
     });
   }, [stableToken, initialTrades]);
+
+  // Debug logging for WebSocket data
+  React.useEffect(() => {
+    console.log('[CodexTrades] WebSocket data:', {
+      wsConnected,
+      wsLoading,
+      wsError,
+      wsTradesCount: wsTrades.length,
+      initialTradesCount: initialTrades.length,
+      displayTradesCount: displayTrades.length,
+      isConnected,
+      isLoading
+    });
+  }, [wsConnected, wsLoading, wsError, wsTrades.length, initialTrades.length, displayTrades.length, isConnected, isLoading]);
 
   // Only show skeleton if we have absolutely no token data (not even optimistic)
   if (!stableToken || (!stableToken.name && !stableToken.symbol)) {
@@ -138,43 +177,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
       </div>
     );
   }
-
-  // Simplified WebSocket connection - use only one WebSocket hook
-  const {
-    isConnected: wsConnected,
-    loading: wsLoading,
-    error: wsError,
-    trades: wsTrades,
-    getTradeStats,
-    getMemoryStats,
-  } = useOptimizedTradeEventsWebSocket({
-    pairAddress: stableToken.pair_address,
-    enabled: !!stableToken.pair_address,
-    initialTrades: initialTrades,
-    tokenDecimals: stableToken.decimals,
-    maxTrades: 200, // Reduced for faster processing
-    enableDeduplication: true,
-  });
-
-  // Use WebSocket trades if available, otherwise show initial trades immediately
-  const displayTrades = wsTrades.length > 0 ? wsTrades : initialTrades;
-  const isConnected = wsConnected || initialTrades.length > 0; // Consider connected if we have initial data
-  const error = wsError;
-  const isLoading = wsLoading && initialTrades.length === 0; // Only show loading if no initial data
-
-  // Debug logging for WebSocket data
-  React.useEffect(() => {
-    console.log('[CodexTrades] WebSocket data:', {
-      wsConnected,
-      wsLoading,
-      wsError,
-      wsTradesCount: wsTrades.length,
-      initialTradesCount: initialTrades.length,
-      displayTradesCount: displayTrades.length,
-      isConnected,
-      isLoading
-    });
-  }, [wsConnected, wsLoading, wsError, wsTrades.length, initialTrades.length, displayTrades.length, isConnected, isLoading]);
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -215,10 +217,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                 const color = isBuy ? 'text-emerald-400' : 'text-red-400';
                 const age = getAge(new Date(trade.timestamp).getTime() / 1000);
                 
-                // Calculate price per token (USD)
-                const tokenAmount = parseFloat(trade.amount) / Math.pow(10, stableToken.decimals);
+                // Use the pre-calculated values from websocket processing
+                const tokenAmount = parseFloat(trade.amount);
                 const totalUSD = trade.totalUSD !== undefined ? trade.totalUSD : parseFloat(trade.price);
-                const pricePerToken = tokenAmount > 0 ? totalUSD / tokenAmount : 0;
+                const pricePerToken = parseFloat(trade.price);
                 
                 // Format retention (token amount) - ensure proper K/M/B formatting
                 const retention = formatSmartNumber(tokenAmount);
