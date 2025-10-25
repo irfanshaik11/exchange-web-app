@@ -25,6 +25,7 @@ export interface BackendOHLCChartProps {
   className?: string;
   baseRefreshMs?: number;
   onDataUpdate?: (data: BackendOHLCData[]) => void;
+  preloadedData?: BackendOHLCData[];
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
@@ -57,26 +58,28 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
   className = '',
   baseRefreshMs = 30000,
   onDataUpdate,
+  preloadedData,
 }) => {
   const [selectedInterval] = useState<BackendInterval>(VALID_INTERVALS.includes(interval) ? interval : '1m');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!preloadedData || preloadedData.length === 0);
   const [error, setError] = useState<string | null>(null);
-  const [candles, setCandles] = useState<BackendOHLCData[]>([]);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [candles, setCandles] = useState<BackendOHLCData[]>(preloadedData || []);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(preloadedData && preloadedData.length > 0 ? new Date() : null);
   const [retryCount, setRetryCount] = useState(0);
 
   const chartRef     = useRef<IChartApi | null>(null);
   const seriesRef    = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const lastGoodCandlesRef = useRef<BackendOHLCData[]>([]);
+  const lastGoodCandlesRef = useRef<BackendOHLCData[]>(preloadedData || []);
   const inFlightRef        = useRef<string | null>(null);
   const mountedRef         = useRef(true);
   const lastFetchAtRef     = useRef<number>(0);
   const roRef              = useRef<ResizeObserver | null>(null);
-  const firstLoadRef       = useRef(true);
+  const firstLoadRef       = useRef(!preloadedData || preloadedData.length === 0);
   const moRef              = useRef<MutationObserver | null>(null);
   const didInitialZoomRef  = useRef(false); // apply default zoom once
+  const hasInitializedRef  = useRef(false); // track if we've made initial request
 
   const buildUrl = () => {
     const url = new URL(`${BACKEND_URL}/v1/trade/ohlc-data`);
@@ -94,9 +97,31 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
       setIsLoading(false);
       return;
     }
+
+    // Skip fetching if we have preloaded data and this is the first load
+    if (preloadedData && preloadedData.length > 0 && firstLoadRef.current) {
+      console.log('[BackendOHLCChart] Skipping fetch - using preloaded data');
+      setIsLoading(false);
+      hasInitializedRef.current = true;
+      return;
+    }
+
+    // Skip if we've already made an initial request
+    if (hasInitializedRef.current && firstLoadRef.current) {
+      console.log('[BackendOHLCChart] Skipping fetch - already initialized');
+      return;
+    }
+
     const url = buildUrl();
     const key = url.toString();
-    if (inFlightRef.current === key) return;
+    
+    // Prevent concurrent requests with the same key
+    if (inFlightRef.current === key) {
+      console.log('[BackendOHLCChart] Request already in flight for:', key);
+      return;
+    }
+    
+    console.log('[BackendOHLCChart] Starting fetch for:', key);
     inFlightRef.current = key;
 
     const now = Date.now();
@@ -108,6 +133,7 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
     lastFetchAtRef.current = Date.now();
 
     const doFetch = async (u: URL) => {
+      console.log('[BackendOHLCChart] Fetching OHLC data from:', u.toString());
       const r = await fetch(u.toString(), {
         method: 'GET',
         headers: { accept: 'application/json', 'X-API-Key': process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key' },
@@ -116,6 +142,7 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
       try { body = await r.clone().json(); } catch {}
       if (!r.ok) throw new Error(body?.message || body?.error || `${r.status} ${r.statusText}`);
       if (!body?.success) throw new Error(body?.message || body?.error || 'API returned unsuccessful response');
+      console.log('[BackendOHLCChart] Received OHLC data:', body?.data?.items?.length || 0, 'candles');
       return (body?.data?.items ?? []) as BackendOHLCData[];
     };
 
@@ -143,6 +170,7 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
     } finally {
       if (mountedRef.current) setIsLoading(false);
       firstLoadRef.current = false;
+      hasInitializedRef.current = true;
       inFlightRef.current = null;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -281,8 +309,36 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
     };
   }, []);
 
+  // Update candles when preloaded data changes
+  useEffect(() => {
+    if (preloadedData && preloadedData.length > 0) {
+      // Only use preloaded data if we have valid mint or pairAddress
+      // This prevents using stale data when parameters are still loading
+      if (!mint && !pairAddress) {
+        console.log('[BackendOHLCChart] Rejecting preloaded data - no mint or pairAddress yet');
+        return;
+      }
+      
+      console.log('[BackendOHLCChart] Using preloaded data:', preloadedData.length, 'candles for mint:', mint, 'pairAddress:', pairAddress);
+      console.log('[BackendOHLCChart] First candle:', preloadedData[0]);
+      console.log('[BackendOHLCChart] Last candle:', preloadedData[preloadedData.length - 1]);
+      setCandles(preloadedData);
+      lastGoodCandlesRef.current = preloadedData;
+      setLastUpdate(new Date());
+      setIsLoading(false);
+      hasInitializedRef.current = true;
+      onDataUpdate?.(preloadedData);
+    }
+  }, [preloadedData, onDataUpdate, mint, pairAddress]);
+
   // Polling with standard refresh
   useEffect(() => {
+    // Skip polling if we have preloaded data and this is the first load
+    if (preloadedData && preloadedData.length > 0 && firstLoadRef.current) {
+      console.log('[BackendOHLCChart] Skipping polling - using preloaded data');
+      return;
+    }
+
     mountedRef.current = true;
     fetchCandles();
 
@@ -296,7 +352,7 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
       mountedRef.current = false;
       clearInterval(id);
     };
-  }, [fetchCandles, retryCount, mint, pairAddress, selectedInterval, timeframe, baseRefreshMs]);
+  }, [fetchCandles, retryCount, mint, pairAddress, selectedInterval, timeframe, baseRefreshMs, preloadedData]);
 
   // Draw data; default zoom-out once, then never fight user zoom
   useEffect(() => {
