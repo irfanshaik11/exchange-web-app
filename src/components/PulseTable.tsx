@@ -4197,8 +4197,28 @@ const PulseTable = React.memo(function PulseTable({
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
+                  
                   // Prefetch trade page for instant navigation
                   router.prefetch(`/trade/${pairAddress}?${queryParams}`);
+                  
+                  // Cache token metadata for instant display
+                  try {
+                    const tokenMetadata = {
+                      name: (token as any)?.name || '',
+                      symbol: (token as any)?.symbol || '',
+                      price_usd: (token as any)?.price_usd || (token as any)?.priceUsd || 0,
+                      market_cap_usd: (token as any)?.market_cap_usd || (token as any)?.marketCapUSD || 0,
+                      image: (token as any)?.logo || (token as any)?.image || (token as any)?.uri || '',
+                      mint: (token as any)?.mint || '',
+                      pair_address: pairAddress,
+                      timestamp: Date.now(),
+                    };
+                    localStorage.setItem(`token_metadata_${pairAddress}`, JSON.stringify(tokenMetadata));
+                    console.log(`[PulseTable] Cached token metadata for ${pairAddress}`);
+                  } catch (error) {
+                    console.warn('[PulseTable] Failed to cache token metadata:', error);
+                  }
+                  
                   // Show and position the popup
                   const popup = e.currentTarget.querySelector('.status-popup') as HTMLElement;
                   if (popup) {

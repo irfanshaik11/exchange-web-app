@@ -41,6 +41,7 @@ function waitForVisibleContainer(el: HTMLElement): Promise<void> {
       const visible = r.width > 40 && r.height > 40 && el.isConnected && getComputedStyle(el).display !== 'none';
       if (visible) resolve(); else requestAnimationFrame(tick);
     };
+    // Start immediately for faster loading
     tick();
   });
 }
@@ -100,7 +101,10 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
 
     const now = Date.now();
     const since = now - lastFetchAtRef.current;
-    if (since < 1000) await new Promise(r => setTimeout(r, 1000 - since));
+    // Skip throttling for initial load to maximize speed
+    if (!firstLoadRef.current && since < 1000) {
+      await new Promise(r => setTimeout(r, 1000 - since));
+    }
     lastFetchAtRef.current = Date.now();
 
     const doFetch = async (u: URL) => {
@@ -283,7 +287,8 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
     fetchCandles();
 
     const backoff = Math.min(Math.pow(2, retryCount), 8);
-    const jitter  = Math.floor(Math.random() * 2000);
+    // Skip jitter for faster initial loading, add it only for subsequent polls
+    const jitter = firstLoadRef.current ? 0 : Math.floor(Math.random() * 2000);
     const intervalMs = baseRefreshMs * backoff + jitter;
 
     const id = setInterval(fetchCandles, intervalMs);

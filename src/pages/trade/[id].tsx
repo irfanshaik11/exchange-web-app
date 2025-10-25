@@ -13,6 +13,7 @@ import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
 import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
 import useInitialTradeData from "../../hooks/useInitialTradeData";
+import useBackgroundOHLCPreload from "../../hooks/useBackgroundOHLCPreload";
 import { useQuickBuyQueryParams } from "../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../utils/queryParams";
 import { useTradePagePrefetch } from "../../hooks/usePrefetch";
@@ -20,7 +21,6 @@ import { useComponentCache } from "../../hooks/useComponentCache";
 import dynamic from 'next/dynamic';
 
 // Lazy load heavy components to reduce initial bundle size
-const BirdeyeChart = dynamic(() => import('../../components/BirdeyeChart'), { ssr: false });
 const BackendOHLCChart = dynamic(() => import('../../components/BackendOHLCChart'), { ssr: false });
 const CodexTrades = dynamic(() => import('../../components/trade/CodexTrades'), { ssr: false });
 const CodexTopTraders = dynamic(() => import('../../components/trade/CodexTopTraders'), { ssr: false });
@@ -44,6 +44,9 @@ const AX = {
 export default function TradePage() {
   const router = useRouter();
   const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
+
+  // BACKGROUND PRELOADING: Start OHLC loading as soon as route is matched (before component mounts)
+  const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload();
 
   // Optimistic token data from query params for instant display
   const optimisticToken = React.useMemo(() => {
@@ -70,7 +73,9 @@ export default function TradePage() {
     });
   }
 
-  const [showSkeleton, setShowSkeleton] = useState(true);
+  // Component-level loading states for progressive loading
+  const [tokenDataLoading, setTokenDataLoading] = useState(false);
+  const [tradesDataLoading, setTradesDataLoading] = useState(false);
   const { isConnected } = useWallet();
   const { user } = useUser();
   const [selectedTab, setSelectedTab] = useState("Trades");
@@ -114,7 +119,8 @@ export default function TradePage() {
     error: initialDataError,
     isFromCache,
     cacheStats,
-    cleanupCache
+    cleanupCache,
+    cachedTokenMetadata
   } = useInitialTradeData(resolvedPairAddress, token?.mint);
 
   // Disabled prefetching to reduce initial load time
@@ -124,16 +130,19 @@ export default function TradePage() {
   // );
 
 
-  // Reduced debug logging for performance
+  // Debug logging for trades data
   useEffect(() => {
-    if (initialTradeData && process.env.NODE_ENV === 'development') {
-      console.log('[Trade Page] Initial data loaded:', {
-        tradesCount: initialTradeData.trades?.length || 0,
-        isFromCache,
-        loading: initialDataLoading,
-      });
-    }
-  }, [initialTradeData, isFromCache, initialDataLoading]);
+    console.log('[Trade Page] Trades data debug:', {
+      initialTradeData: initialTradeData,
+      tradesCount: initialTradeData?.trades?.length || 0,
+      tradesData: initialTradeData?.trades,
+      isFromCache,
+      loading: initialDataLoading,
+      error: initialDataError,
+      resolvedPairAddress,
+      tokenMint: token?.mint
+    });
+  }, [initialTradeData, isFromCache, initialDataLoading, initialDataError, resolvedPairAddress, token?.mint]);
 
   // Fetch correct token data from database (same as search modal)
   const [correctTokenData, setCorrectTokenData] = useState<any>(null);
@@ -270,21 +279,40 @@ export default function TradePage() {
   );
 
   const ohlcParams = getOHLCParams;
+  
+  // Default OHLC params for immediate loading (ULTRA PRIORITY #1)
+  const defaultOHLCParams = { interval: '1h' as const, timeframe: '30d' as const, optimize: false };
+  
+  // Use optimized params if available, otherwise use defaults
+  const currentOHLCParams = ohlcParams || defaultOHLCParams;
+  
+  // Ultra-fast OHLC loading - start immediately on mount
+  const canStartOHLC = preloadComplete || (typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32);
 
 
   // Debug: Log OHLC params calculation
   useEffect(() => {
-    console.log('[Trade Page] OHLC params calculation:', {
-      ohlcParams,
+    console.log('[Trade Page] OHLC params calculation (BACKGROUND PRELOAD):', {
+      currentOHLCParams,
+      optimizedParams: ohlcParams,
       hasCorrectTokenData: !!correctTokenData,
       isLoadingCorrectData,
       tokenMint: token?.mint,
       tokenCreatedAt: token?.created_at || token?.createdAt || (token as any)?.CreatedAt,
       correctTokenCreatedAt: correctTokenData?.created_at,
       dataSource: correctTokenData ? 'search-api' : 'trade-service',
-      isOptimizing: isLoadingCorrectData && !correctTokenData
+      isOptimizing: isLoadingCorrectData && !correctTokenData,
+      usingDefaults: !ohlcParams,
+      mintFromQuery: _mint,
+      resolvedPairAddress,
+      canStartOHLC,
+      backgroundOHLCData: backgroundOHLCData?.length || 0,
+      isPreloading,
+      preloadComplete,
+      ultraFastLoading: preloadComplete && !resolvedPairAddress,
+      loadingBeforeOptimistic: preloadComplete
     });
-  }, [ohlcParams, correctTokenData, isLoadingCorrectData, token]);
+  }, [currentOHLCParams, ohlcParams, correctTokenData, isLoadingCorrectData, token, _mint, resolvedPairAddress, canStartOHLC, backgroundOHLCData, isPreloading, preloadComplete]);
 
   // Debug: Log token data to understand the discrepancy
   useEffect(() => {
@@ -376,11 +404,12 @@ export default function TradePage() {
   );
 
   useEffect(() => () => (rafRef.current ? cancelAnimationFrame(rafRef.current) : undefined), []);
+  // Set component-level loading states based on data availability
   useEffect(() => {
-    setShowSkeleton(true);
-    const t = setTimeout(() => setShowSkeleton(false), 300);
-    return () => clearTimeout(t);
-  }, [id]);
+    setTokenDataLoading(pollingLoading || isHydrating);
+    setTradesDataLoading(initialDataLoading);
+    // Chart loading is now handled internally by BackendOHLCChart
+  }, [pollingLoading, isHydrating, initialDataLoading]);
 
   // Prevent body scroll when mobile modal is open
   useEffect(() => {
@@ -501,49 +530,14 @@ export default function TradePage() {
     };
   }, [showMobileTradeModal, handleDragMove, handleDragEnd]);
 
-  if (showSkeleton) {
-    return (
-      <div
-        className="min-h-screen w-full flex flex-col"
-        style={{ backgroundColor: '#0f1012', color: AX.text, fontFamily: 'Inter, ui-sans-serif, system-ui' }}
-      >
-        <Header search={search} setSearch={setSearch} />
-        <div className="flex flex-1" />
-      </div>
-    );
-  }
-
-  if (pollingLoading) {
-    return null;
-  }
-
-  // Show loading state if token is not loaded yet (with timeout fallback)
-  if (!token && (isHydrating || pollingLoading)) {
-    return (
-      <div className="min-h-screen" style={{ backgroundColor: AX.bg }}>
-        <Head>
-          <title>Loading...</title>
-        </Head>
-        <Header />
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
-            <p style={{ color: AX.muted }}>
-              {isHydrating ? 'Resolving token address...' : 'Loading token data...'}
-            </p>
-            <p className="text-xs mt-2" style={{ color: AX.muted }}>
-              This may take a few seconds...
-            </p>
-          </div>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (!token) {
-    return <div className="mt-20 text-center text-2xl" style={{ color: AX.sell }}>Token not found</div>;
-  }
+  // Always render the page with progressive loading - no more black screen!
+  // Use cached metadata, real token data, or optimistic token data for immediate display
+  const displayToken = token || (cachedTokenMetadata ? {
+    ...cachedTokenMetadata,
+    mint: cachedTokenMetadata.mint || '',
+    pair_address: cachedTokenMetadata.pair_address || '',
+    created_at: cachedTokenMetadata.created_at || null,
+  } : optimisticToken);
 
   return (
     <>
@@ -590,28 +584,29 @@ export default function TradePage() {
             <div className="flex-shrink-0 flex flex-col" style={{ height: topPanePx }}>
               {/* TradeHeader includes name + the ONLY icon cluster */}
               <div className="px-2 flex-shrink-0">
-                <TradeHeader token={correctTokenData || token} />
+                <TradeHeader 
+                  token={correctTokenData || displayToken} 
+                />
               </div>
 
-              {/* Chart - fully responsive with fast-loading data */}
+              {/* Chart - Let BackendOHLCChart handle its own loading state */}
               <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden pb-1">
-                {typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32 && ohlcParams ? (
-                  <>
-                    <BackendOHLCChart
-                      key={`${ohlcParams.interval}-${ohlcParams.timeframe}-${ohlcParams.optimize}`}
-                      pairAddress={resolvedPairAddress}
-                      interval={ohlcParams.interval}
-                      timeframe={ohlcParams.timeframe}
-                      optimize={ohlcParams.optimize}
-                      height="100%"
-                      width="100%"
-                      baseRefreshMs={15000} // Slightly faster refresh rate
-                      className="relative"
-                    />
-                  </>
+                {canStartOHLC || (typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32) ? (
+                  <BackendOHLCChart
+                    key={`${currentOHLCParams.interval}-${currentOHLCParams.timeframe}-${currentOHLCParams.optimize}-${resolvedPairAddress || _mint}`}
+                    mint={typeof _mint === 'string' ? _mint : undefined}
+                    pairAddress={resolvedPairAddress}
+                    interval={currentOHLCParams.interval}
+                    timeframe={currentOHLCParams.timeframe}
+                    optimize={currentOHLCParams.optimize}
+                    height="100%"
+                    width="100%"
+                    baseRefreshMs={10000} // Faster refresh rate for ultra-fast loading
+                    className="relative"
+                  />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
-                    {isHydrating ? 'Resolving pair address...' : 'No pair address available'}
+                    {isHydrating ? 'Resolving pair address...' : 'No mint or pair address available'}
                   </div>
                 )}
               </div>
@@ -684,13 +679,13 @@ export default function TradePage() {
               <div className="flex-1 min-h-0">
                 {selectedTab === "Trades" && (
                   <CodexTrades 
-                    token={correctTokenData || token} 
+                    token={correctTokenData || displayToken} 
                     initialTrades={initialTradeData?.trades || []}
                   />
                 )}
-                {selectedTab === "Top Traders" && <CodexTopTraders token={token} />}
-                {selectedTab === "Holders" && <CodexHolders token={token} />}
-                {selectedTab === "Dev Tokens" && <CodexDevTokens token={token} />}
+                {selectedTab === "Top Traders" && <CodexTopTraders token={displayToken} />}
+                {selectedTab === "Holders" && <CodexHolders token={displayToken} />}
+                {selectedTab === "Dev Tokens" && <CodexDevTokens token={displayToken} />}
               </div>
             </div>
           </div>
@@ -698,7 +693,7 @@ export default function TradePage() {
           {/* RIGHT: action panel */}
           <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:block">
             <TradeActionPanel 
-              token={token} 
+              token={displayToken} 
               tradeParams={tradeParams}
               setTradeParams={setTradeParams}
               quickBuySettings={quickBuySettings}
@@ -766,7 +761,7 @@ export default function TradePage() {
             {/* TradeActionPanel content */}
             <div className="flex-1 overflow-y-auto">
               <TradeActionPanel 
-                token={token} 
+                token={displayToken} 
                 tradeParams={tradeParams}
                 setTradeParams={setTradeParams}
                 quickBuySettings={quickBuySettings}

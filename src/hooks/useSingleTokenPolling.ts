@@ -35,9 +35,12 @@ export default function useSingleTokenPolling(address: string | undefined) {
     []
   );
 
-  // Check if address is a mint address (ends with 'pump')
+  // Check if address is a mint address (needs resolution to pair_address)
   const isMintAddress = useCallback((addr: string) => {
-    return addr.endsWith('pump');
+    // Pair addresses are typically longer (44+ chars) and don't end with 'pump'
+    // Mint addresses are shorter and often end with 'pump'
+    // If it's already a pair_address format, skip resolution
+    return addr.length < 50 && addr.endsWith('pump');
   }, []);
 
   // Resolve address to pair address with timeout
