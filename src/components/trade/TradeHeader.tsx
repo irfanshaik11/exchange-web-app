@@ -776,7 +776,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
           </div>
           <div className="flex items-center gap-2 text-sm" style={{ color: AX.aiGreen }}>
             <span className="font-light" style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}>
-              {getTokenAge(token.created_at || (token as any).CreatedAt || token.createdAt)}
+              {getTokenAge(token.created_at || (token as any).CreatedAt)}
             </span>
             {/* Socials */}
             <div className="relative flex items-center gap-2">

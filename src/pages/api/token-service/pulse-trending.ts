@@ -120,7 +120,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             volume_5m: timeframe === '1m' || timeframe === '5m' ? mockVolume : parseFloat(r.volume_5m || '0'),
             volume_1h: timeframe === '30m' || timeframe === '1h' ? mockVolume : parseFloat(r.volume_1h || '0'),
             volume_6h: parseFloat(r.volume_6h || '0'),
-            volume_24h: parseFloat(r.volume_24h || '0'),
             total_liquidity_usd: parseFloat(r.total_liquidity_usd || r.liquidity_usd || '0'),
             // TX data fields from Codex API with fallback logic for older tokens
             total_buy_volume_5m: parseFloat(r.total_buy_volume_5m || '0') || estimateFrom24h(totalBuyVolume24h, '5m'),
