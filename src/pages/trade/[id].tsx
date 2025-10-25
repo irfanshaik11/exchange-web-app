@@ -45,9 +45,6 @@ export default function TradePage() {
   const router = useRouter();
   const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
 
-  // BACKGROUND PRELOADING: Start OHLC loading as soon as route is matched (before component mounts)
-  const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload();
-
   // Optimistic token data from query params for instant display
   const optimisticToken = React.useMemo(() => {
     if (_name || _symbol) {
@@ -286,8 +283,30 @@ export default function TradePage() {
   // Use optimized params if available, otherwise use defaults
   const currentOHLCParams = ohlcParams || defaultOHLCParams;
   
+  // Debug: Track OHLC params changes
+  useEffect(() => {
+    console.log('[Trade Page] OHLC params changed:', {
+      currentOHLCParams,
+      ohlcParams,
+      defaultOHLCParams,
+      mint: _mint
+    });
+  }, [currentOHLCParams, ohlcParams, _mint]);
+  
+  // BACKGROUND PRELOADING: Start OHLC loading with stable parameters to prevent multiple requests
+  // Use default params initially to prevent parameter changes from causing multiple requests
+  const stableOHLCParams = useRef<any>(defaultOHLCParams);
+  
+  // Only update stable params if we have valid optimized params and haven't started preloading yet
+  if (ohlcParams && !stableOHLCParams.current.updated) {
+    stableOHLCParams.current = { ...ohlcParams, updated: true };
+    console.log('[Trade Page] Updated stable OHLC params:', stableOHLCParams.current);
+  }
+  
+  const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload(stableOHLCParams.current.interval, stableOHLCParams.current.timeframe);
+  
   // Ultra-fast OHLC loading - start immediately on mount
-  const canStartOHLC = preloadComplete || (typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32);
+  const canStartOHLC = preloadComplete || (typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32) || (backgroundOHLCData && backgroundOHLCData.length > 0);
 
 
   // Debug: Log OHLC params calculation
@@ -593,7 +612,7 @@ export default function TradePage() {
               <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden pb-1">
                 {canStartOHLC || (typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32) ? (
                   <BackendOHLCChart
-                    key={`${currentOHLCParams.interval}-${currentOHLCParams.timeframe}-${currentOHLCParams.optimize}-${resolvedPairAddress || _mint}`}
+                    key={`ohlc-chart-${_mint}`}
                     mint={typeof _mint === 'string' ? _mint : undefined}
                     pairAddress={resolvedPairAddress}
                     interval={currentOHLCParams.interval}
@@ -603,6 +622,7 @@ export default function TradePage() {
                     width="100%"
                     baseRefreshMs={10000} // Faster refresh rate for ultra-fast loading
                     className="relative"
+                    preloadedData={backgroundOHLCData}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
