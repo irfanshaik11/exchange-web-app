@@ -38,17 +38,26 @@ export interface Wallet {
   emoji?: string;
 }
 
-// New: Helper to get stored wallets from localStorage
-export function getStoredWallets(): Wallet[] {
+// New: Helper to get stored wallets from localStorage (user-specific)
+export function getStoredWallets(userId?: string): Wallet[] {
   if (typeof window === 'undefined') return []; // Ensure runs only on client-side
-  const walletsJson = localStorage.getItem('wallets');
+  const key = userId ? `wallets_${userId}` : 'wallets';
+  const walletsJson = localStorage.getItem(key);
   return walletsJson ? JSON.parse(walletsJson) : [];
 }
 
-// New: Helper to store wallets to localStorage
-export function storeWallets(wallets: Wallet[]) {
+// New: Helper to store wallets to localStorage (user-specific)
+export function storeWallets(wallets: Wallet[], userId?: string) {
   if (typeof window === 'undefined') return; // Ensure runs only on client-side
-  localStorage.setItem('wallets', JSON.stringify(wallets));
+  const key = userId ? `wallets_${userId}` : 'wallets';
+  localStorage.setItem(key, JSON.stringify(wallets));
+}
+
+// Helper to clear wallets from localStorage (user-specific)
+export function clearStoredWallets(userId?: string) {
+  if (typeof window === 'undefined') return;
+  const key = userId ? `wallets_${userId}` : 'wallets';
+  localStorage.removeItem(key);
 }
 
 export async function getPrice(tokenAddress: string): Promise<{ price: number }> {

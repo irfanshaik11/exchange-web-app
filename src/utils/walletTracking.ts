@@ -67,9 +67,12 @@ const WALLET_TRACKER_WS_URL = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL
 // ===== API Functions =====
 
 // Get all tracked wallets
-export async function getTrackedWallets(): Promise<WatchWallet[]> {
+export async function getTrackedWallets(userId?: string): Promise<WatchWallet[]> {
   try {
-    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch`);
+    const url = userId 
+      ? `${WALLET_TRACKER_API_URL}/api/watch?userId=${encodeURIComponent(userId)}`
+      : `${WALLET_TRACKER_API_URL}/api/watch`;
+    const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch wallets');
     return await response.json();
   } catch (error) {
@@ -79,14 +82,15 @@ export async function getTrackedWallets(): Promise<WatchWallet[]> {
 }
 
 // Add a wallet to tracking
-export async function addTrackedWallet(address: string, name?: string): Promise<void> {
+export async function addTrackedWallet(address: string, name?: string, userId?: string): Promise<void> {
   try {
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         wallet: address, 
-        walletName: name || undefined 
+        walletName: name || undefined,
+        userId: userId || undefined
       }),
     });
     
@@ -101,9 +105,12 @@ export async function addTrackedWallet(address: string, name?: string): Promise<
 }
 
 // Remove a wallet from tracking
-export async function removeTrackedWallet(address: string): Promise<void> {
+export async function removeTrackedWallet(address: string, userId?: string): Promise<void> {
   try {
-    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}`, {
+    const url = userId
+      ? `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}?userId=${encodeURIComponent(userId)}`
+      : `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}`;
+    const response = await fetch(url, {
       method: 'DELETE',
     });
     

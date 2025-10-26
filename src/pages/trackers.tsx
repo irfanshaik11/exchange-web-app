@@ -4,8 +4,6 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import {
   getActivePositionsByUser,
-  getStoredWallets,
-  storeWallets,
 } from "~/utils/functions";
 import type { PositionRow, Wallet } from "~/utils/functions";
 import AddWalletModal from "../components/AddWalletModal";
@@ -24,6 +22,7 @@ import {
   type TradeEvent,
   type WalletTrackerWebSocket,
 } from "~/utils/walletTracking";
+import { useUser } from "../components/UserContext";
 
 const TABS = ["Wallet Manager", "Live Trades"];
 const EMOJIS = [
@@ -96,6 +95,7 @@ const EMOJIS = [
 ];
 
 export default function TrackersPage() {
+  const { user } = useUser();
   const [activeTab, setActiveTab] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -121,21 +121,33 @@ export default function TrackersPage() {
     walletsRef.current = wallets;
   }, [wallets]);
 
+  // Load wallets when user changes or page loads
   useEffect(() => {
-    // Load wallets from localStorage on component mount
-    setWallets(getStoredWallets());
-    
-    // Load tracked wallets from backend
-    loadTrackedWallets();
-  }, []);
+    if (user?.id) {
+      console.log('🔑 Current User ID:', user.id);
+      loadWalletsFromBackend();
+    } else {
+      setWallets([]);
+    }
+  }, [user?.id]);
 
-  const loadTrackedWallets = async () => {
+  const loadWalletsFromBackend = async () => {
     try {
-      const tracked = await getTrackedWallets();
+      // Fetch wallets from backend
+      const tracked = await getTrackedWallets(user?.id);
       setWatchedWallets(tracked);
-      console.log('Loaded tracked wallets:', tracked);
       
-      // Fetch balances for all tracked wallets
+      // Convert backend wallets to frontend format
+      const frontendWallets: Wallet[] = tracked.map(w => ({
+        address: w.address,
+        name: w.walletName || w.address.slice(0, 8),
+        createdAt: new Date(w.createdAt).getTime(),
+        emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+      }));
+      
+      setWallets(frontendWallets);
+      
+      // Fetch balances
       tracked.forEach(async (wallet) => {
         const balance = await getWalletSolBalance(wallet.address);
         if (balance !== null) {
@@ -143,9 +155,11 @@ export default function TrackersPage() {
         }
       });
     } catch (error) {
-      console.error('Failed to load tracked wallets:', error);
+      console.error('Failed to load wallets:', error);
     }
   };
+
+  const loadTrackedWallets = loadWalletsFromBackend;
 
   useEffect(() => {
     if (activeTab === 1) {
@@ -288,30 +302,20 @@ export default function TrackersPage() {
 
   const handleAddWallet = async (address: string, name: string) => {
     try {
-      // Add to backend tracking
-      await addTrackedWallet(address, name);
+      // Add to backend
+      await addTrackedWallet(address, name, user?.id);
       
-      // Also add to local storage for the UI
-      const newWallet: Wallet = {
-        address,
-        name: name || `Wallet ${wallets.length + 1}`,
-        createdAt: Date.now(),
-        emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-      };
-      const updatedWallets = [...wallets, newWallet];
-      setWallets(updatedWallets);
-      storeWallets(updatedWallets);
+      // Reload from backend
+      await loadWalletsFromBackend();
+      
       setShowAddWalletModal(false);
       
-      // Reload tracked wallets from backend
-      await loadTrackedWallets();
-      
-      // Subscribe to the new wallet via WebSocket
+      // Subscribe to WebSocket
       if (wsConnection && wsConnected) {
         wsConnection.subscribe([address]);
       }
       
-      setToast("Wallet added and tracking started!");
+      setToast("Wallet added!");
       setTimeout(() => setToast(""), 3000);
     } catch (error: any) {
       setToast(error.message || "Failed to add wallet");
@@ -322,54 +326,29 @@ export default function TrackersPage() {
   const handleRemoveWallet = async (addressToRemove: string) => {
     try {
       if (addressToRemove === "all") {
-        // Remove all wallets from backend
-        const deletePromises = wallets.map(async (wallet) => {
-          try {
-            await removeTrackedWallet(wallet.address);
-          } catch (error) {
-            console.error(`[Frontend] Failed to remove ${wallet.address}:`, error);
-            throw error; // Re-throw to catch in outer try-catch
-          }
-        });
+        // Remove all wallets
+        await Promise.all(wallets.map(w => removeTrackedWallet(w.address, user?.id)));
         
-        await Promise.all(deletePromises);
-        
-        // Unsubscribe from all wallets
+        // Unsubscribe from WebSocket
         if (wsConnection && wsConnected) {
           wsConnection.unsubscribe(wallets.map(w => w.address));
         }
-        
-        // Clear local state
-        setWallets([]);
-        storeWallets([]);
       } else {
-        // Remove single wallet from backend
-        await removeTrackedWallet(addressToRemove);
+        // Remove single wallet
+        await removeTrackedWallet(addressToRemove, user?.id);
         
-        // Unsubscribe from the wallet
+        // Unsubscribe from WebSocket
         if (wsConnection && wsConnected) {
           wsConnection.unsubscribe([addressToRemove]);
         }
-        
-        // Update local state
-        const updatedWallets = wallets.filter(
-          (wallet) => wallet.address !== addressToRemove,
-        );
-        setWallets(updatedWallets);
-        storeWallets(updatedWallets);
       }
       
-      // Small delay to ensure backend has processed
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Reload from backend
+      await loadWalletsFromBackend();
       
-      // Reload tracked wallets from backend to verify
-      const reloadedWallets = await getTrackedWallets();
-      await loadTrackedWallets();
-      
-      setToast("Wallet removed from tracking");
+      setToast("Wallet removed");
       setTimeout(() => setToast(""), 3000);
     } catch (error: any) {
-      console.error("[Frontend] Error removing wallet:", error);
       setToast(error.message || "Failed to remove wallet");
       setTimeout(() => setToast(""), 3000);
     }
@@ -401,12 +380,23 @@ export default function TrackersPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const imported = JSON.parse(event.target?.result as string);
         if (Array.isArray(imported)) {
-          setWallets(imported);
-          storeWallets(imported);
+          // Add to backend
+          for (const wallet of imported) {
+            try {
+              await addTrackedWallet(wallet.address, wallet.name, user?.id);
+            } catch (error: any) {
+              if (!error.message?.includes('already exists')) {
+                console.error(`Failed to import ${wallet.address}:`, error);
+              }
+            }
+          }
+          // Reload from backend
+          await loadWalletsFromBackend();
+          alert("Wallets imported successfully!");
         } else {
           alert("Invalid wallet file format.");
         }
@@ -692,9 +682,60 @@ export default function TrackersPage() {
         mode={"import"}
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
-        onImport={(imported) => {
-          setWallets(imported);
-          storeWallets(imported);
+        onImport={async (imported) => {
+          try {
+            // Transform imported wallets to support different formats
+            const transformedWallets = imported.map((wallet: any) => {
+              // Handle Axiom.trade format
+              if (wallet.trackedWalletAddress) {
+                return {
+                  address: wallet.trackedWalletAddress,
+                  name: wallet.name || 'Imported Wallet',
+                  emoji: wallet.emoji || EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+                  createdAt: Date.now(),
+                };
+              }
+              // Handle standard format - ensure all required fields exist
+              return {
+                address: wallet.address,
+                name: wallet.name || 'Imported Wallet',
+                emoji: wallet.emoji || EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+                createdAt: wallet.createdAt || Date.now(),
+              };
+            });
+            
+            // Add each wallet to backend
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (const wallet of transformedWallets) {
+              try {
+                await addTrackedWallet(wallet.address, wallet.name, user?.id);
+                successCount++;
+                
+                // Subscribe to websocket
+                if (wsConnection && wsConnected) {
+                  wsConnection.subscribe([wallet.address]);
+                }
+              } catch (error: any) {
+                if (error.message?.includes('already exists')) {
+                  successCount++;
+                } else {
+                  errorCount++;
+                }
+              }
+            }
+            
+            // Reload from backend
+            await loadWalletsFromBackend();
+            
+            setToast(`Imported ${successCount} wallet(s)${errorCount > 0 ? ` (${errorCount} failed)` : ''}`);
+            setTimeout(() => setToast(""), 3000);
+          } catch (error) {
+            console.error('Import error:', error);
+            setToast('Failed to import wallets');
+            setTimeout(() => setToast(""), 3000);
+          }
         }}
         wallets={wallets}
       />
