@@ -323,19 +323,23 @@ export default function TrackersPage() {
     try {
       if (addressToRemove === "all") {
         // Remove all wallets from backend
-        for (const wallet of wallets) {
+        const deletePromises = wallets.map(async (wallet) => {
           try {
             await removeTrackedWallet(wallet.address);
           } catch (error) {
-            console.error(`Failed to remove ${wallet.address}:`, error);
+            console.error(`[Frontend] Failed to remove ${wallet.address}:`, error);
+            throw error; // Re-throw to catch in outer try-catch
           }
-        }
+        });
+        
+        await Promise.all(deletePromises);
         
         // Unsubscribe from all wallets
         if (wsConnection && wsConnected) {
           wsConnection.unsubscribe(wallets.map(w => w.address));
         }
         
+        // Clear local state
         setWallets([]);
         storeWallets([]);
       } else {
@@ -347,6 +351,7 @@ export default function TrackersPage() {
           wsConnection.unsubscribe([addressToRemove]);
         }
         
+        // Update local state
         const updatedWallets = wallets.filter(
           (wallet) => wallet.address !== addressToRemove,
         );
@@ -354,12 +359,17 @@ export default function TrackersPage() {
         storeWallets(updatedWallets);
       }
       
-      // Reload tracked wallets from backend
+      // Small delay to ensure backend has processed
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Reload tracked wallets from backend to verify
+      const reloadedWallets = await getTrackedWallets();
       await loadTrackedWallets();
       
       setToast("Wallet removed from tracking");
       setTimeout(() => setToast(""), 3000);
     } catch (error: any) {
+      console.error("[Frontend] Error removing wallet:", error);
       setToast(error.message || "Failed to remove wallet");
       setTimeout(() => setToast(""), 3000);
     }
