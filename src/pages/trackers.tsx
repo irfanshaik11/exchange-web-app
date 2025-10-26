@@ -12,6 +12,18 @@ import AddWalletModal from "../components/AddWalletModal";
 import WalletRow from "../components/WalletRow";
 import ImportExportWalletModal from "../components/ImportExportWalletModal";
 import WalletScanPanel from "../components/WalletScanPanel";
+import {
+  addTrackedWallet,
+  removeTrackedWallet,
+  getTrackedWallets,
+  getWalletHistory,
+  getWalletSolBalance,
+  createWalletTrackerWebSocket,
+  type WatchWallet,
+  type WalletEvent,
+  type TradeEvent,
+  type WalletTrackerWebSocket,
+} from "~/utils/walletTracking";
 
 const TABS = ["Wallet Manager", "Live Trades"];
 const EMOJIS = [
@@ -96,11 +108,44 @@ export default function TrackersPage() {
   const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(384); // 384px = w-96
   const [isResizing, setIsResizing] = useState(false);
+  const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
+  const [walletEvents, setWalletEvents] = useState<Record<string, WalletEvent[]>>({});
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [latestTrades, setLatestTrades] = useState<TradeEvent[]>([]);
+  const [wsConnection, setWsConnection] = useState<WalletTrackerWebSocket | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const walletsRef = useRef<Wallet[]>([]);
+
+  // Keep walletsRef in sync with wallets state
+  useEffect(() => {
+    walletsRef.current = wallets;
+  }, [wallets]);
 
   useEffect(() => {
     // Load wallets from localStorage on component mount
     setWallets(getStoredWallets());
+    
+    // Load tracked wallets from backend
+    loadTrackedWallets();
   }, []);
+
+  const loadTrackedWallets = async () => {
+    try {
+      const tracked = await getTrackedWallets();
+      setWatchedWallets(tracked);
+      console.log('Loaded tracked wallets:', tracked);
+      
+      // Fetch balances for all tracked wallets
+      tracked.forEach(async (wallet) => {
+        const balance = await getWalletSolBalance(wallet.address);
+        if (balance !== null) {
+          setWalletBalances(prev => ({ ...prev, [wallet.address]: balance }));
+        }
+      });
+    } catch (error) {
+      console.error('Failed to load tracked wallets:', error);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 1) {
@@ -111,6 +156,107 @@ export default function TrackersPage() {
         .finally(() => setLoading(false));
     }
   }, [activeTab]);
+
+  // WebSocket connection for real-time wallet updates
+  useEffect(() => {
+    let connection: WalletTrackerWebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+
+    const handleTradeEvent = (event: TradeEvent) => {
+      console.log('Trade event received:', event);
+      
+      // Add to latest trades list (keep last 50)
+      setLatestTrades(prev => [event, ...prev].slice(0, 50));
+      
+      // Show toast notification
+      const wallet = walletsRef.current.find(w => w.address === event.wallet);
+      const walletName = wallet?.name || event.wallet.slice(0, 4) + '...';
+      const side = event.side === 'buy' ? 'bought' : 'sold';
+      const token = event.symbol || event.mint.slice(0, 8) + '...';
+      setToast(`${walletName} ${side} ${event.amount.toFixed(2)} SOL`);
+      setTimeout(() => setToast(""), 3000);
+    };
+
+    const handleConnect = () => {
+      console.log('WebSocket connected successfully');
+      setWsConnected(true);
+      
+      // Subscribe to all tracked wallets after connection is established
+      if (wallets.length > 0 && connection) {
+        // Small delay to ensure WebSocket is fully ready
+        setTimeout(() => {
+          if (connection?.ws.readyState === WebSocket.OPEN) {
+            const addresses = wallets.map(w => w.address);
+            connection.subscribe(addresses);
+            console.log('Subscribed to wallets:', addresses);
+          }
+        }, 100);
+      }
+    };
+
+    const handleDisconnect = () => {
+      console.log('WebSocket disconnected, will attempt to reconnect...');
+      setWsConnected(false);
+      
+      // Attempt to reconnect after 3 seconds
+      reconnectTimeout = setTimeout(() => {
+        console.log('Attempting to reconnect WebSocket...');
+        initializeWebSocket();
+      }, 3000);
+    };
+
+    const initializeWebSocket = () => {
+      try {
+        console.log('Initializing WebSocket connection...');
+        connection = createWalletTrackerWebSocket(
+          handleTradeEvent,
+          handleConnect,
+          handleDisconnect
+        );
+        setWsConnection(connection);
+      } catch (error) {
+        console.error('Failed to initialize WebSocket:', error);
+        setWsConnected(false);
+        
+        // Retry after 5 seconds
+        reconnectTimeout = setTimeout(() => {
+          console.log('Retrying WebSocket connection...');
+          initializeWebSocket();
+        }, 5000);
+      }
+    };
+
+    // Initialize on mount
+    initializeWebSocket();
+
+    return () => {
+      console.log('Cleaning up WebSocket connection...');
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (connection) {
+        connection.close();
+      }
+    };
+  }, []); // Only run once on mount
+
+  // Subscribe to new wallets when wallet list changes
+  useEffect(() => {
+    if (wsConnection && wsConnected && wallets.length > 0) {
+      // Wait a bit to ensure connection is stable
+      const timer = setTimeout(() => {
+        if (wsConnection.ws.readyState === WebSocket.OPEN) {
+          const addresses = wallets.map(w => w.address);
+          wsConnection.subscribe(addresses);
+          console.log('Updated wallet subscriptions:', addresses);
+        } else {
+          console.warn('WebSocket not ready, skipping subscription update');
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [wallets, wsConnection, wsConnected]);
 
   // Handle sidebar resizing
   useEffect(() => {
@@ -140,30 +286,83 @@ export default function TrackersPage() {
     };
   }, [isResizing]);
 
-  const handleAddWallet = (address: string, name: string) => {
-    const newWallet: Wallet = {
-      address,
-      name: name || `Wallet ${wallets.length + 1}`,
-      createdAt: Date.now(),
-      emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-    };
-    const updatedWallets = [...wallets, newWallet];
-    setWallets(updatedWallets);
-    storeWallets(updatedWallets);
-    setShowAddWalletModal(false);
+  const handleAddWallet = async (address: string, name: string) => {
+    try {
+      // Add to backend tracking
+      await addTrackedWallet(address, name);
+      
+      // Also add to local storage for the UI
+      const newWallet: Wallet = {
+        address,
+        name: name || `Wallet ${wallets.length + 1}`,
+        createdAt: Date.now(),
+        emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+      };
+      const updatedWallets = [...wallets, newWallet];
+      setWallets(updatedWallets);
+      storeWallets(updatedWallets);
+      setShowAddWalletModal(false);
+      
+      // Reload tracked wallets from backend
+      await loadTrackedWallets();
+      
+      // Subscribe to the new wallet via WebSocket
+      if (wsConnection && wsConnected) {
+        wsConnection.subscribe([address]);
+      }
+      
+      setToast("Wallet added and tracking started!");
+      setTimeout(() => setToast(""), 3000);
+    } catch (error: any) {
+      setToast(error.message || "Failed to add wallet");
+      setTimeout(() => setToast(""), 3000);
+    }
   };
 
-  const handleRemoveWallet = (addressToRemove: string) => {
-    let updatedWallets: Wallet[];
-    if (addressToRemove === "all") {
-      updatedWallets = [];
-    } else {
-      updatedWallets = wallets.filter(
-        (wallet) => wallet.address !== addressToRemove,
-      );
+  const handleRemoveWallet = async (addressToRemove: string) => {
+    try {
+      if (addressToRemove === "all") {
+        // Remove all wallets from backend
+        for (const wallet of wallets) {
+          try {
+            await removeTrackedWallet(wallet.address);
+          } catch (error) {
+            console.error(`Failed to remove ${wallet.address}:`, error);
+          }
+        }
+        
+        // Unsubscribe from all wallets
+        if (wsConnection && wsConnected) {
+          wsConnection.unsubscribe(wallets.map(w => w.address));
+        }
+        
+        setWallets([]);
+        storeWallets([]);
+      } else {
+        // Remove single wallet from backend
+        await removeTrackedWallet(addressToRemove);
+        
+        // Unsubscribe from the wallet
+        if (wsConnection && wsConnected) {
+          wsConnection.unsubscribe([addressToRemove]);
+        }
+        
+        const updatedWallets = wallets.filter(
+          (wallet) => wallet.address !== addressToRemove,
+        );
+        setWallets(updatedWallets);
+        storeWallets(updatedWallets);
+      }
+      
+      // Reload tracked wallets from backend
+      await loadTrackedWallets();
+      
+      setToast("Wallet removed from tracking");
+      setTimeout(() => setToast(""), 3000);
+    } catch (error: any) {
+      setToast(error.message || "Failed to remove wallet");
+      setTimeout(() => setToast(""), 3000);
     }
-    setWallets(updatedWallets);
-    storeWallets(updatedWallets);
   };
 
   // Helper to format date
@@ -276,51 +475,20 @@ export default function TrackersPage() {
               </div>
               {activeTab === 0 ? (
                 <>
-                  <div className="border-neutral-800/50p flex items-center border-b py-1">
-                    <div className="flex flex-1 gap-8 text-sm text-neutral-400">
-                      <span className="w-32">Created</span>
-                      <span className="flex-1">Name</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm text-neutral-400">Actions</span>
-                      <button className="text-neutral-400 transition-colors duration-300 hover:text-white">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.5}
-                          stroke="currentColor"
-                          className="h-4 w-4"
+                  <div className="flex items-center border-b border-white/20 p-2">
+                    <div className="flex w-full items-center gap-4 text-xs font-medium text-neutral-400">
+                      <span className="w-28">Created</span>
+                      <span className="flex-1 min-w-0">Name</span>
+                      <span className="w-36">Balance</span>
+                      <span className="w-40">Actions</span>
+                      <span className="w-24 text-right">
+                        <button
+                          className="whitespace-nowrap text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
+                          onClick={() => handleRemoveWallet("all")}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.04 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
-                          />
-                        </svg>
-                      </button>
-                      <button className="text-neutral-400 transition-colors duration-300 hover:text-white">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          strokeWidth={1.5}
-                          stroke="currentColor"
-                          className="h-4 w-4"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.92c-1.01 0-1.85-.75-1.992-1.874L5.323 6.075m1.022-.165L5.754 5.105a1.125 1.125 0 011.992-.858L12 8.752l3.254-4.505a1.125 1.125 0 011.992.858z"
-                          />
-                        </svg>
-                      </button>
-                      <button
-                        className="ml-4 text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
-                        onClick={() => handleRemoveWallet("all")}
-                      >
-                        Remove All
-                      </button>
+                          Remove All
+                        </button>
+                      </span>
                     </div>
                   </div>
                   {wallets.length === 0 ? (
@@ -330,73 +498,98 @@ export default function TrackersPage() {
                       </span>
                     </div>
                   ) : (
-                    <table className="mt-2 w-full text-xs">
+                    <table className="w-full text-xs">
                       <tbody>
-                        {filteredWallets.map((wallet) => (
-                          <WalletRow
-                            key={wallet.address}
-                            wallet={wallet}
-                            onRemove={handleRemoveWallet}
-                            onClick={setScannedWallet}
-                          />
-                        ))}
+                        {filteredWallets.map((wallet) => {
+                          const watched = watchedWallets.find(ww => ww.address === wallet.address);
+                          const events = walletEvents[wallet.address] || [];
+                          const balance = walletBalances[wallet.address];
+                          return (
+                            <WalletRow
+                              key={wallet.address}
+                              wallet={wallet}
+                              watchedWallet={watched}
+                              events={events}
+                              balance={balance}
+                              onRemove={handleRemoveWallet}
+                              onClick={setScannedWallet}
+                            />
+                          );
+                        })}
                       </tbody>
                     </table>
                   )}
                 </>
               ) : (
                 <>
-                  <div className="mb-4 flex items-center justify-between border-b border-neutral-800/50 pb-4">
-                    <div className="flex flex-1 gap-8 text-sm text-neutral-400">
-                      <span className="w-48">Name</span>
-                      <span className="w-48">Token</span>
-                      <span className="w-32">Amount</span>
-                      <span className="w-32">MC</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="text-neutral-400">Paused</span>
-                      <button className="text-neutral-400 transition-colors duration-300 hover:text-white">
-                        &#9646;&#9646;
-                      </button>
-                      <span className="text-neutral-400">P1</span>
-                      <span className="text-neutral-400">0.0</span>
-                      <button className="text-neutral-400 transition-colors duration-300 hover:text-white">
-                        Customize Feed
-                      </button>
+                  <div className="flex items-center border-b border-white/20 py-2">
+                    <div className="flex flex-1 gap-4 text-sm text-neutral-400">
+                      <span className="w-20">Time</span>
+                      <span className="w-24">Wallet</span>
+                      <span className="w-12">Side</span>
+                      <span className="w-32">Token</span>
+                      <span className="w-24">Amount</span>
+                      <span className="w-24">Price</span>
+                      <span className="w-20">Venue</span>
                     </div>
                   </div>
-                  {loading ? (
+                  {latestTrades.length === 0 ? (
                     <div className="flex h-64 flex-col items-center justify-center">
-                      <span className="text-neutral-400">Loading...</span>
-                    </div>
-                  ) : positions.length === 0 ? (
-                    <div className="flex h-64 flex-col items-center justify-center">
+                      <span className="mb-2 text-2xl">📊</span>
                       <span className="text-neutral-400">
-                        No transactions yet.
+                        No live trades yet. Add wallets to start tracking!
+                      </span>
+                      <span className="mt-2 text-xs text-neutral-500">
+                        {wsConnected ? '🟢 Connected' : '🔴 Disconnected'}
                       </span>
                     </div>
                   ) : (
-                    <table className="mt-2 w-full text-xs">
-                      <tbody>
-                        {positions.map((pos, idx) => (
-                          <tr
-                            key={pos.tokenAddress || idx}
-                            className="border-b border-neutral-800/50 transition-colors duration-300 hover:bg-neutral-800/30"
-                          >
-                            <td className="w-48 px-2 py-2 font-mono">
-                              WalletName
-                            </td>
-                            <td className="w-48 px-2 py-2 font-mono">
-                              {pos.tokenAddress}
-                            </td>
-                            <td className="w-32 px-2 py-2">{pos.remaining}</td>
-                            <td className="w-32 px-2 py-2">
-                              ${pos.remainingUsdValue}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                      <table className="mt-2 w-full text-xs">
+                        <tbody>
+                          {latestTrades.map((trade, idx) => {
+                            const wallet = wallets.find(w => w.address === trade.wallet);
+                            const timeAgo = new Date(trade.at).toLocaleTimeString();
+                            return (
+                              <tr
+                                key={`${trade.tx}-${idx}`}
+                                className="border-b border-neutral-800/50 transition-colors duration-300 hover:bg-neutral-800/30"
+                              >
+                                <td className="w-20 px-2 py-2 text-neutral-400">
+                                  {timeAgo}
+                                </td>
+                                <td className="w-24 px-2 py-2 font-mono">
+                                  <span className="truncate" title={trade.wallet}>
+                                    {wallet?.emoji || '💼'} {wallet?.name || trade.wallet.slice(0, 4) + '...'}
+                                  </span>
+                                </td>
+                                <td className="w-12 px-2 py-2">
+                                  <span className={`rounded px-1 py-0.5 text-[10px] font-semibold ${
+                                    trade.side === 'buy' 
+                                      ? 'bg-green-500/20 text-green-400' 
+                                      : 'bg-red-500/20 text-red-400'
+                                  }`}>
+                                    {trade.side.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td className="w-32 px-2 py-2 font-mono text-blue-300">
+                                  {trade.symbol || trade.mint.slice(0, 8) + '...'}
+                                </td>
+                                <td className="w-24 px-2 py-2 text-neutral-200">
+                                  {trade.amount.toFixed(2)}
+                                </td>
+                                <td className="w-24 px-2 py-2 text-neutral-300">
+                                  {trade.price_usd ? `$${trade.price_usd.toFixed(6)}` : '-'}
+                                </td>
+                                <td className="w-20 px-2 py-2 text-neutral-400">
+                                  {trade.venue || 'Unknown'}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </>
               )}
@@ -496,7 +689,7 @@ export default function TrackersPage() {
         wallets={wallets}
       />
       {toast && (
-        <div className="animate-fade-in fixed top-8 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-neutral-900 px-6 py-3 text-sm text-white shadow-lg">
+        <div className="w-fit animate-fade-in fixed top-8 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-white text-black border border-white/80 px-6 py-3 text-sm shadow-lg">
           {toast}
         </div>
       )}
@@ -531,7 +724,8 @@ export default function TrackersPage() {
             <span className="text-green-400">💸</span> $152.42
           </span>
           <span className="flex items-center gap-2">
-            <span className="text-neutral-400">🔗</span> Connection is stable
+            <span className={wsConnected ? "text-green-400" : "text-red-400"}>🔗</span> 
+            {wsConnected ? "Tracker Connected" : "Tracker Disconnected"}
           </span>
           <span className="flex items-center gap-2">
             <span className="text-neutral-400">🌐</span> US-W

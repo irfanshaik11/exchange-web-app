@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import type { Wallet } from '~/utils/functions';
+import type { WatchWallet, WalletEvent } from '~/utils/walletTracking';
 import { FaBell, FaChartBar, FaTrash } from 'react-icons/fa';
 
 interface WalletRowProps {
   wallet: Wallet;
+  watchedWallet?: WatchWallet;
+  events?: WalletEvent[];
+  balance?: number;
   onRemove: (address: string) => void;
   onClick?: (wallet: Wallet) => void;
 }
@@ -31,21 +35,24 @@ function Tooltip({ children, label }: { children: React.ReactNode; label: string
   );
 }
 
-export default function WalletRow({ wallet, onRemove, onClick }: WalletRowProps) {
-  const [balance, setBalance] = useState<number | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+export default function WalletRow({ wallet, watchedWallet, events = [], balance, onRemove, onClick }: WalletRowProps) {
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
-  useEffect(() => {
-    // Simulate fetching real-time data
-    setLoading(true);
-    const fetchBalance = setTimeout(() => {
-      // In a real application, you would fetch actual wallet balance here
-      setBalance(parseFloat((Math.random() * 10000).toFixed(2))); // Dummy balance
-      setLoading(false);
-    }, 1500); // Simulate network delay
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDeleteConfirm(true);
+  };
 
-    return () => clearTimeout(fetchBalance);
-  }, [wallet.address]); // Re-fetch when wallet address changes
+  const handleConfirmDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRemove(wallet.address);
+    setShowDeleteConfirm(false);
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowDeleteConfirm(false);
+  };
 
   // Helper to format date or relative time
   const formatCreated = (timestamp: number) => {
@@ -76,34 +83,57 @@ export default function WalletRow({ wallet, onRemove, onClick }: WalletRowProps)
       className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200 cursor-pointer"
       onClick={() => onClick && onClick(wallet)}
     >
-      <td className="w-24 px-1 py-1 text-neutral-400 text-[11px]">{formatCreated(wallet.createdAt)}</td>
-      <td className="flex-1 px-1 py-1 font-mono text-neutral-200 text-[12px] flex items-center gap-1">
-        <span className="text-base mr-1">{wallet.emoji || ''}</span>
-        <span className="truncate max-w-[90px]">{wallet.name || 'N/A'}</span>
-        <span className="text-neutral-500">|</span>
-        <span className="truncate max-w-[90px] text-neutral-500">{wallet.address}</span>
-        <button 
-          className="text-neutral-500 hover:text-white transition-colors duration-200 flex-shrink-0 p-0.5" 
-          onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(wallet.address); }}
-          title="Copy address"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v2.25A2.25 2.25 0 0113.5 22h-2.25a2.25 2.25 0 01-2.25-2.25v-2.25m11.25-9V7.5a2.25 2.25 0 00-2.25-2.25H9.75A2.25 2.25 0 007.5 7.5v2.25m9.75 9.75H13.5m-3.75 0H7.5M9 6.75V4.5A2.25 2.25 0 0111.25 2h1.5a2.25 2.25 0 012.25 2.25v2.25M10.5 10.5H13.5" /></svg>
-        </button>
-      </td>
-      <td className="px-1 py-1 text-right flex items-center gap-2 justify-end">
-        {/* Action Icons Row */}
-        <div className="flex flex-row gap-2 items-center">
-          <button className="p-1 rounded-md hover:bg-neutral-800 transition-colors" title="Alert" onClick={e => e.stopPropagation()}>
-            <FaBell className="text-base text-emerald-300" />
-          </button>
-          <Tooltip label="Scan Address">
-            <button className="p-1 rounded-md hover:bg-neutral-800 transition-colors" title="Scan" onClick={e => e.stopPropagation()}>
-              <FaChartBar className="text-base text-blue-300" />
+      <td className="py-3 px-2">
+        <div className="flex w-full items-center gap-4">
+          <span className="w-28 text-xs text-neutral-400">{formatCreated(wallet.createdAt)}</span>
+          <div className="flex flex-1 min-w-0 items-center gap-2">
+            <span className="text-lg">{wallet.emoji || '💼'}</span>
+            <span className="truncate text-xs font-medium text-neutral-200">{wallet.name || 'N/A'}</span>
+          </div>
+          <span className="w-36 text-xs text-neutral-300">
+            {balance !== undefined 
+              ? <span className="text-green-400 font-mono">{balance.toFixed(4)} SOL</span>
+              : watchedWallet 
+                ? <span className="text-yellow-400">Loading...</span>
+                : <span className="text-neutral-500">-</span>}
+          </span>
+          <div className="w-40 flex items-center gap-2">
+            <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors" title="Alert" onClick={e => e.stopPropagation()}>
+              <FaBell className="text-sm text-emerald-300" />
             </button>
-          </Tooltip>
-          <button className="p-1 rounded-md hover:bg-neutral-800 transition-colors" title="Delete" onClick={e => { e.stopPropagation(); onRemove(wallet.address); }}>
-            <FaTrash className="text-base text-red-400" />
-          </button>
+            <Tooltip label="Scan Address">
+              <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors" title="Scan" onClick={e => e.stopPropagation()}>
+                <FaChartBar className="text-sm text-blue-300" />
+              </button>
+            </Tooltip>
+            {showDeleteConfirm ? (
+              <div className="flex gap-1">
+                <button 
+                  className="px-2 py-1 rounded-md bg-red-500 hover:bg-red-600 transition-colors text-white text-xs font-medium" 
+                  title="Confirm Delete"
+                  onClick={handleConfirmDelete}
+                >
+                  ✓
+                </button>
+                <button 
+                  className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 transition-colors text-white text-xs font-medium" 
+                  title="Cancel"
+                  onClick={handleCancelDelete}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button 
+                className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors" 
+                title="Delete" 
+                onClick={handleDeleteClick}
+              >
+                <FaTrash className="text-sm text-red-400" />
+              </button>
+            )}
+          </div>
+          <span className="w-24"></span>
         </div>
       </td>
     </tr>
