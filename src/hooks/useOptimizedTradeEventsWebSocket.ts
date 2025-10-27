@@ -281,9 +281,20 @@ export default function useOptimizedTradeEventsWebSocket({
               loading: false,
             };
           });
+        } else {
+          // No new trades (duplicates filtered out), but still set loading to false
+          setState(prev => ({
+            ...prev,
+            loading: false,
+          }));
         }
       } else {
         console.warn('No events found in message:', message);
+        // Ensure loading is false even when no events
+        setState(prev => ({
+          ...prev,
+          loading: false,
+        }));
       }
     } catch (error) {
       console.error('Error processing trade event message:', error);
@@ -295,8 +306,11 @@ export default function useOptimizedTradeEventsWebSocket({
       return;
     }
 
-    // Start loading immediately when connecting
-    setState(prev => ({ ...prev, loading: true }));
+    // Only show loading if we don't have trades yet
+    setState(prev => ({ 
+      ...prev, 
+      loading: prev.trades.length === 0 // Only show loading if no trades yet
+    }));
 
     // Prevent multiple simultaneous connections
     if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
@@ -443,7 +457,13 @@ export default function useOptimizedTradeEventsWebSocket({
       return;
     }
 
-    setState(prev => ({ ...prev, loading: true, isConnected: false, error: null }));
+    // Only set loading to true if we don't have any trades yet
+    setState(prev => ({ 
+      ...prev, 
+      loading: prev.trades.length === 0, // Only show loading if no trades yet
+      isConnected: false, 
+      error: null 
+    }));
 
     // Set loading timeout to prevent infinite loading
     const loadingTimeout = setTimeout(() => {

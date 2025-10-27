@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatSmartNumber } from '~/utils/db';
+import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
 import useCodexTradesWebSocket from '../../hooks/useCodexTradesWebSocket';
 import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
 import type { Token } from '~/utils/db';
@@ -201,7 +201,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                 return (
                   <tr key={trade.pair_address + idx + trade.timestamp} className="border-b border-neutral-800 hover:bg-neutral-800/60">
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
-                    <td className={`px-2 py-2 font-semibold ${color}`}>${formatSmartNumber(pricePerToken)}</td>
+                    <td className={`px-2 py-2 font-semibold ${color}`}>${formatSmallPrice(pricePerToken)}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>${totalUSD.toFixed(2)}</td>
                     <td className="px-2 py-2 text-neutral-300">{retention}</td>
                     <td className="px-2 py-2 text-neutral-300">
@@ -217,34 +217,100 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                   </tr>
                 );
               } else {
-                // Codex trade format - enhanced with new GraphQL fields
-                const isBuy = trade.eventDisplayType === 'Buy';
-                const color = isBuy ? 'text-emerald-400' : 'text-red-400';
-                const age = getAge(trade.timestamp);
+                // Handle both Codex and backend trade formats
+                // Determine which format we have
+                const hasBackendFormat = trade.event_type && (trade.amount || trade.price_in_usd);
+                const hasCodexFormat = trade.eventDisplayType && trade.data;
                 
-                // Calculate price per token (USD) from GraphQL data
-                const tokenAmount = parseFloat(trade.data.amountNonLiquidityToken || trade.data.amount0);
-                const totalUSD = parseFloat(trade.data.priceUsdTotal || '0');
-                const pricePerToken = tokenAmount > 0 ? totalUSD / tokenAmount : 0;
+                // Determine buy/sell and color
+                let isBuy = false;
+                let color = 'text-neutral-400';
+                
+                if (hasBackendFormat) {
+                  isBuy = trade.event_type === 'BUY';
+                } else if (hasCodexFormat) {
+                  isBuy = trade.eventDisplayType === 'Buy';
+                }
+                color = isBuy ? 'text-emerald-400' : 'text-red-400';
+                
+                // Handle timestamp - convert to seconds
+                let timestampInSeconds: number;
+                if (typeof trade.timestamp === 'number') {
+                  // Check if already in seconds or milliseconds
+                  // If timestamp is less than 10^10, it's in seconds
+                  // If timestamp is >= 10^10, it's in milliseconds
+                  timestampInSeconds = trade.timestamp < 10000000000 ? trade.timestamp : trade.timestamp / 1000;
+                } else if (typeof trade.timestamp === 'string') {
+                  timestampInSeconds = new Date(trade.timestamp).getTime() / 1000;
+                } else {
+                  timestampInSeconds = Date.now() / 1000;
+                }
+                const age = getAge(timestampInSeconds);
+                
+                // Calculate price and amounts based on format
+                let tokenAmount: number;
+                let totalUSD: number;
+                let pricePerToken: number;
+                
+                if (hasBackendFormat) {
+                  // Backend format: flat structure
+                  tokenAmount = trade.amount || 0;
+                  totalUSD = trade.total_usd || 0;
+                  pricePerToken = trade.price_in_usd || 0;
+                } else if (hasCodexFormat && trade.data) {
+                  // Codex format: nested structure
+                  // Get token amount
+                  tokenAmount = parseFloat(String(trade.data.amountNonLiquidityToken || trade.data.amount0 || 0));
+                  // Get total USD value (already calculated by API)
+                  totalUSD = parseFloat(String(trade.data.priceUsdTotal || 0));
+                  // Get price per token (already calculated by API)
+                  pricePerToken = parseFloat(String(trade.data.priceUsd || 0));
+                  
+                  // Fallback: if priceUsd is not available, calculate it
+                  if (!pricePerToken && tokenAmount > 0 && totalUSD > 0) {
+                    pricePerToken = totalUSD / tokenAmount;
+                  }
+                  
+                  // Debug logging
+                  if (process.env.NODE_ENV === 'development' && (!pricePerToken || !totalUSD || !tokenAmount)) {
+                    console.log('[CodexTrades] Debug trade data:', {
+                      priceUsd: trade.data.priceUsd,
+                      priceUsdTotal: trade.data.priceUsdTotal,
+                      amountNonLiquidityToken: trade.data.amountNonLiquidityToken,
+                      calculated: { tokenAmount, totalUSD, pricePerToken }
+                    });
+                  }
+                } else {
+                  // Fallback for unknown format
+                  tokenAmount = 0;
+                  totalUSD = 0;
+                  pricePerToken = 0;
+                }
                 
                 // Format retention (token amount) - ensure proper K/M/B formatting
                 const retention = formatSmartNumber(tokenAmount);
                 
+                // Get the right key and maker based on format
+                const tradeKey = hasBackendFormat 
+                  ? (trade.transaction_hash || trade.id || '') + idx
+                  : (trade.transactionHash || '') + idx;
+                const makerAddress = trade.maker || '';
+                
                 return (
-                  <tr key={trade.transactionHash + idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
+                  <tr key={tradeKey} className="border-b border-neutral-800 hover:bg-neutral-800/60">
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
-                    <td className={`px-2 py-2 font-semibold ${color}`}>${formatSmartNumber(pricePerToken)}</td>
+                    <td className={`px-2 py-2 font-semibold ${color}`}>${formatSmallPrice(pricePerToken)}</td>
                     <td className={`px-2 py-2 font-semibold ${color}`}>${totalUSD.toFixed(2)}</td>
                     <td className="px-2 py-2 text-neutral-300">{retention}</td>
                     <td className="px-2 py-2 text-neutral-300">
                       <a
-                        href={`https://solscan.io/account/${trade.maker}`}
+                        href={`https://solscan.io/account/${makerAddress}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[#70E0B0] hover:text-[#58B890] transition-colors hover:underline"
-                        title={`Block: ${trade.blockNumber || 'N/A'} | Wallet Age: ${trade.walletAge ? `${Math.floor(trade.walletAge / 86400)}d` : 'N/A'}`}
+                        title={hasCodexFormat ? `Block: ${trade.blockNumber || 'N/A'} | Wallet Age: ${trade.walletAge ? `${Math.floor(trade.walletAge / 86400)}d` : 'N/A'}` : ''}
                       >
-                        {shortAddr(trade.maker)}
+                        {shortAddr(makerAddress)}
                       </a>
                     </td>
                   </tr>
