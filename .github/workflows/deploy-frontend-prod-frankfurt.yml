@@ -57,8 +57,8 @@ jobs:
             --service-account=486942555299-compute@developer.gserviceaccount.com \
             --region=$REGION \
             --tags=http-server,https-server,lb-health-check \
-            --create-disk=auto-delete=yes,boot=yes,device-name=interstate-narrative-frontend-prod,image=projects/interstate-dev/global/images/interstate-narrative-frontend-prod-image,mode=rw,provisioned-iops=3600,provisioned-throughput=290,size=100,type=hyperdisk-balanced \
-            --create-disk=device-name=persistent-disk-1,mode=rw,size=100,type=hyperdisk-balanced \
+            --create-disk=auto-delete=yes,boot=yes,device-name=interstate-narrative-frontend-prod,image=interstate-narrative-frontend-prod-image-27102025,mode=rw,provisioned-iops=3600,provisioned-throughput=290,size=100,type=hyperdisk-balanced \
+            --create-disk=auto-delete=yes,device-name=persistent-disk-1,mode=rw,size=100,type=hyperdisk-balanced \
             --no-shielded-secure-boot \
             --shielded-vtpm \
             --shielded-integrity-monitoring \
