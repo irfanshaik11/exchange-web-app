@@ -100,6 +100,70 @@ export type Token = {
 };
 
 /**
+ * Formats very small prices with subscript notation for leading zeros.
+ * Examples:
+ *   0.00035268 => "0.0₃52268"
+ *   0.00000012 => "0.0₆12"
+ *   0.123456   => "0.123"
+ *   0.5        => "0.5"
+ */
+export function formatSmallPrice(val: string | number | null | undefined): string {
+  if (val === null || val === undefined) return "-";
+
+  const num = typeof val === "string" ? parseFloat(val) : val;
+
+  if (isNaN(num) || !isFinite(num)) {
+    return "-";
+  }
+
+  // Handle negative numbers
+  const isNegative = num < 0;
+  const abs = Math.abs(num);
+
+  // If number is >= 0.01, use regular formatting
+  // For very small numbers (< 0.01), use subscript notation
+  if (abs >= 0.01) {
+    return (isNegative ? '-' : '') + abs.toFixed(abs >= 1 ? 2 : 4);
+  }
+
+  // For very small numbers, convert to string to count leading zeros
+  const str = abs.toString();
+  
+  // For scientific notation like "3.526868e-4", convert to decimal
+  let decimalStr: string;
+  if (str.includes('e')) {
+    const [base, exponent] = str.split('e');
+    const exp = parseInt(exponent);
+    decimalStr = (parseFloat(base) * Math.pow(10, exp)).toFixed(Math.abs(exp) + 10);
+  } else if (str.includes('.')) {
+    decimalStr = str;
+  } else {
+    decimalStr = abs.toFixed(20);
+  }
+
+  // Count leading zeros after decimal point
+  const match = decimalStr.match(/\.(0*)([1-9].*)/);
+  
+  if (!match) {
+    // No leading zeros, just format normally
+    return (isNegative ? '-' : '') + abs.toFixed(4);
+  }
+
+  const [, leadingZeros, significantDigits] = match;
+  const zeroCount = leadingZeros.length;
+
+  // Format significant digits (take first 6-7 digits)
+  const formattedDigits = significantDigits.slice(0, 6);
+  
+  // Convert zero count to subscript
+  const subscript = zeroCount.toString().split('').map(d => 
+    String.fromCharCode(0x2080 + parseInt(d))
+  ).join('');
+
+  return (isNegative ? '-' : '') + `0.0${subscript}${formattedDigits}`;
+}
+
+/**
  * Formats a number into a human-readable abbreviated form.
  * Examples:
  *   1234567    => "1.23M"
