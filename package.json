@@ -26,6 +26,7 @@
     "@vanilla-extract/private": "^1.0.9",
     "@vanilla-extract/sprinkles": "^1.6.5",
     "bs58": "^6.0.0",
+    "emoji-picker-react": "^4.15.0",
     "framer-motion": "^12.23.24",
     "js-cookie": "^3.0.5",
     "lightweight-charts": "^5.0.9",

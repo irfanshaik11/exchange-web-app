@@ -166,6 +166,132 @@ export default function TrackersPage() {
       setWatchedWallets(allWallets);
       
       // Convert backend wallets to frontend format
+        name: null,
+        mint: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+        venue: 'Pump',
+      },
+      {
+        type: 'trade',
+        wallet: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
+        tx: '9tM2vL5pN8qRx...',
+        at: Date.now() - 6 * 60 * 1000,
+        side: 'buy',
+        amount: 8.1,
+        price_usd: 0.000089,
+        market_cap_usd: null,
+        symbol: 'DOGE',
+        name: null,
+        mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+        venue: 'Raydium',
+      },
+      {
+        type: 'trade',
+        wallet: 'EhN4wHn2rQq2u1RGGWQCm8P7QCvL3sWpDpQx8vH9vJhZ',
+        tx: '2hN5vM8pL3qTy...',
+        at: Date.now() - 8 * 60 * 1000,
+        side: 'sell',
+        amount: 1.2,
+        price_usd: 0.000056,
+        market_cap_usd: null,
+        symbol: 'SHIB',
+        name: null,
+        mint: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',
+        venue: 'Moonit',
+      },
+      {
+        wallet: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+        tx: '5vP3mL6nQ9rSw...',
+        type: 'trade',
+        at: Date.now() - 10 * 60 * 1000,
+        market_cap_usd: null,
+        name: null,
+        side: 'buy',
+        amount: 3.7,
+        price_usd: 0.000123,
+        symbol: 'FLOKI',
+        mint: 'mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So',
+        venue: 'Raydium',
+      },
+      {
+        wallet: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
+        tx: '8wN4vM7pO2qUx...',
+        type: 'trade',
+        at: Date.now() - 12 * 60 * 1000,
+        market_cap_usd: null,
+        name: null,
+        side: 'sell',
+        amount: 6.9,
+        price_usd: 0.000078,
+        symbol: 'PEPE',
+        mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+        venue: 'Pump',
+      },
+      {
+        wallet: 'EhN4wHn2rQq2u1RGGWQCm8P7QCvL3sWpDpQx8vH9vJhZ',
+        tx: '4xL7vN9mP5rTz...',
+        type: 'trade',
+        at: Date.now() - 15 * 60 * 1000,
+        market_cap_usd: null,
+        name: null,
+        side: 'buy',
+        amount: 4.5,
+        price_usd: 0.000101,
+        symbol: 'BONK',
+        mint: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+        venue: 'Raydium',
+      },
+      {
+        wallet: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+        tx: '1nM5vL8qR6sVy...',
+        type: 'trade',
+        at: Date.now() - 18 * 60 * 1000,
+        market_cap_usd: null,
+        name: null,
+        side: 'sell',
+        amount: 2.1,
+        price_usd: 0.000034,
+        symbol: 'DOGE',
+        mint: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+        venue: 'Moonit',
+      },
+  //   ];
+  //   setLatestTrades(mockTrades);
+  // }, []);
+
+  const loadWalletsFromBackend = async () => {
+    try {
+      // Fetch wallets from backend
+      const tracked = await getTrackedWallets(user?.id);
+      
+      // Add mock wallets for testing if no wallets exist
+      // const mockWallets = tracked.length === 0 ? [
+      //     {
+      //       id: 'mock-1',
+      //       ownerId: null,
+      //       address: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
+      //       walletName: 'Whale Wallet',
+      //       createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      //     },
+      //     {
+      //       id: 'mock-2',
+      //       ownerId: null,
+      //       address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+      //       walletName: 'Day Trader',
+      //       createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+      //     },
+      //     {
+      //       id: 'mock-3',
+      //       ownerId: null,
+      //       address: 'EhN4wHn2rQq2u1RGGWQCm8P7QCvL3sWpDpQx8vH9vJhZ',
+      //       walletName: 'Crypto Arbitrageur',
+      //       createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+      //     },
+      // ] : [];
+      
+      const allWallets = tracked;
+      setWatchedWallets(allWallets);
+      
+      // Convert backend wallets to frontend format
       const frontendWallets: Wallet[] = allWallets.map(w => ({
         address: w.address,
         name: w.walletName || w.address.slice(0, 8),
