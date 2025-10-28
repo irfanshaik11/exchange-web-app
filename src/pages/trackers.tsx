@@ -123,22 +123,44 @@ export default function TrackersPage() {
 
   // Load wallets when user changes or page loads
   useEffect(() => {
-    if (user?.id) {
-      console.log('🔑 Current User ID:', user.id);
-      loadWalletsFromBackend();
-    } else {
-      setWallets([]);
-    }
+    loadWalletsFromBackend();
   }, [user?.id]);
 
   const loadWalletsFromBackend = async () => {
     try {
       // Fetch wallets from backend
       const tracked = await getTrackedWallets(user?.id);
-      setWatchedWallets(tracked);
+      
+      // Add mock wallets for testing if no wallets exist
+      // const mockWallets = tracked.length === 0 ? [
+      //     {
+      //       id: 'mock-1',
+      //       ownerId: null,
+      //       address: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
+      //       walletName: 'Whale Wallet',
+      //       createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      //     },
+      //     {
+      //       id: 'mock-2',
+      //       ownerId: null,
+      //       address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+      //       walletName: 'Day Trader',
+      //       createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+      //     },
+      //     {
+      //       id: 'mock-3',
+      //       ownerId: null,
+      //       address: 'EhN4wHn2rQq2u1RGGWQCm8P7QCvL3sWpDpQx8vH9vJhZ',
+      //       walletName: 'Crypto Arbitrageur',
+      //       createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+      //     },
+      // ] : [];
+      
+      const allWallets = tracked;
+      setWatchedWallets(allWallets);
       
       // Convert backend wallets to frontend format
-      const frontendWallets: Wallet[] = tracked.map(w => ({
+      const frontendWallets: Wallet[] = allWallets.map(w => ({
         address: w.address,
         name: w.walletName || w.address.slice(0, 8),
         createdAt: new Date(w.createdAt).getTime(),
@@ -147,8 +169,15 @@ export default function TrackersPage() {
       
       setWallets(frontendWallets);
       
-      // Fetch balances
-      tracked.forEach(async (wallet) => {
+      // Set mock balances for testing
+      // const mockBalances: Record<string, number> = {};
+      // frontendWallets.forEach(wallet => {
+      //   mockBalances[wallet.address] = Math.random() * 100; // Random balance between 0-100 SOL
+      // });
+      // setWalletBalances(mockBalances);
+      
+      // Fetch real balances for tracked wallets
+      allWallets.forEach(async (wallet) => {
         const balance = await getWalletSolBalance(wallet.address);
         if (balance !== null) {
           setWalletBalances(prev => ({ ...prev, [wallet.address]: balance }));
@@ -465,8 +494,23 @@ export default function TrackersPage() {
                       Export
                     </button>
                     <button
-                      className="rounded-full bg-gradient-to-r from-blue-600 to-blue-800 px-4 py-1 text-xs font-semibold text-white shadow-lg shadow-blue-500/20 transition-all duration-300 hover:from-blue-500 hover:to-blue-700"
+                      className="rounded-full px-4 py-1 text-xs font-semibold transition-all duration-300"
+                      style={{
+                        backgroundColor: '#70E0B0',
+                        color: '#000000',
+                        border: 'none'
+                      }}
                       onClick={() => setShowAddWalletModal(true)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#58B890';
+                        e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)';
+                        e.currentTarget.style.transform = 'scale(1.02)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#70E0B0';
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
                     >
                       Add Wallet
                     </button>
@@ -535,7 +579,6 @@ export default function TrackersPage() {
                   </div>
                   {latestTrades.length === 0 ? (
                     <div className="flex h-64 flex-col items-center justify-center">
-                      <span className="mb-2 text-2xl">📊</span>
                       <span className="text-neutral-400">
                         No live trades yet. Add wallets to start tracking!
                       </span>
@@ -596,15 +639,15 @@ export default function TrackersPage() {
             </div>
 
             {/* Resizer Handle */}
-            <div
+            {/* <div
               className="group relative flex h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-blue-500/30"
               onMouseDown={() => setIsResizing(true)}
             >
               <div className="absolute h-16 w-1 rounded-full bg-neutral-700 transition-colors group-hover:bg-blue-500" />
-            </div>
+            </div> */}
 
             {/* Right Column: Twitter Alerts */}
-            <div
+            {/* <div
               className="flex h-full min-h-[530px] flex-col border border-neutral-800/50 bg-neutral-900/50 px-2 shadow-xl backdrop-blur-sm"
               style={{
                 width: `${sidebarWidth}px`,
@@ -612,51 +655,7 @@ export default function TrackersPage() {
                 maxWidth: "800px",
               }}
             >
-              <div className="flex gap-4 border-b border-neutral-800/50 py-2">
-                {TABS.map((tab, i) => (
-                  <button
-                    key={tab}
-                    className={`cursor-pointer rounded-lg px-2 py-1 text-xs text-nowrap transition-all duration-300 ${
-                      activeTab === i
-                        ? "bg-[#21222B] font-medium text-white"
-                        : "font-medium text-neutral-400 hover:bg-neutral-800/50 hover:text-white"
-                    }`}
-                    onClick={() => setActiveTab(i)}
-                  >
-                    {tab}
-                    {tab === "Live Trades" && (
-                      <span className="ml-1 animate-pulse text-sm text-pink-400">
-                        •
-                      </span>
-                    )}
-                  </button>
-                ))}
-                <div className="flex-1" />
-                {/* Search and actions */}
-                {activeTab === 0 && (
-                  <>
-                    <button
-                      className="mr-2 rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
-                      onClick={() => setShowImportModal(true)}
-                    >
-                      Import
-                    </button>
-                    <button
-                      className="mr-2 rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
-                      onClick={handleExportAddresses}
-                    >
-                      Export
-                    </button>
-                    {/* <button
-                      className="rounded-full bg-gradient-to-r from-blue-600 to-blue-800 px-4 py-1 text-xs font-semibold text-white shadow-lg shadow-blue-500/20 transition-all duration-300 hover:from-blue-500 hover:to-blue-700"
-                      onClick={() => setShowAddWalletModal(true)}
-                    >
-                      Add Wallet
-                    </button> */}
-                  </>
-                )}
-              </div>
-              <div className="mb-4 flex items-center justify-between border-b border-neutral-800/50 pb-4">
+              <div className="mb-4 flex items-center justify-between border-b border-neutral-800/50 pb-4 pt-4">
                 <h3 className="text-lg font-semibold text-white">
                   Twitter Alerts
                 </h3>
@@ -669,7 +668,7 @@ export default function TrackersPage() {
                   Add Twitter Handles
                 </button>
               </div>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
