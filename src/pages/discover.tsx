@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+// src/pages/discover.tsx
+import React, { useEffect, useState, useRef } from 'react';
 import Head from 'next/head';
 import InterstateTable from '../components/InterstateTable';
 import type { Token } from '~/utils/db';
@@ -12,8 +13,8 @@ import FilterPopout from '../components/FilterPopout';
 import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
 import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 import toast from "react-hot-toast";
-import { FaChevronDown } from "react-icons/fa";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
+import { FaFilter, FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 
 export type Timeframe = "1m" | "5m" | "30m" | "1h";
 
@@ -30,13 +31,13 @@ const AX = {
 };
 
 export default function DiscoverPage() {
-  // ⬇️ Add "live", but keep all other behavior identical for dex/trending
+  // Tabs (including "live" for the new picture-list UI)
   const [activeTab, setActiveTab] = useState<'dex' | 'trending' | 'live'>('trending');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
-  const { filter } = useFilter();
+  const { /* filter not used here intentionally */ } = useFilter();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
 
   // Load quickBuyAmount from localStorage with fallback
@@ -62,7 +63,7 @@ export default function DiscoverPage() {
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
-  // WebSocket token service – unchanged for dex/trending
+  // WebSocket token service – keep as-is for dex/trending
   const {
     data: allTokens,
     loading: tokensLoading,
@@ -71,7 +72,7 @@ export default function DiscoverPage() {
     isReconnecting,
     usingFallback,
   } = usePaginatedTokensWithFallback({
-    // for "live" we just reuse the same stream as trending; UI changes only
+    // For "live" we reuse trending data; only the UI differs
     filter: activeTab === 'dex' ? 'new' : 'trending',
     timeframe: selectedTimeframe
   });
@@ -89,7 +90,7 @@ export default function DiscoverPage() {
         quoteMint: SOL_MINT_ADDRESS,
         amount: Number(quickBuyAmount) || 0,
         mevProtection: settings.mevMode === "off" ? 0 : 1,
-        poolType: poolType,
+        poolType,
         originalPairAddress: token.pair_address,
         slippage: settings.maxSlippage || 0.4,
         priorityFee: settings.priority || 0.0001,
@@ -124,7 +125,7 @@ export default function DiscoverPage() {
     setSortDirection("desc");
   };
 
-  // Helper to compute volume by timeframe for sorting in trending view – unchanged
+  // Helper to compute volume by timeframe for sorting in trending view
   const getVolumeForTimeframe = (t: any, tf: Timeframe) => {
     const v = t?.[`volume_${tf}`];
     if (typeof v === 'number') return v;
@@ -139,7 +140,7 @@ export default function DiscoverPage() {
     return 0;
   };
 
-  // Sorting handler – unchanged
+  // Sorting handler
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -149,7 +150,7 @@ export default function DiscoverPage() {
     }
   };
 
-  // Update token map when allTokens changes – unchanged
+  // Update token map when allTokens changes
   useEffect(() => {
     if (allTokens && Array.isArray(allTokens)) {
       const newMap = new Map<string, TokenWithDexPaid>();
@@ -166,7 +167,7 @@ export default function DiscoverPage() {
     }
   }, [allTokens]);
 
-  // Update displayed tokens – unchanged behavior for dex/trending
+  // Update displayed tokens
   useEffect(() => {
     if (activeTab === "trending") {
       const arr = Array.from(tokenMapRef.current.values());
@@ -190,13 +191,12 @@ export default function DiscoverPage() {
       });
       setDisplayed(sortedTokens);
     } else {
-      // dex OR live → reuse same slice behavior here;
-      // Live Pump’s UI is separate; data is fed directly below.
+      // dex OR live → same sliced data; Live Pump renders a different UI
       setDisplayed(filteredTokens.slice(0, 10));
     }
   }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe]);
 
-  // Skeleton management – unchanged
+  // Skeleton management
   useEffect(() => {
     setShowSkeleton(true);
     const timer = setTimeout(() => setShowSkeleton(false), 800);
@@ -209,12 +209,12 @@ export default function DiscoverPage() {
     }
   }, [allTokens, tokensLoading]);
 
-  /* ------- Helpers to map tokens -> PumpItem for Live Pump ------- */
+  /* ------- map tokens -> PumpItem for Live Pump ------- */
   const toPumpItem = (t: any): PumpItem => {
     const name = t?.name || t?.symbol || '—';
     const sym = t?.symbol ? String(t.symbol).slice(0, 12) : undefined;
     const desc = t?.description || t?.bio || '';
-    const age = t?.age_label || '22m'; // fallback label
+    const age = t?.age_label || '22m'; // fallback display label
     const mcNum = Number(t?.fully_diluted_value || 0);
     const mc =
       mcNum > 0
@@ -225,17 +225,8 @@ export default function DiscoverPage() {
             : `$${mcNum.toFixed(0)}`)
         : undefined;
 
-    // Try common image fields
-    const coverUrl =
-      t?.image ||
-      t?.logo ||
-      t?.uri ||
-      undefined;
-
-    const avatarUrl =
-      t?.logo ||
-      t?.image ||
-      undefined;
+    const coverUrl = t?.image || t?.logo || t?.uri || undefined;
+    const avatarUrl = t?.logo || t?.image || undefined;
 
     return {
       id: t?.pair_address || t?.mint || Math.random().toString(36).slice(2),
@@ -252,32 +243,29 @@ export default function DiscoverPage() {
   };
 
   const liveLeftItems: PumpItem[] =
-    displayed.slice(0, 6).map(toPumpItem) ||
-    demoLeftPump;
+    displayed.length ? displayed.slice(0, 6).map(toPumpItem) : demoLeftPump;
 
   const liveRightItems: PumpItem[] =
-    displayed.slice(6, 12).map(toPumpItem) ||
-    demoRightPump;
+    displayed.length ? displayed.slice(6, 12).map(toPumpItem) : demoRightPump;
 
   return (
     <>
       <Head>
-      <title>Interstate Memeboard | Discover</title>
-      <meta name="description" content="Interstate dashboard" />
-      <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=2" />
-      <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2" />
-      <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
-
-      {/* Preload the static fallbacks used many times in PumpLive */}  
-      <link rel="preload" as="image" href="/placeholder/fallback-cover.jpg" />
-      <link rel="preload" as="image" href="/placeholder/fallback-avatar.jpg" />
+        <title>Interstate Memeboard | Discover</title>
+        <meta name="description" content="Interstate dashboard" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=2" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=2" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
+        {/* Preload the static fallbacks used many times in PumpLive */}
+        <link rel="preload" as="image" href="/placeholder/fallback-cover.jpg" />
+        <link rel="preload" as="image" href="/placeholder/fallback-avatar.jpg" />
       </Head>
 
       <div className="min-h-screen text-neutral-100" style={{ backgroundColor: AX.bg }}>
         {/* Header */}
         <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
 
-        {/* Tab Navigation (unchanged + Live Pump button) */}
+        {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-20">
           <div className="flex max-w-7xl items-center gap-6">
             <button
@@ -300,8 +288,9 @@ export default function DiscoverPage() {
             </button>
           </div>
 
-          {/* Right controls (kept identical) */}
+          {/* Right controls (unchanged) */}
           <div className="flex flex-row items-center gap-4">
+            {/* Connection status */}
             <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
               <span className="text-xs text-neutral-400">
@@ -309,6 +298,7 @@ export default function DiscoverPage() {
               </span>
             </div>
 
+            {/* Timeframes */}
             <div className="flex max-w-7xl items-center gap-4 text-sm font-medium">
               {(["1m", "5m", "30m", "1h"] as Timeframe[]).map((tf: Timeframe) => (
                 <button
@@ -321,6 +311,7 @@ export default function DiscoverPage() {
               ))}
             </div>
 
+            {/* Filter button */}
             <div className="relative">
               <button
                 className="flex items-center justify-center gap-2 px-4 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative mr-2 bg-neutral-900 border border-neutral-800"
@@ -329,6 +320,7 @@ export default function DiscoverPage() {
                 onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#9CA3AF'; }}
                 onClick={() => setIsFilterPopoutOpen(true)}
               >
+                {/* filter glyph */}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="4" y1="6" x2="20" y2="6"/><circle cx="8" cy="6" r="2"/>
                   <line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2"/>
@@ -341,6 +333,7 @@ export default function DiscoverPage() {
               </button>
             </div>
 
+            {/* Quick Buy */}
             <div className="flex items-center flex-row rounded-full border border-neutral-800 px-4 py-1.5 shadow-inner">
               <span className="mr-2 text-sm text-neutral-400">Quick Buy</span>
               <input
@@ -363,27 +356,53 @@ export default function DiscoverPage() {
                 className="text-sm text-neutral-200 focus:outline-none outline-none w-12"
               />
               <img src="https://axiom.trade/images/sol-fill.svg" alt="Solana" className="mr-4 h-5 w-5" />
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="relative flex items-center justify-center mr-2">
-                  <button
-                    className={`cursor-pointer font-semibold transition-all duration-200 ${activePreset === i ? "text-emerald-300" : "text-neutral-400 hover:text-white"}`}
-                    onClick={() => setActivePreset(i)}
-                    onMouseEnter={() => setShowPillTooltip(`P${i + 1}`)}
-                    onMouseLeave={() => setShowPillTooltip(null)}
-                  >
-                    {`P${i + 1}`}
-                  </button>
-                  {showPillTooltip === `P${i + 1}` && (
-                    <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
-                         style={{ backgroundColor: 'rgba(15, 16, 18, 0.95)', borderColor: '#2A2B33' }}>
-                      <div className="p-2 space-y-1.5">
-                        {/* Keep tooltip minimal, same as your current UI */}
-                        <div className="text-gray-300 text-xs font-light">Preset settings…</div>
+              {[0, 1, 2].map((i) => {
+                const preset = presets[i];
+                const settings = preset?.quickBuySettings;
+                return (
+                  <div key={i} className="relative flex items-center justify-center mr-2">
+                    <button
+                      className={`cursor-pointer font-semibold transition-all duration-200 ${activePreset === i ? "text-emerald-300" : "text-neutral-400 hover:text-white"}`}
+                      onClick={() => setActivePreset(i)}
+                      onMouseEnter={() => setShowPillTooltip(`P${i + 1}`)}
+                      onMouseLeave={() => setShowPillTooltip(null)}
+                    >
+                      {`P${i + 1}`}
+                    </button>
+
+                    {/* Single tooltip block (fixed JSX) */}
+                    {showPillTooltip === `P${i + 1}` && settings && (
+                      <div
+                        className="absolute top-full left-0 mt-1 w-36 rounded-lg shadow-xl border z-50"
+                        style={{ backgroundColor: 'rgba(15, 16, 18, 0.95)', borderColor: '#2A2B33' }}
+                      >
+                        <div className="p-2 space-y-1.5 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <FaRunning className="opacity-80" style={{ color: '#9CA3AF' }} />
+                            <span className="text-gray-300">Slippage: {(settings.maxSlippage * 100).toFixed(0)}%</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <FaGasPump className="opacity-90" style={{ color: settings.priority < 0.01 ? '#FF4D7F' : '#9CA3AF' }} />
+                            <span className="text-yellow-400">Priority: {settings.priority}</span>
+                            {settings.priority < 0.01 && <span className="text-[#FF4D7F]">⚠</span>}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <FaCoins className="opacity-90" style={{ color: '#9CA3AF' }} />
+                            <span className="text-yellow-400">Bribe: {settings.bribe}</span>
+                            {settings.bribe > 0 && <span className="text-[#FF4D7F]">⚠</span>}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <FaBan className="opacity-90" style={{ color: settings.mevMode === 'off' || settings.mevMode === 'reduced' ? '#9CA3AF' : '#70E0B0' }} />
+                            <span className="text-gray-300">
+                              MEV: {settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -394,12 +413,10 @@ export default function DiscoverPage() {
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
           {activeTab === 'live' ? (
-            // ⬇️ New two-column “picture list” layout, scrollable panels, no extra columns
             <PumpLive
               leftItems={liveLeftItems.length ? liveLeftItems : demoLeftPump}
               rightItems={liveRightItems.length ? liveRightItems : demoRightPump}
               onAction={(id) => {
-                // wire this to quick buy or navigate if you like
                 const any = Array.from(tokenMapRef.current.values()).find(
                   t => t.pair_address === id || t.mint === id
                 );
@@ -421,7 +438,6 @@ export default function DiscoverPage() {
               No tokens found.
             </div>
           ) : (
-            // ⬇️ Your existing table stays exactly the same for dex/trending
             <InterstateTable
               rows={displayed.map((token, i) => ({
                 token: token as Token,
