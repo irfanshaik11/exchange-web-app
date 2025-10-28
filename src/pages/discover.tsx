@@ -29,7 +29,23 @@ export default function DiscoverPage() {
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter, setFilter, resetFilter } = useFilter();
   const { quickBuySettings, presets, setPresets, activePreset, setActivePreset } = useQuickBuy();
-  const [quickBuyAmount, setQuickBuyAmount] = useState(0.05);
+  
+  // Load quickBuyAmount from localStorage with fallback
+  const getInitialQuickBuyAmount = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('quickBuyAmount');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+    }
+    return 0.05;
+  };
+  
+  const [quickBuyAmount, setQuickBuyAmount] = useState(getInitialQuickBuyAmount().toString());
+  const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
@@ -65,7 +81,7 @@ export default function DiscoverPage() {
         poolAddress: effectivePoolAddress,
         baseMint: token.mint,
         quoteMint: SOL_MINT_ADDRESS,
-        amount: quickBuyAmount,
+        amount: Number(quickBuyAmount) || 0,
         mevProtection: settings.mevMode === "off" ? 0 : 1,
         poolType: poolType,
         originalPairAddress: token.pair_address,
@@ -244,19 +260,35 @@ export default function DiscoverPage() {
                 </button>
               ))}
             </div>
-            {/* Settings*/}
-            <button className="group cursor-pointer text-neutral-400 transition-colors hover:text-white" onClick={() => setSettingsOpen(true)}>
-              <FaCog className="transition-transform duration-300 group-hover:rotate-90" />
-            </button>
-            <button
-              className="relative flex flex-row items-center rounded-full bg-neutral-900 px-4 py-1.5 shadow-inner border border-neutral-800 group mr-2 cursor-pointer"
-              onClick={() => setIsFilterPopoutOpen(true)}
-            >
-              <FaFilter className="text-lg mr-2 text-white" />
-              <span className="font-semibold text-white text-base">Filters</span>
-              <svg className="ml-2 w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-              <span className="absolute left-3 top-1 w-2 h-2 bg-blue-400 rounded-full"></span>
-            </button>
+            <div className="relative">
+              <button
+                className="flex items-center justify-center gap-2 px-4 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative mr-2 bg-neutral-900 border border-neutral-800"
+                style={{
+                  color: '#9CA3AF'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#E6E7EA';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#9CA3AF';
+                }}
+                onClick={() => setIsFilterPopoutOpen(true)}
+              >
+                {/* Custom Filter Icon - Three horizontal lines with circles */}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="4" y1="6" x2="20" y2="6"/>
+                  <circle cx="8" cy="6" r="2"/>
+                  <line x1="4" y1="12" x2="20" y2="12"/>
+                  <circle cx="16" cy="12" r="2"/>
+                  <line x1="4" y1="18" x2="20" y2="18"/>
+                  <circle cx="8" cy="18" r="2"/>
+                </svg>
+                <span className="font-semibold text-base">Filter</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
             <div className="flex items-center flex-row rounded-full border border-neutral-800 px-4 py-1.5 shadow-inner">
               <span className="mr-2 text-sm text-neutral-400">
                 Quick Buy
@@ -267,7 +299,12 @@ export default function DiscoverPage() {
                   const value = e.target.value;
                   // Only allow numbers and decimal point
                   if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                    setQuickBuyAmount(Number(value) || 0);
+                    setQuickBuyAmount(value);
+                    // Save to localStorage as a number
+                    const numValue = Number(value) || 0;
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem('quickBuyAmount', numValue.toString());
+                    }
                   }
                 }}
                 onKeyDown={(e) => {
@@ -284,13 +321,54 @@ export default function DiscoverPage() {
                 className="mr-4 h-5 w-5"
               />
               {[0, 1, 2].map((i) => (
-                <button
-                  key={i}
-                  className={`mr-2 cursor-pointer font-semibold ${activePreset === i ? "text-emerald-300" : "text-neutral-400"}`}
-                  onClick={() => setActivePreset(i)}
-                >
-                  {`P${i + 1}`}
-                </button>
+                <div key={i} className="relative flex items-center justify-center mr-2">
+                  <button
+                    className={`cursor-pointer font-semibold transition-all duration-200 ${activePreset === i ? "text-emerald-300" : "text-neutral-400 hover:text-white"}`}
+                    onClick={() => setActivePreset(i)}
+                    onMouseEnter={() => setShowPillTooltip(`P${i + 1}`)}
+                    onMouseLeave={() => setShowPillTooltip(null)}
+                  >
+                    {`P${i + 1}`}
+                  </button>
+                  
+                  {/* Tooltip for each pill */}
+                  {showPillTooltip === `P${i + 1}` && (() => {
+                    const preset = presets[i];
+                    const settings = preset?.quickBuySettings;
+                    
+                    if (!settings) return null;
+                    
+                    return (
+                      <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
+                           style={{ 
+                             backgroundColor: 'rgba(15, 16, 18, 0.95)',
+                             borderColor: '#2A2B33'
+                           }}>
+                        <div className="p-2 space-y-1.5">
+                          {/* Slippage */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-gray-300 text-xs font-light">Slippage: {(settings.maxSlippage * 100).toFixed(0)}%</span>
+                          </div>
+                          
+                          {/* Priority Fee */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-yellow-400 text-xs font-light">Priority: {settings.priority}</span>
+                          </div>
+                          
+                          {/* Bribe */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-yellow-400 text-xs font-light">Bribe: {settings.bribe}</span>
+                          </div>
+                          
+                          {/* MEV Protection */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-gray-300 text-xs font-light">MEV: {settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               ))}
             </div>
           </div>
@@ -329,7 +407,7 @@ export default function DiscoverPage() {
               sortDirection={sortDirection}
               setSort={handleSort}
               selectedTimeframe={selectedTimeframe}
-              quickBuyAmount={quickBuyAmount}
+              quickBuyAmount={Number(quickBuyAmount) || 0}
             />
           )}
         </main>

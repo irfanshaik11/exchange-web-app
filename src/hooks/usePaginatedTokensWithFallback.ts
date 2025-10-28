@@ -225,13 +225,23 @@ export default function usePaginatedTokensWithFallback({
             setState(prev => ({ ...prev, loading: false, error: 'Invalid data from token service' }));
           }
         } else {
-          // Non-OK response; surface error and stop loading so UI can render
+          // Non-OK response; keep existing data but don't show error unless we have no data
           console.warn('📡 Non-OK response from token service:', response.status);
-          setState(prev => ({ ...prev, loading: false, error: `Upstream error (${response.status})` }));
+          setState(prev => ({ 
+            ...prev, 
+            loading: false, 
+            // Only show error if we don't have any data yet
+            error: prev.data.length === 0 ? `Upstream error (${response.status})` : null 
+          }));
         }
       } catch (error) {
         console.error('❌ Polling error:', error);
-        setState(prev => ({ ...prev, error: 'Failed to fetch data', loading: false }));
+        setState(prev => ({ 
+          ...prev, 
+          // Only show error if we don't have any data yet
+          error: prev.data.length === 0 ? 'Failed to fetch data' : null, 
+          loading: false 
+        }));
       } finally {
         isPollingRef.current = false;
       }

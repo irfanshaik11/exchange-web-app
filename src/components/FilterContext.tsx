@@ -7,16 +7,34 @@ export interface FilterState {
   searchKeywords: string;
   excludeKeywords: string;
   dexPaid: boolean;
-  topHoldersMin: number | '';
-  topHoldersMax: number | '';
+  // Audit section
+  holdersMin: number | '';
+  holdersMax: number | '';
+  proTradersMin: number | '';
+  proTradersMax: number | '';
+  devMigrationsMin: number | '';
+  devMigrationsMax: number | '';
+  devPairsCreatedMin: number | '';
+  devPairsCreatedMax: number | '';
+  ageMin: number | '';
+  ageUnit: string;
+  // Metrics section
   liquidityMin: number | '';
   liquidityMax: number | '';
   volumeMin: number | '';
   volumeMax: number | '';
   marketCapMin: number | '';
   marketCapMax: number | '';
+  bCurvePercentMin: number | '';
+  bCurvePercentMax: number | '';
+  globalFeesPaidMin: number | '';
+  globalFeesPaidMax: number | '';
   txnsMin: number | '';
   txnsMax: number | '';
+  numBuysMin: number | '';
+  numBuysMax: number | '';
+  numSellsMin: number | '';
+  numSellsMax: number | '';
 }
 
 interface FilterContextType {
@@ -35,16 +53,34 @@ const defaultFilter: FilterState = {
   searchKeywords: '',
   excludeKeywords: '',
   dexPaid: false,
-  topHoldersMin: '',
-  topHoldersMax: '',
+  // Audit section
+  holdersMin: '',
+  holdersMax: '',
+  proTradersMin: '',
+  proTradersMax: '',
+  devMigrationsMin: '',
+  devMigrationsMax: '',
+  devPairsCreatedMin: '',
+  devPairsCreatedMax: '',
+  ageMin: '',
+  ageUnit: 'm',
+  // Metrics section
   liquidityMin: '',
   liquidityMax: '',
   volumeMin: '',
   volumeMax: '',
   marketCapMin: '',
   marketCapMax: '',
+  bCurvePercentMin: '',
+  bCurvePercentMax: '',
+  globalFeesPaidMin: '',
+  globalFeesPaidMax: '',
   txnsMin: '',
   txnsMax: '',
+  numBuysMin: '',
+  numBuysMax: '',
+  numSellsMin: '',
+  numSellsMax: '',
 };
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined);

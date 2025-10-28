@@ -167,6 +167,7 @@ export default function TrackersPage() {
       
       // Convert backend wallets to frontend format
       const frontendWallets: Wallet[] = allWallets.map(w => ({
+      const frontendWallets: Wallet[] = allWallets.map(w => ({
         address: w.address,
         name: w.walletName || w.address.slice(0, 8),
         createdAt: new Date(w.createdAt).getTime(),

@@ -1,0 +1,187 @@
+import React, { useState } from 'react';
+import InterstatePopout from './InterstatePopout';
+import InterstateButton from './InterstateButton';
+import CustomCheckbox from './CustomCheckbox';
+import { FaPowerOff, FaTimes } from 'react-icons/fa';
+import { BiRefresh } from 'react-icons/bi';
+import { useFilter } from './FilterContext';
+import { AmmList } from '~/utils/amms';
+import Image from 'next/image';
+
+/* ---- Enhanced Axiom AI Palette ---- */
+const AX = {
+  bg: "#0f1012",
+  surface: "#1E1F26",
+  surface2: "#17191E",
+  border: "#2A2B33",
+  text: "#E6E7EA",
+  muted: "#9CA3AF",
+  mint: "#70E0B0",
+  mintHover: "#58B890",
+  sell: "#FF4D7F",
+  aiBlue: "#22C55E",
+  aiBlueHover: "#16A34A",
+  aiGreen: "#22C55E",
+  aiGreenHover: "#16A34A",
+  aiCyan: "#06B6D4",
+  aiCyanHover: "#0891B2",
+  glowBlue: "rgba(34, 197, 94, 0.3)",
+  glowGreen: "rgba(34, 197, 94, 0.3)",
+  glowCyan: "rgba(6, 182, 212, 0.3)",
+};
+
+interface FilterPopoutProps {
+  open: boolean;
+  onClose: () => void;
+  onApplyFilters?: (filters: any) => void;
+  currentFilters?: any;
+}
+
+const FilterPopout: React.FC<FilterPopoutProps> = ({ open, onClose, onApplyFilters, currentFilters }) => {
+  // Use local state for pending changes if we have currentFilters (PulseTable mode)
+  const [pendingFilters, setPendingFilters] = useState(currentFilters || {});
+  const [activeCategoryTab, setActiveCategoryTab] = useState<'Audit' | '$ Metrics'>('Audit');
+  
+  // Use global filter context if no currentFilters provided (global mode)
+  const globalFilter = useFilter();
+  
+  const isGlobalMode = !currentFilters;
+  const filters = isGlobalMode ? globalFilter.pendingFilter : pendingFilters;
+  const setFilters = isGlobalMode ? globalFilter.setPendingFilter : setPendingFilters;
+  const hasPendingChanges = isGlobalMode ? globalFilter.hasPendingChanges : JSON.stringify(currentFilters) !== JSON.stringify(pendingFilters);
+
+  const protocols = [
+    { name: 'Pump', icon: <Image src="/pump.svg" alt="Pump" width={16} height={16} className="rounded-full" />, color: '#00ff88' },
+    { name: 'Bonk', icon: <div className="w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold">B</div>, color: '#ff6b35' },
+    { name: 'Bags', icon: <Image src="https://bags.fm/assets/images/bags-icon.png" alt="Bags" width={16} height={16} className="rounded-full" />, color: '#00d4aa' },
+    { name: 'Moonit', icon: <Image src="/moonit.svg" alt="Moonit" width={16} height={16} className="rounded-full" />, color: '#fbbf24' },
+    { name: 'Boop', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/36393.png" alt="Boop" width={16} height={16} className="rounded-full" />, color: '#3b82f6' },
+    { name: 'LaunchLab', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png" alt="LaunchLab" width={16} height={16} className="rounded-full" style={{ filter: 'hue-rotate(180deg) saturate(2) brightness(1.1)' }} />, color: '#3b82f6' },
+    { name: 'Raydium', icon: <div className="w-4 h-4 bg-gray-500 rounded-full flex items-center justify-center text-white text-xs font-bold">R</div>, color: '#6b7280' },
+    { name: 'Meteora AMM', icon: <Image src="/meteora.svg" alt="Meteora" width={16} height={16} className="rounded-full" />, color: '#92400e' },
+    { name: 'Meteora AMM V2', icon: <Image src="/meteora.svg" alt="Meteora V2" width={16} height={16} className="rounded-full" />, color: '#a16207' },
+  ];
+
+  const handlePendingFilterChange = (updater: any) => {
+    const newFilters = typeof updater === 'function' ? updater(filters) : updater;
+    setFilters(newFilters);
+  };
+
+  const handleAmmToggle = (ammId: string) => {
+    setFilters({
+      ...filters,
+      amms: filters.amms.includes(ammId)
+        ? filters.amms.filter(id => id !== ammId)
+        : [...filters.amms, ammId],
+    });
+  };
+
+  const handleMinMaxChange = (key: keyof typeof filters, value: string | number) => {
+    setFilters({ ...filters, [key]: value });
+  };
+
+  const handleTextChange = (key: keyof typeof filters, value: string) => {
+    setFilters({ ...filters, [key]: value });
+  };
+
+  const handleDexPaidToggle = () => {
+    setFilters({ ...filters, dexPaid: !filters.dexPaid });
+  };
+
+  const handleApply = () => {
+    if (isGlobalMode) {
+      globalFilter.applyFilters();
+    } else if (onApplyFilters) {
+      onApplyFilters(pendingFilters);
+    }
+    onClose();
+  };
+
+  const handleReset = () => {
+    if (isGlobalMode) {
+      globalFilter.resetFilter();
+    } else if (currentFilters) {
+      setPendingFilters(currentFilters);
+    }
+  };
+
+  const renderMinMaxInputs = (label: string, minKey: keyof typeof filters, maxKey: keyof typeof filters) => (
+    <div>
+      <h3 className="text-neutral-300 text-sm font-semibold mb-2">{label}</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <input type="number" placeholder="Min" value={filters[minKey] !== undefined && filters[minKey] !== null ? String(filters[minKey]) : ''} onChange={e => handleMinMaxChange(minKey, e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        <input type="number" placeholder="Max" value={filters[maxKey] !== undefined && filters[maxKey] !== null ? String(filters[maxKey]) : ''} onChange={e => handleMinMaxChange(maxKey, e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+      </div>
+    </div>
+  );
+
+  return (
+    <InterstatePopout
+      open={open}
+      onClose={onClose}
+      align="center"
+      className="bg-neutral-900 rounded-xl shadow-2xl w-full sm:max-w-md p-3 sm:p-6 relative text-neutral-100 h-[80vh] max-h-[calc(100vh-40px)] flex flex-col"
+    >
+      <div className="flex items-center justify-between flex-shrink-0 pb-2" style={{marginTop: '-1.5rem', marginLeft: '-1.5rem', marginRight: '-1.5rem', paddingLeft: '1.5rem', paddingRight: '1.5rem'}}>
+        <h2 className="text-xl font-semibold mt-4">Filters</h2>
+        <button onClick={onClose} className="text-neutral-400 hover:text-white text-xl" aria-label="Close">
+          <FaTimes />
+        </button>
+      </div>
+      <div className="space-y-4 flex-1 overflow-y-auto py-2">
+        <div>
+          <h3 className="text-neutral-300 text-sm font-semibold mb-3">AMMs</h3>
+          <div className="flex flex-wrap gap-3">
+            {AmmList.map(amm => (
+              <button
+                key={amm.id}
+                onClick={() => handleAmmToggle(amm.id)}
+                className={`flex flex-row items-center gap-2 p-0.25 rounded-full text-sm font-medium transition-all duration-300 ease-in-out transform cursor-pointer ${
+                  filters.amms.includes(amm.id)
+                    ? `p-0.5 bg-gradient-to-br ${amm.borderColor} text-white shadow-lg`
+                    : `p-0.5 bg-gradient-to-br ${amm.borderColor} text-white shadow-lg opacity-50`
+                }`}>
+                <div className={`bg-neutral-800 rounded-full px-2 py-1 flex-row flex gap-1`}>
+                  <Image src={amm.image} alt={amm.displayName} width={16} height={16} className="rounded-full" />
+                  <span>{amm.displayName}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-neutral-300 text-sm font-semibold mb-1">Search Keywords</label>
+            <input type="text" placeholder="keyword1, keyword2..." value={filters.searchKeywords} onChange={e => handleTextChange('searchKeywords', e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+          <div>
+            <label className="block text-neutral-300 text-sm font-semibold mb-1">Exclude Keywords</label>
+            <input type="text" placeholder="keyword1, keyword2..." value={filters.excludeKeywords} onChange={e => handleTextChange('excludeKeywords', e.target.value)} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <CustomCheckbox checked={filters.dexPaid} onChange={handleDexPaidToggle} /> Dex Paid
+        </label>
+        {renderMinMaxInputs("Top 10 Holders %", 'topHoldersMin', 'topHoldersMax')}
+        {renderMinMaxInputs("Liquidity ($)", 'liquidityMin', 'liquidityMax')}
+        {renderMinMaxInputs("Volume ($)", 'volumeMin', 'volumeMax')}
+        {renderMinMaxInputs("Market Cap ($)", 'marketCapMin', 'marketCapMax')}
+        {renderMinMaxInputs("Txns", 'txnsMin', 'txnsMax')}
+      </div>
+      <div className="flex justify-between items-center flex-shrink-0 mt-6 pt-4" style={{marginLeft: '-1.5rem', marginRight: '-1.5rem', paddingLeft: '1.5rem', paddingRight: '1.5rem'}}>
+        <button onClick={handleReset} className="text-neutral-400 hover:text-white flex items-center gap-2">
+          <FaPowerOff /> Reset
+        </button>
+        <InterstateButton 
+          variant="primary" 
+          onClick={handleApply}
+          disabled={!hasPendingChanges}
+        >
+          Apply Filters
+        </InterstateButton>
+      </div>
+    </InterstatePopout>
+  );
+};
+
+export default FilterPopout; 

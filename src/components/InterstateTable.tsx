@@ -21,6 +21,28 @@ import { useFilter } from "./FilterContext";
 import { getAmm } from "~/utils/amms";
 import { copyToClipboard } from "~/utils/clipboard";
 
+/* ---- Enhanced Axiom AI Palette ---- */
+const AX = {
+  bg: "#0f1012",
+  surface: "#1E1F26",
+  surface2: "#17191E",
+  border: "#2A2B33",
+  text: "#E6E7EA",
+  muted: "#9CA3AF",
+  mint: "#70E0B0",
+  mintHover: "#58B890",
+  sell: "#FF4D7F",
+  aiBlue: "#22C55E",
+  aiBlueHover: "#16A34A",
+  aiGreen: "#22C55E",
+  aiGreenHover: "#16A34A",
+  aiCyan: "#06B6D4",
+  aiCyanHover: "#0891B2",
+  glowBlue: "rgba(34, 197, 94, 0.3)",
+  glowGreen: "rgba(34, 197, 94, 0.3)",
+  glowCyan: "rgba(6, 182, 212, 0.3)",
+};
+
 // Types
 type Token = BaseToken & { dexPaid?: boolean; amm?: string };
 
@@ -216,13 +238,14 @@ const TableHeader: React.FC<{
   onSort?: (key: string) => void;
 }> = ({ sortKey, sortDirection, onSort }) => (
   <thead>
-    <tr className="bg-neutral-800/80">
+    <tr style={{ backgroundColor: AX.surface2, borderBottom: `1px solid ${AX.border}` }}>
       {TABLE_HEADERS.map((header, idx) => (
         <th
           key={idx}
-          className={`${header.width} px-4 py-4 text-${header.align} text-xs font-bold tracking-wide text-neutral-200 uppercase ${
-            header.key ? 'cursor-pointer hover:text-white transition-colors' : ''
+          className={`${header.width} px-4 py-4 text-${header.align} text-xs font-bold tracking-wide uppercase ${
+            header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
           }`}
+          style={{ color: AX.text }}
           onClick={header.key && onSort ? () => onSort(header.key!) : undefined}
         >
           {header.label}
@@ -243,27 +266,138 @@ const TokenAvatar: React.FC<{
   showInitial: boolean;
 }> = ({ token, meta, loading, showInitial }) => {
   const initial = token.name?.charAt(0)?.toUpperCase() || '?';
-  const amm = token.amm ? getAmm(token.amm) : undefined;
-  const borderColorClass = amm ? `bg-gradient-to-br ${amm.borderColor}` : 'border-2 border-yellow-400';
+  
+  // Protocol color mapping - matches PulseTable
+  const protocolColorMap: Record<string, string> = {
+    'pump': '#22c55e',
+    'pump.fun': '#22c55e',
+    'bonk': '#ff6b35',
+    'bags': '#22c55e',
+    'moonshot': '#eab308',
+    'moonshoot': '#eab308',
+    'moonit': '#eab308',
+    'heaven': '#8b5cf6',
+    'daos.fun': '#06b6d4',
+    'candle': '#f59e0b',
+    'sugar': '#ec4899',
+    'believe': '#10b981',
+    'jupiter': '#8b5cf6',
+    'boop': '#134577',
+    'boopfun': '#134577',
+    'launchlab': '#3b82f6',
+    'dynamic': '#526fff',
+    'raydium': '#5c51f7',
+    'raydiumlaunchpad': '#5c51f7',
+    'meteora': '#ff4662',
+    'meteora_v2': '#ff4662',
+    'pump_amm': '#e9ba14',
+    'orca': '#0ea5e9'
+  };
+
+  // Get protocol color based on launchpad_protocol field
+  const getProtocolColor = (token: Token): string => {
+    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+    
+    if (!launchpadProtocol) return '#22c55e';
+    
+    if (protocolColorMap[launchpadProtocol]) return protocolColorMap[launchpadProtocol];
+    if (launchpadProtocol.includes('pump')) return '#22c55e';
+    if (launchpadProtocol.includes('meteora')) return '#ff4662';
+    if (launchpadProtocol.includes('raydium')) return '#5c51f7';
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot')) return '#eab308';
+    if (launchpadProtocol.includes('boop')) return '#134577';
+    if (launchpadProtocol.includes('bonk')) return '#ff6b35';
+    if (launchpadProtocol.includes('bags')) return '#22c55e';
+    
+    return '#22c55e';
+  };
+
+  // Get icon based on token data
+  const getTokenIcon = (token: Token): string => {
+    const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
+    
+    if (!launchpadProtocol) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+    if (launchpadProtocol.includes('pump')) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+    if (launchpadProtocol.includes('meteora')) return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
+    if (launchpadProtocol.includes('raydium')) return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+    if (launchpadProtocol.includes('boop')) return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
+    if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot')) return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+    if (launchpadProtocol.includes('bonk')) return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+    if (launchpadProtocol.includes('bags')) return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
+    
+    return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+  };
+
+  const protocolColor = getProtocolColor(token);
+  const tokenIcon = getTokenIcon(token);
+  const imageUrl = (token as any).uri || (token as any).image || token.logo;
+  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
+  const isFullCircleImage = launchpadProtocol.includes('meteora') || 
+                           launchpadProtocol.includes('bonk') || 
+                           launchpadProtocol.includes('bags') || 
+                           launchpadProtocol.includes('moonit') || 
+                           launchpadProtocol.includes('moonshot');
 
   return (
-    <div className={`h-12 w-12 rounded-lg p-0.5 ${borderColorClass} flex-shrink-0`}>
-      <div className="w-full h-full rounded-lg bg-neutral-800 flex items-center justify-center overflow-hidden">
-        {loading && !showInitial ? (
-          <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
-        ) : meta || token.logo ? (
-          <AvatarImage
-            src={extractMetaImage(meta) || undefined}
-            fallbackSrc={token.logo}
-            name={token.name}
-            symbol={token.symbol}
-            width={48}
-            height={48}
-            className="h-12 w-12 object-cover rounded-lg"
-          />
-        ) : (
-          <span className="text-lg font-bold text-white">{initial}</span>
-        )}
+    <div className="relative h-16 w-16 flex items-center justify-center">
+      {/* Outer border container */}
+      <div 
+        className="relative rounded-lg transition-all duration-300"
+        style={{
+          border: `1px solid ${protocolColor}`,
+          padding: '2px'
+        }}
+      >
+        {/* Inner silver border container */}
+        <div 
+          className="relative rounded-lg"
+          style={{
+            border: `1px solid rgba(192, 192, 192, 0.5)`,
+            padding: '2px'
+          }}
+        >
+          {/* Image container */}
+          <div className="relative rounded-lg overflow-hidden">
+            {loading && !showInitial ? (
+              <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
+                <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
+              </div>
+            ) : meta || imageUrl ? (
+              <img
+                src={extractMetaImage(meta) || imageUrl || token.logo || ''}
+                alt={token.name || token.symbol || ''}
+                width={56}
+                height={56}
+                className="h-full w-full object-cover transition-all duration-300"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center rounded-lg" style={{ backgroundColor: AX.surface2 }}>
+                <span className="text-lg font-bold" style={{ color: AX.text }}>{initial}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Protocol icon bubble - positioned outside the image container */}
+      <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
+           style={{ 
+             width: 20, 
+             height: 20,
+             border: `2px solid ${protocolColor}`,
+             boxShadow: `0 0 4px ${protocolColor}60`
+           }}>
+        <img
+          src={tokenIcon}
+          alt={`${(token as any).launchpad_protocol || 'Protocol'} logo`}
+          className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+          style={{
+            filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
+          }}
+        />
       </div>
     </div>
   );
@@ -296,9 +430,9 @@ const TokenInfo: React.FC<{
         <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} />
       </div>
       <div className="mb-3 text-center">
-        <div className="text-lg font-bold text-white mb-1">{token.name}</div>
-        <div className="text-sm font-medium text-neutral-400 mb-2">({token.symbol})</div>
-        <p className="text-base font-semibold text-white">
+        <div className="text-lg font-bold mb-1" style={{ color: AX.text }}>{token.name}</div>
+        <div className="text-sm font-medium mb-2" style={{ color: AX.muted }}>({token.symbol})</div>
+        <p className="text-base font-semibold" style={{ color: AX.text }}>
           $<SubscriptNumber value={token.usd_price} />{' '}
           <span className={`text-sm ${token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
             {formatPercentChange(token.price_percent_change_1h)}%
@@ -342,10 +476,10 @@ const TokenInfo: React.FC<{
       
       <div className="flex flex-col min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-1">
-          <span className="truncate text-sm font-bold text-white">
+          <span className="truncate text-sm font-bold" style={{ color: AX.text }}>
             {token.name}
           </span>
-          <span className="truncate text-xs font-medium text-neutral-400">
+          <span className="truncate text-xs font-medium" style={{ color: AX.muted }}>
             {token.symbol}
           </span>
         </div>
@@ -478,7 +612,7 @@ const MarketCapCell: React.FC<{
 
   return (
     <div className="text-right">
-      <div className="text-sm font-semibold text-white mb-1">
+      <div className="text-sm font-semibold mb-1" style={{ color: AX.text }}>
         {(() => {
           console.log('MarketCapCell formatSmartNumber call with:', token.fully_diluted_value);
           return `$${formatSmartNumber(token.fully_diluted_value)}`;
@@ -507,12 +641,12 @@ const TxnsCell: React.FC<{
 
   return (
     <div className="text-right">
-      <div className="text-sm text-neutral-100 font-medium mb-1">
+      <div className="text-sm font-medium mb-1" style={{ color: AX.text }}>
         {total === 0 ? '-' : formatSmartNumber(total)}
       </div>
       <div className="text-xs font-medium">
         <span className="text-emerald-400">{buys === 0 ? '-' : formatSmartNumber(buys)}</span>
-        <span className="text-neutral-500 mx-1">/</span>
+        <span className="mx-1" style={{ color: AX.muted }}>/</span>
         <span className="text-red-400">{sells === 0 ? '-' : formatSmartNumber(sells)}</span>
       </div>
     </div>
@@ -530,14 +664,14 @@ const AuditLogCell: React.FC<{
     <div className="flex flex-col items-center gap-1">
       <div className="flex items-center gap-1">
         <span className={`w-2 h-2 rounded-full ${percentChange >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
-        <span className="text-xs font-medium text-neutral-300">
+        <span className="text-xs font-medium" style={{ color: AX.text }}>
           {Math.abs(percentChange).toFixed(2)}%
         </span>
       </div>
       {typeof token.dexPaid !== 'undefined' && (
         <div className="flex items-center gap-1">
           <span className={`w-2 h-2 rounded-full ${token.dexPaid ? 'bg-emerald-400' : 'bg-neutral-600'}`}></span>
-          <span className="text-xs text-neutral-400">Paid</span>
+          <span className="text-xs" style={{ color: AX.muted }}>Paid</span>
         </div>
       )}
     </div>
@@ -589,7 +723,10 @@ const TableRow: React.FC<{
 
   return (
     <tr 
-      className="cursor-pointer transition-colors hover:bg-neutral-800/60 border-b border-neutral-800/50" 
+      className="cursor-pointer transition-colors border-b" 
+      style={{ borderColor: AX.border }}
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = AX.surface2; }}
+      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
       onClick={onClick}
     >
       <td className="w-80 px-4 py-4 align-middle">
@@ -613,13 +750,13 @@ const TableRow: React.FC<{
           });
           return null;
         })()}
-        <div className="text-sm text-neutral-100 font-medium">
+        <div className="text-sm font-medium" style={{ color: AX.text }}>
           ${formatSmartNumber(token.total_liquidity_usd)}
         </div>
       </td>
       
       <td className="w-28 px-4 py-4 align-middle text-right">
-        <div className="text-sm text-neutral-100 font-medium">
+        <div className="text-sm font-medium" style={{ color: AX.text }}>
           {/* Show "-" when volume data is not available instead of $0.00 */}
           {volume === 0 ? "-" : `$${formatSmartNumber(volume)}`}
         </div>
@@ -741,7 +878,11 @@ export default function InterstateTable({
   }, [rows, selectedTimeframe]);
 
   return (
-    <div className="overflow-x-auto border border-neutral-800 bg-neutral-900/95 shadow-lg rounded-lg">
+    <div className="overflow-x-auto shadow-lg rounded-lg" style={{ 
+      backgroundColor: AX.surface2, 
+      border: `1px solid ${AX.border}`,
+      borderColor: AX.border 
+    }}>
       <style jsx>{`
         .price-animate-up {
           background: rgba(52, 211, 153, 0.2);
@@ -764,14 +905,14 @@ export default function InterstateTable({
         }
       `}</style>
       
-      <table className="min-w-full divide-y divide-neutral-800">
+      <table className="min-w-full" style={{ borderCollapse: 'collapse', borderSpacing: 0 }}>
         <TableHeader 
           sortKey={sortKey} 
           sortDirection={sortDirection} 
           onSort={setSort} 
         />
         
-        <tbody className="divide-y divide-neutral-800/50">
+        <tbody>
           {sortedRows.length === 0 ? (
             Array.from({ length: skeletonRowCount }).map((_, idx) => (
               <SkeletonRow key={idx} />

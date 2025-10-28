@@ -167,6 +167,40 @@ export default function TrackersPage() {
       
       // Convert backend wallets to frontend format
       const frontendWallets: Wallet[] = allWallets.map(w => ({
+    try {
+      // Fetch wallets from backend
+      const tracked = await getTrackedWallets(user?.id);
+      
+      // Add mock wallets for testing if no wallets exist
+      // const mockWallets = tracked.length === 0 ? [
+      //     {
+      //       id: 'mock-1',
+      //       ownerId: null,
+      //       address: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
+      //       walletName: 'Whale Wallet',
+      //       createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      //     },
+      //     {
+      //       id: 'mock-2',
+      //       ownerId: null,
+      //       address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+      //       walletName: 'Day Trader',
+      //       createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+      //     },
+      //     {
+      //       id: 'mock-3',
+      //       ownerId: null,
+      //       address: 'EhN4wHn2rQq2u1RGGWQCm8P7QCvL3sWpDpQx8vH9vJhZ',
+      //       walletName: 'Crypto Arbitrageur',
+      //       createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
+      //     },
+      // ] : [];
+      
+      const allWallets = tracked;
+      setWatchedWallets(allWallets);
+      
+      // Convert backend wallets to frontend format
+      const frontendWallets: Wallet[] = allWallets.map(w => ({
         address: w.address,
         name: w.walletName || w.address.slice(0, 8),
         createdAt: new Date(w.createdAt).getTime(),
