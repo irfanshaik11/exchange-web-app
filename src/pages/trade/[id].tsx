@@ -18,6 +18,7 @@ import { useQuickBuyQueryParams } from "../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../utils/queryParams";
 import { useTradePagePrefetch } from "../../hooks/usePrefetch";
 import { useComponentCache } from "../../hooks/useComponentCache";
+import useOptimizedTradeEventsWebSocket from "../../hooks/useOptimizedTradeEventsWebSocket";
 import dynamic from 'next/dynamic';
 
 // Lazy load heavy components to reduce initial bundle size
@@ -134,6 +135,9 @@ export default function TradePage() {
   const [correctTokenData, setCorrectTokenData] = useState<any>(null);
   const [isLoadingCorrectData, setIsLoadingCorrectData] = useState(false);
   
+  // Fetch creator address for dev buy markers
+  const [creatorAddress, setCreatorAddress] = useState<string | null>(null);
+  
   useEffect(() => {
     const fetchCorrectTokenData = async () => {
       if (!token?.mint) return;
@@ -163,6 +167,32 @@ export default function TradePage() {
     
     fetchCorrectTokenData();
   }, [token?.mint, token?.created_at, correctTokenData?.mint]);
+
+  // Fetch creator address for dev buy markers
+  useEffect(() => {
+    const fetchCreatorAddress = async () => {
+      if (!token?.mint) return;
+      
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          console.log('[TradePage] Creator address fetch response:', data);
+          if (data?.filterTokens?.results?.[0]?.token?.creatorAddress) {
+            const addr = data.filterTokens.results[0].token.creatorAddress;
+            console.log('[TradePage] Setting creator address:', addr);
+            setCreatorAddress(addr);
+          }
+        }
+      } catch (error) {
+        console.error('[TradePage] Failed to fetch creator address:', error);
+      }
+    };
+    
+    fetchCreatorAddress();
+  }, [token?.mint]);
 
   // Calculate optimal OHLC interval and timeframe based on CORRECT token age (cached)
   const getOHLCParams = useComponentCache(
@@ -454,6 +484,26 @@ export default function TradePage() {
     created_at: cachedTokenMetadata.created_at || null,
   } : optimisticToken);
 
+  // Get trade data for dev buy markers
+  const { trades: tradeDataForChart } = useOptimizedTradeEventsWebSocket({
+    pairAddress: displayToken?.pair_address || resolvedPairAddress || undefined,
+    enabled: !!displayToken?.pair_address || !!resolvedPairAddress,
+    tokenDecimals: displayToken?.decimals || 9,
+    maxTrades: 200,
+    enableDeduplication: true,
+  });
+
+  // Log trade data and creator address for debugging
+  useEffect(() => {
+    if (tradeDataForChart && tradeDataForChart.length > 0) {
+      console.log('[TradePage] Trade data for chart:', tradeDataForChart.length, 'trades');
+      console.log('[TradePage] Sample trade:', tradeDataForChart[0]);
+    }
+    if (creatorAddress) {
+      console.log('[TradePage] Creator address:', creatorAddress);
+    }
+  }, [tradeDataForChart, creatorAddress]);
+
   return (
     <>
       <Head><title>{token?.name} | Trade</title></Head>
@@ -518,6 +568,8 @@ export default function TradePage() {
                     width="100%"
                     baseRefreshMs={10000} // Faster refresh rate for ultra-fast loading
                     className="relative"
+                    tradeData={tradeDataForChart}
+                    creatorAddress={creatorAddress}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>

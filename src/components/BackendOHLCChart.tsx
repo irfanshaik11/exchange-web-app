@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, createSeriesMarkers } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, UTCTimestamp, SeriesOptionsMap } from 'lightweight-charts';
 
 export type BackendInterval = '1s' | '5s' | '15s' | '30s' | '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '7d';
 export type BackendTimeRange = '1h' | '4h' | '24h' | '7d' | '30d' | '90d' | '180d' | '365d';
@@ -26,6 +26,8 @@ export interface BackendOHLCChartProps {
   baseRefreshMs?: number;
   onDataUpdate?: (data: BackendOHLCData[]) => void;
   preloadedData?: BackendOHLCData[];
+  tradeData?: any[]; // Trade data for dev buy markers
+  creatorAddress?: string | null; // Creator/dev wallet address
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
@@ -59,7 +61,19 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
   baseRefreshMs = 30000,
   onDataUpdate,
   preloadedData,
+  tradeData = [],
+  creatorAddress = null,
 }) => {
+  // Log received props for debugging
+  useEffect(() => {
+    console.log('[BackendOHLCChart] Received props:', {
+      tradeDataLength: tradeData?.length,
+      creatorAddress: creatorAddress,
+      hasTradeData: !!tradeData && tradeData.length > 0,
+      hasCreatorAddress: !!creatorAddress,
+    });
+  }, [tradeData, creatorAddress]);
+
   // Use prop directly instead of state to respond to changes
   const selectedInterval = VALID_INTERVALS.includes(interval) ? interval : '1m';
   const [isLoading, setIsLoading] = useState(!preloadedData || preloadedData.length === 0);
@@ -67,10 +81,13 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
   const [candles, setCandles] = useState<BackendOHLCData[]>(preloadedData || []);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(preloadedData && preloadedData.length > 0 ? new Date() : null);
   const [retryCount, setRetryCount] = useState(0);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; data: any } | null>(null);
 
   const chartRef     = useRef<IChartApi | null>(null);
   const seriesRef    = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const markersRef   = useRef<any[]>([]);
+  const markersApiRef = useRef<any>(null);
 
   const lastGoodCandlesRef = useRef<BackendOHLCData[]>(preloadedData || []);
   const inFlightRef        = useRef<string | null>(null);
@@ -177,16 +194,16 @@ const BackendOHLCChart: React.FC<BackendOHLCChartProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mint, pairAddress, selectedInterval, timeframe, onDataUpdate]);
 
-  // Logical range helper: show ~N bars (thin candles) and a little right padding
-// Right-align and keep bars thin by showing enough logical bars for the container width
+  // Logical range helper: show ~N bars with good spacing
+// Right-align and show appropriate number of bars for the container width
 const setDefaultLogicalRange = useCallback((dataLen: number) => {
   if (!chartRef.current || !containerRef.current || dataLen === 0) return;
   const ts = chartRef.current.timeScale();
 
   // Tune these two:
-  const PX_PER_BAR   = 2.2;   // smaller => thinner bars (try 2.0–2.6)
-  const MIN_BARS     = 420;   // safety floor (ensure thin even on narrow screens)
-  const RIGHT_PAD    = 14;     // small breathing room on the right (in bars)
+  const PX_PER_BAR   = 10;     // pixels per bar (higher = fewer bars, more zoomed in)
+  const MIN_BARS     = 100;   // minimum bars to show (lower = more zoomed in)
+  const RIGHT_PAD    = 3;     // small breathing room on the right (in bars)
 
   const width        = containerRef.current.clientWidth || 800;
   const targetBars   = Math.max(Math.floor(width / PX_PER_BAR), MIN_BARS);
@@ -232,8 +249,8 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
           timeVisible: true,
           secondsVisible: false,
           rightOffset: 12,
-          barSpacing: 1,        // thin bars
-          minBarSpacing: 1,
+          barSpacing: 3,        // thicker bars
+          minBarSpacing: 2,
           fixLeftEdge: false,
           fixRightEdge: false,
         },
@@ -414,6 +431,224 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
     })();
   }, [candles, setDefaultLogicalRange]);
 
+  // Helper function to build markers from trade events
+  const buildMarkersFromEvents = useCallback((events: any[], creatorAddr: string | null) => {
+    if (!events || events.length === 0 || !creatorAddr) {
+      console.log('[BackendOHLCChart] No events or creator address', { eventsLength: events?.length, creatorAddr });
+      return [];
+    }
+
+    console.log('[BackendOHLCChart] Building markers from events:', events.length, 'creator:', creatorAddr);
+
+    // Get seconds per bar for snapping timestamps to candle times
+    const secondsPerBar = SEC_PER_BAR[selectedInterval];
+
+    return events.map((evt) => {
+      // Get timestamp in seconds (lightweight-charts expects UTCTimestamp)
+      let timestamp: UTCTimestamp;
+      if (typeof evt.timestamp === 'number') {
+        const ts = evt.timestamp < 10000000000 ? evt.timestamp : (evt.timestamp / 1000);
+        // Snap to bar start to match candle times exactly (v5 requirement)
+        timestamp = Math.floor(ts / secondsPerBar) * secondsPerBar as UTCTimestamp;
+      } else if (typeof evt.timestamp === 'string') {
+        const ts = new Date(evt.timestamp).getTime() / 1000;
+        // Snap to bar start
+        timestamp = Math.floor(ts / secondsPerBar) * secondsPerBar as UTCTimestamp;
+      } else {
+        return null;
+      }
+
+      // Try multiple fields to get the maker address
+      // The processed trade from useOptimizedTradeEventsWebSocket has maker at the top level
+      const maker = evt.maker || 
+                    evt.originalEvent?.maker || 
+                    '';
+      
+      const isDevTrade = maker && creatorAddr && maker.toLowerCase() === creatorAddr.toLowerCase();
+      
+      // Log address comparison for debugging
+      console.log('[BackendOHLCChart] Comparing addresses - Maker:', maker, '| Creator:', creatorAddr, '| Match:', isDevTrade);
+      
+      // Warn if no maker field found
+      if (!maker) {
+        console.log('[BackendOHLCChart] ⚠️ Trade has no maker field. Event keys:', Object.keys(evt));
+      }
+      
+      // Only mark dev trades
+      if (!isDevTrade) {
+        return null;
+      }
+
+      const isBuy = evt.side === 'buy' || evt.eventDisplayType === 'Buy';
+      const eventType = isBuy ? 'DEV_BUY' : 'DEV_SELL';
+
+      const shortMaker = maker.length > 10 ? `${maker.slice(0, 4)}...${maker.slice(-4)}` : maker;
+      console.log('[BackendOHLCChart] ✅ Creating marker for dev trade:', eventType, 'maker:', shortMaker);
+
+      const price = parseFloat(evt.price || evt.data?.priceUsd || '0');
+      
+      return {
+        time: timestamp,
+        position: 'aboveBar' as 'belowBar' | 'aboveBar' | 'inBar',
+        color: isBuy ? '#00ff00' : '#ff0000',
+        shape: 'arrowDown' as 'circle' | 'square' | 'arrowUp' | 'arrowDown',
+        size: 1,
+        text: isBuy ? 'DB' : 'DS',
+        price: price,
+        // Store original event data for tooltip
+        id: evt.transactionHash || evt.id,
+        data: {
+          type: eventType,
+          timestamp: evt.timestamp,
+          price: evt.price || evt.data?.priceUsd || '0',
+          amount: evt.amount || evt.data?.amountNonLiquidityToken || '0',
+          totalUSD: evt.totalUSD || evt.data?.priceUsdTotal || '0',
+          maker: maker,
+          transactionHash: evt.transactionHash,
+        },
+      };
+    }).filter(Boolean);
+  }, [selectedInterval]);
+
+  // Add markers for dev trades using setMarkers()
+  useEffect(() => {
+    if (!seriesRef.current || !tradeData || tradeData.length === 0 || !creatorAddress) {
+      // Clear markers
+      if (seriesRef.current && markersRef.current.length > 0) {
+        try {
+          (seriesRef.current as any).setMarkers?.([]);
+        } catch (e) {
+          // Method might not exist
+        }
+        markersRef.current = [];
+      }
+      return;
+    }
+
+    const markers = buildMarkersFromEvents(tradeData, creatorAddress);
+    markersRef.current = markers;
+    
+    console.log('[BackendOHLCChart] Setting markers:', markers.length, 'markers');
+    console.log('[BackendOHLCChart] Sample marker:', markers[0]);
+    
+    // Use setTimeout to ensure series is fully initialized
+    const timeoutId = setTimeout(() => {
+      console.log('[BackendOHLCChart] Series state:', { 
+        hasSeries: !!seriesRef.current, 
+        markersCount: markers.length,
+        seriesType: 'Candlestick'
+      });
+      
+      if (seriesRef.current && markers.length > 0) {
+        try {
+          // Check if setMarkers exists
+          const hasSetMarkers = 'setMarkers' in seriesRef.current;
+          const isFunction = typeof (seriesRef.current as any).setMarkers === 'function';
+          console.log('[BackendOHLCChart] setMarkers check:', { hasSetMarkers, isFunction });
+          
+          // Try the old API first (backwards compatibility)
+          const series = seriesRef.current as any;
+          
+          try {
+            if (series.setMarkers && typeof series.setMarkers === 'function') {
+              series.setMarkers(markers);
+              console.log('[BackendOHLCChart] ✅ setMarkers called directly (old API)');
+              return; // Success, exit
+            }
+          } catch (err) {
+            // Old API doesn't exist, continue to v5 API
+          }
+          
+          // Use v5 API: createSeriesMarkers
+          console.log('[BackendOHLCChart] Using createSeriesMarkers v5 API');
+          try {
+            const markersApi = createSeriesMarkers(seriesRef.current, markers);
+            markersApiRef.current = markersApi;
+            console.log('[BackendOHLCChart] ✅ Markers created using createSeriesMarkers');
+            
+          } catch (createError: any) {
+            console.error('[BackendOHLCChart] ❌ createSeriesMarkers failed:', createError);
+          }
+        } catch (error) {
+          console.error('[BackendOHLCChart] ❌ Error setting markers:', error);
+        }
+      } else {
+        console.log('[BackendOHLCChart] No markers to set or series not ready');
+        
+        // If markers exist but data changed, try to update via the API
+        if (markersApiRef.current && markers.length > 0) {
+          try {
+            (markersApiRef.current as any).setMarkers?.(markers);
+            console.log('[BackendOHLCChart] Updated markers via API');
+          } catch (err) {
+            console.error('[BackendOHLCChart] Failed to update markers:', err);
+          }
+        }
+        
+      }
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, [tradeData, creatorAddress, buildMarkersFromEvents]);
+
+  // Subscribe to crosshair move for tooltip
+  useEffect(() => {
+    if (!chartRef.current || !seriesRef.current || !tradeData || tradeData.length === 0) return;
+
+    const handleCrosshairMove = (param: any) => {
+      if (param === null || param.point === undefined) {
+        setTooltip(null);
+        return;
+      }
+
+      // Check if there's a marker at this time
+      const time = param.time;
+      const markers = buildMarkersFromEvents(tradeData, creatorAddress);
+      const markerAtTime = markers.find((m: any) => m.time === time);
+
+      if (markerAtTime && markerAtTime.data) {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (rect) {
+          setTooltip({
+            x: rect.left + param.point.x,
+            y: rect.top + param.point.y,
+            data: markerAtTime.data,
+          });
+        }
+      } else {
+        setTooltip(null);
+      }
+    };
+
+    chartRef.current.subscribeCrosshairMove(handleCrosshairMove);
+
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.unsubscribeCrosshairMove(handleCrosshairMove);
+      }
+    };
+  }, [tradeData, creatorAddress, buildMarkersFromEvents]);
+
+  // Helper to format numbers
+  const formatNumber = (num: number | string): string => {
+    const n = typeof num === 'string' ? parseFloat(num) : num;
+    if (n >= 1000000) return `$${(n / 1000000).toFixed(2)}M`;
+    if (n >= 1000) return `$${(n / 1000).toFixed(2)}K`;
+    return `$${n.toFixed(2)}`;
+  };
+
+  const formatTokenAmount = (num: number | string): string => {
+    const n = typeof num === 'string' ? parseFloat(num) : num;
+    if (n >= 1000000) return `${(n / 1000000).toFixed(2)}M`;
+    if (n >= 1000) return `${(n / 1000).toFixed(2)}K`;
+    return n.toFixed(2);
+  };
+
+  const shortAddress = (addr: string): string => {
+    if (!addr) return '';
+    return addr.length > 10 ? `${addr.slice(0, 4)}...${addr.slice(-4)}` : addr;
+  };
+
   return (
     <div className={`relative ${className}`} style={{ height, width, zIndex: 1 }}>
       <div
@@ -437,6 +672,32 @@ const setDefaultLogicalRange = useCallback((dataLen: number) => {
           </div>
         </div>
       )}
+
+      {tooltip && (
+        <div
+          className="absolute pointer-events-none bg-black/90 text-white text-xs rounded-lg px-3 py-2 shadow-lg border border-gray-700"
+          style={{
+            left: `${tooltip.x + 10}px`,
+            top: `${tooltip.y - 10}px`,
+            zIndex: 5,
+            transform: 'translate(-50%, -100%)',
+          }}
+        >
+          <div className="font-semibold mb-1">
+            {tooltip.data.type === 'DEV_BUY' ? 'Dev Buy' : 'Dev Sell'} @ {new Date(tooltip.data.timestamp).toISOString().replace('T', ' ').slice(0, 19)}
+          </div>
+          <div className="text-gray-300">
+            Price: ${parseFloat(tooltip.data.price).toFixed(2)} USD
+            <br />
+            Amount: {formatTokenAmount(tooltip.data.amount)}
+            <br />
+            Total USD: {formatNumber(tooltip.data.totalUSD)}
+            <br />
+            <span className="font-mono text-gray-400">{shortAddress(tooltip.data.maker)}</span>
+          </div>
+        </div>
+      )}
+
 
       {!isLoading && error && (
         <div className="absolute bottom-2 left-2 bg-red-900/90 text-white text-xs rounded px-2 py-1" style={{ zIndex: 4 }}>
