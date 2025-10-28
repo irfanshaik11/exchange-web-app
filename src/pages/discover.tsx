@@ -13,9 +13,7 @@ import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
 import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 import toast from "react-hot-toast";
 import { FaChevronDown } from "react-icons/fa";
-
-// ⬇️ Live Pump (new)
-import PumpLive, { PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
+import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 
 export type Timeframe = "1m" | "5m" | "30m" | "1h";
 

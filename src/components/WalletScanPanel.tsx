@@ -7,7 +7,7 @@ import PriceChartWidget from './PriceChartWidget';
 import type { Token } from '~/utils/db';
 import { AiOutlineCalendar } from 'react-icons/ai';
 import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+// import 'react-datepicker/dist/react-datepicker.css';
 
 interface WalletScanPanelProps {
   wallet: Wallet;
