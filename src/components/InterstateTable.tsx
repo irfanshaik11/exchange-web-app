@@ -1,11 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
-  FaUser,
-  FaGlobe,
-  FaSearch,
-  FaCopy,
   FaQuestionCircle,
 } from "react-icons/fa";
+import { User, Globe, Search, Copy } from "lucide-react";
 import InterstateButton from "./InterstateButton";
 import Image from 'next/image';
 import InterstateTooltip from './InterstateTooltip';
@@ -411,6 +408,8 @@ const TokenInfo: React.FC<{
 }> = ({ token, i, sortedRows }) => {
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
+  const [showXPreview, setShowXPreview] = useState(false);
+  const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
 
   // const similarTokens = useMemo(() => 
   //   sortedRows
@@ -488,18 +487,113 @@ const TokenInfo: React.FC<{
           <span className="text-xs font-bold text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded">
             {timeLabel}
           </span>
-          <div className="flex items-center gap-1 text-sky-400">
-            <FaUser className="text-xs" />
-            <FaGlobe className="text-xs" />
-            <FaSearch className="text-xs" />
-            <FaCopy 
-              className="text-xs cursor-pointer hover:text-sky-300 transition-colors" 
+          <div className="flex items-center gap-1.5 text-sky-400">
+            {/* User icon - Twitter profile */}
+            <button
+              className="transition-colors duration-200 cursor-pointer hover:text-blue-400"
+              style={{ color: AX.muted }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = AX.aiBlue;
+                // Show X profile preview
+                setShowXPreview(true);
+                // Store button position for popup positioning
+                const buttonRect = e.currentTarget.getBoundingClientRect();
+                const screenWidth = window.innerWidth;
+                const screenHeight = window.innerHeight;
+                
+                // Calculate optimal position
+                let left = buttonRect.left + buttonRect.width / 2;
+                let top = buttonRect.top - 20;
+                
+                // Check if there's enough space above (popup height is ~280px)
+                if (top < 50 || (top - 280) < 0) {
+                  top = buttonRect.bottom + 20;
+                  // If showing below, check if it would go off bottom of screen
+                  if (top + 280 > screenHeight) {
+                    top = screenHeight - 300; // Position near top of screen
+                  }
+                }
+                
+                // Ensure popup doesn't go off screen horizontally
+                if (left < 140) left = 140;
+                if (left > screenWidth - 140) left = screenWidth - 140;
+                
+                setButtonPosition({ left, top });
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = AX.muted;
+                setShowXPreview(false);
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || 'search'}`;
+                window.open(profileUrl, '_blank');
+              }}
+              title="View Twitter profile"
+            >
+              <User className="w-3 h-3" />
+            </button>
+
+            {/* Globe icon - Block explorer / Website */}
+            <button
+              className="transition-colors duration-200 cursor-pointer hover:text-cyan-400"
+              style={{ color: AX.muted }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = AX.aiCyan;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = AX.muted;
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                // Open token on Solscan
+                const explorerUrl = `https://solscan.io/token/${token.mint}`;
+                window.open(explorerUrl, '_blank');
+              }}
+              title="View on Solscan"
+            >
+              <Globe className="w-3 h-3" />
+            </button>
+
+            {/* Search icon - Twitter search */}
+            <button
+              className="transition-colors duration-200 cursor-pointer hover:text-emerald-400"
+              style={{ color: AX.muted }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = AX.aiCyan;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = AX.muted;
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const searchQuery = `${token.symbol} ${token.name}`.trim();
+                const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
+                window.open(twitterUrl, '_blank');
+              }}
+              title="Search on Twitter"
+            >
+              <Search className="w-3 h-3" />
+            </button>
+
+            {/* Copy icon */}
+            <button
+              className="transition-colors duration-200 cursor-pointer hover:text-sky-300"
+              style={{ color: AX.muted }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = AX.aiCyan;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = AX.muted;
+              }}
               onClick={(e) => {
                 e.stopPropagation();
                 copyToClipboard(token.pair_address, "Token address copied to clipboard!");
               }}
               title="Copy token address"
-            />
+            >
+              <Copy className="w-3 h-3" />
+            </button>
           </div>
           {i === 1 && (
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-red-600">
@@ -508,6 +602,152 @@ const TokenInfo: React.FC<{
           )}
         </div>
       </div>
+
+      {/* X Profile Preview Popup */}
+      {showXPreview && buttonPosition && (
+        <div 
+          className="fixed"
+          style={{
+            left: `${buttonPosition.left}px`,
+            top: `${buttonPosition.top}px`,
+            transform: 'translate(-50%, 0)',
+            width: '280px',
+            zIndex: 999999
+          }}
+          onMouseEnter={() => {
+            // Keep popup open when hovering over it
+          }}
+          onMouseLeave={() => {
+            // Hide popup when leaving the popup area
+            setShowXPreview(false);
+          }}
+        >
+          <div 
+            className="rounded-xl overflow-hidden"
+            style={{
+              backgroundColor: AX.surface,
+              border: `1px solid ${AX.border}`,
+              boxShadow: `0 12px 48px rgba(0, 0, 0, 0.5), 0 0 24px ${AX.glowBlue}`,
+              backdropFilter: 'blur(10px)'
+            }}
+          >
+            {/* X Icon Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: '#2f3336' }}>
+              <div className="flex items-center gap-3">
+                <div 
+                  className="w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: '#1d9bf0' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#ffffff' }}>
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white">X Profile</div>
+                  <div className="text-xs text-gray-400">Live Preview</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                <span className="text-xs text-gray-400">Live</span>
+              </div>
+            </div>
+
+            {/* Official X Profile Layout */}
+            <div className="px-4 py-4">
+              {/* Profile Picture */}
+              <div className="flex justify-center mb-4">
+                <div 
+                  className="w-20 h-20 rounded-full overflow-hidden"
+                  style={{ 
+                    backgroundColor: '#1a1a1a',
+                    border: `3px solid #2f3336`
+                  }}
+                >
+                  <img
+                    src={`https://ui-avatars.com/api/?name=${token.symbol || 'Token'}&size=80&background=1a1a1a&color=ffffff&bold=true`}
+                    alt={`${token.symbol} profile`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const fallback = target.nextElementSibling as HTMLElement;
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
+                  />
+                  <div 
+                    className="w-full h-full flex items-center justify-center font-bold text-xl"
+                    style={{ 
+                      backgroundColor: '#1a1a1a',
+                      color: '#ffffff',
+                      display: 'none'
+                    }}
+                  >
+                    {token.symbol?.slice(0, 2) || '??'}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Profile Info */}
+              <div className="text-center mb-4">
+                <div className="flex items-center justify-center gap-2 mb-1">
+                  <h3 className="text-xl font-bold text-white">
+                    {token.symbol || 'Unknown'}
+                  </h3>
+                  {/* Verified Badge */}
+                  <div 
+                    className="w-6 h-6 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: '#1d9bf0' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 12l2 2 4-4"/>
+                      <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
+                    </svg>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-400 mb-3">
+                  @{token.symbol?.toLowerCase() || 'unknown'}
+                </p>
+                <p className="text-sm text-white leading-relaxed px-2">
+                  {token.description || `Official ${token.symbol || 'token'} community. Join the conversation!`}
+                </p>
+              </div>
+              
+              {/* Follow Button */}
+              <div className="flex justify-center mb-4">
+                <button
+                  className="px-6 py-2 rounded-full text-sm font-semibold transition-all duration-200"
+                  style={{
+                    backgroundColor: '#ffffff',
+                    color: '#000000'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#e7e9ea';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#ffffff';
+                  }}
+                >
+                  Follow
+                </button>
+              </div>
+            </div>
+
+            {/* Join Date Section */}
+            <div className="px-4 pb-3">
+              <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <span>Joined {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

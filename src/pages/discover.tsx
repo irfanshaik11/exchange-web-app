@@ -13,7 +13,7 @@ import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
 import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 import { env } from "../env";
 import toast from "react-hot-toast";
-import { FaCog, FaFilter } from "react-icons/fa";
+import { FaCog, FaFilter, FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 
 export type Timeframe = "1m" | "5m" | "30m" | "1h";
 
@@ -347,22 +347,28 @@ export default function DiscoverPage() {
                         <div className="p-2 space-y-1.5">
                           {/* Slippage */}
                           <div className="flex items-center gap-1.5">
-                            <span className="text-gray-300 text-xs font-light">Slippage: {(settings.maxSlippage * 100).toFixed(0)}%</span>
+                            <FaRunning className="text-xs opacity-80" style={{ color: '#9CA3AF' }} />
+                            <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
                           </div>
                           
                           {/* Priority Fee */}
                           <div className="flex items-center gap-1.5">
-                            <span className="text-yellow-400 text-xs font-light">Priority: {settings.priority}</span>
+                            <FaGasPump className="text-xs opacity-90" style={{ color: settings.priority < 0.01 ? '#FF4D7F' : '#9CA3AF' }} />
+                            <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
+                            {settings.priority < 0.01 && <span className="text-[#FF4D7F] text-xs">⚠</span>}
                           </div>
                           
                           {/* Bribe */}
                           <div className="flex items-center gap-1.5">
-                            <span className="text-yellow-400 text-xs font-light">Bribe: {settings.bribe}</span>
+                            <FaCoins className="text-xs opacity-90" style={{ color: '#9CA3AF' }} />
+                            <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
+                            {settings.bribe > 0 && <span className="text-[#FF4D7F] text-xs">⚠</span>}
                           </div>
                           
                           {/* MEV Protection */}
                           <div className="flex items-center gap-1.5">
-                            <span className="text-gray-300 text-xs font-light">MEV: {settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}</span>
+                            <FaBan className="text-xs opacity-90" style={{ color: settings.mevMode === 'off' || settings.mevMode === 'reduced' ? '#9CA3AF' : '#70E0B0' }} />
+                            <span className="text-gray-300 text-xs font-light">{settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}</span>
                           </div>
                         </div>
                       </div>
