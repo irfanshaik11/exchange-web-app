@@ -23,6 +23,7 @@ import {
   type WalletTrackerWebSocket,
 } from "~/utils/walletTracking";
 import { useUser } from "../components/UserContext";
+import { batchFetchTokenMetadata } from "~/utils/tokenMetadata";
 
 const TABS = ["Wallet Manager", "Live Trades"];
 const EMOJIS = [
@@ -115,6 +116,7 @@ export default function TrackersPage() {
   const [wsConnection, setWsConnection] = useState<WalletTrackerWebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const walletsRef = useRef<Wallet[]>([]);
+  const [tokenMetadata, setTokenMetadata] = useState<Map<string, { symbol: string | null; name: string | null }>>(new Map());
 
   // Keep walletsRef in sync with wallets state
   useEffect(() => {
@@ -211,7 +213,7 @@ export default function TrackersPage() {
     let connection: WalletTrackerWebSocket | null = null;
     let reconnectTimeout: NodeJS.Timeout | null = null;
 
-    const handleTradeEvent = (event: TradeEvent) => {
+    const handleTradeEvent = async (event: TradeEvent) => {
       console.log('Trade event received:', event);
       
       // Add to latest trades list (keep last 50)
@@ -219,11 +221,51 @@ export default function TrackersPage() {
       
       // Show toast notification
       const wallet = walletsRef.current.find(w => w.address === event.wallet);
-      const walletName = wallet?.name || event.wallet.slice(0, 4) + '...';
+      const walletName = wallet?.emoji ? `${wallet.emoji} ${wallet.name}` : (wallet?.name || event.wallet.slice(0, 4) + '...');
       const side = event.side === 'buy' ? 'bought' : 'sold';
-      const token = event.symbol || event.mint.slice(0, 8) + '...';
-      setToast(`${walletName} ${side} ${event.amount.toFixed(2)} SOL`);
-      setTimeout(() => setToast(""), 3000);
+      
+      // Get token name - fetch from metadata if not in event
+      let tokenName = event.symbol || event.name;
+      if (!tokenName) {
+        const metadata = tokenMetadata.get(event.mint);
+        if (metadata?.symbol) {
+          tokenName = metadata.symbol;
+        } else {
+          // Fetch metadata if not cached
+          try {
+            const { fetchTokenMetadata } = await import('~/utils/tokenMetadata');
+            const meta = await fetchTokenMetadata(event.mint);
+            tokenName = meta.symbol || event.mint.slice(0, 8) + '...';
+            // Update metadata state
+            setTokenMetadata(prev => {
+              const updated = new Map(prev);
+              updated.set(event.mint, meta);
+              return updated;
+            });
+          } catch (err) {
+            tokenName = event.mint.slice(0, 8) + '...';
+          }
+        }
+      }
+      
+      // Format SOL amount
+      let amountDisplay = '';
+      if (event.sol_spent !== null && event.sol_spent !== undefined) {
+        const solAmount = Math.abs(event.sol_spent);
+        if (solAmount >= 1) {
+          amountDisplay = `${solAmount.toFixed(2)} SOL`;
+        } else if (solAmount >= 0.01) {
+          amountDisplay = `${solAmount.toFixed(3)} SOL`;
+        } else {
+          amountDisplay = `${solAmount.toFixed(4)} SOL`;
+        }
+      } else {
+        // Fallback to showing just the action if no SOL amount
+        amountDisplay = '';
+      }
+      
+      setToast(`${walletName} ${side} ${tokenName}${amountDisplay ? ` for ${amountDisplay}` : ''}`);
+      setTimeout(() => setToast(""), 4000);
     };
 
     const handleConnect = () => {
@@ -288,6 +330,39 @@ export default function TrackersPage() {
       }
     };
   }, []); // Only run once on mount
+
+  // Fetch token metadata for live trades
+  useEffect(() => {
+    if (latestTrades.length === 0) return;
+    
+    // Extract unique mints that don't have symbol
+    const mintsToFetch = latestTrades
+      .filter(trade => trade.mint && !trade.symbol)
+      .map(trade => trade.mint)
+      .filter((mint, idx, arr) => arr.indexOf(mint) === idx); // unique
+    
+    if (mintsToFetch.length === 0) {
+      console.log('[Live Trades] No mints to fetch, all trades have symbols');
+      return;
+    }
+    
+    console.log('[Live Trades] Fetching metadata for tokens:', mintsToFetch);
+    
+    batchFetchTokenMetadata(mintsToFetch)
+      .then(metadata => {
+        console.log('[Live Trades] Successfully fetched metadata:', Object.fromEntries(metadata));
+        setTokenMetadata(prev => {
+          const updated = new Map(prev);
+          metadata.forEach((value, key) => {
+            updated.set(key, value);
+          });
+          return updated;
+        });
+      })
+      .catch(err => {
+        console.error('[Live Trades] Error fetching token metadata:', err);
+      });
+  }, [latestTrades]);
 
   // Subscribe to new wallets when wallet list changes
   useEffect(() => {
@@ -599,6 +674,25 @@ export default function TrackersPage() {
                           {latestTrades.map((trade, idx) => {
                             const wallet = wallets.find(w => w.address === trade.wallet);
                             const timeAgo = new Date(trade.at).toLocaleTimeString();
+                            
+                            // Use fetched metadata as fallback
+                            const metadata = tokenMetadata.get(trade.mint);
+                            const displaySymbol = trade.symbol || metadata?.symbol || trade.mint.slice(0, 8) + '...';
+                            const displayName = trade.name || metadata?.name;
+                            
+                            // Debug log for first trade
+                            if (idx === 0) {
+                              console.log('[Live Trades Display]', {
+                                mint: trade.mint,
+                                tradeSymbol: trade.symbol,
+                                tradeName: trade.name,
+                                metadata: metadata,
+                                displaySymbol: displaySymbol,
+                                displayName: displayName,
+                                totalMetadata: tokenMetadata.size
+                              });
+                            }
+                            
                             return (
                               <tr
                                 key={`${trade.tx}-${idx}`}
@@ -621,8 +715,8 @@ export default function TrackersPage() {
                                     {trade.side.toUpperCase()}
                                   </span>
                                 </td>
-                                <td className="w-32 px-2 py-2 font-mono text-blue-300">
-                                  {trade.symbol || trade.mint.slice(0, 8) + '...'}
+                                <td className="w-32 px-2 py-2 font-mono text-blue-300" title={displayName || undefined}>
+                                  {displaySymbol}
                                 </td>
                                 <td className="w-24 px-2 py-2 text-neutral-200">
                                   {trade.amount.toFixed(2)}
@@ -745,7 +839,7 @@ export default function TrackersPage() {
         wallets={wallets}
       />
       {toast && (
-        <div className="w-fit animate-fade-in fixed top-8 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-white text-black border border-white/80 px-6 py-3 text-sm shadow-lg">
+        <div className="w-fit animate-fade-in fixed top-8 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white border border-blue-400/50 px-6 py-3 text-sm font-semibold shadow-xl shadow-blue-500/30">
           {toast}
         </div>
       )}
@@ -761,12 +855,6 @@ export default function TrackersPage() {
         <div className="flex gap-6">
           <button className="flex items-center gap-2 font-semibold text-emerald-400 transition-colors duration-300 hover:text-emerald-300">
             <span className="text-lg">📊</span> Wallet Tracker
-          </button>
-          <button className="flex items-center gap-2 font-semibold text-sky-400 transition-colors duration-300 hover:text-sky-300">
-            <span className="text-lg">🐦</span> Twitter Tracker
-          </button>
-          <button className="flex items-center gap-2 font-semibold text-gray-400 transition-colors duration-300 hover:text-gray-300">
-            <span className="text-lg">📈</span> PnL Tracker
           </button>
         </div>
         <div className="flex items-center gap-6 text-neutral-400">

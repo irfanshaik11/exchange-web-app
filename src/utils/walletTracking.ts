@@ -42,6 +42,7 @@ export interface TradeEvent {
   name: string | null;
   side: 'buy' | 'sell';
   amount: number;
+  sol_spent: number | null;
   price_usd: number | null;
   market_cap_usd: number | null;
   venue: string | null;
