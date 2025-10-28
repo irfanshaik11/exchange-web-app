@@ -39,7 +39,7 @@
     "**/*.js",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules"],
+  "exclude": ["node_modules", "test-*.js", "test-*.html", "websocket-test-script.js"],
   "linterOptions": {
     "rules": {
       "@typescript-eslint/ban-ts-comment": "off"

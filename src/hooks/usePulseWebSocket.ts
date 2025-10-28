@@ -15,17 +15,23 @@ interface PulseToken {
 
 interface WebSocketMessage {
   type: string;
-  data: PulseToken;
+  data: PulseToken | PulseToken[]; // Can be single token or array for price updates
+  channel?: string;
+  protocol?: string;
 }
 
 interface UsePulseWebSocketOptions {
   enabled?: boolean; // Feature flag to enable/disable WebSocket
   url?: string;
+  channel?: string; // Filter by channel: 'new', 'final-stretch', 'migrated'
+  protocol?: string; // DEPRECATED: Use protocols array instead
+  protocols?: string[]; // Filter by multiple protocols: ['pump.fun', 'meteora', etc.]
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
   onNewToken?: (token: PulseToken) => void;
   onFinalStretchToken?: (token: PulseToken) => void;
   onMigratedToken?: (token: PulseToken) => void;
+  onPriceUpdate?: (updates: PulseToken[]) => void; // NEW: Real-time price updates
 }
 
 interface UsePulseWebSocketReturn {
@@ -46,13 +52,37 @@ export function usePulseWebSocket(
 ): UsePulseWebSocketReturn {
   const {
     enabled = true, // Default enabled, set to false to disable
-    url = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/stream`,
+    channel,
+    protocol,
+    protocols,
     reconnectInterval = 2000,
     maxReconnectAttempts = 10,
     onNewToken,
     onFinalStretchToken,
     onMigratedToken,
+    onPriceUpdate,
   } = options;
+
+  // Build WebSocket URL with query parameters for filtering
+  const buildWebSocketUrl = () => {
+    const baseUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/stream`;
+    const params = new URLSearchParams();
+    if (channel) params.append('channel', channel);
+
+    // Support both single protocol (deprecated) and multiple protocols
+    if (protocols && protocols.length > 0) {
+      // Add multiple protocols as array: protocols[]=pump.fun&protocols[]=meteora
+      protocols.forEach(p => params.append('protocols[]', p));
+    } else if (protocol) {
+      // Backward compatibility: single protocol
+      params.append('protocol', protocol);
+    }
+
+    const queryString = params.toString();
+    return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+  };
+
+  const url = buildWebSocketUrl();
 
   const [newTokens, setNewTokens] = useState<PulseToken[]>([]);
   const [finalStretchTokens, setFinalStretchTokens] = useState<PulseToken[]>([]);
@@ -64,6 +94,26 @@ export function usePulseWebSocket(
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const mountedRef = useRef(true);
+
+  // Store callbacks in refs so they're always current
+  const onNewTokenRef = useRef(onNewToken);
+  const onFinalStretchTokenRef = useRef(onFinalStretchToken);
+  const onMigratedTokenRef = useRef(onMigratedToken);
+  const onPriceUpdateRef = useRef(onPriceUpdate);
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onNewTokenRef.current = onNewToken;
+    onFinalStretchTokenRef.current = onFinalStretchToken;
+    onMigratedTokenRef.current = onMigratedToken;
+    onPriceUpdateRef.current = onPriceUpdate;
+    console.log('[usePulseWebSocket] Callback refs updated:', {
+      onNewToken: typeof onNewToken,
+      onFinalStretchToken: typeof onFinalStretchToken,
+      onMigratedToken: typeof onMigratedToken,
+      onPriceUpdate: typeof onPriceUpdate
+    });
+  }, [onNewToken, onFinalStretchToken, onMigratedToken, onPriceUpdate]);
 
   const clearTokens = useCallback(() => {
     setNewTokens([]);
@@ -95,7 +145,7 @@ export function usePulseWebSocket(
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[usePulseWebSocket] Connected');
+        console.log('[usePulseWebSocket] ✅ Connected to websocket stream');
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -119,13 +169,14 @@ export function usePulseWebSocket(
               const message: WebSocketMessage = JSON.parse(msgStr);
               console.log('[usePulseWebSocket] Parsed message:', { type: message.type, data: message.data });
 
-              if (message.type === 'new_token' && message.data) {
+              if (message.type === 'new_token' && message.data && !Array.isArray(message.data)) {
                 console.log('[usePulseWebSocket] ✅ New token received:', message.data);
+                const token = message.data as PulseToken;
 
                 // Call callback immediately for instant updates
-                if (onNewToken) {
+                if (onNewTokenRef.current) {
                   console.log('[usePulseWebSocket] Calling onNewToken callback');
-                  onNewToken(message.data);
+                  onNewTokenRef.current(token);
                 } else {
                   console.warn('[usePulseWebSocket] onNewToken callback not provided');
                 }
@@ -133,41 +184,62 @@ export function usePulseWebSocket(
                 // Prepend new token to the list
                 setNewTokens((prev) => {
                   // Deduplicate by mint address
-                  const filtered = prev.filter(t => t.mint !== message.data.mint);
-                  const updated = [message.data, ...filtered].slice(0, 50); // Keep only latest 50
+                  const filtered = prev.filter(t => t.mint !== token.mint);
+                  const updated = [token, ...filtered].slice(0, 50); // Keep only latest 50
                   console.log('[usePulseWebSocket] Updated newTokens, count:', updated.length);
                   return updated;
                 });
-              } else if (message.type === 'final_stretch_token' && message.data) {
+              } else if (message.type === 'final_stretch_token' && message.data && !Array.isArray(message.data)) {
                 console.log('[usePulseWebSocket] ✅ Final stretch token received:', message.data);
+                const token = message.data as PulseToken;
 
                 // Call callback immediately for instant updates
-                if (onFinalStretchToken) {
+                if (onFinalStretchTokenRef.current) {
                   console.log('[usePulseWebSocket] Calling onFinalStretchToken callback');
-                  onFinalStretchToken(message.data);
+                  onFinalStretchTokenRef.current(token);
                 }
 
                 // Prepend final stretch token to the list
                 setFinalStretchTokens((prev) => {
                   // Deduplicate by mint address
-                  const filtered = prev.filter(t => t.mint !== message.data.mint);
-                  return [message.data, ...filtered].slice(0, 50); // Keep only latest 50
+                  const filtered = prev.filter(t => t.mint !== token.mint);
+                  return [token, ...filtered].slice(0, 50); // Keep only latest 50
                 });
-              } else if (message.type === 'migrated_token' && message.data) {
+              } else if (message.type === 'migrated_token' && message.data && !Array.isArray(message.data)) {
                 console.log('[usePulseWebSocket] ✅ Migrated token received:', message.data);
+                const token = message.data as PulseToken;
 
                 // Call callback immediately for instant updates
-                if (onMigratedToken) {
+                if (onMigratedTokenRef.current) {
                   console.log('[usePulseWebSocket] Calling onMigratedToken callback');
-                  onMigratedToken(message.data);
+                  console.log('[usePulseWebSocket] Callback function:', typeof onMigratedTokenRef.current);
+                  onMigratedTokenRef.current(token);
+                  console.log('[usePulseWebSocket] onMigratedToken callback completed');
+                } else {
+                  console.warn('[usePulseWebSocket] onMigratedTokenRef.current is null or undefined');
                 }
 
                 // Prepend migrated token to the list
                 setMigratedTokens((prev) => {
                   // Deduplicate by mint address
-                  const filtered = prev.filter(t => t.mint !== message.data.mint);
-                  return [message.data, ...filtered].slice(0, 50); // Keep only latest 50
+                  const filtered = prev.filter(t => t.mint !== token.mint);
+                  return [token, ...filtered].slice(0, 50); // Keep only latest 50
                 });
+              } else if (message.type === 'price_update' && message.data) {
+                console.log('[usePulseWebSocket] 📊 Price update received:', {
+                  count: Array.isArray(message.data) ? message.data.length : 0,
+                  channel: message.channel,
+                  protocol: message.protocol
+                });
+
+                // Call callback for price updates
+                if (onPriceUpdateRef.current) {
+                  const updates = Array.isArray(message.data) ? message.data : [message.data];
+                  console.log('[usePulseWebSocket] Calling onPriceUpdate callback with', updates.length, 'updates');
+                  onPriceUpdateRef.current(updates);
+                } else {
+                  console.warn('[usePulseWebSocket] onPriceUpdate callback not provided');
+                }
               } else {
                 console.warn('[usePulseWebSocket] Unknown message type or missing data:', { type: message.type, hasData: !!message.data });
               }
@@ -232,6 +304,11 @@ export function usePulseWebSocket(
     mountedRef.current = true;
 
     if (enabled) {
+      // Disconnect existing connection when URL changes (channel/protocol change)
+      disconnect();
+      // Reset reconnect attempts
+      reconnectAttemptsRef.current = 0;
+      // Connect with new parameters
       connect();
     }
 
@@ -239,7 +316,7 @@ export function usePulseWebSocket(
       mountedRef.current = false;
       disconnect();
     };
-  }, [enabled, connect, disconnect]);
+  }, [enabled, url, connect, disconnect]); // Added 'url' to reconnect when channel/protocol changes
 
   return {
     newTokens,

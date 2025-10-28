@@ -11,14 +11,14 @@ import {
   FaCamera,
   FaUsers,
   FaTrophy,
-  FaRunning, 
-  FaGasPump, 
-  FaCoins, 
+  FaRunning,
+  FaGasPump,
+  FaCoins,
   FaBan,
   FaRedo,
-  FaDollarSign, 
-  FaRocket, 
-  FaChartBar, 
+  FaDollarSign,
+  FaRocket,
+  FaChartBar,
   FaGem
 } from "react-icons/fa";
 import { FaDice } from "react-icons/fa6";
@@ -26,13 +26,13 @@ import { BsPersonGear, BsCoin, BsMoon, BsCloud, BsCup, BsArrowUp } from "react-i
 import { LuChefHat } from "react-icons/lu";
 import { RiGhostLine, RiFlaskLine } from "react-icons/ri";
 import { BiCandles, BiRefresh } from "react-icons/bi";
-import { 
+import {
   HiChartBar,
   HiUserGroup,
-  HiLightningBolt, 
+  HiLightningBolt,
   HiSparkles
 } from "react-icons/hi";
-import { 
+import {
   MdTrendingUp,
   MdEmojiEvents,
   MdDynamicFeed
@@ -42,6 +42,7 @@ import { SiSolana } from "react-icons/si";
 import Image from 'next/image';
 import InterstatePopout from './InterstatePopout';
 import VerticalInput from './VerticalInput';
+import { usePulseWebSocket } from '~/hooks/usePulseWebSocket';
 
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
@@ -1197,7 +1198,7 @@ function TokenImage({
 }
 
 
-const PulseTable = React.memo(function PulseTable({
+function PulseTable({
   title,
   tokens,
   isFirstOrLast,
@@ -1205,6 +1206,14 @@ const PulseTable = React.memo(function PulseTable({
   skeletonRowCount = 10,
   showBubbleMetrics = false,
 }: PulseTableProps) {
+  // DEBUG: Log EVERY render (not just when tokens change)
+  console.log(`[PulseTable ${title}] 🔥 RENDER START - tokens count: ${tokens?.length || 0}, first token:`, tokens?.[0]?.name || 'none');
+
+  // DEBUG: Log when component receives new props
+  useEffect(() => {
+    console.log(`[PulseTable ${title}] 🎯 Received tokens prop, count: ${tokens?.length || 0}`);
+  }, [tokens, title]);
+
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -1251,10 +1260,13 @@ const PulseTable = React.memo(function PulseTable({
   const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes('new');
+
+  // State for WebSocket real-time updates
+  const [wsTokens, setWsTokens] = useState<Token[]>([]);
   
   const [filters, setFilters] = useState({
     // Protocols
-    protocols: [] as string[],
+    protocols: ['All'] as string[],
     // Quote Tokens
     quoteTokens: [] as string[],
     // Keywords
@@ -1331,6 +1343,36 @@ const PulseTable = React.memo(function PulseTable({
     setShowFilters(false);
   };
 
+  // Map frontend protocol names to backend protocol names
+  const mapProtocolToBackend = useCallback((protocol: string): string[] => {
+    switch (protocol) {
+      case 'Pump':
+        return ['pump.fun'];
+      case 'Pump AMM':
+        return ['pump.fun'];
+      case 'Raydium':
+        return ['raydium', 'raydiumlaunchpad'];
+      case 'Meteora AMM':
+        return ['meteora'];
+      case 'Meteora AMM V2':
+        return ['meteora'];
+      case 'Bonk':
+        return ['bonk'];
+      case 'Bags':
+        return ['bags'];
+      case 'Moonit':
+        return ['moonit'];
+      case 'Boop':
+        return ['boopfun'];
+      case 'LaunchLab':
+        return ['launchlab'];
+      case 'All':
+        return ['all'];
+      default:
+        return [protocol.toLowerCase()];
+    }
+  }, []);
+
   // Fetch filtered tokens from API when protocols are selected
   const fetchFilteredTokens = useCallback(async (protocols: string[]) => {
     if (protocols.length === 0) {
@@ -1340,27 +1382,6 @@ const PulseTable = React.memo(function PulseTable({
 
     setIsFetchingFiltered(true);
     try {
-      // Map frontend protocol names to backend protocol names
-      const mapProtocolToBackend = (protocol: string): string[] => {
-        switch (protocol) {
-          case 'Pump':
-            return ['pump.fun'];
-          case 'Pump AMM':
-            return ['pump.fun'];
-          case 'Raydium':
-            return ['raydium', 'raydiumlaunchpad'];
-          case 'Meteora AMM':
-            return ['meteora'];
-          case 'Meteora AMM V2':
-            return ['meteora'];
-          case 'Bonk':
-            return ['bonk'];
-          case 'LaunchLab':
-            return ['launchlab'];
-          default:
-            return [protocol.toLowerCase()];
-        }
-      };
 
       const backendProtocols = protocols.flatMap(mapProtocolToBackend);
       const protocolsParam = backendProtocols.join(',');
@@ -1389,14 +1410,152 @@ const PulseTable = React.memo(function PulseTable({
     }
   }, [title]);
 
+  // Determine channel from title
+  const channel = useMemo(() => {
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes('new')) return 'new';
+    if (lowerTitle.includes('final')) return 'final_stretch';
+    if (lowerTitle.includes('migrated')) return 'migrated';
+    return undefined;
+  }, [title]);
+
+  // WebSocket for real-time updates with server-side filtering
+  const {
+    newTokens: wsNewTokens,
+    finalStretchTokens: wsFinalStretchTokens,
+    migratedTokens: wsMigratedTokens,
+    connected: wsConnected,
+    error: wsError
+  } = usePulseWebSocket({
+    enabled: true,
+    channel,
+    protocols: filters.protocols.length > 0 ? filters.protocols.flatMap(mapProtocolToBackend) : undefined,
+    onNewToken: useCallback((token: any) => {
+      if (channel === 'new') {
+        setWsTokens(prev => {
+          const filtered = prev.filter(t => t.mint !== token.mint);
+          return [token as Token, ...filtered].slice(0, 50);
+        });
+      }
+    }, [channel]),
+    onFinalStretchToken: useCallback((token: any) => {
+      if (channel === 'final_stretch') {
+        setWsTokens(prev => {
+          const filtered = prev.filter(t => t.mint !== token.mint);
+          return [token as Token, ...filtered].slice(0, 50);
+        });
+      }
+    }, [channel]),
+    onMigratedToken: useCallback((token: any) => {
+      if (channel === 'migrated') {
+        setWsTokens(prev => {
+          const filtered = prev.filter(t => t.mint !== token.mint);
+          return [token as Token, ...filtered].slice(0, 50);
+        });
+      }
+    }, [channel]),
+    onPriceUpdate: useCallback((updates: any[]) => {
+      console.log('[PulseTable] 📊 Price update received, merging', updates.length, 'updates');
+
+      // Merge price updates into filteredTokens (base HTTP data)
+      setFilteredTokens(prev => {
+        if (!prev || prev.length === 0) return prev;
+
+        const updatesMap = new Map(updates.map(u => [u.mint, u]));
+        return prev.map(token => {
+          const update = updatesMap.get(token.mint);
+          if (!update) return token;
+
+          // Merge update into existing token (preserve all fields, update only changed ones)
+          return {
+            ...token,
+            ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
+            ...(update.market_cap_usd !== undefined && { market_cap_usd: update.market_cap_usd }),
+            ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
+            ...(update.bonding_curve_progress !== undefined && { bonding_curve_progress: update.bonding_curve_progress }),
+            ...(update.price_change_24h !== undefined && { price_change_24h: update.price_change_24h }),
+            // Transaction metrics (5m)
+            ...(update.total_buy_volume_5m !== undefined && { total_buy_volume_5m: update.total_buy_volume_5m }),
+            ...(update.total_sell_volume_5m !== undefined && { total_sell_volume_5m: update.total_sell_volume_5m }),
+            ...(update.total_buys_5m !== undefined && { total_buys_5m: update.total_buys_5m }),
+            ...(update.total_sells_5m !== undefined && { total_sells_5m: update.total_sells_5m }),
+            // Transaction metrics (1h)
+            ...(update.total_buy_volume_1h !== undefined && { total_buy_volume_1h: update.total_buy_volume_1h }),
+            ...(update.total_sell_volume_1h !== undefined && { total_sell_volume_1h: update.total_sell_volume_1h }),
+            ...(update.total_buys_1h !== undefined && { total_buys_1h: update.total_buys_1h }),
+            ...(update.total_sells_1h !== undefined && { total_sells_1h: update.total_sells_1h }),
+            // Transaction metrics (6h)
+            ...(update.total_buy_volume_6h !== undefined && { total_buy_volume_6h: update.total_buy_volume_6h }),
+            ...(update.total_sell_volume_6h !== undefined && { total_sell_volume_6h: update.total_sell_volume_6h }),
+            ...(update.total_buys_6h !== undefined && { total_buys_6h: update.total_buys_6h }),
+            ...(update.total_sells_6h !== undefined && { total_sells_6h: update.total_sells_6h }),
+            // Transaction metrics (24h)
+            ...(update.total_buy_volume_24h !== undefined && { total_buy_volume_24h: update.total_buy_volume_24h }),
+            ...(update.total_sell_volume_24h !== undefined && { total_sell_volume_24h: update.total_sell_volume_24h }),
+            ...(update.total_buys_24h !== undefined && { total_buys_24h: update.total_buys_24h }),
+            ...(update.total_sells_24h !== undefined && { total_sells_24h: update.total_sells_24h }),
+            updated_at: update.updated_at || token.updated_at,
+          };
+        });
+      });
+
+      // Also merge into wsTokens (WebSocket new tokens)
+      setWsTokens(prev => {
+        if (!prev || prev.length === 0) return prev;
+
+        const updatesMap = new Map(updates.map(u => [u.mint, u]));
+        return prev.map(token => {
+          const update = updatesMap.get(token.mint);
+          if (!update) return token;
+
+          return {
+            ...token,
+            ...(update.price_usd !== undefined && { price_usd: update.price_usd }),
+            ...(update.market_cap_usd !== undefined && { market_cap_usd: update.market_cap_usd }),
+            ...(update.volume_24h !== undefined && { volume_24h: update.volume_24h }),
+            ...(update.bonding_curve_progress !== undefined && { bonding_curve_progress: update.bonding_curve_progress }),
+            ...(update.price_change_24h !== undefined && { price_change_24h: update.price_change_24h }),
+            ...(update.total_buy_volume_5m !== undefined && { total_buy_volume_5m: update.total_buy_volume_5m }),
+            ...(update.total_sell_volume_5m !== undefined && { total_sell_volume_5m: update.total_sell_volume_5m }),
+            ...(update.total_buys_5m !== undefined && { total_buys_5m: update.total_buys_5m }),
+            ...(update.total_sells_5m !== undefined && { total_sells_5m: update.total_sells_5m }),
+            ...(update.total_buy_volume_1h !== undefined && { total_buy_volume_1h: update.total_buy_volume_1h }),
+            ...(update.total_sell_volume_1h !== undefined && { total_sell_volume_1h: update.total_sell_volume_1h }),
+            ...(update.total_buys_1h !== undefined && { total_buys_1h: update.total_buys_1h }),
+            ...(update.total_sells_1h !== undefined && { total_sells_1h: update.total_sells_1h }),
+            ...(update.total_buy_volume_6h !== undefined && { total_buy_volume_6h: update.total_buy_volume_6h }),
+            ...(update.total_sell_volume_6h !== undefined && { total_sell_volume_6h: update.total_sell_volume_6h }),
+            ...(update.total_buys_6h !== undefined && { total_buys_6h: update.total_buys_6h }),
+            ...(update.total_sells_6h !== undefined && { total_sells_6h: update.total_sells_6h }),
+            ...(update.total_buy_volume_24h !== undefined && { total_buy_volume_24h: update.total_buy_volume_24h }),
+            ...(update.total_sell_volume_24h !== undefined && { total_sell_volume_24h: update.total_sell_volume_24h }),
+            ...(update.total_buys_24h !== undefined && { total_buys_24h: update.total_buys_24h }),
+            ...(update.total_sells_24h !== undefined && { total_sells_24h: update.total_sells_24h }),
+            updated_at: update.updated_at || token.updated_at,
+          };
+        });
+      });
+    }, []),
+  });
+
   // Fetch filtered tokens when protocols change
   useEffect(() => {
-    if (filters.protocols.length > 0) {
+    // Treat ['All'] the same as no filter - don't fetch filtered data
+    const hasSpecificProtocols = filters.protocols.length > 0 && !filters.protocols.includes('All');
+
+    if (hasSpecificProtocols) {
       fetchFilteredTokens(filters.protocols);
+      setWsTokens([]); // Clear stale WebSocket tokens when filter changes
     } else {
+      // When switching back to 'All', clear filtered tokens and rely on parent data + WebSocket
+      // REMOVED: Redundant HTTP refetch that was causing duplicate API calls
+      // The parent component (pulse.tsx) already handles initial data load
+      // WebSocket handles real-time updates - no need to refetch here
       setFilteredTokens([]);
+      setWsTokens([]); // Clear WebSocket tokens when filters are removed
     }
-  }, [filters.protocols, fetchFilteredTokens]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.protocols, title]);
 
   // Save thunderAmount to localStorage whenever it changes - separate storage for each column
   useEffect(() => {
@@ -1652,6 +1811,7 @@ const PulseTable = React.memo(function PulseTable({
 
   // Protocol and quote token data with official icons from web3icons
   const protocols = [
+    { name: 'All', icon: <span className="text-sm">🌐</span>, color: '#9333ea' },
     { name: 'Pump', icon: <Image src="/pump.svg" alt="Pump" width={16} height={16} className="rounded-full" />, color: '#00ff88' },
     { name: 'Bonk', icon: <div className="w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold">B</div>, color: '#ff6b35' },
     { name: 'Bags', icon: <Image src="https://bags.fm/assets/images/bags-icon.png" alt="Bags" width={16} height={16} className="rounded-full" />, color: '#00d4aa' },
@@ -1727,70 +1887,40 @@ const PulseTable = React.memo(function PulseTable({
     }, 2000);
   };
 
-  // Helper function to map protocol names to backend protocol values
-  // Returns multiple variations to match against launchpad_protocol field
-  const mapProtocolToBackend = (protocolName: string): string[] => {
-    switch (protocolName) {
-      case 'Pump':
-        return ['pump', 'pump.fun', 'pumpfun'];
-      case 'Raydium':
-        return ['raydium', 'raydiumlaunchpad'];
-      case 'Meteora AMM':
-        return ['meteora', 'meteora_amm', 'meteoraamm'];
-      case 'Meteora AMM V2':
-        return ['meteora', 'meteora_v2', 'meteorav2', 'meteora_amm'];
-      case 'Bonk':
-        return ['bonk', 'bonkbot'];
-      case 'Bags':
-        return ['bags', 'bags.fm', 'bagsfm'];
-      case 'Moonshot':
-        return ['moonshot'];
-      case 'Heaven':
-        return ['heaven'];
-      case 'Daos.fun':
-        return ['daos', 'daos.fun', 'daosfun'];
-      case 'Candle':
-        return ['candle'];
-      case 'Sugar':
-        return ['sugar'];
-      case 'Believe':
-        return ['believe'];
-      case 'Jupiter Studio':
-        return ['jupiter', 'jupiterstudio'];
-      case 'Moonit':
-        return ['moonit'];
-      case 'Boop':
-        return ['boop', 'boopfun', 'boop.fun'];
-      case 'LaunchLab':
-        return ['launchlab', 'launch_lab'];
-      case 'Dynamic BC':
-        return ['dynamic', 'dynamicbc'];
-      case 'Pump AMM':
-        return ['pump_amm', 'pumpamm', 'pump amm'];
-      case 'Orca':
-        return ['orca'];
-      default:
-        return [];
-    }
-  };
-
-  // Helper function to get token protocol from various fields
-  // Prioritizes launchpad_protocol which is the primary source used for display
-  const getTokenProtocol = (token: any): string | null => {
-    // Check multiple possible fields for protocol information
-    // Priority: launchpad_protocol > protocol > amm_id > launchpadProtocol
-    return token.launchpad_protocol || 
-           token.protocol || 
-           token.amm_id || 
-           token.launchpadProtocol ||
-           token.launchpadName ||
-           null;
-  };
+  // Removed duplicate mapProtocolToBackend and getTokenProtocol functions
+  // Protocol filtering is now 100% server-side via HTTP API and WebSocket
 
   // Filter and sort tokens
   const filteredAndSortedTokens = useMemo(() => {
-    // Use filtered tokens from API if protocols are selected, otherwise use original tokens
-    let filtered = filters.protocols.length > 0 ? [...filteredTokens] : [...tokens];
+    console.log(`[PulseTable ${title}] 🔧 filteredAndSortedTokens recomputing, tokens count: ${tokens?.length || 0}, filteredTokens: ${filteredTokens.length}, wsTokens: ${wsTokens.length}`);
+
+    // Data source priority:
+    // 1. WebSocket real-time tokens (for instant updates)
+    // 2. HTTP API filtered tokens (when protocol filters active)
+    // 3. Original tokens prop (fallback)
+    let filtered: Token[];
+    const hasSpecificProtocols = filters.protocols.length > 0 && !filters.protocols.includes('All');
+
+    // Merge WebSocket tokens with HTTP API tokens (deduplicate by mint)
+    const mergedMap = new Map<string, Token>();
+
+    // Use filteredTokens if available (either from specific filters or fresh "All" fetch)
+    // Otherwise fall back to tokens prop
+    const baseTokens = filteredTokens.length > 0 ? filteredTokens : tokens;
+
+    // First add HTTP API tokens (either filtered or from props)
+    baseTokens.forEach(token => mergedMap.set(token.mint, token));
+
+    // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
+    wsTokens.forEach(token => mergedMap.set(token.mint, token));
+
+    filtered = Array.from(mergedMap.values());
+
+    if (hasSpecificProtocols) {
+      console.log(`[PulseTable ${title}] 🔀 Merged filtered tokens: ${filteredTokens.length} HTTP + ${wsTokens.length} WS = ${filtered.length} total`);
+    } else {
+      console.log(`[PulseTable ${title}] 🔀 Merged tokens (showing All): ${baseTokens.length} HTTP + ${wsTokens.length} WS = ${filtered.length} total`);
+    }
 
     // Filter out tokens without migrated_pool_address in the Migrated column
     // Skip this filter when protocol filtering is applied (API already returns valid migrated tokens)
@@ -2077,7 +2207,7 @@ const PulseTable = React.memo(function PulseTable({
 
     if (filters.onlyPumpLive) {
       filtered = filtered.filter(token => {
-        const protocol = getTokenProtocol(token)?.toLowerCase() || '';
+        const protocol = (token as any).launchpad_protocol?.toLowerCase() || '';
         const isLive = (token as any).is_live ?? (token as any).isLive ?? true;
         return protocol.includes('pump') && isLive;
       });
@@ -2137,10 +2267,7 @@ const PulseTable = React.memo(function PulseTable({
       
       let aValue, bValue;
       
-      // Debug log for sort method
-      if (typeof window !== 'undefined' && filtered.length > 0) {
-        console.log(`[PulseTable] Sorting by: ${filters.sortBy} (${filters.sortOrder}) for ${title}`);
-      }
+      // Sorting applied (debug logs removed for performance)
       
       switch (filters.sortBy) {
         case 'marketCap':
@@ -2218,10 +2345,15 @@ const PulseTable = React.memo(function PulseTable({
     });
 
     return filtered;
-  }, [tokens, filteredTokens, title, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.hasWebsite, filters.hasTwitter, filters.hasTelegram, filters.atLeastOneSocial, filters.onlyPumpLive, filters.sortBy, filters.sortOrder]);
+  }, [tokens, filteredTokens, wsTokens, title, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.hasWebsite, filters.hasTwitter, filters.hasTelegram, filters.atLeastOneSocial, filters.onlyPumpLive, filters.sortBy, filters.sortOrder]);
 
   // Memoize token rendering to prevent unnecessary re-renders
-  const memoizedTokens = useMemo(() => filteredAndSortedTokens, [filteredAndSortedTokens]);
+  const memoizedTokens = useMemo(() => {
+    console.log(`[PulseTable ${title}] 🎬 memoizedTokens recomputed, count: ${filteredAndSortedTokens?.length || 0}, first 3:`,
+      filteredAndSortedTokens?.slice(0, 3).map(t => ({ name: t.name, symbol: t.symbol, mint: t.mint }))
+    );
+    return filteredAndSortedTokens;
+  }, [filteredAndSortedTokens, title]);
 
   // Add wave animation for all Meteora tokens with bonding_pct > 98.6% in Final Stretch only
   useEffect(() => {
@@ -2671,11 +2803,13 @@ const PulseTable = React.memo(function PulseTable({
                         e.currentTarget.style.transform = 'scale(1)';
                       }}
                       onClick={() => {
-                        const allProtocols = protocols.map(p => p.name);
-                        handlePendingFilterChange(prev => ({ 
-                          ...prev, 
-                          protocols: prev.protocols.length === allProtocols.length ? [] : allProtocols 
-                        }));
+                        // Simply revert to ['All'] - same as default state, no API call needed
+                        handlePendingFilterChange(prev => {
+                          return {
+                            ...prev,
+                            protocols: ['All']
+                          };
+                        });
                       }}
                     >
                       Select All
@@ -2724,12 +2858,27 @@ const PulseTable = React.memo(function PulseTable({
                           }
                         }}
                         onClick={() => {
-                          handlePendingFilterChange(prev => ({
-                            ...prev,
-                            protocols: prev.protocols.includes(protocol.name)
-                              ? prev.protocols.filter(p => p !== protocol.name)
-                              : [...prev.protocols, protocol.name]
-                          }));
+                          handlePendingFilterChange(prev => {
+                            const currentProtocols = prev.protocols;
+                            const clickedProtocol = protocol.name;
+
+                            // If clicking "All", clear all other protocols
+                            if (clickedProtocol === 'All') {
+                              return { ...prev, protocols: ['All'] };
+                            }
+
+                            // If clicking a specific protocol
+                            if (currentProtocols.includes(clickedProtocol)) {
+                              // Deselecting a protocol
+                              const remaining = currentProtocols.filter(p => p !== clickedProtocol && p !== 'All');
+                              // If no protocols left, revert to 'All'
+                              return { ...prev, protocols: remaining.length === 0 ? ['All'] : remaining };
+                            } else {
+                              // Selecting a new protocol - remove 'All' and add the new one
+                              const withoutAll = currentProtocols.filter(p => p !== 'All');
+                              return { ...prev, protocols: [...withoutAll, clickedProtocol] };
+                            }
+                          });
                         }}
                       >
                         <span className="text-sm" style={{ color: 'inherit' }}>{protocol.icon}</span>
@@ -4169,12 +4318,14 @@ const PulseTable = React.memo(function PulseTable({
         ) : (
           memoizedTokens
             .filter((token) => {
-              // Only show tokens that have a valid pair_address
+              // Show tokens that have either pair_address or mint (all tokens have mint)
               const pairAddress = (token as any)?.pair_address;
-              return pairAddress && pairAddress.trim() !== '';
+              const mint = (token as any)?.mint;
+              return (pairAddress && pairAddress.trim() !== '') || (mint && mint.trim() !== '');
             })
             .map((token, idx) => {
-              const pairAddress = (token as any)?.pair_address;
+              // Use pair_address if available, otherwise fallback to mint
+              const pairAddress = (token as any)?.pair_address || (token as any)?.mint;
 
               // Build query params for optimistic UI + cache lookup
               const queryParams = new URLSearchParams({
@@ -4189,7 +4340,7 @@ const PulseTable = React.memo(function PulseTable({
               return (
                 <Link
                   href={`/trade/${pairAddress}?${queryParams}`}
-                  key={`${pairAddress}-${idx}`}
+                  key={pairAddress}
                 className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 transition-all duration-300 ease-out"
                 style={{ 
                   borderColor: AX.border,
@@ -5443,7 +5594,7 @@ const PulseTable = React.memo(function PulseTable({
 
     </div>
   );
-});
+}
 
 export default PulseTable;
 
