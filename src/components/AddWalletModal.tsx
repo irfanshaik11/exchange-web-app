@@ -21,11 +21,11 @@ const AddWalletModal: React.FC<AddWalletModalProps> = ({ isOpen, onClose, onAddW
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50">
+    <div className="fixed inset-0 bg-black/90 bg-opacity-50 flex justify-center items-center z-50">
       <div className="bg-neutral-900 border border-emerald-700 shadow-2xl shadow-emerald-500/20 rounded-lg p-6 w-96">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-white">Add Wallet</h2>
-          <button onClick={onClose} className="text-neutral-400 hover:text-white">
+          <button onClick={onClose} className="text-neutral-400 hover:text-white text-3xl cursor-pointer">
             &times;
           </button>
         </div>

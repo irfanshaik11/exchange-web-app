@@ -54,6 +54,7 @@ export default function ImportExportWalletModal({ mode, isOpen, onClose, onImpor
             />
             {error && <div className="text-red-400 text-xs mb-2">{error}</div>}
             <div className="text-xs text-neutral-400 mb-4 space-y-1">
+              <div><span className="text-green-400">✔</span> Axiom.trade wallet imports are supported.</div>
               <div><span className="text-green-400">✔</span> BullX wallet imports are supported.</div>
               <div><span className="text-green-400">✔</span> GMGN wallet imports are supported.</div>
               <div><span className="text-blue-400">✔</span> RayBot wallet imports are supported.</div>
