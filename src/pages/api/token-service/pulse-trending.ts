@@ -26,12 +26,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (Array.isArray(v)) v.forEach((x) => params.append(k, x));
     else if (v !== undefined) params.append(k, String(v));
   }
+  
   // Always request fresh cache-bypass
   params.set('fresh', '1');
   // Only set default limit if no limit is provided
   if (!params.get('limit')) params.set('limit', '50');
   // Set default timeframe if not provided
   if (!params.get('timeframe')) params.set('timeframe', '1h');
+  
+  // Add required parameters for trending endpoint
+  params.set('filter', 'trending');
+  params.set('source', 'codex'); // Required for timeframe support
 
   const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
 
@@ -51,7 +56,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   try {
-    const upstream = await fetchWithTimeout(`${goBase}/v1/pulse/trending?${params.toString()}`);
+    // Use the getAllTokens endpoint with trending filter and codex source
+    const upstream = await fetchWithTimeout(`${goBase}/api/getAllTokens?${params.toString()}`);
     const text = await upstream.text();
     res.status(upstream.status);
     try {
@@ -72,40 +78,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return 0;
           };
 
-          // Get base values
-          const totalBuys24h = r.total_buys_24h ?? 0;
-          const totalSells24h = r.total_sells_24h ?? 0;
-          const totalBuyVolume24h = r.total_buy_volume_24h ?? 0;
-          const totalSellVolume24h = r.total_sell_volume_24h ?? 0;
-          const totalBuyers24h = r.total_buyers_24h ?? 0;
-          const totalSellers24h = r.total_sellers_24h ?? 0;
-          const uniqueWallets24h = r.unique_wallets_24h ?? 0;
-
-          // Mock trending data based on timeframe and position (since remote service has no transaction data)
+          // Get base values from response
           const timeframe = params.get('timeframe') || '1h';
-          const mockTrendingMultiplier = (() => {
-            switch (timeframe) {
-              case '1m': return 1.0 + (index * 0.1); // Higher activity for top tokens
-              case '5m': return 0.8 + (index * 0.08);
-              case '30m': return 0.6 + (index * 0.06);
-              case '1h': return 0.4 + (index * 0.04);
-              default: return 0.5;
-            }
-          })();
+          const volume24h = parseFloat(r.volume_24h || r.volume_usd || r.volume || '0');
+          const marketCap = parseFloat(r.market_cap_usd || r.market_cap || '0');
           
-          const marketCap = parseFloat(r.market_cap_usd || '0');
-          const mockVolume = marketCap * mockTrendingMultiplier * 0.01; // 1% of market cap as volume
-          const mockBuys = Math.floor(mockVolume / 100) + index; // Mock buy count
-
+          // Initialize transaction data variables (Codex doesn't provide these)
+          const totalBuys24h = parseInt(r.total_buys_24h || '0') || 0;
+          const totalSells24h = parseInt(r.total_sells_24h || '0') || 0;
+          const totalBuyers24h = parseInt(r.total_buyers_24h || '0') || 0;
+          const totalSellers24h = parseInt(r.total_sellers_24h || '0') || 0;
+          const uniqueWallets24h = parseInt(r.unique_wallets_24h || '0') || 0;
+          const totalBuyVolume24h = parseFloat(r.total_buy_volume_24h || '0') || 0;
+          const totalSellVolume24h = parseFloat(r.total_sell_volume_24h || '0') || 0;
+          
           return {
             mint: r.mint || r.mint_address || r.Mint || null,
             pair_address: r.pair_address || null,
             name: r.name || r.token_name || '',
             symbol: r.symbol || r.token_symbol || '',
-            usd_price: parseFloat(r.price_usd || r.usd_price || '0'),
-            fully_diluted_value: parseFloat(r.market_cap_usd || r.fully_diluted_value || '0'),
-            volume_24h: parseFloat(r.volume_24h || '0'),
-            price_percent_change_1h: parseFloat(r.price_change_1h || r.price_percent_change_1h || '0'),
+            usd_price: parseFloat(r.usd_price || r.price_usd || '0'),
+            fully_diluted_value: parseFloat(r.market_cap_usd || r.market_cap || r.fully_diluted_value || '0'),
+            volume_24h: volume24h,
+            price_percent_change_1h: parseFloat(r.price_change || r.price_change_1h || r.price_percent_change_1h || '0'),
             bonding_curve_progress: parseFloat(r.bonding_pct || r.bonding_curve_progress || '0'),
             graduation_percent: parseFloat(r.graduation_percent || '0'),
             graduationPercent: parseFloat(r.graduation_percent || '0'),
@@ -116,11 +111,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             // Optional extra fields used by the UI
             logo: r.logo || r.uri || r.image || null,
             image: r.image || r.uri || r.logo || null,
-            // Volume fields - use mock data since remote service has no transaction data
-            volume_5m: timeframe === '1m' || timeframe === '5m' ? mockVolume : parseFloat(r.volume_5m || '0'),
-            volume_1h: timeframe === '30m' || timeframe === '1h' ? mockVolume : parseFloat(r.volume_1h || '0'),
+            // Volume fields - map existing volumes or use estimates
+            volume_1m: parseFloat(r.volume_1m || '0'),
+            volume_5m: parseFloat(r.volume_5m || r.volume_24h || '0'),
+            volume_30m: parseFloat(r.volume_30m || r.volume_24h || '0'),
+            volume_1h: parseFloat(r.volume_1h || r.volume_24h || '0'),
             volume_6h: parseFloat(r.volume_6h || '0'),
-            total_liquidity_usd: parseFloat(r.total_liquidity_usd || r.liquidity_usd || '0'),
+            total_liquidity_usd: parseFloat(r.liquidity_usd || r.total_liquidity_usd || r.liquidity || '0'),
             // TX data fields from Codex API with fallback logic for older tokens
             total_buy_volume_5m: parseFloat(r.total_buy_volume_5m || '0') || estimateFrom24h(totalBuyVolume24h, '5m'),
             total_buy_volume_1h: parseFloat(r.total_buy_volume_1h || '0') || estimateFrom24h(totalBuyVolume24h, '1h'),
@@ -130,25 +127,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             total_sell_volume_1h: parseFloat(r.total_sell_volume_1h || '0') || estimateFrom24h(totalSellVolume24h, '1h'),
             total_sell_volume_6h: parseFloat(r.total_sell_volume_6h || '0') || estimateFrom24h(totalSellVolume24h, '6h'),
             total_sell_volume_24h: totalSellVolume24h,
-            total_buyers_5m: parseInt(r.total_buyers_5m || '0') || Math.max(1, Math.floor(totalBuyers24h / 288)),
-            total_buyers_1h: parseInt(r.total_buyers_1h || '0') || Math.max(1, Math.floor(totalBuyers24h / 24)),
-            total_buyers_6h: parseInt(r.total_buyers_6h || '0') || Math.max(1, Math.floor(totalBuyers24h / 4)),
+            total_buyers_5m: parseInt(r.total_buyers_5m || '0') || Math.max(0, Math.floor(totalBuyers24h / 288)),
+            total_buyers_1h: parseInt(r.total_buyers_1h || '0') || Math.max(0, Math.floor(totalBuyers24h / 24)),
+            total_buyers_6h: parseInt(r.total_buyers_6h || '0') || Math.max(0, Math.floor(totalBuyers24h / 4)),
             total_buyers_24h: totalBuyers24h,
-            total_sellers_5m: parseInt(r.total_sellers_5m || '0') || Math.max(1, Math.floor(totalSellers24h / 288)),
-            total_sellers_1h: parseInt(r.total_sellers_1h || '0') || Math.max(1, Math.floor(totalSellers24h / 24)),
-            total_sellers_6h: parseInt(r.total_sellers_6h || '0') || Math.max(1, Math.floor(totalSellers24h / 4)),
+            total_sellers_5m: parseInt(r.total_sellers_5m || '0') || Math.max(0, Math.floor(totalSellers24h / 288)),
+            total_sellers_1h: parseInt(r.total_sellers_1h || '0') || Math.max(0, Math.floor(totalSellers24h / 24)),
+            total_sellers_6h: parseInt(r.total_sellers_6h || '0') || Math.max(0, Math.floor(totalSellers24h / 4)),
             total_sellers_24h: totalSellers24h,
-            total_buys_5m: timeframe === '1m' || timeframe === '5m' ? mockBuys : parseInt(r.total_buys_5m || '0') || Math.max(1, Math.floor(totalBuys24h / 288)),
-            total_buys_1h: timeframe === '30m' || timeframe === '1h' ? mockBuys : parseInt(r.total_buys_1h || '0') || Math.max(1, Math.floor(totalBuys24h / 24)),
-            total_buys_6h: parseInt(r.total_buys_6h || '0') || Math.max(1, Math.floor(totalBuys24h / 4)),
+            total_buys_5m: parseInt(r.total_buys_5m || '0') || Math.max(0, Math.floor(totalBuys24h / 288)),
+            total_buys_1h: parseInt(r.total_buys_1h || '0') || Math.max(0, Math.floor(totalBuys24h / 24)),
+            total_buys_6h: parseInt(r.total_buys_6h || '0') || Math.max(0, Math.floor(totalBuys24h / 4)),
             total_buys_24h: totalBuys24h,
-            total_sells_5m: parseInt(r.total_sells_5m || '0') || Math.max(1, Math.floor(totalSells24h / 288)),
-            total_sells_1h: parseInt(r.total_sells_1h || '0') || Math.max(1, Math.floor(totalSells24h / 24)),
-            total_sells_6h: parseInt(r.total_sells_6h || '0') || Math.max(1, Math.floor(totalSells24h / 4)),
+            total_sells_5m: parseInt(r.total_sells_5m || '0') || Math.max(0, Math.floor(totalSells24h / 288)),
+            total_sells_1h: parseInt(r.total_sells_1h || '0') || Math.max(0, Math.floor(totalSells24h / 24)),
+            total_sells_6h: parseInt(r.total_sells_6h || '0') || Math.max(0, Math.floor(totalSells24h / 4)),
             total_sells_24h: totalSells24h,
-            unique_wallets_5m: parseInt(r.unique_wallets_5m || '0') || Math.max(1, Math.floor(uniqueWallets24h / 288)),
-            unique_wallets_1h: parseInt(r.unique_wallets_1h || '0') || Math.max(1, Math.floor(uniqueWallets24h / 24)),
-            unique_wallets_6h: parseInt(r.unique_wallets_6h || '0') || Math.max(1, Math.floor(uniqueWallets24h / 4)),
+            unique_wallets_5m: parseInt(r.unique_wallets_5m || '0') || Math.max(0, Math.floor(uniqueWallets24h / 288)),
+            unique_wallets_1h: parseInt(r.unique_wallets_1h || '0') || Math.max(0, Math.floor(uniqueWallets24h / 24)),
+            unique_wallets_6h: parseInt(r.unique_wallets_6h || '0') || Math.max(0, Math.floor(uniqueWallets24h / 4)),
             unique_wallets_24h: uniqueWallets24h,
             price_percent_change_5m: r.price_percent_change_5m ?? 0,
             price_percent_change_6h: r.price_percent_change_6h ?? 0,

@@ -10,7 +10,7 @@ import InterstateTooltip from '../InterstateTooltip';
 interface TableRowProps {
   token: Token;
   i: number;
-  selectedTimeframe: '5m' | '1h' | '6h' | '24h';
+  selectedTimeframe: '1m' | '5m' | '30m' | '1h';
   onQuickBuy?: (token: Token) => void;
   quickBuyAmount?: number | string;
   animationState?: Record<string, string>;
@@ -115,17 +115,17 @@ export default function TableRow({
       {/* Volume */}
       <td className="px-3 py-2">
         <div className="font-medium text-white">
-          ${formatSmartNumber((token as any).volume_24h || 0)}
+          ${formatSmartNumber((token as any)[`volume_${selectedTimeframe}`] || (token as any).volume_24h || 0)}
         </div>
       </td>
 
       {/* TXNS */}
       <td className="px-3 py-2">
         <div className="font-medium text-white">
-          {formatSmartNumber(token.total_buys_24h + token.total_sells_24h)}
+          {formatSmartNumber(((token as any)[`total_buys_${selectedTimeframe}`] || 0) + ((token as any)[`total_sells_${selectedTimeframe}`] || 0))}
         </div>
         <div className="text-sm text-neutral-400">
-          {formatSmartNumber(token.unique_wallets_24h)} buyers
+          {formatSmartNumber((token as any)[`unique_wallets_${selectedTimeframe}`] || token.unique_wallets_24h || 0)} buyers
         </div>
       </td>
 
