@@ -357,7 +357,7 @@ const TokenAvatar: React.FC<{
           }}
         >
           {/* Image container */}
-          <div className="relative rounded-lg overflow-hidden">
+          <div className="relative rounded-lg overflow-hidden" style={{ width: '56px', height: '56px' }}>
             {loading && !showInitial ? (
               <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
                 <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
@@ -374,7 +374,7 @@ const TokenAvatar: React.FC<{
                 }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center rounded-lg" style={{ backgroundColor: AX.surface2 }}>
+              <div className="w-full h-full flex items-center justify-center rounded-lg" style={{ backgroundColor: AX.surface2, width: '56px', height: '56px' }}>
                 <span className="text-lg font-bold" style={{ color: AX.text }}>{initial}</span>
               </div>
             )}
