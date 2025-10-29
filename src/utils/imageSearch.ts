@@ -30,10 +30,10 @@ const IMAGE_SOURCES = [
     name: 'Jupiter Static',
     searchUrl: (symbol: string) => `https://static-create.jup.ag/${symbol.toLowerCase()}.png`,
   },
-  {
-    name: 'DexScreener',
-    searchUrl: (symbol: string) => `https://cdn.dexscreener.com/static/img/tokens/${symbol.toLowerCase()}.png`,
-  },
+  // {
+  //   name: 'DexScreener',
+  //   searchUrl: (symbol: string) => `https://cdn.dexscreener.com/static/img/tokens/${symbol.toLowerCase()}.png`,
+  // },
   {
     name: 'CoinGecko',
     searchUrl: (symbol: string) => `https://assets.coingecko.com/coins/images/${symbol.toLowerCase()}.png`,

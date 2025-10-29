@@ -26,7 +26,21 @@ export default function usePaginatedTokensWithFallback({
   limit = 20,
   timeframe,
 }: UsePaginatedTokensParams = {}) {
-  console.log('🔧 usePaginatedTokensWithFallback hook called with:', { filter, order, offset, limit, timeframe });
+  console.log('🔧 [HOOK] usePaginatedTokensWithFallback called with:', { filter, order, offset, limit, timeframe });
+  
+  // Early return if limit is 0 (used to disable the hook)
+  if (limit === 0) {
+    console.log('🔧 [HOOK] Disabled - limit is 0, returning empty state');
+    return {
+      data: [],
+      loading: false,
+      isConnected: false,
+      isReconnecting: false,
+      error: null,
+      usingFallback: false,
+    };
+  }
+  
   console.log('🔧 Environment check:', {
     WEBSOCKET_URL: env.NEXT_PUBLIC_WEBSOCKET_URL,
     BACKEND_URL: env.NEXT_PUBLIC_BACKEND_URL
@@ -54,6 +68,7 @@ export default function usePaginatedTokensWithFallback({
 
   const lastStableDataRef = useRef<any[] | null>(null);
   const lastTimeframeRef = useRef<string | undefined>(timeframe);
+  const currentRequestTimeframeRef = useRef<string | undefined>(timeframe);
 
   // Stabilize incoming lists to avoid jarring dips (e.g., 2 items on 5m)
   const stabilizeList = useCallback((incoming: any[]): any[] => {
@@ -62,10 +77,12 @@ export default function usePaginatedTokensWithFallback({
       const prev = lastStableDataRef.current;
       const minCount = Math.max(5, Math.floor(lim * 0.4));
 
-      // Reset stability baseline if timeframe changed
+      // Reset stability baseline if timeframe changed - IMPORTANT: don't use prev data from different timeframe
       if (lastTimeframeRef.current !== timeframe) {
-        console.log('⏱️ Timeframe changed from', lastTimeframeRef.current, 'to', timeframe, '- keeping previous list stable initially');
+        console.log('⏱️ Timeframe changed from', lastTimeframeRef.current, 'to', timeframe, '- clearing previous list to prevent data clash');
         lastTimeframeRef.current = timeframe;
+        // Clear previous data to prevent mixing timeframes
+        lastStableDataRef.current = null;
       }
 
       if (!Array.isArray(incoming)) return prev || [];
@@ -117,7 +134,7 @@ export default function usePaginatedTokensWithFallback({
   }, [limit, timeframe]);
 
   const throttledSetData = useCallback((newData: any[]) => {
-    console.log('🔧 Setting data in hook (raw):', newData?.length, 'tokens');
+    console.log('🔧 Setting data in hook (raw):', newData?.length, 'tokens, for timeframe:', currentRequestTimeframeRef.current);
     const stable = stabilizeList(newData);
     console.log('🔧 After stabilization:', stable?.length, 'tokens');
     if (stable?.[0]) {
@@ -161,8 +178,12 @@ export default function usePaginatedTokensWithFallback({
           limit: (limit || 20).toString(),
         });
         
-        if (timeframe) {
+        // STRICTLY enforce: only include timeframe if it's provided and valid
+        if (timeframe && (timeframe === '5m' || timeframe === '1h' || timeframe === '6h' || timeframe === '24h')) {
           queryParams.set('timeframe', timeframe);
+          console.log('📡 Polling: Using timeframe:', timeframe);
+        } else {
+          console.warn('📡 Polling: Invalid or missing timeframe, skipping:', timeframe);
         }
         
         // If env is ws(s)://..., convert to http(s):// for REST polling
@@ -269,7 +290,18 @@ export default function usePaginatedTokensWithFallback({
     console.log('🔄 Previous state:', { dataLength: state.data.length, loading: state.loading });
     console.log('🔄 Starting fresh data fetch for timeframe:', timeframe);
     console.log('🔄 Timeframe type:', typeof timeframe, 'value:', JSON.stringify(timeframe));
-    setState(prev => ({ ...prev, loading: true, isConnected: false, error: null, usingFallback: false }));
+    
+    // Update current request timeframe IMMEDIATELY to track which timeframe is being requested
+    currentRequestTimeframeRef.current = timeframe;
+    
+    // Clear existing data when timeframe changes to prevent stale data display
+    setState(prev => ({ ...prev, loading: true, isConnected: false, error: null, usingFallback: false, data: [] }));
+    
+    // Clear stable data reference when timeframe changes
+    if (lastTimeframeRef.current !== timeframe) {
+      console.log('🧹 Clearing stable data reference due to timeframe change');
+      lastStableDataRef.current = null;
+    }
 
     let pingInterval: NodeJS.Timeout | null = null;
 
@@ -284,8 +316,12 @@ export default function usePaginatedTokensWithFallback({
           limit: (limit || 20).toString(),
         });
         // Include timeframe in WS connection so server returns correct window
-        if (timeframe) {
+        // STRICTLY enforce: only include timeframe if it's provided
+        if (timeframe && (timeframe === '5m' || timeframe === '1h' || timeframe === '6h' || timeframe === '24h')) {
           queryParams.set('timeframe', timeframe);
+          console.log('🔌 WebSocket: Using timeframe:', timeframe);
+        } else {
+          console.warn('🔌 WebSocket: Invalid or missing timeframe, skipping:', timeframe);
         }
         const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/tokens?${queryParams}`;
         console.log('🔌 Attempting WebSocket connection to:', wsUrl);
