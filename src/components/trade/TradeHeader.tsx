@@ -7,7 +7,7 @@ import { SubscriptNumber } from "../InterstateTable";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 
 import { IoShareSocialOutline } from "react-icons/io5";
-import { FaRegStar, FaStar, FaUser, FaSearch, FaExpand, FaCamera, FaRegCopy } from "react-icons/fa";
+import { FaRegStar, FaStar, FaSearch, FaExpand, FaCamera, FaRegCopy } from "react-icons/fa";
 import { LuPill } from "react-icons/lu";
 import Link from "next/link";
 
@@ -26,6 +26,91 @@ const AX = {
   glowCyan: "rgba(6, 182, 212, 0.3)",
 };
 
+/* ---------- Protocol types aligned with PulseTable ---------- */
+type ProtocolId =
+  | "pump" | "pump_amm"
+  | "meteora" | "meteora_v2"
+  | "raydium" | "raydiumlaunchpad"
+  | "bonk" | "bags" | "moonit"
+  | "boop" | "launchlab"
+  | "unknown";
+
+const PROTOCOL_ICON: Record<ProtocolId, string> = {
+  pump: "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png",
+  pump_amm: "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png",
+  meteora: "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013",
+  meteora_v2: "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013",
+  raydium: "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png",
+  raydiumlaunchpad: "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png",
+  bonk: "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png",
+  bags: "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw",
+  moonit: "https://avatars.githubusercontent.com/u/174132191?s=280&v=4",
+  boop: "https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true",
+  launchlab: "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png",
+  unknown: "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png",
+};
+
+const PROTOCOL_COLOR: Record<ProtocolId, string> = {
+  pump: "#22c55e",
+  pump_amm: "#e9ba14",
+  meteora: "#ff4662",
+  meteora_v2: "#ff4662",
+  raydium: "#5c51f7",
+  raydiumlaunchpad: "#5c51f7",
+  bonk: "#ff6b35",
+  bags: "#22c55e",
+  moonit: "#eab308",
+  boop: "#134577",
+  launchlab: "#3b82f6",
+  unknown: "#22c55e",
+};
+
+// Centralized badge scaling; Meteora uses larger badge and image
+function protocolBadgeScale(id: ProtocolId) {
+  return id.startsWith("meteora")
+    ? { sizeRatio: 0.44, imgScale: 1.00, rightRatio: 0.30, bottomRatio: 0.22 } // imgScale adjusted to use 100% fill below
+    : { sizeRatio: 0.32, imgScale: 0.72, rightRatio: 0.42, bottomRatio: 0.28 };
+}
+
+const normalizeKey = (s?: string) =>
+  (s || "").toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
+
+const ALIASES: Record<string, ProtocolId> = {
+  pump: "pump",
+  "pump.fun": "pump",
+  pumpfun: "pump",
+  pumpamm: "pump_amm",
+  meteora: "meteora",
+  meteorav2: "meteora_v2",
+  raydium: "raydium",
+  raydiumlaunchpad: "raydiumlaunchpad",
+  bonk: "bonk",
+  bags: "bags",
+  boop: "boop",
+  boopfun: "boop",
+  moonit: "moonit",
+  moonshot: "moonit",
+  moonshoot: "moonit",
+  launchlab: "launchlab",
+};
+
+function detectProtocolId(token: any): ProtocolId {
+  const candidates = [token?.launchpad_protocol, token?.protocol, token?.launchpadName, token?.amm];
+  for (const raw of candidates) {
+    const key = normalizeKey(String(raw || ""));
+    if (!key) continue;
+    if (ALIASES[key]) return ALIASES[key];
+    if (key.includes("meteora")) return key.includes("v2") ? "meteora_v2" : "meteora";
+    if (key.includes("pump")) return key.includes("amm") ? "pump_amm" : "pump";
+    if (key.includes("raydium")) return key.includes("launchpad") ? "raydiumlaunchpad" : "raydium";
+    if (key.includes("bonk")) return "bonk";
+    if (key.includes("boop")) return "boop";
+    if (key.includes("bags")) return "bags";
+    if (key.includes("moonit") || key.includes("moonshot") || key.includes("moonshoot")) return "moonit";
+  }
+  return "unknown";
+}
+
 /* ---------- helpers ---------- */
 function getTokenAge(createdAt: string | number) {
   if (!createdAt && createdAt !== 0) return "Unknown";
@@ -40,100 +125,6 @@ function getTokenAge(createdAt: string | number) {
   if (days > 0) return `${days}d`;
   if (hours > 0) return `${hours}h`;
   return `${mins}m`;
-}
-
-const protocolColorMap: Record<string, string> = {
-  pump: "#22c55e",
-  "pump.fun": "#22c55e",
-  bonk: "#ff6b35",
-  moonshot: "#a855f7",
-  heaven: "#8b5cf6",
-  "daos.fun": "#06b6d4",
-  candle: "#f59e0b",
-  sugar: "#ec4899",
-  believe: "#10b981",
-  jupiter: "#8b5cf6",
-  moonit: "#74831f",
-  boop: "#134577",
-  boopfun: "#134577",
-  launchlab: "#ef4444",
-  dynamic: "#526fff",
-  raydium: "#5c51f7",
-  raydiumlaunchpad: "#5c51f7",
-  meteora: "#ff4662",
-  meteora_v2: "#ff4662",
-  pump_amm: "#e9ba14",
-  orca: "#0ea5e9",
-};
-
-function getColumnType(token: Token): "new" | "final-stretch" | "migrated" {
-  const migrated =
-    (token as any).is_migrated ||
-    (token as any).migrated ||
-    (token as any).graduated ||
-    (token as any).is_graduated;
-  if (migrated) return "migrated";
-
-  const pct =
-    (token as any).bonding_pct ??
-    ((token as any).bonding_curve_progress != null
-      ? (token as any).bonding_curve_progress * 100
-      : undefined) ??
-    (token as any).graduationPercent ??
-    0;
-
-  const marketCap =
-    (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
-
-  let progress = 0;
-  if (typeof pct === "number" && pct >= 0) progress = pct;
-  else if (marketCap > 0) progress = Math.min((marketCap / 69000000) * 100, 100);
-
-  return progress >= 60 ? "final-stretch" : "new";
-}
-
-function getProtocolColor(token: Token, column: "new" | "final-stretch" | "migrated") {
-  const lp = (token as any).launchpad_protocol?.toLowerCase();
-  const proto = (token as any).protocol?.toLowerCase();
-  const ln = (token as any).launchpadName?.toLowerCase();
-  const amm = (token as any).amm?.toLowerCase();
-  const v = lp || proto || ln || amm || "";
-  if (!v) return "#22c55e";
-
-  if (v.includes("meteora")) return column === "migrated" ? "#eab308" : "#ff4662";
-  if (v.includes("pump")) return column === "migrated" ? "#eab308" : "#22c55e";
-
-  if (protocolColorMap[v]) return protocolColorMap[v];
-  if (v.includes("raydium")) return "#5c51f7";
-  if (v.includes("moonit")) return "#74831f";
-  if (v.includes("boop")) return "#134577";
-  if (v.includes("bonk")) return protocolColorMap["bonk"];
-  if (v.includes("orca")) return protocolColorMap["orca"];
-  if (v.includes("jupiter")) return protocolColorMap["jupiter"];
-  return "#22c55e";
-}
-
-function getTokenIcon(token: Token): string {
-  const lp = (token as any).launchpad_protocol?.toLowerCase();
-  const proto = (token as any).protocol?.toLowerCase();
-  const ln = (token as any).launchpadName?.toLowerCase();
-  const amm = (token as any).amm?.toLowerCase();
-  const v = lp || proto || ln || amm || "";
-  if (!v || v.includes("pump"))
-    return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
-  if (v.includes("meteora"))
-    return "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013";
-  if (v.includes("raydium"))
-    return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
-  if (v.includes("boop"))
-    return "https://dropsearn.fra1.cdn.digitaloceanspaces.com/media/projects/logos/boopfun_logo_1746246162.webp";
-  if (v.includes("moonit"))
-    return "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6_LEZppFrAkKMqApIwCM_R5n0-b4XC8Aluw&s";
-  if (v.includes("orca"))
-    return "https://s2.coinmarketcap.com/static/img/coins/64x64/7501.png";
-  if (v.includes("jupiter"))
-    return "https://s2.coinmarketcap.com/static/img/coins/64x64/29210.png";
-  return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
 }
 
 function normalizeAssetUrl(raw?: string): string | null {
@@ -177,6 +168,33 @@ function StatInline({
       </span>
     </div>
   );
+}
+
+/* ---------- column type ---------- */
+function getColumnType(token: Token): "new" | "final-stretch" | "migrated" {
+  const migrated =
+    (token as any).is_migrated ||
+    (token as any).migrated ||
+    (token as any).graduated ||
+    (token as any).is_graduated;
+  if (migrated) return "migrated";
+
+  const pct =
+    (token as any).bonding_pct ??
+    ((token as any).bonding_curve_progress != null
+      ? (token as any).bonding_curve_progress * 100
+      : undefined) ??
+    (token as any).graduationPercent ??
+    0;
+
+  const marketCap =
+    (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
+
+  let progress = 0;
+  if (typeof pct === "number" && pct >= 0) progress = pct;
+  else if (marketCap > 0) progress = Math.min((marketCap / 69000000) * 100, 100);
+
+  return progress >= 60 ? "final-stretch" : "new";
 }
 
 /* ===================================================================== */
@@ -234,10 +252,14 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
     return mc ? Math.min((mc / 69000000) * 100, 100) : 0;
   })();
 
-  // protocol color + icon
+  /* ---------- canonical protocol resolution ---------- */
   const columnType = getColumnType(token);
-  const protocolColor = getProtocolColor(token, columnType);
-  const tokenIcon = getTokenIcon(token);
+  const protoId = detectProtocolId(token);
+  let protocolColor = PROTOCOL_COLOR[protoId] || PROTOCOL_COLOR.unknown;
+  if (columnType === "migrated" && (protoId.startsWith("meteora") || protoId.startsWith("pump"))) {
+    protocolColor = "#eab308";
+  }
+  const tokenIcon = PROTOCOL_ICON[protoId] || PROTOCOL_ICON.unknown;
 
   // token image (ipfs/http)
   const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
@@ -253,8 +275,16 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
     setTimeout(() => setShowToast(false), 1600);
   };
 
+  // --- sizing ratios + badge scaling (centralized) ---
+  const AVATAR_SIZE = 44; // h-11 / w-11
+  const { sizeRatio, imgScale, rightRatio, bottomRatio } = protocolBadgeScale(protoId);
+  const BADGE_SIZE = Math.round(AVATAR_SIZE * sizeRatio);
+  const BADGE_BORDER = 2;
+  const badgeRight = -Math.round(BADGE_SIZE * rightRatio);
+  const badgeBottom = -Math.round(BADGE_SIZE * bottomRatio);
+  const isMeteora = protoId.startsWith("meteora");
+
   return (
-    // CHANGED: remove justify-between, add gap so center sits just left of the actions
     <div className="flex w-full items-center gap-6 px-2 py-2" style={{ color: AX.text }}>
       {/* WS banner(s) */}
       {wsError && (
@@ -270,7 +300,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
 
       {/* LEFT: token avatar + meta */}
       <div className="flex items-center gap-3">
-        {/* Avatar with protocol-colored outer ring and protocol badge (bottom-right) */}
+        {/* Avatar with protocol-colored outer ring and hanging protocol badge */}
         <div
           className="relative h-11 w-11 rounded-[10px] overflow-visible"
           onMouseEnter={() => setShowPreview(true)}
@@ -315,21 +345,42 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
             </div>
           </div>
 
-          {/* Protocol badge (BOTTOM-RIGHT) */}
+          {/* Protocol badge (HANGING outside, bottom-right) */}
           <div
-            className="absolute -bottom-1 -right-1 rounded-full bg-white overflow-hidden grid place-items-center"
+            className="absolute rounded-full overflow-hidden grid place-items-center"
             style={{
-              width: 18,
-              height: 18,
-              border: `2px solid ${protocolColor}`,
+              width: BADGE_SIZE,
+              height: BADGE_SIZE,
+              right: badgeRight,
+              bottom: badgeBottom,
+              border: `${BADGE_BORDER}px solid ${protocolColor}`,
               boxShadow: `0 0 6px ${protocolColor}66`,
+              zIndex: 5,
+              // CHANGED: remove white background for Meteora so no white rim shows
+              backgroundColor: isMeteora ? "#0f1012" : "#ffffff",
             }}
             title="Protocol"
           >
             <img
               src={tokenIcon}
               alt="protocol"
-              className="w-[70%] h-[70%] object-contain"
+              // CHANGED: for Meteora, fill the circle and multiply to kill white pixels
+              style={
+                isMeteora
+                  ? {
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      mixBlendMode: "multiply",
+                      // slight boost so reds stay punchy after multiply on dark bg
+                      filter: "contrast(1.05) saturate(1.05)",
+                    }
+                  : {
+                      width: `${Math.round(BADGE_SIZE * imgScale)}px`,
+                      height: `${Math.round(BADGE_SIZE * imgScale)}px`,
+                      objectFit: "contain",
+                    }
+              }
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
               }}
@@ -345,7 +396,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
               {token.name}
             </span>
 
-            {/* copy mint */}
             {!!token.mint && (
               <button
                 className="ml-1"
@@ -367,7 +417,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
           <div className="flex items-center gap-2 text-sm" style={{ color: AX.green }}>
             <span>{getTokenAge((token as any).created_at || (token as any).CreatedAt)}</span>
 
-            {/* pump.fun link (heuristic) */}
             {token.mint && token.mint.slice(-4) === "pump" && (
               <Link
                 target="_blank"
@@ -379,7 +428,6 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
               </Link>
             )}
 
-            {/* twitter search */}
             <button
               title="Search on X"
               onClick={() =>
@@ -396,12 +444,11 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
         </div>
       </div>
 
-      {/* CENTER: compact stats — now sits directly to the right of the left block */}
+      {/* CENTER: compact stats */}
       <div className="flex items-center gap-6">
         <div className="text-left">
           <div className="text-[18px] tabular-nums flex items-center gap-1">
             ${formatSmartNumber(mcap)}
-            {/* live dot */}
             {wsConnected && <span className="text-[12px]" style={{ color: AX.green }}>●</span>}
           </div>
         </div>
@@ -416,7 +463,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
         </div>
       </div>
 
-      {/* RIGHT: actions — pinned to far right */}
+      {/* RIGHT: actions */}
       <div className="flex items-center gap-2 ml-auto">
         <span title="Share">
           <IoShareSocialOutline className="cursor-pointer text-[14px]" style={{ color: AX.muted }} />
