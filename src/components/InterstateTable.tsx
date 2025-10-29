@@ -235,14 +235,14 @@ const TableHeader: React.FC<{
   onSort?: (key: string) => void;
 }> = ({ sortKey, sortDirection, onSort }) => (
   <thead>
-    <tr style={{ backgroundColor: AX.surface2, borderBottom: `1px solid ${AX.border}` }}>
+    <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
       {TABLE_HEADERS.map((header, idx) => (
         <th
           key={idx}
-          className={`${header.width} px-4 py-4 text-${header.align} text-xs font-bold tracking-wide uppercase ${
+          className={`${header.width} px-4 py-4 text-${header.align} text-xs font-medium tracking-wide uppercase ${
             header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
           }`}
-          style={{ color: AX.text }}
+          style={{ color: AX.text, fontWeight: '300' }}
           onClick={header.key && onSort ? () => onSort(header.key!) : undefined}
         >
           {header.label}
@@ -484,7 +484,7 @@ const TokenInfo: React.FC<{
         </div>
         
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded">
+          <span className="text-xs text-emerald-400" style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace', fontWeight: 400 }}>
             {timeLabel}
           </span>
           <div className="flex items-center gap-1.5 text-sky-400">
@@ -852,7 +852,11 @@ const MarketCapCell: React.FC<{
 
   return (
     <div className="text-right">
-      <div className="text-sm font-semibold" style={{ color: AX.text }}>
+      <div className="text-sm font-semibold" style={{ 
+        color: AX.text,
+        fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+        fontWeight: '400'
+      }}>
         {(() => {
           // console.log('MarketCapCell formatSmartNumber call with:', token.fully_diluted_value);
           return `$${formatSmartNumber(token.fully_diluted_value)}`;
@@ -880,15 +884,25 @@ const TxnsCell: React.FC<{
 }> = ({ token, selectedTimeframe }) => {
   const { total, buys, sells } = getTxns(token, selectedTimeframe);
 
+  const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
+  
   return (
     <div className="text-right">
-      <div className="text-sm font-medium mb-1" style={{ color: AX.text }}>
+      <div className="text-sm font-medium mb-1" style={{ 
+        color: AX.text,
+        fontFamily: monospaceFont,
+        fontWeight: '400'
+      }}>
         {total === 0 ? '-' : formatSmartNumber(total)}
       </div>
       <div className="text-xs font-medium">
-        <span className="text-emerald-400">{buys === 0 ? '-' : formatSmartNumber(buys)}</span>
+        <span className="text-emerald-400" style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+          {buys === 0 ? '-' : formatSmartNumber(buys)}
+        </span>
         <span className="mx-1" style={{ color: AX.muted }}>/</span>
-        <span className="text-red-400">{sells === 0 ? '-' : formatSmartNumber(sells)}</span>
+        <span className="text-red-400" style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+          {sells === 0 ? '-' : formatSmartNumber(sells)}
+        </span>
       </div>
     </div>
   );
@@ -904,17 +918,27 @@ const AuditLogCell: React.FC<{
   const buyCount = (token as any)[`total_buys_${selectedTimeframe}`] || 0;
   const sellCount = (token as any)[`total_sells_${selectedTimeframe}`] || 0;
 
+  const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
+  
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="flex items-center gap-1">
         <span className={`w-2 h-2 rounded-full ${percentChange >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
-        <span className="text-xs font-medium" style={{ color: AX.text }}>
+        <span className="text-xs font-medium" style={{ 
+          color: AX.text,
+          fontFamily: monospaceFont,
+          fontWeight: '400'
+        }}>
           {Math.abs(percentChange).toFixed(2)}%
         </span>
       </div>
       <div className="flex gap-2 text-xs" style={{ color: AX.muted }}>
-        <span>B: {formatSmartNumber(buyCount)}</span>
-        <span>S: {formatSmartNumber(sellCount)}</span>
+        <span style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+          B: {formatSmartNumber(buyCount)}
+        </span>
+        <span style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+          S: {formatSmartNumber(sellCount)}
+        </span>
       </div>
     </div>
   );
@@ -992,13 +1016,21 @@ const TableRow: React.FC<{
           });
           return null;
         })()} */}
-        <div className="text-sm font-medium" style={{ color: AX.text }}>
+        <div className="text-sm font-medium" style={{ 
+          color: AX.text,
+          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+          fontWeight: '400'
+        }}>
           ${formatSmartNumber(token.total_liquidity_usd)}
         </div>
       </td>
       
       <td className="w-28 px-4 py-4 align-middle text-right">
-        <div className="text-sm font-medium" style={{ color: AX.text }}>
+        <div className="text-sm font-medium" style={{ 
+          color: AX.text,
+          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+          fontWeight: '400'
+        }}>
           {/* Show "-" when volume data is not available instead of $0.00 */}
           {volume === 0 ? "-" : `$${formatSmartNumber(volume)}`}
         </div>
@@ -1117,7 +1149,7 @@ export default function InterstateTable({
 
   return (
     <div className="overflow-x-auto shadow-lg rounded-lg" style={{ 
-      backgroundColor: AX.surface2, 
+      backgroundColor: 'rgba(30, 31, 38, 0.3)', 
       border: `1px solid ${AX.border}`,
       borderColor: AX.border 
     }}>
@@ -1157,7 +1189,37 @@ export default function InterstateTable({
             ))
           ) : (
             sortedRows.map(({ token, i }) => {
-              const handleTokenClick = () => {
+              const handleTokenClick = async () => {
+                // First, backfill the token to the database (same as search functionality)
+                try {
+                  console.log('🔄 Backfilling token from discover page:', token);
+                  
+                  const backfillResponse = await fetch('/api/token-service/backfill-token', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      mint: token.mint,
+                      name: token.name,
+                      symbol: token.symbol,
+                      uri: token.uri,
+                      market_cap_usd: token.fully_diluted_value,
+                      liquidity_usd: token.total_liquidity_usd,
+                      pair_address: token.pair_address
+                    })
+                  });
+
+                  if (backfillResponse.ok) {
+                    console.log('✅ Token backfilled successfully');
+                  } else {
+                    console.warn('⚠️ Token backfill failed, but continuing with navigation');
+                  }
+                } catch (error) {
+                  console.error('❌ Error backfilling token:', error);
+                  // Continue with navigation even if backfill fails
+                }
+
                 // Navigate immediately with pair_address or mint - trade page will handle resolution
                 const address = token.pair_address || token.mint;
                 if (address) {

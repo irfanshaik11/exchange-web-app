@@ -273,7 +273,7 @@ export default function usePaginatedTokensWithFallback({
 
     // Set up polling interval (reduced frequency to prevent flickering)
     pollIntervalRef.current = setInterval(poll, 3000);
-  }, [filter, order, offset, limit, throttledSetData]);
+  }, [filter, order, offset, limit, timeframe, throttledSetData]);
 
   // Clear polling
   const clearPolling = useCallback(() => {
@@ -297,10 +297,14 @@ export default function usePaginatedTokensWithFallback({
     // Clear existing data when timeframe changes to prevent stale data display
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null, usingFallback: false, data: [] }));
     
-    // Clear stable data reference when timeframe changes
+    // Clear stable data reference and STOP any existing polling when timeframe changes
     if (lastTimeframeRef.current !== timeframe) {
       // console.log('🧹 Clearing stable data reference due to timeframe change');
       lastStableDataRef.current = null;
+      // CRITICAL: Clear any existing polling interval when timeframe changes
+      clearPolling();
+      // Update the last timeframe reference
+      lastTimeframeRef.current = timeframe;
     }
 
     let pingInterval: NodeJS.Timeout | null = null;

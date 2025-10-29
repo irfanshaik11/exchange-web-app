@@ -48,8 +48,8 @@ interface FilterContextType {
 }
 
 const defaultFilter: FilterState = {
-  protocols: ['Raydium', 'Pump', 'Moonit'],
-  amms: AmmList.map(amm => amm.id),
+  protocols: [],
+  amms: [],
   searchKeywords: '',
   excludeKeywords: '',
   dexPaid: false,

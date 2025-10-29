@@ -117,6 +117,7 @@ const FilterPopout: React.FC<FilterPopoutProps> = ({ open, onClose, onApplyFilte
       onClose={onClose}
       align="center"
       className="bg-neutral-900 rounded-xl shadow-2xl w-full sm:max-w-lg p-3 sm:p-6 relative text-neutral-100 h-[80vh] max-h-[calc(100vh-40px)] flex flex-col"
+      zIndex={200}
     >
       <div className="flex items-center justify-between flex-shrink-0 pb-2" style={{marginTop: '-1.5rem', marginLeft: '-1.5rem', marginRight: '-1.5rem', paddingLeft: '1.5rem', paddingRight: '1.5rem'}}>
         <h2 className="text-xl font-semibold mt-4">Filters</h2>
