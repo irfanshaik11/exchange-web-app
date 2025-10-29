@@ -1,9 +1,12 @@
+// Backend API URL
+const WALLET_TRACKER_API_URL = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+
 // Cache for token metadata to avoid repeated fetches
 const metadataCache = new Map<string, { symbol: string | null; name: string | null }>();
 
 /**
- * Fetch token metadata using Helius DAS API (Digital Asset Standard)
- * This has much better coverage than manually parsing Metaplex metadata
+ * Fetch token metadata via secure backend (using Helius DAS API)
+ * This keeps API keys secure and provides better coverage than manually parsing Metaplex metadata
  */
 export async function fetchTokenMetadata(mintAddress: string): Promise<{ symbol: string | null; name: string | null }> {
   // Check cache first
@@ -16,24 +19,14 @@ export async function fetchTokenMetadata(mintAddress: string): Promise<{ symbol:
   console.log(`[TokenMetadata] Fetching metadata for ${mintAddress.slice(0, 8)}...`);
 
   try {
-    // Use Helius DAS API for better coverage
-    const url = 'https://mainnet.helius-rpc.com/?api-key=58281a41-2a84-4eab-82ea-b84c72af7346';
-    
-    const response = await fetch(url, {
+    // Use backend endpoint to keep API key secure
+    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/token-metadata`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 'metadata-fetch',
-        method: 'getAsset',
-        params: {
-          id: mintAddress,
-          displayOptions: {
-            showFungible: true
-          }
-        },
+        mints: [mintAddress],
       }),
     });
 
@@ -43,12 +36,8 @@ export async function fetchTokenMetadata(mintAddress: string): Promise<{ symbol:
 
     const data = await response.json();
     
-    if (data.result) {
-      const asset = data.result;
-      const symbol = asset.content?.metadata?.symbol || asset.token_info?.symbol || null;
-      const name = asset.content?.metadata?.name || asset.token_info?.name || null;
-      
-      const result = { symbol, name };
+    if (data.ok && data.metadata && data.metadata[mintAddress]) {
+      const result = data.metadata[mintAddress];
       console.log(`[TokenMetadata] Successfully fetched for ${mintAddress.slice(0, 8)}...`, result);
       metadataCache.set(mintAddress, result);
       return result;
@@ -67,7 +56,7 @@ export async function fetchTokenMetadata(mintAddress: string): Promise<{ symbol:
 }
 
 /**
- * Batch fetch token metadata for multiple mints using Helius getAssetBatch
+ * Batch fetch token metadata for multiple mints via secure backend
  */
 export async function batchFetchTokenMetadata(mintAddresses: string[]): Promise<Map<string, { symbol: string | null; name: string | null }>> {
   const results = new Map<string, { symbol: string | null; name: string | null }>();
@@ -90,30 +79,19 @@ export async function batchFetchTokenMetadata(mintAddresses: string[]): Promise<
   console.log(`[TokenMetadata] Fetching ${uncachedAddresses.length} uncached tokens in batch`);
   
   try {
-    // Use Helius getAssetBatch API for better performance
-    const url = 'https://mainnet.helius-rpc.com/?api-key=58281a41-2a84-4eab-82ea-b84c72af7346';
-    
-    // Batch API supports up to 1000 assets at once, but we'll chunk to 100 for safety
+    // Backend API supports up to 100 assets at once
     const chunkSize = 100;
     
     for (let i = 0; i < uncachedAddresses.length; i += chunkSize) {
       const chunk = uncachedAddresses.slice(i, i + chunkSize);
       
-      const response = await fetch(url, {
+      const response = await fetch(`${WALLET_TRACKER_API_URL}/api/token-metadata`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 'batch-metadata-fetch',
-          method: 'getAssetBatch',
-          params: {
-            ids: chunk,
-            displayOptions: {
-              showFungible: true
-            }
-          },
+          mints: chunk,
         }),
       });
 
@@ -124,23 +102,12 @@ export async function batchFetchTokenMetadata(mintAddresses: string[]): Promise<
 
       const data = await response.json();
       
-      if (data.result && Array.isArray(data.result)) {
-        data.result.forEach((asset: any, index: number) => {
-          const mintAddress = chunk[index];
-          if (asset) {
-            const symbol = asset.content?.metadata?.symbol || asset.token_info?.symbol || null;
-            const name = asset.content?.metadata?.name || asset.token_info?.name || null;
-            
-            const metadata = { symbol, name };
-            results.set(mintAddress, metadata);
-            metadataCache.set(mintAddress, metadata);
-            console.log(`[TokenMetadata] Batch fetched ${mintAddress.slice(0, 8)}...`, metadata);
-          } else {
-            // Asset not found
-            const fallback = { symbol: null, name: null };
-            results.set(mintAddress, fallback);
-            metadataCache.set(mintAddress, fallback);
-          }
+      if (data.ok && data.metadata) {
+        chunk.forEach((mintAddress) => {
+          const metadata = data.metadata[mintAddress] || { symbol: null, name: null };
+          results.set(mintAddress, metadata);
+          metadataCache.set(mintAddress, metadata);
+          console.log(`[TokenMetadata] Batch fetched ${mintAddress.slice(0, 8)}...`, metadata);
         });
       }
     }

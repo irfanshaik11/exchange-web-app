@@ -153,31 +153,60 @@ export async function getWalletSnapshots(address: string): Promise<WalletBalance
   }
 }
 
-// Get SOL balance for a wallet (using Solana RPC directly)
+// Get SOL balance for a wallet (via backend to keep RPC key secure)
 export async function getWalletSolBalance(address: string): Promise<number | null> {
   try {
-    // Use a public RPC endpoint or configure your own
-    const RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC;
-    const response = await fetch(RPC_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getBalance',
-        params: [address],
-      }),
-    });
+    const response = await fetch(
+      `${WALLET_TRACKER_API_URL}/api/wallet-balance/${encodeURIComponent(address)}`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch wallet balance');
+    }
     
     const data = await response.json();
-    if (data.result?.value !== undefined) {
-      // Convert lamports to SOL
-      return data.result.value / 1e9;
+    
+    if (data.ok && typeof data.balance === 'number') {
+      return data.balance;
     }
+    
     return null;
   } catch (error) {
     console.error('Error fetching SOL balance:', error);
     return null;
+  }
+}
+
+// Transaction interface for wallet activity
+export interface WalletTransaction {
+  signature: string;
+  slot: number;
+  blockTime: number | null;
+  err: any;
+  memo: string | null;
+}
+
+// Get recent transactions for a wallet (via backend using Helius)
+export async function getWalletTransactions(address: string, limit: number = 10): Promise<WalletTransaction[]> {
+  try {
+    const response = await fetch(
+      `${WALLET_TRACKER_API_URL}/api/wallet-transactions/${encodeURIComponent(address)}?limit=${limit}`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch wallet transactions');
+    }
+    
+    const data = await response.json();
+    
+    if (data.ok && Array.isArray(data.transactions)) {
+      return data.transactions;
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error fetching wallet transactions:', error);
+    return [];
   }
 }
 
