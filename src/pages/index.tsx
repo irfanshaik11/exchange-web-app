@@ -63,7 +63,7 @@ function shuffleArray<T extends NonNullable<unknown>>(array: T[]): T[] {
 // Add this type extension after importing Token
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
-export type Timeframe = "1m" | "5m" | "30m" | "1h";
+export type Timeframe = "5m" | "1h" | "6h" | "24h";
 
 export default function Home() {
   const router = useRouter();
@@ -79,9 +79,15 @@ export default function Home() {
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const isDiscover = router.pathname === "/";
-  const timeframes = ["1m", "5m", "30m", "1h"] as Timeframe[];
+  const timeframes = ["5m", "1h", "6h", "24h"] as Timeframe[];
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<Timeframe>("1h");
+  
+  // Log timeframe changes in index page
+  useEffect(() => {
+    console.log('🔍 [INDEX] selectedTimeframe changed to:', selectedTimeframe);
+  }, [selectedTimeframe]);
+  
   const { user, loading: userLoading, refreshUser } = useUser();
   const [selectedTab, setSelectedTab] = useState<"dex" | "trending">("trending");
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
@@ -93,12 +99,17 @@ export default function Home() {
   const { filter, setFilter, resetFilter } = useFilter();
   const [showSkeleton, setShowSkeleton] = useState(true);
 
-  // WebSocket token service
-  console.log('🔧 About to call usePaginatedTokensWithFallback with:', { 
+  // WebSocket token service - ONLY for home page, not discover
+  console.log('🔧 [INDEX] About to call usePaginatedTokensWithFallback with:', { 
     filter: selectedTab === 'dex' ? 'new' : 'trending', 
-    timeframe: selectedTimeframe 
+    timeframe: selectedTimeframe,
+    pathname: router.pathname
   });
-  console.log('🔧 selectedTimeframe value:', selectedTimeframe, 'type:', typeof selectedTimeframe);
+  console.log('🔧 [INDEX] selectedTimeframe value:', selectedTimeframe, 'type:', typeof selectedTimeframe);
+  
+  // Don't make API calls if we're on a different page
+  const shouldMakeCalls = router.pathname === '/';
+  
   const {
     data: allTokens,
     loading: tokensLoading,
@@ -108,8 +119,17 @@ export default function Home() {
     usingFallback,
   } = usePaginatedTokensWithFallback({
     filter: selectedTab === 'dex' ? 'new' : 'trending',
-    timeframe: selectedTimeframe
-  });  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
+    timeframe: selectedTimeframe,
+    // Disable the hook when not on home page
+    limit: shouldMakeCalls ? 20 : 0
+  });
+  
+  // Only make API calls on the home page, not discover page
+  useEffect(() => {
+    if (router.pathname !== '/') {
+      console.log('🚫 Index page: Skipping API calls - not on home route');
+    }
+  }, [router.pathname]);  // Efficiently update tokenMapRef and trigger re-renders only for changed tokens
   useEffect(() => {
     console.log('🔧 allTokens changed:', { allTokens, isArray: Array.isArray(allTokens), length: Array.isArray(allTokens) ? allTokens.length : 'not array' });
     if (Array.isArray(allTokens)) {
@@ -353,10 +373,6 @@ export default function Home() {
       return isNaN(n) ? 0 : n;
     }
     // simple fallbacks
-    if (tf === '1h') return Number(t?.volume_5m) || 0;
-    if (tf === '30m') return Number(t?.volume_5m) || 0;
-    if (tf === '5m') return Number(t?.volume_5m) || 0;
-    if (tf === '1m') return Number(t?.volume_5m) || 0;
     return 0;
   }, []);
 

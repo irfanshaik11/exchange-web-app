@@ -8,6 +8,7 @@ import type { Token } from '~/utils/db';
 import { AiOutlineCalendar } from 'react-icons/ai';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import { batchFetchTokenMetadata } from '~/utils/tokenMetadata';
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -15,6 +16,46 @@ interface WalletScanPanelProps {
 }
 
 const TABS = ["Active Positions", "History", "Top 100", "Activity"];
+
+// Helper to format timestamp as relative time (like "5m", "3h", "2d")
+function formatTimeAgo(timestamp: string | number | Date): string {
+  let date: Date;
+  
+  // Parse the timestamp
+  if (typeof timestamp === 'string') {
+    date = new Date(timestamp);
+  } else if (typeof timestamp === 'number') {
+    // Handle both seconds and milliseconds
+    date = new Date(timestamp < 10000000000 ? timestamp * 1000 : timestamp);
+  } else if (timestamp instanceof Date) {
+    date = timestamp;
+  } else {
+    return 'Unknown';
+  }
+  
+  // Validate date
+  if (isNaN(date.getTime())) {
+    return 'Unknown';
+  }
+  
+  const now = Date.now();
+  const diff = now - date.getTime();
+  
+  if (diff < 0) return 'Just now';
+  
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  const months = Math.floor(diff / 2592000000);
+  const years = Math.floor(diff / 31536000000);
+  
+  if (years > 0) return `${years}y`;
+  if (months > 0) return `${months}mo`;
+  if (days > 0) return `${days}d`;
+  if (hours > 0) return `${hours}h`;
+  if (minutes > 0) return `${minutes}m`;
+  return 'Just now';
+}
 
 const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) => {
   // Live data state
@@ -24,6 +65,12 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState("Activity");
+  
+  // History data
+  const [history, setHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [tokenMetadata, setTokenMetadata] = useState<Map<string, { symbol: string | null; name: string | null }>>(new Map());
   const [token, setToken] = useState<Token | null>(null);
   const [tokenLoading, setTokenLoading] = useState(true);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -123,6 +170,58 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
       .finally(() => setTokenBalanceLoading(false));
   }, [wallet.address, token && token.pair_address]);
 
+  // Fetch history when History tab is selected
+  useEffect(() => {
+    if (tab !== 'History' || !wallet?.address) return;
+    
+    setHistoryLoading(true);
+    setHistoryError(null);
+    
+    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_API || 'http://localhost:8081';
+    
+    fetch(`${backendUrl}/api/history?wallet=${wallet.address}&limit=100`)
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch history');
+        return res.json();
+      })
+      .then(data => {
+        console.log('[History] Received data:', data);
+        setHistory(Array.isArray(data) ? data : []);
+      })
+      .catch(err => {
+        console.error('[History] Error:', err);
+        setHistoryError('Failed to load trading history');
+        setHistory([]);
+      })
+      .finally(() => {
+        setHistoryLoading(false);
+      });
+  }, [tab, wallet?.address]);
+
+  // Fetch token metadata for all mints in history
+  useEffect(() => {
+    if (history.length === 0) return;
+    
+    // Extract unique mints that don't have symbol/name
+    const mintsToFetch = history
+      .filter(trade => trade.mint && (!trade.symbol || !trade.name))
+      .map(trade => trade.mint)
+      .filter((mint, idx, arr) => arr.indexOf(mint) === idx); // unique
+    
+    if (mintsToFetch.length === 0) return;
+    
+    console.log('[History] Fetching metadata for', mintsToFetch.length, 'tokens');
+    
+    batchFetchTokenMetadata(mintsToFetch)
+      .then(metadata => {
+        console.log('[History] Fetched token metadata:', metadata);
+        setTokenMetadata(metadata);
+      })
+      .catch(err => {
+        console.error('[History] Error fetching token metadata:', err);
+      });
+  }, [history]);
+
   const handleCopy = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(wallet.address).then(() => {
@@ -141,8 +240,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
   }, [toast]);
 
   return (
-    <InterstatePopout open={true} onClose={onClose} align="center" className="w-[calc(100vw-600px)] h-[calc(100vh-120px)] p-0 bg-transparent shadow-none" overlayClassName="z-50">
-      <div className="relative w-[calc(100vw-600px)] h-[calc(100vh-120px)] bg-neutral-900 border border-neutral-700 shadow-2xl flex flex-col">
+    <InterstatePopout open={true} onClose={onClose} align="center" className="md:w-[80%] w-[90%] h-[calc(100vh-120px)] p-0 bg-transparent shadow-none" overlayClassName="z-50">
+      <div className="relative w-full h-[calc(100vh-120px)] bg-neutral-900 border border-neutral-700 shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-8 pt-6 pb-3 border-b border-neutral-800 relative">
           <div className="flex items-center gap-4">
@@ -352,6 +451,145 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
                   {currency === 'USD' ? 'USD' : 'SOL'}
                 </button>
               </div>
+            )}
+          </div>
+          {/* Tab Content Area */}
+          <div className="flex-1 overflow-auto px-8 py-4">
+            {tab === 'History' && (
+              <div className="w-full h-full">
+                {historyLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-neutral-400 animate-pulse">Loading history...</div>
+                  </div>
+                ) : historyError ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-red-400">{historyError}</div>
+                  </div>
+                ) : history.length === 0 ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-neutral-500">No trading history found</div>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-neutral-900 border-b border-neutral-800">
+                      <tr className="text-neutral-400 text-xs uppercase">
+                        <th className="py-3 px-4 text-left font-semibold">Time</th>
+                        <th className="py-3 px-4 text-left font-semibold">Token</th>
+                        <th className="py-3 px-4 text-center font-semibold">Side</th>
+                        <th className="py-3 px-4 text-right font-semibold">Amount</th>
+                        <th className="py-3 px-4 text-right font-semibold">Price (USD)</th>
+                        <th className="py-3 px-4 text-right font-semibold">Value</th>
+                        <th className="py-3 px-4 text-left font-semibold">Venue</th>
+                        <th className="py-3 px-4 text-center font-semibold">Tx</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-800">
+                      {history
+                        .filter((trade) => {
+                          if (!searchTerm) return true;
+                          const term = searchTerm.toLowerCase();
+                          const metadata = tokenMetadata.get(trade.mint);
+                          return (
+                            trade.symbol?.toLowerCase().includes(term) ||
+                            trade.name?.toLowerCase().includes(term) ||
+                            metadata?.symbol?.toLowerCase().includes(term) ||
+                            metadata?.name?.toLowerCase().includes(term) ||
+                            trade.mint?.toLowerCase().includes(term) ||
+                            trade.txSig?.toLowerCase().includes(term)
+                          );
+                        })
+                        .map((trade, idx) => {
+                          // Handle different data formats for amount
+                          let amount = 0;
+                          if (typeof trade.amount === 'number') {
+                            amount = trade.amount;
+                          } else if (typeof trade.amount === 'string') {
+                            amount = parseFloat(trade.amount);
+                          } else if (trade.amount && typeof trade.amount === 'object' && trade.amount.toNumber) {
+                            amount = trade.amount.toNumber();
+                          }
+                          
+                          // Handle different data formats for priceUsd
+                          let priceUsd = null;
+                          if (typeof trade.priceUsd === 'number') {
+                            priceUsd = trade.priceUsd;
+                          } else if (typeof trade.priceUsd === 'string') {
+                            priceUsd = parseFloat(trade.priceUsd);
+                          } else if (trade.priceUsd && typeof trade.priceUsd === 'object' && trade.priceUsd.toNumber) {
+                            priceUsd = trade.priceUsd.toNumber();
+                          }
+                          
+                          const value = priceUsd ? amount * priceUsd : null;
+                          const timeAgo = trade.ts ? formatTimeAgo(trade.ts) : 'Unknown';
+                          
+                          // Use fetched metadata as fallback
+                          const metadata = tokenMetadata.get(trade.mint);
+                          const displaySymbol = trade.symbol || metadata?.symbol || 'Unknown';
+                          const displayName = trade.name || metadata?.name;
+                          
+                          return (
+                            <tr key={trade.id || idx} className="hover:bg-neutral-800 transition-colors">
+                              <td className="py-3 px-4 text-neutral-300">
+                                <div className="text-sm font-mono">{timeAgo}</div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <div className="flex flex-col">
+                                  <span className="text-white font-semibold" title={displayName || undefined}>
+                                    {displaySymbol}
+                                  </span>
+                                  <span className="text-[10px] text-neutral-500 font-mono">
+                                    {trade.mint ? `${trade.mint.slice(0, 4)}...${trade.mint.slice(-4)}` : '—'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                  trade.side === 'buy' 
+                                    ? 'bg-emerald-900/30 text-emerald-400' 
+                                    : 'bg-rose-900/30 text-rose-400'
+                                }`}>
+                                  {trade.side?.toUpperCase() || '—'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right text-neutral-300">
+                                {amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                              </td>
+                              <td className="py-3 px-4 text-right text-neutral-300">
+                                {priceUsd ? `$${priceUsd.toLocaleString(undefined, { maximumFractionDigits: 6 })}` : '—'}
+                              </td>
+                              <td className="py-3 px-4 text-right text-neutral-300">
+                                {value ? `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}
+                              </td>
+                              <td className="py-3 px-4 text-neutral-400 text-xs">
+                                {trade.venue || 'Unknown'}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <a
+                                  href={`https://solscan.io/tx/${trade.txSig}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:text-blue-300 transition-colors"
+                                  title="View on Solscan"
+                                >
+                                  <FiExternalLink className="inline text-sm" />
+                                </a>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+            {tab === 'Active Positions' && (
+              <div className="flex items-center justify-center h-full text-neutral-500">Active Positions - Coming Soon</div>
+            )}
+            {tab === 'Top 100' && (
+              <div className="flex items-center justify-center h-full text-neutral-500">Top 100 - Coming Soon</div>
+            )}
+            {tab === 'Activity' && (
+              <div className="flex items-center justify-center h-full text-neutral-500">Activity - Coming Soon</div>
             )}
           </div>
         </div>
