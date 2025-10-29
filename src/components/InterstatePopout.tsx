@@ -50,17 +50,20 @@ export default function InterstatePopout({
   if (!render) return null;
 
   // Overlay classes for centering and background with blur + fade
+  // Only allow pointer events when actually visible to prevent any blocking
   const overlayBase = `fixed inset-0 z-50 transition-opacity duration-200 ${
     isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
   }`;
   const overlayCenter = 'flex items-center justify-center bg-black/40 backdrop-blur-sm';
   const overlayTopRight = 'flex items-start justify-end bg-black/40 backdrop-blur-sm';
 
+  // Double-check: if not visible, ensure pointer-events are disabled via inline style too
   return (
     <div
       className={
         `${overlayBase} ${align === 'center' ? overlayCenter : overlayTopRight} ${isVisible ? 'visible' : ''} ${overlayClassName}`
       }
+      style={{ pointerEvents: isVisible ? 'auto' : 'none' }}
     >
       <div
         ref={contentRef}

@@ -71,15 +71,20 @@ function validateSettings(settings: QuickBuySettings): QuickBuySettings {
 }
 
 export function QuickBuyProvider({ children }: { children: ReactNode }) {
-  // TEMPORARY: Force reset localStorage to use new defaults BEFORE loading
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('quickBuySettings');
-    console.log('🧹 Cleared localStorage quickBuySettings');
-    console.log('🔧 Default settings:', defaultSettings);
-  }
-
   // Load from localStorage if available
   const getInitialState = () => {
+    // TEMPORARY: Force reset localStorage to use new defaults BEFORE loading
+    // Moved inside function to avoid running during render
+    if (typeof window !== 'undefined') {
+      // Only remove on first load, not every render
+      const shouldReset = sessionStorage.getItem('quickBuySettingsReset') !== 'true';
+      if (shouldReset) {
+        localStorage.removeItem('quickBuySettings');
+        sessionStorage.setItem('quickBuySettingsReset', 'true');
+        console.log('🧹 Cleared localStorage quickBuySettings');
+        console.log('🔧 Default settings:', defaultSettings);
+      }
+    }
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('quickBuySettings');
       console.log('📦 Saved settings from localStorage:', saved);
