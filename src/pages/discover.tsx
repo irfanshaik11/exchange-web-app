@@ -14,7 +14,7 @@ import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
 import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 import toast from "react-hot-toast";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
-import { FaFilter, FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
+import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 
 export type Timeframe = "5m" | "1h" | "6h" | "24h";
 
@@ -63,6 +63,74 @@ export default function DiscoverPage() {
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
+  // 🔒 Image cache: tokenId -> { cover?: string; avatar?: string }
+  const imageCacheRef = useRef<Map<string, { cover?: string; avatar?: string }>>(new Map());
+  // Track one-time preloads to avoid refetch spam
+  const preloadedRef = useRef<Set<string>>(new Set());
+
+  const getTokenId = (t: any) => t?.pair_address || t?.mint || undefined;
+
+  const pickImageCandidates = (t: any) => {
+    const coverCandidate = t?.image || t?.logo || t?.uri || undefined;
+    const avatarCandidate = t?.logo || t?.image || undefined;
+    return { coverCandidate, avatarCandidate };
+  };
+
+  const getCachedImagesForToken = (t: any) => {
+    const id = getTokenId(t);
+    const { coverCandidate, avatarCandidate } = pickImageCandidates(t);
+
+    const cached = id ? imageCacheRef.current.get(id) : undefined;
+    let cover = cached?.cover;
+    let avatar = cached?.avatar;
+
+    // First time we see this token, adopt current candidates
+    if (!cover && coverCandidate) cover = coverCandidate;
+    if (!avatar && avatarCandidate) avatar = avatarCandidate;
+
+    if (id) {
+      imageCacheRef.current.set(id, { cover, avatar });
+
+      // Optional one-time preload to encourage browser caching
+      const preloadKey = `${id}:${cover ?? ''}|${avatar ?? ''}`;
+      if (!preloadedRef.current.has(preloadKey)) {
+        if (cover) { const i = new Image(); i.decoding = 'async'; i.loading = 'eager'; i.src = cover; }
+        if (avatar) { const i2 = new Image(); i2.decoding = 'async'; i2.loading = 'eager'; i2.src = avatar; }
+        preloadedRef.current.add(preloadKey);
+      }
+    }
+
+    return { cover, avatar };
+  };
+
+  // Hydrate cache from sessionStorage (optional persistence)
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = sessionStorage.getItem('tokenImageCache');
+        if (raw) {
+          const obj = JSON.parse(raw) as Record<string, { cover?: string; avatar?: string }>;
+          imageCacheRef.current = new Map(Object.entries(obj));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Persist cache to sessionStorage periodically (after displayed changes is fine)
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const obj: Record<string, { cover?: string; avatar?: string }> = {};
+        imageCacheRef.current.forEach((v, k) => { obj[k] = v; });
+        sessionStorage.setItem('tokenImageCache', JSON.stringify(obj));
+      }
+    } catch {
+      // ignore
+    }
+  }, [displayed]);
+
   // WebSocket token service – keep as-is for dex/trending
   const {
     data: allTokens,
@@ -76,7 +144,7 @@ export default function DiscoverPage() {
     filter: 'trending',
     timeframe: selectedTimeframe
   });
-  
+
   // Debug log to track timeframe changes
   // useEffect(() => {
   //   console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
@@ -145,7 +213,7 @@ export default function DiscoverPage() {
   // Apply filters to tokens
   const applyFilters = useCallback((tokens: TokenWithDexPaid[]) => {
     let filtered = [...tokens];
-    
+
     // Search keywords
     if (localFilters.searchKeywords.trim()) {
       const searchTerms = localFilters.searchKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
@@ -156,7 +224,7 @@ export default function DiscoverPage() {
         });
       }
     }
-    
+
     // Exclude keywords
     if (localFilters.excludeKeywords.trim()) {
       const excludeTerms = localFilters.excludeKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
@@ -167,7 +235,7 @@ export default function DiscoverPage() {
         });
       }
     }
-    
+
     // Market cap filter
     if (localFilters.marketCapMin || localFilters.marketCapMax) {
       filtered = filtered.filter(token => {
@@ -177,7 +245,7 @@ export default function DiscoverPage() {
         return marketCap >= min && marketCap <= max;
       });
     }
-    
+
     // Volume filter
     if (localFilters.volumeMin || localFilters.volumeMax) {
       filtered = filtered.filter(token => {
@@ -187,7 +255,7 @@ export default function DiscoverPage() {
         return volume >= min && volume <= max;
       });
     }
-    
+
     // Liquidity filter
     if (localFilters.liquidityMin || localFilters.liquidityMax) {
       filtered = filtered.filter(token => {
@@ -197,7 +265,7 @@ export default function DiscoverPage() {
         return liquidity >= min && liquidity <= max;
       });
     }
-    
+
     return filtered;
   }, [localFilters, selectedTimeframe, getVolumeForTimeframe]);
 
@@ -271,7 +339,7 @@ export default function DiscoverPage() {
     }
   }, [allTokens, tokensLoading]);
 
-  /* ------- map tokens -> PumpItem for Live Pump ------- */
+  /* ------- map tokens -> PumpItem for Live Pump (uses cached images) ------- */
   const toPumpItem = (t: any): PumpItem => {
     const name = t?.name || t?.symbol || '—';
     const sym = t?.symbol ? String(t.symbol).slice(0, 12) : undefined;
@@ -287,8 +355,7 @@ export default function DiscoverPage() {
             : `$${mcNum.toFixed(0)}`)
         : undefined;
 
-    const coverUrl = t?.image || t?.logo || t?.uri || undefined;
-    const avatarUrl = t?.logo || t?.image || undefined;
+    const { cover, avatar } = getCachedImagesForToken(t);
 
     return {
       id: t?.pair_address || t?.mint || Math.random().toString(36).slice(2),
@@ -297,8 +364,8 @@ export default function DiscoverPage() {
       desc,
       age,
       mc,
-      coverUrl,
-      avatarUrl,
+      coverUrl: cover,
+      avatarUrl: avatar,
       verified: Boolean(t?.verified),
       hot: Boolean(t?.hot),
     };
@@ -309,6 +376,21 @@ export default function DiscoverPage() {
 
   const liveRightItems: PumpItem[] =
     displayed.length ? displayed.slice(6, 12).map(toPumpItem) : demoRightPump;
+
+  // Simple LRU-ish trim when the cache gets large (optional)
+  useEffect(() => {
+    const MAX = 1500; // tune to your needs
+    const cache = imageCacheRef.current;
+    if (cache.size > MAX) {
+      const toDrop = Math.ceil(MAX * 0.1);
+      const it = cache.keys();
+      for (let i = 0; i < toDrop; i++) {
+        const k = it.next().value as string | undefined;
+        if (!k) break;
+        cache.delete(k);
+      }
+    }
+  }, [displayed]);
 
   return (
     <>
