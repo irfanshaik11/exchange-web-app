@@ -26,11 +26,11 @@ export default function usePaginatedTokensWithFallback({
   limit = 20,
   timeframe,
 }: UsePaginatedTokensParams = {}) {
-  console.log('🔧 [HOOK] usePaginatedTokensWithFallback called with:', { filter, order, offset, limit, timeframe });
+  //console.log('🔧 [HOOK] usePaginatedTokensWithFallback called with:', { filter, order, offset, limit, timeframe });
   
   // Early return if limit is 0 (used to disable the hook)
   if (limit === 0) {
-    console.log('🔧 [HOOK] Disabled - limit is 0, returning empty state');
+    //console.log('🔧 [HOOK] Disabled - limit is 0, returning empty state');
     return {
       data: [],
       loading: false,
@@ -41,10 +41,10 @@ export default function usePaginatedTokensWithFallback({
     };
   }
   
-  console.log('🔧 Environment check:', {
-    WEBSOCKET_URL: env.NEXT_PUBLIC_WEBSOCKET_URL,
-    BACKEND_URL: env.NEXT_PUBLIC_BACKEND_URL
-  });
+  // console.log('🔧 Environment check:', {
+  //   WEBSOCKET_URL: env.NEXT_PUBLIC_WEBSOCKET_URL,
+  //   BACKEND_URL: env.NEXT_PUBLIC_BACKEND_URL
+  // });
   
   const [state, setState] = useState<TokensState>({
     data: [],
@@ -55,7 +55,7 @@ export default function usePaginatedTokensWithFallback({
     usingFallback: false,
   });
 
-  console.log('🔧 Current state:', { dataLength: state.data.length, loading: state.loading, usingFallback: state.usingFallback });
+  // console.log('🔧 Current state:', { dataLength: state.data.length, loading: state.loading, usingFallback: state.usingFallback });
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -79,7 +79,7 @@ export default function usePaginatedTokensWithFallback({
 
       // Reset stability baseline if timeframe changed - IMPORTANT: don't use prev data from different timeframe
       if (lastTimeframeRef.current !== timeframe) {
-        console.log('⏱️ Timeframe changed from', lastTimeframeRef.current, 'to', timeframe, '- clearing previous list to prevent data clash');
+        // console.log('⏱️ Timeframe changed from', lastTimeframeRef.current, 'to', timeframe, '- clearing previous list to prevent data clash');
         lastTimeframeRef.current = timeframe;
         // Clear previous data to prevent mixing timeframes
         lastStableDataRef.current = null;
@@ -95,7 +95,7 @@ export default function usePaginatedTokensWithFallback({
 
       // If incoming is too small (e.g., MV not fully refreshed), merge into previous order
       if (incoming.length < minCount && prev.length >= incoming.length) {
-        console.log('🛡️ Stabilizing list: incoming length', incoming.length, '< minCount', minCount);
+        // console.log('🛡️ Stabilizing list: incoming length', incoming.length, '< minCount', minCount);
         const byAddr = new Map<string, any>();
         for (const t of prev) byAddr.set(t.pair_address, t);
         for (const t of incoming) byAddr.set(t.pair_address, t); // overlay updates
@@ -134,22 +134,22 @@ export default function usePaginatedTokensWithFallback({
   }, [limit, timeframe]);
 
   const throttledSetData = useCallback((newData: any[]) => {
-    console.log('🔧 Setting data in hook (raw):', newData?.length, 'tokens, for timeframe:', currentRequestTimeframeRef.current);
+    // console.log('🔧 Setting data in hook (raw):', newData?.length, 'tokens, for timeframe:', currentRequestTimeframeRef.current);
     const stable = stabilizeList(newData);
-    console.log('🔧 After stabilization:', stable?.length, 'tokens');
-    if (stable?.[0]) {
-      console.log('🔧 First token data (stable):', {
-        name: stable[0].name,
-        symbol: stable[0].symbol,
-        usd_price: stable[0].usd_price,
-        fully_diluted_value: stable[0].fully_diluted_value,
-        total_liquidity_usd: stable[0].total_liquidity_usd,
-        volume_5m: stable[0].volume_5m,
-        volume_1h: stable[0].volume_1h,
-        volume_6h: stable[0].volume_6h,
-        volume_24h: stable[0].volume_24h,
-      });
-    }
+    // console.log('🔧 After stabilization:', stable?.length, 'tokens');
+    // if (stable?.[0]) {
+    //   console.log('🔧 First token data (stable):', {
+    //     name: stable[0].name,
+    //     symbol: stable[0].symbol,
+    //     usd_price: stable[0].usd_price,
+    //     fully_diluted_value: stable[0].fully_diluted_value,
+    //     total_liquidity_usd: stable[0].total_liquidity_usd,
+    //     volume_5m: stable[0].volume_5m,
+    //     volume_1h: stable[0].volume_1h,
+    //     volume_6h: stable[0].volume_6h,
+    //     volume_24h: stable[0].volume_24h,
+    //   });
+    // }
     setState(prev => {
       // Only update if data actually changed to prevent flickering
       if (JSON.stringify(prev.data) === JSON.stringify(stable)) {
@@ -161,7 +161,7 @@ export default function usePaginatedTokensWithFallback({
 
   // Polling fallback function
   const startPolling = useCallback(() => {
-    console.log('🔄 Starting polling fallback with timeframe:', timeframe);
+    // console.log('🔄 Starting polling fallback with timeframe:', timeframe);
     setState(prev => ({ ...prev, usingFallback: true, isReconnecting: false }));
     
     const poll = async () => {
@@ -181,9 +181,9 @@ export default function usePaginatedTokensWithFallback({
         // STRICTLY enforce: only include timeframe if it's provided and valid
         if (timeframe && (timeframe === '5m' || timeframe === '1h' || timeframe === '6h' || timeframe === '24h')) {
           queryParams.set('timeframe', timeframe);
-          console.log('📡 Polling: Using timeframe:', timeframe);
+          // console.log('📡 Polling: Using timeframe:', timeframe);
         } else {
-          console.warn('📡 Polling: Invalid or missing timeframe, skipping:', timeframe);
+          // console.warn('📡 Polling: Invalid or missing timeframe, skipping:', timeframe);
         }
         
         // If env is ws(s)://..., convert to http(s):// for REST polling
@@ -195,42 +195,42 @@ export default function usePaginatedTokensWithFallback({
           url = `/api/token-service/pulse-trending?${queryParams}`;
         }
         
-        console.log('📡 Polling URL:', url);
-        console.log('📡 Query params:', Object.fromEntries(queryParams.entries()));
-        console.log('📡 Environment WEBSOCKET_URL (for WS only):', env.NEXT_PUBLIC_WEBSOCKET_URL);
+        // console.log('📡 Polling URL:', url);
+        // console.log('📡 Query params:', Object.fromEntries(queryParams.entries()));
+        // console.log('📡 Environment WEBSOCKET_URL (for WS only):', env.NEXT_PUBLIC_WEBSOCKET_URL);
         
         const response = await fetch(url);
-        console.log('📡 Polling response status:', response.status, response.ok);
+        // console.log('📡 Polling response status:', response.status, response.ok);
         
         // Treat 304 Not Modified as a successful no-op: keep current list stable
         if (response.status === 304) {
-          console.log('📡 Upstream returned 304 (Not Modified) — keeping existing data');
+          // console.log('📡 Upstream returned 304 (Not Modified) — keeping existing data');
           setState(prev => ({ ...prev, loading: false, error: null }));
           return;
         }
 
         if (response.ok) {
           const data = await response.json();
-          console.log('📡 Polling data received:', data?.result?.length || data?.length, 'tokens');
+          //console.log('📡 Polling data received:', data?.result?.length || data?.length, 'tokens');
           
           // Handle both wrapped and direct array responses
           const tokens = data.result || data;
           
-          // Debug: Check the first token's price data
-          if (tokens && Array.isArray(tokens) && tokens[0]) {
-            console.log('📡 First token price debug:', {
-              name: tokens[0].name,
-              symbol: tokens[0].symbol,
-              usd_price: tokens[0].usd_price,
-              fully_diluted_value: tokens[0].fully_diluted_value,
-              total_liquidity_usd: tokens[0].total_liquidity_usd,
-              typeof_usd_price: typeof tokens[0].usd_price,
-              typeof_fdv: typeof tokens[0].fully_diluted_value
-            });
-          }
+          // // Debug: Check the first token's price data
+          // if (tokens && Array.isArray(tokens) && tokens[0]) {
+          //   console.log('📡 First token price debug:', {
+          //     name: tokens[0].name,
+          //     symbol: tokens[0].symbol,
+          //     usd_price: tokens[0].usd_price,
+          //     fully_diluted_value: tokens[0].fully_diluted_value,
+          //     total_liquidity_usd: tokens[0].total_liquidity_usd,
+          //     typeof_usd_price: typeof tokens[0].usd_price,
+          //     typeof_fdv: typeof tokens[0].fully_diluted_value
+          //   });
+          // }
           
           if (tokens && Array.isArray(tokens)) {
-            console.log('🔧 Setting tokens data:', tokens.length, 'tokens');
+            // console.log('🔧 Setting tokens data:', tokens.length, 'tokens');
             console.log('🔧 First token:', tokens[0] ? { 
               name: tokens[0].name, 
               symbol: tokens[0].symbol,
@@ -242,7 +242,7 @@ export default function usePaginatedTokensWithFallback({
             throttledSetData(tokens);
             setState(prev => ({ ...prev, error: null, loading: false }));
           } else {
-            console.log('🔧 No valid tokens data received:', { tokens, isArray: Array.isArray(tokens) });
+            //console.log('🔧 No valid tokens data received:', { tokens, isArray: Array.isArray(tokens) });
             setState(prev => ({ ...prev, loading: false, error: 'Invalid data from token service' }));
           }
         } else {
@@ -286,10 +286,10 @@ export default function usePaginatedTokensWithFallback({
 
   // Effect for managing connection (WebSocket + fallback)
   useEffect(() => {
-    console.log('🔄 Hook useEffect triggered with params:', { filter, order, offset, limit, timeframe });
-    console.log('🔄 Previous state:', { dataLength: state.data.length, loading: state.loading });
-    console.log('🔄 Starting fresh data fetch for timeframe:', timeframe);
-    console.log('🔄 Timeframe type:', typeof timeframe, 'value:', JSON.stringify(timeframe));
+    // console.log('🔄 Hook useEffect triggered with params:', { filter, order, offset, limit, timeframe });
+    // console.log('🔄 Previous state:', { dataLength: state.data.length, loading: state.loading });
+    // console.log('🔄 Starting fresh data fetch for timeframe:', timeframe);
+    // console.log('🔄 Timeframe type:', typeof timeframe, 'value:', JSON.stringify(timeframe));
     
     // Update current request timeframe IMMEDIATELY to track which timeframe is being requested
     currentRequestTimeframeRef.current = timeframe;
@@ -299,7 +299,7 @@ export default function usePaginatedTokensWithFallback({
     
     // Clear stable data reference when timeframe changes
     if (lastTimeframeRef.current !== timeframe) {
-      console.log('🧹 Clearing stable data reference due to timeframe change');
+      // console.log('🧹 Clearing stable data reference due to timeframe change');
       lastStableDataRef.current = null;
     }
 
@@ -319,12 +319,12 @@ export default function usePaginatedTokensWithFallback({
         // STRICTLY enforce: only include timeframe if it's provided
         if (timeframe && (timeframe === '5m' || timeframe === '1h' || timeframe === '6h' || timeframe === '24h')) {
           queryParams.set('timeframe', timeframe);
-          console.log('🔌 WebSocket: Using timeframe:', timeframe);
+          // console.log('🔌 WebSocket: Using timeframe:', timeframe);
         } else {
           console.warn('🔌 WebSocket: Invalid or missing timeframe, skipping:', timeframe);
         }
         const wsUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/tokens?${queryParams}`;
-        console.log('🔌 Attempting WebSocket connection to:', wsUrl);
+        // console.log('🔌 Attempting WebSocket connection to:', wsUrl);
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
@@ -437,12 +437,12 @@ export default function usePaginatedTokensWithFallback({
           if (pingInterval) {
             clearInterval(pingInterval);
           }
-          console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
+          //console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
           setState(prev => ({ ...prev, isConnected: false }));
           
           // If connection closed abnormally (1006), fall back to polling immediately
           if (event.code === 1006) {
-            console.log('🚨 WebSocket closed abnormally (1006), falling back to polling');
+            //console.log('🚨 WebSocket closed abnormally (1006), falling back to polling');
             startPolling();
             return;
           }
@@ -458,7 +458,7 @@ export default function usePaginatedTokensWithFallback({
           if (ws.readyState === WebSocket.OPEN) {
             try {
               ws.send('ping');
-              console.log('📤 Sent periodic ping to WebSocket server');
+              //console.log('📤 Sent periodic ping to WebSocket server');
             } catch (error) {
               console.error('Failed to send periodic ping:', error);
               clearInterval(pingInterval);
@@ -477,7 +477,7 @@ export default function usePaginatedTokensWithFallback({
           setState(prev => ({ ...prev, error: 'WebSocket connection error' }));
           
           // Trigger fallback immediately when WebSocket errors occur
-          console.log('🚨 WebSocket error detected, triggering fallback to polling');
+          //console.log('🚨 WebSocket error detected, triggering fallback to polling');
           handleReconnect();
         };
       } catch (error) {
@@ -487,20 +487,20 @@ export default function usePaginatedTokensWithFallback({
     };
 
     const handleReconnect = () => {
-      console.log('🔄 handleReconnect called, attempt:', reconnectAttemptRef.current, 'max:', maxReconnectAttempts);
+      //console.log('🔄 handleReconnect called, attempt:', reconnectAttemptRef.current, 'max:', maxReconnectAttempts);
       
       if (reconnectAttemptRef.current >= maxReconnectAttempts) {
-        console.log('✅ Max WebSocket reconnect attempts reached, falling back to polling');
+        //console.log('✅ Max WebSocket reconnect attempts reached, falling back to polling');
         startPolling();
         return;
       }
       
       setState(prev => ({ ...prev, isReconnecting: true }));
       reconnectAttemptRef.current += 1;
-      console.log('🔄 Incremented reconnect attempt to:', reconnectAttemptRef.current);
+      //console.log('🔄 Incremented reconnect attempt to:', reconnectAttemptRef.current);
       
       const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 8000);
-      console.log('🔄 Scheduling WebSocket reconnect in', delay, 'ms');
+      //console.log('🔄 Scheduling WebSocket reconnect in', delay, 'ms');
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
     };
 

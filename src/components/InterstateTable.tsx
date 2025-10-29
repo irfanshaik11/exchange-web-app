@@ -92,16 +92,16 @@ const getTokenStat = (token: Token, stat: string, timeframe: string): number => 
 
   const num = typeof val === 'number' ? val : parseFloat(val) || 0;
 
-  if (num === 0) {
-    console.log('getTokenStat returning 0:', {
-      stat,
-      timeframe,
-      key,
-      rawValue: val,
-      rawValueType: typeof val,
-      tokenName: token.name
-    });
-  }
+  // if (num === 0) {
+  //   console.log('getTokenStat returning 0:', {
+  //     stat,
+  //     timeframe,
+  //     key,
+  //     rawValue: val,
+  //     rawValueType: typeof val,
+  //     tokenName: token.name
+  //   });
+  // }
 
   return num;
 };
@@ -841,20 +841,20 @@ const MarketCapCell: React.FC<{
   const isPositive = percentChange >= 0;
 
   // Debug logging for MarketCapCell
-  console.log('MarketCapCell Debug:', {
-    tokenName: token.name,
-    fullyDilutedValue: token.fully_diluted_value,
-    fullyDilutedValueType: typeof token.fully_diluted_value,
-    usdPrice: token.usd_price,
-    usdPriceType: typeof token.usd_price,
-    token: token
-  });
+  // console.log('MarketCapCell Debug:', {
+  //   tokenName: token.name,
+  //   fullyDilutedValue: token.fully_diluted_value,
+  //   fullyDilutedValueType: typeof token.fully_diluted_value,
+  //   usdPrice: token.usd_price,
+  //   usdPriceType: typeof token.usd_price,
+  //   token: token
+  // });
 
   return (
     <div className="text-right">
       <div className="text-sm font-semibold" style={{ color: AX.text }}>
         {(() => {
-          console.log('MarketCapCell formatSmartNumber call with:', token.fully_diluted_value);
+          // console.log('MarketCapCell formatSmartNumber call with:', token.fully_diluted_value);
           return `$${formatSmartNumber(token.fully_diluted_value)}`;
         })()}
       </div>
@@ -952,16 +952,16 @@ const TableRow: React.FC<{
   const volume = getVolume(token, selectedTimeframe);
   
   // Debug volume calculation
-  console.log('Volume calculation debug:', {
-    tokenName: token.name,
-    selectedTimeframe,
-    totalVolume: volume,
-    preferredBuySell: {
-      buy: (token as any)[`total_buy_volume_${selectedTimeframe}`],
-      sell: (token as any)[`total_sell_volume_${selectedTimeframe}`],
-    },
-    fallbackAggregated: (token as any)[`volume_${selectedTimeframe}`],
-  });
+  // console.log('Volume calculation debug:', {
+  //   tokenName: token.name,
+  //   selectedTimeframe,
+  //   totalVolume: volume,
+  //   preferredBuySell: {
+  //     buy: (token as any)[`total_buy_volume_${selectedTimeframe}`],
+  //     sell: (token as any)[`total_sell_volume_${selectedTimeframe}`],
+  //   },
+  //   fallbackAggregated: (token as any)[`volume_${selectedTimeframe}`],
+  // });
 
   return (
     <tr 
@@ -984,14 +984,14 @@ const TableRow: React.FC<{
       </td>
       
       <td className="w-28 px-4 py-4 align-middle text-right">
-        {(() => {
+        {/* {(() => {
           console.log('Liquidity Debug:', {
             tokenName: token.name,
             totalLiquidityUsd: token.total_liquidity_usd,
             totalLiquidityUsdType: typeof token.total_liquidity_usd
           });
           return null;
-        })()}
+        })()} */}
         <div className="text-sm font-medium" style={{ color: AX.text }}>
           ${formatSmartNumber(token.total_liquidity_usd)}
         </div>
@@ -1047,22 +1047,17 @@ export default function InterstateTable({
 
   // Memoized filtered and sorted rows
   const sortedRows = useMemo(() => {
-    console.log('🔧 InterstateTable sortedRows useMemo:', {
-      totalRows: rows.length,
-      filterAmms: filter.amms,
-      tokensWithAmm: rows.filter(({ token }) => token.amm).length,
-      tokensWithoutAmm: rows.filter(({ token }) => !token.amm).length
-    });
+    //console.log('', {});
     
     const filteredRows = rows.filter(({ token }) => 
       !token.amm || filter.amms.includes(token.amm)
     );
     
-    console.log('🔧 Filtered rows:', {
-      before: rows.length,
-      after: filteredRows.length,
-      filteredOut: rows.length - filteredRows.length
-    });
+    // console.log('🔧 Filtered rows:', {
+    //   before: rows.length,
+    //   after: filteredRows.length,
+    //   filteredOut: rows.length - filteredRows.length
+    // });
 
     if (!sortKey) return filteredRows;
     

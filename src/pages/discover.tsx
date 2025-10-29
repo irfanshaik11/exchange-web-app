@@ -64,11 +64,6 @@ export default function DiscoverPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   // WebSocket token service – keep as-is for dex/trending
-  console.log('🔧 [DISCOVER] About to call usePaginatedTokensWithFallback with:', { 
-    filter: 'trending',
-    timeframe: selectedTimeframe
-  });
-  
   const {
     data: allTokens,
     loading: tokensLoading,
@@ -83,9 +78,9 @@ export default function DiscoverPage() {
   });
   
   // Debug log to track timeframe changes
-  useEffect(() => {
-    console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
-  }, [selectedTimeframe]);
+  // useEffect(() => {
+  //   console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
+  // }, [selectedTimeframe]);
 
   // QUICK BUY handler – unchanged
   async function handleQuickBuy(token: Token) {
@@ -130,14 +125,14 @@ export default function DiscoverPage() {
   }
 
   const handleTimeframeClick = (tf: string) => {
-    console.log('🖱️ Discover: Timeframe clicked:', tf);
+    // console.log('🖱️ Discover: Timeframe clicked:', tf);
     setSelectedTimeframe(tf as Timeframe);
     setSortKey("volume");
     setSortDirection("desc");
   };
 
   // Helper to compute volume by timeframe for sorting in trending view
-  const getVolumeForTimeframe = (t: any, tf: Timeframe) => {
+  const getVolumeForTimeframe = useCallback((t: any, tf: Timeframe) => {
     const v = t?.[`volume_${tf}`];
     if (typeof v === 'number') return v;
     if (typeof v === 'string' && v.trim() !== '') {
@@ -145,7 +140,7 @@ export default function DiscoverPage() {
       return isNaN(n) ? 0 : n;
     }
     return 0;
-  };
+  }, []);
 
   // Apply filters to tokens
   const applyFilters = useCallback((tokens: TokenWithDexPaid[]) => {
@@ -328,9 +323,11 @@ export default function DiscoverPage() {
         <link rel="preload" as="image" href="/placeholder/fallback-avatar.jpg" />
       </Head>
 
-      <div className="min-h-screen text-neutral-100" style={{ backgroundColor: AX.bg }}>
+      <div className="min-h-screen text-neutral-100 relative" style={{ backgroundColor: AX.bg }}>
         {/* Header */}
-        <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
+        <div style={{ position: 'relative', zIndex: 100 }}>
+          <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
+        </div>
 
         {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-20">
@@ -475,12 +472,14 @@ export default function DiscoverPage() {
         </div>
 
         {/* Filter Popout */}
-        <FilterPopout 
-          open={isFilterPopoutOpen} 
-          onClose={() => setIsFilterPopoutOpen(false)}
-          onApplyFilters={(filters) => setLocalFilters(filters)}
-          currentFilters={localFilters}
-        />
+        {isFilterPopoutOpen && (
+          <FilterPopout 
+            open={isFilterPopoutOpen} 
+            onClose={() => setIsFilterPopoutOpen(false)}
+            onApplyFilters={(filters) => setLocalFilters(filters)}
+            currentFilters={localFilters}
+          />
+        )}
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
@@ -509,7 +508,8 @@ export default function DiscoverPage() {
             <div className="py-10 text-center text-neutral-400">
               No tokens found.
             </div>
-          ) : (
+          ) 
+          : (
             <InterstateTable
               rows={displayed.map((token, i) => ({
                 token: token as Token,
