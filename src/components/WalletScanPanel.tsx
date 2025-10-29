@@ -150,7 +150,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     setHistoryLoading(true);
     setHistoryError(null);
     
-    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_API || 'http://localhost:8081';
+    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
     
     fetch(`${backendUrl}/api/history?wallet=${wallet.address}&limit=100`)
       .then(res => {
