@@ -16,17 +16,17 @@ import useInitialTradeData from "../../hooks/useInitialTradeData";
 import useBackgroundOHLCPreload from "../../hooks/useBackgroundOHLCPreload";
 import { useQuickBuyQueryParams } from "../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../utils/queryParams";
-import { useTradePagePrefetch } from "../../hooks/usePrefetch";
 import { useComponentCache } from "../../hooks/useComponentCache";
 import useOptimizedTradeEventsWebSocket from "../../hooks/useOptimizedTradeEventsWebSocket";
-import dynamic from 'next/dynamic';
+import dynamic from "next/dynamic";
 
 // Lazy load heavy components to reduce initial bundle size
-const BackendOHLCChart = dynamic(() => import('../../components/BackendOHLCChart'), { ssr: false });
-const CodexTrades = dynamic(() => import('../../components/trade/CodexTrades'), { ssr: false });
-const CodexTopTraders = dynamic(() => import('../../components/trade/CodexTopTraders'), { ssr: false });
-const CodexDevTokens = dynamic(() => import('../../components/trade/CodexDevTokens'), { ssr: false });
-const CodexHolders = dynamic(() => import('../../components/trade/CodexHolders'), { ssr: false });
+const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
+const CodexTrades = dynamic(() => import("../../components/trade/CodexTrades"), { ssr: false });
+const CodexTopTraders = dynamic(() => import("../../components/trade/CodexTopTraders"), { ssr: false });
+const CodexDevTokens = dynamic(() => import("../../components/trade/CodexDevTokens"), { ssr: false });
+const CodexHolders = dynamic(() => import("../../components/trade/CodexHolders"), { ssr: false });
+
 /* ---------- AXIOM palette ---------- */
 const AX = {
   bg: "#101114",
@@ -53,24 +53,23 @@ export default function TradePage() {
   const optimisticToken = React.useMemo(() => {
     if (_name || _symbol) {
       return {
-        name: _name as string || '',
-        symbol: _symbol as string || '',
+        name: (_name as string) || "",
+        symbol: (_symbol as string) || "",
         price_usd: _price ? parseFloat(_price as string) : undefined,
         market_cap_usd: _mcap ? parseFloat(_mcap as string) : undefined,
-        image: _image as string || undefined,
+        image: (_image as string) || undefined,
       };
     }
     return null;
   }, [_name, _symbol, _price, _mcap, _image]);
 
-  // Reduced debug logging for performance
-  if (process.env.NODE_ENV === 'development') {
-    console.log('TradePage Debug:', {
+  if (process.env.NODE_ENV === "development") {
+    console.log("TradePage Debug:", {
       id,
       idType: typeof id,
       isString: typeof id === "string",
       mintFromQuery: _mint,
-      optimisticToken
+      optimisticToken,
     });
   }
 
@@ -83,7 +82,7 @@ export default function TradePage() {
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
-  
+
   // Drag functionality for mobile modal
   const modalDragRef = useRef<HTMLDivElement | null>(null);
   const dragStartY = useRef(0);
@@ -92,187 +91,116 @@ export default function TradePage() {
   const modalTransform = useRef(0);
 
   // Query parameter handling for trade settings
-  const {
-    queryString,
-    getQueryParams,
-    getTradeParams,
-    getLimitOrderParams,
-    settings: quickBuySettings,
-    side: quickBuySide
-  } = useQuickBuyQueryParams();
+  const { settings: quickBuySettings, side: quickBuySide } = useQuickBuyQueryParams();
 
   // Trade page specific parameters
-  const {
-    params: tradeParams,
-    setParams: setTradeParams,
-    getQueryString: getTradeQueryString,
-    getApiParams: getTradeApiParams,
-    isReady: tradeParamsReady
-  } = useTradePageQueryParams();
+  const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
 
-  const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } =
-    useSingleTokenPolling(typeof id === "string" ? id : undefined);
+  const { token, isPolling, loading: pollingLoading, isHydrating, resolvedPairAddress } = useSingleTokenPolling(
+    typeof id === "string" ? id : undefined
+  );
 
   // Optimized initial trade data loading - only load when we have resolved pair address
-  const { 
-    data: initialTradeData, 
-    loading: initialDataLoading, 
+  const {
+    data: initialTradeData,
+    loading: initialDataLoading,
     error: initialDataError,
     isFromCache,
     cacheStats,
     cleanupCache,
-    cachedTokenMetadata
+    cachedTokenMetadata,
   } = useInitialTradeData(resolvedPairAddress, token?.mint);
 
-  // Disabled prefetching to reduce initial load time
-  // const { prefetchTradeData, getCachedData, getStats: getPrefetchStats } = useTradePagePrefetch(
-  //   resolvedPairAddress,
-  //   token?.mint
-  // );
-
   // Fetch correct token data from database (same as search modal)
-  // Use cached metadata if available to avoid unnecessary API call
   const [correctTokenData, setCorrectTokenData] = useState<any>(null);
   const [isLoadingCorrectData, setIsLoadingCorrectData] = useState(false);
-  
+
   // Fetch creator address for dev buy markers
   const [creatorAddress, setCreatorAddress] = useState<string | null>(null);
-  
+
   useEffect(() => {
     const fetchCorrectTokenData = async () => {
       if (!token?.mint) return;
-      
-      // Skip if we already have correct data or if token already has created_at
-      if (correctTokenData?.mint === token.mint || token.created_at) {
-        return;
-      }
-      
+      if (correctTokenData?.mint === token.mint || token.created_at) return;
+
       setIsLoadingCorrectData(true);
-      
       try {
-        // Use the same search endpoint that search modal uses
         const response = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(token.mint)}&limit=1`);
         if (response.ok) {
           const data = await response.json();
-          if (data.tokens && data.tokens.length > 0) {
-            setCorrectTokenData(data.tokens[0]);
-          }
+          if (data.tokens && data.tokens.length > 0) setCorrectTokenData(data.tokens[0]);
         }
       } catch (error) {
-        console.error('[Trade Page] Failed to fetch correct token data:', error);
+        console.error("[Trade Page] Failed to fetch correct token data:", error);
       } finally {
         setIsLoadingCorrectData(false);
       }
     };
-    
+
     fetchCorrectTokenData();
   }, [token?.mint, token?.created_at, correctTokenData?.mint]);
 
-  // Fetch creator address for dev buy markers
   useEffect(() => {
     const fetchCreatorAddress = async () => {
       if (!token?.mint) return;
-      
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/tokens/dev?tokenAddress=${token.mint}&limit=1`
         );
         if (response.ok) {
           const data = await response.json();
-          console.log('[TradePage] Creator address fetch response:', data);
           if (data?.filterTokens?.results?.[0]?.token?.creatorAddress) {
-            const addr = data.filterTokens.results[0].token.creatorAddress;
-            console.log('[TradePage] Setting creator address:', addr);
-            setCreatorAddress(addr);
+            setCreatorAddress(data.filterTokens.results[0].token.creatorAddress);
           }
         }
       } catch (error) {
-        console.error('[TradePage] Failed to fetch creator address:', error);
+        console.error("[TradePage] Failed to fetch creator address:", error);
       }
     };
-    
+
     fetchCreatorAddress();
   }, [token?.mint]);
 
   // Calculate optimal OHLC interval and timeframe based on CORRECT token age (cached)
   const getOHLCParams = useComponentCache(
-    'ohlc-params',
+    "ohlc-params",
     [correctTokenData, token, isLoadingCorrectData],
     () => {
-      // Use correct token data if available, otherwise fall back to trade service data
       const tokenForAge = correctTokenData || token;
-      const createdAt = tokenForAge?.created_at || tokenForAge?.createdAt || (tokenForAge as any)?.CreatedAt;
-    
-    if (!createdAt) {
-      // Default for tokens without creation time - good default that works for most tokens
-      return { interval: '1h' as const, timeframe: '30d' as const, optimize: false };
-    }
+      const createdAt =
+        (tokenForAge as any)?.created_at || (tokenForAge as any)?.createdAt || (tokenForAge as any)?.CreatedAt;
 
-    // Handle Unix timestamp in seconds (convert to milliseconds)
-    let timestamp = createdAt;
-    if (typeof createdAt === 'number' && createdAt < 10000000000) {
-      timestamp = createdAt * 1000;
-    }
-    
-    const createdDate = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - createdDate.getTime();
-    const ageInHours = diffMs / (1000 * 60 * 60);
-    const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      if (!createdAt) return { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
 
-    // For very new tokens (< 1 hour) - use 1m intervals
-    if (ageInHours < 1) {
-      return { interval: '1m' as const, timeframe: '1h' as const, optimize: false };
-    }
-    // For very new tokens (< 6 hours) - use 1m intervals
-    else if (ageInHours < 6) {
-      return { interval: '1m' as const, timeframe: '4h' as const, optimize: false };
-    }
-    // For new tokens (< 24 hours) - use 1m intervals
-    else if (ageInDays < 1) {
-      return { interval: '1m' as const, timeframe: '24h' as const, optimize: false };
-    }
-    // For tokens 1-7 days old
-    else if (ageInDays < 7) {
-      return { interval: '15m' as const, timeframe: '7d' as const, optimize: false };
-    }
-    // For tokens 7-30 days old
-    else if (ageInDays < 30) {
-      return { interval: '1h' as const, timeframe: '30d' as const, optimize: false };
-    }
-    // For tokens 30-90 days old
-    else if (ageInDays < 90) {
-      return { interval: '1d' as const, timeframe: '90d' as const, optimize: true };
-    }
-    // For tokens 90-180 days old
-    else if (ageInDays < 180) {
-      return { interval: '1d' as const, timeframe: '180d' as const, optimize: true };
-    }
-    // For tokens 180-365 days old
-    else if (ageInDays < 365) {
-      return { interval: '1d' as const, timeframe: '365d' as const, optimize: true };
-    }
-    // For very old tokens (> 1 year)
-    else {
-      return { interval: '7d' as const, timeframe: '365d' as const, optimize: true };
-    }
+      let timestamp = createdAt as any;
+      if (typeof createdAt === "number" && createdAt < 10000000000) timestamp = createdAt * 1000;
+
+      const createdDate = new Date(timestamp);
+      const diffMs = Date.now() - createdDate.getTime();
+      const ageInHours = diffMs / (1000 * 60 * 60);
+      const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      if (ageInHours < 1) return { interval: "1m", timeframe: "1h", optimize: false } as const;
+      if (ageInHours < 6) return { interval: "1m", timeframe: "4h", optimize: false } as const;
+      if (ageInDays < 1) return { interval: "1m", timeframe: "24h", optimize: false } as const;
+      if (ageInDays < 7) return { interval: "15m", timeframe: "7d", optimize: false } as const;
+      if (ageInDays < 30) return { interval: "1h", timeframe: "30d", optimize: false } as const;
+      if (ageInDays < 90) return { interval: "1d", timeframe: "90d", optimize: true } as const;
+      if (ageInDays < 180) return { interval: "1d", timeframe: "180d", optimize: true } as const;
+      if (ageInDays < 365) return { interval: "1d", timeframe: "365d", optimize: true } as const;
+      return { interval: "7d", timeframe: "365d", optimize: true } as const;
     }
   );
 
   const ohlcParams = getOHLCParams;
-  
-  // Default OHLC params for immediate loading (ULTRA PRIORITY #1)
-  const defaultOHLCParams = { interval: '1h' as const, timeframe: '30d' as const, optimize: false };
-  
-  // Use optimized params if available, otherwise use defaults
-  // Memoize to prevent unnecessary chart remounts
-  const currentOHLCParams = React.useMemo(() => 
-    ohlcParams || defaultOHLCParams,
+  const defaultOHLCParams = { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+
+  const currentOHLCParams = React.useMemo(
+    () => ohlcParams || defaultOHLCParams,
     [ohlcParams?.interval, ohlcParams?.timeframe, ohlcParams?.optimize]
   );
-  
-  // Ultra-fast OHLC loading - start immediately on mount
-  const canStartOHLC = preloadComplete || (typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32);
+
+  const canStartOHLC = preloadComplete || (typeof resolvedPairAddress === "string" && resolvedPairAddress.length >= 32);
 
   // ---------------- drag-to-resize for left column ----------------
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -349,40 +277,32 @@ export default function TradePage() {
   );
 
   useEffect(() => () => (rafRef.current ? cancelAnimationFrame(rafRef.current) : undefined), []);
+
   // Set component-level loading states based on data availability
   useEffect(() => {
     setTokenDataLoading(pollingLoading || isHydrating);
     setTradesDataLoading(initialDataLoading);
-    // Chart loading is now handled internally by BackendOHLCChart
   }, [pollingLoading, isHydrating, initialDataLoading]);
 
   // Prevent body scroll when mobile modal is open
   useEffect(() => {
-    if (showMobileTradeModal) {
-      document.body.classList.add('modal-open');
-    } else {
-      document.body.classList.remove('modal-open');
-    }
-    
-    return () => {
-      document.body.classList.remove('modal-open');
-    };
+    if (showMobileTradeModal) document.body.classList.add("modal-open");
+    else document.body.classList.remove("modal-open");
+    return () => document.body.classList.remove("modal-open");
   }, [showMobileTradeModal]);
 
-  // Close modal with animation
   const closeModal = useCallback(() => {
     setIsClosingModal(true);
     setTimeout(() => {
       setShowMobileTradeModal(false);
       setIsClosingModal(false);
-    }, 300); // Match animation duration
+    }, 300);
   }, []);
 
-  // Drag functionality for modal
   const handleDragStart = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
     dragStartY.current = clientY;
     isDragging.current = true;
     modalTransform.current = 0;
@@ -390,21 +310,16 @@ export default function TradePage() {
 
   const handleDragMove = useCallback((e: React.TouchEvent | React.MouseEvent) => {
     if (!isDragging.current) return;
-    
     e.preventDefault();
     e.stopPropagation();
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
     dragCurrentY.current = clientY;
     const deltaY = dragCurrentY.current - dragStartY.current;
-    
-    // Only allow downward dragging
     if (deltaY > 0) {
       modalTransform.current = deltaY;
       if (modalDragRef.current) {
         modalDragRef.current.style.transform = `translateY(${deltaY}px)`;
-        // Add opacity effect as user drags
-        const opacity = Math.max(0.7, 1 - (deltaY / 300));
-        modalDragRef.current.style.opacity = String(opacity);
+        modalDragRef.current.style.opacity = String(Math.max(0.7, 1 - deltaY / 300));
       }
     }
   }, []);
@@ -412,77 +327,49 @@ export default function TradePage() {
   const handleDragEnd = useCallback(() => {
     if (!isDragging.current) return;
     isDragging.current = false;
-    
-    const threshold = 100; // Minimum drag distance to close
+    const threshold = 100;
     if (modalTransform.current > threshold) {
       closeModal();
-    } else {
-      // Snap back to original position with animation
-      if (modalDragRef.current) {
-        modalDragRef.current.style.transition = 'transform 0.2s ease-out, opacity 0.2s ease-out';
-        modalDragRef.current.style.transform = 'translateY(0px)';
-        modalDragRef.current.style.opacity = '1';
-        // Remove transition after animation completes
-        setTimeout(() => {
-          if (modalDragRef.current) {
-            modalDragRef.current.style.transition = '';
-          }
-        }, 200);
-      }
+    } else if (modalDragRef.current) {
+      modalDragRef.current.style.transition = "transform 0.2s ease-out, opacity 0.2s ease-out";
+      modalDragRef.current.style.transform = "translateY(0px)";
+      modalDragRef.current.style.opacity = "1";
+      setTimeout(() => {
+        if (modalDragRef.current) modalDragRef.current.style.transition = "";
+      }, 200);
     }
     modalTransform.current = 0;
   }, [closeModal]);
 
-  // Global mouse event listeners for drag functionality
   useEffect(() => {
     if (!showMobileTradeModal) return;
-
-    const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (isDragging.current) {
-        handleDragMove(e as any);
-      }
-    };
-
-    const handleGlobalMouseUp = () => {
-      if (isDragging.current) {
-        handleDragEnd();
-      }
-    };
-
-    const handleGlobalTouchMove = (e: TouchEvent) => {
-      if (isDragging.current) {
-        handleDragMove(e as any);
-      }
-    };
-
-    const handleGlobalTouchEnd = () => {
-      if (isDragging.current) {
-        handleDragEnd();
-      }
-    };
-
-    // Add global event listeners
-    document.addEventListener('mousemove', handleGlobalMouseMove, { passive: false });
-    document.addEventListener('mouseup', handleGlobalMouseUp, { passive: false });
-    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
-    document.addEventListener('touchend', handleGlobalTouchEnd, { passive: false });
-
+    const mm = (e: MouseEvent) => isDragging.current && handleDragMove(e as any);
+    const mu = () => isDragging.current && handleDragEnd();
+    const tm = (e: TouchEvent) => isDragging.current && handleDragMove(e as any);
+    const tu = () => isDragging.current && handleDragEnd();
+    document.addEventListener("mousemove", mm, { passive: false });
+    document.addEventListener("mouseup", mu, { passive: false });
+    document.addEventListener("touchmove", tm, { passive: false });
+    document.addEventListener("touchend", tu, { passive: false });
     return () => {
-      document.removeEventListener('mousemove', handleGlobalMouseMove);
-      document.removeEventListener('mouseup', handleGlobalMouseUp);
-      document.removeEventListener('touchmove', handleGlobalTouchMove);
-      document.removeEventListener('touchend', handleGlobalTouchEnd);
+      document.removeEventListener("mousemove", mm);
+      document.removeEventListener("mouseup", mu);
+      document.removeEventListener("touchmove", tm);
+      document.removeEventListener("touchend", tu);
     };
   }, [showMobileTradeModal, handleDragMove, handleDragEnd]);
 
   // Always render the page with progressive loading - no more black screen!
-  // Use cached metadata, real token data, or optimistic token data for immediate display
-  const displayToken = token || (cachedTokenMetadata ? {
-    ...cachedTokenMetadata,
-    mint: cachedTokenMetadata.mint || '',
-    pair_address: cachedTokenMetadata.pair_address || '',
-    created_at: cachedTokenMetadata.created_at || null,
-  } : optimisticToken);
+  const displayToken =
+    token ||
+    (cachedTokenMetadata
+      ? {
+          ...cachedTokenMetadata,
+          mint: cachedTokenMetadata.mint || "",
+          pair_address: cachedTokenMetadata.pair_address || "",
+          created_at: cachedTokenMetadata.created_at || null,
+        }
+      : optimisticToken);
 
   // Get trade data for dev buy markers
   const { trades: tradeDataForChart } = useOptimizedTradeEventsWebSocket({
@@ -493,46 +380,38 @@ export default function TradePage() {
     enableDeduplication: true,
   });
 
-  // Log trade data and creator address for debugging
   useEffect(() => {
     if (tradeDataForChart && tradeDataForChart.length > 0) {
-      console.log('[TradePage] Trade data for chart:', tradeDataForChart.length, 'trades');
-      console.log('[TradePage] Sample trade:', tradeDataForChart[0]);
+      console.log("[TradePage] Trade data for chart:", tradeDataForChart.length, "trades");
     }
-    if (creatorAddress) {
-      console.log('[TradePage] Creator address:', creatorAddress);
-    }
+    if (creatorAddress) console.log("[TradePage] Creator address:", creatorAddress);
   }, [tradeDataForChart, creatorAddress]);
 
   return (
     <>
-      <Head><title>{token?.name} | Trade</title></Head>
+      <Head>
+        <title>{token?.name} | Trade</title>
+      </Head>
       <Toaster position="top-right" />
 
       {draggingRef.current && <div className="fixed inset-0 z-[60] cursor-row-resize" />}
 
       <div
         className="min-h-screen w-full flex flex-col"
-        style={{ backgroundColor: '#0f1012', color: AX.text, fontFamily: 'Inter, ui-sans-serif, system-ui' }}
+        style={{ backgroundColor: "#0f1012", color: AX.text, fontFamily: "Inter, ui-sans-serif, system-ui" }}
       >
         {/* Top global header */}
         <Header search={search} setSearch={setSearch} />
 
-        {/* little live banners */}
-        {/* Commented out: Live data updating banner
-        {isPolling && (
-          <div
-            className="text-center text-xs px-2 py-1.5"
-            style={{ color: AX.text, backgroundColor: "#14231B", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}
-          >
-            Live data updating every 3 seconds…
-          </div>
-        )}
-        */}
         {isHydrating && (
           <div
             className="text-center text-xs px-2 py-1.5"
-            style={{ color: AX.text, backgroundColor: "#2A2414", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}
+            style={{
+              color: AX.text,
+              backgroundColor: "#2A2414",
+              borderTop: `1px solid ${AX.border}`,
+              borderBottom: `1px solid ${AX.border}`,
+            }}
           >
             Finding trading pair for this token…
           </div>
@@ -542,44 +421,42 @@ export default function TradePage() {
           {/* LEFT: chart + tables */}
           <div
             ref={containerRef}
-            className="flex-1 min-w-0 max-w-full flex flex-col pb-3"
+            className="flex-1 min-w-0 max-w-full flex flex-col pb-0"
             style={{ borderRight: `1px solid ${AX.border}` }}
           >
             {/* TOP pane - Chart in top left */}
             <div className="flex-shrink-0 flex flex-col" style={{ height: topPanePx }}>
               {/* TradeHeader includes name + the ONLY icon cluster */}
               <div className="px-2 flex-shrink-0">
-                <TradeHeader 
-                  token={correctTokenData || displayToken} 
-                />
+                <TradeHeader token={correctTokenData || displayToken} />
               </div>
 
-              {/* Chart - Let BackendOHLCChart handle its own loading state */}
-              <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden pb-1">
-                {canStartOHLC || (typeof resolvedPairAddress === 'string' && resolvedPairAddress.length >= 32) ? (
+              {/* Chart - tight bottom spacing */}
+              <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden">
+                {canStartOHLC || (typeof resolvedPairAddress === "string" && resolvedPairAddress.length >= 32) ? (
                   <BackendOHLCChart
                     key={`chart-${resolvedPairAddress || _mint}`}
-                    mint={typeof _mint === 'string' ? _mint : undefined}
+                    mint={typeof _mint === "string" ? _mint : undefined}
                     pairAddress={resolvedPairAddress}
                     interval={currentOHLCParams.interval}
                     timeframe={currentOHLCParams.timeframe}
                     optimize={currentOHLCParams.optimize}
                     height="100%"
                     width="100%"
-                    baseRefreshMs={10000} // Faster refresh rate for ultra-fast loading
+                    baseRefreshMs={10000}
                     className="relative"
                     tradeData={tradeDataForChart}
                     creatorAddress={creatorAddress}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
-                    {isHydrating ? 'Resolving pair address...' : 'No mint or pair address available'}
+                    {isHydrating ? "Resolving pair address..." : "No mint or pair address available"}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Resizer - positioned between chart and tabs */}
+            {/* Ultra-thin resizer */}
             <div
               role="separator"
               aria-orientation="horizontal"
@@ -607,61 +484,43 @@ export default function TradePage() {
                   document.body.style.cursor = "";
                   (document.body.style as any).userSelect = "";
                   document.documentElement.style.cursor = "";
-                  window.removeEventListener("pointermove", onMove, { capture: true } as any);
+                  window.removeEventListener("pointermove", onMove as any, { capture: true } as any);
                   window.removeEventListener("pointerup", onUp as any, { capture: true } as any);
                 };
-                window.addEventListener("pointermove", onMove, { capture: true });
+                window.addEventListener("pointermove", onMove as any, { capture: true });
                 window.addEventListener("pointerup", onUp as any, { capture: true });
               }}
-              className="relative h-4 cursor-row-resize select-none touch-none flex-shrink-0 "
-              style={{ 
-                touchAction: "none",
-                zIndex: 1,
-                background: AX.bg
-              }}
+              className="relative h-[2px] cursor-row-resize select-none touch-none flex-shrink-0"
+              style={{ touchAction: "none", zIndex: 1, background: "transparent" }}
             >
               <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px" style={{ background: AX.border }} />
-              <div
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 px-2 py-1 rounded-full transition-all duration-200 hover:scale-110 hover:opacity-100"
-                style={{ 
-                  background: 'rgba(61, 220, 132, 0.12)',
-                  border: `1px solid rgba(61, 220, 132, 0.3)`,
-                  width: '32px',
-                  height: '12px',
-                  opacity: 0.8
-                }}
-              >
-                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.8 }} />
-                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.8 }} />
-                <span className="h-1 w-1 rounded-full" style={{ background: '#3DDC84', opacity: 0.8 }} />
-              </div>
             </div>
 
-            {/* BOTTOM pane */}
-            <div className="flex-1 min-h-[120px] flex flex-col">
-              <TradeTabs 
-                selectedTab={selectedTab} 
-                setSelectedTab={setSelectedTab}
-              />
+            {/* BOTTOM pane (tabs + tables) */}
+            <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col">
+              <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
               <div className="flex-1 min-h-0">
                 {selectedTab === "Trades" && (
-                  <CodexTrades 
-                    token={correctTokenData || displayToken} 
-                    initialTrades={initialTradeData?.trades || []}
-                  />
+                  <CodexTrades token={correctTokenData || displayToken} initialTrades={initialTradeData?.trades || []} />
                 )}
                 {selectedTab === "Top Traders" && (
-                  <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
+                  <React.Suspense
+                    fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}
+                  >
                     <CodexTopTraders token={displayToken} />
                   </React.Suspense>
                 )}
                 {selectedTab === "Holders" && (
-                  <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
+                  <React.Suspense
+                    fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}
+                  >
                     <CodexHolders token={displayToken} />
                   </React.Suspense>
                 )}
                 {selectedTab === "Dev Tokens" && (
-                  <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
+                  <React.Suspense
+                    fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}
+                  >
                     <CodexDevTokens token={displayToken} />
                   </React.Suspense>
                 )}
@@ -671,8 +530,8 @@ export default function TradePage() {
 
           {/* RIGHT: action panel */}
           <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:block">
-            <TradeActionPanel 
-              token={displayToken} 
+            <TradeActionPanel
+              token={displayToken}
               tradeParams={tradeParams}
               setTradeParams={setTradeParams}
               quickBuySettings={quickBuySettings}
@@ -683,7 +542,7 @@ export default function TradePage() {
 
           {/* Trade button for mobile */}
           <div className="fixed bottom-0 left-0 w-full p-4 z-50 lg:hidden mb-10">
-            <button 
+            <button
               className="w-full bg-emerald-500 text-white p-2 rounded-lg cursor-pointer"
               onClick={() => setShowMobileTradeModal(true)}
             >
@@ -692,38 +551,38 @@ export default function TradePage() {
           </div>
         </div>
       </div>
-      
+
       {/* Mobile Trade Modal */}
       {showMobileTradeModal && (
         <div className="fixed inset-0 z-[100] lg:hidden">
           {/* Backdrop */}
-          <div 
+          <div
             className={`absolute inset-0 bg-black/70 bg-opacity-50 transition-opacity duration-300 ${
-              isClosingModal ? 'opacity-0' : 'opacity-100'
+              isClosingModal ? "opacity-0" : "opacity-100"
             }`}
             onClick={closeModal}
           />
-          
+
           {/* Bottom Sheet */}
-          <div 
+          <div
             ref={modalDragRef}
             className={`absolute bottom-0 left-0 right-0 bg-[#0f1012] rounded-t-xl shadow-2xl max-h-[85vh] flex flex-col ${
-              isClosingModal ? 'mobile-trade-modal-closing' : 'mobile-trade-modal'
+              isClosingModal ? "mobile-trade-modal-closing" : "mobile-trade-modal"
             }`}
-            style={{ touchAction: 'none' }}
+            style={{ touchAction: "none" }}
           >
             {/* Handle bar - draggable area */}
-            <div 
+            <div
               className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing select-none"
               onTouchStart={handleDragStart}
               onTouchMove={handleDragMove}
               onTouchEnd={handleDragEnd}
               onMouseDown={handleDragStart}
-              style={{ touchAction: 'none' }}
+              style={{ touchAction: "none" }}
             >
               <div className="w-12 h-1 bg-[#2A2B33] rounded-full" />
             </div>
-            
+
             {/* Close button */}
             <div className="flex justify-end pr-4 pb-2">
               <button
@@ -736,11 +595,11 @@ export default function TradePage() {
                 </svg>
               </button>
             </div>
-            
+
             {/* TradeActionPanel content */}
             <div className="flex-1 overflow-y-auto">
-              <TradeActionPanel 
-                token={displayToken} 
+              <TradeActionPanel
+                token={displayToken}
                 tradeParams={tradeParams}
                 setTradeParams={setTradeParams}
                 quickBuySettings={quickBuySettings}
@@ -750,80 +609,78 @@ export default function TradePage() {
           </div>
         </div>
       )}
-      
+
       <Footer />
 
-      {/* Lightweight Charts styling */}
+      {/* Global tight spacing & chart styles */}
       <style jsx global>{`
         /* Ensure lightweight charts fit properly in our layout */
-        .lightweight-chart-container {
-          width: 100% !important;
-          height: 100% !important;
-          background: rgba(0, 0, 0, 1) !important;
-        }
-        
-        /* Make chart bars thinner and more spaced */
-        .ohlc-chart-container {
-          width: 100% !important;
-          height: 100% !important;
-        }
-        
-        /* Ensure proper chart spacing */
+        .lightweight-chart-container,
+        .ohlc-chart-container,
         .tv-lightweight-charts {
           width: 100% !important;
           height: 100% !important;
         }
-        
-        /* Make candlesticks appear thinner */
         .tv-lightweight-charts .pane {
           overflow: visible !important;
         }
-        
-        /* Reduce candlestick width visually */
         .tv-lightweight-charts canvas {
           image-rendering: pixelated;
           image-rendering: -moz-crisp-edges;
           image-rendering: crisp-edges;
         }
 
-        /* Chart wrapper responsive behavior */
+        /* Chart wrapper */
         .chart-wrapper {
           display: flex;
           flex-direction: column;
           position: relative;
           max-width: 100%;
         }
-
         .chart-wrapper > * {
           max-width: 100%;
         }
 
-        /* Prevent layout overflow on large screens */
-        @media (min-width: 1920px) {
-          .chart-wrapper {
-            max-width: 100%;
-          }
-        }
-
-        /* Ensure resizer doesn't interfere with chart */
+        /* Thin splitter keeps layout tight */
         [role="separator"] {
           pointer-events: auto;
           position: relative;
         }
-
         [role="separator"]:hover {
           opacity: 1;
         }
 
-        /* Mobile Trade Modal Styles */
-        .mobile-trade-modal {
-          animation: slideUp 0.3s ease-out;
+        /* ===== Tighten the space between chart and tabs ===== */
+        #tabs-pane {
+          margin-top: 0 !important;
+          padding-top: 0 !important;
+        }
+        #tabs-pane > * {
+          margin-top: 0 !important;
+          padding-top: 0 !important;
+        }
+        /* In case TradeTabs injects its own top spacing */
+        #tabs-pane > div:first-of-type,
+        #tabs-pane [class*="tabs"]:first-of-type,
+        #tabs-pane [class*="Tab"]:first-of-type {
+          margin-top: 0 !important;
+          padding-top: 0 !important;
+        }
+        /* Ensure chart section doesn't add bottom spacing */
+        .chart-wrapper,
+        .chart-wrapper > * {
+          margin-bottom: 0 !important;
+          padding-bottom: 0 !important;
         }
 
+        /* Mobile Trade Modal animations */
+        .mobile-trade-modal {
+          animation: slideUp 0.3s ease-out;
+          transition: transform 0.3s ease-out;
+        }
         .mobile-trade-modal-closing {
           animation: slideDown 0.3s ease-in;
         }
-
         @keyframes slideUp {
           from {
             transform: translateY(100%);
@@ -832,7 +689,6 @@ export default function TradePage() {
             transform: translateY(0);
           }
         }
-
         @keyframes slideDown {
           from {
             transform: translateY(0);
@@ -842,58 +698,9 @@ export default function TradePage() {
           }
         }
 
-        .mobile-trade-backdrop {
-          animation: fadeIn 0.3s ease-out;
-        }
-
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
-        }
-
-        @keyframes fadeOut {
-          from {
-            opacity: 1;
-          }
-          to {
-            opacity: 0;
-          }
-        }
-
         /* Prevent body scroll when modal is open */
         body.modal-open {
           overflow: hidden;
-        }
-
-        /* Drag improvements */
-        .cursor-grab {
-          cursor: grab;
-        }
-
-        .cursor-grab:active {
-          cursor: grabbing;
-        }
-
-        /* Prevent text selection during drag */
-        .select-none {
-          user-select: none;
-          -webkit-user-select: none;
-          -moz-user-select: none;
-          -ms-user-select: none;
-        }
-
-        /* Smooth transitions for drag states */
-        .mobile-trade-modal {
-          transition: transform 0.3s ease-out;
-        }
-
-        /* Disable transitions during drag */
-        .mobile-trade-modal.dragging {
-          transition: none;
         }
       `}</style>
     </>
