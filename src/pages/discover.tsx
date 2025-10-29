@@ -31,8 +31,7 @@ const AX = {
 };
 
 export default function DiscoverPage() {
-  // T ancestors - only trending is enabled now
-  const [activeTab, setActiveTab] = useState<'trending'>('trending');
+  const [activeTab, setActiveTab] = useState<'trending' | 'dex' | 'live'>('trending');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -278,7 +277,6 @@ export default function DiscoverPage() {
   }, [allTokens, tokensLoading]);
 
   /* ------- map tokens -> PumpItem for Live Pump ------- */
-  /* Commented out - Live Pump feature disabled
   const toPumpItem = (t: any): PumpItem => {
     const name = t?.name || t?.symbol || '—';
     const sym = t?.symbol ? String(t.symbol).slice(0, 12) : undefined;
@@ -316,7 +314,6 @@ export default function DiscoverPage() {
 
   const liveRightItems: PumpItem[] =
     displayed.length ? displayed.slice(6, 12).map(toPumpItem) : demoRightPump;
-  */
 
   return (
     <>
@@ -338,24 +335,24 @@ export default function DiscoverPage() {
         {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-20">
           <div className="flex max-w-7xl items-center gap-6">
-            {/* <button
-              className={`text-lg font-semibold transition-colors ${activeTab === "dex" ? "text-white" : "text-neutral-400"} cursor-pointer`}
-              onClick={() => setActiveTab("dex")}
-            >
-              DEX Screener
-            </button> */}
             <button
               className={`text-lg font-semibold transition-colors ${activeTab === "trending" ? "text-white" : "text-neutral-400"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
-            {/* <button
+            <button
+              className={`text-lg font-semibold transition-colors ${activeTab === "dex" ? "text-white" : "text-neutral-400"} cursor-pointer`}
+              onClick={() => setActiveTab("dex")}
+            >
+              DEX Screener
+            </button>
+            <button
               className={`text-lg font-semibold transition-colors ${activeTab === "live" ? "text-white" : "text-neutral-400"} cursor-pointer`}
               onClick={() => setActiveTab("live")}
             >
               Live Pump
-            </button> */}
+            </button>
           </div>
 
           {/* Right controls (unchanged) */}
@@ -487,7 +484,7 @@ export default function DiscoverPage() {
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
-          {/* {activeTab === 'live' ? (
+          {activeTab === 'live' ? (
             <PumpLive
               leftItems={liveLeftItems.length ? liveLeftItems : demoLeftPump}
               rightItems={liveRightItems.length ? liveRightItems : demoRightPump}
@@ -498,7 +495,7 @@ export default function DiscoverPage() {
                 if (any) handleQuickBuy(any as Token);
               }}
             />
-          ) : */} {(showSkeleton || tokensLoading) ? (
+          ) : (showSkeleton || tokensLoading) ? (
             <div className="space-y-4">
               {Array.from({ length: 10 }).map((_, i) => (
                 <div key={i} className="h-12 w-full bg-neutral-800 animate-pulse rounded" />
