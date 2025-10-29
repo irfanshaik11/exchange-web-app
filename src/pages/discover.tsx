@@ -1,5 +1,5 @@
 // src/pages/discover.tsx
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Head from 'next/head';
 import InterstateTable from '../components/InterstateTable';
 import type { Token } from '~/utils/db';
@@ -16,7 +16,7 @@ import toast from "react-hot-toast";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaFilter, FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 
-export type Timeframe = "1m" | "5m" | "30m" | "1h";
+export type Timeframe = "5m" | "1h" | "6h" | "24h";
 
 // Extend Token with optional flags
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
@@ -31,13 +31,14 @@ const AX = {
 };
 
 export default function DiscoverPage() {
-  // Tabs (including "live" for the new picture-list UI)
-  const [activeTab, setActiveTab] = useState<'dex' | 'trending' | 'live'>('trending');
+  // T ancestors - only trending is enabled now
+  const [activeTab, setActiveTab] = useState<'trending'>('trending');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
-  const { /* filter not used here intentionally */ } = useFilter();
+  const { filter } = useFilter();
+  const [localFilters, setLocalFilters] = useState(filter);
   const { presets, activePreset, setActivePreset } = useQuickBuy();
 
   // Load quickBuyAmount from localStorage with fallback
@@ -64,6 +65,11 @@ export default function DiscoverPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   // WebSocket token service – keep as-is for dex/trending
+  console.log('🔧 [DISCOVER] About to call usePaginatedTokensWithFallback with:', { 
+    filter: 'trending',
+    timeframe: selectedTimeframe
+  });
+  
   const {
     data: allTokens,
     loading: tokensLoading,
@@ -72,10 +78,15 @@ export default function DiscoverPage() {
     isReconnecting,
     usingFallback,
   } = usePaginatedTokensWithFallback({
-    // For "live" we reuse trending data; only the UI differs
-    filter: activeTab === 'dex' ? 'new' : 'trending',
+    // Always use trending endpoint
+    filter: 'trending',
     timeframe: selectedTimeframe
   });
+  
+  // Debug log to track timeframe changes
+  useEffect(() => {
+    console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
+  }, [selectedTimeframe]);
 
   // QUICK BUY handler – unchanged
   async function handleQuickBuy(token: Token) {
@@ -120,6 +131,7 @@ export default function DiscoverPage() {
   }
 
   const handleTimeframeClick = (tf: string) => {
+    console.log('🖱️ Discover: Timeframe clicked:', tf);
     setSelectedTimeframe(tf as Timeframe);
     setSortKey("volume");
     setSortDirection("desc");
@@ -133,12 +145,67 @@ export default function DiscoverPage() {
       const n = parseFloat(v);
       return isNaN(n) ? 0 : n;
     }
-    if (tf === '1h') return Number(t?.volume_5m) || 0;
-    if (tf === '30m') return Number(t?.volume_5m) || 0;
-    if (tf === '5m') return Number(t?.volume_5m) || 0;
-    if (tf === '1m') return Number(t?.volume_5m) || 0;
     return 0;
   };
+
+  // Apply filters to tokens
+  const applyFilters = useCallback((tokens: TokenWithDexPaid[]) => {
+    let filtered = [...tokens];
+    
+    // Search keywords
+    if (localFilters.searchKeywords.trim()) {
+      const searchTerms = localFilters.searchKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
+      if (searchTerms.length > 0) {
+        filtered = filtered.filter(token => {
+          const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
+          return searchTerms.some(term => tokenText.includes(term));
+        });
+      }
+    }
+    
+    // Exclude keywords
+    if (localFilters.excludeKeywords.trim()) {
+      const excludeTerms = localFilters.excludeKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
+      if (excludeTerms.length > 0) {
+        filtered = filtered.filter(token => {
+          const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
+          return !excludeTerms.some(term => tokenText.includes(term));
+        });
+      }
+    }
+    
+    // Market cap filter
+    if (localFilters.marketCapMin || localFilters.marketCapMax) {
+      filtered = filtered.filter(token => {
+        const marketCap = Number(token.fully_diluted_value) || 0;
+        const min = localFilters.marketCapMin ? Number(localFilters.marketCapMin) : 0;
+        const max = localFilters.marketCapMax ? Number(localFilters.marketCapMax) : Infinity;
+        return marketCap >= min && marketCap <= max;
+      });
+    }
+    
+    // Volume filter
+    if (localFilters.volumeMin || localFilters.volumeMax) {
+      filtered = filtered.filter(token => {
+        const volume = getVolumeForTimeframe(token, selectedTimeframe);
+        const min = localFilters.volumeMin ? Number(localFilters.volumeMin) : 0;
+        const max = localFilters.volumeMax ? Number(localFilters.volumeMax) : Infinity;
+        return volume >= min && volume <= max;
+      });
+    }
+    
+    // Liquidity filter
+    if (localFilters.liquidityMin || localFilters.liquidityMax) {
+      filtered = filtered.filter(token => {
+        const liquidity = Number(token.total_liquidity_usd) || 0;
+        const min = localFilters.liquidityMin ? Number(localFilters.liquidityMin) : 0;
+        const max = localFilters.liquidityMax ? Number(localFilters.liquidityMax) : Infinity;
+        return liquidity >= min && liquidity <= max;
+      });
+    }
+    
+    return filtered;
+  }, [localFilters, selectedTimeframe, getVolumeForTimeframe]);
 
   // Sorting handler
   const handleSort = (key: typeof sortKey) => {
@@ -171,7 +238,8 @@ export default function DiscoverPage() {
   useEffect(() => {
     if (activeTab === "trending") {
       const arr = Array.from(tokenMapRef.current.values());
-      const sortedTokens = [...arr];
+      const filtered = applyFilters(arr);
+      const sortedTokens = [...filtered];
       sortedTokens.sort((a, b) => {
         let aVal = 0, bVal = 0;
         if (sortKey === 'volume') {
@@ -194,7 +262,7 @@ export default function DiscoverPage() {
       // dex OR live → same sliced data; Live Pump renders a different UI
       setDisplayed(filteredTokens.slice(0, 10));
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe]);
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters]);
 
   // Skeleton management
   useEffect(() => {
@@ -210,6 +278,7 @@ export default function DiscoverPage() {
   }, [allTokens, tokensLoading]);
 
   /* ------- map tokens -> PumpItem for Live Pump ------- */
+  /* Commented out - Live Pump feature disabled
   const toPumpItem = (t: any): PumpItem => {
     const name = t?.name || t?.symbol || '—';
     const sym = t?.symbol ? String(t.symbol).slice(0, 12) : undefined;
@@ -247,6 +316,7 @@ export default function DiscoverPage() {
 
   const liveRightItems: PumpItem[] =
     displayed.length ? displayed.slice(6, 12).map(toPumpItem) : demoRightPump;
+  */
 
   return (
     <>
@@ -268,39 +338,39 @@ export default function DiscoverPage() {
         {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-20">
           <div className="flex max-w-7xl items-center gap-6">
-            <button
+            {/* <button
               className={`text-lg font-semibold transition-colors ${activeTab === "dex" ? "text-white" : "text-neutral-400"} cursor-pointer`}
               onClick={() => setActiveTab("dex")}
             >
               DEX Screener
-            </button>
+            </button> */}
             <button
               className={`text-lg font-semibold transition-colors ${activeTab === "trending" ? "text-white" : "text-neutral-400"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
-            <button
+            {/* <button
               className={`text-lg font-semibold transition-colors ${activeTab === "live" ? "text-white" : "text-neutral-400"} cursor-pointer`}
               onClick={() => setActiveTab("live")}
             >
               Live Pump
-            </button>
+            </button> */}
           </div>
 
           {/* Right controls (unchanged) */}
           <div className="flex flex-row items-center gap-4">
-            {/* Connection status */}
-            <div className="flex items-center gap-2">
+            {/* Connection status - commented out per user request */}
+            {/* <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
               <span className="text-xs text-neutral-400">
-                {isConnected ? 'Live' : usingFallback ? 'Polling' : 'Disconnected'}
+                {isConnected ? 'Live' : 'Disconnected'}
               </span>
-            </div>
+            </div> */}
 
             {/* Timeframes */}
             <div className="flex max-w-7xl items-center gap-4 text-sm font-medium">
-              {(["1m", "5m", "30m", "1h"] as Timeframe[]).map((tf: Timeframe) => (
+              {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
                 <button
                   key={tf}
                   className={(selectedTimeframe === tf ? "text-emerald-400 " : "text-neutral-400 ") + "cursor-pointer transition-colors"}
@@ -408,11 +478,16 @@ export default function DiscoverPage() {
         </div>
 
         {/* Filter Popout */}
-        <FilterPopout open={isFilterPopoutOpen} onClose={() => setIsFilterPopoutOpen(false)} />
+        <FilterPopout 
+          open={isFilterPopoutOpen} 
+          onClose={() => setIsFilterPopoutOpen(false)}
+          onApplyFilters={(filters) => setLocalFilters(filters)}
+          currentFilters={localFilters}
+        />
 
         {/* Main Content */}
         <main className="mx-auto px-20 pb-10">
-          {activeTab === 'live' ? (
+          {/* {activeTab === 'live' ? (
             <PumpLive
               leftItems={liveLeftItems.length ? liveLeftItems : demoLeftPump}
               rightItems={liveRightItems.length ? liveRightItems : demoRightPump}
@@ -423,7 +498,7 @@ export default function DiscoverPage() {
                 if (any) handleQuickBuy(any as Token);
               }}
             />
-          ) : (showSkeleton || tokensLoading) ? (
+          ) : */} {(showSkeleton || tokensLoading) ? (
             <div className="space-y-4">
               {Array.from({ length: 10 }).map((_, i) => (
                 <div key={i} className="h-12 w-full bg-neutral-800 animate-pulse rounded" />

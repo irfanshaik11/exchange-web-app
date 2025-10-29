@@ -54,7 +54,7 @@ interface InterstateTableProps {
   sortKey?: string;
   sortDirection?: 'asc' | 'desc';
   setSort?: (key: string) => void;
-  selectedTimeframe: '1m' | '5m' | '30m' | '1h';
+  selectedTimeframe: '5m' | '1h' | '6h' | '24h';
   quickBuyAmount?: number | string;
   skeletonRowCount?: number;
 }
@@ -73,7 +73,7 @@ const TABLE_HEADERS: HeaderConfig[] = [
   { key: 'total_liquidity_usd', label: 'Liquidity', align: 'right', width: 'w-28' },
   { key: 'volume', label: 'Volume', align: 'right', width: 'w-28' },
   { key: 'txns', label: 'TXNS', align: 'right', width: 'w-24' },
-  { key: null, label: 'Audit Log', align: 'center', width: 'w-24' },
+  // { key: null, label: 'Token Info', align: 'center', width: 'w-24' },
   { key: null, label: 'Action', align: 'center', width: 'w-32' },
 ];
 
@@ -852,13 +852,14 @@ const MarketCapCell: React.FC<{
 
   return (
     <div className="text-right">
-      <div className="text-sm font-semibold mb-1" style={{ color: AX.text }}>
+      <div className="text-sm font-semibold" style={{ color: AX.text }}>
         {(() => {
           console.log('MarketCapCell formatSmartNumber call with:', token.fully_diluted_value);
           return `$${formatSmartNumber(token.fully_diluted_value)}`;
         })()}
       </div>
-      <div
+      {/* Commented out percentage display per user request */}
+      {/* <div
         className={`text-xs font-semibold ${
           isPositive ? "text-emerald-400" : "text-red-400"
         } ${
@@ -867,7 +868,7 @@ const MarketCapCell: React.FC<{
         }`}
       >
         {formatPercentChange(percentChange)}%
-      </div>
+      </div> */}
     </div>
   );
 };
@@ -900,6 +901,9 @@ const AuditLogCell: React.FC<{
 }> = ({ token, selectedTimeframe }) => {
   const percentChange = getTokenStat(token, 'price_percent_change', selectedTimeframe);
 
+  const buyCount = (token as any)[`total_buys_${selectedTimeframe}`] || 0;
+  const sellCount = (token as any)[`total_sells_${selectedTimeframe}`] || 0;
+
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="flex items-center gap-1">
@@ -908,12 +912,10 @@ const AuditLogCell: React.FC<{
           {Math.abs(percentChange).toFixed(2)}%
         </span>
       </div>
-      {typeof token.dexPaid !== 'undefined' && (
-        <div className="flex items-center gap-1">
-          <span className={`w-2 h-2 rounded-full ${token.dexPaid ? 'bg-emerald-400' : 'bg-neutral-600'}`}></span>
-          <span className="text-xs" style={{ color: AX.muted }}>Paid</span>
-        </div>
-      )}
+      <div className="flex gap-2 text-xs" style={{ color: AX.muted }}>
+        <span>B: {formatSmartNumber(buyCount)}</span>
+        <span>S: {formatSmartNumber(sellCount)}</span>
+      </div>
     </div>
   );
 };
@@ -1006,9 +1008,10 @@ const TableRow: React.FC<{
         <TxnsCell token={token} selectedTimeframe={selectedTimeframe} />
       </td>
       
-      <td className="w-24 px-4 py-4 align-middle">
+      {/* Token Info column - commented out per user request */}
+      {/* <td className="w-24 px-4 py-4 align-middle">
         <AuditLogCell token={token} selectedTimeframe={selectedTimeframe} />
-      </td>
+      </td> */}
       
       <td className="w-32 px-4 py-4 align-middle text-center">
         <InterstateButton

@@ -102,7 +102,7 @@ export default function ImageSearchStatus() {
           <div>• Pump.fun CDN</div>
           <div>• Moonit CDN</div>
           <div>• Jupiter Static</div>
-          <div>• DexScreener</div>
+          {/* <div>• DexScreener</div> */}
           <div>• CoinGecko</div>
           <div>• Solana Token List</div>
           <div>• IPFS Metadata</div>
