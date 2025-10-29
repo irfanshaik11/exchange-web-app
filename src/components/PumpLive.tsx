@@ -1,5 +1,5 @@
 // components/PumpLive.tsx
-import React from "react";
+import React, { useMemo, useState } from "react";
 
 const AX = {
   bg: "#0f1012",
@@ -13,7 +13,7 @@ const AX = {
   chip: "#0b1b14",
 };
 
-// Static fallbacks (ensure these files exist under /public)
+// Static fallbacks (kept for optional use; we now prefer initial-letter blocks)
 const FALLBACK_COVER = "/placeholder/fallback-cover.jpg";
 const FALLBACK_AVATAR = "/placeholder/fallback-avatar.jpg";
 
@@ -22,30 +22,14 @@ export type PumpItem = {
   name: string;
   symbol?: string;
   desc?: string;
-
-  /** Right-side age next to green dot (e.g. "22m") */
-  age: string;
-
-  /** Small green chip on the icon row; falls back to `age` if omitted (e.g. "2h", "3mo") */
-  chipAge?: string;
-
-  /** Market cap text (e.g. "$7.26K"). If missing, we render a small dummy value. */
-  mc?: string;
-
-  /** Big left thumbnail */
-  coverUrl?: string;
-
-  /** Tiny avatar next to name */
-  avatarUrl?: string;
-
-  /** Shows tiny green square next to name */
-  verified?: boolean;
-
-  /** Orange status ring on the thumbnail dot */
-  hot?: boolean;
-
-  /** Mini comments count (e.g. 21) shown as a small bubble beside the glyph row */
-  comments?: number;
+  age: string;           // right-side age (e.g., "22m")
+  chipAge?: string;      // small green chip (e.g., "2h")
+  mc?: string;           // market cap text (e.g., "$7.26K")
+  coverUrl?: string;     // big left thumbnail
+  avatarUrl?: string;    // tiny avatar next to name
+  verified?: boolean;    // verification dot
+  hot?: boolean;         // orange status ring
+  comments?: number;     // mini comments count
 };
 
 /* ---------------- helpers ---------------- */
@@ -56,6 +40,10 @@ function getDummyMc(seed: string) {
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   const buckets = ["$5.41K", "$5.44K", "$5.53K", "$6.59K", "$7.14K", "$9.86K", "$10.8K"];
   return buckets[h % buckets.length];
+}
+
+function getInitial(name?: string, symbol?: string) {
+  return (symbol?.trim()?.charAt(0) || name?.trim()?.charAt(0) || "?").toUpperCase();
 }
 
 function BlueIconRow({
@@ -75,7 +63,7 @@ function BlueIconRow({
         {chipText}
       </span>
 
-      {/* comments mini pill (speech bubble + count) */}
+      {/* comments mini pill */}
       <span
         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md"
         style={{ color: AX.blue, backgroundColor: "transparent", border: `1px solid ${AX.border}` }}
@@ -120,9 +108,14 @@ export function PumpRow({
   onAction?: (id: string) => void;
 }) {
   const mcText = item.mc ?? getDummyMc(item.id);
+  const initial = useMemo(() => getInitial(item.name, item.symbol), [item.name, item.symbol]);
 
-  // prefer remote if provided, otherwise use our static fallback
-  const coverSrc = item.coverUrl || FALLBACK_COVER;
+  // Whether we should show actual images (start true if url exists; switch to false onError)
+  const [showCoverImg, setShowCoverImg] = useState<boolean>(!!item.coverUrl);
+  const [showAvatarImg, setShowAvatarImg] = useState<boolean>(!!item.avatarUrl);
+
+  // prefer remote if provided (we'll *not* fall back to static JPGs; instead show initial blocks)
+  const coverSrc = item.coverUrl || FALLBACK_COVER;   // still defined, but we gate with showCoverImg
   const avatarSrc = item.avatarUrl || FALLBACK_AVATAR;
 
   return (
@@ -140,22 +133,36 @@ export function PumpRow({
           border: `1px solid ${AX.border}`,
         }}
       >
-        {/* Lazy, async, dimensioned cover */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={coverSrc}
-          alt=""
-          width={120}
-          height={72}
-          loading="lazy"
-          decoding="async"
-          fetchPriority="low"
-          className="w-full h-full object-cover"
-          onError={(e) => {
-            const t = e.currentTarget as HTMLImageElement;
-            if (!t.src.endsWith(FALLBACK_COVER)) t.src = FALLBACK_COVER;
-          }}
-        />
+        {/* If we have a cover URL and it hasn't failed: show image; else show initial block */}
+        {showCoverImg && item.coverUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={coverSrc}
+            alt=""
+            width={120}
+            height={72}
+            loading="lazy"
+            decoding="async"
+            fetchPriority="low"
+            className="w-full h-full object-cover"
+            onError={() => setShowCoverImg(false)}
+          />
+        ) : (
+          <div className="w-full h-full grid place-items-center">
+            <div
+              className="rounded-md font-bold"
+              style={{
+                color: AX.text,
+                fontSize: 24,
+                letterSpacing: 1,
+              }}
+              aria-label={initial}
+              title={item.name}
+            >
+              {initial}
+            </div>
+          </div>
+        )}
 
         {/* status dot */}
         <span
@@ -181,22 +188,31 @@ export function PumpRow({
               border: `1px solid ${AX.border}`,
             }}
           >
-            {/* Lazy, async, dimensioned avatar */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={avatarSrc}
-              alt=""
-              width={26}
-              height={26}
-              loading="lazy"
-              decoding="async"
-              fetchPriority="low"
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                const t = e.currentTarget as HTMLImageElement;
-                if (!t.src.endsWith(FALLBACK_AVATAR)) t.src = FALLBACK_AVATAR;
-              }}
-            />
+            {showAvatarImg && item.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarSrc}
+                alt=""
+                width={26}
+                height={26}
+                loading="lazy"
+                decoding="async"
+                fetchPriority="low"
+                className="w-full h-full object-cover"
+                onError={() => setShowAvatarImg(false)}
+              />
+            ) : (
+              <div className="w-full h-full grid place-items-center">
+                <span
+                  className="font-bold"
+                  style={{ color: AX.text, fontSize: 12 }}
+                  aria-label={initial}
+                  title={item.name}
+                >
+                  {initial}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* name + symbol + verified */}
@@ -343,7 +359,7 @@ export const demoLeft: PumpItem[] = [
     chipAge: "3mo",
     comments: 21,
     mc: "$7.26K",
-    // you can omit coverUrl/avatarUrl to see fallbacks
+    // omit coverUrl/avatarUrl to see first-letter fallback
   },
   {
     id: "l2",
@@ -376,6 +392,5 @@ export const demoRight: PumpItem[] = [
     age: "18m",
     chipAge: "8mo",
     comments: 1,
-    // mc omitted -> dummy
   },
 ];

@@ -146,7 +146,7 @@ export default function Header({
                 className="h-auto w-30 scale-90"
               />
             </Link>
-            <nav className="ml-6 flex items-center gap-5">
+            <nav className="ml-6 flex items-center gap-5" style={{ position: 'relative', zIndex: 1000 }}>
               {navLinks.map((link) => {
                 const isActive = router.pathname === link.href || 
                   (link.name === "Trenches" && router.pathname.startsWith("/trade/"));
@@ -154,12 +154,24 @@ export default function Header({
                   <Link
                     key={link.name}
                     href={link.href}
+                    onClick={(e) => {
+                      // Use router.push for client-side navigation with fallback
+                      router.push(link.href).catch((err: any) => {
+                        // Fallback to full page navigation if router.push fails
+                        console.error('Router.push failed, using fallback:', err);
+                        window.location.href = link.href;
+                      });
+                    }}
                     className={`px-1.5 py-0.5 text-sm font-medium transition-all duration-300 ease-out rounded ${
                       isActive ? "border-current" : ""
                     }`}
                     style={{
                       color: isActive ? AX.mint : AX.text,
-                      borderColor: isActive ? AX.mint : "transparent"
+                      borderColor: isActive ? AX.mint : "transparent",
+                      position: 'relative',
+                      zIndex: 1001,
+                      pointerEvents: 'auto',
+                      cursor: 'pointer'
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
