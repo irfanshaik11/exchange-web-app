@@ -264,40 +264,94 @@ export default function PortfolioPage() {
   }, [user?.id, activeSpotTab]);
 
 
- useEffect(() => {
-   if (positions.length > 0) {
-     // Add validation to prevent extreme values
-     const validPositions = positions.filter(pos => 
-       isFinite(pos.pnl) && 
-       isFinite(pos.remainingUsdValue) && 
-       isFinite(pos.boughtUsdValue) &&
-       Math.abs(pos.pnl) < 1e12 && // Less than 1 trillion
-       Math.abs(pos.remainingUsdValue) < 1e12 &&
-       Math.abs(pos.boughtUsdValue) < 1e12
-     );
+useEffect(() => {
+  if (positions.length > 0) {
+    // Add validation to prevent extreme values
+    const validPositions = positions.filter(pos => 
+      isFinite(pos.pnl) && 
+      isFinite(pos.remainingUsdValue) && 
+      isFinite(pos.boughtUsdValue) &&
+      Math.abs(pos.pnl) < 1e12 && // Less than 1 trillion
+      Math.abs(pos.remainingUsdValue) < 1e12 &&
+      Math.abs(pos.boughtUsdValue) < 1e12
+    );
 
-     const totalPnl = validPositions.reduce((acc, pos) => acc + pos.pnl, 0);
-     const totalRemainingValue = validPositions.reduce(
-       (acc, pos) => acc + pos.remainingUsdValue,
-       0,
-     );
-     const totalBoughtValue = validPositions.reduce(
-       (acc, pos) => acc + pos.boughtUsdValue,
-       0,
-     );
-     setUnrealizedPnl(totalPnl);
-     setUnrealizedPnlPercentage(
-       totalBoughtValue ? (totalPnl / totalBoughtValue) * 100 : 0,
-     );
-     setTotalValue(solBalance + totalRemainingValue);
+    // Apply the same correction rules used in Positions table for consistency
+    const correctedPositions = validPositions.map(pos => {
+      // Unit correction for token amounts
+      let correctedSold = pos.sold;
+      if (pos.sold > pos.bought * 1000) {
+        correctedSold = pos.sold / 1000000; // Scale down by 1 million
+      }
+      const correctedBought = pos.bought;
+      const correctedRemaining = Math.max(0, correctedBought - correctedSold);
 
-     // Create top 100 positions sorted by USD value
-     const sortedByUsdValue = [...validPositions].sort((a, b) => {
-       return b.remainingUsdValue - a.remainingUsdValue;
-     });
-     setTop100Positions(sortedByUsdValue.slice(0, 100));
-   }
- }, [positions, solBalance]);
+      // Fix soldUsdValue anomalies
+      let correctedSoldUsdValue = pos.soldUsdValue;
+      if (correctedSoldUsdValue > 10000 && pos.boughtUsdValue > 0 && pos.boughtUsdValue < 1000) {
+        if (pos.sold > pos.bought) {
+          if (correctedBought > 0) {
+            const sellRatio = Math.min(correctedSold / correctedBought, 1);
+            correctedSoldUsdValue = pos.boughtUsdValue * sellRatio;
+          }
+        } else if (correctedSoldUsdValue > pos.boughtUsdValue * 100) {
+          const sellRatio = pos.sold / pos.bought;
+          correctedSoldUsdValue = pos.boughtUsdValue * Math.min(sellRatio, 1);
+        }
+      }
+      if (pos.sold > pos.bought && correctedSoldUsdValue > pos.boughtUsdValue) {
+        correctedSoldUsdValue = pos.boughtUsdValue;
+      }
+
+      // Fix remainingUsdValue anomalies
+      let correctedRemainingUsdValue = pos.remainingUsdValue;
+      const needsRemainingFix = (pos.remaining < 0 || pos.sold > pos.bought || (Math.abs(correctedRemainingUsdValue) > 10000 && pos.boughtUsdValue > 0 && pos.boughtUsdValue < 1000));
+      if (needsRemainingFix) {
+        if (correctedBought > 0) {
+          const avgBuyPrice = pos.boughtUsdValue / correctedBought;
+          correctedRemainingUsdValue = correctedRemaining * avgBuyPrice;
+        } else {
+          correctedRemainingUsdValue = 0;
+        }
+      }
+
+      // Recalculate PnL using corrected values
+      const correctedPnl = (correctedSoldUsdValue + correctedRemainingUsdValue) - pos.boughtUsdValue;
+      const correctedPnlPercentage = pos.boughtUsdValue > 0 ? (correctedPnl / pos.boughtUsdValue) * 100 : 0;
+
+      return {
+        ...pos,
+        sold: correctedSold,
+        remaining: correctedRemaining,
+        soldUsdValue: correctedSoldUsdValue,
+        remainingUsdValue: correctedRemainingUsdValue,
+        pnl: correctedPnl,
+        pnlPercentage: correctedPnlPercentage,
+      };
+    });
+
+    const totalPnl = correctedPositions.reduce((acc, pos) => acc + pos.pnl, 0);
+    const totalRemainingValue = correctedPositions.reduce(
+      (acc, pos) => acc + pos.remainingUsdValue,
+      0,
+    );
+    const totalBoughtValue = correctedPositions.reduce(
+      (acc, pos) => acc + pos.boughtUsdValue,
+      0,
+    );
+    setUnrealizedPnl(totalPnl);
+    setUnrealizedPnlPercentage(
+      totalBoughtValue ? (totalPnl / totalBoughtValue) * 100 : 0,
+    );
+    setTotalValue(solBalance + totalRemainingValue);
+
+    // Create top 100 positions sorted by corrected USD value
+    const sortedByUsdValue = [...correctedPositions].sort((a, b) => {
+      return b.remainingUsdValue - a.remainingUsdValue;
+    });
+    setTop100Positions(sortedByUsdValue.slice(0, 100));
+  }
+}, [positions, solBalance]);
 
  // Search filtering effect
  useEffect(() => {
@@ -426,8 +480,24 @@ export default function PortfolioPage() {
         const avgCostPerToken = pos.boughtUsdValue / pos.bought;
         // Cost basis of sold tokens = average cost * amount sold (corrected)
         const costBasisOfSold = avgCostPerToken * correctedSold;
-        // Realized PnL = money received - cost basis
-        const realizedPnl = pos.soldUsdValue - costBasisOfSold;
+
+        // Correct soldUsdValue anomalies (same heuristics as Positions table)
+        let correctedSoldUsdValue = pos.soldUsdValue;
+        if (correctedSoldUsdValue > 10000 && pos.boughtUsdValue > 0 && pos.boughtUsdValue < 1000) {
+          if (pos.sold > pos.bought) {
+            const sellRatio = Math.min(correctedSold / pos.bought, 1);
+            correctedSoldUsdValue = pos.boughtUsdValue * sellRatio;
+          } else if (correctedSoldUsdValue > pos.boughtUsdValue * 100) {
+            const sellRatio = pos.sold / pos.bought;
+            correctedSoldUsdValue = pos.boughtUsdValue * Math.min(sellRatio, 1);
+          }
+        }
+        if (pos.sold > pos.bought && correctedSoldUsdValue > pos.boughtUsdValue) {
+          correctedSoldUsdValue = pos.boughtUsdValue;
+        }
+
+        // Realized PnL = money received - cost basis (using corrected USD)
+        const realizedPnl = correctedSoldUsdValue - costBasisOfSold;
         
         // Debug logging for PNL calculation
         console.log('PNL calculation debug:', {

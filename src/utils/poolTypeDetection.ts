@@ -59,15 +59,15 @@ export function getPoolTypeFromToken(token: Token): PoolType {
     return "Pumpfun";
   }
   
-  // If no protocol info at all, log an error
+  // If no protocol info at all, return empty string - backend will auto-detect
   if (!protocol || protocol.trim() === "") {
-    console.error(`❌ No protocol information for token ${token.symbol} (${token.mint}). Cannot determine pool type.`);
-    console.error(`   Pair address: ${token.pair_address}`);
-    console.error(`   This token's data needs to be updated in the token service.`);
-    return ""; // Will cause fallback in backend
+    console.warn(`⚠️ No protocol information for token ${token.symbol} (${token.mint}).`);
+    console.warn(`   Pair address: ${token.pair_address}`);
+    console.warn(`   Frontend will send empty poolType - backend will auto-detect from pool address.`);
+    return ""; // Backend will auto-detect from poolAddress
   }
   
-  console.warn(`⚠️ Unknown protocol "${protocol}" for token ${token.symbol}. Using empty poolType (will use fallback).`);
+  console.warn(`⚠️ Unknown protocol "${protocol}" for token ${token.symbol}. Frontend will send empty poolType - backend will auto-detect.`);
   return "";
 }
 

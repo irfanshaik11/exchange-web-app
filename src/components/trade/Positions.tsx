@@ -471,6 +471,120 @@ const Positions: React.FC<PositionsProps> = ({
               .reverse() // Reverse so newest/most recent positions appear at the top
               .filter(pos => showHidden || !hiddenTokens.has(pos.tokenAddress))
               .map((pos, idx) => {
+              // Helper function to calculate corrected values for this position
+              const getCorrectedValues = () => {
+                // Apply unit correction for token amounts
+                let correctedSold = pos.sold;
+                if (pos.sold > pos.bought * 1000) {
+                  correctedSold = pos.sold / 1000000; // Scale down by 1 million
+                }
+                const correctedBought = pos.bought;
+                const correctedRemaining = correctedBought - correctedSold;
+                
+                // Correct soldUsdValue
+                let correctedSoldUsdValue = pos.soldUsdValue;
+                
+                // Check if soldUsdValue is suspiciously high compared to boughtUsdValue
+                if (correctedSoldUsdValue > 10000 && pos.boughtUsdValue > 0 && pos.boughtUsdValue < 1000) {
+                  // Check if sold amount is impossible (> bought)
+                  if (pos.sold > pos.bought) {
+                    if (correctedBought > 0) {
+                      const sellRatio = Math.min(correctedSold / correctedBought, 1);
+                      correctedSoldUsdValue = pos.boughtUsdValue * sellRatio;
+                      
+                      console.warn('⚠️ DETECTED: Invalid soldUsdValue in Positions (sold > bought) - fixing:', {
+                        tokenAddress: pos.tokenAddress,
+                        originalSoldUsdValue: pos.soldUsdValue,
+                        boughtUsdValue: pos.boughtUsdValue,
+                        sold: pos.sold,
+                        bought: pos.bought,
+                        correctedSold: correctedSold,
+                        sellRatio: sellRatio,
+                        correctedSoldUsdValue: correctedSoldUsdValue
+                      });
+                    }
+                  } else if (correctedSoldUsdValue > pos.boughtUsdValue * 100) {
+                    const sellRatio = pos.sold / pos.bought;
+                    correctedSoldUsdValue = pos.boughtUsdValue * Math.min(sellRatio, 1);
+                    
+                    console.warn('⚠️ DETECTED: soldUsdValue is way too high in Positions - fixing:', {
+                      tokenAddress: pos.tokenAddress,
+                      originalSoldUsdValue: pos.soldUsdValue,
+                      boughtUsdValue: pos.boughtUsdValue,
+                      sellRatio: sellRatio,
+                      correctedSoldUsdValue: correctedSoldUsdValue
+                    });
+                  }
+                }
+                
+                // Final sanity check: if sold > bought (impossible), cap soldUsdValue at boughtUsdValue
+                if (pos.sold > pos.bought && correctedSoldUsdValue > pos.boughtUsdValue) {
+                  correctedSoldUsdValue = pos.boughtUsdValue;
+                  console.warn('⚠️ Capping soldUsdValue at boughtUsdValue (sold > bought is impossible):', {
+                    tokenAddress: pos.tokenAddress,
+                    sold: pos.sold,
+                    bought: pos.bought,
+                    correctedSoldUsdValue: correctedSoldUsdValue
+                  });
+                }
+                
+                // Correct remainingUsdValue
+                let correctedRemainingUsdValue = pos.remainingUsdValue;
+                
+                // If remaining is negative (impossible - can't sell more than bought), fix remainingUsdValue
+                if (pos.remaining < 0 || pos.sold > pos.bought) {
+                  if (correctedBought > 0 && correctedRemaining >= 0) {
+                    const avgBuyPrice = pos.boughtUsdValue / correctedBought;
+                    correctedRemainingUsdValue = correctedRemaining * avgBuyPrice;
+                    
+                    console.warn('⚠️ DETECTED: Invalid remainingUsdValue in Positions - fixing:', {
+                      tokenAddress: pos.tokenAddress,
+                      originalRemainingUsdValue: pos.remainingUsdValue,
+                      remaining: pos.remaining,
+                      correctedRemaining: correctedRemaining,
+                      avgBuyPrice: avgBuyPrice,
+                      correctedRemainingUsdValue: correctedRemainingUsdValue
+                    });
+                  } else {
+                    correctedRemainingUsdValue = 0;
+                  }
+                }
+                
+                // If remainingUsdValue is suspiciously large, recalculate
+                if (Math.abs(correctedRemainingUsdValue) > 10000 && pos.boughtUsdValue > 0 && pos.boughtUsdValue < 1000) {
+                  const safeRemaining = Math.max(0, correctedRemaining);
+                  if (correctedBought > 0) {
+                    const avgBuyPrice = pos.boughtUsdValue / correctedBought;
+                    correctedRemainingUsdValue = safeRemaining * avgBuyPrice;
+                    
+                    console.warn('⚠️ DETECTED: remainingUsdValue is suspiciously large - fixing:', {
+                      tokenAddress: pos.tokenAddress,
+                      originalRemainingUsdValue: pos.remainingUsdValue,
+                      correctedRemaining: correctedRemaining,
+                      correctedRemainingUsdValue: correctedRemainingUsdValue
+                    });
+                  }
+                }
+                
+                // Recalculate PnL using corrected values
+                const correctedPnl = (correctedSoldUsdValue + correctedRemainingUsdValue) - pos.boughtUsdValue;
+                const correctedPnlPercentage = pos.boughtUsdValue > 0 
+                  ? (correctedPnl / pos.boughtUsdValue) * 100 
+                  : 0;
+                
+                return {
+                  correctedSold,
+                  correctedBought,
+                  correctedRemaining,
+                  correctedSoldUsdValue,
+                  correctedRemainingUsdValue,
+                  correctedPnl,
+                  correctedPnlPercentage
+                };
+              };
+              
+              const corrected = getCorrectedValues();
+              
               // For positions: backend stores originalPairAddress value in pairAddress field
               const navigateAddress = pos.pairAddress || pos.tokenAddress;
               const displayAddress = pos.pairAddress || pos.tokenAddress;
@@ -620,7 +734,7 @@ const Positions: React.FC<PositionsProps> = ({
                   </div>
                 </td>
                 <td className="px-2 py-2">
-                  {formatSmartNumber(pos.bought)}
+                  {formatSmartNumber(corrected.correctedBought)}
                   <span className="ml-1 text-neutral-400">
                     {showInSOL && solPrice > 0
                       ? <>(<SolIcon />{formatSmartNumber(pos.boughtUsdValue / solPrice)})</>
@@ -629,44 +743,29 @@ const Positions: React.FC<PositionsProps> = ({
                   </span>
                 </td>
                 <td className="px-2 py-2">
-                  {(() => {
-                    // Apply same unit correction as in PNL calculation
-                    let correctedSold = pos.sold;
-                    if (pos.sold > pos.bought * 1000) {
-                      correctedSold = pos.sold / 1000000; // Scale down by 1 million
-                    }
-                    return formatSmartNumber(correctedSold);
-                  })()}
+                  {formatSmartNumber(corrected.correctedSold)}
                   <span className="ml-1 text-neutral-400">
                     {showInSOL && solPrice > 0
-                      ? <>(<SolIcon />{formatSmartNumber(pos.soldUsdValue / solPrice)})</>
-                      : `($${formatSmartNumber(pos.soldUsdValue)})`
+                      ? <>(<SolIcon />{formatSmartNumber(corrected.correctedSoldUsdValue / solPrice)})</>
+                      : `($${formatSmartNumber(corrected.correctedSoldUsdValue)})`
                     }
                   </span>
                 </td>
                 <td className="px-2 py-2">
-                  {(() => {
-                    // Apply same unit correction for remaining amount
-                    let correctedRemaining = pos.remaining;
-                    if (pos.sold > pos.bought * 1000) {
-                      // If sold amount had unit mismatch, remaining likely does too
-                      correctedRemaining = pos.remaining / 1000000; // Scale down by 1 million
-                    }
-                    return formatSmartNumber(correctedRemaining);
-                  })()}
+                  {formatSmartNumber(corrected.correctedRemaining)}
                   <span className="ml-1 text-neutral-400">
                     {showInSOL && solPrice > 0
-                      ? <>(<SolIcon />{formatSmartNumber(pos.remainingUsdValue / solPrice)})</>
-                      : `($${formatSmartNumber(pos.remainingUsdValue)})`
+                      ? <>(<SolIcon />{formatSmartNumber(corrected.correctedRemainingUsdValue / solPrice)})</>
+                      : `($${formatSmartNumber(corrected.correctedRemainingUsdValue)})`
                     }
                   </span>
                 </td>
-                <td className={`px-2 py-2 font-semibold ${pos.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
+                <td className={`px-2 py-2 font-semibold ${corrected.correctedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
                   {showInSOL && solPrice > 0
-                    ? <>{pos.pnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(pos.pnl) / solPrice)}</>
-                    : `${pos.pnl >= 0 ? '+' : ''}$${formatSmartNumber(Math.abs(pos.pnl))}`
+                    ? <>{corrected.correctedPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(corrected.correctedPnl) / solPrice)}</>
+                    : `${corrected.correctedPnl >= 0 ? '+' : ''}$${formatSmartNumber(Math.abs(corrected.correctedPnl))}`
                   }
-                  <span className="ml-1 text-xs">({(pos.pnlPercentage).toFixed(2)}%)</span>
+                  <span className="ml-1 text-xs">({corrected.correctedPnlPercentage.toFixed(2)}%)</span>
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-2">

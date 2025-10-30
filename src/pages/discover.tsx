@@ -145,9 +145,29 @@ export default function DiscoverPage() {
   //   console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
   // }, [selectedTimeframe]);
 
-  // QUICK BUY handler – exact copy from PulseTable
+  // QUICK BUY handler – with detailed logging (same as PulseTable)
   const handleQuickBuy = async (token: Token) => {
     console.log("🎯 handleQuickBuy called for token:", token.symbol);
+    
+    // ✅ COMPREHENSIVE DATA LOGGING FOR TESTING
+    console.log("\n" + "=".repeat(80));
+    console.log("📋 QUICK BUY DATA VERIFICATION - DISCOVER PAGE");
+    console.log("=".repeat(80));
+    
+    // Log full token object
+    console.log("\n📊 FULL TOKEN OBJECT:");
+    console.log(JSON.stringify(token, null, 2));
+    
+    // Log key token fields
+    console.log("\n🔑 KEY TOKEN FIELDS:");
+    console.log("  mint:", token.mint);
+    console.log("  symbol:", token.symbol);
+    console.log("  name:", token.name);
+    console.log("  pair_address:", token.pair_address);
+    console.log("  migrated_pool_address:", token.migrated_pool_address || "(none)");
+    console.log("  launchpad_protocol:", token.launchpad_protocol || "(none)");
+    console.log("  protocol:", token.protocol || "(none)");
+    console.log("  amm_id:", token.amm_id || "(none)");
     
     // Fallback toast function for production issues
     const showToast = (message: string, type: 'success' | 'error' = 'error') => {
@@ -205,58 +225,133 @@ export default function DiscoverPage() {
     try {
       const poolType = getPoolTypeFromToken(token);
       const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
-      console.log(`🔍 Quick Buy ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
-      console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
+      
+      console.log("\n🏊 POOL INFORMATION:");
+      console.log(`  Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'}`);
+      console.log(`  Detected PoolType: ${poolType || '(empty - backend will auto-detect)'}`);
+      if (!poolType) {
+        console.log(`  ⚠️  Note: Empty poolType is OK - backend will auto-detect from pool address`);
+      }
+      console.log(`  Effective Pool Address: ${effectivePoolAddress}`);
+      console.log(`  Using migrated_pool_address: ${token.migrated_pool_address ? 'YES' : 'NO'}`);
+      console.log(`  Original pair_address: ${token.pair_address}`);
       
       const settings = presets[activePreset].quickBuySettings;
-      console.log(`🎯 Quick Buy with presets:`, {
-        slippage: `${(settings.maxSlippage * 100).toFixed(1)}%`,
-        priorityFee: `${settings.priority} SOL`,
-        bribe: `${settings.bribe} SOL`,
-        mevMode: settings.mevMode,
-        autoFee: settings.autoFee,
-      });
-      console.log('🔍 Full settings object:', settings);
-      console.log('🔍 Active preset:', activePreset);
-      console.log('🔍 All presets:', presets);
       
-      const data = await tradeBuy({
+      console.log("\n⚙️ PRESET SETTINGS:");
+      console.log(`  Active Preset: P${activePreset + 1} (from selectedPill: ${selectedPill})`);
+      console.log(`  Slippage: ${(settings.maxSlippage || 0.4) * 100}% (${settings.maxSlippage || 0.4} decimal)`);
+      console.log(`  Priority Fee: ${settings.priority || 0.0001} SOL`);
+      console.log(`  Bribe: ${settings.bribe || 0} SOL`);
+      console.log(`  MEV Mode: ${settings.mevMode}`);
+      console.log(`  MEV Protection: ${settings.mevMode === "off" ? 0 : 1}`);
+      console.log(`  Auto Fee: ${settings.autoFee || false}`);
+      console.log(`  Max Fee: ${settings.maxFee || 0} SOL`);
+      console.log(`  RPC: ${settings.rpc || "(default)"}`);
+      
+      console.log("\n📦 FULL SETTINGS OBJECT:");
+      console.log(JSON.stringify(settings, null, 2));
+      
+      // Build the complete payload
+      const payload = {
         poolAddress: effectivePoolAddress,
         baseMint: token.mint,
         quoteMint: SOL_MINT_ADDRESS,
         amount: buyAmount,
-        mevProtection: settings.mevMode === "off" ? 0 : 1,
+        mevProtection: (settings.mevMode === "off" ? 0 : 1) as 0 | 1,
         poolType: poolType,
-        originalPairAddress: token.pair_address, // Original pair address from token-service
-        // Preset trading parameters
-        slippage: (settings.maxSlippage || 0.4) * 100, // Convert decimal to percentage (0.4 -> 40)
+        originalPairAddress: token.pair_address,
+        slippage: (settings.maxSlippage || 0.4) * 100,
         priorityFee: settings.priority || 0.0001,
         bribe: settings.bribe || 0,
         mevMode: settings.mevMode,
         autoFee: settings.autoFee || false,
         maxFee: settings.maxFee || 0,
         rpc: settings.rpc,
-        // Debugging metadata
         tokenName: token.name,
         tokenSymbol: token.symbol,
-      }, user.bearerToken);
+      };
+      
+      console.log("\n📤 COMPLETE PAYLOAD BEING SENT TO API:");
+      console.log(JSON.stringify(payload, null, 2));
+      console.log("\n📤 PAYLOAD SUMMARY:");
+      console.log("  poolAddress:", payload.poolAddress);
+      console.log("  baseMint:", payload.baseMint);
+      console.log("  quoteMint:", payload.quoteMint);
+      console.log("  amount:", payload.amount, "SOL");
+      console.log("  poolType:", payload.poolType);
+      console.log("  slippage:", payload.slippage, "%");
+      console.log("  priorityFee:", payload.priorityFee, "SOL");
+      console.log("  bribe:", payload.bribe, "SOL");
+      console.log("  mevProtection:", payload.mevProtection);
+      console.log("  mevMode:", payload.mevMode);
+      console.log("  originalPairAddress:", payload.originalPairAddress);
+      console.log("=".repeat(80) + "\n");
+      
+      const data = await tradeBuy(payload, user.bearerToken);
+      
+      console.log("\n📥 API RESPONSE RECEIVED:");
+      console.log(JSON.stringify(data, null, 2));
       
       const txHash = data?.hash || data?.txid;
       const tokenAmount = data?.amount || data?.tokenAmount;
 
       if (data && txHash) {
-        console.log(`✅ Quick Buy successful! Hash: ${txHash}`);
+        console.log("\n✅ QUICK BUY SUCCESS:");
+        console.log("  Transaction Hash:", txHash);
+        console.log("  Token Amount:", tokenAmount || 'N/A');
+        console.log("  Token Symbol:", token.symbol);
+        console.log("  Full Response:", JSON.stringify(data, null, 2));
+        
+        // Backfill token to token-service so it's available in portfolio/activity
+        try {
+          console.log("\n🔄 Backfilling token after Quick Buy...");
+          const backfillResponse = await fetch('/api/token-service/backfill-token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              mint: token.mint,
+              name: token.name,
+              symbol: token.symbol,
+              uri: token.uri,
+              market_cap_usd: token.fully_diluted_value,
+              liquidity_usd: token.total_liquidity_usd,
+              pair_address: token.pair_address || token.migrated_pool_address
+            })
+          });
+
+          if (backfillResponse.ok) {
+            console.log('✅ Token backfilled successfully to token-service');
+          } else {
+            console.warn('⚠️ Token backfill failed (token may already exist or service unavailable)');
+          }
+        } catch (backfillError) {
+          console.error('❌ Error backfilling token:', backfillError);
+          // Don't fail the Quick Buy if backfill fails - it's non-critical
+        }
+        
         showToast(
           `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`,
           'success'
         );
       } else {
-        console.log('❌ Quick Buy failed - no transaction hash returned');
+        console.log("\n❌ QUICK BUY FAILED:");
+        console.log("  Response:", JSON.stringify(data, null, 2));
+        console.log("  Missing transaction hash");
         showToast("❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
       // Use console.warn for expected errors, console.error for unexpected
       const logFn = (e as any)?.expected ? console.warn : console.error;
+      
+      console.log("\n❌ QUICK BUY ERROR:");
+      console.log("  Error Type:", e?.constructor?.name || typeof e);
+      console.log("  Error Message:", e?.message || String(e));
+      console.log("  Error Code:", e?.code || 'N/A');
+      console.log("  Full Error:", JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
+      
       logFn('Quick Buy error:', e);
 
       if (e instanceof ApiError) {
