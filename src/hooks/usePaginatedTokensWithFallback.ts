@@ -178,7 +178,25 @@ export default function usePaginatedTokensWithFallback({
   // Polling fallback function
   const startPolling = useCallback(() => {
     // console.log('🔄 Starting polling fallback with timeframe:', timeframe);
-    setState(prev => ({ ...prev, usingFallback: true, isReconnecting: false }));
+    // Ensure loading state is true when starting polling (if no data yet)
+    // This prevents "No tokens found" from showing prematurely
+    setState(prev => {
+      if (prev.data.length === 0) {
+        return { 
+          ...prev, 
+          usingFallback: true, 
+          isReconnecting: false,
+          loading: true, // Force loading true if no data yet
+          error: null // Clear any WebSocket errors when starting polling
+        };
+      }
+      return { 
+        ...prev, 
+        usingFallback: true, 
+        isReconnecting: false,
+        error: null 
+      };
+    });
     
     const poll = async () => {
       // // CRITICAL: Check if timeframe has changed - abort if so
@@ -404,14 +422,15 @@ export default function usePaginatedTokensWithFallback({
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
-        // Set a connection timeout
+        // Set a connection timeout - shorter for faster fallback
         wsConnectionTimeoutRef.current = setTimeout(() => {
           if (ws.readyState === WebSocket.CONNECTING) {
             console.log('⏰ WebSocket connection timeout, falling back to polling');
+            setState(prev => ({ ...prev, usingFallback: true, loading: true, error: null }));
             ws.close();
             handleReconnect();
           }
-        }, 5000); // 5 second timeout for WebSocket connection
+        }, 3000); // Reduced from 5s to 3s for faster fallback
 
         ws.onopen = () => {
           if (wsConnectionTimeoutRef.current) {
@@ -430,14 +449,15 @@ export default function usePaginatedTokensWithFallback({
             console.error('Failed to send ping:', error);
           }
           
-          // Set a timeout to detect if no data is received
+          // Set a timeout to detect if no data is received - shorter timeout for faster fallback
           setTimeout(() => {
             if (ws.readyState === WebSocket.OPEN && state.data.length === 0) {
-              console.log('⏰ No data received from WebSocket after 3 seconds, falling back to polling');
+              console.log('⏰ No data received from WebSocket after 2 seconds, falling back to polling');
+              setState(prev => ({ ...prev, usingFallback: true, loading: true, error: null }));
               ws.close();
               startPolling();
             }
-          }, 3000);
+          }, 2000); // Reduced from 3s to 2s for faster fallback
         };
 
         ws.onmessage = (event) => {
@@ -516,9 +536,10 @@ export default function usePaginatedTokensWithFallback({
           //console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
           setState(prev => ({ ...prev, isConnected: false }));
           
-          // If connection closed abnormally (1006), fall back to polling immediately
-          if (event.code === 1006) {
-            //console.log('🚨 WebSocket closed abnormally (1006), falling back to polling');
+          // If connection closed abnormally (1006) or we have no data, fall back to polling immediately
+          if (event.code === 1006 || state.data.length === 0) {
+            //console.log('🚨 WebSocket closed abnormally (1006) or no data, falling back to polling');
+            setState(prev => ({ ...prev, usingFallback: true, loading: true, error: null }));
             startPolling();
             return;
           }
@@ -550,14 +571,30 @@ export default function usePaginatedTokensWithFallback({
             wsConnectionTimeoutRef.current = null;
           }
           console.error('WebSocket error:', error);
-          setState(prev => ({ ...prev, error: 'WebSocket connection error' }));
           
           // Trigger fallback immediately when WebSocket errors occur
+          // Don't set error state yet - let polling try first
           //console.log('🚨 WebSocket error detected, triggering fallback to polling');
+          setState(prev => ({ 
+            ...prev, 
+            usingFallback: true,
+            // Keep loading true until polling starts
+            loading: prev.data.length === 0 ? true : prev.loading,
+            // Don't set error if we're about to fall back - polling will handle errors
+            error: null 
+          }));
           handleReconnect();
         };
       } catch (error) {
         console.error('Failed to establish WebSocket connection:', error);
+        // Set fallback state immediately, don't show error yet
+        setState(prev => ({ 
+          ...prev, 
+          usingFallback: true,
+          // Keep loading true until polling starts
+          loading: prev.data.length === 0 ? true : prev.loading,
+          error: null 
+        }));
         handleReconnect();
       }
     };
@@ -567,6 +604,16 @@ export default function usePaginatedTokensWithFallback({
       
       if (reconnectAttemptRef.current >= maxReconnectAttempts) {
         //console.log('✅ Max WebSocket reconnect attempts reached, falling back to polling');
+        // Start polling immediately - don't wait
+        startPolling();
+        return;
+      }
+      
+      // For initial connection failure, fall back immediately instead of retrying
+      // Only retry if we had a successful connection that then dropped
+      if (reconnectAttemptRef.current === 0 && state.data.length === 0) {
+        // First failure with no data - fall back to polling immediately
+        //console.log('🚨 Initial WebSocket connection failed, falling back to polling immediately');
         startPolling();
         return;
       }
@@ -580,10 +627,24 @@ export default function usePaginatedTokensWithFallback({
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
     };
 
-    // Try WebSocket first
+    // Try WebSocket first, but also start polling as a parallel fallback with a short delay
+    // This ensures we don't show "No tokens found" while waiting for WebSocket
     connectWebSocket();
-
+    
+    // Start polling after a short delay if WebSocket hasn't provided data
+    // This creates a parallel fallback to ensure tokens show up quickly
+    const fallbackTimeout = setTimeout(() => {
+      // Check current state via refs to avoid stale closure
+      const hasData = lastStableDataRef.current && lastStableDataRef.current.length > 0;
+      if (!hasData && !isPollingRef.current && !state.isConnected) {
+        console.log('⏰ Starting parallel HTTP polling fallback (WebSocket slow/no response)');
+        startPolling();
+      }
+    }, 2500); // Start polling after 2.5s if no WebSocket data yet
+    
     return () => {
+      // Clear fallback timeout if component unmounts
+      clearTimeout(fallbackTimeout);
       // Abort any in-flight requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
