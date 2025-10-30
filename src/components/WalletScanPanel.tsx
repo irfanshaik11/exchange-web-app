@@ -428,7 +428,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
             )}
           </div>
           {/* Tab Content Area */}
-          <div className="flex-1 overflow-auto px-8 py-4">
+          <div className="flex-1 overflow-auto px-8">
             {tab === 'History' && (
               <div className="w-full h-full">
                 {historyLoading ? (

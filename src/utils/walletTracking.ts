@@ -6,6 +6,7 @@ export interface WatchWallet {
   ownerId: string | null;
   address: string;
   walletName: string | null;
+  notificationsEnabled: boolean;
   createdAt: string;
 }
 
@@ -183,6 +184,33 @@ export async function getWalletSnapshots(address: string): Promise<WalletBalance
   } catch (error) {
     console.error('Error fetching wallet snapshots:', error);
     return [];
+  }
+}
+
+// Toggle notifications for a wallet
+export async function toggleWalletNotifications(
+  address: string, 
+  enabled: boolean, 
+  userId?: string
+): Promise<void> {
+  try {
+    const url = userId
+      ? `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}/notifications?userId=${encodeURIComponent(userId)}`
+      : `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}/notifications`;
+    
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to toggle notifications');
+    }
+  } catch (error) {
+    console.error('Error toggling notifications:', error);
+    throw error;
   }
 }
 
