@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { LuPencil, LuCheck } from "react-icons/lu";
 import { formatSmartNumber, type Token } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
-import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt } from "react-icons/fa";
+import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt, FaTrophy, FaDice, FaUsers, FaChartBar, FaCrown, FaCrosshairs, FaFire } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
 import { createLimitOrder, tradeBuy, tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
@@ -15,6 +15,10 @@ import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
+import { BsCoin, BsPersonGear } from "react-icons/bs";
+import { RiGhostLine } from "react-icons/ri";
+import { LuChefHat } from "react-icons/lu";
+import { BiCandles } from "react-icons/bi";
 // import TokenAnalyticsPanel from "../TokenAnalyticsPanel";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
@@ -34,6 +38,8 @@ const AX = {
   mint: "#70E0B0",
   mintHover: "#58B890",
   sell: "#FF4D7F",
+  aiGreen: "#14b080",
+  red: "#f25561",
 };
 
 const baseBtn =
@@ -145,6 +151,208 @@ const AddressDisplay: React.FC<{
           <FaExternalLinkAlt className="w-3 h-3 text-[#9CA3AF]" />
         </a>
       </div>
+    </div>
+  );
+};
+
+// Token Info Dropdown Component
+const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Get token metrics (using token-analytics if available)
+  const sniperPercent = token?.sniper_holding_percentage ?? 0;
+  const bundlePercent = token?.bundle_holding_percentage ?? 0;
+  const insiderPercent = token?.insider_holding_percentage ?? 0;
+  const devPercent = token?.dev_holding_percentage ?? 0;
+  const top10Percent = token?.top10_holding_percentage ?? 0;
+  const lpBurned = token?.lp_burned ?? false;
+
+  return (
+    <div className="border-t border-[#2A2B33]">
+      <div className="flex items-center justify-between px-3 py-2">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-2 px-2 py-1 -mx-2 -my-1 rounded hover:bg-[#2A2B33] transition-colors"
+        >
+          <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Token Info</span>
+          <svg 
+            width="12" 
+            height="12" 
+            viewBox="0 0 12 12" 
+            fill="none" 
+            className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          >
+            <path d="M6 9L1 4L11 4L6 9Z" fill="currentColor" />
+          </svg>
+        </button>
+        <button
+          onClick={() => {
+            // Refresh action could go here
+            console.log('Refresh token info');
+          }}
+          className="p-1 rounded hover:bg-[#1E1F26] transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+            <path d="M21 3v5h-5" />
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+            <path d="M3 21v-5h5" />
+          </svg>
+        </button>
+      </div>
+
+      {isOpen && (
+        <div className="px-3 pb-3 space-y-2" style={{ backgroundColor: AX.bg }}>
+          {/* Tax Percentage - Large Display */}
+          <div className="rounded-md p-2.5 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+            <div className="text-center">
+              <div className="text-[12px] font-bold mb-0.5" style={{ color: AX.muted }}>
+                {token?.tax_percentage ? `${token.tax_percentage}%` : '0%'}
+              </div>
+              <div className="text-[10px] uppercase tracking-wide" style={{ color: AX.muted }}>Tax %</div>
+            </div>
+          </div>
+
+          {/* Separator Line */}
+          <div className="h-px" style={{ backgroundColor: AX.border }}></div>
+
+          {/* Token Metrics Grid - First Row */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {/* Top 10 Holders */}
+            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <BsPersonGear size={16} style={{ color: AX.aiGreen }} />
+                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                    {top10Percent > 0 ? `${top10Percent.toFixed(2)}%` : '0%'}
+                  </div>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Top 10 H.</div>
+              </div>
+            </div>
+
+            {/* Dev Holdings */}
+            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <LuChefHat size={16} style={{ color: AX.aiGreen }} />
+                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                    {devPercent > 0 ? `${devPercent.toFixed(1)}%` : '0%'}
+                  </div>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev H.</div>
+              </div>
+            </div>
+
+            {/* Sniper Holdings */}
+            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <FaCrosshairs size={16} style={{ color: AX.aiGreen }} />
+                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                    {sniperPercent > 0 ? `${sniperPercent.toFixed(1)}%` : '0%'}
+                  </div>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Snipers H.</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Token Metrics Grid - Second Row */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {/* Insider Holdings */}
+            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <RiGhostLine size={16} style={{ color: AX.aiGreen }} />
+                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                    {insiderPercent > 0 ? `${insiderPercent.toFixed(1)}%` : '0%'}
+                  </div>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Insiders</div>
+              </div>
+            </div>
+
+            {/* Bundle Holdings */}
+            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <FaDice size={16} style={{ color: AX.aiGreen }} />
+                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                    {bundlePercent > 0 ? `${bundlePercent.toFixed(2)}%` : '0%'}
+                  </div>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Bundlers</div>
+              </div>
+            </div>
+
+            {/* LP Burned */}
+            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <FaFire size={16} style={{ color: AX.aiGreen }} />
+                  <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                    {lpBurned ? '100%' : '0%'}
+                  </div>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>LP Burned</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Separator Line */}
+          <div className="h-px" style={{ backgroundColor: AX.border }}></div>
+
+          {/* Additional Metrics - Third Row */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {/* Holders */}
+            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <FaUsers className="text-white" size={16} />
+                  <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                    {token?.total_holders || 0}
+                  </div>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Holders</div>
+              </div>
+            </div>
+
+            {/* Pro Traders */}
+            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <BiCandles className="text-white" size={16} />
+                  <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                    {token?.pro_traders || 0}
+                  </div>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Pro Traders</div>
+              </div>
+            </div>
+
+            {/* Dex Paid */}
+            <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <img 
+                    src="https://i.pinimg.com/736x/e6/2d/e6/e62de698746dfcb09d2d64f85371eed1.jpg" 
+                    alt="Dex" 
+                    style={{ 
+                      width: '16px', 
+                      height: '16px'
+                    }}
+                  />
+                  <div className="text-[12px] font-bold" style={{ color: token?.dex_paid ? AX.aiGreen : AX.red }}>
+                    {token?.dex_paid ? 'Paid' : 'Unpaid'}
+                  </div>
+                </div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dex Paid</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -697,8 +905,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   return (
     <div
-      className="flex h-full flex-col text-[12px] leading-tight"
-      style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial' }}
+      className="flex flex-col text-[12px] leading-tight"
+      style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial', paddingBottom: '100px' }}
     >
       {/* ===== A. Time buttons ===== */}
       <div className="px-3 pt-2 pb-2 border-b border-[#2A2B33]">
@@ -1953,6 +2161,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           />
         )}
       </div>
+
+      {/* ===== Token Info ===== */}
+      <TokenInfoDropdown token={token} />
 
       {/* High Slippage Warning Dialog */}
       <HighSlippageWarningDialog
