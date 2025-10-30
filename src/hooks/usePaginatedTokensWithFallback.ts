@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import throttle from "lodash.throttle";
 import { env } from "../env";
+import { getCached, setCached } from "../utils/simpleCache";
 
 interface UsePaginatedTokensParams {
   filter?: string;
@@ -230,7 +231,14 @@ export default function usePaginatedTokensWithFallback({
           return;
         }
         
-        const response = await fetch(url, { signal: abortController.signal });
+        // Serve cached immediately if present and no data yet
+        const cached = getCached<any[]>(url);
+        if (cached && state.data.length === 0) {
+          throttledSetData(cached);
+          setState(prev => ({ ...prev, loading: false, error: null }));
+        }
+
+        const response = await fetch(url, { signal: abortController.signal, cache: 'no-store' as RequestCache });
         // console.log('📡 Polling response status:', response.status, response.ok);
         
         // Treat 304 Not Modified as a successful no-op: keep current list stable
@@ -286,6 +294,8 @@ export default function usePaginatedTokensWithFallback({
               volume_24h: tokens[0].volume_24h
             } : 'No tokens');
             throttledSetData(tokens);
+            // Cache fresh tokens briefly to smooth next render
+            setCached(url, tokens, 15_000);
             setState(prev => ({ ...prev, error: null, loading: false }));
           } else {
             //console.log('🔧 No valid tokens data received:', { tokens, isArray: Array.isArray(tokens) });

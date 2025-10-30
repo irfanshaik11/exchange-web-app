@@ -59,11 +59,35 @@ export interface TrackedWallet {
   latestEvent?: TradeEvent;
 }
 
-const WALLET_TRACKER_API_URL = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+// Normalize API URL: if it's https to a raw IP, downgrade to http to avoid TLS issues in browsers
+const resolveApiUrl = () => {
+  const envUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL;
+  if (!envUrl) return 'http://localhost:8081';
+  try {
+    const u = new URL(envUrl);
+    const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(u.hostname);
+    if (u.protocol === 'https:' && isIp) {
+      return `http://${u.host}`;
+    }
+    return envUrl;
+  } catch {
+    return envUrl;
+  }
+};
+
+const WALLET_TRACKER_API_URL = resolveApiUrl();
+
+// Normalize WS URL: allow users to provide http(s) and convert to ws(s) automatically
+const resolveWsUrl = () => {
+  const envWs = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL;
+  if (!envWs) return 'ws://localhost:8082';
+  if (envWs.startsWith('http://')) return envWs.replace(/^http:\/\//, 'ws://');
+  if (envWs.startsWith('https://')) return envWs.replace(/^https:\/\//, 'wss://');
+  return envWs;
+};
+
 // WebSocket is on a different port (8082), so we need to handle this properly
-const WALLET_TRACKER_WS_URL = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL 
-  ? process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL 
-  : 'ws://localhost:8082';
+const WALLET_TRACKER_WS_URL = resolveWsUrl();
 
 // ===== API Functions =====
 
@@ -74,7 +98,12 @@ export async function getTrackedWallets(userId?: string): Promise<WatchWallet[]>
       ? `${WALLET_TRACKER_API_URL}/api/watch?userId=${encodeURIComponent(userId)}`
       : `${WALLET_TRACKER_API_URL}/api/watch`;
     const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch wallets');
+    if (!response.ok) {
+      const ct = response.headers.get('content-type') || '';
+      const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
+      const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to fetch wallets'));
+      throw new Error(msg || 'Failed to fetch wallets');
+    }
     return await response.json();
   } catch (error) {
     console.error('Error fetching tracked wallets:', error);
@@ -96,8 +125,10 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
     });
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to add wallet');
+      const ct = response.headers.get('content-type') || '';
+      const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
+      const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to add wallet'));
+      throw new Error(msg || 'Failed to add wallet');
     }
   } catch (error) {
     console.error('Error adding wallet:', error);
@@ -116,8 +147,10 @@ export async function removeTrackedWallet(address: string, userId?: string): Pro
     });
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to remove wallet');
+      const ct = response.headers.get('content-type') || '';
+      const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
+      const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to remove wallet'));
+      throw new Error(msg || 'Failed to remove wallet');
     }
   } catch (error) {
     console.error('Error removing wallet:', error);

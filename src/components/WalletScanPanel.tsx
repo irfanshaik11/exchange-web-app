@@ -9,6 +9,7 @@ import { AiOutlineCalendar } from 'react-icons/ai';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { batchFetchTokenMetadata } from '~/utils/tokenMetadata';
+import { getWalletHistory } from '~/utils/walletTracking';
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -177,20 +178,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     setHistoryLoading(true);
     setHistoryError(null);
     
-    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_API || 'http://localhost:8081';
-    
-    fetch(`${backendUrl}/api/history?wallet=${wallet.address}&limit=100`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch history');
-        return res.json();
-      })
+    getWalletHistory(wallet.address, 100)
       .then(data => {
         console.log('[History] Received data:', data);
         setHistory(Array.isArray(data) ? data : []);
       })
       .catch(err => {
         console.error('[History] Error:', err);
-        setHistoryError('Failed to load trading history');
+        setHistoryError(typeof err?.message === 'string' ? err.message : 'Failed to load trading history');
         setHistory([]);
       })
       .finally(() => {

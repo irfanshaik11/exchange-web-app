@@ -46,23 +46,23 @@ import { usePulseWebSocket } from '~/hooks/usePulseWebSocket';
 
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
-  bg: "#0f1012",
-  surface: "#1E1F26",
-  surface2: "#17191E",
-  border: "#2A2B33",
+  bg: "#0b0c0e",
+  surface: "#16171C",
+  surface2: "#121317",
+  border: "#24252C",
   text: "#E6E7EA",
   muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
-  aiBlue: "#22C55E",
-  aiBlueHover: "#16A34A",
-  aiGreen: "#22C55E",
-  aiGreenHover: "#16A34A",
+  mint: "#18c48c",
+  mintHover: "#12a877",
+  sell: "#ed3a7a",
+  aiBlue: "#526fff", // purple/indigo accent per request
+  aiBlueHover: "#3f56d9",
+  aiGreen: "#18c48c",
+  aiGreenHover: "#12a877",
   aiCyan: "#06B6D4",
   aiCyanHover: "#0891B2",
-  glowBlue: "rgba(34, 197, 94, 0.3)",
-  glowGreen: "rgba(34, 197, 94, 0.3)",
+  glowBlue: "rgba(82, 111, 255, 0.3)",
+  glowGreen: "rgba(24, 196, 140, 0.3)",
   glowCyan: "rgba(6, 182, 212, 0.3)",
 };
 import { useRouter } from "next/router";
@@ -107,6 +107,17 @@ const SmartColor: React.FC<SmartColorProps> = ({ children, className = "", token
     const symbol = token.symbol?.toLowerCase() || '';
     const name = token.name?.toLowerCase() || '';
     const mint = token.mint || '';
+    const mc = token.fully_diluted_value || token.market_cap_usd || 0;
+
+    // Restrict MarketCap metric to approved palette only
+    if (metricType === 'marketCap') {
+      // User-defined tiers (in thousands):
+      // 0–20k: blue, 20k–30k: purple, 30k–100k: yellow, 100k+: green
+      if (mc >= 100_000) return '#31e3ac';  // Green: 100k+
+      if (mc >= 30_000) return '#ddc13d';   // Yellow: 30k–100k
+      if (mc >= 20_000) return '#526ffe';   // Purple: 20k–30k
+      return '#52c6ff';                     // Blue: <20k
+    }
     
     // AI/Tech tokens - Custom Blue
     if (symbol.includes('ai') || symbol.includes('tech') || symbol.includes('bot') || 
@@ -128,21 +139,21 @@ const SmartColor: React.FC<SmartColorProps> = ({ children, className = "", token
       return '#10b981'; // Green
     }
     
-    // High volume tokens - Cyan
+    // High volume tokens - map to allowed palette (use blue)
     const volume = token.volume_24h || 0;
     if (volume > 1000000) { // > $1M volume
-      return '#06b6d4'; // Cyan
+      return '#52c6ff'; // Blue
     }
     
-    // High market cap tokens - Purple
+    // For non-marketCap metrics, prefer purple for notable tokens using approved purple
     const marketCap = token.fully_diluted_value || token.market_cap_usd || 0;
     if (marketCap > 10000000) { // > $10M market cap
-      return '#8b5cf6'; // Purple
+      return '#526ffe'; // Purple
     }
     
-    // New/trending tokens - Orange
+    // New/trending tokens - map to approved palette (use yellow)
     if (mint.slice(-4) === "pump" || symbol.length <= 3) {
-      return '#f97316'; // Orange
+      return '#ddc13d'; // Yellow
     }
     
     // Default based on symbol hash for consistency
@@ -151,7 +162,7 @@ const SmartColor: React.FC<SmartColorProps> = ({ children, className = "", token
       return a & a;
     }, 0);
     
-    const defaultColors = ['#3b82f6', '#10b981', '#f59e0b', '#06b6d4', '#8b5cf6'];
+    const defaultColors = ['#52c6ff', '#31e3ac', '#ddc13d', '#526ffe'];
     return defaultColors[Math.abs(hash) % defaultColors.length];
   };
   
@@ -640,24 +651,32 @@ function TokenImage({
       <div className="relative h-20 w-20 flex items-center justify-center">
         {/* Outer border container */}
         <div 
-          className="relative rounded-lg transition-all duration-300 ease-out"
+          className="relative rounded-sm transition-all duration-300 ease-out"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           style={{
-            border: `1px solid ${protocolColor}`,
-            padding: '2px'
+            border: 'none',
+            padding: '0'
           }}
         >
-          {/* Inner silver border container */}
+          {/* Single colored border container (moved inward) */}
           <div 
-            className="relative rounded-lg"
+            className="relative rounded-sm"
             style={{
-              border: `1px solid rgba(192, 192, 192, 0.5)`,
-              padding: '2px'
+              border: `1px solid ${(() => {
+                const isNewColumn = columnType === 'new';
+                if (isNewColumn && typeof protocolColor === 'string' && protocolColor.startsWith('#') && (protocolColor.length === 7 || protocolColor.length === 4)) {
+                  // Slightly more transparent (~70%) for New Pairs color border
+                  return protocolColor.length === 7 ? `${protocolColor}B3` : `${protocolColor}B`;
+                }
+                return protocolColor;
+              })()}`,
+              padding: '3px',
+              backgroundColor: '#06070b'
             }}
           >
             {/* Image container */}
-            <div className="relative rounded-lg overflow-hidden">
+            <div className="relative rounded-sm overflow-hidden">
               <FastImage
                 src={imageUrl}
                 alt={token.name || token.symbol || ""}
@@ -687,8 +706,8 @@ function TokenImage({
                 width="74"
                 height="74"
                 fill="none"
-                stroke="#4B5563"
-                strokeWidth="1"
+                stroke="none"
+                strokeWidth="0"
                 rx="6"
               />
               
@@ -697,7 +716,7 @@ function TokenImage({
                 d="M 78 78 L 10 78 Q 2 78 2 70 L 2 10 Q 2 2 10 2 L 70 2 Q 78 2 78 10 L 78 70 Q 78 78 70 78"
                 fill="none"
                 stroke={protocolColor}
-                strokeWidth="3"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeDasharray={`${4 * 76}`} // Total perimeter
@@ -708,8 +727,8 @@ function TokenImage({
           </div>
         )}
         
-        {/* Dynamic protocol icon bubble - positioned outside the image container */}
-        <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
+        {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
+        <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/5 translate-y-1/4 z-10"
              style={{ 
                width: 20, 
                height: 20,
@@ -2526,15 +2545,18 @@ function PulseTable({
 
   return (
     <div
-      className={`flex w-full lg:min-w-[340px] flex-1 flex-col shadow-lg mb-10 ${
-        isFirstOrLast === "first" ? "border-r border-l border-t rounded-tl-lg lg:rounded-tl-lg" : 
-        isFirstOrLast === "last" ? "border-r border-t rounded-tr-lg lg:rounded-tr-lg" : 
-        isFirstOrLast === "only" ? "border border-t border-l border-r rounded-lg" : 
+      className={`num flex w-full lg:min-w-[340px] flex-1 flex-col shadow-lg mb-10 ${
+        isFirstOrLast === "first" ? "border-r border-l border-t rounded-tl-md lg:rounded-tl-md" : 
+        isFirstOrLast === "last" ? "border-r border-t rounded-tr-md lg:rounded-tr-md" : 
+        isFirstOrLast === "only" ? "border border-t border-l border-r rounded-md" : 
         "border-r border-t"
       }`}
       style={{ 
-        backgroundColor: 'rgba(30, 31, 38, 0.3)',
-        borderColor: AX.border 
+        backgroundColor: '#101114',
+        borderColor: (title.toLowerCase().includes('new')) ? 'rgba(36, 37, 44, 0.015)' : AX.border,
+        borderStyle: 'solid',
+        borderWidth: '1px',
+        boxShadow: (title.toLowerCase().includes('new')) ? 'none' : undefined
       }}
     >
       <div 
@@ -2711,13 +2733,13 @@ function PulseTable({
               <circle cx="8" cy="18" r="2"/>
             </svg>
             
-            {/* Protocol Filter Count Indicator */}
-            {filters.protocols.length > 0 && (
+            {/* Protocol Filter Count Indicator (exclude 'All') */}
+            {filters.protocols.filter((p: string) => p !== 'All').length > 0 && (
               <span 
                 className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
                 style={{ fontSize: '10px' }}
               >
-                {filters.protocols.length}
+                {filters.protocols.filter((p: string) => p !== 'All').length}
               </span>
             )}
           </button>
@@ -4332,7 +4354,7 @@ function PulseTable({
             >
               {/* Profile Picture & Address skeleton */}
               <div className="mr-2 flex w-20 flex-col items-center">
-                <div className="relative h-20 w-20 rounded-lg" style={{ backgroundColor: AX.surface }} />
+                <div className="relative h-20 w-20 rounded-sm" style={{ backgroundColor: AX.surface }} />
                 <div className="mt-1 h-3 w-16 rounded" style={{ backgroundColor: AX.surface }} />
               </div>
               {/* Main Info Section skeleton */}
@@ -5018,17 +5040,25 @@ function PulseTable({
                       <div className={'justify-right flex flex-col text-xs lg:text-xs'}>
                          <span style={{ color: AX.muted }}>
                            MC{" "}
-                           <SmartColor token={token} metricType="marketCap" className="text-sm lg:text-base font-medium">
-                             <SmoothNumber
-                               value={
-                                 (token as any).fully_diluted_value ??
-                                 (token as any).market_cap_usd ??
-                                 0
-                               }
-                               formatter={(val) => `$${formatSmartNumber(val)}`}
-                               duration={300}
-                             />
-                           </SmartColor>
+                           {(() => {
+                             const isFinalStretchColumn = title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch');
+                             const lp = ((token as any).launchpad_protocol || '').toLowerCase();
+                             const bonding = (token as any).bonding_pct ?? 0;
+                             const hasGreenWave = isFinalStretchColumn && lp.includes('meteora') && bonding > 98.6;
+                             const mcVal = (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
+                             if (hasGreenWave) {
+                               return (
+                                 <span className="text-sm lg:text-base font-medium" style={{ color: '#526ffe' }}>
+                                   <SmoothNumber value={mcVal} formatter={(val) => `$${formatSmartNumber(val)}`} duration={300} />
+                                 </span>
+                               );
+                             }
+                             return (
+                               <SmartColor token={token} metricType="marketCap" className="text-sm lg:text-base font-medium">
+                                 <SmoothNumber value={mcVal} formatter={(val) => `$${formatSmartNumber(val)}`} duration={300} />
+                               </SmartColor>
+                             );
+                           })()}
                          </span>
                         <span style={{ color: AX.muted }}>
                           <span className="text-xs">V</span>{" "}
@@ -5134,7 +5164,7 @@ function PulseTable({
                               duration={0}
                             />
                           </span>
-                          <div className="w-8 h-1 bg-gray-700 rounded-full overflow-hidden ml-1 flex">
+                          <div className="w-8 h-0.5 bg-gray-700 rounded-full overflow-hidden ml-1 flex">
                             <div 
                               className="h-full bg-green-400"
                               style={{
@@ -5191,17 +5221,19 @@ function PulseTable({
                       <button 
                         className="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100 z-50 shadow-sm"
                         style={{ 
-                          backgroundColor: AX.aiGreen, 
-                          color: '#000000',
-                          border: '1px solid rgba(0,0,0,0.15)'
+                          backgroundColor: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? '#101114' : AX.aiGreen,
+                          color: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? AX.aiGreen : '#000000',
+                          border: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? `1px solid ${AX.aiGreen}` : '1px solid rgba(0,0,0,0.15)'
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = AX.aiGreenHover;
+                          const isFinal = title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch');
+                          e.currentTarget.style.backgroundColor = isFinal ? '#101114' : AX.aiGreenHover;
                           e.currentTarget.style.transform = 'translateY(-1px)';
-                          e.currentTarget.style.boxShadow = '0 4px 14px rgba(112, 224, 176, 0.25)';
+                          e.currentTarget.style.boxShadow = isFinal ? `0 0 10px ${AX.glowGreen}` : '0 4px 14px rgba(112, 224, 176, 0.25)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = AX.aiGreen;
+                          const isFinal = title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch');
+                          e.currentTarget.style.backgroundColor = isFinal ? '#101114' : AX.aiGreen;
                           e.currentTarget.style.transform = 'translateY(0)';
                           e.currentTarget.style.boxShadow = 'none';
                         }}
@@ -5249,25 +5281,31 @@ function PulseTable({
                           const isHighBondingMeteora = isMeteora && bondingPct > 98.6;
                           
                           if (isHighBondingMeteora) {
-                            // Snipe logo for high bonding Meteora tokens - bigger and darker
+                            // Snipe icon (crosshair) rendered in green
+                            const isFinal = title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch');
                             return (
                               <>
-                                <img 
-                                  src="https://static.thenounproject.com/png/2098274-200.png" 
-                                  alt="Snipe" 
-                                  width="18" 
-                                  height="18" 
-                                  style={{ filter: 'brightness(0.3)' }}
-                                />
-                                {thunderAmount || '0'} SOL
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: AX.aiGreen }}>
+                                  <circle cx="12" cy="12" r="7" />
+                                  <line x1="12" y1="3" x2="12" y2="7" />
+                                  <line x1="12" y1="17" x2="12" y2="21" />
+                                  <line x1="3" y1="12" x2="7" y2="12" />
+                                  <line x1="17" y1="12" x2="21" y2="12" />
+                                  <circle cx="12" cy="12" r="2.2" />
+                                </svg>
+                                <span style={{ color: isFinal ? AX.aiGreen : undefined }}>
+                                  {thunderAmount || '0'} SOL
+                                </span>
                               </>
                             );
                           } else {
                             // Regular thunder for other tokens
                             return (
                               <>
-                                <HiLightningBolt className="text-black" size={14} /> {thunderAmount || '0'}
-                                SOL
+                                <HiLightningBolt className={"text-black"} style={{ color: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? AX.aiGreen : '#000000' }} size={14} />
+                                <span style={{ color: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? AX.aiGreen : undefined }}>
+                                  {thunderAmount || '0'} SOL
+                                </span>
                               </>
                             );
                           }
