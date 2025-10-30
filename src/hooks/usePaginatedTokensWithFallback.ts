@@ -171,7 +171,9 @@ export default function usePaginatedTokensWithFallback({
       if (JSON.stringify(prev.data) === JSON.stringify(stable)) {
         return prev;
       }
-      return { ...prev, data: stable, loading: false };
+      // CRITICAL: Set data and loading together - this prevents "No tokens found" from showing
+      // when data arrives but loading was set to false before data was set
+      return { ...prev, data: stable, loading: false, error: null };
     });
   }, [stabilizeList, timeframe]);
 
@@ -252,8 +254,10 @@ export default function usePaginatedTokensWithFallback({
         // Serve cached immediately if present and no data yet
         const cached = getCached<any[]>(url);
         if (cached && state.data.length === 0) {
+          // throttledSetData sets both data AND loading: false
           throttledSetData(cached);
-          setState(prev => ({ ...prev, loading: false, error: null }));
+          // Only clear error here - loading is handled by throttledSetData
+          setState(prev => ({ ...prev, error: null }));
         }
 
         const response = await fetch(url, { signal: abortController.signal, cache: 'no-store' as RequestCache });
@@ -262,7 +266,14 @@ export default function usePaginatedTokensWithFallback({
         // Treat 304 Not Modified as a successful no-op: keep current list stable
         if (response.status === 304) {
           // console.log('📡 Upstream returned 304 (Not Modified) — keeping existing data');
-          setState(prev => ({ ...prev, loading: false, error: null }));
+          // Only clear error - don't set loading: false if we have no data yet
+          setState(prev => {
+            if (prev.data.length > 0) {
+              return { ...prev, loading: false, error: null };
+            }
+            // Keep loading true if no data yet - don't show "No tokens found"
+            return { ...prev, error: null };
+          });
           return;
         }
 
@@ -311,10 +322,12 @@ export default function usePaginatedTokensWithFallback({
               volume_6h: tokens[0].volume_6h,
               volume_24h: tokens[0].volume_24h
             } : 'No tokens');
+            // throttledSetData sets both data AND loading: false, so don't set loading separately
             throttledSetData(tokens);
             // Cache fresh tokens briefly to smooth next render
             setCached(url, tokens, 15_000);
-            setState(prev => ({ ...prev, error: null, loading: false }));
+            // Only clear error here - loading is handled by throttledSetData
+            setState(prev => ({ ...prev, error: null }));
           } else {
             //console.log('🔧 No valid tokens data received:', { tokens, isArray: Array.isArray(tokens) });
             setState(prev => ({ ...prev, loading: false, error: 'Invalid data from token service' }));
