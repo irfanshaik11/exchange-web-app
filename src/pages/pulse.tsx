@@ -1010,7 +1010,7 @@ export default function PulsePage() {
         <title>Pulse | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
-      <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#0f1012' }}>
+      <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#06070b' }}>
         <Header />
         <div className="w-full px-5 pt-2 pb-6">
           <div className="mb-2">

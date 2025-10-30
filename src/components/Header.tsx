@@ -18,8 +18,8 @@ const AX = {
   border: "#2A2B33",
   text: "#E6E7EA",
   muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
+  mint: "#18c48c",
+  mintHover: "#12a877",
   sell: "#FF4D7F",
 };
 
@@ -128,11 +128,15 @@ export default function Header({
   return (
     <>
       <header className="sticky top-0 z-20 w-full border-b backdrop-blur" style={{ backgroundColor: '#0f1012', borderColor: AX.border }}>
-        <div className="w-full bg-green-400 text-center text-black p-0.5 text-sm">
+        <div
+          className="w-full text-center p-0.5 text-sm"
+          role="alert"
+          style={{ backgroundColor: '#ddc13d', color: '#0b0c0e', borderBottom: '1px solid #c7ae32' }}
+        >
           [ This terminal is still under development and not ready for production,&nbsp;
           <b>use at your own risk!</b> ]
         </div>
-        <div className="flex max-w-full items-center justify-between border-b px-4 py-2.5" style={{ backgroundColor: '#000000', borderColor: AX.border }}>
+        <div className="flex max-w-full items-center justify-between border-b px-4 py-2.5" style={{ backgroundColor: '#06070b', borderColor: AX.border }}>
           <div className="flex min-w-0 items-center gap-3">
             <Link
               href="/pulse"
@@ -201,9 +205,9 @@ export default function Header({
                   className="hidden md:flex items-center gap-2 h-8 rounded-full border px-3 pr-2 transition-all duration-300 ease-out"
                   style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.muted }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.08)';
-                    e.currentTarget.style.borderColor = '#22c55e';
-                    e.currentTarget.style.boxShadow = '0 0 8px rgba(34, 197, 94, 0.3), 0 0 16px rgba(34, 197, 94, 0.15)';
+                    e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
+                    e.currentTarget.style.borderColor = '#18c48c';
+                    e.currentTarget.style.boxShadow = '0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)';
                     e.currentTarget.style.transform = 'scale(1.01)';
                   }}
                   onMouseLeave={(e) => {
@@ -238,9 +242,9 @@ export default function Header({
                   color: AX.text 
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(112, 224, 176, 0.08)';
+                  e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
                   e.currentTarget.style.borderColor = AX.mint;
-                  e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.2)';
+                  e.currentTarget.style.boxShadow = '0 0 8px rgba(24, 196, 140, 0.2)';
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = AX.surface;
@@ -266,8 +270,8 @@ export default function Header({
                 border: 'none'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#58B890';
-                e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)';
+                e.currentTarget.style.backgroundColor = AX.mintHover;
+                e.currentTarget.style.boxShadow = '0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)';
                 e.currentTarget.style.transform = 'scale(1.02)';
               }}
               onMouseLeave={(e) => {
@@ -333,10 +337,10 @@ export default function Header({
                 color: AX.muted 
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.08)';
-                e.currentTarget.style.borderColor = '#22c55e';
-                e.currentTarget.style.color = '#22c55e';
-                e.currentTarget.style.boxShadow = '0 0 8px rgba(34, 197, 94, 0.3), 0 0 16px rgba(34, 197, 94, 0.15)';
+                e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
+                e.currentTarget.style.borderColor = '#18c48c';
+                e.currentTarget.style.color = '#18c48c';
+                e.currentTarget.style.boxShadow = '0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)';
                 e.currentTarget.style.transform = 'scale(1.02)';
               }}
               onMouseLeave={(e) => {
@@ -413,7 +417,7 @@ export default function Header({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 px-3 py-0.5">
+        <div className="flex items-center gap-2 px-3 py-0.5" style={{ backgroundColor: '#06070b' }}>
           {/* <div className="group relative">
             <button
               onClick={() => setWatchlistOpen(true)}
