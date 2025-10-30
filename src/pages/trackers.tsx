@@ -493,6 +493,10 @@ export default function TrackersPage() {
                               balance={balance}
                               onRemove={handleRemoveWallet}
                               onClick={setScannedWallet}
+                              onNotificationToggle={async (address, enabled) => {
+                                // Refresh the global watched wallets to sync the state
+                                await refreshWatchedWallets();
+                              }}
                             />
                           );
                         })}
