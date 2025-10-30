@@ -850,35 +850,7 @@ export default function TrackersPage() {
         />
       )}
 
-      {/* Bottom Navigation/Footer */}
-      <div className="fixed bottom-0 left-0 z-40 flex w-full items-center justify-between border-t border-emerald-950/50 bg-neutral-900/80 px-6 py-3 text-xs backdrop-blur-md">
-        <div className="flex gap-6">
-          <button className="flex items-center gap-2 font-semibold text-emerald-400 transition-colors duration-300 hover:text-emerald-300">
-            <span className="text-lg">📊</span> Wallet Tracker
-          </button>
-        </div>
-        <div className="flex items-center gap-6 text-neutral-400">
-          <span className="flex items-center gap-2">
-            <span className="text-emerald-400">💰</span> $106.8K
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-blue-400">💎</span> $2581
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-green-400">💸</span> $152.42
-          </span>
-          <span className="flex items-center gap-2">
-            <span className={wsConnected ? "text-green-400" : "text-red-400"}>🔗</span> 
-            {wsConnected ? "Tracker Connected" : "Tracker Disconnected"}
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-neutral-400">🌐</span> US-W
-          </span>
-          <span className="cursor-pointer text-neutral-400 transition-colors duration-300 hover:text-white">
-            Docs
-          </span>
-        </div>
-      </div>
+      {/* Footer */}
       <Footer />
     </>
   );

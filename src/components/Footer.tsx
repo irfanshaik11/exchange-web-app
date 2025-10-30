@@ -19,6 +19,7 @@ import QuickBuySettingsModal from './QuickBuySettingsModal';
 import PnLModal from './PnLModal';
 import { useQuickBuy } from './QuickBuyContext';
 import { useSolPrice } from './SolPriceContext';
+import { useUser } from './UserContext';
 
 // Custom X (Twitter) icon component
 const XIcon = ({ size = 14 }: { size?: number }) => (
@@ -75,25 +76,26 @@ export default function Footer() {
   const [showPnLModal, setShowPnLModal] = useState(false);
   const { activePreset } = useQuickBuy();
   const { solPrice } = useSolPrice(); // Use shared SOL price from context
+  const { solBalance } = useUser();
 
   const navLinks = [
-    // { name: "Wallet", href: "/wallet", icon: FaWallet },
-    // { name: "Twitter", href: "/twitter", icon: XIcon, hasNotification: true },
-    // { name: "Discover", href: "/", icon: FaCompass, hasNotification: true },
-    // { name: "Pulse", href: "/pulse", icon: FaChartLine, hasNotification: true },
-    // { name: "PnL", href: "/pnl", icon: FaChartBar },
+    { name: "Wallet", href: "/trackers", icon: FaWallet },
+    { name: "Twitter", href: "/twitter", icon: XIcon, hasNotification: true },
+    { name: "Discover", href: "/", icon: FaCompass, hasNotification: true },
+    { name: "Pulse", href: "/pulse", icon: FaChartLine, hasNotification: true },
+    // { name: "PnL", href: "/pnl", icon: FaChartBar }, // Disabled: 404 route not available
   ];
 
   const statusIcons = [
-    // { icon: "❤️", color: "red" },
-    // { icon: "💊", color: "green" },
-    // { icon: "🦊", color: "orange" },
+    { icon: "❤️", color: "red" },
+    { icon: "💊", color: "green" },
+    { icon: "🦊", color: "orange" },
   ];
 
   const utilityIcons = [
-    // { icon: FaBars, tooltip: "Layout" },
-    // { icon: FaBell, tooltip: "Notifications" },
-    // { icon: FaPalette, tooltip: "Theme" },
+    { icon: FaBars, tooltip: "Layout" },
+    { icon: FaBell, tooltip: "Notifications" },
+    { icon: FaPalette, tooltip: "Theme" },
   ];
 
   const socialLinks = [
@@ -111,11 +113,11 @@ export default function Footer() {
         borderColor: AX.border 
       }}
     >
-      <div className="flex items-center justify-between px-2 sm:px-4 py-2 h-12 overflow-x-auto">
+      <div className="flex items-center justify-between px-2 sm:px-2 py-1 h-9 overflow-x-auto">
         {/* Left Section - Preset Button */}
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           <button
-            className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-300 ease-out"
+            className="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-2 py-1 rounded-md text-xs sm:text-xs font-medium transition-all duration-300 ease-out"
             style={{
               backgroundColor: AX.mint,
               color: '#000000',
@@ -131,18 +133,17 @@ export default function Footer() {
               e.currentTarget.style.boxShadow = 'none';
             }}
           >
-            <FaBars size={10} className="sm:w-3 sm:h-3" />
-            <FaCog size={10} className="sm:w-3 sm:h-3" />
-            <span className="hidden sm:inline">PRESET {activePreset + 1}</span>
-            <span className="sm:hidden">P{activePreset + 1}</span>
+            <FaBars size={9} className="sm:w-3 sm:h-3" />
+            <FaCog size={9} className="sm:w-3 sm:h-3" />
+            <span className="hidden sm:inline leading-none">PRESET {activePreset + 1}</span>
+            <span className="sm:hidden leading-none">P{activePreset + 1}</span>
           </button>
 
           {/* Wallet Display */}
-          {false && (
-            <div className="relative">
+          <div className="relative">
               <button
-                onClick={() => setShowWalletDropdown(!showWalletDropdown)}
-                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-full border transition-all duration-300 ease-out"
+                onClick={() => router.push('/trackers')}
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-2 py-0.5 rounded-full border transition-all duration-300 ease-out"
                 style={{
                   backgroundColor: 'transparent',
                   borderColor: AX.border,
@@ -157,17 +158,11 @@ export default function Footer() {
                   e.currentTarget.style.borderColor = AX.border;
                 }}
               >
-                <FaWallet size={10} className="sm:w-3 sm:h-3" />
-                <span className="text-xs sm:text-sm">1</span>
-                {/* Solana Logo */}
-                <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 flex items-center justify-center">
-                  <span className="text-xs font-bold text-white">S</span>
-                </div>
-                <span className="text-xs sm:text-sm">0</span>
-                <FaChevronDown size={8} className="sm:w-2 sm:h-2" />
+                <FaWallet size={9} className="sm:w-3 sm:h-3" />
+                <SolanaIcon size={12} />
+                <span className="text-[11px] sm:text-xs font-medium leading-none">{Number.isFinite(solBalance) ? solBalance.toFixed(2) : '0.00'}</span>
               </button>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Center Section - Navigation Links */}
@@ -186,7 +181,7 @@ export default function Footer() {
                 )}
                 <Link
                   href={link.href}
-                  className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-1 rounded transition-all duration-300 ease-out group"
+                  className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
                   style={{
                     color: isActive ? AX.mint : AX.muted,
                     backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
@@ -204,14 +199,9 @@ export default function Footer() {
                     }
                   }}
                 >
-                  <IconComponent size={12} className="sm:w-3 sm:h-3" />
-                  <span className="text-xs sm:text-sm hidden sm:inline">{link.name}</span>
-                  {link.hasNotification && (
-                    <div 
-                      className="absolute -top-1 -right-1 w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full"
-                      style={{ backgroundColor: AX.sell }}
-                    />
-                  )}
+                  <IconComponent size={11} className="sm:w-3 sm:h-3" />
+                  <span className="text-[11px] sm:text-xs hidden sm:inline leading-none">{link.name}</span>
+                  {/* Notification bubble removed */}
                 </Link>
               </React.Fragment>
             );
@@ -232,7 +222,7 @@ export default function Footer() {
           {/* PnL Link */}
           <button
             onClick={() => setShowPnLModal(true)}
-            className="flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-1 rounded transition-all duration-300 ease-out group"
+            className="flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
             style={{
               color: AX.muted,
               backgroundColor: 'transparent'
@@ -246,14 +236,14 @@ export default function Footer() {
               e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
-            <FaChartBar size={12} className="sm:w-3 sm:h-3" />
-            <span className="text-xs sm:text-sm hidden sm:inline">PnL</span>
+            <FaChartBar size={11} className="sm:w-3 sm:h-3" />
+            <span className="text-[11px] sm:text-xs hidden sm:inline leading-none">PnL</span>
           </button>
 
           <div className="w-px h-3 sm:h-4" style={{ backgroundColor: AX.border }} />
 
           {/* Solana Price */}
-          <div className="flex items-center gap-1 px-1 sm:px-2 py-1 rounded-full border" style={{ borderColor: AX.border }}>
+          <div className="flex items-center gap-1 px-1 sm:px-2 py-0.5 rounded-full border" style={{ borderColor: AX.border }}>
             <SolanaIcon size={14} />
             <span className="text-xs sm:text-sm font-medium" style={{ color: AX.green }}>
               {solPrice > 0 ? `$${solPrice.toFixed(2)}` : '...'}
@@ -263,10 +253,10 @@ export default function Footer() {
           <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
 
           {/* Global Dropdown */}
-          {/* <div className="relative hidden sm:block">
+          <div className="relative hidden sm:block">
             <button
               onClick={() => setShowGlobalDropdown(!showGlobalDropdown)}
-              className="flex items-center gap-1 px-2 py-1 rounded transition-all duration-300 ease-out"
+              className="flex items-center gap-1 px-2 py-0.5 rounded transition-all duration-300 ease-out"
               style={{ color: AX.text }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = AX.surface;
@@ -276,12 +266,12 @@ export default function Footer() {
               }}
             >
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: AX.red }} />
-              <span className="text-sm font-medium">GLOBAL</span>
-              <FaChevronDown size={10} />
+              <span className="text-xs font-medium leading-none">GLOBAL</span>
+              <FaChevronDown size={8} />
             </button>
           </div>
 
-          <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} /> */}
+          <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
 
           {/* Utility Icons */}
           <div className="flex items-center gap-1">
@@ -320,7 +310,7 @@ export default function Footer() {
                   href={social.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-1 sm:px-2 py-1 rounded transition-all duration-300 ease-out group"
+                  className="flex items-center gap-1 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
                   style={{ color: AX.muted }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = AX.mint;
@@ -332,8 +322,8 @@ export default function Footer() {
                   }}
                   title={social.tooltip}
                 >
-                  <IconComponent size={16} className="sm:w-5 sm:h-5" />
-                  {social.text && <span className="text-xs sm:text-sm hidden sm:inline">{social.text}</span>}
+                  <IconComponent size={15} className="sm:w-4 sm:h-4" />
+                  {social.text && <span className="text-[11px] sm:text-xs hidden sm:inline leading-none">{social.text}</span>}
                 </Link>
               );
             })}

@@ -1,6 +1,5 @@
 import React from 'react';
 import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
-import useCodexTradesWebSocket from '../../hooks/useCodexTradesWebSocket';
 import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
 import type { Token } from '~/utils/db';
 
@@ -15,7 +14,7 @@ function getAge(timestamp: number) {
   const diffMins = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffSeconds / 3600);
   const diffDays = Math.floor(diffSeconds / 86400);
-  
+
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h`;
   return `${diffMins}m`;
@@ -26,79 +25,115 @@ function shortAddr(addr: string) {
   return addr.slice(0, 3) + '...' + addr.slice(-3);
 }
 
-function getTradeType(eventDisplayType: string) {
-  switch (eventDisplayType) {
-    case 'Buy':
-      return { type: 'Buy', color: 'text-emerald-400' };
-    case 'Sell':
-      return { type: 'Sell', color: 'text-red-400' };
-    case 'Add':
-      return { type: 'Add', color: 'text-emerald-400' };
-    default:
-      return { type: eventDisplayType, color: 'text-neutral-400' };
-  }
+function clamp01(n: number) {
+  return Math.max(0, Math.min(1, n));
 }
 
-function getAmount(data: { amount0: string; amount1: string }, eventDisplayType: string, tokenDecimals: number = 2) {
-  // Use amount0 for token amount (this is the non-liquidity token amount)
-  const rawAmount = parseFloat(data.amount0);
-  // Convert from raw token units to display units
-  const displayAmount = rawAmount / Math.pow(10, tokenDecimals);
-  return formatSmartNumber(displayAmount);
+function percentile(arr: number[], p: number) {
+  if (!arr.length) return 0;
+  const a = [...arr].sort((x, y) => x - y);
+  const idx = (a.length - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  if (lo === hi) return a[lo];
+  const w = idx - lo;
+  return a[lo] * (1 - w) + a[hi] * w;
 }
 
-function getTotalUSD(
-  amount0: string,
-  amount1: string,
-  token0SwapValueUsd: string,
-  token1SwapValueUsd: string,
-  eventDisplayType: string,
-  swapData?: any // New parameter for enhanced swap data
-) {
-  // If we have enhanced swap data with priceUsdTotal, use that
-  if (swapData && swapData.priceUsdTotal) {
-    return parseFloat(swapData.priceUsdTotal);
+/** Normalize trade shapes into a single structure */
+function normalizeTrade(
+  trade: any,
+  tokenDecimalsFallback = 9
+): {
+  isBuy: boolean;
+  color: 'text-emerald-400' | 'text-red-400' | 'text-neutral-400';
+  totalUSD: number;
+  pricePerToken: number;
+  tokenAmount: number;
+  maker: string;
+  timestampSec: number;
+  keyPart: string;
+} {
+  let isBuy = false;
+  let color: 'text-emerald-400' | 'text-red-400' | 'text-neutral-400' = 'text-neutral-400';
+  let totalUSD = 0;
+  let pricePerToken = 0;
+  let tokenAmount = 0;
+  let maker = trade.maker || trade.trader || '';
+  let timestampSec = Date.now() / 1000;
+  let keyPart = '';
+
+  const hasWsShape = trade.side && trade.amount && trade.price && trade.pair_address;
+  const hasBackend = trade.event_type && (trade.amount !== undefined || trade.price_in_usd !== undefined);
+  const hasCodex = trade.eventDisplayType && trade.data;
+
+  if (typeof trade.timestamp === 'number') {
+    timestampSec = trade.timestamp < 1e10 ? trade.timestamp : trade.timestamp / 1000;
+  } else if (typeof trade.timestamp === 'string') {
+    timestampSec = new Date(trade.timestamp).getTime() / 1000;
   }
-  
-  const amt0 = Math.abs(parseFloat(amount0));
-  const amt1 = Math.abs(parseFloat(amount1));
-  const usd0 = parseFloat(token0SwapValueUsd);
-  const usd1 = parseFloat(token1SwapValueUsd);
-  
-  // Determine which token is SOL by checking which USD value is larger
-  // SOL price (~$100-$250) will be much larger than memecoin prices
-  // The larger USD value likely represents the quote token (SOL)
-  
-  if (usd0 > usd1 && usd0 > 10) {
-    // token0 appears to be SOL (higher price)
-    // Use token0 USD value or calculate from amount0
-    const solAmount = amt0 / 1e9;
-    return solAmount * usd0;
-  } else if (usd1 > usd0 && usd1 > 10) {
-    // token1 appears to be SOL (higher price)
-    // Use token1 USD value or calculate from amount1
-    const solAmount = amt1 / 1e9;
-    return solAmount * usd1;
+
+  if (hasWsShape) {
+    isBuy = trade.side === 'buy';
+    color = isBuy ? 'text-emerald-400' : 'text-red-400';
+    tokenAmount = parseFloat(trade.amount) || 0;
+    const maybeTotal = trade.totalUSD !== undefined ? parseFloat(trade.totalUSD) : NaN;
+    const maybePrice = parseFloat(trade.price);
+    if (isFinite(maybeTotal)) {
+      totalUSD = maybeTotal;
+      pricePerToken = tokenAmount > 0 ? totalUSD / tokenAmount : maybePrice || 0;
+    } else {
+      pricePerToken = maybePrice || 0;
+      totalUSD = tokenAmount * pricePerToken;
+    }
+    keyPart = (trade.pair_address || '') + (trade.timestamp || '');
+    maker = trade.maker || trade.taker || trade.pair_address || '';
+  } else if (hasBackend) {
+    isBuy = trade.event_type === 'BUY';
+    color = isBuy ? 'text-emerald-400' : 'text-red-400';
+    tokenAmount = Number(trade.amount || 0);
+    totalUSD = Number(trade.total_usd || 0);
+    pricePerToken = Number(trade.price_in_usd || 0);
+    if (!pricePerToken && tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
+    keyPart = (trade.transaction_hash || trade.id || '') + (trade.timestamp || '');
+    maker = trade.maker || trade.trader || '';
+  } else if (hasCodex) {
+    isBuy = trade.eventDisplayType === 'Buy';
+    color = isBuy ? 'text-emerald-400' : 'text-red-400';
+
+    const d = trade.data || {};
+    tokenAmount = parseFloat(String(d.amountNonLiquidityToken ?? d.amount0 ?? 0)) || 0;
+    totalUSD = parseFloat(String(d.priceUsdTotal ?? 0)) || 0;
+    pricePerToken = parseFloat(String(d.priceUsd ?? 0)) || 0;
+    if (!pricePerToken && tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
+
+    keyPart = (trade.transactionHash || trade.txHash || '') + (trade.timestamp || '');
+    maker = trade.maker || trade.trader || '';
   } else {
-    // Both values are small, use the larger one as total value
-    return Math.max(usd0, usd1);
+    isBuy = !!(trade.side === 'buy' || trade.type === 'BUY');
+    color = isBuy ? 'text-emerald-400' : 'text-red-400';
+    tokenAmount = Number(trade.amount || trade.size || 0);
+    totalUSD = Number(trade.total_usd || trade.total || 0);
+    pricePerToken = Number(trade.price_in_usd || trade.price || 0);
+    if (!pricePerToken && tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
+    keyPart = (trade.id || trade.hash || '') + (trade.timestamp || '');
+    maker = trade.maker || trade.trader || '';
   }
+
+  return { isBuy, color, totalUSD, pricePerToken, tokenAmount, maker, timestampSec, keyPart };
 }
 
-function formatMarketCap(marketCapUsd: number) {
-  if (!marketCapUsd || marketCapUsd === 0) return '-';
-  
-  if (marketCapUsd >= 1000000) {
-    return `$${(marketCapUsd / 1000000).toFixed(2)}M`;
-  } else if (marketCapUsd >= 1000) {
-    return `$${(marketCapUsd / 1000).toFixed(2)}K`;
-  } else {
-    return `$${marketCapUsd.toFixed(2)}`;
-  }
+/** Subtle gradient used only for the inline bar, NOT the cell background */
+function heatBarGradient(isBuy: boolean, intensity01: number) {
+  const t = clamp01(intensity01);
+  // keep it subtle: 0.10..0.32
+  const a = 0.10 + 0.22 * t;
+  const rgb = isBuy ? '16,185,129' /* emerald-500-ish */ : '244,63,94' /* rose-500-ish */;
+  // fade to transparent so the table row background shows through
+  return `linear-gradient(90deg, rgba(${rgb}, ${a}) 0%, rgba(${rgb}, ${a * 0.6}) 60%, rgba(${rgb}, 0) 100%)`;
 }
 
 const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
-  // Stabilize token object to prevent hook parameter changes and unnecessary re-renders
   const stableToken = React.useMemo(() => {
     if (!token) return null;
     return {
@@ -111,35 +146,50 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     };
   }, [token?.pair_address, token?.decimals, token?.name, token?.symbol, token?.mint]);
 
-  // Stabilize initialTrades to prevent WebSocket re-initialization
   const stableInitialTrades = React.useMemo(() => initialTrades, [initialTrades.length]);
 
-  // CRITICAL: Call hooks BEFORE any conditional returns to prevent React hooks violation
-  // Simplified WebSocket connection - use only one WebSocket hook
   const {
     isConnected: wsConnected,
     loading: wsLoading,
     error: wsError,
     trades: wsTrades,
-    getTradeStats,
-    getMemoryStats,
   } = useOptimizedTradeEventsWebSocket({
     pairAddress: stableToken?.pair_address,
     enabled: !!stableToken?.pair_address,
     initialTrades: stableInitialTrades,
     tokenDecimals: stableToken?.decimals || 9,
-    maxTrades: 200, // Reduced for faster processing
+    maxTrades: 200,
     enableDeduplication: true,
   });
 
-  // Use WebSocket trades if available, otherwise show initial trades immediately
-  // Prioritize WebSocket data but fallback to initial trades for better data persistence
   const displayTrades = wsTrades.length > 0 ? wsTrades : stableInitialTrades;
-  const isConnected = wsConnected || stableInitialTrades.length > 0; // Consider connected if we have initial data
-  const error = wsError;
-  const isLoading = wsLoading && stableInitialTrades.length === 0; // Only show loading if no initial data
+  const isLoading = wsLoading && stableInitialTrades.length === 0;
 
-  // Only show skeleton if we have absolutely no token data (not even optimistic)
+  // Normalize first 100 for scaling
+  const normalized = React.useMemo(() => {
+    const slice = (displayTrades || []).slice(0, 100);
+    return slice.map((t, i) => {
+      const n = normalizeTrade(t, stableToken?.decimals ?? 9);
+      return { ...n, raw: t, idx: i };
+    });
+  }, [displayTrades, stableToken?.decimals]);
+
+  // Robust reference: 95th percentile
+  const p95 = React.useMemo(() => {
+    const arr = normalized.map(n => n.totalUSD).filter((x) => Number.isFinite(x) && x >= 0);
+    return percentile(arr, 0.95) || 0;
+  }, [normalized]);
+
+  const scaleAmt = React.useCallback(
+    (v: number) => {
+      if (!isFinite(v) || v <= 0) return 0;
+      const ref = p95 > 0 ? p95 : Math.max(...normalized.map(n => n.totalUSD), 1);
+      return clamp01(v / ref);
+    },
+    [p95, normalized]
+  );
+
+  // Skeleton if token absent
   if (!stableToken || (!stableToken.name && !stableToken.symbol)) {
     return (
       <div className="flex-1 min-h-0 p-4">
@@ -157,169 +207,91 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-18">
         <table className="w-full text-xs">
-        <thead className="sticky top-0 bg-gray-900 z-10">
-          <tr className="text-neutral-400 border-b border-neutral-800">
-            <th className="px-2 py-2 text-left">Age ↓</th>
-            <th className="px-2 py-2 text-left">Price (USD)</th>
-            <th className="px-2 py-2 text-left">Amt (USD)</th>
-            <th className="px-2 py-2 text-left">Retention</th>
-            <th className="px-2 py-2 text-left">Trader</th>
-          </tr>
-        </thead>
-        <tbody>
-          {isLoading ? (
-            <tr>
-              <td colSpan={5} className="text-center py-6 text-neutral-500">
-                Loading trades...
-              </td>
+          <thead className="sticky top-0 bg-gray-900 z-10">
+            <tr className="text-neutral-400 border-b border-neutral-800">
+              <th className="px-2 py-2 text-left">Age ↓</th>
+              <th className="px-2 py-2 text-left">Price (USD)</th>
+              <th className="px-2 py-2 text-left">Amt (USD)</th>
+              <th className="px-2 py-2 text-left">Retention</th>
+              <th className="px-2 py-2 text-left">Trader</th>
             </tr>
-          ) : !displayTrades || displayTrades.length === 0 ? (
-            <tr>
-              <td colSpan={5} className="text-center py-6 text-neutral-500">
-                {displayTrades.length > 0 ? 'No trades found.' : (isLoading ? 'Loading...' : 'No trades available.')}
-              </td>
-            </tr>
-          ) : (
-            displayTrades.slice(0, 100).map((trade: any, idx) => { // Reduced from 200 to 100 for faster rendering
-              // Check if it's a WebSocket trade event
-              if (trade.side && trade.amount && trade.price && trade.pair_address) {
-                // WebSocket trade event format
-                const isBuy = trade.side === 'buy';
-                const color = isBuy ? 'text-emerald-400' : 'text-red-400';
-                const age = getAge(new Date(trade.timestamp).getTime() / 1000);
-                
-                // Use the pre-calculated values from websocket processing
-                const tokenAmount = parseFloat(trade.amount);
-                const totalUSD = trade.totalUSD !== undefined ? trade.totalUSD : parseFloat(trade.price);
-                const pricePerToken = parseFloat(trade.price);
-                
-                // Format retention (token amount) - ensure proper K/M/B formatting
-                const retention = formatSmartNumber(tokenAmount);
-                
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={5} className="text-center py-6 text-neutral-500">
+                  Loading trades...
+                </td>
+              </tr>
+            ) : !normalized.length ? (
+              <tr>
+                <td colSpan={5} className="text-center py-6 text-neutral-500">
+                  No trades available.
+                </td>
+              </tr>
+            ) : (
+              normalized.map((n) => {
+                const age = getAge(n.timestampSec);
+                const retention = formatSmartNumber(n.tokenAmount);
+                const amtStr = Number.isFinite(n.totalUSD) ? `$${n.totalUSD.toFixed(2)}` : '$0.00';
+                const priceStr = Number.isFinite(n.pricePerToken) ? `$${formatSmallPrice(n.pricePerToken)}` : '$-';
+
+                const intensity = scaleAmt(n.totalUSD);
+                const gradient = heatBarGradient(n.isBuy, intensity);
+
                 return (
-                  <tr key={trade.pair_address + idx + trade.timestamp} className="border-b border-neutral-800 hover:bg-neutral-800/60">
+                  <tr key={n.keyPart || n.idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
-                    <td className={`px-2 py-2 font-semibold ${color}`}>${formatSmallPrice(pricePerToken)}</td>
-                    <td className={`px-2 py-2 font-semibold ${color}`}>${totalUSD.toFixed(2)}</td>
+                    <td className={`px-2 py-2 font-semibold ${n.color}`}>{priceStr}</td>
+
+                    {/* HEATMAP BAR only; cell background stays default */}
+                    <td className="px-2 py-2 font-semibold relative overflow-hidden"
+                        title={`~${(intensity * 100).toFixed(0)}% of recent size`}>
+                      {/* bar (behind content) */}
+                      <div
+                        aria-hidden
+                        className="absolute left-0 top-0 bottom-0 z-0"
+                        style={{
+                          width: `${Math.max(6, intensity * 100)}%`,
+                          backgroundImage: gradient,
+                          // blends with whatever row bg you already have
+                          mixBlendMode: 'screen',
+                          pointerEvents: 'none',
+                          transition: 'width 160ms ease',
+                        }}
+                      />
+                      {/* amount text */}
+                      <div className={`relative z-10 ${n.isBuy ? 'text-emerald-300' : 'text-red-300'}`}>
+                        {amtStr}
+                      </div>
+                    </td>
+
                     <td className="px-2 py-2 text-neutral-300">{retention}</td>
                     <td className="px-2 py-2 text-neutral-300">
                       <a
-                        href={`https://solscan.io/account/${trade.maker || trade.pair_address}`}
+                        href={`https://solscan.io/account/${n.maker || ''}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[#70E0B0] hover:text-[#58B890] transition-colors hover:underline"
                       >
-                        {shortAddr(trade.maker || trade.pair_address)}
+                        {shortAddr(n.maker || '')}
                       </a>
                     </td>
                   </tr>
                 );
-              } else {
-                // Handle both Codex and backend trade formats
-                // Determine which format we have
-                const hasBackendFormat = trade.event_type && (trade.amount || trade.price_in_usd);
-                const hasCodexFormat = trade.eventDisplayType && trade.data;
-                
-                // Determine buy/sell and color
-                let isBuy = false;
-                let color = 'text-neutral-400';
-                
-                if (hasBackendFormat) {
-                  isBuy = trade.event_type === 'BUY';
-                } else if (hasCodexFormat) {
-                  isBuy = trade.eventDisplayType === 'Buy';
-                }
-                color = isBuy ? 'text-emerald-400' : 'text-red-400';
-                
-                // Handle timestamp - convert to seconds
-                let timestampInSeconds: number;
-                if (typeof trade.timestamp === 'number') {
-                  // Check if already in seconds or milliseconds
-                  // If timestamp is less than 10^10, it's in seconds
-                  // If timestamp is >= 10^10, it's in milliseconds
-                  timestampInSeconds = trade.timestamp < 10000000000 ? trade.timestamp : trade.timestamp / 1000;
-                } else if (typeof trade.timestamp === 'string') {
-                  timestampInSeconds = new Date(trade.timestamp).getTime() / 1000;
-                } else {
-                  timestampInSeconds = Date.now() / 1000;
-                }
-                const age = getAge(timestampInSeconds);
-                
-                // Calculate price and amounts based on format
-                let tokenAmount: number;
-                let totalUSD: number;
-                let pricePerToken: number;
-                
-                if (hasBackendFormat) {
-                  // Backend format: flat structure
-                  tokenAmount = trade.amount || 0;
-                  totalUSD = trade.total_usd || 0;
-                  pricePerToken = trade.price_in_usd || 0;
-                } else if (hasCodexFormat && trade.data) {
-                  // Codex format: nested structure
-                  // Get token amount
-                  tokenAmount = parseFloat(String(trade.data.amountNonLiquidityToken || trade.data.amount0 || 0));
-                  // Get total USD value (already calculated by API)
-                  totalUSD = parseFloat(String(trade.data.priceUsdTotal || 0));
-                  // Get price per token (already calculated by API)
-                  pricePerToken = parseFloat(String(trade.data.priceUsd || 0));
-                  
-                  // Fallback: if priceUsd is not available, calculate it
-                  if (!pricePerToken && tokenAmount > 0 && totalUSD > 0) {
-                    pricePerToken = totalUSD / tokenAmount;
-                  }
-                  
-                  // Debug logging
-                  if (process.env.NODE_ENV === 'development' && (!pricePerToken || !totalUSD || !tokenAmount)) {
-                    console.log('[CodexTrades] Debug trade data:', {
-                      priceUsd: trade.data.priceUsd,
-                      priceUsdTotal: trade.data.priceUsdTotal,
-                      amountNonLiquidityToken: trade.data.amountNonLiquidityToken,
-                      calculated: { tokenAmount, totalUSD, pricePerToken }
-                    });
-                  }
-                } else {
-                  // Fallback for unknown format
-                  tokenAmount = 0;
-                  totalUSD = 0;
-                  pricePerToken = 0;
-                }
-                
-                // Format retention (token amount) - ensure proper K/M/B formatting
-                const retention = formatSmartNumber(tokenAmount);
-                
-                // Get the right key and maker based on format
-                const tradeKey = hasBackendFormat 
-                  ? (trade.transaction_hash || trade.id || '') + idx
-                  : (trade.transactionHash || '') + idx;
-                const makerAddress = trade.maker || '';
-                
-                return (
-                  <tr key={tradeKey} className="border-b border-neutral-800 hover:bg-neutral-800/60">
-                    <td className="px-2 py-2 text-neutral-300">{age}</td>
-                    <td className={`px-2 py-2 font-semibold ${color}`}>${formatSmallPrice(pricePerToken)}</td>
-                    <td className={`px-2 py-2 font-semibold ${color}`}>${totalUSD.toFixed(2)}</td>
-                    <td className="px-2 py-2 text-neutral-300">{retention}</td>
-                    <td className="px-2 py-2 text-neutral-300">
-                      <a
-                        href={`https://solscan.io/account/${makerAddress}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#70E0B0] hover:text-[#58B890] transition-colors hover:underline"
-                        title={hasCodexFormat ? `Block: ${trade.blockNumber || 'N/A'} | Wallet Age: ${trade.walletAge ? `${Math.floor(trade.walletAge / 86400)}d` : 'N/A'}` : ''}
-                      >
-                        {shortAddr(makerAddress)}
-                      </a>
-                    </td>
-                  </tr>
-                );
-              }
-            })
-          )}
-        </tbody>
+              })
+            )}
+          </tbody>
         </table>
+
+        {!!p95 && (
+          <div className="px-2 py-2 text-[10px] text-neutral-500 flex items-center gap-2">
+            <span className="inline-block">Amt heat = relative to ~95th percentile</span>
+            <span className="ml-auto">p95: ${p95.toFixed(2)}</span>
+          </div>
+        )}
       </div>
     </div>
   );

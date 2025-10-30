@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import FastImage from '../FastImage';
 import { FaExternalLinkAlt } from 'react-icons/fa';
 import Image from 'next/image';
+import { useSolPrice } from '~/components/SolPriceContext';
 
 interface TokenMetadata {
   imageUrl?: string;
@@ -129,6 +130,7 @@ const Activity: React.FC<ActivityProps> = ({
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [currentTime, setCurrentTime] = useState(Date.now());
   const router = useRouter();
+  const { solPrice } = useSolPrice();
   
   // Update current time every minute to refresh age calculations
   useEffect(() => {
@@ -412,10 +414,147 @@ const Activity: React.FC<ActivityProps> = ({
               const formattedMarketCap = marketCapValue ? `$${formatSmartNumber(marketCapValue)}` : 'N/A';
               
               // Format amount (USD value)
-              const amountValue = typeof trade.usdValue === 'string' 
+              // ⚠️ VALIDATION: Detect if usdValue is suspiciously high (likely marketCap or wrong units)
+              let amountValue = typeof trade.usdValue === 'string' 
                 ? parseFloat(trade.usdValue) 
                 : trade.usdValue;
-              const formattedAmount = amountValue ? `$${formatSmartNumber(amountValue)}` : 'N/A';
+              
+              // For Sell trades, validate usdValue is reasonable
+              // If usdValue > $10,000 and tokenAmount exists, check if it's actually marketCap
+              if (trade.type === 'Sell' && amountValue && amountValue > 10000) {
+                const marketCapNum = typeof trade.marketCap === 'string' 
+                  ? parseFloat(trade.marketCap) 
+                  : trade.marketCap;
+                const solAmountNum = typeof trade.solAmount === 'string'
+                  ? parseFloat(trade.solAmount)
+                  : trade.solAmount;
+                
+                // If usdValue matches marketCap, it's definitely wrong - recalculate from solAmount
+                if (marketCapNum && Math.abs(amountValue - marketCapNum) < 1000) {
+                  console.warn('⚠️ DETECTED: usdValue matches marketCap for Sell trade - fixing:', {
+                    tokenAddress: trade.tokenAddress,
+                    originalUsdValue: amountValue,
+                    marketCap: marketCapNum,
+                    solAmount: solAmountNum,
+                    calculatedUsdValue: solAmountNum ? solAmountNum * 200 : amountValue // ~$200 SOL price fallback
+                  });
+                  
+                  // Recalculate from solAmount if available (SOL amount * current SOL price)
+                  if (solAmountNum && solAmountNum > 0 && solAmountNum < 100) {
+                    // If solAmount is reasonable (< 100 SOL), use it to calculate
+                    const currentSolPrice = solPrice > 0 ? solPrice : 200; // Fallback to $200 if not available
+                    amountValue = solAmountNum * currentSolPrice;
+                    console.log('✅ Fixed usdValue using solAmount:', {
+                      solAmount: solAmountNum,
+                      solPrice: currentSolPrice,
+                      calculatedUsdValue: amountValue
+                    });
+                  } else {
+                    // If solAmount is also wrong, try to estimate from buy/sell comparison
+                    const buyTrade = trades.find(t => 
+                      t.tokenAddress === trade.tokenAddress && 
+                      t.type === 'Buy' && 
+                      t.transactionHash !== trade.transactionHash
+                    );
+                    if (buyTrade) {
+                      const buyUsdValue = typeof buyTrade.usdValue === 'string' 
+                        ? parseFloat(buyTrade.usdValue) 
+                        : buyTrade.usdValue;
+                      if (buyUsdValue && buyUsdValue < 1000 && buyUsdValue > 0) {
+                        // Estimate sell value as percentage of buy value based on token amounts
+                        const buyTokenAmount = typeof buyTrade.tokenAmount === 'string'
+                          ? parseFloat(buyTrade.tokenAmount)
+                          : buyTrade.tokenAmount;
+                        const sellTokenAmount = typeof trade.tokenAmount === 'string'
+                          ? parseFloat(trade.tokenAmount)
+                          : trade.tokenAmount;
+                        if (buyTokenAmount && sellTokenAmount && buyTokenAmount > 0) {
+                          const sellRatio = sellTokenAmount / buyTokenAmount;
+                          amountValue = buyUsdValue * sellRatio;
+                          console.log('✅ Fixed usdValue using buy/sell ratio:', amountValue);
+                        }
+                      }
+                    }
+                  }
+                  
+                  // Final sanity check: if still way too high, use a conservative estimate
+                  if (amountValue > 10000) {
+                    // If we still have a suspiciously high value, scale it down
+                    // This suggests the backend has a unit mismatch
+                    amountValue = amountValue / 1000000; // Try dividing by 1 million
+                    console.warn('⚠️ Still high after fixes, applying scale correction:', amountValue);
+                  }
+                }
+                
+                // Additional check: if solAmount exists and is reasonable, validate usdValue against it
+                if (solAmountNum && solAmountNum > 0 && solAmountNum < 100) {
+                  const currentSolPrice = solPrice > 0 ? solPrice : 200; // Fallback to $200 if not available
+                  const expectedUsdValue = solAmountNum * currentSolPrice;
+                  if (amountValue > expectedUsdValue * 10) {
+                    // If usdValue is more than 10x what it should be, use the calculated value
+                    console.warn('⚠️ usdValue is way too high compared to solAmount - fixing:', {
+                      originalUsdValue: amountValue,
+                      solAmount: solAmountNum,
+                      solPrice: currentSolPrice,
+                      expectedUsdValue: expectedUsdValue,
+                      correctedValue: expectedUsdValue
+                    });
+                    amountValue = expectedUsdValue;
+                  }
+                }
+
+                // Broad fallback: if still suspiciously high, try alternative corrections even when
+                // it didn't match marketCap exactly
+                if (amountValue > 10000) {
+                  let corrected = false;
+                  const currentSolPrice = solPrice > 0 ? solPrice : 200;
+
+                  if (solAmountNum && solAmountNum > 0 && solAmountNum < 100) {
+                    const expectedUsdValue = solAmountNum * currentSolPrice;
+                    if (amountValue > expectedUsdValue * 5) {
+                      amountValue = expectedUsdValue;
+                      corrected = true;
+                      console.warn('⚠️ Applying broad solAmount-based correction for high usdValue:', amountValue);
+                    }
+                  }
+
+                  if (!corrected) {
+                    const buyTrade = trades.find(t => 
+                      t.tokenAddress === trade.tokenAddress && 
+                      t.type === 'Buy' && 
+                      t.transactionHash !== trade.transactionHash
+                    );
+                    if (buyTrade) {
+                      const buyUsdValue = typeof buyTrade.usdValue === 'string' 
+                        ? parseFloat(buyTrade.usdValue) 
+                        : buyTrade.usdValue;
+                      const buyTokenAmount = typeof buyTrade.tokenAmount === 'string' 
+                        ? parseFloat(buyTrade.tokenAmount) 
+                        : buyTrade.tokenAmount;
+                      const sellTokenAmount = typeof trade.tokenAmount === 'string' 
+                        ? parseFloat(trade.tokenAmount) 
+                        : trade.tokenAmount;
+                      if (buyUsdValue && buyTokenAmount && sellTokenAmount && buyTokenAmount > 0) {
+                        const sellRatio = Math.min(sellTokenAmount / buyTokenAmount, 1);
+                        const estimated = buyUsdValue * sellRatio;
+                        if (amountValue > estimated * 10) {
+                          amountValue = estimated;
+                          corrected = true;
+                          console.warn('⚠️ Applying broad buy/sell ratio correction for high usdValue:', amountValue);
+                        }
+                      }
+                    }
+                  }
+
+                  // Final fallback: scale down by 1e6 if still absurdly high
+                  if (!corrected && amountValue > 10000) {
+                    amountValue = amountValue / 1000000;
+                    console.warn('⚠️ Final fallback scale correction applied for high usdValue:', amountValue);
+                  }
+                }
+              }
+              
+              const formattedAmount = amountValue && amountValue > 0 ? `$${formatSmartNumber(amountValue)}` : 'N/A';
               
               // Format token amount with unit correction
               let tokenAmountValue = typeof trade.tokenAmount === 'string' 

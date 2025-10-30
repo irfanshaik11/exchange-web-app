@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import throttle from "lodash.throttle";
 import { env } from "../env";
+import { getCached, setCached } from "../utils/simpleCache";
 
 interface UsePaginatedTokensParams {
   filter?: string;
@@ -65,6 +66,7 @@ export default function usePaginatedTokensWithFallback({
   const maxReconnectAttempts = 0; // 0 = try once, then fall back immediately
   const reconnectAttemptRef = useRef(0);
   const wsConnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const lastStableDataRef = useRef<any[] | null>(null);
   const lastTimeframeRef = useRef<string | undefined>(timeframe);
@@ -134,6 +136,15 @@ export default function usePaginatedTokensWithFallback({
   }, [limit, timeframe]);
 
   const throttledSetData = useCallback((newData: any[]) => {
+    // CRITICAL: Only process data if it's for the current timeframe
+    if (currentRequestTimeframeRef.current !== timeframe) {
+      // console.log('🚫 Ignoring data - timeframe mismatch:', {
+      //   dataTimeframe: currentRequestTimeframeRef.current,
+      //   currentTimeframe: timeframe
+      // });
+      return;
+    }
+    
     // console.log('🔧 Setting data in hook (raw):', newData?.length, 'tokens, for timeframe:', currentRequestTimeframeRef.current);
     const stable = stabilizeList(newData);
     // console.log('🔧 After stabilization:', stable?.length, 'tokens');
@@ -151,13 +162,18 @@ export default function usePaginatedTokensWithFallback({
     //   });
     // }
     setState(prev => {
+      // CRITICAL: Double-check timeframe hasn't changed during stabilization
+      if (currentRequestTimeframeRef.current !== timeframe) {
+        //console.log('🚫 Ignoring stabilized data - timeframe changed during processing');
+        return prev;
+      }
       // Only update if data actually changed to prevent flickering
       if (JSON.stringify(prev.data) === JSON.stringify(stable)) {
         return prev;
       }
       return { ...prev, data: stable, loading: false };
     });
-  }, [stabilizeList]);
+  }, [stabilizeList, timeframe]);
 
   // Polling fallback function
   const startPolling = useCallback(() => {
@@ -165,12 +181,22 @@ export default function usePaginatedTokensWithFallback({
     setState(prev => ({ ...prev, usingFallback: true, isReconnecting: false }));
     
     const poll = async () => {
+      // // CRITICAL: Check if timeframe has changed - abort if so
+      if (currentRequestTimeframeRef.current !== timeframe) {
+        //console.log('🚫 Aborting poll request - timeframe changed from', currentRequestTimeframeRef.current, 'to', timeframe);
+        return;
+      }
+      
       if (isPollingRef.current) {
         // Skip overlapping poll to avoid piling up requests when upstream stalls
         return;
       }
       isPollingRef.current = true;
       try {
+        // Create new AbortController for this request
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+        
         const queryParams = new URLSearchParams({
           filter: filter || 'new',
           order: order || 'desc',
@@ -199,7 +225,20 @@ export default function usePaginatedTokensWithFallback({
         // console.log('📡 Query params:', Object.fromEntries(queryParams.entries()));
         // console.log('📡 Environment WEBSOCKET_URL (for WS only):', env.NEXT_PUBLIC_WEBSOCKET_URL);
         
-        const response = await fetch(url);
+        // // CRITICAL: Check again before making request
+        if (currentRequestTimeframeRef.current !== timeframe) {
+          //console.log('🚫 Aborting fetch - timeframe changed during request setup');
+          return;
+        }
+        
+        // Serve cached immediately if present and no data yet
+        const cached = getCached<any[]>(url);
+        if (cached && state.data.length === 0) {
+          throttledSetData(cached);
+          setState(prev => ({ ...prev, loading: false, error: null }));
+        }
+
+        const response = await fetch(url, { signal: abortController.signal, cache: 'no-store' as RequestCache });
         // console.log('📡 Polling response status:', response.status, response.ok);
         
         // Treat 304 Not Modified as a successful no-op: keep current list stable
@@ -210,11 +249,26 @@ export default function usePaginatedTokensWithFallback({
         }
 
         if (response.ok) {
+          // CRITICAL: Check again before processing response
+          if (currentRequestTimeframeRef.current !== timeframe) {
+            //console.log('🚫 Ignoring response - timeframe changed during fetch');
+            return;
+          }
+          
           const data = await response.json();
           //console.log('📡 Polling data received:', data?.result?.length || data?.length, 'tokens');
           
           // Handle both wrapped and direct array responses
           const tokens = data.result || data;
+          
+          // CRITICAL: Final check before setting data
+          // if (currentRequestTimeframeRef.current !== timeframe) {
+          //   console.log('🚫 Ignoring tokens data - timeframe changed:', {
+          //     requestTimeframe: currentRequestTimeframeRef.current,
+          //     currentTimeframe: timeframe
+          //   });
+          //   return;
+          // }
           
           // // Debug: Check the first token's price data
           // if (tokens && Array.isArray(tokens) && tokens[0]) {
@@ -240,6 +294,8 @@ export default function usePaginatedTokensWithFallback({
               volume_24h: tokens[0].volume_24h
             } : 'No tokens');
             throttledSetData(tokens);
+            // Cache fresh tokens briefly to smooth next render
+            setCached(url, tokens, 15_000);
             setState(prev => ({ ...prev, error: null, loading: false }));
           } else {
             //console.log('🔧 No valid tokens data received:', { tokens, isArray: Array.isArray(tokens) });
@@ -255,16 +311,25 @@ export default function usePaginatedTokensWithFallback({
             error: prev.data.length === 0 ? `Upstream error (${response.status})` : null 
           }));
         }
-      } catch (error) {
+      } catch (error: any) {
+        // Ignore abort errors - they're expected when switching timeframes
+        if (error?.name === 'AbortError') {
+          //console.log('🚫 Polling request aborted (timeframe changed)');
+          return;
+        }
         console.error('❌ Polling error:', error);
-        setState(prev => ({ 
-          ...prev, 
-          // Only show error if we don't have any data yet
-          error: prev.data.length === 0 ? 'Failed to fetch data' : null, 
-          loading: false 
-        }));
+        // Only update state if timeframe hasn't changed
+        if (currentRequestTimeframeRef.current === timeframe) {
+          setState(prev => ({ 
+            ...prev, 
+            // Only show error if we don't have any data yet
+            error: prev.data.length === 0 ? 'Failed to fetch data' : null, 
+            loading: false 
+          }));
+        }
       } finally {
         isPollingRef.current = false;
+        abortControllerRef.current = null;
       }
     };
 
@@ -273,7 +338,7 @@ export default function usePaginatedTokensWithFallback({
 
     // Set up polling interval (reduced frequency to prevent flickering)
     pollIntervalRef.current = setInterval(poll, 3000);
-  }, [filter, order, offset, limit, throttledSetData]);
+  }, [filter, order, offset, limit, timeframe, throttledSetData]);
 
   // Clear polling
   const clearPolling = useCallback(() => {
@@ -291,16 +356,27 @@ export default function usePaginatedTokensWithFallback({
     // console.log('🔄 Starting fresh data fetch for timeframe:', timeframe);
     // console.log('🔄 Timeframe type:', typeof timeframe, 'value:', JSON.stringify(timeframe));
     
+    // CRITICAL: Abort any in-flight requests from previous timeframe
+    if (abortControllerRef.current) {
+      // console.log('🚫 Aborting previous request due to timeframe change');
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
     // Update current request timeframe IMMEDIATELY to track which timeframe is being requested
     currentRequestTimeframeRef.current = timeframe;
     
     // Clear existing data when timeframe changes to prevent stale data display
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null, usingFallback: false, data: [] }));
     
-    // Clear stable data reference when timeframe changes
+    // Clear stable data reference and STOP any existing polling when timeframe changes
     if (lastTimeframeRef.current !== timeframe) {
       // console.log('🧹 Clearing stable data reference due to timeframe change');
       lastStableDataRef.current = null;
+      // CRITICAL: Clear any existing polling interval when timeframe changes
+      clearPolling();
+      // Update the last timeframe reference
+      lastTimeframeRef.current = timeframe;
     }
 
     let pingInterval: NodeJS.Timeout | null = null;
@@ -508,6 +584,11 @@ export default function usePaginatedTokensWithFallback({
     connectWebSocket();
 
     return () => {
+      // Abort any in-flight requests
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
       clearPolling();
       if (pingInterval) {
         clearInterval(pingInterval);

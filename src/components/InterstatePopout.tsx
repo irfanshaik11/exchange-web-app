@@ -8,6 +8,7 @@ interface InterstatePopoutProps {
   className?: string;
   overlayClassName?: string;
   disableClickOutside?: boolean;
+  zIndex?: number;
 }
 
 export default function InterstatePopout({
@@ -18,6 +19,7 @@ export default function InterstatePopout({
   className = '',
   overlayClassName = '',
   disableClickOutside = false,
+  zIndex = 50,
 }: InterstatePopoutProps) {
   const [render, setRender] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -51,7 +53,7 @@ export default function InterstatePopout({
 
   // Overlay classes for centering and background with blur + fade
   // Only allow pointer events when actually visible to prevent any blocking
-  const overlayBase = `fixed inset-0 z-50 transition-opacity duration-200 ${
+  const overlayBase = `fixed inset-0 transition-opacity duration-200 ${
     isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
   }`;
   const overlayCenter = 'flex items-center justify-center bg-black/40 backdrop-blur-sm';
@@ -63,7 +65,7 @@ export default function InterstatePopout({
       className={
         `${overlayBase} ${align === 'center' ? overlayCenter : overlayTopRight} ${isVisible ? 'visible' : ''} ${overlayClassName}`
       }
-      style={{ pointerEvents: isVisible ? 'auto' : 'none' }}
+      style={{ pointerEvents: isVisible ? 'auto' : 'none', zIndex }}
     >
       <div
         ref={contentRef}

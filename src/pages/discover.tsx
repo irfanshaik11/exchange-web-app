@@ -10,25 +10,18 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
-import { tradeBuy, SOL_MINT_ADDRESS } from "../utils/api";
-import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
-import toast from "react-hot-toast";
+import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
+import { toast } from "react-hot-toast";
+import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
+import { HiLightningBolt } from "react-icons/hi";
 
 export type Timeframe = "5m" | "1h" | "6h" | "24h";
 
 // Extend Token with optional flags
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
-
-const AX = {
-  bg: '#0f1012',
-  surface2: '#17191E',
-  border: '#2A2B33',
-  text: '#E6E7EA',
-  muted: '#9CA3AF',
-  green: '#22c55e',
-};
 
 export default function DiscoverPage() {
   const [activeTab, setActiveTab] = useState<'trending' | 'dex' | 'live'>('trending');
@@ -39,6 +32,7 @@ export default function DiscoverPage() {
   const { filter } = useFilter();
   const [localFilters, setLocalFilters] = useState(filter);
   const { presets, activePreset, setActivePreset } = useQuickBuy();
+  const { user } = useUser();
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -55,6 +49,7 @@ export default function DiscoverPage() {
   };
 
   const [quickBuyAmount, setQuickBuyAmount] = useState(getInitialQuickBuyAmount().toString());
+  const [selectedPill, setSelectedPill] = useState('P1'); // Local preset selection for discover page
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showSkeleton, setShowSkeleton] = useState(true);
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
@@ -150,22 +145,123 @@ export default function DiscoverPage() {
   //   console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
   // }, [selectedTimeframe]);
 
-  // QUICK BUY handler – unchanged
-  async function handleQuickBuy(token: Token) {
+  // QUICK BUY handler – with detailed logging (same as PulseTable)
+  const handleQuickBuy = async (token: Token) => {
+    console.log("🎯 handleQuickBuy called for token:", token.symbol);
+    
+    // ✅ COMPREHENSIVE DATA LOGGING FOR TESTING
+    console.log("\n" + "=".repeat(80));
+    console.log("📋 QUICK BUY DATA VERIFICATION - DISCOVER PAGE");
+    console.log("=".repeat(80));
+    
+    // Log full token object
+    console.log("\n📊 FULL TOKEN OBJECT:");
+    console.log(JSON.stringify(token, null, 2));
+    
+    // Log key token fields
+    console.log("\n🔑 KEY TOKEN FIELDS:");
+    console.log("  mint:", token.mint);
+    console.log("  symbol:", token.symbol);
+    console.log("  name:", token.name);
+    console.log("  pair_address:", token.pair_address);
+    console.log("  migrated_pool_address:", token.migrated_pool_address || "(none)");
+    console.log("  launchpad_protocol:", token.launchpad_protocol || "(none)");
+    console.log("  protocol:", token.protocol || "(none)");
+    console.log("  amm_id:", token.amm_id || "(none)");
+    
+    // Fallback toast function for production issues
+    const showToast = (message: string, type: 'success' | 'error' = 'error') => {
+      try {
+        if (type === 'success') {
+          toast.success(message, {
+            duration: 5000,
+            style: {
+              background: '#1E1F26',
+              color: '#E6E7EA',
+              border: '1px solid #70E0B0',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              zIndex: 9999
+            }
+          });
+        } else {
+          toast.error(message, {
+            duration: 5000,
+            style: {
+              background: '#1E1F26',
+              color: '#E6E7EA',
+              border: '1px solid #ff6b6b',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              zIndex: 9999
+            }
+          });
+        }
+      } catch (error) {
+        // Fallback to console and alert if toast fails
+        console.error('Toast failed:', error);
+        console.log(`[${type.toUpperCase()}] ${message}`);
+        if (typeof window !== 'undefined' && window.alert) {
+          window.alert(message);
+        }
+      }
+    };
+    
+    if (!user) {
+      console.log("❌ No user found");
+      showToast("⚠️ Please connect your wallet to trade");
+      return;
+    }
+
+    const buyAmount = parseFloat(quickBuyAmount);
+    if (isNaN(buyAmount) || buyAmount <= 0) {
+      console.log("❌ Invalid buy amount:", quickBuyAmount);
+      showToast("⚠️ Please enter a valid SOL amount (minimum 0.001 SOL)");
+      return;
+    }
+
     try {
       const poolType = getPoolTypeFromToken(token);
       const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
+      
+      console.log("\n🏊 POOL INFORMATION:");
+      console.log(`  Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'}`);
+      console.log(`  Detected PoolType: ${poolType || '(empty - backend will auto-detect)'}`);
+      if (!poolType) {
+        console.log(`  ⚠️  Note: Empty poolType is OK - backend will auto-detect from pool address`);
+      }
+      console.log(`  Effective Pool Address: ${effectivePoolAddress}`);
+      console.log(`  Using migrated_pool_address: ${token.migrated_pool_address ? 'YES' : 'NO'}`);
+      console.log(`  Original pair_address: ${token.pair_address}`);
+      
       const settings = presets[activePreset].quickBuySettings;
-
-      const data = await tradeBuy({
+      
+      console.log("\n⚙️ PRESET SETTINGS:");
+      console.log(`  Active Preset: P${activePreset + 1} (from selectedPill: ${selectedPill})`);
+      console.log(`  Slippage: ${(settings.maxSlippage || 0.4) * 100}% (${settings.maxSlippage || 0.4} decimal)`);
+      console.log(`  Priority Fee: ${settings.priority || 0.0001} SOL`);
+      console.log(`  Bribe: ${settings.bribe || 0} SOL`);
+      console.log(`  MEV Mode: ${settings.mevMode}`);
+      console.log(`  MEV Protection: ${settings.mevMode === "off" ? 0 : 1}`);
+      console.log(`  Auto Fee: ${settings.autoFee || false}`);
+      console.log(`  Max Fee: ${settings.maxFee || 0} SOL`);
+      console.log(`  RPC: ${settings.rpc || "(default)"}`);
+      
+      console.log("\n📦 FULL SETTINGS OBJECT:");
+      console.log(JSON.stringify(settings, null, 2));
+      
+      // Build the complete payload
+      const payload = {
         poolAddress: effectivePoolAddress,
         baseMint: token.mint,
         quoteMint: SOL_MINT_ADDRESS,
-        amount: Number(quickBuyAmount) || 0,
-        mevProtection: settings.mevMode === "off" ? 0 : 1,
-        poolType,
+        amount: buyAmount,
+        mevProtection: (settings.mevMode === "off" ? 0 : 1) as 0 | 1,
+        poolType: poolType,
         originalPairAddress: token.pair_address,
-        slippage: settings.maxSlippage || 0.4,
+        slippage: (settings.maxSlippage || 0.4) * 100,
         priorityFee: settings.priority || 0.0001,
         bribe: settings.bribe || 0,
         mevMode: settings.mevMode,
@@ -174,23 +270,124 @@ export default function DiscoverPage() {
         rpc: settings.rpc,
         tokenName: token.name,
         tokenSymbol: token.symbol,
-      }, '');
-
-      const txHash = (data as any)?.hash || (data as any)?.txid;
-      const tokenAmount = (data as any)?.amount || (data as any)?.tokenAmount;
+      };
+      
+      console.log("\n📤 COMPLETE PAYLOAD BEING SENT TO API:");
+      console.log(JSON.stringify(payload, null, 2));
+      console.log("\n📤 PAYLOAD SUMMARY:");
+      console.log("  poolAddress:", payload.poolAddress);
+      console.log("  baseMint:", payload.baseMint);
+      console.log("  quoteMint:", payload.quoteMint);
+      console.log("  amount:", payload.amount, "SOL");
+      console.log("  poolType:", payload.poolType);
+      console.log("  slippage:", payload.slippage, "%");
+      console.log("  priorityFee:", payload.priorityFee, "SOL");
+      console.log("  bribe:", payload.bribe, "SOL");
+      console.log("  mevProtection:", payload.mevProtection);
+      console.log("  mevMode:", payload.mevMode);
+      console.log("  originalPairAddress:", payload.originalPairAddress);
+      console.log("=".repeat(80) + "\n");
+      
+      const data = await tradeBuy(payload, user.bearerToken);
+      
+      console.log("\n📥 API RESPONSE RECEIVED:");
+      console.log(JSON.stringify(data, null, 2));
+      
+      const txHash = data?.hash || data?.txid;
+      const tokenAmount = data?.amount || data?.tokenAmount;
 
       if (data && txHash) {
-        toast.success(
-          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`,
+        console.log("\n✅ QUICK BUY SUCCESS:");
+        console.log("  Transaction Hash:", txHash);
+        console.log("  Token Amount:", tokenAmount || 'N/A');
+        console.log("  Token Symbol:", token.symbol);
+        console.log("  Full Response:", JSON.stringify(data, null, 2));
+        
+        // Backfill token to token-service so it's available in portfolio/activity
+        try {
+          console.log("\n🔄 Backfilling token after Quick Buy...");
+          const backfillResponse = await fetch('/api/token-service/backfill-token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              mint: token.mint,
+              name: token.name,
+              symbol: token.symbol,
+              uri: token.uri,
+              market_cap_usd: token.fully_diluted_value,
+              liquidity_usd: token.total_liquidity_usd,
+              pair_address: token.pair_address || token.migrated_pool_address
+            })
+          });
+
+          if (backfillResponse.ok) {
+            console.log('✅ Token backfilled successfully to token-service');
+          } else {
+            console.warn('⚠️ Token backfill failed (token may already exist or service unavailable)');
+          }
+        } catch (backfillError) {
+          console.error('❌ Error backfilling token:', backfillError);
+          // Don't fail the Quick Buy if backfill fails - it's non-critical
+        }
+        
+        showToast(
+          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`,
+          'success'
         );
       } else {
-        toast.error("❌ Quick Buy failed - no transaction hash returned");
+        console.log("\n❌ QUICK BUY FAILED:");
+        console.log("  Response:", JSON.stringify(data, null, 2));
+        console.log("  Missing transaction hash");
+        showToast("❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
-      console.error('Quick Buy error:', e);
-      toast.error(`❌ Quick Buy failed: ${e.message || "Unknown error"}`);
+      // Use console.warn for expected errors, console.error for unexpected
+      const logFn = (e as any)?.expected ? console.warn : console.error;
+      
+      console.log("\n❌ QUICK BUY ERROR:");
+      console.log("  Error Type:", e?.constructor?.name || typeof e);
+      console.log("  Error Message:", e?.message || String(e));
+      console.log("  Error Code:", e?.code || 'N/A');
+      console.log("  Full Error:", JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
+      
+      logFn('Quick Buy error:', e);
+
+      if (e instanceof ApiError) {
+        // Show simplified user-friendly messages with enhanced styling
+        const toastStyle = {
+          background: '#1E1F26',
+          color: '#E6E7EA',
+          border: '1px solid #ff6b6b',
+          borderRadius: '8px',
+          fontSize: '14px',
+          fontWeight: '500'
+        };
+        
+        if (e.code === 'NO_ACTIVE_POOL') {
+          showToast(`⚠️ Pool unavailable for ${token.symbol}`);
+        } else if (e.code === 'INSUFFICIENT_BALANCE') {
+          showToast(`⚠️ Insufficient balance`);
+        } else if (e.code === 'TX_FAILED') {
+          showToast(`❌ Trade failed. Try adjusting slippage or amount.`);
+        } else if (e.code === 'NO_HOLDINGS') {
+          showToast(`❌ No ${token.symbol} to sell`);
+        } else if (e.code === 'AMOUNT_TOO_SMALL') {
+          showToast(`❌ Amount too small (min 0.001 SOL)`);
+        } else if (e.code === 'POOL_UNAVAILABLE') {
+          showToast(`⚠️ Pool has insufficient liquidity`);
+        } else {
+          // Generic error with shortened message
+          const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
+          showToast(`❌ ${msg}`);
+        }
+      } else {
+        // Unexpected error - show generic message
+        showToast(`❌ Trade failed. Please try again.`);
+      }
     }
-  }
+  };
 
   const handleTimeframeClick = (tf: string) => {
     // console.log('🖱️ Discover: Timeframe clicked:', tf);
@@ -210,9 +407,49 @@ export default function DiscoverPage() {
     return 0;
   }, []);
 
+  // Map AMM IDs to protocol patterns (same logic as PulseTable)
+  const mapAmmToProtocolPatterns = useCallback((ammId: string): string[] => {
+    switch (ammId) {
+      case 'pump':
+      case 'pump_amm':
+        return ['pump.fun', 'pump'];
+      case 'raydium_amm':
+      case 'amm_v3':
+        return ['raydium', 'raydiumlaunchpad'];
+      case 'cp_amm':
+      case 'lb_clmm':
+        return ['meteora', 'meteora_v2'];
+      case 'token_launchpad':
+        return ['moonit', 'moonshot', 'moonshoot'];
+      case 'raydium_launchpad':
+        return ['bonk'];
+      default:
+        return [ammId.toLowerCase()];
+    }
+  }, []);
+
   // Apply filters to tokens
   const applyFilters = useCallback((tokens: TokenWithDexPaid[]) => {
     let filtered = [...tokens];
+
+    // Protocol/AMM filter - filter by launchpad_protocol (same as PulseTable)
+    if (localFilters.amms && localFilters.amms.length > 0) {
+      const protocolPatterns = localFilters.amms.flatMap(ammId => mapAmmToProtocolPatterns(ammId));
+      filtered = filtered.filter(token => {
+        const launchpadProtocol = ((token as any).launchpad_protocol || '').toLowerCase();
+        if (!launchpadProtocol) return false;
+        
+        // Check if token's protocol matches any selected AMM's protocol patterns
+        return protocolPatterns.some(pattern => {
+          const patternLower = pattern.toLowerCase();
+          // Direct match
+          if (launchpadProtocol === patternLower) return true;
+          // Substring match (e.g., "raydiumlaunchpad" contains "raydium")
+          if (launchpadProtocol.includes(patternLower) || patternLower.includes(launchpadProtocol)) return true;
+          return false;
+        });
+      });
+    }
 
     // Search keywords
     if (localFilters.searchKeywords.trim()) {
@@ -267,7 +504,7 @@ export default function DiscoverPage() {
     }
 
     return filtered;
-  }, [localFilters, selectedTimeframe, getVolumeForTimeframe]);
+  }, [localFilters, selectedTimeframe, getVolumeForTimeframe, mapAmmToProtocolPatterns]);
 
   // Sorting handler
   const handleSort = (key: typeof sortKey) => {
@@ -405,29 +642,29 @@ export default function DiscoverPage() {
         <link rel="preload" as="image" href="/placeholder/fallback-avatar.jpg" />
       </Head>
 
-      <div className="min-h-screen text-neutral-100 relative" style={{ backgroundColor: AX.bg }}>
+      <div className="min-h-screen text-[#E6E7EA] relative" style={{ backgroundColor: '#0f1012' }}>
         {/* Header */}
         <div style={{ position: 'relative', zIndex: 100 }}>
           <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
         </div>
 
         {/* Tab Navigation */}
-        <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-20">
+        <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-8 max-w-[98%]">
           <div className="flex max-w-7xl items-center gap-6">
             <button
-              className={`text-lg font-semibold transition-colors ${activeTab === "trending" ? "text-white" : "text-neutral-400"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
             <button
-              className={`text-lg font-semibold transition-colors ${activeTab === "dex" ? "text-white" : "text-neutral-400"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("dex")}
             >
               DEX Screener
             </button>
             <button
-              className={`text-lg font-semibold transition-colors ${activeTab === "live" ? "text-white" : "text-neutral-400"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("live")}
             >
               Live Pump
@@ -445,11 +682,11 @@ export default function DiscoverPage() {
             </div> */}
 
             {/* Timeframes */}
-            <div className="flex max-w-7xl items-center gap-4 text-sm font-medium">
+            <div className="flex max-w-7xl items-center gap-3 text-sm font-medium">
               {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
                 <button
                   key={tf}
-                  className={(selectedTimeframe === tf ? "text-emerald-400 " : "text-neutral-400 ") + "cursor-pointer transition-colors"}
+                  className={(selectedTimeframe === tf ? "text-white " : "text-[#9CA3AF] hover:text-white ") + "cursor-pointer transition-colors"}
                   onClick={() => handleTimeframeClick(tf)}
                 >
                   {tf}
@@ -460,95 +697,150 @@ export default function DiscoverPage() {
             {/* Filter button */}
             <div className="relative">
               <button
-                className="flex items-center justify-center gap-2 px-4 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative mr-2 bg-neutral-900 border border-neutral-800"
-                style={{ color: '#9CA3AF' }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#E6E7EA'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#9CA3AF'; }}
+                className="flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative mr-2 bg-[#17191E] border border-[#2A2B33] text-[#9CA3AF] hover:text-[#E6E7EA]"
                 onClick={() => setIsFilterPopoutOpen(true)}
               >
                 {/* filter glyph */}
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="4" y1="6" x2="20" y2="6"/><circle cx="8" cy="6" r="2"/>
                   <line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2"/>
                   <line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="18" r="2"/>
                 </svg>
-                <span className="font-semibold text-base">Filter</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <span className="font-medium text-sm">Filter</span>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
             </div>
 
-            {/* Quick Buy */}
-            <div className="flex items-center flex-row rounded-full border border-neutral-800 px-4 py-1.5 shadow-inner">
-              <span className="mr-2 text-sm text-neutral-400">Quick Buy</span>
-              <input
-                value={quickBuyAmount}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                    setQuickBuyAmount(value);
-                    const numValue = Number(value) || 0;
-                    if (typeof window !== 'undefined') {
-                      localStorage.setItem('quickBuyAmount', numValue.toString());
+            {/* Quick Buy - Same as PulseTable */}
+            <div className="flex items-center justify-center rounded-full px-3 py-1.5 gap-2 border bg-[#17191E]"
+                 style={{ borderColor: '#2A2B33' }}>
+              {/* Amount - Editable */}
+              <div className="flex items-center justify-center gap-1">
+                <HiLightningBolt size={12} style={{ color: '#22C55E' }} />
+                <input
+                  type="text"
+                  value={quickBuyAmount}
+                  inputMode="decimal"
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // Allow only digits and at most one decimal point
+                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                      setQuickBuyAmount(value);
+                      const numValue = Number(value) || 0;
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem('quickBuyAmount', numValue.toString());
+                      }
                     }
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (!/[0-9.]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
-                    e.preventDefault();
-                  }
-                }}
-                className="text-sm text-neutral-200 focus:outline-none outline-none w-12"
-              />
-              <img src="https://axiom.trade/images/sol-fill.svg" alt="Solana" className="mr-4 h-5 w-5" />
-              {[0, 1, 2].map((i) => {
-                const preset = presets[i];
-                const settings = preset?.quickBuySettings;
-                return (
-                  <div key={i} className="relative flex items-center justify-center mr-2">
-                    <button
-                      className={`cursor-pointer font-semibold transition-all duration-200 ${activePreset === i ? "text-emerald-300" : "text-neutral-400 hover:text-white"}`}
-                      onClick={() => setActivePreset(i)}
-                      onMouseEnter={() => setShowPillTooltip(`P${i + 1}`)}
-                      onMouseLeave={() => setShowPillTooltip(null)}
-                    >
-                      {`P${i + 1}`}
-                    </button>
-
-                    {/* Single tooltip block (fixed JSX) */}
-                    {showPillTooltip === `P${i + 1}` && settings && (
-                      <div
-                        className="absolute top-full left-0 mt-1 w-36 rounded-lg shadow-xl border z-50"
-                        style={{ backgroundColor: 'rgba(15, 16, 18, 0.95)', borderColor: '#2A2B33' }}
+                  }}
+                  onKeyDown={(e) => {
+                    // Block non-numeric keys except control/navigation keys and '.'
+                    const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
+                    if (allowedKeys.includes(e.key)) return;
+                    if (e.key === '.') return;
+                    if (!/^[0-9]$/.test(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  className="bg-transparent border-none outline-none text-xs font-medium w-10 text-center"
+                  style={{ color: '#E6E7EA' }}
+                />
+              </div>
+              
+              {/* Solana Symbol */}
+              <div className="flex items-center justify-center">
+                <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana_discover)"/>
+                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana_discover)"/>
+                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana_discover)"/>
+                  <defs>
+                    <linearGradient id="paint0_linear_solana_discover" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint1_linear_solana_discover" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                    <linearGradient id="paint2_linear_solana_discover" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                      <stop offset="0" stopColor="#00FFA3"/>
+                      <stop offset="1" stopColor="#DC1FFF"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              
+              {/* Separator */}
+              <div className="w-px h-4 bg-gray-600"></div>
+              
+              {/* P1 P2 P3 Pill - Simple Toggle */}
+              <div className="flex items-center justify-center gap-1 relative">
+                {['P1', 'P2', 'P3'].map((pill) => {
+                  const presetIndex = parseInt(pill.replace('P', '')) - 1;
+                  const preset = presets[presetIndex];
+                  const settings = preset?.quickBuySettings;
+                  
+                  return (
+                    <div key={pill} className="relative flex items-center justify-center">
+                      <button
+                        className={`px-1.5 py-0.5 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center ${
+                          selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-white'
+                        }`}
+                        onClick={() => {
+                          setSelectedPill(pill);
+                          setActivePreset(presetIndex); // Also update global preset for consistency
+                          console.log(`Selected ${pill} in discover page`);
+                        }}
+                        onMouseEnter={() => setShowPillTooltip(pill)}
+                        onMouseLeave={() => setShowPillTooltip(null)}
                       >
-                        <div className="p-2 space-y-1.5 text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <FaRunning className="opacity-80" style={{ color: '#9CA3AF' }} />
-                            <span className="text-gray-300">Slippage: {(settings.maxSlippage * 100).toFixed(0)}%</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <FaGasPump className="opacity-90" style={{ color: settings.priority < 0.01 ? '#FF4D7F' : '#9CA3AF' }} />
-                            <span className="text-yellow-400">Priority: {settings.priority}</span>
-                            {settings.priority < 0.01 && <span className="text-[#FF4D7F]">⚠</span>}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <FaCoins className="opacity-90" style={{ color: '#9CA3AF' }} />
-                            <span className="text-yellow-400">Bribe: {settings.bribe}</span>
-                            {settings.bribe > 0 && <span className="text-[#FF4D7F]">⚠</span>}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <FaBan className="opacity-90" style={{ color: settings.mevMode === 'off' || settings.mevMode === 'reduced' ? '#9CA3AF' : '#70E0B0' }} />
-                            <span className="text-gray-300">
-                              MEV: {settings.mevMode === 'off' ? 'Off' : settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
-                            </span>
+                        {pill}
+                      </button>
+                      
+                      {/* Tooltip for each pill */}
+                      {showPillTooltip === pill && settings && (
+                        <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
+                             style={{ 
+                               backgroundColor: 'rgba(15, 16, 18, 0.95)',
+                               borderColor: '#2A2B33' 
+                             }}>
+                          <div className="p-2 space-y-1.5">
+                            {/* Slippage - Running person icon */}
+                            <div className="flex items-center gap-1.5">
+                              <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
+                              <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
+                            </div>
+                            
+                            {/* Priority Fee - Gas pump icon with yellow styling */}
+                            <div className="flex items-center gap-1.5">
+                              <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                              <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
+                              <span className="text-red-500 text-xs font-light">⚠</span>
+                            </div>
+                            
+                            {/* Bribe - Coins icon with yellow styling */}
+                            <div className="flex items-center gap-1.5">
+                              <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                              <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
+                              <span className="text-red-500 text-xs font-light">⚠</span>
+                            </div>
+                            
+                            {/* MEV Protection - Ban icon */}
+                            <div className="flex items-center gap-1.5">
+                              <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
+                              <span className="text-gray-300 text-xs font-light">
+                                {settings.mevMode === 'off' ? 'Off' : 
+                                 settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -564,7 +856,7 @@ export default function DiscoverPage() {
         )}
 
         {/* Main Content */}
-        <main className="mx-auto px-20 pb-10">
+        <main className="mx-auto px-8 pb-10 max-w-[98%]">
           {activeTab === 'live' ? (
             <PumpLive
               leftItems={liveLeftItems.length ? liveLeftItems : demoLeftPump}
@@ -579,7 +871,7 @@ export default function DiscoverPage() {
           ) : (showSkeleton || tokensLoading) ? (
             <div className="space-y-4">
               {Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="h-12 w-full bg-neutral-800 animate-pulse rounded" />
+                <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
               ))}
             </div>
           ) : tokenError ? (
@@ -587,7 +879,7 @@ export default function DiscoverPage() {
               {tokenError}
             </div>
           ) : displayed.length === 0 ? (
-            <div className="py-10 text-center text-neutral-400">
+            <div className="py-10 text-center text-[#9CA3AF]">
               No tokens found.
             </div>
           ) 
