@@ -84,12 +84,12 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
     <div className="w-full">
       
       {error && (
-        <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-          <p className="text-red-400 text-sm">{error}</p>
+        <div className="mb-4 p-2 bg-red-900/20 border border-red-500/30 rounded-lg">
+          <p className="text-red-400 text-xs">{error}</p>
         </div>
       )}
 
-      <div className="overflow-y-auto max-h-96">
+      <div className="overflow-y-auto max-h-196 pb-25">
         <table className="w-full text-xs">
         <thead>
           <tr className="text-neutral-400 border-b border-neutral-800">

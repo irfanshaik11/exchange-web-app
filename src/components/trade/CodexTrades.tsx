@@ -157,7 +157,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-18">
         <table className="w-full text-xs">
         <thead className="sticky top-0 bg-gray-900 z-10">
           <tr className="text-neutral-400 border-b border-neutral-800">

@@ -417,12 +417,12 @@ export default function TradePage() {
           </div>
         )}
 
-        <div className="flex flex-1 w-full max-w-full overflow-hidden">
+        <div className="flex flex-1 w-full max-w-full overflow-hidden" style={{ minHeight: 0 }}>
           {/* LEFT: chart + tables */}
           <div
             ref={containerRef}
             className="flex-1 min-w-0 max-w-full flex flex-col pb-0"
-            style={{ borderRight: `1px solid ${AX.border}` }}
+            style={{ borderRight: `1px solid ${AX.border}`, minHeight: 0 }}
           >
             {/* TOP pane - Chart in top left */}
             <div className="flex-shrink-0 flex flex-col" style={{ height: topPanePx }}>
@@ -497,9 +497,9 @@ export default function TradePage() {
             </div>
 
             {/* BOTTOM pane (tabs + tables) */}
-            <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col">
+            <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col overflow-y-auto">
               <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
-              <div className="flex-1 min-h-0">
+              <div className="flex-1 min-h-0 overflow-y-auto">
                 {selectedTab === "Trades" && (
                   <CodexTrades token={correctTokenData || displayToken} initialTrades={initialTradeData?.trades || []} />
                 )}
@@ -529,7 +529,7 @@ export default function TradePage() {
           </div>
 
           {/* RIGHT: action panel */}
-          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:block">
+          <div className="flex-shrink-0 min-w-[260px] basis-[280px] md:basis-[310px] lg:basis-[330px] hidden lg:flex flex-col overflow-y-auto h-full">
             <TradeActionPanel
               token={displayToken}
               tradeParams={tradeParams}

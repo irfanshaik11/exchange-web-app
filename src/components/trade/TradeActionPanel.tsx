@@ -905,8 +905,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   return (
     <div
-      className="flex h-full flex-col text-[12px] leading-tight"
-      style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial' }}
+      className="flex flex-col text-[12px] leading-tight"
+      style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial', paddingBottom: '100px' }}
     >
       {/* ===== A. Time buttons ===== */}
       <div className="px-3 pt-2 pb-2 border-b border-[#2A2B33]">
