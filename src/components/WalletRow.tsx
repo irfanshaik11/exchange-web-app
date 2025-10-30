@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { Wallet } from '~/utils/functions';
 import type { WatchWallet, WalletEvent } from '~/utils/walletTracking';
-import { FaBell, FaChartBar, FaTrash } from 'react-icons/fa';
+import { toggleWalletNotifications } from '~/utils/walletTracking';
+import { FaBell, FaBellSlash, FaChartBar, FaTrash } from 'react-icons/fa';
 
 interface WalletRowProps {
   wallet: Wallet;
@@ -10,6 +11,7 @@ interface WalletRowProps {
   balance?: number;
   onRemove: (address: string) => void;
   onClick?: (wallet: Wallet) => void;
+  onNotificationToggle?: (address: string, enabled: boolean) => void;
 }
 
 function Tooltip({ children, label }: { children: React.ReactNode; label: string }) {
@@ -35,8 +37,19 @@ function Tooltip({ children, label }: { children: React.ReactNode; label: string
   );
 }
 
-export default function WalletRow({ wallet, watchedWallet, events = [], balance, onRemove, onClick }: WalletRowProps) {
+export default function WalletRow({ wallet, watchedWallet, events = [], balance, onRemove, onClick, onNotificationToggle }: WalletRowProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [notificationsEnabled, setNotificationsEnabled] = React.useState(
+    watchedWallet?.notificationsEnabled ?? true
+  );
+  const [isTogglingNotification, setIsTogglingNotification] = React.useState(false);
+  
+  // Update local state when watchedWallet changes
+  useEffect(() => {
+    if (watchedWallet?.notificationsEnabled !== undefined) {
+      setNotificationsEnabled(watchedWallet.notificationsEnabled);
+    }
+  }, [watchedWallet?.notificationsEnabled]);
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -52,6 +65,36 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
   const handleCancelDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowDeleteConfirm(false);
+  };
+
+  const handleToggleNotifications = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (isTogglingNotification) return; // Prevent double-clicks
+    
+    try {
+      setIsTogglingNotification(true);
+      const newState = !notificationsEnabled;
+      
+      // Optimistically update UI
+      setNotificationsEnabled(newState);
+      
+      // Call backend API with ownerId from watchedWallet
+      await toggleWalletNotifications(
+        wallet.address, 
+        newState, 
+        watchedWallet?.ownerId || undefined
+      );
+      
+      // Notify parent component if callback provided
+      onNotificationToggle?.(wallet.address, newState);
+    } catch (error) {
+      // Revert on error
+      setNotificationsEnabled(!notificationsEnabled);
+      console.error('Failed to toggle notifications:', error);
+    } finally {
+      setIsTogglingNotification(false);
+    }
   };
 
   // Helper to format date or relative time
@@ -80,8 +123,7 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
   return (
     <tr
       key={wallet.address}
-      className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200 cursor-pointer"
-      onClick={() => onClick && onClick(wallet)}
+      className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200"
     >
       <td className="py-3 px-2">
         <div className="flex w-full items-center gap-4">
@@ -98,25 +140,36 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
                 : <span className="text-neutral-500">-</span>}
           </span>
           <div className="w-40 flex items-center gap-2">
-            <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors" title="Alert" onClick={e => e.stopPropagation()}>
-              <FaBell className="text-sm text-emerald-300" />
-            </button>
+						<Tooltip label={notificationsEnabled ? "Notifications ON" : "Notifications OFF"}>
+							<button 
+								className={`p-1.5 rounded-md hover:bg-neutral-800 transition-all duration-200 ${isTogglingNotification ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+								title={notificationsEnabled ? "Click to disable notifications" : "Click to enable notifications"}
+								onClick={handleToggleNotifications}
+								disabled={isTogglingNotification}
+							>
+								{notificationsEnabled ? (
+									<FaBell className="text-sm text-emerald-400" />
+								) : (
+									<FaBellSlash className="text-sm text-neutral-500" />
+								)}
+							</button>
+						</Tooltip>
             <Tooltip label="Scan Address">
-              <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors" title="Scan" onClick={e => e.stopPropagation()}>
+              <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors cursor-pointer" title="Scan" onClick={() => onClick && onClick(wallet)}>
                 <FaChartBar className="text-sm text-blue-300" />
               </button>
             </Tooltip>
             {showDeleteConfirm ? (
               <div className="flex gap-1">
                 <button 
-                  className="px-2 py-1 rounded-md bg-red-500 hover:bg-red-600 transition-colors text-white text-xs font-medium" 
+                  className="px-2 py-1 rounded-md bg-red-500 hover:bg-red-600 transition-colors text-white text-xs font-medium cursor-pointer" 
                   title="Confirm Delete"
                   onClick={handleConfirmDelete}
                 >
                   ✓
                 </button>
                 <button 
-                  className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 transition-colors text-white text-xs font-medium" 
+                  className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 transition-colors text-white text-xs font-medium cursor-pointer" 
                   title="Cancel"
                   onClick={handleCancelDelete}
                 >
@@ -125,7 +178,7 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
               </div>
             ) : (
               <button 
-                className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors" 
+                className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors cursor-pointer"
                 title="Delete" 
                 onClick={handleDeleteClick}
               >

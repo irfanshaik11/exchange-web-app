@@ -9,7 +9,7 @@ import { AiOutlineCalendar } from 'react-icons/ai';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { batchFetchTokenMetadata } from '~/utils/tokenMetadata';
-import { getWalletHistory } from '~/utils/walletTracking';
+import { getWalletSolBalance, getWalletTransactions, getWalletHistory } from '~/utils/walletTracking';
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -92,32 +92,15 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     if (!wallet?.address) return;
     setLoading(true);
     setError(null);
-    fetch('https://api.mainnet-beta.solana.com', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getBalance',
-        params: [wallet.address]
-      })
-    })
-      .then(async res => {
-        if (!res.ok) throw new Error('Failed to fetch balance');
-        const text = await res.text();
-        if (!text) throw new Error('Empty response for balance');
-        return JSON.parse(text);
-      })
-      .then(data => setBalance(data?.result?.value ? data.result.value / 1e9 : 0))
+    
+    // Fetch SOL balance via secure backend endpoint
+    getWalletSolBalance(wallet.address)
+      .then(balance => setBalance(balance))
       .catch(() => setBalance(null));
-    fetch(`https://public-api.solscan.io/account/transactions?address=${wallet.address}&limit=10`)
-      .then(async res => {
-        if (!res.ok) throw new Error('Failed to fetch activity');
-        const text = await res.text();
-        if (!text) throw new Error('Empty response for activity');
-        return JSON.parse(text);
-      })
-      .then(data => Array.isArray(data) ? setActivity(data) : setActivity([]))
+    
+    // Fetch recent transactions via backend (using Helius)
+    getWalletTransactions(wallet.address, 10)
+      .then(transactions => setActivity(transactions))
       .catch(() => setActivity([]))
       .finally(() => setLoading(false));
   }, [wallet.address]);
@@ -141,30 +124,19 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     if (!wallet.address || !token || !token.pair_address) return;
     setTokenBalanceLoading(true);
     setTokenBalanceError(null);
-    // 1. Get token accounts by owner
-    fetch('https://api.mainnet-beta.solana.com', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'getTokenAccountsByOwner',
-        params: [
-          wallet.address,
-          { mint: token.pair_address },
-          { encoding: 'jsonParsed' }
-        ]
-      })
-    })
+    
+    // Get token accounts by owner via secure backend endpoint
+    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+    
+    fetch(`${backendUrl}/api/token-accounts/${encodeURIComponent(wallet.address)}?mint=${encodeURIComponent(token.pair_address)}`)
       .then(res => res.json())
       .then(data => {
-        const accounts = data?.result?.value;
-        if (!accounts || accounts.length === 0) {
+        if (!data.ok || !data.accounts || data.accounts.length === 0) {
           setTokenBalance(0);
           return;
         }
         // Use the first account (most users have one)
-        const amount = accounts[0]?.account?.data?.parsed?.info?.tokenAmount?.uiAmount;
+        const amount = data.accounts[0]?.account?.data?.parsed?.info?.tokenAmount?.uiAmount;
         setTokenBalance(typeof amount === 'number' ? amount : 0);
       })
       .catch(() => setTokenBalanceError('Failed to fetch token balance'))
@@ -178,6 +150,13 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     setHistoryLoading(true);
     setHistoryError(null);
     
+    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+    
+    fetch(`${backendUrl}/api/history?wallet=${wallet.address}&limit=100`)
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch history');
+        return res.json();
+      })
     getWalletHistory(wallet.address, 100)
       .then(data => {
         console.log('[History] Received data:', data);
@@ -449,7 +428,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
             )}
           </div>
           {/* Tab Content Area */}
-          <div className="flex-1 overflow-auto px-8 py-4">
+          <div className="flex-1 overflow-auto px-8">
             {tab === 'History' && (
               <div className="w-full h-full">
                 {historyLoading ? (

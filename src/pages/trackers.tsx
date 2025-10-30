@@ -16,13 +16,12 @@ import {
   getTrackedWallets,
   getWalletHistory,
   getWalletSolBalance,
-  createWalletTrackerWebSocket,
   type WatchWallet,
   type WalletEvent,
   type TradeEvent,
-  type WalletTrackerWebSocket,
 } from "~/utils/walletTracking";
 import { useUser } from "../components/UserContext";
+import { useWalletTracker } from "../components/WalletTrackerContext";
 import { batchFetchTokenMetadata } from "~/utils/tokenMetadata";
 
 const TABS = ["Wallet Manager", "Live Trades"];
@@ -97,6 +96,7 @@ const EMOJIS = [
 
 export default function TrackersPage() {
   const { user } = useUser();
+  const { wsConnected, latestTrades, watchedWallets: globalWatchedWallets, refreshWatchedWallets } = useWalletTracker();
   const [activeTab, setActiveTab] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -112,9 +112,6 @@ export default function TrackersPage() {
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [walletEvents, setWalletEvents] = useState<Record<string, WalletEvent[]>>({});
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
-  const [latestTrades, setLatestTrades] = useState<TradeEvent[]>([]);
-  const [wsConnection, setWsConnection] = useState<WalletTrackerWebSocket | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, { symbol: string | null; name: string | null }>>(new Map());
 
@@ -138,6 +135,9 @@ export default function TrackersPage() {
     try {
       // Fetch wallets from backend
       const tracked = await getTrackedWallets(user?.id);
+      
+      // Also refresh global watched wallets
+      await refreshWatchedWallets();
       
       // Add mock wallets for testing if no wallets exist
       // const mockWallets = tracked.length === 0 ? [
@@ -208,128 +208,10 @@ export default function TrackersPage() {
     }
   }, [activeTab]);
 
-  // WebSocket connection for real-time wallet updates
+  // Sync local watchedWallets state with global context
   useEffect(() => {
-    let connection: WalletTrackerWebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
-
-    const handleTradeEvent = async (event: TradeEvent) => {
-      console.log('Trade event received:', event);
-      
-      // Add to latest trades list (keep last 50)
-      setLatestTrades(prev => [event, ...prev].slice(0, 50));
-      
-      // Show toast notification
-      const wallet = walletsRef.current.find(w => w.address === event.wallet);
-      const walletName = wallet?.emoji ? `${wallet.emoji} ${wallet.name}` : (wallet?.name || event.wallet.slice(0, 4) + '...');
-      const side = event.side === 'buy' ? 'bought' : 'sold';
-      
-      // Get token name - fetch from metadata if not in event
-      let tokenName = event.symbol || event.name;
-      if (!tokenName) {
-        const metadata = tokenMetadata.get(event.mint);
-        if (metadata?.symbol) {
-          tokenName = metadata.symbol;
-        } else {
-          // Fetch metadata if not cached
-          try {
-            const { fetchTokenMetadata } = await import('~/utils/tokenMetadata');
-            const meta = await fetchTokenMetadata(event.mint);
-            tokenName = meta.symbol || event.mint.slice(0, 8) + '...';
-            // Update metadata state
-            setTokenMetadata(prev => {
-              const updated = new Map(prev);
-              updated.set(event.mint, meta);
-              return updated;
-            });
-          } catch (err) {
-            tokenName = event.mint.slice(0, 8) + '...';
-          }
-        }
-      }
-      
-      // Format SOL amount
-      let amountDisplay = '';
-      if (event.sol_spent !== null && event.sol_spent !== undefined) {
-        const solAmount = Math.abs(event.sol_spent);
-        if (solAmount >= 1) {
-          amountDisplay = `${solAmount.toFixed(2)} SOL`;
-        } else if (solAmount >= 0.01) {
-          amountDisplay = `${solAmount.toFixed(3)} SOL`;
-        } else {
-          amountDisplay = `${solAmount.toFixed(4)} SOL`;
-        }
-      } else {
-        // Fallback to showing just the action if no SOL amount
-        amountDisplay = '';
-      }
-      
-      setToast(`${walletName} ${side} ${tokenName}${amountDisplay ? ` for ${amountDisplay}` : ''}`);
-      setTimeout(() => setToast(""), 4000);
-    };
-
-    const handleConnect = () => {
-      console.log('WebSocket connected successfully');
-      setWsConnected(true);
-      
-      // Subscribe to all tracked wallets after connection is established
-      if (wallets.length > 0 && connection) {
-        // Small delay to ensure WebSocket is fully ready
-        setTimeout(() => {
-          if (connection?.ws.readyState === WebSocket.OPEN) {
-            const addresses = wallets.map(w => w.address);
-            connection.subscribe(addresses);
-            console.log('Subscribed to wallets:', addresses);
-          }
-        }, 100);
-      }
-    };
-
-    const handleDisconnect = () => {
-      console.log('WebSocket disconnected, will attempt to reconnect...');
-      setWsConnected(false);
-      
-      // Attempt to reconnect after 3 seconds
-      reconnectTimeout = setTimeout(() => {
-        console.log('Attempting to reconnect WebSocket...');
-        initializeWebSocket();
-      }, 3000);
-    };
-
-    const initializeWebSocket = () => {
-      try {
-        console.log('Initializing WebSocket connection...');
-        connection = createWalletTrackerWebSocket(
-          handleTradeEvent,
-          handleConnect,
-          handleDisconnect
-        );
-        setWsConnection(connection);
-      } catch (error) {
-        console.error('Failed to initialize WebSocket:', error);
-        setWsConnected(false);
-        
-        // Retry after 5 seconds
-        reconnectTimeout = setTimeout(() => {
-          console.log('Retrying WebSocket connection...');
-          initializeWebSocket();
-        }, 5000);
-      }
-    };
-
-    // Initialize on mount
-    initializeWebSocket();
-
-    return () => {
-      console.log('Cleaning up WebSocket connection...');
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-      }
-      if (connection) {
-        connection.close();
-      }
-    };
-  }, []); // Only run once on mount
+    setWatchedWallets(globalWatchedWallets);
+  }, [globalWatchedWallets]);
 
   // Fetch token metadata for live trades
   useEffect(() => {
@@ -364,23 +246,6 @@ export default function TrackersPage() {
       });
   }, [latestTrades]);
 
-  // Subscribe to new wallets when wallet list changes
-  useEffect(() => {
-    if (wsConnection && wsConnected && wallets.length > 0) {
-      // Wait a bit to ensure connection is stable
-      const timer = setTimeout(() => {
-        if (wsConnection.ws.readyState === WebSocket.OPEN) {
-          const addresses = wallets.map(w => w.address);
-          wsConnection.subscribe(addresses);
-          console.log('Updated wallet subscriptions:', addresses);
-        } else {
-          console.warn('WebSocket not ready, skipping subscription update');
-        }
-      }, 100);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [wallets, wsConnection, wsConnected]);
 
   // Handle sidebar resizing
   useEffect(() => {
@@ -415,15 +280,10 @@ export default function TrackersPage() {
       // Add to backend
       await addTrackedWallet(address, name, user?.id);
       
-      // Reload from backend
+      // Reload from backend (this will also refresh global watched wallets)
       await loadWalletsFromBackend();
       
       setShowAddWalletModal(false);
-      
-      // Subscribe to WebSocket
-      if (wsConnection && wsConnected) {
-        wsConnection.subscribe([address]);
-      }
       
       setToast("Wallet added!");
       setTimeout(() => setToast(""), 3000);
@@ -438,22 +298,12 @@ export default function TrackersPage() {
       if (addressToRemove === "all") {
         // Remove all wallets
         await Promise.all(wallets.map(w => removeTrackedWallet(w.address, user?.id)));
-        
-        // Unsubscribe from WebSocket
-        if (wsConnection && wsConnected) {
-          wsConnection.unsubscribe(wallets.map(w => w.address));
-        }
       } else {
         // Remove single wallet
         await removeTrackedWallet(addressToRemove, user?.id);
-        
-        // Unsubscribe from WebSocket
-        if (wsConnection && wsConnected) {
-          wsConnection.unsubscribe([addressToRemove]);
-        }
       }
       
-      // Reload from backend
+      // Reload from backend (this will also refresh global watched wallets)
       await loadWalletsFromBackend();
       
       setToast("Wallet removed");
@@ -477,10 +327,14 @@ export default function TrackersPage() {
       wallet.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  // Export: copy addresses to clipboard and show toast
+  // Export: copy wallet data (name and address) to clipboard as JSON
   const handleExportAddresses = () => {
-    const addresses = wallets.map((w) => w.address).join(", ");
-    navigator.clipboard.writeText(addresses);
+    const walletsData = wallets.map((w) => ({
+      name: w.name || 'Unnamed Wallet',
+      address: w.address,
+    }));
+    const jsonString = JSON.stringify(walletsData, null, 2);
+    navigator.clipboard.writeText(jsonString);
     setToast("Wallets copied to clipboard");
     setTimeout(() => setToast(""), 2000);
   };
@@ -524,6 +378,7 @@ export default function TrackersPage() {
       <Head>
         <title>Trackers | Interstate Memeboard</title>
       </Head>
+			<div className="mb-20">
       <div className="flex min-h-screen flex-col bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-neutral-100">
         <Header />
         <div className="w-full flex-grow">
@@ -811,11 +666,6 @@ export default function TrackersPage() {
               try {
                 await addTrackedWallet(wallet.address, wallet.name, user?.id);
                 successCount++;
-                
-                // Subscribe to websocket
-                if (wsConnection && wsConnected) {
-                  wsConnection.subscribe([wallet.address]);
-                }
               } catch (error: any) {
                 if (error.message?.includes('already exists')) {
                   successCount++;
@@ -850,8 +700,37 @@ export default function TrackersPage() {
         />
       )}
 
-      {/* Footer */}
+      {/* Bottom Navigation/Footer */}
+      {/* <div className="fixed bottom-0 left-0 z-40 flex w-full items-center justify-between border-t border-emerald-950/50 bg-neutral-900/80 px-6 py-3 text-xs backdrop-blur-md">
+        <div className="flex gap-6">
+          <button className="flex items-center gap-2 font-semibold text-emerald-400 transition-colors duration-300 hover:text-emerald-300">
+            <span className="text-lg">📊</span> Wallet Tracker
+          </button>
+        </div>
+        <div className="flex items-center gap-6 text-neutral-400">
+          <span className="flex items-center gap-2">
+            <span className="text-emerald-400">💰</span> $106.8K
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-blue-400">💎</span> $2581
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-green-400">💸</span> $152.42
+          </span>
+          <span className="flex items-center gap-2">
+            <span className={wsConnected ? "text-green-400" : "text-red-400"}>🔗</span> 
+            {wsConnected ? "Tracker Connected" : "Tracker Disconnected"}
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-neutral-400">🌐</span> US-W
+          </span>
+          <span className="cursor-pointer text-neutral-400 transition-colors duration-300 hover:text-white">
+            Docs
+          </span>
+        </div>
+      </div> */}
       <Footer />
+			</div>
     </>
   );
 }

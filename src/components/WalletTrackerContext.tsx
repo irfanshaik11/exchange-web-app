@@ -1,0 +1,250 @@
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import toast from 'react-hot-toast';
+import { 
+  createWalletTrackerWebSocket, 
+  type WalletTrackerWebSocket, 
+  type TradeEvent,
+  getTrackedWallets,
+  type WatchWallet
+} from '~/utils/walletTracking';
+import type { Wallet } from '~/utils/functions';
+import { useUser } from './UserContext';
+
+interface WalletTrackerContextValue {
+  wsConnected: boolean;
+  latestTrades: TradeEvent[];
+  watchedWallets: WatchWallet[];
+  refreshWatchedWallets: () => Promise<void>;
+}
+
+const WalletTrackerContext = createContext<WalletTrackerContextValue | undefined>(undefined);
+
+export function useWalletTracker() {
+  const context = useContext(WalletTrackerContext);
+  if (!context) {
+    throw new Error('useWalletTracker must be used within WalletTrackerProvider');
+  }
+  return context;
+}
+
+export function WalletTrackerProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useUser();
+  const [wsConnected, setWsConnected] = useState(false);
+  const [latestTrades, setLatestTrades] = useState<TradeEvent[]>([]);
+  const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
+  const [wsConnection, setWsConnection] = useState<WalletTrackerWebSocket | null>(null);
+  const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(new Map());
+  
+  const watchedWalletsRef = useRef<WatchWallet[]>([]);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    watchedWalletsRef.current = watchedWallets;
+  }, [watchedWallets]);
+
+  // Load watched wallets
+  const refreshWatchedWallets = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const wallets = await getTrackedWallets(user.id);
+      setWatchedWallets(wallets);
+    } catch (error) {
+      console.error('Failed to fetch watched wallets:', error);
+    }
+  };
+
+  // Initial load of watched wallets
+  useEffect(() => {
+    if (user?.id) {
+      refreshWatchedWallets();
+    }
+  }, [user?.id]);
+
+  // WebSocket connection for real-time wallet updates
+  useEffect(() => {
+    if (!user?.id || watchedWallets.length === 0) {
+      // Close connection if no wallets to watch
+      if (wsConnection) {
+        wsConnection.close();
+        setWsConnection(null);
+        setWsConnected(false);
+      }
+      return;
+    }
+
+    let connection: WalletTrackerWebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+
+    const handleTradeEvent = async (event: TradeEvent) => {
+      console.log('🔔 Trade event received:', event);
+      
+      // Add to latest trades list (keep last 50)
+      setLatestTrades(prev => [event, ...prev].slice(0, 50));
+      
+      // Find wallet info for better notification
+      const wallet = watchedWalletsRef.current.find(w => w.address === event.wallet);
+      const walletName = wallet?.walletName || event.wallet.slice(0, 8) + '...';
+      const side = event.side === 'buy' ? 'bought' : 'sold';
+      const sideColor = event.side === 'buy' ? '#10b981' : '#ef4444';
+      
+      // Get token name - fetch from metadata if not in event
+      let tokenName = event.symbol || event.name;
+      if (!tokenName) {
+        const metadata = tokenMetadata.get(event.mint);
+        if (metadata?.symbol) {
+          tokenName = metadata.symbol;
+        } else {
+          // Fetch metadata if not cached
+          try {
+            const { fetchTokenMetadata } = await import('~/utils/tokenMetadata');
+            const meta = await fetchTokenMetadata(event.mint);
+            tokenName = meta.symbol || event.mint.slice(0, 8) + '...';
+            // Update metadata state
+            setTokenMetadata(prev => {
+              const updated = new Map(prev);
+              updated.set(event.mint, meta);
+              return updated;
+            });
+          } catch (err) {
+            tokenName = event.mint.slice(0, 8) + '...';
+          }
+        }
+      }
+      
+      // Format SOL amount
+      let amountDisplay = '';
+      if (event.sol_spent !== null && event.sol_spent !== undefined) {
+        const solAmount = Math.abs(event.sol_spent);
+        if (solAmount >= 1) {
+          amountDisplay = `${solAmount.toFixed(2)} SOL`;
+        } else if (solAmount >= 0.01) {
+          amountDisplay = `${solAmount.toFixed(3)} SOL`;
+        } else {
+          amountDisplay = `${solAmount.toFixed(4)} SOL`;
+        }
+      }
+      
+      // Show toast notification with custom styling
+      toast.custom(
+        (t) => (
+          <div
+            className={`${
+              t.visible ? 'animate-enter' : 'animate-leave'
+            } max-w-md w-full bg-neutral-900 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
+          >
+            <div className="flex-1 w-0 p-4">
+              <div className="flex items-start">
+                <div className="flex-shrink-0 pt-0.5">
+                  <div 
+                    className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold"
+                    style={{ backgroundColor: sideColor }}
+                  >
+                    {event.side === 'buy' ? '📈' : '📉'}
+                  </div>
+                </div>
+                <div className="ml-3 flex-1">
+                  <p className="text-sm font-medium text-white">
+                    {walletName}
+                  </p>
+                  <p className="mt-1 text-sm text-gray-300">
+                    {side} <span className="font-semibold">{tokenName}</span>
+                    {amountDisplay ? ` for ${amountDisplay}` : ''}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex border-l border-gray-700">
+              <button
+                onClick={() => toast.dismiss(t.id)}
+                className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-gray-400 hover:text-gray-200 focus:outline-none"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ),
+        { duration: 5000, position: 'top-right' }
+      );
+    };
+
+    const handleConnect = () => {
+      console.log('✅ WebSocket connected successfully');
+      setWsConnected(true);
+      
+      // Subscribe to all tracked wallets after connection is established
+      if (watchedWallets.length > 0 && connection) {
+        // Small delay to ensure WebSocket is fully ready
+        setTimeout(() => {
+          if (connection?.ws.readyState === WebSocket.OPEN) {
+            const addresses = watchedWallets.map(w => w.address);
+            connection.subscribe(addresses);
+            console.log('📡 Subscribed to wallets:', addresses.map(a => a.slice(0, 8) + '...'));
+          }
+        }, 100);
+      }
+    };
+
+    const handleDisconnect = () => {
+      console.log('⚠️ WebSocket disconnected, will attempt to reconnect...');
+      setWsConnected(false);
+      
+      // Attempt to reconnect after 3 seconds
+      reconnectTimeout = setTimeout(() => {
+        console.log('🔄 Attempting to reconnect WebSocket...');
+        initializeWebSocket();
+      }, 3000);
+    };
+
+    const initializeWebSocket = () => {
+      try {
+        console.log('🔌 Initializing WebSocket connection...');
+        connection = createWalletTrackerWebSocket(
+          handleTradeEvent,
+          handleConnect,
+          handleDisconnect
+        );
+        setWsConnection(connection);
+      } catch (error) {
+        console.error('❌ Failed to initialize WebSocket:', error);
+      }
+    };
+
+    // Initialize WebSocket connection
+    initializeWebSocket();
+
+    // Cleanup on unmount or when wallets change
+    return () => {
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      if (connection) {
+        console.log('🔌 Closing WebSocket connection...');
+        connection.close();
+      }
+    };
+  }, [user?.id, watchedWallets.length]); // Re-initialize when user changes or wallet count changes
+
+  // Update subscriptions when wallet list changes (without recreating connection)
+  useEffect(() => {
+    if (wsConnection && wsConnected && watchedWallets.length > 0) {
+      const addresses = watchedWallets.map(w => w.address);
+      console.log('🔄 Updating wallet subscriptions:', addresses.map(a => a.slice(0, 8) + '...'));
+      wsConnection.subscribe(addresses);
+    }
+  }, [watchedWallets, wsConnected, wsConnection]);
+
+  const value: WalletTrackerContextValue = {
+    wsConnected,
+    latestTrades,
+    watchedWallets,
+    refreshWatchedWallets,
+  };
+
+  return (
+    <WalletTrackerContext.Provider value={value}>
+      {children}
+    </WalletTrackerContext.Provider>
+  );
+}
+
