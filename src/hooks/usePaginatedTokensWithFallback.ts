@@ -67,6 +67,7 @@ export default function usePaginatedTokensWithFallback({
   const reconnectAttemptRef = useRef(0);
   const wsConnectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const maxLoadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const lastStableDataRef = useRef<any[] | null>(null);
   const lastTimeframeRef = useRef<string | undefined>(timeframe);
@@ -173,6 +174,11 @@ export default function usePaginatedTokensWithFallback({
       }
       // CRITICAL: Set data and loading together - this prevents "No tokens found" from showing
       // when data arrives but loading was set to false before data was set
+      // Also clear max loading timeout since we got data
+      if (maxLoadingTimeoutRef.current) {
+        clearTimeout(maxLoadingTimeoutRef.current);
+        maxLoadingTimeoutRef.current = null;
+      }
       return { ...prev, data: stable, loading: false, error: null };
     });
   }, [stabilizeList, timeframe]);
@@ -180,6 +186,13 @@ export default function usePaginatedTokensWithFallback({
   // Polling fallback function
   const startPolling = useCallback(() => {
     // console.log('🔄 Starting polling fallback with timeframe:', timeframe);
+    
+    // Don't start polling if already polling
+    if (isPollingRef.current || pollIntervalRef.current) {
+      // console.log('🔄 Already polling, skipping');
+      return;
+    }
+    
     // Ensure loading state is true when starting polling (if no data yet)
     // This prevents "No tokens found" from showing prematurely
     setState(prev => {
@@ -401,11 +414,34 @@ export default function usePaginatedTokensWithFallback({
       abortControllerRef.current = null;
     }
     
+    // Clear previous max loading timeout
+    if (maxLoadingTimeoutRef.current) {
+      clearTimeout(maxLoadingTimeoutRef.current);
+      maxLoadingTimeoutRef.current = null;
+    }
+    
     // Update current request timeframe IMMEDIATELY to track which timeframe is being requested
     currentRequestTimeframeRef.current = timeframe;
     
     // Clear existing data when timeframe changes to prevent stale data display
     setState(prev => ({ ...prev, loading: true, isConnected: false, error: null, usingFallback: false, data: [] }));
+    
+    // Set maximum loading timeout - prevents infinite loading in production
+    // After 15 seconds, if still no data, set loading to false so UI can show retry/error state
+    maxLoadingTimeoutRef.current = setTimeout(() => {
+      setState(prev => {
+        // Only set loading to false if we still have no data after 15 seconds
+        if (prev.data.length === 0 && prev.loading) {
+          console.warn('⏰ Maximum loading timeout reached (15s) - no data received yet');
+          return {
+            ...prev,
+            loading: false,
+            error: prev.error || 'Loading timeout - please refresh or try again'
+          };
+        }
+        return prev;
+      });
+    }, 15000); // 15 second max loading time
     
     // Clear stable data reference and STOP any existing polling when timeframe changes
     if (lastTimeframeRef.current !== timeframe) {
@@ -421,7 +457,9 @@ export default function usePaginatedTokensWithFallback({
 
     const connectWebSocket = () => {
       try {
-        clearPolling(); // Stop polling when attempting WebSocket
+        // PRODUCTION FIX: Don't clear polling - let it run in parallel with WebSocket
+        // This ensures data loads even if WebSocket fails in production
+        // clearPolling(); // Disabled - let polling continue as backup
 
         const queryParams = new URLSearchParams({
           filter: filter || 'new',
@@ -448,7 +486,9 @@ export default function usePaginatedTokensWithFallback({
             console.log('⏰ WebSocket connection timeout, falling back to polling');
             setState(prev => ({ ...prev, usingFallback: true, loading: true, error: null }));
             ws.close();
-            handleReconnect();
+            // PRODUCTION FIX: Start polling instead of trying to reconnect WebSocket
+            // This ensures data loads in production even if WebSocket is blocked/fails
+            startPolling();
           }
         }, 3000); // Reduced from 5s to 3s for faster fallback
 
@@ -647,24 +687,20 @@ export default function usePaginatedTokensWithFallback({
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
     };
 
-    // Try WebSocket first, but also start polling as a parallel fallback with a short delay
-    // This ensures we don't show "No tokens found" while waiting for WebSocket
+    // PRODUCTION FIX: Start polling immediately in parallel with WebSocket attempt
+    // This ensures data loads in production even if WebSocket is blocked/fails
+    // Don't wait for WebSocket - start polling right away as a parallel backup
+    startPolling();
+    
+    // Also try WebSocket, but don't wait for it
     connectWebSocket();
     
-    // Start polling after a short delay if WebSocket hasn't provided data
-    // This creates a parallel fallback to ensure tokens show up quickly
-    const fallbackTimeout = setTimeout(() => {
-      // Check current state via refs to avoid stale closure
-      const hasData = lastStableDataRef.current && lastStableDataRef.current.length > 0;
-      if (!hasData && !isPollingRef.current && !state.isConnected) {
-        console.log('⏰ Starting parallel HTTP polling fallback (WebSocket slow/no response)');
-        startPolling();
-      }
-    }, 2500); // Start polling after 2.5s if no WebSocket data yet
-    
     return () => {
-      // Clear fallback timeout if component unmounts
-      clearTimeout(fallbackTimeout);
+      // Clear max loading timeout
+      if (maxLoadingTimeoutRef.current) {
+        clearTimeout(maxLoadingTimeoutRef.current);
+        maxLoadingTimeoutRef.current = null;
+      }
       // Abort any in-flight requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();

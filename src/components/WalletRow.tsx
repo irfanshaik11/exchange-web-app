@@ -39,17 +39,87 @@ function Tooltip({ children, label }: { children: React.ReactNode; label: string
 
 export default function WalletRow({ wallet, watchedWallet, events = [], balance, onRemove, onClick, onNotificationToggle }: WalletRowProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(
-    watchedWallet?.notificationsEnabled ?? true
-  );
+  
+  // Ref to track if we've loaded from localStorage (prevents backend from overriding)
+  const hasLoadedFromStorageRef = React.useRef(false);
+  
+  // Helper to get notification state from localStorage (source of truth)
+  const getNotificationStateFromStorage = (): boolean | null => {
+    if (typeof window !== 'undefined') {
+      const storageKey = `wallet_notifications_${wallet.address}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved !== null) {
+        try {
+          const parsed = JSON.parse(saved);
+          console.log(`✅ Found localStorage value for ${wallet.address}: ${parsed}`);
+          return parsed;
+        } catch {
+          // Invalid JSON, ignore
+          console.warn(`⚠️ Invalid localStorage value for ${wallet.address}`);
+        }
+      } else {
+        console.log(`❌ No localStorage value found for ${wallet.address}`);
+      }
+    }
+    return null;
+  };
+  
+  // Load initial state: ALWAYS prioritize localStorage first, then backend, then default
+  const getInitialNotificationState = (): boolean => {
+    const stored = getNotificationStateFromStorage();
+    if (stored !== null) {
+      hasLoadedFromStorageRef.current = true;
+      return stored; // localStorage is source of truth
+    }
+    // Fallback to watchedWallet state from backend, or default to true
+    return watchedWallet?.notificationsEnabled ?? true;
+  };
+  
+  const [notificationsEnabled, setNotificationsEnabled] = React.useState(getInitialNotificationState);
   const [isTogglingNotification, setIsTogglingNotification] = React.useState(false);
   
-  // Update local state when watchedWallet changes
+  // ALWAYS check localStorage FIRST - it takes absolute precedence
+  // This effect runs on mount and whenever wallet address changes
   useEffect(() => {
-    if (watchedWallet?.notificationsEnabled !== undefined) {
+    // Check localStorage first - this is the source of truth
+    const stored = getNotificationStateFromStorage();
+    if (stored !== null) {
+      // localStorage exists - use it ALWAYS (don't trust backend)
+      hasLoadedFromStorageRef.current = true;
+      console.log(`📖 [USE EFFECT] Loaded from localStorage: ${wallet.address} = ${stored}`);
+      setNotificationsEnabled(stored);
+      return; // Exit early - don't check backend
+    }
+    
+    // Only use backend value if:
+    // 1. No localStorage value exists AND
+    // 2. We haven't loaded from storage before AND
+    // 3. Backend has a value
+    if (!hasLoadedFromStorageRef.current && watchedWallet?.notificationsEnabled !== undefined) {
+      console.log(`📖 [USE EFFECT] No localStorage, using backend: ${wallet.address} = ${watchedWallet.notificationsEnabled}`);
       setNotificationsEnabled(watchedWallet.notificationsEnabled);
     }
-  }, [watchedWallet?.notificationsEnabled]);
+  }, [wallet.address]); // Only depend on wallet.address to avoid backend overrides
+  
+  // Separate effect to handle watchedWallet changes, but STILL prioritize localStorage
+  // This prevents backend updates from overriding user's localStorage preference
+  useEffect(() => {
+    // Always check localStorage first, even if watchedWallet changed
+    const stored = getNotificationStateFromStorage();
+    if (stored !== null) {
+      // localStorage takes precedence - always use it, ignore backend changes
+      hasLoadedFromStorageRef.current = true;
+      console.log(`🛡️ [BACKEND UPDATE] localStorage overrides backend change: ${wallet.address} = ${stored}`);
+      setNotificationsEnabled(stored);
+      return; // Exit - don't use backend value
+    }
+    
+    // If no localStorage and we haven't loaded from storage, use backend value
+    if (!hasLoadedFromStorageRef.current && watchedWallet?.notificationsEnabled !== undefined) {
+      console.log(`📖 [BACKEND UPDATE] Using backend value (no localStorage): ${wallet.address} = ${watchedWallet.notificationsEnabled}`);
+      setNotificationsEnabled(watchedWallet.notificationsEnabled);
+    }
+  }, [watchedWallet?.notificationsEnabled, wallet.address]); // Watch for backend changes
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -79,18 +149,52 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
       // Optimistically update UI
       setNotificationsEnabled(newState);
       
-      // Call backend API with ownerId from watchedWallet
-      await toggleWalletNotifications(
-        wallet.address, 
-        newState, 
-        watchedWallet?.ownerId || undefined
-      );
+      // CRITICAL: Save to localStorage IMMEDIATELY and SYNC (before API call)
+      // This is the source of truth and MUST persist
+      const storageKey = `wallet_notifications_${wallet.address}`;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(storageKey, JSON.stringify(newState));
+        // Force sync to disk (some browsers cache localStorage)
+        if ('sync' in localStorage && typeof (localStorage as any).sync === 'function') {
+          (localStorage as any).sync();
+        }
+        hasLoadedFromStorageRef.current = true; // Mark that we've saved to storage
+        console.log(`💾 [TOGGLE] Saved to localStorage: ${wallet.address} = ${newState}`);
+        
+        // Verify it was saved correctly
+        const verify = localStorage.getItem(storageKey);
+        if (verify !== JSON.stringify(newState)) {
+          console.error(`❌ [TOGGLE] localStorage save verification FAILED for ${wallet.address}`);
+        } else {
+          console.log(`✅ [TOGGLE] localStorage save verified for ${wallet.address}`);
+        }
+      }
+      
+      // Call backend API with ownerId from watchedWallet (non-blocking - localStorage is source of truth)
+      try {
+        await toggleWalletNotifications(
+          wallet.address, 
+          newState, 
+          watchedWallet?.ownerId || undefined
+        );
+        console.log(`✅ [TOGGLE] Backend updated successfully for ${wallet.address}`);
+      } catch (apiError) {
+        console.error(`⚠️ [TOGGLE] Backend update failed (but localStorage saved): ${wallet.address}`, apiError);
+        // Don't revert - localStorage is saved, that's what matters
+      }
       
       // Notify parent component if callback provided
       onNotificationToggle?.(wallet.address, newState);
     } catch (error) {
       // Revert on error
       setNotificationsEnabled(!notificationsEnabled);
+      // Remove from localStorage if there was a critical error
+      if (typeof window !== 'undefined') {
+        const storageKey = `wallet_notifications_${wallet.address}`;
+        localStorage.removeItem(storageKey);
+        hasLoadedFromStorageRef.current = false;
+        console.log(`❌ [TOGGLE] Removed localStorage entry due to error for: ${wallet.address}`);
+      }
       console.error('Failed to toggle notifications:', error);
     } finally {
       setIsTogglingNotification(false);
