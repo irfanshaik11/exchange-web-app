@@ -387,8 +387,18 @@ export default function usePaginatedTokensWithFallback({
     // Initial poll
     poll();
 
-    // Set up polling interval (reduced frequency to prevent flickering)
-    pollIntervalRef.current = setInterval(poll, 3000);
+    // Set up polling interval
+    // PRODUCTION OPTIMIZATION: Use shorter interval initially (1s) for faster first load
+    // This helps in production where WebSocket might be blocked and we need faster fallback
+    // After data is received, the interval will be increased to 3s (done via throttledSetData check)
+    pollIntervalRef.current = setInterval(() => {
+      poll();
+      // If we have data, switch to longer interval to reduce server load
+      if (lastStableDataRef.current && lastStableDataRef.current.length > 0) {
+        clearInterval(pollIntervalRef.current!);
+        pollIntervalRef.current = setInterval(poll, 3000);
+      }
+    }, 1000); // Start with 1s for faster initial production load
   }, [filter, order, offset, limit, timeframe, throttledSetData]);
 
   // Clear polling
