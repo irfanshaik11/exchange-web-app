@@ -1,22 +1,28 @@
 // src/pages/discover.tsx
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import InterstateTable from '../components/InterstateTable';
 import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
+import { usePumpPortalWebSocket } from '../hooks/usePumpPortalWebSocket';
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+
+// Wrapped SOL mint address - used to filter out quote tokens
+const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { toast } from "react-hot-toast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
+import { prefetchTradeData } from "~/utils/tokenCache";
 
 export type Timeframe = "5m" | "1h" | "6h" | "24h";
 
@@ -24,6 +30,7 @@ export type Timeframe = "5m" | "1h" | "6h" | "24h";
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
 export default function DiscoverPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'trending' | 'dex' | 'live'>('trending');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
@@ -78,9 +85,10 @@ export default function DiscoverPage() {
     let cover = cached?.cover;
     let avatar = cached?.avatar;
 
-    // First time we see this token, adopt current candidates
-    if (!cover && coverCandidate) cover = coverCandidate;
-    if (!avatar && avatarCandidate) avatar = avatarCandidate;
+    // Update cache if we have new candidates (this handles async image loading)
+    // If we have a new cover/avatar candidate, use it even if cached was undefined
+    if (coverCandidate && cover !== coverCandidate) cover = coverCandidate;
+    if (avatarCandidate && avatar !== avatarCandidate) avatar = avatarCandidate;
 
     if (id) {
       imageCacheRef.current.set(id, { cover, avatar });
@@ -139,6 +147,15 @@ export default function DiscoverPage() {
     timeframe: selectedTimeframe
   });
 
+  // PumpPortal WebSocket for live pump section
+  const {
+    tokens: pumpPortalTokens,
+    connected: pumpPortalConnected,
+    error: pumpPortalError,
+  } = usePumpPortalWebSocket({
+    enabled: activeTab === 'live', // Only connect when on live tab
+  });
+
   // Debug log to track timeframe changes
   // useEffect(() => {
   //   console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
@@ -153,12 +170,12 @@ export default function DiscoverPage() {
     console.log("📋 QUICK BUY DATA VERIFICATION - DISCOVER PAGE");
     console.log("=".repeat(80));
     
-    // Log full token object
-    console.log("\n📊 FULL TOKEN OBJECT:");
+    // Log full token object - compare with PumpLive
+    console.log("\n📊 [TRENDING] FULL TOKEN OBJECT:");
     console.log(JSON.stringify(token, null, 2));
     
-    // Log key token fields
-    console.log("\n🔑 KEY TOKEN FIELDS:");
+    // Log key token fields - compare with PumpLive
+    console.log("\n🔑 [TRENDING] KEY TOKEN FIELDS:");
     console.log("  mint:", token.mint);
     console.log("  symbol:", token.symbol);
     console.log("  name:", token.name);
@@ -251,8 +268,8 @@ export default function DiscoverPage() {
       console.log("\n📦 FULL SETTINGS OBJECT:");
       console.log(JSON.stringify(settings, null, 2));
       
-      // Build the complete payload
-      const payload = {
+      // Build the complete payload - exactly like PulseTable
+      const payload: any = {
         poolAddress: effectivePoolAddress,
         baseMint: token.mint,
         quoteMint: SOL_MINT_ADDRESS,
@@ -266,10 +283,14 @@ export default function DiscoverPage() {
         mevMode: settings.mevMode,
         autoFee: settings.autoFee || false,
         maxFee: settings.maxFee || 0,
-        rpc: settings.rpc,
         tokenName: token.name,
         tokenSymbol: token.symbol,
       };
+      
+      // Only include rpc if it exists (same as PulseTable)
+      if (settings.rpc) {
+        payload.rpc = settings.rpc;
+      }
       
       console.log("\n📤 COMPLETE PAYLOAD BEING SENT TO API:");
       console.log(JSON.stringify(payload, null, 2));
@@ -349,7 +370,18 @@ export default function DiscoverPage() {
       console.log("  Error Type:", e?.constructor?.name || typeof e);
       console.log("  Error Message:", e?.message || String(e));
       console.log("  Error Code:", e?.code || 'N/A');
-      console.log("  Full Error:", JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
+      console.log("  Error Details:", e?.details || 'N/A');
+      console.log("  Full Error Object:", e);
+      console.log("  Full Error JSON:", JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
+      
+      // Try to extract more details from the error
+      if (e?.response) {
+        console.log("  Response Status:", e.response.status);
+        console.log("  Response Body:", e.response.body);
+      }
+      if (e?.data) {
+        console.log("  Error Data:", e.data);
+      }
       
       logFn('Quick Buy error:', e);
 
@@ -519,16 +551,55 @@ export default function DiscoverPage() {
   useEffect(() => {
     if (allTokens && Array.isArray(allTokens)) {
       const newMap = new Map<string, TokenWithDexPaid>();
+      
       allTokens.forEach((token: any) => {
-        const key = token.pair_address || token.mint;
-        if (key) {
-          newMap.set(key, token as TokenWithDexPaid);
+        // CRITICAL: Filter out wrapped SOL tokens explicitly
+        if (!token || !token.mint || token.mint === WRAPPED_SOL_MINT) {
+          return;
+        }
+        
+        // Ensure we have valid token data (not quote tokens)
+        if (token.quoteMint === WRAPPED_SOL_MINT && !token.pair_address && !token.mint) {
+          return; // Skip if this looks like quote token data
+        }
+        
+        // Create a deep copy to avoid mutation issues
+        const tokenCopy = JSON.parse(JSON.stringify(token)) as TokenWithDexPaid;
+        
+        // Use a unique key: prefer pair_address, fallback to mint, but ensure uniqueness
+        const baseKey = tokenCopy.pair_address || tokenCopy.mint;
+        if (!baseKey || baseKey === WRAPPED_SOL_MINT) {
+          return; // Skip invalid keys
+        }
+        
+        // If key already exists, keep the one with pair_address (more complete data)
+        const existing = newMap.get(baseKey);
+        if (existing) {
+          // Prefer token with pair_address, or the one with more complete data
+          if (tokenCopy.pair_address && !existing.pair_address) {
+            newMap.set(baseKey, tokenCopy);
+          } else if (existing.pair_address && !tokenCopy.pair_address) {
+            // Keep existing
+            return;
+          } else {
+            // Both have or don't have pair_address - prefer the one with more data
+            const existingKeys = Object.keys(existing).length;
+            const newKeys = Object.keys(tokenCopy).length;
+            if (newKeys > existingKeys) {
+              newMap.set(baseKey, tokenCopy);
+            }
+          }
+        } else {
+          newMap.set(baseKey, tokenCopy);
         }
       });
+      
       tokenMapRef.current = newMap;
 
       const arr = Array.from(tokenMapRef.current.values());
-      setFilteredTokens(arr);
+      // Final safety check: filter out any wrapped SOL that might have slipped through
+      const filtered = arr.filter(t => t.mint !== WRAPPED_SOL_MINT);
+      setFilteredTokens(filtered);
     }
   }, [allTokens]);
 
@@ -536,9 +607,21 @@ export default function DiscoverPage() {
   useEffect(() => {
     if (activeTab === "trending") {
       const arr = Array.from(tokenMapRef.current.values());
-      const filtered = applyFilters(arr);
-      const sortedTokens = [...filtered];
+      
+      // Safety check: filter out wrapped SOL before processing
+      const safeArr = arr.filter(t => t && t.mint && t.mint !== WRAPPED_SOL_MINT);
+      
+      const filtered = applyFilters(safeArr);
+      
+      // Create deep copies to avoid mutation during sort
+      const sortedTokens = filtered.map(t => JSON.parse(JSON.stringify(t)));
+      
       sortedTokens.sort((a, b) => {
+        // Final safety check in sort
+        if (!a || !b || a.mint === WRAPPED_SOL_MINT || b.mint === WRAPPED_SOL_MINT) {
+          return 0;
+        }
+        
         let aVal = 0, bVal = 0;
         if (sortKey === 'volume') {
           aVal = getVolumeForTimeframe(a, selectedTimeframe);
@@ -555,12 +638,16 @@ export default function DiscoverPage() {
         }
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
       });
-      setDisplayed(sortedTokens);
+      
+      // Final filter before setting displayed
+      const finalSafe = sortedTokens.filter(t => t && t.mint && t.mint !== WRAPPED_SOL_MINT);
+      setDisplayed(finalSafe);
     } else {
       // dex OR live → same sliced data; Live Pump renders a different UI
-      setDisplayed(filteredTokens.slice(0, 10));
+      const safe = filteredTokens.filter(t => t && t.mint && t.mint !== WRAPPED_SOL_MINT);
+      setDisplayed(safe.slice(0, 10));
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters]);
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe]);
 
 
   /* ------- map tokens -> PumpItem for Live Pump (uses cached images) ------- */
@@ -595,11 +682,83 @@ export default function DiscoverPage() {
     };
   };
 
-  const liveLeftItems: PumpItem[] =
-    displayed.length ? displayed.slice(0, 6).map(toPumpItem) : demoLeftPump;
+  // Create a helper to map PumpPortal tokens to PumpItem format
+  const toPumpPortalItem = (t: any): PumpItem => {
+    const name = t?.name || t?.symbol || '—';
+    const sym = t?.symbol ? String(t.symbol).slice(0, 12) : undefined;
+    const desc = t?.description || t?.bio || '';
+    
+    // Calculate age from timestamp
+    const age = t?.timestamp 
+      ? (() => {
+          const seconds = Math.floor((Date.now() - t.timestamp) / 1000);
+          if (seconds < 60) return `${seconds}s`;
+          if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+          if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+          return `${Math.floor(seconds / 86400)}d`;
+        })()
+      : '1m';
+    
+    const mcNum = Number(t?.market_cap_usd || (t?.marketCapSol ? (t.marketCapSol * 170) : 0));
+    const mc =
+      mcNum > 0
+        ? (mcNum >= 1_000_000
+            ? `$${(mcNum / 1_000_000).toFixed(2)}M`
+            : mcNum >= 1_000
+            ? `$${(mcNum / 1_000).toFixed(2)}K`
+            : `$${mcNum.toFixed(0)}`)
+        : undefined;
 
-  const liveRightItems: PumpItem[] =
-    displayed.length ? displayed.slice(6, 12).map(toPumpItem) : demoRightPump;
+    // Use cached images to ensure they persist across re-renders
+    const { cover, avatar } = getCachedImagesForToken(t);
+    
+    // For PumpPortal tokens, use the same image for both cover and avatar
+    // The large box (cover) shows the full image, the small box (avatar) shows the token image
+    const imageUrl = cover || t?.image || undefined;
+    const avatarImageUrl = avatar || imageUrl || undefined;
+    
+    // Debug: Log individual token mapping
+    console.log(`[toPumpPortalItem] Mapping ${name}:`, {
+      hasImage: !!t.image,
+      hasCover: !!cover,
+      finalImageUrl: !!imageUrl,
+      finalAvatarUrl: !!avatarImageUrl,
+      raw: { tImage: t.image, cover, avatar }
+    });
+
+    return {
+      id: t?.pair_address || t?.mint || Math.random().toString(36).slice(2),
+      name,
+      symbol: sym,
+      desc,
+      age,
+      mc,
+      coverUrl: imageUrl, // Large box - full token image
+      avatarUrl: avatarImageUrl, // Small box - token image (same as large box for PumpPortal)
+      verified: false,
+      hot: true, // Mark all PumpPortal tokens as hot/live
+      _rawToken: t, // Store raw token for backfill
+    };
+  };
+
+  const liveLeftItems: PumpItem[] = pumpPortalTokens.slice(0, 30).map(toPumpPortalItem);
+  const liveRightItems: PumpItem[] = pumpPortalTokens.slice(30, 60).map(toPumpPortalItem);
+
+  // Debug: Log image data for PumpPortal tokens
+  useEffect(() => {
+    if (pumpPortalTokens.length > 0) {
+      console.log('[Discover] PumpPortal tokens with image data:', 
+        pumpPortalTokens.slice(0, 12).map(t => ({
+          name: t.name,
+          mint: t.mint,
+          hasUri: !!t.uri,
+          hasImage: !!t.image,
+          uri: t.uri,
+          image: t.image
+        }))
+      );
+    }
+  }, [pumpPortalTokens]);
 
   // Simple LRU-ish trim when the cache gets large (optional)
   useEffect(() => {
@@ -629,7 +788,7 @@ export default function DiscoverPage() {
         <link rel="preload" as="image" href="/placeholder/fallback-avatar.jpg" />
       </Head>
 
-      <div className="min-h-screen text-[#E6E7EA] relative" style={{ backgroundColor: '#0f1012' }}>
+      <div className="min-h-screen text-[#E6E7EA] relative" style={{ backgroundColor: '#06070b' }}>
         {/* Header */}
         <div style={{ position: 'relative', zIndex: 100 }}>
           <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
@@ -650,12 +809,12 @@ export default function DiscoverPage() {
             >
               DEX Screener
             </button>
-            <button
+            {/* <button
               className={`text-lg font-light transition-colors ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("live")}
             >
-              Live Pump
-            </button>
+              Pump Live
+            </button> */}
           </div>
 
           {/* Right controls (unchanged) */}
@@ -668,37 +827,41 @@ export default function DiscoverPage() {
               </span>
             </div> */}
 
-            {/* Timeframes */}
-            <div className="flex max-w-7xl items-center gap-3 text-sm font-medium">
-              {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
-                <button
-                  key={tf}
-                  className={(selectedTimeframe === tf ? "text-white " : "text-[#9CA3AF] hover:text-white ") + "cursor-pointer transition-colors"}
-                  onClick={() => handleTimeframeClick(tf)}
-                >
-                  {tf}
-                </button>
-              ))}
-            </div>
+            {/* Timeframes - hide when on live tab */}
+            {activeTab !== 'live' && (
+              <div className="flex max-w-7xl items-center gap-3 text-sm font-medium">
+                {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
+                  <button
+                    key={tf}
+                    className={(selectedTimeframe === tf ? "text-white " : "text-[#9CA3AF] hover:text-white ") + "cursor-pointer transition-colors"}
+                    onClick={() => handleTimeframeClick(tf)}
+                  >
+                    {tf}
+                  </button>
+                ))}
+              </div>
+            )}
 
-            {/* Filter button */}
-            <div className="relative">
-              <button
-                className="flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative mr-2 bg-[#17191E] border border-[#2A2B33] text-[#9CA3AF] hover:text-[#E6E7EA]"
-                onClick={() => setIsFilterPopoutOpen(true)}
-              >
-                {/* filter glyph */}
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="4" y1="6" x2="20" y2="6"/><circle cx="8" cy="6" r="2"/>
-                  <line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2"/>
-                  <line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="18" r="2"/>
-                </svg>
-                <span className="font-medium text-sm">Filter</span>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
+            {/* Filter button - hidden when in Live Pump tab */}
+            {activeTab !== 'live' && (
+              <div className="relative">
+                <button
+                  className="flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative mr-2 bg-[#17191E] border border-[#2A2B33] text-[#9CA3AF] hover:text-[#E6E7EA]"
+                  onClick={() => setIsFilterPopoutOpen(true)}
+                >
+                  {/* filter glyph */}
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="4" y1="6" x2="20" y2="6"/><circle cx="8" cy="6" r="2"/>
+                    <line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2"/>
+                    <line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="18" r="2"/>
+                  </svg>
+                  <span className="font-medium text-sm">Filter</span>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+            )}
 
             {/* Quick Buy - Same as PulseTable */}
             <div className="flex items-center justify-center rounded-full px-3 py-1.5 gap-2 border bg-[#17191E]"
@@ -845,16 +1008,70 @@ export default function DiscoverPage() {
         {/* Main Content */}
         <main className="mx-auto px-8 pb-10 max-w-[98%]">
           {activeTab === 'live' ? (
-            <PumpLive
-              leftItems={liveLeftItems.length ? liveLeftItems : demoLeftPump}
-              rightItems={liveRightItems.length ? liveRightItems : demoRightPump}
-              onAction={(id) => {
-                const any = Array.from(tokenMapRef.current.values()).find(
-                  t => t.pair_address === id || t.mint === id
-                );
-                if (any) handleQuickBuy(any as Token);
-              }}
-            />
+            pumpPortalTokens.length > 0 ? (
+              <PumpLive
+                leftItems={liveLeftItems}
+                rightItems={liveRightItems}
+                onAction={async (id, rawToken) => {
+                  // Backfill token data first
+                  if (rawToken) {
+                    try {
+                      console.log('[Discover] Backfilling token:', rawToken);
+                      const backfillResponse = await fetch('/api/token-service/backfill-token', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          mint: rawToken.mint,
+                          name: rawToken.name,
+                          symbol: rawToken.symbol,
+                          uri: rawToken.uri,
+                          market_cap_usd: rawToken.market_cap_usd || rawToken.marketCapSol ? (rawToken.marketCapSol * 170) : undefined,
+                          liquidity_usd: undefined, // PumpPortal doesn't provide liquidity data
+                          pair_address: rawToken.pair_address || rawToken.bondingCurveKey
+                        })
+                      });
+
+                      if (backfillResponse.ok) {
+                        console.log('[Discover] Token backfilled successfully');
+                      } else {
+                        console.warn('[Discover] Token backfill failed, but continuing with navigation');
+                      }
+                    } catch (err) {
+                      console.error('[Discover] Error backfilling token:', err);
+                    }
+                  }
+
+                  // Prefetch trade data before navigating
+                  console.log('[Discover] Prefetching trade data for:', id);
+                  try {
+                    await prefetchTradeData(id);
+                    console.log('[Discover] Prefetch complete for:', id);
+                  } catch (err) {
+                    console.error('[Discover] Prefetch failed:', err);
+                  }
+                  // Navigate to trade page
+                  router.push(`/trade/${id}`);
+                }}
+                quickBuyAmount={Number(quickBuyAmount) || 0}
+                onQuickBuy={handleQuickBuy}
+              />
+            ) : pumpPortalConnected && pumpPortalTokens.length === 0 ? (
+              <div className="py-10 text-center text-[#9CA3AF]">
+                Waiting for live tokens...
+              </div>
+            ) : !pumpPortalConnected && pumpPortalError ? (
+              <div className="py-10 text-center text-red-400">
+                Connection error: {pumpPortalError}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-20 w-full bg-[#1E1F26] animate-pulse rounded" />
+                ))}
+              </div>
+            )
           ) : displayed.length > 0 ? (
             <InterstateTable
               rows={displayed.map((token, i) => ({
