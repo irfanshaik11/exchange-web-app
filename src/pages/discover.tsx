@@ -563,18 +563,29 @@ export default function DiscoverPage() {
     }
   }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters]);
 
-  // Skeleton management
+  // Skeleton management - improved for production reliability
   useEffect(() => {
+    // When tab changes, show skeleton briefly
     setShowSkeleton(true);
     const timer = setTimeout(() => setShowSkeleton(false), 800);
     return () => clearTimeout(timer);
   }, [activeTab]);
 
   useEffect(() => {
-    if ((allTokens && Array.isArray(allTokens) && allTokens.length > 0) || tokensLoading === false) {
+    // Hide skeleton when we have data OR when loading is complete (even if no data)
+    // This ensures data shows immediately when available, even if loading state is delayed
+    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
+      // We have data - hide skeleton immediately
+      setShowSkeleton(false);
+    } else if (tokensLoading === false) {
+      // Loading finished (even if no data) - hide skeleton
       setShowSkeleton(false);
     }
-  }, [allTokens, tokensLoading]);
+    // PRODUCTION FIX: Also check if displayed tokens are available (data might be processed)
+    if (displayed.length > 0) {
+      setShowSkeleton(false);
+    }
+  }, [allTokens, tokensLoading, displayed.length]);
 
   // Track if we have data available (even if not displayed yet)
   const hasDataAvailable = React.useMemo(() => {
@@ -875,6 +886,20 @@ export default function DiscoverPage() {
                 if (any) handleQuickBuy(any as Token);
               }}
             />
+          ) : displayed.length > 0 ? (
+            // PRODUCTION FIX: Show data immediately if available, don't wait for loading state
+            <InterstateTable
+              rows={displayed.map((token, i) => ({
+                token: token as Token,
+                i: i,
+              }))}
+              onQuickBuy={handleQuickBuy}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              setSort={handleSort}
+              selectedTimeframe={selectedTimeframe}
+              quickBuyAmount={Number(quickBuyAmount) || 0}
+            />
           ) : (showSkeleton || tokensLoading) ? (
             <div className="space-y-4">
               {Array.from({ length: 10 }).map((_, i) => (
@@ -895,21 +920,7 @@ export default function DiscoverPage() {
                 <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
               ))}
             </div>
-          ) 
-          : (
-            <InterstateTable
-              rows={displayed.map((token, i) => ({
-                token: token as Token,
-                i: i,
-              }))}
-              onQuickBuy={handleQuickBuy}
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              setSort={handleSort}
-              selectedTimeframe={selectedTimeframe}
-              quickBuyAmount={Number(quickBuyAmount) || 0}
-            />
-          )}
+          ) : null}
         </main>
 
         <Footer />
