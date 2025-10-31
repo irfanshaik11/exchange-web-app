@@ -576,6 +576,13 @@ export default function DiscoverPage() {
     }
   }, [allTokens, tokensLoading]);
 
+  // Track if we have data available (even if not displayed yet)
+  const hasDataAvailable = React.useMemo(() => {
+    return (allTokens && Array.isArray(allTokens) && allTokens.length > 0) || 
+           (tokenMapRef.current && tokenMapRef.current.size > 0) ||
+           displayed.length > 0;
+  }, [allTokens, displayed.length]);
+
   /* ------- map tokens -> PumpItem for Live Pump (uses cached images) ------- */
   const toPumpItem = (t: any): PumpItem => {
     const name = t?.name || t?.symbol || '—';
@@ -878,9 +885,15 @@ export default function DiscoverPage() {
             <div className="py-10 text-center text-red-400">
               {tokenError}
             </div>
-          ) : displayed.length === 0 ? (
+          ) : displayed.length === 0 && !hasDataAvailable && !tokensLoading ? (
             <div className="py-10 text-center text-[#9CA3AF]">
               No tokens found.
+            </div>
+          ) : displayed.length === 0 && (hasDataAvailable || tokensLoading) ? (
+            <div className="space-y-4">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
+              ))}
             </div>
           ) 
           : (

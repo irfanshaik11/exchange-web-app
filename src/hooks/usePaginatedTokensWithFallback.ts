@@ -330,14 +330,20 @@ export default function usePaginatedTokensWithFallback({
             setState(prev => ({ ...prev, error: null }));
           } else {
             //console.log('🔧 No valid tokens data received:', { tokens, isArray: Array.isArray(tokens) });
-            setState(prev => ({ ...prev, loading: false, error: 'Invalid data from token service' }));
+            setState(prev => ({ 
+              ...prev, 
+              // Keep loading true if no data yet - prevents "No tokens found" from showing prematurely
+              loading: prev.data.length === 0 ? true : false, 
+              error: prev.data.length === 0 ? 'Invalid data from token service' : null 
+            }));
           }
         } else {
           // Non-OK response; keep existing data but don't show error unless we have no data
           console.warn('📡 Non-OK response from token service:', response.status);
           setState(prev => ({ 
             ...prev, 
-            loading: false, 
+            // Keep loading true if no data yet - prevents premature "No tokens found"
+            loading: prev.data.length === 0 ? true : false, 
             // Only show error if we don't have any data yet
             error: prev.data.length === 0 ? `Upstream error (${response.status})` : null 
           }));
@@ -355,7 +361,8 @@ export default function usePaginatedTokensWithFallback({
             ...prev, 
             // Only show error if we don't have any data yet
             error: prev.data.length === 0 ? 'Failed to fetch data' : null, 
-            loading: false 
+            // Keep loading true if no data yet - prevents premature "No tokens found"
+            loading: prev.data.length === 0 ? true : false
           }));
         }
       } finally {
