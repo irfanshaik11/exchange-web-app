@@ -50,6 +50,7 @@ function normalizeTrade(
   totalUSD: number;
   pricePerToken: number;
   tokenAmount: number;
+  solAmount: number;
   maker: string;
   timestampSec: number;
   keyPart: string;
@@ -59,6 +60,7 @@ function normalizeTrade(
   let totalUSD = 0;
   let pricePerToken = 0;
   let tokenAmount = 0;
+  let solAmount = 0;
   let maker = trade.maker || trade.trader || '';
   let timestampSec = Date.now() / 1000;
   let keyPart = '';
@@ -105,6 +107,7 @@ function normalizeTrade(
     tokenAmount = parseFloat(String(d.amountNonLiquidityToken ?? d.amount0 ?? 0)) || 0;
     totalUSD = parseFloat(String(d.priceUsdTotal ?? 0)) || 0;
     pricePerToken = parseFloat(String(d.priceUsd ?? 0)) || 0;
+    solAmount = parseFloat(String(d.priceBaseTokenTotal ?? 0)) || 0;
     if (!pricePerToken && tokenAmount > 0 && totalUSD > 0) pricePerToken = totalUSD / tokenAmount;
 
     keyPart = (trade.transactionHash || trade.txHash || '') + (trade.timestamp || '');
@@ -120,7 +123,26 @@ function normalizeTrade(
     maker = trade.maker || trade.trader || '';
   }
 
-  return { isBuy, color, totalUSD, pricePerToken, tokenAmount, maker, timestampSec, keyPart };
+  // Try to get solAmount from other trade shapes if not set
+  if (solAmount === 0) {
+    // Priority 1: Check originalEvent.data.priceBaseTokenTotal (for WebSocket/Codex events)
+    if (trade.originalEvent?.data?.priceBaseTokenTotal) {
+      solAmount = parseFloat(String(trade.originalEvent.data.priceBaseTokenTotal)) || 0;
+    }
+    // Priority 2: For WebSocket shape, try to calculate from price/totalUSD
+    else if (hasWsShape && trade.price) {
+      const price = parseFloat(trade.price);
+      if (price > 10 && price < 300) { // Likely SOL price
+        solAmount = totalUSD > 0 ? totalUSD / price : 0;
+      }
+    }
+    // Priority 3: For backend, check if there's a base token amount field
+    else if (hasBackend && trade.base_token_amount) {
+      solAmount = parseFloat(String(trade.base_token_amount)) || 0;
+    }
+  }
+
+  return { isBuy, color, totalUSD, pricePerToken, tokenAmount, solAmount, maker, timestampSec, keyPart };
 }
 
 /** Subtle gradient used only for the inline bar, NOT the cell background */
@@ -174,9 +196,15 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     });
   }, [displayTrades, stableToken?.decimals]);
 
-  // Robust reference: 95th percentile
+  // Robust reference: 95th percentile for USD
   const p95 = React.useMemo(() => {
     const arr = normalized.map(n => n.totalUSD).filter((x) => Number.isFinite(x) && x >= 0);
+    return percentile(arr, 0.95) || 0;
+  }, [normalized]);
+
+  // Robust reference: 95th percentile for SOL
+  const p95Sol = React.useMemo(() => {
+    const arr = normalized.map(n => n.solAmount).filter((x) => Number.isFinite(x) && x > 0);
     return percentile(arr, 0.95) || 0;
   }, [normalized]);
 
@@ -187,6 +215,15 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
       return clamp01(v / ref);
     },
     [p95, normalized]
+  );
+
+  const scaleAmtSol = React.useCallback(
+    (v: number) => {
+      if (!isFinite(v) || v <= 0) return 0;
+      const ref = p95Sol > 0 ? p95Sol : Math.max(...normalized.map(n => n.solAmount).filter(x => x > 0), 1);
+      return clamp01(v / ref);
+    },
+    [p95Sol, normalized]
   );
 
   // Skeleton if token absent
@@ -214,39 +251,46 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
               <th className="px-2 py-2 text-left">Age ↓</th>
               <th className="px-2 py-2 text-left">Price (USD)</th>
               <th className="px-2 py-2 text-left">Amt (USD)</th>
-              <th className="px-2 py-2 text-left">Retention</th>
+              <th className="px-2 py-2 text-left">Amt (SOL)</th>
+              <th className="px-2 py-2 text-left">Amount (Tokens)</th>
               <th className="px-2 py-2 text-left">Trader</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={5} className="text-center py-6 text-neutral-500">
+                <td colSpan={6} className="text-center py-6 text-neutral-500">
                   Loading trades...
                 </td>
               </tr>
             ) : !normalized.length ? (
               <tr>
-                <td colSpan={5} className="text-center py-6 text-neutral-500">
+                <td colSpan={6} className="text-center py-6 text-neutral-500">
                   No trades available.
                 </td>
               </tr>
             ) : (
               normalized.map((n) => {
                 const age = getAge(n.timestampSec);
-                const retention = formatSmartNumber(n.tokenAmount);
+                const tokenAmountStr = formatSmartNumber(n.tokenAmount);
+                const solAmountStr = Number.isFinite(n.solAmount) && n.solAmount > 0 
+                  ? formatSmartNumber(n.solAmount)
+                  : '-';
                 const amtStr = Number.isFinite(n.totalUSD) ? `$${n.totalUSD.toFixed(2)}` : '$0.00';
                 const priceStr = Number.isFinite(n.pricePerToken) ? `$${formatSmallPrice(n.pricePerToken)}` : '$-';
 
                 const intensity = scaleAmt(n.totalUSD);
                 const gradient = heatBarGradient(n.isBuy, intensity);
+                
+                const intensitySol = n.solAmount > 0 ? scaleAmtSol(n.solAmount) : 0;
+                const gradientSol = heatBarGradient(n.isBuy, intensitySol);
 
                 return (
                   <tr key={n.keyPart || n.idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
                     <td className="px-2 py-2 text-neutral-300">{age}</td>
                     <td className={`px-2 py-2 font-semibold ${n.color}`}>{priceStr}</td>
 
-                    {/* HEATMAP BAR only; cell background stays default */}
+                    {/* HEATMAP BAR for USD - only; cell background stays default */}
                     <td className="px-2 py-2 font-semibold relative overflow-hidden"
                         title={`~${(intensity * 100).toFixed(0)}% of recent size`}>
                       {/* bar (behind content) */}
@@ -268,13 +312,43 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                       </div>
                     </td>
 
-                    <td className="px-2 py-2 text-neutral-300">{retention}</td>
+                    {/* HEATMAP BAR for SOL - same functionality as USD */}
+                    <td className="px-2 py-2 font-semibold relative overflow-hidden"
+                        title={n.solAmount > 0 ? `~${(intensitySol * 100).toFixed(0)}% of recent SOL size` : 'No SOL data'}>
+                      {n.solAmount > 0 ? (
+                        <>
+                          {/* bar (behind content) */}
+                          <div
+                            aria-hidden
+                            className="absolute left-0 top-0 bottom-0 z-0"
+                            style={{
+                              width: `${Math.max(6, intensitySol * 100)}%`,
+                              backgroundImage: gradientSol,
+                              // blends with whatever row bg you already have
+                              mixBlendMode: 'screen',
+                              pointerEvents: 'none',
+                              transition: 'width 160ms ease',
+                            }}
+                          />
+                          {/* amount text */}
+                          <div className={`relative z-10 ${n.isBuy ? 'text-emerald-300' : 'text-red-300'}`}>
+                            {solAmountStr}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="relative z-10 text-neutral-400">
+                          {solAmountStr}
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="px-2 py-2 text-neutral-300">{tokenAmountStr}</td>
                     <td className="px-2 py-2 text-neutral-300">
                       <a
                         href={`https://solscan.io/account/${n.maker || ''}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[#70E0B0] hover:text-[#58B890] transition-colors hover:underline"
+                        className="text-white hover:text-neutral-300 transition-colors hover:underline"
                       >
                         {shortAddr(n.maker || '')}
                       </a>
