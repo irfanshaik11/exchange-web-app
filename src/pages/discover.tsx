@@ -52,6 +52,7 @@ export default function DiscoverPage() {
   const [selectedPill, setSelectedPill] = useState('P1'); // Local preset selection for discover page
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showSkeleton, setShowSkeleton] = useState(true);
+  const skeletonTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
@@ -565,13 +566,35 @@ export default function DiscoverPage() {
 
   // Skeleton management - improved for production reliability
   useEffect(() => {
+    // Clear any existing timeout when tab changes
+    if (skeletonTimeoutRef.current) {
+      clearTimeout(skeletonTimeoutRef.current);
+      skeletonTimeoutRef.current = null;
+    }
+    
     // When tab changes, show skeleton briefly
     setShowSkeleton(true);
-    const timer = setTimeout(() => setShowSkeleton(false), 800);
-    return () => clearTimeout(timer);
+    skeletonTimeoutRef.current = setTimeout(() => {
+      setShowSkeleton(false);
+      skeletonTimeoutRef.current = null;
+    }, 800);
+    
+    return () => {
+      if (skeletonTimeoutRef.current) {
+        clearTimeout(skeletonTimeoutRef.current);
+        skeletonTimeoutRef.current = null;
+      }
+    };
   }, [activeTab]);
 
   useEffect(() => {
+    // PRODUCTION FIX: Hide skeleton immediately when data is available
+    // Clear timeout first to prevent race conditions
+    if (skeletonTimeoutRef.current) {
+      clearTimeout(skeletonTimeoutRef.current);
+      skeletonTimeoutRef.current = null;
+    }
+    
     // Hide skeleton when we have data OR when loading is complete (even if no data)
     // This ensures data shows immediately when available, even if loading state is delayed
     if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
@@ -900,7 +923,7 @@ export default function DiscoverPage() {
               selectedTimeframe={selectedTimeframe}
               quickBuyAmount={Number(quickBuyAmount) || 0}
             />
-          ) : (showSkeleton || tokensLoading) ? (
+          ) : tokensLoading && displayed.length === 0 ? (
             <div className="space-y-4">
               {Array.from({ length: 10 }).map((_, i) => (
                 <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
