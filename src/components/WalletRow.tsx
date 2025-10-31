@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { Wallet } from '~/utils/functions';
 import type { WatchWallet, WalletEvent } from '~/utils/walletTracking';
-import { FaBell, FaChartBar, FaTrash } from 'react-icons/fa';
+import { toggleWalletNotifications } from '~/utils/walletTracking';
+import { FaBell, FaBellSlash, FaChartBar, FaTrash } from 'react-icons/fa';
 
 interface WalletRowProps {
   wallet: Wallet;
@@ -10,6 +11,7 @@ interface WalletRowProps {
   balance?: number;
   onRemove: (address: string) => void;
   onClick?: (wallet: Wallet) => void;
+  onNotificationToggle?: (address: string, enabled: boolean) => void;
 }
 
 function Tooltip({ children, label }: { children: React.ReactNode; label: string }) {
@@ -35,8 +37,89 @@ function Tooltip({ children, label }: { children: React.ReactNode; label: string
   );
 }
 
-export default function WalletRow({ wallet, watchedWallet, events = [], balance, onRemove, onClick }: WalletRowProps) {
+export default function WalletRow({ wallet, watchedWallet, events = [], balance, onRemove, onClick, onNotificationToggle }: WalletRowProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  
+  // Ref to track if we've loaded from localStorage (prevents backend from overriding)
+  const hasLoadedFromStorageRef = React.useRef(false);
+  
+  // Helper to get notification state from localStorage (source of truth)
+  const getNotificationStateFromStorage = (): boolean | null => {
+    if (typeof window !== 'undefined') {
+      const storageKey = `wallet_notifications_${wallet.address}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved !== null) {
+        try {
+          const parsed = JSON.parse(saved);
+          console.log(`✅ Found localStorage value for ${wallet.address}: ${parsed}`);
+          return parsed;
+        } catch {
+          // Invalid JSON, ignore
+          console.warn(`⚠️ Invalid localStorage value for ${wallet.address}`);
+        }
+      } else {
+        console.log(`❌ No localStorage value found for ${wallet.address}`);
+      }
+    }
+    return null;
+  };
+  
+  // Load initial state: ALWAYS prioritize localStorage first, then backend, then default
+  const getInitialNotificationState = (): boolean => {
+    const stored = getNotificationStateFromStorage();
+    if (stored !== null) {
+      hasLoadedFromStorageRef.current = true;
+      return stored; // localStorage is source of truth
+    }
+    // Fallback to watchedWallet state from backend, or default to true
+    return watchedWallet?.notificationsEnabled ?? true;
+  };
+  
+  const [notificationsEnabled, setNotificationsEnabled] = React.useState(getInitialNotificationState);
+  const [isTogglingNotification, setIsTogglingNotification] = React.useState(false);
+  
+  // ALWAYS check localStorage FIRST - it takes absolute precedence
+  // This effect runs on mount and whenever wallet address changes
+  useEffect(() => {
+    // Check localStorage first - this is the source of truth
+    const stored = getNotificationStateFromStorage();
+    if (stored !== null) {
+      // localStorage exists - use it ALWAYS (don't trust backend)
+      hasLoadedFromStorageRef.current = true;
+      console.log(`📖 [USE EFFECT] Loaded from localStorage: ${wallet.address} = ${stored}`);
+      setNotificationsEnabled(stored);
+      return; // Exit early - don't check backend
+    }
+    
+    // Only use backend value if:
+    // 1. No localStorage value exists AND
+    // 2. We haven't loaded from storage before AND
+    // 3. Backend has a value
+    if (!hasLoadedFromStorageRef.current && watchedWallet?.notificationsEnabled !== undefined) {
+      console.log(`📖 [USE EFFECT] No localStorage, using backend: ${wallet.address} = ${watchedWallet.notificationsEnabled}`);
+      setNotificationsEnabled(watchedWallet.notificationsEnabled);
+    }
+  }, [wallet.address]); // Only depend on wallet.address to avoid backend overrides
+  
+  // Separate effect to handle watchedWallet changes, but STILL prioritize localStorage
+  // This prevents backend updates from overriding user's localStorage preference
+  useEffect(() => {
+    // Always check localStorage first, even if watchedWallet changed
+    const stored = getNotificationStateFromStorage();
+    if (stored !== null) {
+      // localStorage takes precedence - always use it, ignore backend changes
+      hasLoadedFromStorageRef.current = true;
+      console.log(`🛡️ [BACKEND UPDATE] localStorage overrides backend change: ${wallet.address} = ${stored}`);
+      setNotificationsEnabled(stored);
+      return; // Exit - don't use backend value
+    }
+    
+    // If no localStorage and we haven't loaded from storage, use backend value
+    if (!hasLoadedFromStorageRef.current && watchedWallet?.notificationsEnabled !== undefined) {
+      console.log(`📖 [BACKEND UPDATE] Using backend value (no localStorage): ${wallet.address} = ${watchedWallet.notificationsEnabled}`);
+      setNotificationsEnabled(watchedWallet.notificationsEnabled);
+    }
+  }, [watchedWallet?.notificationsEnabled, wallet.address]); // Watch for backend changes
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -52,6 +135,70 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
   const handleCancelDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowDeleteConfirm(false);
+  };
+
+  const handleToggleNotifications = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (isTogglingNotification) return; // Prevent double-clicks
+    
+    try {
+      setIsTogglingNotification(true);
+      const newState = !notificationsEnabled;
+      
+      // Optimistically update UI
+      setNotificationsEnabled(newState);
+      
+      // CRITICAL: Save to localStorage IMMEDIATELY and SYNC (before API call)
+      // This is the source of truth and MUST persist
+      const storageKey = `wallet_notifications_${wallet.address}`;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(storageKey, JSON.stringify(newState));
+        // Force sync to disk (some browsers cache localStorage)
+        if ('sync' in localStorage && typeof (localStorage as any).sync === 'function') {
+          (localStorage as any).sync();
+        }
+        hasLoadedFromStorageRef.current = true; // Mark that we've saved to storage
+        console.log(`💾 [TOGGLE] Saved to localStorage: ${wallet.address} = ${newState}`);
+        
+        // Verify it was saved correctly
+        const verify = localStorage.getItem(storageKey);
+        if (verify !== JSON.stringify(newState)) {
+          console.error(`❌ [TOGGLE] localStorage save verification FAILED for ${wallet.address}`);
+        } else {
+          console.log(`✅ [TOGGLE] localStorage save verified for ${wallet.address}`);
+        }
+      }
+      
+      // Call backend API with ownerId from watchedWallet (non-blocking - localStorage is source of truth)
+      try {
+        await toggleWalletNotifications(
+          wallet.address, 
+          newState, 
+          watchedWallet?.ownerId || undefined
+        );
+        console.log(`✅ [TOGGLE] Backend updated successfully for ${wallet.address}`);
+      } catch (apiError) {
+        console.error(`⚠️ [TOGGLE] Backend update failed (but localStorage saved): ${wallet.address}`, apiError);
+        // Don't revert - localStorage is saved, that's what matters
+      }
+      
+      // Notify parent component if callback provided
+      onNotificationToggle?.(wallet.address, newState);
+    } catch (error) {
+      // Revert on error
+      setNotificationsEnabled(!notificationsEnabled);
+      // Remove from localStorage if there was a critical error
+      if (typeof window !== 'undefined') {
+        const storageKey = `wallet_notifications_${wallet.address}`;
+        localStorage.removeItem(storageKey);
+        hasLoadedFromStorageRef.current = false;
+        console.log(`❌ [TOGGLE] Removed localStorage entry due to error for: ${wallet.address}`);
+      }
+      console.error('Failed to toggle notifications:', error);
+    } finally {
+      setIsTogglingNotification(false);
+    }
   };
 
   // Helper to format date or relative time
@@ -80,8 +227,7 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
   return (
     <tr
       key={wallet.address}
-      className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200 cursor-pointer"
-      onClick={() => onClick && onClick(wallet)}
+      className="border-b border-neutral-800/50 hover:bg-neutral-800/40 transition-all duration-200"
     >
       <td className="py-3 px-2">
         <div className="flex w-full items-center gap-4">
@@ -98,25 +244,36 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
                 : <span className="text-neutral-500">-</span>}
           </span>
           <div className="w-40 flex items-center gap-2">
-            <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors" title="Alert" onClick={e => e.stopPropagation()}>
-              <FaBell className="text-sm text-emerald-300" />
-            </button>
+						<Tooltip label={notificationsEnabled ? "Notifications ON" : "Notifications OFF"}>
+							<button 
+								className={`p-1.5 rounded-md hover:bg-neutral-800 transition-all duration-200 ${isTogglingNotification ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+								title={notificationsEnabled ? "Click to disable notifications" : "Click to enable notifications"}
+								onClick={handleToggleNotifications}
+								disabled={isTogglingNotification}
+							>
+								{notificationsEnabled ? (
+									<FaBell className="text-sm text-emerald-400" />
+								) : (
+									<FaBellSlash className="text-sm text-neutral-500" />
+								)}
+							</button>
+						</Tooltip>
             <Tooltip label="Scan Address">
-              <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors" title="Scan" onClick={e => e.stopPropagation()}>
+              <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors cursor-pointer" title="Scan" onClick={() => onClick && onClick(wallet)}>
                 <FaChartBar className="text-sm text-blue-300" />
               </button>
             </Tooltip>
             {showDeleteConfirm ? (
               <div className="flex gap-1">
                 <button 
-                  className="px-2 py-1 rounded-md bg-red-500 hover:bg-red-600 transition-colors text-white text-xs font-medium" 
+                  className="px-2 py-1 rounded-md bg-red-500 hover:bg-red-600 transition-colors text-white text-xs font-medium cursor-pointer" 
                   title="Confirm Delete"
                   onClick={handleConfirmDelete}
                 >
                   ✓
                 </button>
                 <button 
-                  className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 transition-colors text-white text-xs font-medium" 
+                  className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 transition-colors text-white text-xs font-medium cursor-pointer" 
                   title="Cancel"
                   onClick={handleCancelDelete}
                 >
@@ -125,7 +282,7 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
               </div>
             ) : (
               <button 
-                className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors" 
+                className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors cursor-pointer"
                 title="Delete" 
                 onClick={handleDeleteClick}
               >

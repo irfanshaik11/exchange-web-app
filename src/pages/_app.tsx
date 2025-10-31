@@ -18,6 +18,7 @@ import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
 import { FilterProvider } from '../components/FilterContext';
 import { SolPriceProvider } from '../components/SolPriceContext';
+import { WalletTrackerProvider } from '../components/WalletTrackerContext';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -227,7 +228,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                     <QuickBuyProvider>
                       <WatchlistProvider>
                         <FilterProvider>
-                          <Component {...pageProps} />
+                          <WalletTrackerProvider>
+                            <Component {...pageProps} />
+                          </WalletTrackerProvider>
                         </FilterProvider>
                       </WatchlistProvider>
                     </QuickBuyProvider>
