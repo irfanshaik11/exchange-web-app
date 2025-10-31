@@ -697,13 +697,22 @@ export default function usePaginatedTokensWithFallback({
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
     };
 
-    // PRODUCTION FIX: Start polling immediately in parallel with WebSocket attempt
-    // This ensures data loads in production even if WebSocket is blocked/fails
-    // Don't wait for WebSocket - start polling right away as a parallel backup
-    startPolling();
-    
-    // Also try WebSocket, but don't wait for it
-    connectWebSocket();
+    // PRODUCTION FIX: For trending filter, skip WebSocket entirely and use HTTP polling only
+    // WebSocket endpoint (/v1/ws/tokens) doesn't support "trending" filter - only supports "new", "final_stretch", "migrated"
+    // This prevents unnecessary WebSocket connection attempts that will fail
+    if (filter === 'trending') {
+      console.log('📡 Trending filter detected - using HTTP polling only (WebSocket does not support trending)');
+      startPolling();
+    } else {
+      // For other filters (new, migrated, final_stretch), try WebSocket first
+      // PRODUCTION FIX: Start polling immediately in parallel with WebSocket attempt
+      // This ensures data loads in production even if WebSocket is blocked/fails
+      // Don't wait for WebSocket - start polling right away as a parallel backup
+      startPolling();
+      
+      // Also try WebSocket, but don't wait for it
+      connectWebSocket();
+    }
     
     return () => {
       // Clear max loading timeout
