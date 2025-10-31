@@ -606,10 +606,11 @@ export default function usePaginatedTokensWithFallback({
           //console.log('WebSocket connection closed with code:', event.code, 'reason:', event.reason);
           setState(prev => ({ ...prev, isConnected: false }));
           
-          // If connection closed abnormally (1006) or we have no data, fall back to polling immediately
-          if (event.code === 1006 || state.data.length === 0) {
-            //console.log('🚨 WebSocket closed abnormally (1006) or no data, falling back to polling');
-            setState(prev => ({ ...prev, usingFallback: true, loading: true, error: null }));
+          // PRODUCTION FIX: For trending filter, always fall back to polling (WebSocket doesn't support it)
+          // Also fall back if connection closed abnormally (1006) or we have no data
+          if (filter === 'trending' || event.code === 1006 || state.data.length === 0) {
+            console.log(`📡 WebSocket closed (code: ${event.code}, filter: ${filter}) - falling back to polling`);
+            setState(prev => ({ ...prev, usingFallback: true, loading: prev.data.length === 0 ? true : prev.loading, error: null }));
             startPolling();
             return;
           }
@@ -641,6 +642,20 @@ export default function usePaginatedTokensWithFallback({
             wsConnectionTimeoutRef.current = null;
           }
           console.error('WebSocket error:', error);
+          
+          // PRODUCTION FIX: For trending filter, immediately start polling (WebSocket doesn't support it)
+          // For other filters, try reconnect first
+          if (filter === 'trending') {
+            console.log('📡 WebSocket error for trending filter - starting polling immediately');
+            setState(prev => ({ 
+              ...prev, 
+              usingFallback: true,
+              loading: prev.data.length === 0 ? true : prev.loading,
+              error: null 
+            }));
+            startPolling();
+            return;
+          }
           
           // Trigger fallback immediately when WebSocket errors occur
           // Don't set error state yet - let polling try first
