@@ -48,7 +48,7 @@ jobs:
           echo "Creating template: $TEMPLATE_NAME from scratch"
           gcloud compute instance-templates create $TEMPLATE_NAME \
             --project=$PROJECT_ID \
-            --machine-type=c4-standard-8 \
+            --machine-type=c4-standard-16 \
             --network-interface=network-tier=PREMIUM,nic-type=GVNIC,stack-type=IPV4_ONLY,subnet=prod-subnet-1 \
             --instance-template-region=$REGION \
             --maintenance-policy=MIGRATE \
