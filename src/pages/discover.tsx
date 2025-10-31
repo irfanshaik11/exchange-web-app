@@ -51,8 +51,6 @@ export default function DiscoverPage() {
   const [quickBuyAmount, setQuickBuyAmount] = useState(getInitialQuickBuyAmount().toString());
   const [selectedPill, setSelectedPill] = useState('P1'); // Local preset selection for discover page
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
-  const [showSkeleton, setShowSkeleton] = useState(true);
-  const skeletonTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
@@ -564,58 +562,6 @@ export default function DiscoverPage() {
     }
   }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters]);
 
-  // Skeleton management - improved for production reliability
-  useEffect(() => {
-    // Clear any existing timeout when tab changes
-    if (skeletonTimeoutRef.current) {
-      clearTimeout(skeletonTimeoutRef.current);
-      skeletonTimeoutRef.current = null;
-    }
-    
-    // When tab changes, show skeleton briefly
-    setShowSkeleton(true);
-    skeletonTimeoutRef.current = setTimeout(() => {
-      setShowSkeleton(false);
-      skeletonTimeoutRef.current = null;
-    }, 800);
-    
-    return () => {
-      if (skeletonTimeoutRef.current) {
-        clearTimeout(skeletonTimeoutRef.current);
-        skeletonTimeoutRef.current = null;
-      }
-    };
-  }, [activeTab]);
-
-  useEffect(() => {
-    // PRODUCTION FIX: Hide skeleton immediately when data is available
-    // Clear timeout first to prevent race conditions
-    if (skeletonTimeoutRef.current) {
-      clearTimeout(skeletonTimeoutRef.current);
-      skeletonTimeoutRef.current = null;
-    }
-    
-    // Hide skeleton when we have data OR when loading is complete (even if no data)
-    // This ensures data shows immediately when available, even if loading state is delayed
-    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
-      // We have data - hide skeleton immediately
-      setShowSkeleton(false);
-    } else if (tokensLoading === false) {
-      // Loading finished (even if no data) - hide skeleton
-      setShowSkeleton(false);
-    }
-    // PRODUCTION FIX: Also check if displayed tokens are available (data might be processed)
-    if (displayed.length > 0) {
-      setShowSkeleton(false);
-    }
-  }, [allTokens, tokensLoading, displayed.length]);
-
-  // Track if we have data available (even if not displayed yet)
-  const hasDataAvailable = React.useMemo(() => {
-    return (allTokens && Array.isArray(allTokens) && allTokens.length > 0) || 
-           (tokenMapRef.current && tokenMapRef.current.size > 0) ||
-           displayed.length > 0;
-  }, [allTokens, displayed.length]);
 
   /* ------- map tokens -> PumpItem for Live Pump (uses cached images) ------- */
   const toPumpItem = (t: any): PumpItem => {
@@ -910,7 +856,6 @@ export default function DiscoverPage() {
               }}
             />
           ) : displayed.length > 0 ? (
-            // PRODUCTION FIX: Show data immediately if available, don't wait for loading state
             <InterstateTable
               rows={displayed.map((token, i) => ({
                 token: token as Token,
@@ -923,7 +868,21 @@ export default function DiscoverPage() {
               selectedTimeframe={selectedTimeframe}
               quickBuyAmount={Number(quickBuyAmount) || 0}
             />
-          ) : tokensLoading && displayed.length === 0 ? (
+          ) : (allTokens && Array.isArray(allTokens) && allTokens.length > 0) ? (
+            // Fallback: show raw data immediately if available (even if loading state hasn't updated yet)
+            <InterstateTable
+              rows={allTokens.map((token, i) => ({
+                token: token as Token,
+                i: i,
+              }))}
+              onQuickBuy={handleQuickBuy}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              setSort={handleSort}
+              selectedTimeframe={selectedTimeframe}
+              quickBuyAmount={Number(quickBuyAmount) || 0}
+            />
+          ) : tokensLoading ? (
             <div className="space-y-4">
               {Array.from({ length: 10 }).map((_, i) => (
                 <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
@@ -933,17 +892,11 @@ export default function DiscoverPage() {
             <div className="py-10 text-center text-red-400">
               {tokenError}
             </div>
-          ) : displayed.length === 0 && !hasDataAvailable && !tokensLoading ? (
+          ) : (
             <div className="py-10 text-center text-[#9CA3AF]">
               No tokens found.
             </div>
-          ) : displayed.length === 0 && (hasDataAvailable || tokensLoading) ? (
-            <div className="space-y-4">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
-              ))}
-            </div>
-          ) : null}
+          )}
         </main>
 
         <Footer />
