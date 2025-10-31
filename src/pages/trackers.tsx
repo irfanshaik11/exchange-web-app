@@ -172,7 +172,7 @@ export default function TrackersPage() {
         address: w.address,
         name: w.walletName || w.address.slice(0, 8),
         createdAt: new Date(w.createdAt).getTime(),
-        emoji: EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+        emoji: w.emoji || EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
       }));
       
       setWallets(frontendWallets);
@@ -275,10 +275,10 @@ export default function TrackersPage() {
     };
   }, [isResizing]);
 
-  const handleAddWallet = async (address: string, name: string) => {
+  const handleAddWallet = async (address: string, name: string, emoji?: string) => {
     try {
       // Add to backend
-      await addTrackedWallet(address, name, user?.id);
+      await addTrackedWallet(address, name, user?.id, emoji);
       
       // Reload from backend (this will also refresh global watched wallets)
       await loadWalletsFromBackend();
@@ -327,10 +327,11 @@ export default function TrackersPage() {
       wallet.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  // Export: copy wallet data (name and address) to clipboard as JSON
+  // Export: copy wallet data (name, emoji, and address) to clipboard as JSON
   const handleExportAddresses = () => {
     const walletsData = wallets.map((w) => ({
       name: w.name || 'Unnamed Wallet',
+      emoji: w.emoji || '👻',
       address: w.address,
     }));
     const jsonString = JSON.stringify(walletsData, null, 2);
@@ -668,7 +669,7 @@ export default function TrackersPage() {
             
             for (const wallet of transformedWallets) {
               try {
-                await addTrackedWallet(wallet.address, wallet.name, user?.id);
+                await addTrackedWallet(wallet.address, wallet.name, user?.id, wallet.emoji);
                 successCount++;
               } catch (error: any) {
                 if (error.message?.includes('already exists')) {

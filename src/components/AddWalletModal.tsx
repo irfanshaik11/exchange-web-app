@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { isValidSolanaAddress } from '~/utils/verifySolanaAddress';
 
 const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false });
 
@@ -14,17 +15,48 @@ const AddWalletModal: React.FC<AddWalletModalProps> = ({ isOpen, onClose, onAddW
   const [walletName, setWalletName] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState('👻');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [addressError, setAddressError] = useState('');
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onAddWallet(walletAddress, walletName, selectedEmoji);
+    
+    // Validate Solana address
+    if (!walletAddress.trim()) {
+      setAddressError('Wallet address is required');
+      return;
+    }
+    
+    if (!isValidSolanaAddress(walletAddress.trim())) {
+      setAddressError('Invalid Solana wallet address');
+      return;
+    }
+    
+    // Clear error and proceed
+    setAddressError('');
+    onAddWallet(walletAddress.trim(), walletName, selectedEmoji);
     setWalletAddress('');
     setWalletName('');
     setSelectedEmoji('👻');
     setShowEmojiPicker(false);
     onClose();
+  };
+
+  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setWalletAddress(value);
+    // Clear error when user starts typing
+    if (addressError) {
+      setAddressError('');
+    }
+  };
+
+  const handleAddressBlur = () => {
+    // Validate on blur if there's a value
+    if (walletAddress.trim() && !isValidSolanaAddress(walletAddress.trim())) {
+      setAddressError('Invalid Solana wallet address');
+    }
   };
 
   const onEmojiClick = (emojiObject: any) => {
@@ -47,12 +79,20 @@ const AddWalletModal: React.FC<AddWalletModalProps> = ({ isOpen, onClose, onAddW
             <input
               type="text"
               id="walletAddress"
-              className="bg-neutral-800 border border-neutral-700 rounded px-3 py-2 w-full text-neutral-200 focus:outline-none focus:border-emerald-500"
+              className={`bg-neutral-800 border rounded px-3 py-2 w-full text-neutral-200 focus:outline-none ${
+                addressError 
+                  ? 'border-red-500 focus:border-red-500' 
+                  : 'border-neutral-700 focus:border-emerald-500'
+              }`}
               placeholder="Enter wallet address"
               value={walletAddress}
-              onChange={(e) => setWalletAddress(e.target.value)}
+              onChange={handleAddressChange}
+              onBlur={handleAddressBlur}
               required
             />
+            {addressError && (
+              <p className="text-red-500 text-xs mt-1">{addressError}</p>
+            )}
           </div>
           <div className="mb-6">
             <label htmlFor="walletName" className="block text-sm font-medium text-neutral-400 mb-1">Wallet Name</label>
