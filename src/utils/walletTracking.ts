@@ -6,6 +6,7 @@ export interface WatchWallet {
   ownerId: string | null;
   address: string;
   walletName: string | null;
+  emoji: string | null;
   notificationsEnabled: boolean;
   createdAt: string;
 }
@@ -113,7 +114,7 @@ export async function getTrackedWallets(userId?: string): Promise<WatchWallet[]>
 }
 
 // Add a wallet to tracking
-export async function addTrackedWallet(address: string, name?: string, userId?: string): Promise<void> {
+export async function addTrackedWallet(address: string, name?: string, userId?: string, emoji?: string): Promise<void> {
   try {
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch`, {
       method: 'POST',
@@ -121,7 +122,8 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
       body: JSON.stringify({ 
         wallet: address, 
         walletName: name || undefined,
-        userId: userId || undefined
+        userId: userId || undefined,
+        emoji: emoji || undefined
       }),
     });
     
