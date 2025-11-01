@@ -61,7 +61,7 @@ export default function DiscoverPage() {
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
-  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
+  const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   // 🔒 Image cache: tokenId -> { cover?: string; avatar?: string }
@@ -626,10 +626,10 @@ export default function DiscoverPage() {
         if (sortKey === 'volume') {
           aVal = getVolumeForTimeframe(a, selectedTimeframe);
           bVal = getVolumeForTimeframe(b, selectedTimeframe);
-        } else if (sortKey === 'liquidity') {
+        } else if (sortKey === 'liquidity' || sortKey === 'total_liquidity_usd') {
           aVal = Number((a as any).total_liquidity_usd) || 0;
           bVal = Number((b as any).total_liquidity_usd) || 0;
-        } else if (sortKey === 'market_cap_total') {
+        } else if (sortKey === 'market_cap_total' || sortKey === 'fully_diluted_value') {
           aVal = Number((a as any).fully_diluted_value) || 0;
           bVal = Number((b as any).fully_diluted_value) || 0;
         } else {
@@ -639,9 +639,13 @@ export default function DiscoverPage() {
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
       });
       
-      // Final filter before setting displayed
+      // Final filter before setting displayed - also deduplicate by mint/address
       const finalSafe = sortedTokens.filter(t => t && t.mint && t.mint !== WRAPPED_SOL_MINT);
-      setDisplayed(finalSafe);
+      // Deduplicate by creating a Map keyed by both mint and pair_address to handle edge cases
+      const uniqueSafe = Array.from(
+        new Map(finalSafe.map(t => [t.pair_address || t.mint, t])).values()
+      );
+      setDisplayed(uniqueSafe);
     } else {
       // dex OR live → same sliced data; Live Pump renders a different UI
       const safe = filteredTokens.filter(t => t && t.mint && t.mint !== WRAPPED_SOL_MINT);
