@@ -71,6 +71,47 @@ export default function DiscoverPage() {
 
   const getTokenId = (t: any) => t?.pair_address || t?.mint || undefined;
 
+  // Helper to check if a token is wrapped SOL - AGGRESSIVE FILTERING
+  const isWrappedSol = useCallback((token: any): boolean => {
+    if (!token || !token.mint) return false;
+    
+    // Check exact mint match (most reliable)
+    if (token.mint === WRAPPED_SOL_MINT) return true;
+    
+    // Check symbol and name with comprehensive variations
+    const symbol = (token.symbol || '').toLowerCase().trim();
+    const name = (token.name || '').toLowerCase().trim();
+    
+    // Comprehensive wrapped SOL variations to catch all instances
+    const wrappedSolVariations = [
+      'wrapped sol',
+      'wsol',
+      'wrapped solana',
+      'wsolana',
+      'wrapped-sol',
+      'wrapped-solana',
+      'solwrapped',
+      'solw',
+      'w.sol',
+      'w sol',
+      'sol wrapped',
+      'sol wrapped solana',
+      'wrappedsol',
+      'wrappedsolana'
+    ];
+    
+    // Check if symbol or name contains any variation
+    const isWrappedSolSymbol = wrappedSolVariations.some(variant => 
+      symbol === variant || symbol.includes(variant) ||
+      name === variant || name.includes(variant)
+    );
+    
+    // Also check if mint starts with So111... (wrapped SOL mint pattern)
+    const isWrappedSolMint = token.mint.startsWith('So111');
+    
+    return isWrappedSolSymbol || isWrappedSolMint;
+  }, []);
+
   const pickImageCandidates = (t: any) => {
     const coverCandidate = t?.image || t?.logo || t?.uri || undefined;
     const avatarCandidate = t?.logo || t?.image || undefined;
@@ -554,7 +595,7 @@ export default function DiscoverPage() {
       
       allTokens.forEach((token: any) => {
         // CRITICAL: Filter out wrapped SOL tokens explicitly
-        if (!token || !token.mint || token.mint === WRAPPED_SOL_MINT) {
+        if (!token || !token.mint || isWrappedSol(token)) {
           return;
         }
         
@@ -566,28 +607,20 @@ export default function DiscoverPage() {
         // Create a deep copy to avoid mutation issues
         const tokenCopy = JSON.parse(JSON.stringify(token)) as TokenWithDexPaid;
         
-        // Use a unique key: prefer pair_address, fallback to mint, but ensure uniqueness
-        const baseKey = tokenCopy.pair_address || tokenCopy.mint;
-        if (!baseKey || baseKey === WRAPPED_SOL_MINT) {
-          return; // Skip invalid keys
+        // CRITICAL: Use mint as primary key to prevent wrapped SOL duplicates
+        // Wrapped SOL can have different pair_addresses but same mint
+        const baseKey = tokenCopy.mint || tokenCopy.pair_address;
+        if (!baseKey || baseKey === WRAPPED_SOL_MINT || isWrappedSol(tokenCopy)) {
+          return; // Skip invalid keys or wrapped SOL
         }
         
-        // If key already exists, keep the one with pair_address (more complete data)
+        // If key already exists, keep the one with more complete data
         const existing = newMap.get(baseKey);
         if (existing) {
-          // Prefer token with pair_address, or the one with more complete data
-          if (tokenCopy.pair_address && !existing.pair_address) {
+          const existingKeys = Object.keys(existing).length;
+          const newKeys = Object.keys(tokenCopy).length;
+          if (newKeys > existingKeys) {
             newMap.set(baseKey, tokenCopy);
-          } else if (existing.pair_address && !tokenCopy.pair_address) {
-            // Keep existing
-            return;
-          } else {
-            // Both have or don't have pair_address - prefer the one with more data
-            const existingKeys = Object.keys(existing).length;
-            const newKeys = Object.keys(tokenCopy).length;
-            if (newKeys > existingKeys) {
-              newMap.set(baseKey, tokenCopy);
-            }
           }
         } else {
           newMap.set(baseKey, tokenCopy);
@@ -598,10 +631,10 @@ export default function DiscoverPage() {
 
       const arr = Array.from(tokenMapRef.current.values());
       // Final safety check: filter out any wrapped SOL that might have slipped through
-      const filtered = arr.filter(t => t.mint !== WRAPPED_SOL_MINT);
+      const filtered = arr.filter(t => !isWrappedSol(t));
       setFilteredTokens(filtered);
     }
-  }, [allTokens]);
+  }, [allTokens, isWrappedSol]);
 
   // Update displayed tokens
   useEffect(() => {
@@ -609,7 +642,7 @@ export default function DiscoverPage() {
       const arr = Array.from(tokenMapRef.current.values());
       
       // Safety check: filter out wrapped SOL before processing
-      const safeArr = arr.filter(t => t && t.mint && t.mint !== WRAPPED_SOL_MINT);
+      const safeArr = arr.filter(t => t && t.mint && !isWrappedSol(t));
       
       const filtered = applyFilters(safeArr);
       
@@ -618,7 +651,7 @@ export default function DiscoverPage() {
       
       sortedTokens.sort((a, b) => {
         // Final safety check in sort
-        if (!a || !b || a.mint === WRAPPED_SOL_MINT || b.mint === WRAPPED_SOL_MINT) {
+        if (!a || !b || isWrappedSol(a) || isWrappedSol(b)) {
           return 0;
         }
         
@@ -640,18 +673,41 @@ export default function DiscoverPage() {
       });
       
       // Final filter before setting displayed - also deduplicate by mint/address
-      const finalSafe = sortedTokens.filter(t => t && t.mint && t.mint !== WRAPPED_SOL_MINT);
-      // Deduplicate by creating a Map keyed by both mint and pair_address to handle edge cases
-      const uniqueSafe = Array.from(
-        new Map(finalSafe.map(t => [t.pair_address || t.mint, t])).values()
-      );
+      const finalSafe = sortedTokens.filter(t => t && t.mint && !isWrappedSol(t));
+      
+      // CRITICAL: Deduplicate using Set to track seen mints AND addresses
+      // This prevents duplicate wrapped SOL with different pair_addresses
+      const seenAddresses = new Set<string>();
+      const seenMints = new Set<string>();
+      const uniqueSafe: TokenWithDexPaid[] = [];
+      
+      for (const token of finalSafe) {
+        const mint = token.mint;
+        const address = token.pair_address;
+        
+        // Skip if we've already seen this mint (prevents wrapped SOL duplicates)
+        if (mint && seenMints.has(mint)) {
+          continue;
+        }
+        
+        // Also check address to be safe
+        if (address && seenAddresses.has(address)) {
+          continue;
+        }
+        
+        // Mark as seen and add to results
+        if (mint) seenMints.add(mint);
+        if (address) seenAddresses.add(address);
+        uniqueSafe.push(token);
+      }
+      
       setDisplayed(uniqueSafe);
     } else {
       // dex OR live → same sliced data; Live Pump renders a different UI
-      const safe = filteredTokens.filter(t => t && t.mint && t.mint !== WRAPPED_SOL_MINT);
+      const safe = filteredTokens.filter(t => t && t.mint && !isWrappedSol(t));
       setDisplayed(safe.slice(0, 10));
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe]);
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol]);
 
 
   /* ------- map tokens -> PumpItem for Live Pump (uses cached images) ------- */
