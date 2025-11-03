@@ -72,13 +72,13 @@ gsutil cp gs://github-deployment/prod/env-file/frontend/.env "$PROJECT_DIR/.env"
 echo "📦 Installing dependencies..."
 npm ci || DEPLOY_STATUS="failure"
 
-########################################
-# Lint & Type Check (non-blocking)
-########################################
-echo "🧹 Running lint and type checks..."
-npm install @eslint/eslintrc typescript-eslint --save-dev || echo "ESLint deps already installed"
-npx eslint . --ext .js,.jsx,.ts,.tsx || echo "⚠️ Lint warnings (non-blocking)"
-npm run typecheck || echo "⚠️ Type checking warnings (non-blocking)"
+# ########################################
+# # Lint & Type Check (non-blocking)
+# ########################################
+# echo "🧹 Running lint and type checks..."
+# npm install @eslint/eslintrc typescript-eslint --save-dev || echo "ESLint deps already installed"
+# #npx eslint . --ext .js,.jsx,.ts,.tsx || echo "⚠️ Lint warnings (non-blocking)"
+# npm run typecheck || echo "⚠️ Type checking warnings (non-blocking)"
 
 ########################################
 # Build Next.js App
