@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
-import { FaSearch, FaStar, FaBell, FaWallet } from "react-icons/fa";
+import { FaSearch, FaBell, FaWallet } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import dynamic from "next/dynamic";
