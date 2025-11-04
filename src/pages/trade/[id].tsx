@@ -1,7 +1,6 @@
 import { useRouter } from "next/router";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import Head from "next/head";
-import { Toaster } from "react-hot-toast";
 import { useWallet } from "../../components/useWallet";
 import { useUser } from "../../components/UserContext";
 import Header from "../../components/Header";
@@ -23,8 +22,8 @@ import SimilarTokensPanel from "../../components/trade/SimilarTokensPanel";
 import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPanel";
 
 // Lazy load heavy components to reduce initial bundle size
-const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
-// const AdvancedOHLCChart = dynamic(() => import("../../components/AdvancedOHLCChart"), { ssr: false });
+//const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
+const AdvancedOHLCChart = dynamic(() => import("../../components/AdvancedOHLCChart"), { ssr: false });
 const CodexTrades = dynamic(() => import("../../components/trade/CodexTrades"), { ssr: false });
 const CodexTopTraders = dynamic(() => import("../../components/trade/CodexTopTraders"), { ssr: false });
 const CodexDevTokens = dynamic(() => import("../../components/trade/CodexDevTokens"), { ssr: false });
@@ -448,7 +447,6 @@ export default function TradePage() {
   return (
     <>
       <Head><title>{token?.name} | Trade</title></Head>
-      <Toaster position="top-right" />
 
       <div 
         className="min-h-screen w-full flex flex-col"
@@ -500,6 +498,9 @@ export default function TradePage() {
                 <TradeHeader token={correctTokenData || displayToken} />
               </div>
 
+              {/* Separator line after TradeHeader */}
+              <div className="px-3 border-b border-[#2A2B33]" style={{ marginTop: '2px' }} />
+
               <div 
                 id="chart-container-wrapper"
                 className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden" 
@@ -512,24 +513,7 @@ export default function TradePage() {
                 }}
               >
                 {canStartOHLC || (typeof resolvedPairAddress === "string" && resolvedPairAddress.length >= 32) ? (
-                  // <AdvancedOHLCChart
-                  //   key={`chart-${resolvedPairAddress || _mint}`}
-                  //   mint={typeof _mint === "string" ? _mint : undefined}
-                  //   pairAddress={resolvedPairAddress}
-                  //   interval={currentOHLCParams.interval}
-                  //   timeframe={currentOHLCParams.timeframe}
-                  //   optimize={currentOHLCParams.optimize}
-                  //   height="100%"
-                  //   width="100%"
-                  //   baseRefreshMs={10000}
-                  //   className="relative"
-                  //   tradeData={tradeDataForChart}
-                  //   creatorAddress={creatorAddress}
-                  //   tokenSymbol={displayToken?.symbol || null}
-                  //   tokenName={displayToken?.name || null}
-                  //   tokenDecimals={typeof displayToken?.decimals === 'number' ? displayToken.decimals : null}
-                  // />
-                  <BackendOHLCChart
+                  <AdvancedOHLCChart
                     key={`chart-${resolvedPairAddress || _mint}`}
                     mint={typeof _mint === "string" ? _mint : undefined}
                     pairAddress={resolvedPairAddress}
@@ -542,7 +526,24 @@ export default function TradePage() {
                     className="relative"
                     tradeData={tradeDataForChart}
                     creatorAddress={creatorAddress}
+                    tokenSymbol={displayToken?.symbol || null}
+                    tokenName={displayToken?.name || null}
+                    tokenDecimals={typeof displayToken?.decimals === 'number' ? displayToken.decimals : null}
                   />
+                  // <BackendOHLCChart
+                  //   key={`chart-${resolvedPairAddress || _mint}`}
+                  //   mint={typeof _mint === "string" ? _mint : undefined}
+                  //   pairAddress={resolvedPairAddress}
+                  //   interval={currentOHLCParams.interval}
+                  //   timeframe={currentOHLCParams.timeframe}
+                  //   optimize={currentOHLCParams.optimize}
+                  //   height="100%"
+                  //   width="100%"
+                  //   baseRefreshMs={10000}
+                  //   className="relative"
+                  //   tradeData={tradeDataForChart}
+                  //   creatorAddress={creatorAddress}
+                  // />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
                     {isHydrating ? "Resolving pair address..." : "No mint or pair address available"}

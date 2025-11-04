@@ -10,7 +10,7 @@ import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
-import { toast } from "react-hot-toast";
+import { showCenteredErrorToast } from "~/utils/toast";
 import type { Token } from "~/utils/db";
 
 /* ---- Enhanced Axiom AI Palette (matching PulseTable) ---- */
@@ -78,6 +78,18 @@ function truncateMiddle(text: string, maxLength: number = 30): string {
   const start = Math.floor(maxLength / 2) - 2;
   const end = Math.ceil(maxLength / 2) - 2;
   return `${text.slice(0, start)}...${text.slice(-end)}`;
+}
+
+function getFirstString(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return undefined;
 }
 
 // Get market cap color based on PulseTable's SmartColor logic
@@ -818,10 +830,14 @@ export function PumpRow({
                   mint: rawToken.mint,
                   bondingCurveKey: rawToken.bondingCurveKey,
                   pair_address: rawToken.pair_address,
+                  pairAddress: rawToken.pairAddress,
                   migrated_pool_address: rawToken.migrated_pool_address,
+                  migratedPoolAddress: rawToken.migratedPoolAddress,
                   protocol: rawToken.protocol,
                   launchpad_protocol: rawToken.launchpad_protocol,
                   pool: rawToken.pool,
+                  poolAddress: rawToken.poolAddress || rawToken.pool_address,
+                  amm_id: rawToken.amm_id,
                 });
                 
                 // Calculate market cap from available data
@@ -836,20 +852,50 @@ export function PumpRow({
                 // - payload.poolAddress = migrated_pool_address || pair_address
                 
                 // Get the original pair_address (bondingCurveKey for pre-migration tokens)
-                const originalPairAddress = rawToken.pair_address ;
+                const originalPairAddress = getFirstString(
+                  rawToken.pair_address,
+                  rawToken.pairAddress,
+                  rawToken.bondingCurveKey,
+                  rawToken.bonding_curve_key,
+                  rawToken.bonding_curve_address,
+                  rawToken.bondingCurve?.address,
+                  rawToken.bonding_curve?.address,
+                );
                 // Get migrated pool address if available
-                const migratedPoolAddress = rawToken.migrated_pool_address;
+                const migratedPoolAddress = getFirstString(
+                  rawToken.migrated_pool_address,
+                  rawToken.migratedPoolAddress,
+                  rawToken.migrated_poolAddress,
+                  rawToken.migrated_pool?.address,
+                  rawToken.migratedPool?.address,
+                  rawToken.target_pool_address,
+                  rawToken.targetPoolAddress,
+                );
+                const fallbackPoolAddress = getFirstString(
+                  rawToken.poolAddress,
+                  rawToken.pool_address,
+                  rawToken.amm_id,
+                  rawToken.ammId,
+                  typeof rawToken.pool === 'string' && rawToken.pool.length >= 32 ? rawToken.pool : undefined,
+                );
                 // Effective pool address (what handleQuickBuy will use)
-                const effectivePoolAddress = migratedPoolAddress || originalPairAddress;
+                const effectivePoolAddress = getFirstString(
+                  migratedPoolAddress,
+                  originalPairAddress,
+                  fallbackPoolAddress,
+                );
                 
                 if (!effectivePoolAddress || effectivePoolAddress.trim() === '') {
                   console.error('[PumpLive] ❌ No valid pool address found!', {
                     migrated_pool_address: rawToken.migrated_pool_address,
                     bondingCurveKey: rawToken.bondingCurveKey,
                     pair_address: rawToken.pair_address,
+                    pairAddress: rawToken.pairAddress,
+                    poolAddress: rawToken.poolAddress || rawToken.pool_address,
+                    fallbackPoolAddress,
                     itemId: item.id,
                   });
-                  toast.error('Invalid token: No pool address available');
+                  showCenteredErrorToast('Invalid token: No pool address available');
                   return;
                 }
                 
@@ -857,6 +903,7 @@ export function PumpRow({
                   originalPairAddress: originalPairAddress || 'none',
                   migrated_pool_address: migratedPoolAddress || 'none',
                   bondingCurveKey: rawToken.bondingCurveKey || 'none',
+                  fallbackPoolAddress: fallbackPoolAddress || 'none',
                   effectivePoolAddress: effectivePoolAddress,
                   isMigrated: !!migratedPoolAddress
                 });
@@ -867,8 +914,8 @@ export function PumpRow({
                   standard: '',
                   name: item.name,
                   symbol: item.symbol || '',
-                  logo: item.avatarUrl || item.coverUrl || '',
-                  decimals: 6,
+                  logo: item.avatarUrl || item.coverUrl || rawToken.image || '',
+                  decimals: typeof rawToken.decimals === 'number' ? rawToken.decimals : 6,
                   metaplex: null,
                   fully_diluted_value: fullyDilutedValue,
                   total_supply: 0,
@@ -917,17 +964,24 @@ export function PumpRow({
                   total_snipers: 0,
                   // CRITICAL: Set pair_address to original (bondingCurveKey), not effective pool address
                   // handleQuickBuy will use: effectivePoolAddress = migrated_pool_address || pair_address
-                  pair_address: originalPairAddress,
+                  pair_address: originalPairAddress || effectivePoolAddress,
                   migrated_pool_address: migratedPoolAddress || undefined,
                   total_holders: 0,
                   created_at: rawToken.created_at || new Date().toISOString(),
                   updated_at: new Date().toISOString(),
-                  bonding_curve_progress: rawToken.bonding_curve_progress || 0,
-                  uri: rawToken.uri || item.coverUrl,
+                  bonding_curve_progress: rawToken.bonding_curve_progress || rawToken.bondingCurveProgress || 0,
+                  uri: rawToken.uri || rawToken.metadata_uri || item.coverUrl,
                   // For pump.fun tokens, protocol is typically 'pump' or 'pump.fun'
-                  launchpad_protocol: rawToken.launchpad_protocol || rawToken.protocol || 'pump',
-                  protocol: rawToken.protocol || 'pump',
-                  amm_id: rawToken.amm_id || undefined,
+                  launchpad_protocol: getFirstString(
+                    rawToken.launchpad_protocol,
+                    rawToken.protocol,
+                    rawToken.pool,
+                  ) || 'pump',
+                  protocol: getFirstString(
+                    rawToken.protocol,
+                    rawToken.pool,
+                  ) || 'pump',
+                  amm_id: getFirstString(rawToken.amm_id, rawToken.ammId) || undefined,
                 };
                 
                 // DEBUG: Log the constructed token to compare with Trending
@@ -948,8 +1002,10 @@ export function PumpRow({
                 console.log('[PumpLive] ✅ Raw token data:', {
                   mint: rawToken.mint,
                   pair_address: rawToken.pair_address,
+                  pairAddress: rawToken.pairAddress,
                   bondingCurveKey: rawToken.bondingCurveKey,
                   migrated_pool_address: rawToken.migrated_pool_address,
+                  migratedPoolAddress: rawToken.migratedPoolAddress,
                   protocol: rawToken.protocol,
                   launchpad_protocol: rawToken.launchpad_protocol,
                 });

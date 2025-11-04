@@ -44,27 +44,6 @@ import InterstatePopout from './InterstatePopout';
 import VerticalInput from './VerticalInput';
 import { usePulseWebSocket } from '~/hooks/usePulseWebSocket';
 
-/* ---- Enhanced Axiom AI Palette ---- */
-const AX = {
-  bg: "#0b0c0e",
-  surface: "#16171C",
-  surface2: "#121317",
-  border: "#24252C",
-  text: "#E6E7EA",
-  muted: "#9CA3AF",
-  mint: "#18c48c",
-  mintHover: "#12a877",
-  sell: "#ed3a7a",
-  aiBlue: "#526fff", // purple/indigo accent per request
-  aiBlueHover: "#3f56d9",
-  aiGreen: "#18c48c",
-  aiGreenHover: "#12a877",
-  aiCyan: "#06B6D4",
-  aiCyanHover: "#0891B2",
-  glowBlue: "rgba(82, 111, 255, 0.3)",
-  glowGreen: "rgba(24, 196, 140, 0.3)",
-  glowCyan: "rgba(6, 182, 212, 0.3)",
-};
 import { useRouter } from "next/router";
 import { fetchTokenMetadata } from "~/utils/functions";
 import { LuPill, LuSearch } from "react-icons/lu";
@@ -78,9 +57,31 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
-import { toast } from "react-hot-toast";
+import { showCenteredErrorToast, showCenteredSuccessToast } from "~/utils/toast";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
+
+/* ---- Enhanced Axiom AI Palette ---- */
+const AX = {
+  bg: "#0b0c0e",
+  surface: "#16171C",
+  surface2: "#121317",
+  border: "#24252C",
+  text: "#E6E7EA",
+  muted: "#9CA3AF",
+  mint: "#18c48c",
+  mintHover: "#12a877",
+  sell: "#ed3a7a",
+  aiBlue: "#526fff",
+  aiBlueHover: "#3f56d9",
+  aiGreen: "#18c48c",
+  aiGreenHover: "#12a877",
+  aiCyan: "#06B6D4",
+  aiCyanHover: "#0891B2",
+  glowBlue: "rgba(82, 111, 255, 0.3)",
+  glowGreen: "rgba(24, 196, 140, 0.3)",
+  glowCyan: "rgba(6, 182, 212, 0.3)",
+};
 
 interface PulseTableProps {
   title: string;
@@ -346,7 +347,6 @@ function useTokenMetadata(uri?: string) {
   }, [uri]);
   return { meta, loading, showInitial };
 }
-
 function TokenImage({
   token,
   priority = false,
@@ -645,7 +645,6 @@ function TokenImage({
   const bondingPct = (token as any).bonding_pct ?? 0;
   const isMigratedColumn = columnType === 'migrated';
   const isHighBondingMeteora = isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
-
   return (
     <>
       <div className="relative h-20 w-20 flex items-center justify-center">
@@ -939,7 +938,6 @@ function TokenImage({
           }
         `
       }} />
-
       {/* CSS for animations */}
       <style jsx>{`
         @keyframes shine {
@@ -1140,7 +1138,6 @@ function TokenImage({
         .filter-modal input[type="number"]::-webkit-search-cancel-button {
           display: none !important;
         }
-        
         /* Global rules for ALL number inputs in the entire modal */
         .filter-modal * input[type="number"]::-webkit-outer-spin-button,
         .filter-modal * input[type="number"]::-webkit-inner-spin-button {
@@ -1671,7 +1668,7 @@ function PulseTable({
   const router = useRouter();
   
   // Quick buy functionality
-  const { user } = useUser();
+  const { user, solBalance } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   
   // Get the preset index from the selected pill for this column
@@ -1703,81 +1700,93 @@ function PulseTable({
     console.log("  protocol:", token.protocol || "(none)");
     console.log("  amm_id:", token.amm_id || "(none)");
     
-    // Fallback toast function for production issues
-    const showToast = (message: string, type: 'success' | 'error' = 'error') => {
-      try {
-        if (type === 'success') {
-          toast.success(message, {
-            duration: 5000,
-            style: {
-              background: '#1E1F26',
-              color: '#E6E7EA',
-              border: '1px solid #70E0B0',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              zIndex: 9999
-            }
-          });
-        } else {
-          toast.error(message, {
-            duration: 5000,
-            style: {
-              background: '#1E1F26',
-              color: '#E6E7EA',
-              border: '1px solid #ff6b6b',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              zIndex: 9999
-            }
-          });
-        }
-      } catch (error) {
-        // Fallback to console and alert if toast fails
-        console.error('Toast failed:', error);
-        console.log(`[${type.toUpperCase()}] ${message}`);
-        if (typeof window !== 'undefined' && window.alert) {
-          window.alert(message);
-        }
-      }
-    };
-    
     if (!user) {
       console.log("❌ No user found");
-      showToast("⚠️ Please connect your wallet to trade");
+      showCenteredErrorToast("⚠️ Please connect your wallet to trade");
+      return;
+    }
+
+    if (!user.bearerToken) {
+      console.log("❌ Missing bearer token for user");
+      showCenteredErrorToast("⚠️ Authentication required to trade.");
       return;
     }
 
     const buyAmount = parseFloat(thunderAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
       console.log("❌ Invalid buy amount:", thunderAmount);
-      showToast("⚠️ Please enter a valid SOL amount (minimum 0.001 SOL)");
+      showCenteredErrorToast("⚠️ Please enter a valid SOL amount (minimum 0.001 SOL)");
       return;
     }
 
     try {
       const poolType = getPoolTypeFromToken(token);
       const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
-      
-      console.log("\n🏊 POOL INFORMATION:");
-      console.log(`  Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'}`);
-      console.log(`  Detected PoolType: ${poolType || '(empty - backend will auto-detect)'}`);
-      if (!poolType) {
-        console.log(`  ⚠️  Note: Empty poolType is OK - backend will auto-detect from pool address`);
+      if (!effectivePoolAddress) {
+        console.log("❌ Missing pool address for token", token.symbol);
+        showCenteredErrorToast("⚠️ Trading pool not available for this token yet. Please try later.");
+        return;
       }
-      console.log(`  Effective Pool Address: ${effectivePoolAddress}`);
-      console.log(`  Using migrated_pool_address: ${token.migrated_pool_address ? 'YES' : 'NO'}`);
-      console.log(`  Original pair_address: ${token.pair_address}`);
-      
+      console.log(`🔍 Quick Buy ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+      console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
+
       const presetIndex = getPresetIndex(); // Use local preset selection based on selectedPill
-      const settings = presets[presetIndex].quickBuySettings;
+      const preset = presets[presetIndex];
+      if (!preset) {
+        console.log("❌ Quick buy preset missing for index", presetIndex);
+        showCenteredErrorToast("⚠️ Quick buy preset not configured. Please update your presets and retry.");
+        return;
+      }
+
+      const settings = preset.quickBuySettings;
+      const minimums: Record<string, number> = {
+        "meteora amm v2": 0.0001,
+        "meteora amm v1": 0.0001,
+        "Raydium CPMM": 0.00001,
+        "PumpAmm": 0.000001,
+        "Pumpfun": 0.000001,
+        "meteora dbc": 0.000001,
+      };
+
+      const poolMinimum = minimums[poolType];
+      const minAmount = Math.max(0.0001, poolMinimum ?? 0);
+      if (buyAmount < minAmount) {
+        const protocolName = token.launchpad_protocol || token.protocol || poolType || "this pool";
+        console.log("❌ Quick Buy amount below minimum", { buyAmount, minAmount, protocolName });
+        showCenteredErrorToast(
+          `Minimum trade amount: ${minAmount} SOL for ${protocolName}. Please increase your amount.`,
+          { duration: 6000 }
+        );
+        return;
+      }
+
+      const safetyBuffer = 0.003;
+      const priorityFee = settings.priority || 0;
+      const bribeFee = settings.bribe || 0;
+      const totalFees = safetyBuffer + priorityFee + bribeFee;
+      const totalRequired = buyAmount + totalFees;
+
+      if (!Number.isFinite(solBalance) || solBalance <= 0) {
+        console.log("❌ SOL balance unavailable or zero", solBalance);
+        showCenteredErrorToast("⚠️ Insufficient SOL balance. Please fund your wallet before trading.");
+        return;
+      }
+
+      if (totalRequired > solBalance) {
+        const missing = Math.max(totalRequired - solBalance, 0);
+        console.log("❌ Not enough SOL for quick buy", { totalRequired, solBalance, missing });
+        showCenteredErrorToast(
+          `Insufficient balance! Need ${totalRequired.toFixed(4)} SOL (missing ${missing.toFixed(4)} SOL). Please fund your wallet.`,
+          { duration: 6000 }
+        );
+        return;
+      }
       
       console.log("\n⚙️ PRESET SETTINGS:");
       console.log(`  Active Preset: P${presetIndex + 1} (from selectedPill: ${selectedPill})`);
-      console.log(`  Slippage: ${(settings.maxSlippage || 0.4) * 100}% (${settings.maxSlippage || 0.4} decimal)`);
-      console.log(`  Priority Fee: ${settings.priority || 0.0001} SOL`);
-      console.log(`  Bribe: ${settings.bribe || 0} SOL`);
+      console.log(`  Slippage: ${(settings.maxSlippage * 100).toFixed(1)}%`);
+      console.log(`  Priority Fee: ${settings.priority} SOL`);
+      console.log(`  Bribe: ${settings.bribe} SOL`);
       console.log(`  MEV Mode: ${settings.mevMode}`);
       console.log(`  MEV Protection: ${settings.mevMode === "off" ? 0 : 1}`);
       console.log(`  Auto Fee: ${settings.autoFee || false}`);
@@ -1837,15 +1846,14 @@ function PulseTable({
         console.log("  Token Amount:", tokenAmount || 'N/A');
         console.log("  Token Symbol:", token.symbol);
         console.log("  Full Response:", JSON.stringify(data, null, 2));
-        showToast(
-          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`,
-          'success'
+        showCenteredSuccessToast(
+          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
         );
       } else {
         console.log("\n❌ QUICK BUY FAILED:");
         console.log("  Response:", JSON.stringify(data, null, 2));
         console.log("  Missing transaction hash");
-        showToast("❌ Quick Buy failed - no transaction hash returned");
+        showCenteredErrorToast("❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
       // Use console.warn for expected errors, console.error for unexpected
@@ -1860,36 +1868,26 @@ function PulseTable({
       logFn('Quick Buy error:', e);
 
       if (e instanceof ApiError) {
-        // Show simplified user-friendly messages with enhanced styling
-        const toastStyle = {
-          background: '#1E1F26',
-          color: '#E6E7EA',
-          border: '1px solid #ff6b6b',
-          borderRadius: '8px',
-          fontSize: '14px',
-          fontWeight: '500'
-        };
-        
         if (e.code === 'NO_ACTIVE_POOL') {
-          showToast(`⚠️ Pool unavailable for ${token.symbol}`);
+          showCenteredErrorToast(`⚠️ Pool unavailable for ${token.symbol}`);
         } else if (e.code === 'INSUFFICIENT_BALANCE') {
-          showToast(`⚠️ Insufficient balance`);
+          showCenteredErrorToast(`⚠️ Insufficient balance`);
         } else if (e.code === 'TX_FAILED') {
-          showToast(`❌ Trade failed. Try adjusting slippage or amount.`);
+          showCenteredErrorToast(`❌ Trade failed. Try adjusting slippage or amount.`);
         } else if (e.code === 'NO_HOLDINGS') {
-          showToast(`❌ No ${token.symbol} to sell`);
+          showCenteredErrorToast(`❌ No ${token.symbol} to sell`);
         } else if (e.code === 'AMOUNT_TOO_SMALL') {
-          showToast(`❌ Amount too small (min 0.001 SOL)`);
+          showCenteredErrorToast(`❌ Amount too small (min 0.001 SOL)`);
         } else if (e.code === 'POOL_UNAVAILABLE') {
-          showToast(`⚠️ Pool has insufficient liquidity`);
+          showCenteredErrorToast(`⚠️ Pool has insufficient liquidity`);
         } else {
           // Generic error with shortened message
           const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
-          showToast(`❌ ${msg}`);
+          showCenteredErrorToast(`❌ ${msg}`);
         }
       } else {
         // Unexpected error - show generic message
-        showToast(`❌ Trade failed. Please try again.`);
+        showCenteredErrorToast(`❌ Trade failed. Please try again.`);
       }
     }
   };
@@ -1971,10 +1969,8 @@ function PulseTable({
       setShowToast(false);
     }, 2000);
   };
-
   // Removed duplicate mapProtocolToBackend and getTokenProtocol functions
   // Protocol filtering is now 100% server-side via HTTP API and WebSocket
-
   // Filter and sort tokens
   const filteredAndSortedTokens = useMemo(() => {
     console.log(`[PulseTable ${title}] 🔧 filteredAndSortedTokens recomputing, tokens count: ${tokens?.length || 0}, filteredTokens: ${filteredTokens.length}, wsTokens: ${wsTokens.length}`);
@@ -2542,7 +2538,6 @@ function PulseTable({
       return "-";
     }
   };
-
   return (
     <div
       className={`num flex w-full lg:min-w-[340px] flex-1 flex-col shadow-lg mb-10 ${
@@ -2867,7 +2862,6 @@ function PulseTable({
                   <BiRefresh className="w-4 h-4" style={{ color: AX.text }} />
                 </button>
               </div>
-
               <div className="p-4 max-h-[500px] overflow-y-auto" style={{ backgroundColor: AX.surface }}>
                 {/* Protocols */}
                 <div className="mb-4">
@@ -3104,7 +3098,6 @@ function PulseTable({
                     </button>
                   ))}
                 </div>
-
                 {/* Category Content */}
                 {activeCategoryTab === 'Audit' && (
                   <div className="space-y-3">
@@ -3272,7 +3265,7 @@ function PulseTable({
                           }}
                           onFocus={(e) => {
                             e.target.style.outline = 'none';
-                            e.target.style.boxShadow = 'none';
+                            e.currentTarget.style.boxShadow = 'none';
                             e.target.style.borderColor = AX.border;
                           }}
                         />
@@ -3474,7 +3467,6 @@ function PulseTable({
                         />
                       </div>
                     </div>
-
                     {/* Dev Pairs Created */}
                     <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Dev Pairs Created</label>
@@ -3600,7 +3592,6 @@ function PulseTable({
                         </select>
                       </div>
                     </div>
-
                     {/* Top 10 Holders % - COMMENTED OUT: Filter not implemented (always returns true) */}
                     {/* <div>
                       <label className="block text-sm font-medium mb-2" style={{ color: AX.text }}>Top 10 Holders %</label>
@@ -4026,7 +4017,6 @@ function PulseTable({
 
                   </div>
                 )}
-
                 {/* SOCIALS TAB - COMMENTED OUT: Filters work but rarely used */}
                 {false && activeCategoryTab === 'Socials' && (
                   <div className="space-y-3">
@@ -4655,7 +4645,7 @@ function PulseTable({
                               e.stopPropagation();
                               try {
                                 await navigator.clipboard.writeText(token.mint);
-                                showCopyToast();
+                                showCenteredSuccessToast("Copied to clipboard");
                                 // Show success feedback
                                 const button = e.currentTarget as HTMLButtonElement;
                                 if (button && button.style) {
@@ -4676,7 +4666,7 @@ function PulseTable({
                                 textArea.select();
                                 try {
                                   document.execCommand('copy');
-                                  showCopyToast();
+                                  showCenteredSuccessToast("Copied to clipboard");
                                   const button = e.currentTarget as HTMLButtonElement;
                                   if (button && button.style) {
                                     const originalColor = button.style.color || AX.muted;
@@ -4833,13 +4823,19 @@ function PulseTable({
                                         </svg>
                                       </div>
                                       <div>
-                                        <div className="text-sm font-bold text-white">X Profile</div>
-                                        <div className="text-xs text-gray-400">Live Preview</div>
+                                        <div className="text-sm font-bold text-white">
+                                          X Profile
+                                        </div>
+                                        <div className="text-xs text-gray-400">
+                                          Live Preview
+                                        </div>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1">
                                       <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                      <span className="text-xs text-gray-400">Live</span>
+                                      <span className="text-xs text-gray-400">
+                                        Live
+                                      </span>
                                     </div>
                                   </div>
 
@@ -4903,36 +4899,6 @@ function PulseTable({
                                       </p>
                                     </div>
                                     
-                                    {/* Stats Row */}
-                                    {/* <div className="flex items-center justify-center gap-8 text-sm mb-4">
-                                      <div className="text-center">
-                                        <div className="font-bold text-white text-lg">
-                                          {(() => {
-                                            const symbol = token.symbol?.toLowerCase() || '';
-                                            const hash = symbol.split('').reduce((a, b) => {
-                                              a = ((a << 5) - a) + b.charCodeAt(0);
-                                              return a & a;
-                                            }, 0);
-                                            return Math.abs(hash) % 50000 + 1000;
-                                          })()}
-                                        </div>
-                                        <div className="text-gray-400 text-xs">Following</div>
-                                      </div>
-                                      <div className="text-center">
-                                        <div className="font-bold text-white text-lg">
-                                          {(() => {
-                                            const symbol = token.symbol?.toLowerCase() || '';
-                                            const hash = symbol.split('').reduce((a, b) => {
-                                              a = ((a << 5) - a) + b.charCodeAt(0);
-                                              return a & a;
-                                            }, 0);
-                                            return Math.abs(hash) % 500000 + 10000;
-                                          })()}
-                                        </div>
-                                        <div className="text-gray-400 text-xs">Followers</div>
-                                      </div>
-                                    </div> */}
-                                    
                                     {/* Follow Button */}
                                     <div className="flex justify-center mb-4">
                                       <button
@@ -4962,7 +4928,9 @@ function PulseTable({
                                         <line x1="8" y1="2" x2="8" y2="6"/>
                                         <line x1="3" y1="10" x2="21" y2="10"/>
                                       </svg>
-                                      <span>Joined {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+                                      <span>
+                                        Joined {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                                      </span>
                                     </div>
                                   </div>
 
@@ -5086,57 +5054,6 @@ function PulseTable({
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
-                          {/* <span className="text-xs">F</span>{" "}
-                          <svg width="10" height="10" viewBox="0 0 397.7 311.7" fill="none" className="ml-1">
-                            <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint0_linear_solana)"/>
-                            <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana)"/>
-                            <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana)"/>
-                            <defs>
-                              <linearGradient id="paint0_linear_solana" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                                <stop offset="0" stopColor="#00FFA3"/>
-                                <stop offset="1" stopColor="#DC1FFF"/>
-                              </linearGradient>
-                              <linearGradient id="paint1_linear_solana" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                                <stop offset="0" stopColor="#00FFA3"/>
-                                <stop offset="1" stopColor="#DC1FFF"/>
-                              </linearGradient>
-                              <linearGradient id="paint2_linear_solana" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                                <stop offset="0" stopColor="#00FFA3"/>
-                                <stop offset="1" stopColor="#DC1FFF"/>
-                              </linearGradient>
-                            </defs>
-                          </svg>
-                          <span 
-                            className="text-xs font-medium"
-                            style={{ 
-                              color: '#ffffff',
-                              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
-                            }}
-                          >
-                            {(() => {
-                              // Try to get actual liquidity data from multiple possible fields
-                              const liquidityUsd = (token as any).liquidity_usd ?? 
-                                                   (token as any).total_liquidity_usd ?? 
-                                                   (token as any).liquidity ?? 0;
-                              
-                              // If we have actual liquidity data and SOL price, show it
-                              if (liquidityUsd > 0 && solPrice && solPrice > 0) {
-                                const liquiditySol = liquidityUsd / solPrice;
-                                return formatSmartNumber(liquiditySol);
-                              }
-                              
-                              // Fallback: Estimate from market cap
-                              // Bonding curve tokens typically have ~10% of market cap as liquidity
-                              const marketCap = (token as any).fully_diluted_value ?? 
-                                               (token as any).market_cap_usd ?? 0;
-                              if (marketCap > 0 && solPrice && solPrice > 0) {
-                                const estimatedLiquiditySol = (marketCap * 0.1) / solPrice;
-                                return `${formatSmartNumber(estimatedLiquiditySol)}`;
-                              }
-                              
-                              return '-';
-                            })()}
-                          </span> */}
                           <span className="text-xs">TX</span>{" "}
                           <span 
                             className="text-xs font-medium"
@@ -5168,55 +5085,29 @@ function PulseTable({
                             <div 
                               className="h-full bg-green-400"
                               style={{
-                                width: `${Math.min(100, Math.max(0, ((token.total_buys_24h ?? 0) / Math.max(1, (token.total_buys_24h ?? 0) + (token.total_sells_24h ?? 0))) * 100))}%`
+                                width: `${(() => {
+                                  const buys = token.total_buys_24h ?? 0;
+                                  const sells = token.total_sells_24h ?? 0;
+                                  const total = Math.max(1, buys + sells);
+                                  const percent = (buys / total) * 100;
+                                  return Math.min(100, Math.max(0, percent));
+                                })()}%`
                               }}
                             ></div>
                             <div 
                               className="h-full bg-red-400"
                               style={{
-                                width: `${Math.min(100, Math.max(0, ((token.total_sells_24h ?? 0) / Math.max(1, (token.total_buys_24h ?? 0) + (token.total_sells_24h ?? 0))) * 100))}%`
+                                width: `${(() => {
+                                  const buys = token.total_buys_24h ?? 0;
+                                  const sells = token.total_sells_24h ?? 0;
+                                  const total = Math.max(1, buys + sells);
+                                  const percent = (sells / total) * 100;
+                                  return Math.min(100, Math.max(0, percent));
+                                })()}%`
                               }}
                             ></div>
                           </div>
                         </div>
-                        {/* <span className="text-neutral-400">
-                          V5m{" "}
-                          <span className="font-bold text-green-400">
-                            <SmoothNumber
-                              value={
-                                (token.total_buy_volume_5m ?? 0) +
-                                (token.total_sell_volume_5m ?? 0)
-                              }
-                              formatter={(val) => `$${formatSmartNumber(val)}`}
-                              duration={300}
-                            />
-                          </span>
-                        </span> */}
-                      </div>
-                      <div className="flex items-center gap-3 text-xs">
-                        {/* <span className="text-neutral-400">
-                          W5m{" "}
-                          <span className="font-bold text-blue-400">
-                            <SmoothNumber
-                              value={token.unique_wallets_5m ?? 0}
-                              duration={300}
-                            />
-                          </span>
-                        </span>
-                        <span className="text-neutral-400">
-                          B/S{" "}
-                          <span className="font-bold text-yellow-400">
-                            <SmoothNumber
-                              value={token.total_buys_24h ?? 0}
-                              duration={0}
-                            />
-                            /
-                            <SmoothNumber
-                              value={token.total_sells_24h ?? 0}
-                              duration={0}
-                            />
-                          </span>
-                        </span> */}
                       </div>
                       <button 
                         className="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100 z-50 shadow-sm"
@@ -5314,7 +5205,6 @@ function PulseTable({
                     </div>
                   </div>
                 </div>
-                
                 {/* Bottom Row */}
                 <div className="absolute left-24 bottom-2 flex flex-row items-center gap-1">
                   {/* Buyers percentage - Green */}
@@ -5409,7 +5299,6 @@ function PulseTable({
                     <span className="text-xs text-gray-500">-</span>
                   </span> */}
                 </div>
-                
                 {/* Red Meteora -> Arrows -> Yellow Meteora for High Bonding Tokens - Bottom-right of full row */}
                 {(() => {
                   const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
@@ -5486,7 +5375,6 @@ function PulseTable({
           })
         )}
       </div>
-      
       {/* Fixed positioned tooltips */}
       {memoizedTokens.map((token, idx) => (
         <>
@@ -5549,24 +5437,6 @@ function PulseTable({
         </>
       ))}
       
-      {/* Copy Success Toast */}
-      {showToast && (
-        <div 
-          className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg transition-all duration-300 ease-out"
-          style={{
-            backgroundColor: AX.surface,
-            color: AX.aiGreen,
-            border: `1px solid ${AX.aiGreen}`,
-            boxShadow: `0 4px 12px rgba(0, 0, 0, 0.3), 0 0 8px ${AX.glowGreen}`
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <FaRegCopy size={14} />
-            <span className="text-sm font-medium">Copied to clipboard!</span>
-          </div>
-        </div>
-      )}
-
       {/* Snipe on Migration Modal */}
       {showSnipeModal && selectedToken && (
         <InterstatePopout
@@ -5701,4 +5571,3 @@ function PulseTable({
 }
 
 export default PulseTable;
-

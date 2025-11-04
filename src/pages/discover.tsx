@@ -13,16 +13,15 @@ import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
-
-// Wrapped SOL mint address - used to filter out quote tokens
-const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
-import { toast } from "react-hot-toast";
+import { showCenteredErrorToast, showCenteredSuccessToast } from "~/utils/toast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { prefetchTradeData } from "~/utils/tokenCache";
+
+const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
 export type Timeframe = "5m" | "1h" | "6h" | "24h";
 
@@ -39,7 +38,7 @@ export default function DiscoverPage() {
   const { filter } = useFilter();
   const [localFilters, setLocalFilters] = useState(filter);
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const { user } = useUser();
+  const { user, solBalance } = useUser();
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -205,96 +204,91 @@ export default function DiscoverPage() {
   // QUICK BUY handler – with detailed logging (same as PulseTable)
   const handleQuickBuy = async (token: Token) => {
     console.log("🎯 handleQuickBuy called for token:", token.symbol);
-    
-    // ✅ COMPREHENSIVE DATA LOGGING FOR TESTING
     console.log("\n" + "=".repeat(80));
     console.log("📋 QUICK BUY DATA VERIFICATION - DISCOVER PAGE");
     console.log("=".repeat(80));
-    
-    // Log full token object - compare with PumpLive
+
     console.log("\n📊 [TRENDING] FULL TOKEN OBJECT:");
     console.log(JSON.stringify(token, null, 2));
-    
-    // Log key token fields - compare with PumpLive
-    console.log("\n🔑 [TRENDING] KEY TOKEN FIELDS:");
-    console.log("  mint:", token.mint);
-    console.log("  symbol:", token.symbol);
-    console.log("  name:", token.name);
-    console.log("  pair_address:", token.pair_address);
-    console.log("  migrated_pool_address:", token.migrated_pool_address || "(none)");
-    console.log("  launchpad_protocol:", token.launchpad_protocol || "(none)");
-    console.log("  protocol:", token.protocol || "(none)");
-    console.log("  amm_id:", token.amm_id || "(none)");
-    
-    // Fallback toast function for production issues
-    const showToast = (message: string, type: 'success' | 'error' = 'error') => {
-      try {
-        if (type === 'success') {
-          toast.success(message, {
-            duration: 5000,
-            style: {
-              background: '#1E1F26',
-              color: '#E6E7EA',
-              border: '1px solid #70E0B0',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              zIndex: 9999
-            }
-          });
-        } else {
-          toast.error(message, {
-            duration: 5000,
-            style: {
-              background: '#1E1F26',
-              color: '#E6E7EA',
-              border: '1px solid #ff6b6b',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: '500',
-              zIndex: 9999
-            }
-          });
-        }
-      } catch (error) {
-        // Fallback to console and alert if toast fails
-        console.error('Toast failed:', error);
-        console.log(`[${type.toUpperCase()}] ${message}`);
-        if (typeof window !== 'undefined' && window.alert) {
-          window.alert(message);
-        }
-      }
-    };
-    
+
     if (!user) {
       console.log("❌ No user found");
-      showToast("⚠️ Please connect your wallet to trade");
+      showCenteredErrorToast("⚠️ Please connect your wallet to trade");
       return;
     }
 
-    const buyAmount = parseFloat(quickBuyAmount);
-    if (isNaN(buyAmount) || buyAmount <= 0) {
+    if (!user.bearerToken) {
+      console.log("❌ Missing bearer token for user");
+      showCenteredErrorToast("⚠️ Authentication required to trade.");
+      return;
+    }
+
+    const buyAmount = Number(quickBuyAmount);
+    if (!Number.isFinite(buyAmount) || buyAmount <= 0) {
       console.log("❌ Invalid buy amount:", quickBuyAmount);
-      showToast("⚠️ Please enter a valid SOL amount (minimum 0.001 SOL)");
+      showCenteredErrorToast("⚠️ Please enter a valid SOL amount (minimum 0.0001 SOL)");
       return;
     }
 
     try {
       const poolType = getPoolTypeFromToken(token);
       const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
-      
-      console.log("\n🏊 POOL INFORMATION:");
-      console.log(`  Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'}`);
-      console.log(`  Detected PoolType: ${poolType || '(empty - backend will auto-detect)'}`);
-      if (!poolType) {
-        console.log(`  ⚠️  Note: Empty poolType is OK - backend will auto-detect from pool address`);
+      if (!effectivePoolAddress) {
+        console.log("❌ Missing pool address for token", token.symbol);
+        showCenteredErrorToast("⚠️ Trading pool not available for this token yet. Please try later.");
+        return;
       }
-      console.log(`  Effective Pool Address: ${effectivePoolAddress}`);
-      console.log(`  Using migrated_pool_address: ${token.migrated_pool_address ? 'YES' : 'NO'}`);
-      console.log(`  Original pair_address: ${token.pair_address}`);
-      
-      const settings = presets[activePreset].quickBuySettings;
-      
+
+      const preset = presets[activePreset];
+      if (!preset) {
+        console.log("❌ Quick buy preset missing for index", activePreset);
+        showCenteredErrorToast("⚠️ Quick buy preset not configured. Please update your presets and retry.");
+        return;
+      }
+
+      const settings = preset.quickBuySettings;
+      const minimums: Record<string, number> = {
+        "meteora amm v2": 0.0001,
+        "meteora amm v1": 0.0001,
+        "Raydium CPMM": 0.00001,
+        "PumpAmm": 0.000001,
+        "Pumpfun": 0.000001,
+        "meteora dbc": 0.000001,
+      };
+      const poolMinimum = minimums[poolType];
+      const minAmount = Math.max(0.0001, poolMinimum ?? 0);
+      if (buyAmount < minAmount) {
+        const protocolName = token.launchpad_protocol || token.protocol || poolType || "this pool";
+        console.log("❌ Quick Buy amount below minimum", { buyAmount, minAmount, protocolName });
+        showCenteredErrorToast(
+          `Minimum trade amount: ${minAmount} SOL for ${protocolName}. Please increase your amount.`,
+          { duration: 6000 }
+        );
+        return;
+      }
+
+      const safetyBuffer = 0.003;
+      const priorityFee = settings.priority || 0;
+      const bribeFee = settings.bribe || 0;
+      const totalFees = safetyBuffer + priorityFee + bribeFee;
+      const totalRequired = buyAmount + totalFees;
+
+      if (!Number.isFinite(solBalance) || solBalance <= 0) {
+        console.log("❌ SOL balance unavailable or zero", solBalance);
+        showCenteredErrorToast("⚠️ Insufficient SOL balance. Please fund your wallet before trading.");
+        return;
+      }
+
+      if (totalRequired > solBalance) {
+        const missing = Math.max(totalRequired - solBalance, 0);
+        console.log("❌ Not enough SOL for quick buy", { totalRequired, solBalance, missing });
+        showCenteredErrorToast(
+          `Insufficient balance! Need ${totalRequired.toFixed(4)} SOL (missing ${missing.toFixed(4)} SOL). Please fund your wallet.`,
+          { duration: 6000 }
+        );
+        return;
+      }
+
       console.log("\n⚙️ PRESET SETTINGS:");
       console.log(`  Active Preset: P${activePreset + 1} (from selectedPill: ${selectedPill})`);
       console.log(`  Slippage: ${(settings.maxSlippage || 0.4) * 100}% (${settings.maxSlippage || 0.4} decimal)`);
@@ -305,18 +299,14 @@ export default function DiscoverPage() {
       console.log(`  Auto Fee: ${settings.autoFee || false}`);
       console.log(`  Max Fee: ${settings.maxFee || 0} SOL`);
       console.log(`  RPC: ${settings.rpc || "(default)"}`);
-      
-      console.log("\n📦 FULL SETTINGS OBJECT:");
-      console.log(JSON.stringify(settings, null, 2));
-      
-      // Build the complete payload - exactly like PulseTable
+
       const payload: any = {
         poolAddress: effectivePoolAddress,
         baseMint: token.mint,
         quoteMint: SOL_MINT_ADDRESS,
         amount: buyAmount,
         mevProtection: (settings.mevMode === "off" ? 0 : 1) as 0 | 1,
-        poolType: poolType,
+        poolType,
         originalPairAddress: token.pair_address,
         slippage: (settings.maxSlippage || 0.4) * 100,
         priorityFee: settings.priority || 0.0001,
@@ -327,12 +317,10 @@ export default function DiscoverPage() {
         tokenName: token.name,
         tokenSymbol: token.symbol,
       };
-      
-      // Only include rpc if it exists (same as PulseTable)
       if (settings.rpc) {
         payload.rpc = settings.rpc;
       }
-      
+
       console.log("\n📤 COMPLETE PAYLOAD BEING SENT TO API:");
       console.log(JSON.stringify(payload, null, 2));
       console.log("\n📤 PAYLOAD SUMMARY:");
@@ -348,12 +336,12 @@ export default function DiscoverPage() {
       console.log("  mevMode:", payload.mevMode);
       console.log("  originalPairAddress:", payload.originalPairAddress);
       console.log("=".repeat(80) + "\n");
-      
+
       const data = await tradeBuy(payload, user.bearerToken);
-      
+
       console.log("\n📥 API RESPONSE RECEIVED:");
       console.log(JSON.stringify(data, null, 2));
-      
+
       const txHash = data?.hash || data?.txid;
       const tokenAmount = data?.amount || data?.tokenAmount;
 
@@ -363,15 +351,12 @@ export default function DiscoverPage() {
         console.log("  Token Amount:", tokenAmount || 'N/A');
         console.log("  Token Symbol:", token.symbol);
         console.log("  Full Response:", JSON.stringify(data, null, 2));
-        
-        // Backfill token to token-service so it's available in portfolio/activity
+
         try {
           console.log("\n🔄 Backfilling token after Quick Buy...");
           const backfillResponse = await fetch('/api/token-service/backfill-token', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               mint: token.mint,
               name: token.name,
@@ -390,23 +375,20 @@ export default function DiscoverPage() {
           }
         } catch (backfillError) {
           console.error('❌ Error backfilling token:', backfillError);
-          // Don't fail the Quick Buy if backfill fails - it's non-critical
         }
-        
-        showToast(
-          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`,
-          'success'
+
+        showCenteredSuccessToast(
+          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
         );
       } else {
         console.log("\n❌ QUICK BUY FAILED:");
         console.log("  Response:", JSON.stringify(data, null, 2));
         console.log("  Missing transaction hash");
-        showToast("❌ Quick Buy failed - no transaction hash returned");
+        showCenteredErrorToast("❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
-      // Use console.warn for expected errors, console.error for unexpected
       const logFn = (e as any)?.expected ? console.warn : console.error;
-      
+
       console.log("\n❌ QUICK BUY ERROR:");
       console.log("  Error Type:", e?.constructor?.name || typeof e);
       console.log("  Error Message:", e?.message || String(e));
@@ -414,49 +396,28 @@ export default function DiscoverPage() {
       console.log("  Error Details:", e?.details || 'N/A');
       console.log("  Full Error Object:", e);
       console.log("  Full Error JSON:", JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
-      
-      // Try to extract more details from the error
-      if (e?.response) {
-        console.log("  Response Status:", e.response.status);
-        console.log("  Response Body:", e.response.body);
-      }
-      if (e?.data) {
-        console.log("  Error Data:", e.data);
-      }
-      
+
       logFn('Quick Buy error:', e);
 
       if (e instanceof ApiError) {
-        // Show simplified user-friendly messages with enhanced styling
-        const toastStyle = {
-          background: '#1E1F26',
-          color: '#E6E7EA',
-          border: '1px solid #ff6b6b',
-          borderRadius: '8px',
-          fontSize: '14px',
-          fontWeight: '500'
-        };
-        
         if (e.code === 'NO_ACTIVE_POOL') {
-          showToast(`⚠️ Pool unavailable for ${token.symbol}`);
+          showCenteredErrorToast(`⚠️ Pool unavailable for ${token.symbol}`);
         } else if (e.code === 'INSUFFICIENT_BALANCE') {
-          showToast(`⚠️ Insufficient balance`);
+          showCenteredErrorToast(`⚠️ Insufficient balance`);
         } else if (e.code === 'TX_FAILED') {
-          showToast(`❌ Trade failed. Try adjusting slippage or amount.`);
+          showCenteredErrorToast(`❌ Trade failed. Try adjusting slippage or amount.`);
         } else if (e.code === 'NO_HOLDINGS') {
-          showToast(`❌ No ${token.symbol} to sell`);
+          showCenteredErrorToast(`❌ No ${token.symbol} to sell`);
         } else if (e.code === 'AMOUNT_TOO_SMALL') {
-          showToast(`❌ Amount too small (min 0.001 SOL)`);
+          showCenteredErrorToast(`❌ Amount too small (min 0.001 SOL)`);
         } else if (e.code === 'POOL_UNAVAILABLE') {
-          showToast(`⚠️ Pool has insufficient liquidity`);
+          showCenteredErrorToast(`⚠️ Pool has insufficient liquidity`);
         } else {
-          // Generic error with shortened message
           const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
-          showToast(`❌ ${msg}`);
+          showCenteredErrorToast(`❌ ${msg}`);
         }
       } else {
-        // Unexpected error - show generic message
-        showToast(`❌ Trade failed. Please try again.`);
+        showCenteredErrorToast(`❌ Trade failed. Please try again.`);
       }
     }
   };
