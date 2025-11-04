@@ -1,273 +1,204 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
+import React, { useState } from 'react';
+import Head from 'next/head';
+import AdvancedOHLCChart from '../components/AdvancedOHLCChart';
 
-export default function TestMarkers() {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+// Mock trade data for testing dev markers
+const mockTradeData = [
+  {
+    id: '1',
+    maker: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU', // Mock creator address
+    timestamp: Math.floor(Date.now() / 1000) - 3600, // 1 hour ago
+    price: 0.000123,
+    price_usd: 0.000123,
+    amount: '1000000',
+    symbol: 'DDOWN',
+    is_buy: true,
+    side: 'buy',
+    type: 'buy',
+  },
+  {
+    id: '2',
+    maker: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU', // Same creator (dev)
+    timestamp: Math.floor(Date.now() / 1000) - 1800, // 30 minutes ago
+    price: 0.000156,
+    price_usd: 0.000156,
+    amount: '500000',
+    symbol: 'DDOWN',
+    is_buy: false,
+    side: 'sell',
+    type: 'sell',
+  },
+  {
+    id: '3',
+    maker: 'DifferentWalletAddress123456789', // Different wallet (not dev)
+    timestamp: Math.floor(Date.now() / 1000) - 900, // 15 minutes ago
+    price: 0.000145,
+    price_usd: 0.000145,
+    amount: '2000000',
+    is_buy: true,
+    side: 'buy',
+    type: 'buy',
+  },
+  {
+    id: '4',
+    maker: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU', // Creator again (dev)
+    timestamp: Math.floor(Date.now() / 1000) - 300, // 5 minutes ago
+    price: 0.000178,
+    price_usd: 0.000178,
+    amount: '750000',
+    symbol: 'DDOWN',
+    is_buy: true,
+    side: 'buy',
+    type: 'buy',
+  },
+];
 
-  const [markersStatus, setMarkersStatus] = useState<string>('Initializing...');
-  const [markerPositions, setMarkerPositions] = useState<Array<{ x: number; y: number; marker: any }>>([]);
-  const [hoveredMarker, setHoveredMarker] = useState<{ x: number; y: number; marker: any } | null>(null);
+const mockCreatorAddress = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
 
-  // We'll keep candles + generated markers in refs/state so we can recompute
-  const candlesRef = useRef<
-    Array<{ time: UTCTimestamp; open: number; high: number; low: number; close: number }>
-  >([]);
-  const [testMarkers, setTestMarkers] = useState<any[]>([]);
-  const testMarkersRef = useRef<any[]>([]);
-
-  // Helper to calculate screen-space marker positions for overlay
-  const calculatePositions = useCallback(() => {
-    if (!chartRef.current || !seriesRef.current || !chartContainerRef.current) return;
-    if (testMarkersRef.current.length === 0) return;
-
-    const timeScale = chartRef.current.timeScale();
-
-    const newPositions = testMarkersRef.current
-      .map((marker) => {
-        const timeCoord = timeScale.timeToCoordinate(marker.time);
-        const priceCoord = seriesRef.current!.priceToCoordinate(marker.price);
-
-        if (timeCoord === null || priceCoord === null) {
-          return null;
-        }
-
-        return {
-          x: timeCoord,
-          y: priceCoord - 20, // Offset above the bar
-          marker,
-        };
-      })
-      .filter(Boolean) as Array<{ x: number; y: number; marker: any }>;
-
-    setMarkerPositions(newPositions);
-    setMarkersStatus(`✅ Calculated ${newPositions.length} overlay marker(s)`);
-  }, []); // Stable reference - we'll access testMarkers from ref in the implementation
-
-  // Initialize chart + data once
-  useEffect(() => {
-    if (!chartContainerRef.current) return;
-
-    // 1. Create chart
-    const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: 600,
-      layout: {
-        background: { type: ColorType.Solid, color: '#131722' },
-        textColor: '#d1d4dc',
-      },
-      grid: {
-        vertLines: { color: '#2B2B43' },
-        horzLines: { color: '#2B2B43' },
-      },
-      timeScale: {
-        timeVisible: true,
-        secondsVisible: false,
-      },
-    });
-
-    // 2. Add candlestick series
-    const candlestickSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
-      borderDownColor: '#ef5350',
-      borderUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
-      wickUpColor: '#26a69a',
-    });
-
-    chartRef.current = chart;
-    seriesRef.current = candlestickSeries;
-
-    // 3. Generate candle data aligned to minute boundaries
-    const nowRaw = Math.floor(Date.now() / 1000);
-    const nowAligned = nowRaw - (nowRaw % 60); // floor to start of current minute
-    const sampleCandles: Array<{
-      time: UTCTimestamp;
-      open: number;
-      high: number;
-      low: number;
-      close: number;
-    }> = [];
-
-    let price = 100;
-    // make 21 candles, 1-minute apart
-    for (let i = 20; i >= 0; i--) {
-      const t = (nowAligned - i * 60) as UTCTimestamp;
-      price += (Math.random() - 0.5) * 2;
-
-      sampleCandles.push({
-        time: t,
-        open: price - 0.5,
-        high: price + 1,
-        low: price - 1,
-        close: price,
-      });
-    }
-
-    candlesRef.current = sampleCandles;
-    candlestickSeries.setData(sampleCandles);
-
-    // 4. Build the test markers.
-    const secondsPerBar = 60; // 1m bars
-    // We'll pick candle indices we KNOW exist to avoid mismatch.
-    const midIdx = Math.floor(sampleCandles.length * 0.5);
-    const lateIdx = Math.floor(sampleCandles.length * 0.8);
-
-    const midCandle = sampleCandles[midIdx];
-    const lateCandle = sampleCandles[lateIdx];
-
-    const test = [
-      {
-        // align marker time EXACTLY to candle time
-        time: midCandle.time,
-        position: 'belowBar' as const,
-        color: '#7bdc6e', // green-ish
-        text: 'DB',
-        isBuy: true,
-        price: midCandle.close,
-      },
-      {
-        time: lateCandle.time,
-        position: 'aboveBar' as const,
-        color: '#ef5350', // red-ish
-        text: 'DS',
-        isBuy: false,
-        price: lateCandle.close,
-      },
-    ];
-
-    setTestMarkers(test);
-    testMarkersRef.current = test;
-    setMarkersStatus('Chart + candles ready, markers built');
-
-    // 5. Subscribe to timescale changes so we can keep overlays in sync on zoom/pan/resize
-    const ts = chart.timeScale();
-    const handleLogicalRangeChange = () => {
-      calculatePositions();
-    };
-    const handleSizeChange = () => {
-      calculatePositions();
-    };
-
-    (ts as any).subscribeVisibleLogicalRangeChange?.(handleLogicalRangeChange);
-    (ts as any).subscribeSizeChange?.(handleSizeChange);
-
-    // Also update on window resize (container might change width)
-    const handleWindowResize = () => {
-      if (!chartContainerRef.current || !chartRef.current) return;
-      const { clientWidth } = chartContainerRef.current;
-
-      chartRef.current.applyOptions({
-        width: clientWidth,
-        height: 600,
-      });
-
-      calculatePositions();
-    };
-
-    window.addEventListener('resize', handleWindowResize);
-
-    // Cleanup
-    return () => {
-      (ts as any).unsubscribeVisibleLogicalRangeChange?.(handleLogicalRangeChange);
-      (ts as any).unsubscribeSizeChange?.(handleSizeChange);
-      window.removeEventListener('resize', handleWindowResize);
-      chart.remove();
-    };
-   }, []); // No dependencies - only run once
-
-  // Recalculate positions when markers change or after chart updates
-  useEffect(() => {
-    if (testMarkers.length === 0) return;
-    
-    // Small delay to ensure chart is ready
-    const timeout = setTimeout(() => {
-      calculatePositions();
-    }, 100);
-    
-    return () => clearTimeout(timeout);
-  }, [testMarkers.length]); // Only depend on length, not the full array
+export default function TestMarkersPage() {
+  const [showDebugInfo, setShowDebugInfo] = useState(true);
 
   return (
-    <div className="min-h-screen bg-gray-900 p-8 text-white">
-      <div className="max-w-7xl mx-auto space-y-4">
-        <h1 className="text-3xl font-bold">Lightweight Charts Markers Test</h1>
-
-        <div className="bg-gray-800 rounded-lg p-4">
-          <h2 className="text-xl mb-2">Status:</h2>
-          <p className="text-green-400 font-mono">{markersStatus}</p>
-        </div>
-
-        {/* wrapper that is RELATIVE and has NO padding offset around the chart canvas + overlays */}
-        <div className="bg-gray-800 rounded-lg relative" style={{ width: '100%', height: '600px' }}>
-          {/* chart mounts here, positioned at top-left of this relative parent */}
-          <div
-            ref={chartContainerRef}
-            className="absolute left-0 top-0 w-full h-full"
-          />
-
-          {/* HTML Overlay Markers */}
-          {markerPositions.map((pos, idx) => (
-            <div
-              key={`marker-${idx}`}
-              className="absolute pointer-events-auto cursor-pointer transition-transform hover:scale-110"
-              style={{
-                left: `${pos.x}px`,
-                top: `${pos.y}px`,
-                transform: 'translate(-50%, -50%)',
-                zIndex: 10,
-              }}
-              onMouseEnter={() => setHoveredMarker(pos)}
-              onMouseLeave={() => setHoveredMarker(null)}
+    <>
+      <Head>
+        <title>Test Dev Trade Markers</title>
+      </Head>
+      
+      <div className="min-h-screen bg-gray-900 text-white p-4">
+        <div className="max-w-7xl mx-auto">
+          <h1 className="text-3xl font-bold mb-6 text-center">
+            Dev Trade Markers Test Page
+          </h1>
+          
+          {/* Debug Info Panel */}
+          <div className="mb-6">
+            <button
+              onClick={() => setShowDebugInfo(!showDebugInfo)}
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded mb-4"
             >
-              <div
-                className="flex items-center justify-center font-bold leading-none rounded-full shadow-[0_8px_24px_rgba(0,0,0,0.6)]"
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  backgroundColor: pos.marker.isBuy ? '#7bdc6e' : '#ef5350',
-                  border: '1px solid rgba(0,0,0,0.4)',
-                  color: '#0d1222',
-                  fontSize: '11px',
+              {showDebugInfo ? 'Hide' : 'Show'} Debug Info
+            </button>
+            
+            {showDebugInfo && (
+              <div className="bg-gray-800 p-4 rounded-lg mb-4">
+                <h3 className="text-lg font-semibold mb-3">Test Data:</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <h4 className="font-medium text-green-400 mb-2">Creator Address:</h4>
+                    <code className="bg-gray-700 p-2 rounded block break-all">
+                      {mockCreatorAddress}
+                    </code>
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-medium text-blue-400 mb-2">Mock Trade Data:</h4>
+                    <div className="space-y-2">
+                      {mockTradeData.map((trade, index) => (
+                        <div key={trade.id} className="bg-gray-700 p-2 rounded text-xs">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-white font-bold text-xs ${trade.is_buy ? 'bg-green-600' : 'bg-red-600'}`}>
+                                {trade.is_buy ? 'DB' : 'DS'}
+                              </div>
+                              <span className={`font-medium ${trade.is_buy ? 'text-green-400' : 'text-red-400'}`}>
+                                {trade.is_buy ? 'DEV BUY' : 'DEV SELL'}
+                              </span>
+                            </div>
+                            <span className="text-gray-400">
+                              {new Date(trade.timestamp * 1000).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <div className="text-gray-300">
+                            Price: ${trade.price_usd?.toFixed(6)} | Amount: {trade.amount}
+                          </div>
+                          <div className="text-gray-400 text-xs">
+                            Maker: {trade.maker === mockCreatorAddress ? '✅ CREATOR' : '❌ Other'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-4 p-3 bg-yellow-900/30 border border-yellow-600 rounded">
+                  <h4 className="font-medium text-yellow-400 mb-1">Expected Results:</h4>
+                  <ul className="text-sm text-yellow-200 space-y-1">
+                    <li>• You should see <strong>3 dev trade markers</strong> (trades #1, #2, #4)</li>
+                    <li>• Trade #3 should <strong>NOT</strong> have a marker (different wallet)</li>
+                    <li>• <span className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold">DB</span> Green circles with "DB" <strong>on top of candles</strong> for dev buys</li>
+                    <li>• <span className="bg-red-600 text-white px-2 py-1 rounded text-xs font-bold">DS</span> Red circles with "DS" <strong>on top of candles</strong> for dev sells</li>
+                    <li>• Markers positioned <strong>above their respective candles</strong></li>
+                    <li>• Hover tooltips with trade details</li>
+                    <li>• Timeline markers showing "DB"/"DS"</li>
+                  </ul>
+                  
+                  <div className="mt-3 p-2 bg-gray-700 rounded">
+                    <h5 className="text-xs font-medium text-gray-300 mb-2">Visual Example:</h5>
+                    <div className="flex items-center gap-4 text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                          DB
+                        </div>
+                        <span className="text-green-400">Dev Buy Marker</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center text-white font-bold text-xs">
+                          DS
+                        </div>
+                        <span className="text-red-400">Dev Sell Marker</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Chart Container */}
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <h2 className="text-xl font-semibold mb-4">AdvancedOHLCChart with Dev Trade Markers</h2>
+            
+            <div className="h-[600px] w-full border border-gray-600 rounded">
+              <AdvancedOHLCChart
+                // Use a well-known token for testing (you can change this)
+                mint="So11111111111111111111111111111111111111112" // SOL
+                interval="1m"
+                timeframe="24h"
+                height="100%"
+                width="100%"
+                tradeData={mockTradeData}
+                creatorAddress={mockCreatorAddress}
+                onDataUpdate={(data) => {
+                  console.log('[TestPage] OHLC data updated:', data.length, 'candles');
                 }}
-              >
-                {pos.marker.text}
-              </div>
+              />
             </div>
-          ))}
+          </div>
 
-          {/* Tooltip */}
-          {hoveredMarker && (
-            <div
-              className="absolute pointer-events-none bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg border border-gray-700 z-20"
-              style={{
-                left: `${hoveredMarker.x + 20}px`,
-                top: `${hoveredMarker.y}px`,
-                transform: 'translateY(-50%)',
-              }}
-            >
-              <div className="font-semibold mb-1">
-                {hoveredMarker.marker.isBuy ? 'Dev Buy' : 'Dev Sell'} @ {new Date(hoveredMarker.marker.time * 1000).toLocaleTimeString()}
-              </div>
-              <div className="text-gray-300">
-                Price: ${hoveredMarker.marker.price.toFixed(2)} USD
-              </div>
+          {/* Instructions */}
+          <div className="mt-6 bg-gray-800 p-4 rounded-lg">
+            <h3 className="text-lg font-semibold mb-3">Testing Instructions:</h3>
+            <ol className="list-decimal list-inside space-y-2 text-sm">
+              <li>Open your browser's <strong>Developer Console</strong> (F12)</li>
+              <li>Look for logs starting with <code>[AdvancedOHLCChart]</code></li>
+              <li>Check for <code>getMarks CALLED</code> and <code>Returning marks: X marks</code></li>
+              <li>Look for circular markers positioned <strong>above candles</strong> with <strong>DB</strong> (green) and <strong>DS</strong> (red) text</li>
+              <li>Hover over markers to see detailed tooltips</li>
+              <li>Check the timeline at the bottom for "DB"/"DS" indicators</li>
+            </ol>
+            
+            <div className="mt-4 p-3 bg-blue-900/30 border border-blue-600 rounded">
+              <h4 className="font-medium text-blue-400 mb-1">Troubleshooting:</h4>
+              <ul className="text-sm text-blue-200 space-y-1">
+                <li>• If no markers appear, check console for <code>getMarks</code> calls</li>
+                <li>• Verify trade data is being passed correctly</li>
+                <li>• Make sure creator address matches trade makers</li>
+                <li>• Try zooming/panning the chart to trigger mark refresh</li>
+              </ul>
             </div>
-          )}
-        </div>
-
-        <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-2">Expected:</h3>
-          <ul className="list-disc list-inside space-y-1 text-gray-300">
-            <li>Green circle with "DB" centered over a candle around the middle</li>
-            <li>Red circle with "DS" centered over a later candle</li>
-            <li>Overlay pills stay aligned on zoom/pan/resize</li>
-          </ul>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

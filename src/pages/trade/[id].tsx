@@ -1,7 +1,6 @@
 import { useRouter } from "next/router";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import Head from "next/head";
-import { Toaster } from "react-hot-toast";
 import { useWallet } from "../../components/useWallet";
 import { useUser } from "../../components/UserContext";
 import Header from "../../components/Header";
@@ -23,7 +22,8 @@ import SimilarTokensPanel from "../../components/trade/SimilarTokensPanel";
 import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPanel";
 
 // Lazy load heavy components to reduce initial bundle size
-const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
+//const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
+const AdvancedOHLCChart = dynamic(() => import("../../components/AdvancedOHLCChart"), { ssr: false });
 const CodexTrades = dynamic(() => import("../../components/trade/CodexTrades"), { ssr: false });
 const CodexTopTraders = dynamic(() => import("../../components/trade/CodexTopTraders"), { ssr: false });
 const CodexDevTokens = dynamic(() => import("../../components/trade/CodexDevTokens"), { ssr: false });
@@ -211,21 +211,78 @@ export default function TradePage() {
 
   // ---------------- drag-to-resize for left column ----------------
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const clampTop = useCallback((desired: number) => {
-    const el = containerRef.current;
-    if (!el) return desired;
-    const rect = el.getBoundingClientRect();
-    const MIN_TOP = 280;
+  
+  // Minimum chart height (including header) - chart should never shrink below this
+  const MIN_CHART_HEIGHT = 350; // 350px total (header ~50px + chart ~300px minimum)
+  
+  // Calculate responsive min/max based on viewport
+  const getResponsiveLimits = useCallback(() => {
+    if (typeof window === "undefined") return { min: MIN_CHART_HEIGHT, max: 800 };
+    const vh = window.innerHeight;
+    const MIN_TOP = Math.max(MIN_CHART_HEIGHT, vh * 0.3); // At least min chart height or 30% of viewport
     const MIN_BOTTOM = 180;
-    const maxTop = Math.max(MIN_TOP, rect.height - MIN_BOTTOM);
-    return Math.min(Math.max(desired, MIN_TOP), maxTop);
+    const MAX_TOP = Math.min(vh * 0.85, vh - MIN_BOTTOM); // Max 85% of viewport or viewport minus bottom
+    return { min: MIN_TOP, max: MAX_TOP };
   }, []);
+  
+  const clampTop = useCallback((desired: number) => {
+    const limits = getResponsiveLimits();
+    // Ensure minimum is always respected
+    const enforcedMin = Math.max(MIN_CHART_HEIGHT, limits.min);
+    // Use viewport height to calculate max, not container height (which changes during drag)
+    const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+    // Max should be viewport height minus minimum bottom pane space (180px)
+    // Account for header/other UI elements by subtracting a bit more
+    const maxTop = Math.min(vh - 180, limits.max);
+    // Clamp the desired value between min and max - allow movement in both directions
+    const clamped = Math.max(enforcedMin, Math.min(desired, maxTop));
+    return clamped;
+  }, [getResponsiveLimits]);
+  
+  // Initialize with responsive default based on viewport
   const [topPanePx, setTopPanePx] = useState<number>(() => {
-    if (typeof window === "undefined") return 420;
-    const v = Number(localStorage.getItem("tradeSplitTopPx"));
-    return Number.isFinite(v) && v > 0 ? v : 420;
+    if (typeof window === "undefined") return 500;
+    // Try to use saved value, but validate it's still reasonable
+    const saved = Number(localStorage.getItem("tradeSplitTopPx"));
+    if (Number.isFinite(saved) && saved > 0) {
+      const limits = { min: MIN_CHART_HEIGHT, max: window.innerHeight * 0.85 };
+      // If saved value is reasonable, use it; otherwise use responsive default
+      if (saved >= limits.min && saved <= limits.max) {
+        return saved;
+      }
+    }
+    // Default to 50% of viewport height, clamped between min and max
+    const defaultHeight = Math.max(MIN_CHART_HEIGHT, Math.min(window.innerHeight * 0.5, 800));
+    return defaultHeight;
   });
-  useEffect(() => { localStorage.setItem("tradeSplitTopPx", String(topPanePx)); }, [topPanePx]);
+  
+  const [isResizing, setIsResizing] = useState(false);
+  const topPanePxRef = useRef(topPanePx);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    topPanePxRef.current = topPanePx;
+  }, [topPanePx]);
+  
+  useEffect(() => { 
+    localStorage.setItem("tradeSplitTopPx", String(topPanePx)); 
+  }, [topPanePx]);
+  
+  // Handle window resize to adjust top pane if needed
+  useEffect(() => {
+    const handleResize = () => {
+      const limits = getResponsiveLimits();
+      // If current height is outside new limits, adjust it
+      if (topPanePx < limits.min) {
+        setTopPanePx(limits.min);
+      } else if (topPanePx > limits.max) {
+        setTopPanePx(limits.max);
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [topPanePx, getResponsiveLimits]);
 
   useEffect(() => {
     setTokenDataLoading(pollingLoading || isHydrating);
@@ -390,10 +447,15 @@ export default function TradePage() {
   return (
     <>
       <Head><title>{token?.name} | Trade</title></Head>
-      <Toaster position="top-right" />
 
-      <div className="min-h-screen w-full flex flex-col"
-           style={{ backgroundColor: "#0f1012", color: AX.text, fontFamily: "Inter, ui-sans-serif, system-ui" }}>
+      <div 
+        className="min-h-screen w-full flex flex-col"
+        style={{ 
+          backgroundColor: "#0f1012", 
+          color: AX.text, 
+          fontFamily: "Inter, ui-sans-serif, system-ui",
+        }}
+      >
         {/* Top global header */}
         <Header search={search} setSearch={setSearch} />
 
@@ -404,21 +466,54 @@ export default function TradePage() {
           </div>
         )}
 
-        <div className="flex flex-1 w-full max-w-full overflow-hidden" style={{ minHeight: 0 }}>
+        <div 
+          className="flex flex-1 w-full max-w-full overflow-hidden" 
+          style={{ 
+            minHeight: 0,
+            flex: '1 1 auto',
+          }}
+        >
           {/* LEFT: chart + tables */}
           <div
+            ref={containerRef}
             className="flex-1 min-w-0 max-w-full flex flex-col pb-0"
-            style={{ borderRight: `1px solid ${AX.border}`, minHeight: 0 }}
+            style={{ 
+              borderRight: `1px solid ${AX.border}`, 
+              minHeight: 0,
+              height: '100%',
+              overflow: 'hidden',
+            }}
           >
             {/* TOP pane - Chart in top left */}
-            <div className="flex-shrink-0 flex flex-col" style={{ height: topPanePx }}>
+            <div 
+              className="flex-shrink-0 flex flex-col" 
+              style={{ 
+                height: topPanePx,
+                minHeight: `${MIN_CHART_HEIGHT}px`,
+                transition: isResizing ? 'none' : 'height 0.2s ease-out',
+                willChange: isResizing ? 'height' : 'auto',
+              }}
+            >
               <div className="px-2 flex-shrink-0">
                 <TradeHeader token={correctTokenData || displayToken} />
               </div>
 
-              <div className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden">
+              {/* Separator line after TradeHeader */}
+              <div className="px-3 border-b border-[#2A2B33]" style={{ marginTop: '2px' }} />
+
+              <div 
+                id="chart-container-wrapper"
+                className="flex-1 min-h-[240px] relative chart-wrapper w-full overflow-hidden" 
+                style={{ 
+                  height: '100%',
+                  width: '100%',
+                  position: 'relative',
+                  minHeight: 0,
+                  minWidth: 0,
+                }}
+              >
                 {canStartOHLC || (typeof resolvedPairAddress === "string" && resolvedPairAddress.length >= 32) ? (
-                  <BackendOHLCChart
+                  <AdvancedOHLCChart
                     key={`chart-${resolvedPairAddress || _mint}`}
                     mint={typeof _mint === "string" ? _mint : undefined}
                     pairAddress={resolvedPairAddress}
@@ -431,7 +526,24 @@ export default function TradePage() {
                     className="relative"
                     tradeData={tradeDataForChart}
                     creatorAddress={creatorAddress}
+                    tokenSymbol={displayToken?.symbol || null}
+                    tokenName={displayToken?.name || null}
+                    tokenDecimals={typeof displayToken?.decimals === 'number' ? displayToken.decimals : null}
                   />
+                  // <BackendOHLCChart
+                  //   key={`chart-${resolvedPairAddress || _mint}`}
+                  //   mint={typeof _mint === "string" ? _mint : undefined}
+                  //   pairAddress={resolvedPairAddress}
+                  //   interval={currentOHLCParams.interval}
+                  //   timeframe={currentOHLCParams.timeframe}
+                  //   optimize={currentOHLCParams.optimize}
+                  //   height="100%"
+                  //   width="100%"
+                  //   baseRefreshMs={10000}
+                  //   className="relative"
+                  //   tradeData={tradeDataForChart}
+                  //   creatorAddress={creatorAddress}
+                  // />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
                     {isHydrating ? "Resolving pair address..." : "No mint or pair address available"}
@@ -440,38 +552,72 @@ export default function TradePage() {
               </div>
             </div>
 
-            {/* Ultra-thin resizer */}
+            {/* Resizer with visible drag handle - thin but visible */}
             <div
               role="separator"
               aria-orientation="horizontal"
               aria-label="Resize chart and trades panels"
               tabIndex={0}
               onPointerDown={(e) => {
+                // Only start drag on primary button (left click) for mouse, or any touch
+                if (e.pointerType === 'mouse' && e.button !== 0) {
+                  return; // Reject non-left mouse clicks
+                }
+                
                 e.preventDefault();
-                const startY = e.clientY + window.scrollY;
-                const startTop = topPanePx;
-                const onMove = (ev: any) => {
-                  const pageY = ev.clientY + window.scrollY;
-                  const delta = pageY - startY;
-                  setTopPanePx((v) => clampTop(startTop + delta));
-                };
-                const onUp = () => {
-                  window.removeEventListener("pointermove", onMove as any, { capture: true } as any);
-                  window.removeEventListener("pointerup", onUp as any, { capture: true } as any);
-                  document.body.style.cursor = "";
-                  (document.body.style as any).userSelect = "";
-                  document.documentElement.style.cursor = "";
-                };
+                e.stopPropagation();
+                
+                const startY = e.clientY;
+                const startTop = topPanePxRef.current;
+                
+                // Capture pointer to ensure we get events even when cursor moves outside element
+                (e.target as Element).setPointerCapture(e.pointerId);
+                
+                setIsResizing(true);
                 document.body.style.cursor = "row-resize";
-                (document.body.style as any).userSelect = "none";
-                document.documentElement.style.cursor = "row-resize";
-                window.addEventListener("pointermove", onMove as any, { capture: true } as any);
-                window.addEventListener("pointerup", onUp as any, { capture: true } as any);
+                document.body.style.userSelect = "none";
+                
+                const onMove = (ev: PointerEvent) => {
+                  ev.preventDefault();
+                  
+                  const currentY = ev.clientY;
+                  const delta = currentY - startY;
+                  const newHeight = clampTop(startTop + delta);
+                  
+                  setTopPanePx(newHeight);
+                  topPanePxRef.current = newHeight;
+                };
+                
+                const onUp = (ev: PointerEvent) => {
+                  // Release pointer capture
+                  (e.target as Element).releasePointerCapture(e.pointerId);
+                  
+                  setIsResizing(false);
+                  document.body.style.cursor = "";
+                  document.body.style.userSelect = "";
+                  
+                  // Remove event listeners from the separator element, not window
+                  (e.target as Element).removeEventListener("pointermove", onMove);
+                  (e.target as Element).removeEventListener("pointerup", onUp);
+                  (e.target as Element).removeEventListener("pointercancel", onUp);
+                };
+                
+                // Add event listeners to the separator element, not window
+                (e.target as Element).addEventListener("pointermove", onMove, { passive: false });
+                (e.target as Element).addEventListener("pointerup", onUp, { passive: false });
+                (e.target as Element).addEventListener("pointercancel", onUp, { passive: false });
               }}
-              className="relative h-[2px] cursor-row-resize select-none touch-none flex-shrink-0"
-              style={{ touchAction: "none", zIndex: 1, background: "transparent" }}
+              className="relative h-1.5 cursor-row-resize select-none touch-none flex-shrink-0 flex items-center justify-center hover:bg-gray-800/20 transition-colors"
+              style={{ touchAction: "none", zIndex: 10, pointerEvents: "auto" }}
             >
-              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px" style={{ background: AX.border }} />
+              {/* Visible dots handle - smaller, thinner dots */}
+              <div className="flex items-center gap-0.5">
+                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
+                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
+                <div className="w-0.5 h-0.5 rounded-full bg-gray-500" />
+              </div>
+              {/* Visual separator line */}
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-gray-700/20" />
             </div>
 
             {/* BOTTOM pane (tabs + tables) */}
@@ -588,8 +734,22 @@ export default function TradePage() {
         .lightweight-chart-container, .ohlc-chart-container, .tv-lightweight-charts { width:100% !important; height:100% !important; }
         .tv-lightweight-charts .pane { overflow: visible !important; }
         .tv-lightweight-charts canvas { image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges; }
-        .chart-wrapper { display:flex; flex-direction:column; position:relative; max-width:100%; }
-        .chart-wrapper > * { max-width:100%; }
+        .chart-wrapper { 
+          display:flex; 
+          flex-direction:column; 
+          position:relative; 
+          max-width:100%; 
+          width: 100%;
+          height: 100%;
+          min-height: 240px;
+        }
+        .chart-wrapper > * { 
+          max-width:100%; 
+          width: 100%;
+          height: 100%;
+          flex: 1;
+          min-height: 0;
+        }
         [role="separator"] { pointer-events:auto; position:relative; }
         [role="separator"]:hover { opacity:1; }
         #tabs-pane { margin-top:0 !important; padding-top:0 !important; }

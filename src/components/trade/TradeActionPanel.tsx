@@ -9,7 +9,8 @@ import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
 import { createLimitOrder, tradeBuy, tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getTradeActivityByUser } from "~/utils/functions";
-import toast from "react-hot-toast";
+import toast, { type ToastOptions } from "react-hot-toast";
+import { showCenteredErrorToast } from "~/utils/toast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
@@ -98,7 +99,7 @@ const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard!");
   } catch (err) {
-    toast.error("Failed to copy");
+    showCenteredErrorToast("Failed to copy");
   }
 };
 
@@ -498,7 +499,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [targetMC, setTargetMC] = useState(externalTradeParams?.targetMC || "");
   const [sliderPct, setSliderPct] = useState(externalTradeParams?.sliderPct || 0);
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
   const [creatorAddress, setCreatorAddress] = useState<string>("");
@@ -1162,7 +1163,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     if (value < minAmount) {
                       setAmount(String(minAmount));
                       const protocolName = token.launchpad_protocol || token.protocol || poolType;
-                      toast.error(
+                      showCenteredErrorToast(
                         `Amount auto-corrected to minimum: ${minAmount} SOL for ${protocolName}`,
                         { duration: 4000 }
                       );
@@ -1488,18 +1489,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         </div>
 
       {/* Feedback */}
-      {message && (
+      {successMessage && (
         <div
           className={cx(
             "mx-3 mt-2 rounded-md p-2 text-center text-[11px] font-bold",
-            message.type === "success" 
-              ? mode === "buy" 
-                ? "bg-[#70E0B0] text-black"  // Green for successful buy
-                : "bg-[#FF4D7F] text-black"  // Red for successful sell
-              : "bg-[#FF4D7F] text-black"    // Red for errors
+            mode === "buy"
+              ? "bg-[#70E0B0] text-black"  // Green for successful buy
+              : "bg-[#FF4D7F] text-black"  // Red for successful sell
           )}
         >
-          {message.text}
+          {successMessage}
         </div>
       )}
 
@@ -1550,7 +1549,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           disabled={!amount || isLoading || (tab === "limit" && !targetMC)}
           onClick={async () => {
             if (!user?.bearerToken) {
-              setMessage({ type: "error", text: "Authentication required to create orders." });
+              setSuccessMessage(null);
+              showCenteredErrorToast("Authentication required to create orders.");
               return;
             }
 
@@ -1573,14 +1573,26 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
             // Continue with normal flow
             setIsLoading(true);
-            setMessage(null);
+            setSuccessMessage(null);
 
             if (tab === "limit") {
               if (!amount || !targetMC) {
-                setMessage({
-                  type: "error",
-                  text: "Amount and Target Market Cap are required for limit orders.",
-                });
+                setSuccessMessage(null);
+                showCenteredErrorToast("Amount and Target Market Cap are required for limit orders.");
+                setIsLoading(false);
+                return;
+              }
+              const numericAmount = Number(amount);
+              const numericTargetMC = Number(targetMC);
+              if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+                setSuccessMessage(null);
+                showCenteredErrorToast("Enter a valid amount.");
+                setIsLoading(false);
+                return;
+              }
+              if (!Number.isFinite(numericTargetMC) || numericTargetMC <= 0) {
+                setSuccessMessage(null);
+                showCenteredErrorToast("Enter a valid target market cap.");
                 setIsLoading(false);
                 return;
               }
@@ -1604,11 +1616,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   },
                   user.bearerToken
                 );
-                setMessage({ type: "success", text: `Limit order for ${token.symbol} created successfully!` });
+                setSuccessMessage(`Limit order for ${token.symbol} created successfully!`);
                 setAmount("");
                 setTargetMC("");
               } catch (error: any) {
-                setMessage({ type: "error", text: `Failed to create limit order: ${error.message}` });
+                setSuccessMessage(null);
+                showCenteredErrorToast(`Failed to create limit order: ${error.message}`);
               } finally {
                 setIsLoading(false);
               }
@@ -1626,8 +1639,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
               if (!requested || requested <= 0) {
                 setIsLoading(false);
-                setMessage({ type: "error", text: "Enter a valid amount." });
-                toast.error("Enter a valid amount");
+                setSuccessMessage(null);
+                showCenteredErrorToast("Enter a valid amount.");
                 return;
               }
               
@@ -1643,17 +1656,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 "meteora dbc": 0.000001,
               };
               
-              const minAmount = minimums[poolType] || 0.000001; // Default 0.000001 SOL
+              const poolMinimum = minimums[poolType];
+              const minAmount = Math.max(0.0001, poolMinimum ?? 0); // Enforce global 0.0001 SOL floor
               
               if (requested < minAmount) {
                 setIsLoading(false);
-                const protocolName = token.launchpad_protocol || token.protocol || poolType;
-                setMessage({ 
-                  type: "error", 
-                  text: `❌ Amount too small for ${protocolName}. Minimum: ${minAmount} SOL` 
-                });
-                toast.error(`Minimum trade amount: ${minAmount} SOL for ${protocolName}`, { 
-                  duration: 5000 
+                const protocolName = token.launchpad_protocol || token.protocol || poolType || "this pool";
+                setSuccessMessage(null);
+                showCenteredErrorToast(`Minimum trade amount: ${minAmount} SOL for ${protocolName}`, {
+                  duration: 5000,
                 });
                 return;
               }
@@ -1662,8 +1673,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 setIsLoading(false);
                 const need = Math.max(required - solBalance, 0);
                 const msg = `Insufficient balance!\nTrade: ${requested.toFixed(4)} SOL\nFees: ${totalFees.toFixed(4)} SOL (priority: ${priorityFee.toFixed(4)}, bribe: ${bribeFee.toFixed(4)}, buffer: 0.003)\nTotal needed: ${required.toFixed(4)} SOL\nMissing: ${need.toFixed(4)} SOL`;
-                setMessage({ type: "error", text: msg });
-                toast.error(`Insufficient balance! Need ${required.toFixed(4)} SOL (missing ${need.toFixed(4)} SOL). Please fund your wallet.`);
+                setSuccessMessage(null);
+                showCenteredErrorToast(
+                  `Insufficient balance! Need ${required.toFixed(4)} SOL (missing ${need.toFixed(4)} SOL). Please fund your wallet.`
+                );
                 return;
               }
             } else if (mode === "sell") {
@@ -1671,14 +1684,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               const percentage = Number(amount || 0);
               if (!percentage || percentage <= 0) {
                 setIsLoading(false);
-                setMessage({ type: "error", text: "Enter a valid percentage." });
-                toast.error("Enter a valid percentage");
+                setSuccessMessage(null);
+                showCenteredErrorToast("Enter a valid percentage.");
                 return;
               }
               if (percentage > 100) {
                 setIsLoading(false);
-                setMessage({ type: "error", text: "Percentage cannot exceed 100%." });
-                toast.error("Percentage cannot exceed 100%");
+                setSuccessMessage(null);
+                showCenteredErrorToast("Percentage cannot exceed 100%.");
                 return;
               }
             }
@@ -1753,12 +1766,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 const txHash = tr?.hash || tr?.txid;
                 const tokenAmount = tr?.amount || tr?.tokenAmount;
                 if (tr && txHash) {
-                  setMessage({
-                    type: "success",
-                    text: `✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`,
-                  });
+                  setSuccessMessage(`✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`);
                 } else {
-                  setMessage({ type: "error", text: "❌ Trade failed. Please try again." });
+                  setSuccessMessage(null);
+                  showCenteredErrorToast("❌ Trade failed. Please try again.");
                 }
                 
                 // Refresh position data after successful trade by recalculating from trade activity
@@ -1820,6 +1831,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             // Handle errors outside try-catch to prevent Next.js overlay
             if (tradingError) {
               const error = tradingError;
+              setSuccessMessage(null);
               // Use console.warn for expected validation errors, console.error for unexpected errors
               const logFn = (error as any)?.expected ? console.warn : console.error;
               logFn("Trade error caught:", error);
@@ -1827,6 +1839,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               let errorMessage = "Trade failed. Please try again.";
               let suggestions: string[] = [];
               let showToast = true;
+              let errorToastShown = false;
+              const pushErrorToast = (text: string, options?: ToastOptions) => {
+                errorToastShown = true;
+                showCenteredErrorToast(text, options);
+              };
               
               // Handle structured API errors
               if (error instanceof ApiError) {
@@ -1838,57 +1855,52 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   const minAmount = (error.details as any)?.minimumAmount || 0.0001;
                   const protocol = (error.details as any)?.protocol || 'this DEX';
                   errorMessage = `💰 Amount Too Small`;
-                  toast.error(
-                    `Minimum ${minAmount} SOL required for ${protocol}`,
+                  pushErrorToast(
+                    `Minimum trade amount: ${minAmount} SOL for ${protocol}. Please increase your amount.`,
                     { duration: 6000 }
                   );
-                  setMessage({
-                    type: "error",
-                    text: `Minimum trade amount: ${minAmount} SOL for ${protocol}. Please increase your amount.`
-                  });
                   setIsLoading(false); // Critical Fix #12: Reset loading state before early return
                   return; // Don't show suggestions toast
                 } else if (error.code === 'NO_ACTIVE_POOL') {
                   errorMessage = `⚠️ Pool Unavailable: ${error.message}`;
-                  toast.error(`Pool unavailable for ${token.symbol}`, { duration: 5000 });
+                  pushErrorToast(`Pool unavailable for ${token.symbol}`, { duration: 5000 });
                 } else if (error.code === 'POOL_GRADUATED') {
                   errorMessage = `🎓 Pool Graduated: This pool has completed its bonding curve. A new pool may be available.`;
-                  toast.error(`Pool graduated for ${token.symbol}`, { duration: 5000 });
+                  pushErrorToast(`Pool graduated for ${token.symbol}`, { duration: 5000 });
                 } else if (error.code === 'SERVICE_UNAVAILABLE') {
                   errorMessage = `⏸️ Service Temporarily Unavailable: ${error.message}`;
-                  toast.error(`Trading service unavailable. Try a different token.`, { duration: 6000 });
+                  pushErrorToast(`Trading service unavailable. Try a different token.`, { duration: 6000 });
                 } else if (error.code === 'TRADE_FAILED') {
                   errorMessage = `❌ Trade Failed: This pool configuration is not currently supported.`;
                   suggestions = error.suggestions || ['Try a different token on a supported DEX'];
                 } else if (error.code === 'POOL_UNAVAILABLE') {
                   errorMessage = `⚠️ Pool Unavailable: ${error.message}`;
-                  toast.error(`Pool has insufficient liquidity`, { duration: 5000 });
+                  pushErrorToast(`Pool has insufficient liquidity`, { duration: 5000 });
                 } else if (error.code === 'TX_FAILED') {
                   errorMessage = `❌ Transaction Failed: ${error.message}`;
-                  toast.error(`Trade could not be completed. Try again or use a different token.`, { duration: 5000 });
+                  pushErrorToast(`Trade could not be completed. Try again or use a different token.`, { duration: 5000 });
                 } else if (error.code === 'NO_HOLDINGS') {
                   // Critical Fix #5: No Holdings Check
                   errorMessage = `❌ No ${token.symbol || 'tokens'} to Sell: You don't own any of this token.`;
-                  toast.error(`You don't own any ${token.symbol || 'tokens'}. Cannot sell.`, { duration: 5000 });
-                  setMessage({ type: "error", text: errorMessage });
+                  pushErrorToast(`You don't own any ${token.symbol || 'tokens'}. Cannot sell.`, { duration: 5000 });
                   setIsLoading(false); // Critical Fix #12: Reset loading state before early return
                   return; // Don't show suggestions toast
                 } else if (error.code === 'VALIDATION_ERROR') {
                   // Critical Fix #7: Check if it's a minimum amount error
                   if (error.details?.amount?.message?.includes('at least')) {
                     errorMessage = `💰 Amount Too Small: ${error.details.amount.message}`;
-                    toast.error('Trade amount must be at least 0.001 SOL', { duration: 5000 });
+                    pushErrorToast('Trade amount must be at least 0.001 SOL', { duration: 5000 });
                     suggestions.push('Increase your trade amount to at least 0.001 SOL (~$0.20 USD)');
                     suggestions.push('Smaller amounts may fail due to transaction fees');
                   } else {
                     // Generic validation error
                     errorMessage = `❌ Validation Error: ${error.message}`;
-                    toast.error(`Invalid trade parameters`, { duration: 4000 });
+                    pushErrorToast(`Invalid trade parameters`, { duration: 4000 });
                   }
                 } else if (error.code === 'INVALID_POOL_TYPE') {
                   // Critical Fix #6: Empty Pool Type Validation
                   errorMessage = `⚠️ Pool Type Error: ${error.message || 'This token\'s trading pool is not supported'}`;
-                  toast.error('Trading pool not supported for this token', { duration: 5000 });
+                  pushErrorToast('Trading pool not supported for this token', { duration: 5000 });
                   if (error.suggestions && Array.isArray(error.suggestions)) {
                     error.suggestions.forEach((s: string) => suggestions.push(s));
                   }
@@ -1898,7 +1910,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 if (error.message?.includes("AMOUNT_TOO_SMALL") || error.message?.includes("Amount too small") || error.message?.includes("at least 0.001")) {
                   // Critical Fix #7: Minimum Trade Amount Validation (fallback)
                   errorMessage = `💰 Amount Too Small: Minimum 0.001 SOL required`;
-                  toast.error("Trade amount must be at least 0.001 SOL", { duration: 6000 });
+                  pushErrorToast("Trade amount must be at least 0.001 SOL", { duration: 6000 });
                   suggestions.push('Increase your trade amount to at least 0.001 SOL (~$0.20 USD)');
                   suggestions.push('Smaller amounts may fail due to transaction fees');
                 } else if (error.message?.includes("Insufficient SOL balance") || error.message?.includes("INSUFFICIENT_BALANCE")) {
@@ -1908,7 +1920,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 } else if (error.message?.includes("NO_HOLDINGS") || error.message?.includes("no token account") || error.message?.includes("do not own") || error.message?.includes("Insufficient token holdings")) {
                   // Critical Fix #5: No Holdings Check (fallback for non-structured errors)
                   errorMessage = `❌ You don't own any ${token.symbol || 'tokens'}. Cannot sell.`;
-                  toast.error(`No ${token.symbol || 'tokens'} to sell`, { duration: 5000 });
+                  pushErrorToast(`No ${token.symbol || 'tokens'} to sell`, { duration: 5000 });
                 } else if (error.message?.includes("Invalid account discriminator") || error.message?.includes("INVALID_POOL_ADDRESS")) {
                   errorMessage = `❌ Invalid pool address. The pool data may be outdated.`;
                   suggestions.push("Try refreshing the page to get updated pool information");
@@ -1922,7 +1934,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 } else if (error.message?.includes('INVALID_POOL_TYPE') || error.message?.includes('Invalid pool') || error.message?.includes('Unsupported pool')) {
                   // Critical Fix #6: Empty Pool Type Validation (fallback for non-structured errors)
                   errorMessage = `⚠️ This token's trading pool is not supported`;
-                  toast.error('Pool type not supported', { duration: 4000 });
+                  pushErrorToast('Pool type not supported', { duration: 4000 });
                   suggestions.push('This token may not have a supported trading pool');
                   suggestions.push('Try refreshing the page to get updated pool information');
                 }
@@ -1946,17 +1958,16 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 errorMessage = "❌ Token Not Found: This token may not have active trading pools. Try a different token.";
               }
               
-              setMessage({ type: "error", text: errorMessage });
+              if (!errorToastShown) {
+                pushErrorToast(errorMessage);
+              }
               
               // Show suggestions if available
               if (suggestions.length > 0 && showToast) {
                 console.log("Error suggestions:", suggestions);
                 try {
                   setTimeout(() => {
-                    toast.error(
-                      `💡 ${suggestions[0]}`,
-                      { duration: 6000 }
-                    );
+                    pushErrorToast(`💡 ${suggestions[0]}`, { duration: 6000 });
                   }, 1000);
                 } catch (toastError) {
                   // Silently fail if toast errors
