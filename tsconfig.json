@@ -50,7 +50,8 @@
     "node_modules",
     "test-*.js",
     "test-*.html",
-    "websocket-test-script.js"
+    "websocket-test-script.js",
+    "public/charting_library/**/*"
   ],
   "linterOptions": {
     "rules": {
