@@ -7,6 +7,7 @@ This document covers the deployment of only the frontend service (Next.js applic
 ## Prerequisites
 
 ### Required Tools
+-check
 - Docker with buildx support
 - kubectl configured for your Kubernetes cluster
 - Access to push to `kishore2006/meme-cointrading-ui` Docker repository
