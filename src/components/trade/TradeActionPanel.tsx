@@ -10,7 +10,7 @@ import QuickBuy from "../QuickBuy";
 import { createLimitOrder, tradeBuy, tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getTradeActivityByUser } from "~/utils/functions";
 import toast, { type ToastOptions } from "react-hot-toast";
-import { showCenteredErrorToast } from "~/utils/toast";
+import { showCenteredErrorToast, showTransactionPendingToast, updateTransactionToast } from "~/utils/toast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
@@ -1596,7 +1596,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 setIsLoading(false);
                 return;
               }
+              let pendingToastId: string | null = null;
               try {
+                pendingToastId = showTransactionPendingToast("Attempting transaction...");
                 await createLimitOrder(
                   {
                     tokenAddress: token.mint || '', // Use token mint address, not pool address
@@ -1616,10 +1618,20 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   },
                   user.bearerToken
                 );
+                updateTransactionToast(
+                  pendingToastId,
+                  "success",
+                  `✅ Limit order for ${token.symbol} created successfully!`
+                );
                 setSuccessMessage(`Limit order for ${token.symbol} created successfully!`);
                 setAmount("");
                 setTargetMC("");
               } catch (error: any) {
+                updateTransactionToast(
+                  pendingToastId,
+                  "error",
+                  `❌ Failed to create limit order`
+                );
                 setSuccessMessage(null);
                 showCenteredErrorToast(`Failed to create limit order: ${error.message}`);
               } finally {
@@ -1703,12 +1715,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
             // Wrap in try-catch to prevent Next.js error overlay in dev mode
             let tradingError: any = null;
-            
+            let pendingToastId: string | null = null;
+             
             try {
+              pendingToastId = showTransactionPendingToast("Attempting transaction...");
               const tradeParams = {
                 amount: Number(amount),
                 poolAddress: effectivePoolAddress,
-                originalPairAddress: token.pair_address || '', // Original pair_address from token-service
+                originalPairAddress: token.pair_address || '', // Original pair address from token-service
                 baseMint: token.mint || '',
                 quoteMint: SOL_MINT_ADDRESS,
                 mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
@@ -1766,8 +1780,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 const txHash = tr?.hash || tr?.txid;
                 const tokenAmount = tr?.amount || tr?.tokenAmount;
                 if (tr && txHash) {
+                  updateTransactionToast(
+                    pendingToastId,
+                    "success",
+                    `✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`
+                  );
                   setSuccessMessage(`✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`);
                 } else {
+                  updateTransactionToast(
+                    pendingToastId,
+                    "error",
+                    "❌ Trade failed. Please try again."
+                  );
                   setSuccessMessage(null);
                   showCenteredErrorToast("❌ Trade failed. Please try again.");
                 }
