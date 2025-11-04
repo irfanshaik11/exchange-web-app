@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import InterstatePopout from "./InterstatePopout";
 import { useQuickBuy } from "./QuickBuyContext";
 import type { QuickBuySettings, QuickBuyPreset } from "./QuickBuyContext";
@@ -15,6 +15,9 @@ import {
 import InterstateTooltip from "./InterstateTooltip";
 import InterstateButton from "./InterstateButton";
 import CustomCheckbox from './CustomCheckbox';
+import { useUser } from "./UserContext";
+import toast from "react-hot-toast";
+import { updateRpcEndpoint } from "~/utils/api";
 
 interface QuickBuySettingsModalProps {
   open: boolean;
@@ -38,7 +41,11 @@ export default function QuickBuySettingsModal({
     activePreset,
     setActivePreset,
   } = useQuickBuy();
+  const { user } = useUser();
   const [side, setSide] = useState<"buy" | "sell">("buy");
+  const [isSavingRpc, setIsSavingRpc] = useState(false);
+  const rpcUpdateTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSubmittedRpc = useRef<string>("");
 
   // Helper to update a field in the correct preset and side
   const updateSetting = (key: keyof QuickBuySettings, value: any) => {
@@ -61,6 +68,70 @@ export default function QuickBuySettingsModal({
   const settings = side === "buy"
     ? presets[activePreset].quickBuySettings
     : presets[activePreset].quickSellSettings;
+
+  const scheduleRpcUpdate = React.useCallback((rawValue: string) => {
+    if (rpcUpdateTimeout.current) {
+      clearTimeout(rpcUpdateTimeout.current);
+      rpcUpdateTimeout.current = null;
+    }
+
+    const trimmed = rawValue.trim();
+
+    console.log('[QuickBuySettingsModal] RPC input change detected:', {
+      rawValue,
+      trimmed,
+      hasToken: Boolean(user?.bearerToken),
+      sameAsLast: trimmed === lastSubmittedRpc.current,
+    });
+
+    if (!trimmed || !user?.bearerToken) {
+      return;
+    }
+
+    if (!/^https?:\/\//i.test(trimmed)) {
+      return;
+    }
+
+    if (trimmed === lastSubmittedRpc.current) {
+      return;
+    }
+
+    rpcUpdateTimeout.current = setTimeout(async () => {
+      rpcUpdateTimeout.current = null;
+      setIsSavingRpc(true);
+      console.log('[QuickBuySettingsModal] ▶️ Sending RPC update request...');
+      try {
+        await updateRpcEndpoint(trimmed, user.bearerToken);
+        lastSubmittedRpc.current = trimmed;
+        toast.success('RPC endpoint updated', { id: 'rpc-update' });
+      } catch (error: any) {
+        console.error('Failed to update RPC endpoint', error);
+        toast.error(error?.message || 'Failed to update RPC endpoint', { id: 'rpc-update' });
+      } finally {
+        setIsSavingRpc(false);
+      }
+    }, 500);
+  }, [user?.bearerToken]);
+
+  const handleRpcChange = (value: string) => {
+    updateSetting('rpc', value);
+    scheduleRpcUpdate(value);
+  };
+
+  React.useEffect(() => {
+    return () => {
+      if (rpcUpdateTimeout.current) {
+        clearTimeout(rpcUpdateTimeout.current);
+        rpcUpdateTimeout.current = null;
+      }
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!user?.bearerToken) {
+      lastSubmittedRpc.current = "";
+    }
+  }, [user?.bearerToken]);
 
   // Save changes to context and presets
   const handleContinue = () => {
@@ -221,9 +292,14 @@ export default function QuickBuySettingsModal({
           className="w-full px-3 py-2 text-xs text-neutral-300 outline-none"
           placeholder="https://"
           value={settings.rpc || ""}
-          onChange={e => updateSetting('rpc', e.target.value)}
+          onChange={e => handleRpcChange(e.target.value)}
         />
       </div>
+      {isSavingRpc && (
+        <div className="px-4 pb-4 text-xs text-emerald-300">
+          Updating RPC endpoint...
+        </div>
+      )}
       <div className="p-4 border-t border-neutral-700/90 w-full">
         <InterstateButton onClick={handleContinue} className="w-full">Continue</InterstateButton>
       </div>
