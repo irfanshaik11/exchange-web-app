@@ -59,7 +59,13 @@ import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
-import { showCenteredErrorToast, showCenteredSuccessToast, showTransactionPendingToast, updateTransactionToast } from "~/utils/toast";
+import {
+  showCenteredErrorToast,
+  showCenteredSuccessToast,
+  showTransactionPendingToast,
+  startTransactionToastTimeout,
+  updateTransactionToast,
+} from "~/utils/toast";
 
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
@@ -1709,6 +1715,7 @@ function PulseTable({
     }
 
     let pendingToastId: string | null = null;
+    let clearToastTimeout = () => undefined;
     try {
       const poolType = getPoolTypeFromToken(token);
       const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
@@ -1822,6 +1829,7 @@ function PulseTable({
       console.log("=".repeat(80) + "\n");
       
       pendingToastId = showTransactionPendingToast("Attempting transaction...");
+      clearToastTimeout = startTransactionToastTimeout(pendingToastId);
        const data = await tradeBuy(payload, user.bearerToken);
        
        console.log("\n📥 API RESPONSE RECEIVED:");
@@ -1836,13 +1844,19 @@ function PulseTable({
          console.log("  Token Amount:", tokenAmount || 'N/A');
          console.log("  Token Symbol:", token.symbol);
          console.log("  Full Response:", JSON.stringify(data, null, 2));
-         updateTransactionToast(pendingToastId, "success", `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`);
+         updateTransactionToast(
+           pendingToastId,
+           "success",
+           `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
+         );
+         clearToastTimeout();
        } else {
          console.log("\n❌ QUICK BUY FAILED:");
          console.log("  Response:", JSON.stringify(data, null, 2));
          console.log("  Missing transaction hash");
          updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
          showCenteredErrorToast("❌ Quick Buy failed - no transaction hash returned");
+         clearToastTimeout();
        }
      } catch (e: any) {
        // Use console.warn for expected errors, console.error for unexpected
@@ -1857,6 +1871,7 @@ function PulseTable({
        logFn('Quick Buy error:', e);
 
        if (e instanceof ApiError) {
+         clearToastTimeout();
          if (e.code === 'NO_ACTIVE_POOL') {
            updateTransactionToast(pendingToastId, "error", `⚠️ Pool unavailable for ${token.symbol}`);
            showCenteredErrorToast(`⚠️ Pool unavailable for ${token.symbol}`);
@@ -1885,6 +1900,7 @@ function PulseTable({
          // Unexpected error - show generic message
          updateTransactionToast(pendingToastId, "error", "❌ Trade failed. Please try again.");
          showCenteredErrorToast(`❌ Trade failed. Please try again.`);
+         clearToastTimeout();
        }
      }
    };

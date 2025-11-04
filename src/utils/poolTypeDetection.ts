@@ -22,7 +22,19 @@ export function getPoolTypeFromToken(token: Token): PoolType {
   const protocolLower = protocol.toLowerCase();
   
   // Map various protocol names to backend poolType values
-  if (protocolLower.includes("pumpswap") || protocolLower.includes("pump_swap") || protocolLower.includes("pump_amm") || protocolLower === "pumpamm") {
+  if (
+    protocolLower.includes("pumpamm") ||
+    protocolLower.includes("pump_amm") ||
+    protocolLower.includes("pump amm")
+  ) {
+    return "PumpAmm";
+  }
+  if (
+    protocolLower.includes("cache-to-cache") ||
+    protocolLower.includes("cache_to_cache") ||
+    protocolLower.includes("cache to cache") ||
+    protocolLower === "c2c"
+  ) {
     return "PumpAmm";
   }
   if (protocolLower.includes("pump.fun") || protocolLower.includes("pumpfun") || protocolLower === "pump") {

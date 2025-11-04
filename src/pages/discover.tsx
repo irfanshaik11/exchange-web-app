@@ -14,7 +14,7 @@ import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
-import { showCenteredErrorToast, showTransactionPendingToast, updateTransactionToast } from "~/utils/toast";
+import { showCenteredErrorToast, showTransactionPendingToast, startTransactionToastTimeout, updateTransactionToast } from "~/utils/toast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
@@ -231,6 +231,7 @@ export default function DiscoverPage() {
     }
 
     let pendingToastId: string | null = null;
+    let clearToastTimeout = () => undefined;
     try {
       const poolType = getPoolTypeFromToken(token);
       const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
@@ -339,6 +340,7 @@ export default function DiscoverPage() {
       console.log("=".repeat(80) + "\n");
       
       pendingToastId = showTransactionPendingToast("Attempting transaction...");
+      clearToastTimeout = startTransactionToastTimeout(pendingToastId);
       const data = await tradeBuy(payload, user.bearerToken);
        
       console.log("\n📥 API RESPONSE RECEIVED:");
@@ -383,12 +385,14 @@ export default function DiscoverPage() {
           "success",
           `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
         );
+        clearToastTimeout();
       } else {
         console.log("\n❌ QUICK BUY FAILED:");
         console.log("  Response:", JSON.stringify(data, null, 2));
         console.log("  Missing transaction hash");
         updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
         showCenteredErrorToast("❌ Quick Buy failed - no transaction hash returned");
+        clearToastTimeout();
       }
     } catch (e: any) {
       const logFn = (e as any)?.expected ? console.warn : console.error;
@@ -404,6 +408,7 @@ export default function DiscoverPage() {
       logFn('Quick Buy error:', e);
 
       if (e instanceof ApiError) {
+        clearToastTimeout();
         if (e.code === 'NO_ACTIVE_POOL') {
           updateTransactionToast(pendingToastId, "error", `⚠️ Pool unavailable for ${token.symbol}`);
           showCenteredErrorToast(`⚠️ Pool unavailable for ${token.symbol}`);
@@ -431,6 +436,7 @@ export default function DiscoverPage() {
         // Unexpected error - show generic message
         updateTransactionToast(pendingToastId, "error", "❌ Trade failed. Please try again.");
         showCenteredErrorToast(`❌ Trade failed. Please try again.`);
+        clearToastTimeout();
       }
     }
   };

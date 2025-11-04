@@ -4,6 +4,8 @@ type ToastKind = "success" | "error";
 
 type PendingToastKind = ToastKind | "loading";
 
+const DEFAULT_TRANSACTION_TIMEOUT_MS = 20000;
+
 const baseStyle = {
   background: "#1E1F26",
   color: "#E6E7EA",
@@ -71,4 +73,18 @@ export const updateTransactionToast = (
   if (!id) return;
   const toastFn = type === "success" ? toast.success : toast.error;
   toastFn(message, { id, ...buildOptions(type, options) });
+};
+
+export const startTransactionToastTimeout = (
+  id: string | null,
+  message = "❌ Transaction timed out. Please try again.",
+  timeoutMs: number = DEFAULT_TRANSACTION_TIMEOUT_MS
+): (() => void) => {
+  if (!id) {
+    return () => undefined;
+  }
+  const timeoutId = window.setTimeout(() => {
+    updateTransactionToast(id, "error", message);
+  }, timeoutMs);
+  return () => window.clearTimeout(timeoutId);
 };
