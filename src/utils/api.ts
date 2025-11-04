@@ -276,6 +276,21 @@ export const updateLimitOrder = (
     },
   );
 
+export const updateRpcEndpoint = (
+  rpcUrl: string,
+  authToken: string,
+  websocketUrl?: string,
+) =>
+  apiFetch<{
+    message: string;
+    rpcEndpoint: string;
+    rpcWebsocketEndpoint: string;
+  }>("/api/config/rpc", {
+    method: "POST",
+    body: { rpcUrl, websocketUrl },
+    authToken,
+  });
+
 /* -------------------------------------------------------------------------- */
 /*                               Trade endpoints                              */
 /* -------------------------------------------------------------------------- */

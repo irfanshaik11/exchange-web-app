@@ -1868,6 +1868,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               let showToast = true;
               let errorToastShown = false;
               const pushErrorToast = (text: string, options?: ToastOptions) => {
+                if (/slippage/i.test(text)) {
+                  return;
+                }
                 errorToastShown = true;
                 showCenteredErrorToast(text, options);
               };
@@ -1965,6 +1968,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   suggestions.push('This token may not have a supported trading pool');
                   suggestions.push('Try refreshing the page to get updated pool information');
                 }
+              }
+
+              // Remove any slippage-specific suggestions/messages surfaced from backend responses
+              suggestions = suggestions.filter((s) => !/slippage/i.test(s));
+              if (/slippage/i.test(errorMessage)) {
+                errorMessage = "❌ Trade could not be completed. Please try again.";
               }
               
               // Always display user-friendly error message in the UI
