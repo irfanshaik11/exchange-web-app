@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
-import { FaSearch, FaBell, FaWallet } from "react-icons/fa";
+import { useEffect, useState, useRef } from "react";
+import { FaSearch, FaBell, FaWallet, FaBars, FaTimes } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import dynamic from "next/dynamic";
@@ -71,6 +71,10 @@ export default function Header({
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
   // Toggle Search modal with Tab and '/' (outside of inputs)
   useEffect(() => {
@@ -125,6 +129,69 @@ export default function Header({
     setWithdrawOpen(true);
   };
 
+  // Close mobile menu when clicking outside or on backdrop
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      document.body.style.overflow = '';
+      return;
+    }
+
+    // Prevent body scroll when menu is open
+    document.body.style.overflow = 'hidden';
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement;
+      
+      // Don't close if clicking on the hamburger button itself
+      if (target.closest('[data-mobile-menu-toggle]')) {
+        return;
+      }
+      
+      // Don't close if clicking inside the menu
+      if (mobileMenuRef.current && mobileMenuRef.current.contains(target)) {
+        return;
+      }
+      
+      // Close if clicking outside (backdrop or elsewhere)
+      setMobileMenuOpen(false);
+    };
+
+    // Add a small delay to avoid immediate closing when opening
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }, 50);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [router.pathname]);
+
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+
+    if (profileMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [profileMenuOpen]);
+
   return (
     <>
       <header className="sticky top-0 z-20 w-full border-b backdrop-blur" style={{ backgroundColor: '#0f1012', borderColor: AX.border }}>
@@ -138,6 +205,27 @@ export default function Header({
         </div>
         <div className="flex max-w-full items-center justify-between border-b px-4 py-2.5" style={{ backgroundColor: '#06070b', borderColor: AX.border }}>
           <div className="flex min-w-0 items-center gap-3">
+            {/* Mobile hamburger menu button */}
+            <button
+              data-mobile-menu-toggle
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileMenuOpen(!mobileMenuOpen);
+              }}
+              className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out z-50 relative"
+              style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.text }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
+                e.currentTarget.style.borderColor = AX.mint;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = AX.surface;
+                e.currentTarget.style.borderColor = AX.border;
+              }}
+            >
+              {mobileMenuOpen ? <FaTimes size={14} /> : <FaBars size={14} />}
+            </button>
+            
             <Link
               href="/pulse"
               className="flex items-center text-xl tracking-tight select-none"
@@ -150,7 +238,8 @@ export default function Header({
                 className="h-auto w-30 scale-90"
               />
             </Link>
-            <nav className="ml-6 flex items-center gap-5" style={{ position: 'relative', zIndex: 1000 }}>
+            {/* Desktop navigation - hidden on mobile */}
+            <nav className="hidden md:flex ml-6 items-center gap-5" style={{ position: 'relative', zIndex: 1000 }}>
               {navLinks.map((link) => {
                 const isActive = router.pathname === link.href || 
                   (link.name === "Trenches" && router.pathname.startsWith("/trade/"));
@@ -232,10 +321,10 @@ export default function Header({
                 </button>
               </div>
             )}
-            {/* SOL Balance Pill */}
+            {/* SOL Balance Pill - hidden on mobile (will be in mobile menu) */}
             {user && (
               <div 
-                className="flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out cursor-default"
+                className="hidden md:flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out cursor-default"
                 style={{ 
                   backgroundColor: AX.surface, 
                   borderColor: AX.border,
@@ -261,9 +350,10 @@ export default function Header({
                 />
               </div>
             )}
+            {/* Deposit/Withdraw buttons - hidden on mobile (will be in mobile menu) */}
             <button
               onClick={handleDepositClick}
-              className="ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
+              className="hidden md:block ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
               style={{
                 backgroundColor: AX.mint,
                 color: '#000000',
@@ -284,7 +374,7 @@ export default function Header({
             </button>
             <button
               onClick={handleWithdrawClick}
-              className="ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
+              className="hidden md:block ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
               style={{
                 backgroundColor: AX.sell,
                 color: '#000000',
@@ -328,9 +418,10 @@ export default function Header({
             >
               <FaStar size={14} />
             </button> */}
+            {/* Notification button - visible on all screens */}
             <button
               onClick={() => setNotificationOpen(true)}
-              className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
+              className="flex ml-2 h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
               style={{ 
                 backgroundColor: AX.surface, 
                 borderColor: AX.border,
@@ -353,22 +444,33 @@ export default function Header({
             >
               <FaBell size={14} />
             </button>
+            {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
-              <div className="group relative flex cursor-pointer items-center gap-2">
+              <div ref={profileMenuRef} className="flex group relative cursor-pointer items-center gap-2">
                 {/* Circular profile picture (placeholder) */}
-                <div className="flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold text-white select-none" style={{ backgroundColor: AX.mint }}>
+                <div 
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold text-white select-none" 
+                  style={{ backgroundColor: AX.mint }}
+                  onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                >
                   {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                 </div>
-                <span className="max-w-[90px] truncate text-sm" style={{ color: AX.text }}>
+                <span className="hidden md:block max-w-[90px] truncate text-sm" style={{ color: AX.text }}>
                   {user.name}
                 </span>
                 {/* Dropdown for logout */}
-                <div className="absolute top-8 right-0 z-50 min-w-[100px] rounded border px-3 py-1.5 opacity-0 shadow-lg transition-opacity group-hover:opacity-100" style={{ backgroundColor: AX.surface, borderColor: AX.border }}>
+                <div 
+                  className={`absolute top-8 right-0 z-50 min-w-[100px] rounded border px-3 py-1.5 shadow-lg transition-opacity ${
+                    profileMenuOpen ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
+                  }`}
+                  style={{ backgroundColor: AX.surface, borderColor: AX.border }}
+                >
                   <InterstateButton
                     variant="danger"
                     size="sm"
                     className="h-auto w-full border-none bg-transparent px-0 py-0 text-left text-xs font-semibold shadow-none hover:underline"
                     onClick={() => {
+                      setProfileMenuOpen(false);
                       if (typeof window !== "undefined") {
                         document.cookie = "token=; Max-Age=0; path=/;";
                       }
@@ -490,6 +592,130 @@ export default function Header({
           
           <div className="h-4 border-r" style={{ borderColor: AX.border }}> </div>
         </div>
+        
+        {/* Mobile Menu - slides down from top */}
+        <div
+          ref={mobileMenuRef}
+          className={`md:hidden fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-out overflow-y-auto ${
+            mobileMenuOpen ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full pointer-events-none'
+          }`}
+          style={{
+            backgroundColor: AX.bg,
+            borderBottom: `1px solid ${AX.border}`,
+            maxHeight: '100vh',
+          }}
+        >
+          {/* Close button at top */}
+          <div className="flex justify-end items-center px-4 py-3 border-b" style={{ borderColor: AX.border }}>
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
+              style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.text }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
+                e.currentTarget.style.borderColor = AX.mint;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = AX.surface;
+                e.currentTarget.style.borderColor = AX.border;
+              }}
+            >
+              <FaTimes size={14} />
+            </button>
+          </div>
+          
+          <div className="px-4 pb-4">
+            {/* Navigation Links */}
+            <nav className="flex flex-col gap-1 mb-4">
+              {navLinks.map((link) => {
+                const isActive = router.pathname === link.href || 
+                  (link.name === "Trenches" && router.pathname.startsWith("/trade/"));
+                return (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 text-base font-medium transition-all duration-200 rounded-lg"
+                    style={{
+                      color: isActive ? AX.mint : AX.text,
+                      backgroundColor: isActive ? 'rgba(24, 196, 140, 0.1)' : 'transparent',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.backgroundColor = 'rgba(112, 224, 176, 0.08)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    {link.name}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="border-t pt-4 mb-4" style={{ borderColor: AX.border }}>
+              {/* SOL Balance */}
+              {user && (
+                <div 
+                  className="flex items-center gap-2 px-4 py-3 rounded-lg mb-2"
+                  style={{ 
+                    backgroundColor: AX.surface, 
+                    color: AX.text 
+                  }}
+                >
+                  <FaWallet size={14} style={{ color: AX.muted }} />
+                  <span className="text-sm font-medium">{solBalance.toFixed(4)} SOL</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-2 px-4">
+                <button
+                  onClick={() => {
+                    handleDepositClick();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200"
+                  style={{
+                    backgroundColor: AX.mint,
+                    color: '#000000',
+                  }}
+                >
+                  Deposit
+                </button>
+                <button
+                  onClick={() => {
+                    handleWithdrawClick();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200"
+                  style={{
+                    backgroundColor: AX.sell,
+                    color: '#000000',
+                  }}
+                >
+                  Withdraw
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Backdrop overlay when mobile menu is open */}
+        <div
+          className={`md:hidden fixed inset-0 z-40 transition-opacity duration-300 ${
+            mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          }`}
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          }}
+          onClick={() => setMobileMenuOpen(false)}
+        />
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
       <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
