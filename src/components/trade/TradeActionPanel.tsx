@@ -10,7 +10,12 @@ import QuickBuy from "../QuickBuy";
 import { createLimitOrder, tradeBuy, tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getTradeActivityByUser } from "~/utils/functions";
 import toast, { type ToastOptions } from "react-hot-toast";
-import { showCenteredErrorToast, showTransactionPendingToast, updateTransactionToast } from "~/utils/toast";
+import {
+  showCenteredErrorToast,
+  showTransactionPendingToast,
+  startTransactionToastTimeout,
+  updateTransactionToast,
+} from "~/utils/toast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
@@ -1489,18 +1494,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         </div>
 
       {/* Feedback */}
-      {successMessage && (
-        <div
-          className={cx(
-            "mx-3 mt-2 rounded-md p-2 text-center text-[11px] font-bold",
-            mode === "buy"
-              ? "bg-[#70E0B0] text-black"  // Green for successful buy
-              : "bg-[#FF4D7F] text-black"  // Red for successful sell
-          )}
-        >
-          {successMessage}
-        </div>
-      )}
+      {/* Previously showed inline success/error messages; replaced by centered toasts */}
 
       {/* Helper line */}
       <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
@@ -1597,8 +1591,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 return;
               }
               let pendingToastId: string | null = null;
+              let clearToastTimeout = () => undefined;
               try {
                 pendingToastId = showTransactionPendingToast("Attempting transaction...");
+                clearToastTimeout = startTransactionToastTimeout(pendingToastId);
                 await createLimitOrder(
                   {
                     tokenAddress: token.mint || '', // Use token mint address, not pool address
@@ -1618,6 +1614,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   },
                   user.bearerToken
                 );
+                clearToastTimeout();
                 updateTransactionToast(
                   pendingToastId,
                   "success",
@@ -1627,6 +1624,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 setAmount("");
                 setTargetMC("");
               } catch (error: any) {
+                clearToastTimeout();
                 updateTransactionToast(
                   pendingToastId,
                   "error",
@@ -1716,9 +1714,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             // Wrap in try-catch to prevent Next.js error overlay in dev mode
             let tradingError: any = null;
             let pendingToastId: string | null = null;
+            let clearToastTimeout = () => undefined;
              
             try {
               pendingToastId = showTransactionPendingToast("Attempting transaction...");
+              clearToastTimeout = startTransactionToastTimeout(pendingToastId);
               const tradeParams = {
                 amount: Number(amount),
                 poolAddress: effectivePoolAddress,
@@ -1730,7 +1730,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 // Preset trading parameters
                 slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
                 priorityFee: settings.priority || 0.001, // Default 0.001 SOL
-                bribe: settings.bribe || 0.05, // Default 0.05 SOL
+                bribe: settings.bribe ?? 0.05, // Default 0.05 SOL when unset
                 mevMode: settings.mevMode,
                 autoFee: settings.autoFee || false,
                 maxFee: settings.maxFee || 0,
@@ -1766,7 +1766,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     // Preset trading parameters
                     slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
                     priorityFee: settings.priority || 0.001,
-                    bribe: settings.bribe || 0.05,
+                    bribe: settings.bribe ?? 0.05,
                   }, user.bearerToken)
                     .catch((err) => {
                       // Use console.warn for expected errors, console.error for unexpected
@@ -1780,6 +1780,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 const txHash = tr?.hash || tr?.txid;
                 const tokenAmount = tr?.amount || tr?.tokenAmount;
                 if (tr && txHash) {
+                  clearToastTimeout();
                   updateTransactionToast(
                     pendingToastId,
                     "success",
@@ -1787,6 +1788,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   );
                   setSuccessMessage(`✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`);
                 } else {
+                  clearToastTimeout();
                   updateTransactionToast(
                     pendingToastId,
                     "error",
@@ -1850,6 +1852,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             } catch (error: any) {
               // Catch any other errors
               tradingError = error;
+              clearToastTimeout();
             }
             
             // Handle errors outside try-catch to prevent Next.js overlay

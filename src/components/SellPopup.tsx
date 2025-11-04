@@ -199,7 +199,7 @@ const SellPopup: React.FC<SellPopupProps> = ({ isOpen, onClose, position, tokenM
         // Preset trading parameters
         slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
         priorityFee: settings.priority || 0.001,
-        bribe: settings.bribe || 0.05,
+        bribe: settings.bribe ?? 0.05,
       };
 
       console.log('🚀 [SellPopup] Sending sell request:', sellParams);
