@@ -4,6 +4,7 @@ import type { Token } from "~/utils/db";
 import { formatSmartNumber } from "~/utils/db";
 import { useWatchlist } from "../WatchlistContext";
 import { SubscriptNumber } from "../InterstateTable";
+import FastImage from "../FastImage";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
 
 import { IoShareSocialOutline } from "react-icons/io5";
@@ -22,93 +23,135 @@ const AX = {
   green: "#3DDC84",
   blue: "#8EC5FF",
   aiBlue: "#3B82F6",
+  aiGreen: "#18c48c",
   aiCyan: "#06B6D4",
+  glowBlue: "rgba(59, 130, 246, 0.35)",
+  glowGreen: "rgba(24, 196, 140, 0.3)",
   glowCyan: "rgba(6, 182, 212, 0.3)",
 };
 
-/* ---------- Protocol types aligned with PulseTable ---------- */
-type ProtocolId =
-  | "pump" | "pump_amm"
-  | "meteora" | "meteora_v2"
-  | "raydium" | "raydiumlaunchpad"
-  | "bonk" | "bags" | "moonit"
-  | "boop" | "launchlab"
-  | "unknown";
-
-const PROTOCOL_ICON: Record<ProtocolId, string> = {
-  pump: "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png",
-  pump_amm: "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png",
-  meteora: "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013",
-  meteora_v2: "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013",
-  raydium: "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png",
-  raydiumlaunchpad: "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png",
-  bonk: "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png",
-  bags: "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw",
-  moonit: "https://avatars.githubusercontent.com/u/174132191?s=280&v=4",
-  boop: "https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true",
-  launchlab: "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png",
-  unknown: "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png",
-};
-
-const PROTOCOL_COLOR: Record<ProtocolId, string> = {
-  pump: "#22c55e",
-  pump_amm: "#e9ba14",
-  meteora: "#ff4662",
-  meteora_v2: "#ff4662",
-  raydium: "#5c51f7",
-  raydiumlaunchpad: "#5c51f7",
-  bonk: "#ff6b35",
-  bags: "#22c55e",
-  moonit: "#eab308",
-  boop: "#134577",
-  launchlab: "#3b82f6",
-  unknown: "#22c55e",
-};
-
-// Centralized badge scaling; Meteora uses larger badge and image
-function protocolBadgeScale(id: ProtocolId) {
-  return id.startsWith("meteora")
-    ? { sizeRatio: 0.44, imgScale: 1.00, rightRatio: 0.30, bottomRatio: 0.22 } // imgScale adjusted to use 100% fill below
-    : { sizeRatio: 0.32, imgScale: 0.72, rightRatio: 0.42, bottomRatio: 0.28 };
-}
+const DEFAULT_PROTOCOL_COLOR = "#22c55e";
+const DEFAULT_PROTOCOL_ICON = "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
 
 const normalizeKey = (s?: string) =>
   (s || "").toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
 
-const ALIASES: Record<string, ProtocolId> = {
-  pump: "pump",
-  "pump.fun": "pump",
-  pumpfun: "pump",
-  pumpamm: "pump_amm",
-  meteora: "meteora",
-  meteorav2: "meteora_v2",
-  raydium: "raydium",
-  raydiumlaunchpad: "raydiumlaunchpad",
-  bonk: "bonk",
-  bags: "bags",
-  boop: "boop",
-  boopfun: "boop",
-  moonit: "moonit",
-  moonshot: "moonit",
-  moonshoot: "moonit",
-  launchlab: "launchlab",
+const rawProtocolColorMap: Record<string, string> = {
+  pump: DEFAULT_PROTOCOL_COLOR,
+  "pump.fun": DEFAULT_PROTOCOL_COLOR,
+  bonk: "#ff6b35",
+  bags: DEFAULT_PROTOCOL_COLOR,
+  moonshot: "#eab308",
+  moonshoot: "#eab308",
+  moonit: "#eab308",
+  heaven: "#8b5cf6",
+  "daos.fun": "#06b6d4",
+  candle: "#f59e0b",
+  sugar: "#ec4899",
+  believe: "#10b981",
+  jupiter: "#8b5cf6",
+  boop: "#134577",
+  boopfun: "#134577",
+  launchlab: "#3b82f6",
+  dynamic: "#526fff",
+  raydium: "#5c51f7",
+  raydiumlaunchpad: "#5c51f7",
+  meteora: "#ff4662",
+  "meteora_v2": "#ff4662",
+  pump_amm: "#e9ba14",
+  orca: "#0ea5e9",
 };
 
-function detectProtocolId(token: any): ProtocolId {
-  const candidates = [token?.launchpad_protocol, token?.protocol, token?.launchpadName, token?.amm];
-  for (const raw of candidates) {
-    const key = normalizeKey(String(raw || ""));
-    if (!key) continue;
-    if (ALIASES[key]) return ALIASES[key];
-    if (key.includes("meteora")) return key.includes("v2") ? "meteora_v2" : "meteora";
-    if (key.includes("pump")) return key.includes("amm") ? "pump_amm" : "pump";
-    if (key.includes("raydium")) return key.includes("launchpad") ? "raydiumlaunchpad" : "raydium";
-    if (key.includes("bonk")) return "bonk";
-    if (key.includes("boop")) return "boop";
-    if (key.includes("bags")) return "bags";
-    if (key.includes("moonit") || key.includes("moonshot") || key.includes("moonshoot")) return "moonit";
+const normalizedProtocolColorMap: Record<string, string> = Object.fromEntries(
+  Object.entries(rawProtocolColorMap).map(([key, value]) => [normalizeKey(key), value])
+);
+
+function extractProtocolRaw(token: Token | null): string | null {
+  if (!token) return null;
+  const candidates = [
+    (token as any).launchpad_protocol,
+    (token as any).protocol,
+    (token as any).launchpadName,
+    (token as any).amm,
+  ];
+  for (const candidate of candidates) {
+    if (candidate == null) continue;
+    const value = String(candidate).toLowerCase().trim();
+    if (value) return value;
   }
-  return "unknown";
+  return null;
+}
+
+function resolveProtocolColor(token: Token, columnType: "new" | "final-stretch" | "migrated"): string {
+  const raw = extractProtocolRaw(token);
+  if (!raw) return DEFAULT_PROTOCOL_COLOR;
+
+  if (raw.includes("meteora")) {
+    return columnType === "migrated" ? "#eab308" : "#ff4662";
+  }
+
+  if (raw.includes("pump")) {
+    return columnType === "migrated" ? "#eab308" : DEFAULT_PROTOCOL_COLOR;
+  }
+
+  if (raw.includes("launch")) {
+    return columnType === "migrated" ? "#eab308" : "#3b82f6";
+  }
+
+  const normalized = normalizeKey(raw);
+
+  if (rawProtocolColorMap[raw]) return rawProtocolColorMap[raw];
+  if (normalizedProtocolColorMap[normalized]) return normalizedProtocolColorMap[normalized];
+
+  if (raw.includes("raydium")) return "#5c51f7";
+  if (raw.includes("moonit") || raw.includes("moonshot") || raw.includes("moonshoot")) return "#eab308";
+  if (raw.includes("boop")) return "#134577";
+  if (raw.includes("bonk")) return "#ff6b35";
+  if (raw.includes("bags")) return DEFAULT_PROTOCOL_COLOR;
+  if (raw.includes("orca")) return "#0ea5e9";
+  if (raw.includes("jupiter")) return "#8b5cf6";
+
+  return DEFAULT_PROTOCOL_COLOR;
+}
+
+function resolveProtocolIcon(token: Token): string {
+  const raw = extractProtocolRaw(token);
+  if (!raw) return DEFAULT_PROTOCOL_ICON;
+
+  if (raw.includes("meteora")) {
+    return "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013";
+  }
+
+  if (raw.includes("raydium") || raw.includes("launch")) {
+    return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
+  }
+
+  if (raw.includes("boop")) {
+    return "https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true";
+  }
+
+  if (raw.includes("moonit") || raw.includes("moonshot") || raw.includes("moonshoot")) {
+    return "https://avatars.githubusercontent.com/u/174132191?s=280&v=4";
+  }
+
+  if (raw.includes("bonk")) {
+    return "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png";
+  }
+
+  if (raw.includes("bags")) {
+    return "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw";
+  }
+
+  if (raw.includes("pump")) {
+    return DEFAULT_PROTOCOL_ICON;
+  }
+
+  return DEFAULT_PROTOCOL_ICON;
+}
+
+function shouldFillProtocolBadge(token: Token): boolean {
+  const raw = extractProtocolRaw(token) || "";
+  return ["meteora", "bonk", "bags", "moonit", "moonshot", "moonshoot"].some((needle) => raw.includes(needle));
 }
 
 /* ---------- helpers ---------- */
@@ -221,6 +264,8 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const isWatched = isInWatchlist(token.pair_address || "");
   const [showPreview, setShowPreview] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  const [showZoomPopup, setShowZoomPopup] = useState(false);
+  const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
 
   const { isConnected: wsConnected, loading: wsLoading, error: wsError, getMarketData } =
     useMarketDataWebSocket({
@@ -254,16 +299,16 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
 
   /* ---------- canonical protocol resolution ---------- */
   const columnType = getColumnType(token);
-  const protoId = detectProtocolId(token);
-  let protocolColor = PROTOCOL_COLOR[protoId] || PROTOCOL_COLOR.unknown;
-  if (columnType === "migrated" && (protoId.startsWith("meteora") || protoId.startsWith("pump"))) {
-    protocolColor = "#eab308";
-  }
-  const tokenIcon = PROTOCOL_ICON[protoId] || PROTOCOL_ICON.unknown;
+  const protocolColor = resolveProtocolColor(token, columnType);
+  const tokenIcon = resolveProtocolIcon(token);
+  const fillProtocolBadge = shouldFillProtocolBadge(token);
 
   // token image (ipfs/http)
   const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
   const imgSrc = normalizeAssetUrl(rawImg);
+  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    token.symbol || token.name || "T"
+  )}&background=0f1012&color=E6E7EA&size=36`;
 
   const handleWatchlistClick = () => {
     if (isWatched) removeFromWatchlist(token.pair_address || "");
@@ -275,14 +320,36 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
     setTimeout(() => setShowToast(false), 1600);
   };
 
-  // --- sizing ratios + badge scaling (centralized) ---
-  const AVATAR_SIZE = 44; // h-11 / w-11
-  const { sizeRatio, imgScale, rightRatio, bottomRatio } = protocolBadgeScale(protoId);
-  const BADGE_SIZE = Math.round(AVATAR_SIZE * sizeRatio);
-  const BADGE_BORDER = 2;
-  const badgeRight = -Math.round(BADGE_SIZE * rightRatio);
-  const badgeBottom = -Math.round(BADGE_SIZE * bottomRatio);
-  const isMeteora = protoId.startsWith("meteora");
+  const handleImageHover = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const popupWidth = 150;
+    const popupHeight = 150;
+    
+    // Default position to the right of the image
+    let x = rect.right + 10;
+    let y = rect.top + (rect.height / 2) - (popupHeight / 2);
+    
+    // Check if popup would go off the right edge of the screen
+    if (x + popupWidth > window.innerWidth) {
+      x = rect.left - popupWidth - 10; // Position to the left instead
+    }
+    
+    // Check if popup would go off the top or bottom of the screen
+    if (y < 10) {
+      y = 10; // Keep some margin from top
+    } else if (y + popupHeight > window.innerHeight - 10) {
+      y = window.innerHeight - popupHeight - 10; // Keep some margin from bottom
+    }
+    
+    setPopupPosition({ x, y });
+    setShowPreview(true);
+    setShowZoomPopup(true);
+  };
+
+  const handleImageLeave = () => {
+    setShowPreview(false);
+    setShowZoomPopup(false);
+  };
 
   return (
     <div className="flex w-full items-center gap-6 px-2 py-2" style={{ color: AX.text }}>
@@ -300,91 +367,83 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
 
       {/* LEFT: token avatar + meta */}
       <div className="flex items-center gap-3">
-        {/* Avatar with protocol-colored outer ring and hanging protocol badge */}
+        {/* Avatar with PulseTable-style border + protocol badge */}
         <div
-          className="relative h-11 w-11 rounded-[10px] overflow-visible"
-          onMouseEnter={() => setShowPreview(true)}
-          onMouseLeave={() => setShowPreview(false)}
+          className="relative flex items-center justify-center rounded-sm transition-all duration-300 ease-out cursor-pointer"
+          onMouseEnter={handleImageHover}
+          onMouseLeave={handleImageLeave}
+          style={{
+            width: 44,
+            height: 44,
+            overflow: "visible",
+            boxShadow: showPreview ? `0 0 5px ${AX.glowCyan}, 0 0 10px ${AX.glowCyan}` : "none",
+            transform: showPreview ? "scale(1.02)" : "scale(1)",
+          }}
         >
-          {/* OUTER ring (protocol color) */}
-          <div
-            className="absolute -inset-[2px] rounded-[12px] pointer-events-none"
-            style={{
-              border: `2px solid ${protocolColor}`,
-              boxShadow: showPreview ? `0 0 16px ${protocolColor}66` : "none",
-            }}
-          />
-          {/* INNER subtle border + image */}
-          <div
-            className="relative h-full w-full rounded-[10px] overflow-hidden"
-            style={{ border: `1px solid rgba(192,192,192,0.28)` }}
-          >
-            {imgSrc ? (
-              <img
-                src={imgSrc}
-                alt={token.name || token.symbol || ""}
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                    token.symbol || token.name || "T"
-                  )}&background=0f1012&color=E6E7EA&size=44`;
-                }}
-              />
-            ) : (
-              <div className="h-full w-full grid place-items-center" style={{ background: AX.surface2 }}>
-                <span className="text-lg">{(token.symbol || token.name || "?").slice(0, 1)}</span>
-              </div>
-            )}
-
-            {/* Hover camera hint */}
+          <div className="relative rounded-sm" style={{ border: "none", padding: 0 }}>
             <div
-              className="absolute inset-0 grid place-items-center bg-black/55 transition-opacity"
-              style={{ opacity: showPreview ? 1 : 0 }}
+              className="relative rounded-sm"
+              style={{
+                border: `1px solid ${protocolColor}`,
+                padding: 1,
+                backgroundColor: "#06070b",
+              }}
             >
-              <FaCamera size={12} />
+              <div
+                className="relative rounded-sm overflow-hidden"
+                style={{ width: 36, height: 36 }}
+              >
+                <FastImage
+                  src={imgSrc ?? undefined}
+                  fallbackSrc={fallbackAvatar}
+                  alt={token.name || token.symbol || ""}
+                  width={36}
+                  height={36}
+                  className="w-full h-full object-cover transition-all duration-300"
+                  symbol={token.symbol}
+                  name={token.name}
+                  showBubble={false}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Protocol badge (HANGING outside, bottom-right) */}
           <div
-            className="absolute rounded-full overflow-hidden grid place-items-center"
+            className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/5 translate-y-1/4 z-10"
             style={{
-              width: BADGE_SIZE,
-              height: BADGE_SIZE,
-              right: badgeRight,
-              bottom: badgeBottom,
-              border: `${BADGE_BORDER}px solid ${protocolColor}`,
-              boxShadow: `0 0 6px ${protocolColor}66`,
-              zIndex: 5,
-              // CHANGED: remove white background for Meteora so no white rim shows
-              backgroundColor: isMeteora ? "#0f1012" : "#ffffff",
+              width: 12,
+              height: 12,
+              border: `1px solid ${protocolColor}`,
+              boxShadow: `0 0 2px ${protocolColor}60`,
             }}
             title="Protocol"
           >
             <img
               src={tokenIcon}
-              alt="protocol"
-              // CHANGED: for Meteora, fill the circle and multiply to kill white pixels
-              style={
-                isMeteora
-                  ? {
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      mixBlendMode: "multiply",
-                      // slight boost so reds stay punchy after multiply on dark bg
-                      filter: "contrast(1.05) saturate(1.05)",
-                    }
-                  : {
-                      width: `${Math.round(BADGE_SIZE * imgScale)}px`,
-                      height: `${Math.round(BADGE_SIZE * imgScale)}px`,
-                      objectFit: "contain",
-                    }
-              }
+              alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
+              className={`${fillProtocolBadge ? "w-full h-full object-cover" : "w-3/4 h-3/4 object-contain"} rounded-full`}
+              style={{
+                filter: protocolColor === "#eab308" ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)" : "none",
+              }}
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
               }}
             />
+          </div>
+
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300 pointer-events-none"
+            style={{ opacity: showPreview ? 1 : 0 }}
+          >
+            <div
+              className="flex items-center justify-center rounded-full p-1.5"
+              style={{
+                backgroundColor: AX.aiCyan,
+                boxShadow: `0 0 8px ${AX.glowCyan}`,
+              }}
+            >
+              <FaCamera size={16} style={{ color: "#000000" }} className="drop-shadow-lg" />
+            </div>
           </div>
         </div>
 
@@ -487,6 +546,57 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
       {showToast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] px-3 py-1.5 bg-emerald-600 text-white rounded-md text-sm">
           Copied!
+        </div>
+      )}
+
+      {/* Zoom popup */}
+      {showZoomPopup && (
+        <div
+          className="fixed z-[99998] pointer-events-none transition-all duration-300 ease-out"
+          style={{
+            left: `${popupPosition.x}px`,
+            top: `${popupPosition.y}px`,
+            opacity: showZoomPopup ? 1 : 0,
+            transform: showZoomPopup ? 'scale(1) translateY(0)' : 'scale(0.9) translateY(-10px)',
+          }}
+        >
+          <div
+            className="relative rounded-lg overflow-hidden shadow-2xl"
+            style={{
+              width: 150,
+              height: 150,
+              backgroundColor: AX.surface,
+              border: `2px solid ${protocolColor}`,
+              boxShadow: `0 0 20px ${AX.glowCyan}, 0 0 40px ${AX.glowCyan}40`,
+            }}
+          >
+            <FastImage
+              src={imgSrc ?? undefined}
+              fallbackSrc={fallbackAvatar}
+              alt={`${token.name || token.symbol || ""} - Zoomed`}
+              width={150}
+              height={150}
+              className="w-full h-full object-cover"
+              symbol={token.symbol}
+              name={token.name}
+              showBubble={false}
+            />
+            
+            {/* Overlay with token info */}
+            <div
+              className="absolute bottom-0 left-0 right-0 px-2 py-1"
+              style={{
+                background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+              }}
+            >
+              <div className="text-white text-xs font-medium truncate">
+                {token.symbol}
+              </div>
+              <div className="text-gray-300 text-[10px] truncate">
+                {token.name}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
