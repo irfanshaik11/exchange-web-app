@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import Head from 'next/head';
 import PulseTable from '../components/PulseTable';
 import PulseControlBar from '../components/PulseControlBar';
