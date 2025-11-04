@@ -14,7 +14,7 @@ import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
-import { showCenteredErrorToast, showCenteredSuccessToast } from "~/utils/toast";
+import { showCenteredErrorToast, showTransactionPendingToast, updateTransactionToast } from "~/utils/toast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
@@ -230,6 +230,7 @@ export default function DiscoverPage() {
       return;
     }
 
+    let pendingToastId: string | null = null;
     try {
       const poolType = getPoolTypeFromToken(token);
       const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
@@ -320,7 +321,7 @@ export default function DiscoverPage() {
       if (settings.rpc) {
         payload.rpc = settings.rpc;
       }
-
+      
       console.log("\n📤 COMPLETE PAYLOAD BEING SENT TO API:");
       console.log(JSON.stringify(payload, null, 2));
       console.log("\n📤 PAYLOAD SUMMARY:");
@@ -336,15 +337,16 @@ export default function DiscoverPage() {
       console.log("  mevMode:", payload.mevMode);
       console.log("  originalPairAddress:", payload.originalPairAddress);
       console.log("=".repeat(80) + "\n");
-
+      
+      pendingToastId = showTransactionPendingToast("Attempting transaction...");
       const data = await tradeBuy(payload, user.bearerToken);
-
+       
       console.log("\n📥 API RESPONSE RECEIVED:");
       console.log(JSON.stringify(data, null, 2));
-
+       
       const txHash = data?.hash || data?.txid;
       const tokenAmount = data?.amount || data?.tokenAmount;
-
+ 
       if (data && txHash) {
         console.log("\n✅ QUICK BUY SUCCESS:");
         console.log("  Transaction Hash:", txHash);
@@ -376,14 +378,16 @@ export default function DiscoverPage() {
         } catch (backfillError) {
           console.error('❌ Error backfilling token:', backfillError);
         }
-
-        showCenteredSuccessToast(
+        updateTransactionToast(
+          pendingToastId,
+          "success",
           `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
         );
       } else {
         console.log("\n❌ QUICK BUY FAILED:");
         console.log("  Response:", JSON.stringify(data, null, 2));
         console.log("  Missing transaction hash");
+        updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
         showCenteredErrorToast("❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
@@ -401,22 +405,31 @@ export default function DiscoverPage() {
 
       if (e instanceof ApiError) {
         if (e.code === 'NO_ACTIVE_POOL') {
+          updateTransactionToast(pendingToastId, "error", `⚠️ Pool unavailable for ${token.symbol}`);
           showCenteredErrorToast(`⚠️ Pool unavailable for ${token.symbol}`);
         } else if (e.code === 'INSUFFICIENT_BALANCE') {
+          updateTransactionToast(pendingToastId, "error", `⚠️ Insufficient balance`);
           showCenteredErrorToast(`⚠️ Insufficient balance`);
         } else if (e.code === 'TX_FAILED') {
+          updateTransactionToast(pendingToastId, "error", `❌ Trade failed. Try adjusting slippage or amount.`);
           showCenteredErrorToast(`❌ Trade failed. Try adjusting slippage or amount.`);
         } else if (e.code === 'NO_HOLDINGS') {
+          updateTransactionToast(pendingToastId, "error", `❌ No ${token.symbol} to sell`);
           showCenteredErrorToast(`❌ No ${token.symbol} to sell`);
         } else if (e.code === 'AMOUNT_TOO_SMALL') {
+          updateTransactionToast(pendingToastId, "error", `❌ Amount too small (min 0.001 SOL)`);
           showCenteredErrorToast(`❌ Amount too small (min 0.001 SOL)`);
         } else if (e.code === 'POOL_UNAVAILABLE') {
+          updateTransactionToast(pendingToastId, "error", `⚠️ Pool has insufficient liquidity`);
           showCenteredErrorToast(`⚠️ Pool has insufficient liquidity`);
         } else {
           const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
+          updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
           showCenteredErrorToast(`❌ ${msg}`);
         }
       } else {
+        // Unexpected error - show generic message
+        updateTransactionToast(pendingToastId, "error", "❌ Trade failed. Please try again.");
         showCenteredErrorToast(`❌ Trade failed. Please try again.`);
       }
     }

@@ -2,6 +2,8 @@ import toast, { type ToastOptions } from "react-hot-toast";
 
 type ToastKind = "success" | "error";
 
+type PendingToastKind = ToastKind | "loading";
+
 const baseStyle = {
   background: "#1E1F26",
   color: "#E6E7EA",
@@ -17,24 +19,36 @@ const defaultBorders: Record<ToastKind, string> = {
   error: "1px solid #ff6b6b",
 };
 
-export const showCenteredToast = (
-  message: string,
-  type: ToastKind = "error",
+const loadingBorder = "1px solid #3B82F6";
+
+const buildOptions = (
+  type: PendingToastKind,
   options?: ToastOptions
-) => {
-  const config: ToastOptions = {
-    duration: 5000,
+): ToastOptions => {
+  const border =
+    type === "loading"
+      ? loadingBorder
+      : defaultBorders[type as ToastKind] ?? defaultBorders.error;
+
+  return {
+    duration: type === "loading" ? Infinity : 5000,
     position: "top-center",
     ...options,
     style: {
       ...baseStyle,
       ...(options?.style ?? {}),
-      border: options?.style?.border ?? defaultBorders[type],
+      border: options?.style?.border ?? border,
     },
   };
+};
 
+export const showCenteredToast = (
+  message: string,
+  type: ToastKind = "error",
+  options?: ToastOptions
+) => {
   const toastFn = type === "success" ? toast.success : toast.error;
-  toastFn(message, config);
+  toastFn(message, buildOptions(type, options));
 };
 
 export const showCenteredErrorToast = (message: string, options?: ToastOptions) =>
@@ -42,3 +56,19 @@ export const showCenteredErrorToast = (message: string, options?: ToastOptions) 
 
 export const showCenteredSuccessToast = (message: string, options?: ToastOptions) =>
   showCenteredToast(message, "success", options);
+
+export const showTransactionPendingToast = (
+  message: string,
+  options?: ToastOptions
+): string => toast.loading(message, buildOptions("loading", options));
+
+export const updateTransactionToast = (
+  id: string | null,
+  type: ToastKind,
+  message: string,
+  options?: ToastOptions
+) => {
+  if (!id) return;
+  const toastFn = type === "success" ? toast.success : toast.error;
+  toastFn(message, { id, ...buildOptions(type, options) });
+};
