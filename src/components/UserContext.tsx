@@ -155,7 +155,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           // Enable notifications after initialization is complete
           setTimeout(() => {
             setNotificationsEnabled(true);
-            console.log(`🔔 Notifications ENABLED`);
+            // console.log(`🔔 Notifications ENABLED`);
           }, 3000); // Wait 3 seconds after initialization
         } catch (error) {
           console.error('Failed to initialize balance:', error);
