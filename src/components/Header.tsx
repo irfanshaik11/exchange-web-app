@@ -593,16 +593,18 @@ export default function Header({
           <div className="h-4 border-r" style={{ borderColor: AX.border }}> </div>
         </div>
         
-        {/* Mobile Menu - slides down from top */}
+        {/* Mobile Menu - slides from left to right */}
         <div
           ref={mobileMenuRef}
-          className={`md:hidden fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-out overflow-y-auto ${
-            mobileMenuOpen ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full pointer-events-none'
+          className={`md:hidden fixed top-0 left-0 bottom-0 z-50 transition-all duration-300 ease-out overflow-y-auto ${
+            mobileMenuOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'
           }`}
           style={{
             backgroundColor: AX.bg,
-            borderBottom: `1px solid ${AX.border}`,
-            maxHeight: '100vh',
+            borderRight: `1px solid ${AX.border}`,
+            width: '80%',
+            maxWidth: '320px',
+            height: '100vh',
           }}
         >
           {/* Close button at top */}
