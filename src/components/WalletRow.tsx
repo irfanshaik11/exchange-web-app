@@ -55,10 +55,10 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
           return parsed;
         } catch {
           // Invalid JSON, ignore
-          console.warn(`⚠️ Invalid localStorage value for ${wallet.address}`);
+          // console.warn(`⚠️ Invalid localStorage value for ${wallet.address}`);
         }
       } else {
-        console.log(`❌ No localStorage value found for ${wallet.address}`);
+        // console.log(`❌ No localStorage value found for ${wallet.address}`);
       }
     }
     return null;
@@ -96,7 +96,7 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
     // 2. We haven't loaded from storage before AND
     // 3. Backend has a value
     if (!hasLoadedFromStorageRef.current && watchedWallet?.notificationsEnabled !== undefined) {
-      console.log(`📖 [USE EFFECT] No localStorage, using backend: ${wallet.address} = ${watchedWallet.notificationsEnabled}`);
+      // console.log(`📖 [USE EFFECT] No localStorage, using backend: ${wallet.address} = ${watchedWallet.notificationsEnabled}`);
       setNotificationsEnabled(watchedWallet.notificationsEnabled);
     }
   }, [wallet.address]); // Only depend on wallet.address to avoid backend overrides
@@ -116,7 +116,7 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
     
     // If no localStorage and we haven't loaded from storage, use backend value
     if (!hasLoadedFromStorageRef.current && watchedWallet?.notificationsEnabled !== undefined) {
-      console.log(`📖 [BACKEND UPDATE] Using backend value (no localStorage): ${wallet.address} = ${watchedWallet.notificationsEnabled}`);
+      // console.log(`📖 [BACKEND UPDATE] Using backend value (no localStorage): ${wallet.address} = ${watchedWallet.notificationsEnabled}`);
       setNotificationsEnabled(watchedWallet.notificationsEnabled);
     }
   }, [watchedWallet?.notificationsEnabled, wallet.address]); // Watch for backend changes

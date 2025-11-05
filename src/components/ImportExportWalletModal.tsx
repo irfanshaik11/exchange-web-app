@@ -4,7 +4,7 @@ interface ImportExportWalletModalProps {
   mode: 'import' | 'export';
   isOpen: boolean;
   onClose: () => void;
-  onImport?: (wallets: any[]) => void;
+  onImport?: (wallets: any[], onProgress?: (current: number, total: number) => void) => Promise<void>;
   wallets?: any[];
 }
 
@@ -12,17 +12,39 @@ export default function ImportExportWalletModal({ mode, isOpen, onClose, onImpor
   const [importText, setImportText] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
 
   if (!isOpen) return null;
 
-  const handleImport = () => {
+  const handleImport = async () => {
     try {
       const parsed = JSON.parse(importText);
       if (Array.isArray(parsed)) {
+        if (parsed.length === 0) {
+          setError('No wallets to import.');
+          return;
+        }
+        
         setError('');
-        onImport?.(parsed);
-        setImportText('');
-        onClose();
+        setIsImporting(true);
+        setImportProgress({ current: 0, total: parsed.length });
+        
+        try {
+          // Wait for onImport to complete, passing progress callback
+          await onImport?.(parsed, (current, total) => {
+            setImportProgress({ current, total });
+          });
+          setImportText('');
+          setIsImporting(false);
+          setImportProgress({ current: 0, total: 0 });
+          // Only close after successful import
+          onClose();
+        } catch (importError: any) {
+          setIsImporting(false);
+          setImportProgress({ current: 0, total: 0 });
+          setError(importError?.message || 'Failed to import wallets. Please try again.');
+        }
       } else {
         setError('Invalid format. Must be an array.');
       }
@@ -39,13 +61,26 @@ export default function ImportExportWalletModal({ mode, isOpen, onClose, onImpor
     }
   };
 
+  // Prevent closing modal while importing
+  const handleClose = () => {
+    if (!isImporting) {
+      onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-neutral-900 rounded-xl shadow-2xl w-full max-w-sm relative h-auto min-h-[500px] flex flex-col">
         <div className="px-4 pt-3 pb-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-white">{mode === 'import' ? 'Import Solana Wallets' : 'Export Solana Wallets'}</h2>
-            <button className="text-neutral-400 hover:text-white text-2xl font-light" onClick={onClose}>&times;</button>
+            <button 
+              className="text-neutral-400 hover:text-white text-2xl font-light disabled:opacity-50 disabled:cursor-not-allowed" 
+              onClick={handleClose}
+              disabled={isImporting}
+            >
+              &times;
+            </button>
           </div>
         </div>
         <div className="border-b border-neutral-700 mb-6"></div>
@@ -53,12 +88,27 @@ export default function ImportExportWalletModal({ mode, isOpen, onClose, onImpor
           {mode === 'import' ? (
           <>
             <textarea
-              className="w-full h-40 p-3 rounded bg-neutral-800 text-neutral-100 border border-neutral-700 mb-3"
+              className="w-full h-40 p-3 rounded bg-neutral-800 text-neutral-100 border border-neutral-700 mb-3 disabled:opacity-50 disabled:cursor-not-allowed outline-none focus:border-white resize-none"
               placeholder="Paste your exported wallets here..."
               value={importText}
               onChange={e => setImportText(e.target.value)}
+              disabled={isImporting}
             />
             {error && <div className="text-red-400 text-xs mb-3">{error}</div>}
+            {isImporting && (
+              <div className="mb-3">
+                <div className="flex items-center justify-between text-sm text-neutral-300 mb-2">
+                  <span>Importing wallets...</span>
+                  <span>{importProgress.current} / {importProgress.total}</span>
+                </div>
+                <div className="w-full bg-neutral-800 rounded-full h-2">
+                  <div 
+                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
             <div className="text-xs text-neutral-400 mb-6 space-y-3 flex-1">
               <div className="flex items-center gap-3">
                 <img src="https://bookface-images.s3.amazonaws.com/small_logos/3ffbe7a826e30d31bb15e11d521be0059beb3f81.png" alt="Axiom" className="w-6 h-6 rounded" />
@@ -77,7 +127,34 @@ export default function ImportExportWalletModal({ mode, isOpen, onClose, onImpor
                 <span>RayBot wallet imports are supported.</span>
               </div>
             </div>
-            <button className="w-full text-black font-semibold rounded-lg py-2 transition-all duration-300 mt-auto" style={{ backgroundColor: '#70E0B0' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#58B890'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#70E0B0'} onClick={handleImport}>Import</button>
+            <button 
+              className="w-full text-black font-semibold rounded-lg py-2 transition-all duration-300 mt-auto disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2" 
+              style={{ backgroundColor: isImporting ? '#4A9B7A' : '#70E0B0' }} 
+              onMouseEnter={(e) => {
+                if (!isImporting) {
+                  e.currentTarget.style.backgroundColor = '#58B890';
+                }
+              }} 
+              onMouseLeave={(e) => {
+                if (!isImporting) {
+                  e.currentTarget.style.backgroundColor = '#70E0B0';
+                }
+              }} 
+              onClick={handleImport}
+              disabled={isImporting || !importText.trim()}
+            >
+              {isImporting ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Importing...</span>
+                </>
+              ) : (
+                'Import'
+              )}
+            </button>
           </>
         ) : (
           <>
