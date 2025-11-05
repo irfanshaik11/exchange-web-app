@@ -213,7 +213,9 @@ export default function TradePage() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   
   // Minimum chart height (including header) - chart should never shrink below this
-  const MIN_CHART_HEIGHT = 350; // 350px total (header ~50px + chart ~300px minimum)
+  const MIN_CHART_HEIGHT = 350;
+  const DEFAULT_CHART_HEIGHT_RATIO = 0.65;
+  const SSR_DEFAULT_CHART_HEIGHT = 900;
   
   // Calculate responsive min/max based on viewport
   const getResponsiveLimits = useCallback(() => {
@@ -241,19 +243,18 @@ export default function TradePage() {
   
   // Initialize with responsive default based on viewport
   const [topPanePx, setTopPanePx] = useState<number>(() => {
-    if (typeof window === "undefined") return 500;
-    // Try to use saved value, but validate it's still reasonable
+    if (typeof window === "undefined") return Math.max(MIN_CHART_HEIGHT, SSR_DEFAULT_CHART_HEIGHT);
+
+    const limits = getResponsiveLimits();
+    const proposed = Math.max(limits.min, Math.min(window.innerHeight * DEFAULT_CHART_HEIGHT_RATIO, limits.max));
+
+    // Try to use saved value, but coerce it to at least the proposed default
     const saved = Number(localStorage.getItem("tradeSplitTopPx"));
-    if (Number.isFinite(saved) && saved > 0) {
-      const limits = { min: MIN_CHART_HEIGHT, max: window.innerHeight * 0.85 };
-      // If saved value is reasonable, use it; otherwise use responsive default
-      if (saved >= limits.min && saved <= limits.max) {
-        return saved;
-      }
+    if (Number.isFinite(saved) && saved > 0 && saved >= limits.min && saved <= limits.max) {
+      return Math.max(saved, proposed);
     }
-    // Default to 50% of viewport height, clamped between min and max
-    const defaultHeight = Math.max(MIN_CHART_HEIGHT, Math.min(window.innerHeight * 0.5, 800));
-    return defaultHeight;
+
+    return proposed;
   });
   
   const [isResizing, setIsResizing] = useState(false);
