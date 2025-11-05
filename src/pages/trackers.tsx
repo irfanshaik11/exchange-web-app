@@ -20,11 +20,23 @@ import {
   type WalletEvent,
   type TradeEvent,
 } from "~/utils/walletTracking";
+import {
+  addTrackedTwitterAccount,
+  removeTrackedTwitterAccount,
+  getTrackedTwitterAccounts,
+  getTwitterFeed,
+  getUserTweets,
+  type TwitterAccount,
+  type Tweet,
+} from "~/utils/twitterTracking";
 import { useUser } from "../components/UserContext";
 import { useWalletTracker } from "../components/WalletTrackerContext";
 import { batchFetchTokenMetadata } from "~/utils/tokenMetadata";
+import AddTwitterHandleModal from "../components/AddTwitterHandleModal";
+import TwitterAccountRow from "../components/TwitterAccountRow";
 
 const TABS = ["Wallet Manager", "Live Trades"];
+const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
 const EMOJIS = [
   "💰",
   "🚀",
@@ -114,6 +126,14 @@ export default function TrackersPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, { symbol: string | null; name: string | null }>>(new Map());
+  
+  // Twitter state
+  const [showAddTwitterModal, setShowAddTwitterModal] = useState(false);
+  const [twitterAccounts, setTwitterAccounts] = useState<TwitterAccount[]>([]);
+  const [twitterFeed, setTwitterFeed] = useState<Tweet[]>([]);
+  const [twitterTab, setTwitterTab] = useState(0);
+  const [loadingTwitterFeed, setLoadingTwitterFeed] = useState(false);
+  const [selectedTwitterUser, setSelectedTwitterUser] = useState<string | null>(null);
 
   // Keep walletsRef in sync with wallets state
   useEffect(() => {
@@ -124,6 +144,18 @@ export default function TrackersPage() {
   useEffect(() => {
     loadWalletsFromBackend();
   }, [user?.id]);
+
+  // Load Twitter accounts on mount
+  useEffect(() => {
+    loadTwitterAccounts();
+  }, [user?.id]);
+
+  // Load Twitter feed when accounts change or tab changes
+  useEffect(() => {
+    if (twitterTab === 1 && twitterAccounts.length > 0) {
+      loadTwitterFeed();
+    }
+  }, [twitterTab, twitterAccounts]);
 
   // Add mock live trades data (currently commented out)
   // useEffect(() => {
@@ -326,6 +358,73 @@ export default function TrackersPage() {
       wallet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wallet.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+
+  // Twitter functions
+  const loadTwitterAccounts = async () => {
+    const accounts = await getTrackedTwitterAccounts(user?.id);
+    setTwitterAccounts(accounts);
+  };
+
+  const handleAddTwitterAccount = async (username: string) => {
+    try {
+      await addTrackedTwitterAccount(username, user?.id);
+      await loadTwitterAccounts();
+      setToast(`Added @${username}`);
+      setTimeout(() => setToast(""), 3000);
+    } catch (error: any) {
+      setToast(error.message || "Failed to add Twitter account");
+      setTimeout(() => setToast(""), 3000);
+      throw error;
+    }
+  };
+
+  const handleRemoveTwitterAccount = async (username: string) => {
+    try {
+      await removeTrackedTwitterAccount(username, user?.id);
+      await loadTwitterAccounts();
+      setToast(`Removed @${username}`);
+      setTimeout(() => setToast(""), 3000);
+    } catch (error: any) {
+      setToast(error.message || "Failed to remove Twitter account");
+      setTimeout(() => setToast(""), 3000);
+    }
+  };
+
+  const loadTwitterFeed = async () => {
+    setLoadingTwitterFeed(true);
+    try {
+      let tweets: Tweet[] = [];
+      
+      if (selectedTwitterUser) {
+        // Load tweets from specific user
+        tweets = await getUserTweets(selectedTwitterUser, 20);
+      } else {
+        // Load tweets from all tracked accounts
+        const usernames = twitterAccounts.map(acc => acc.username);
+        tweets = await getTwitterFeed(usernames, 20);
+      }
+      
+      setTwitterFeed(tweets);
+    } catch (error) {
+      console.error('Error loading Twitter feed:', error);
+      setToast('Failed to load Twitter feed');
+      setTimeout(() => setToast(""), 3000);
+    } finally {
+      setLoadingTwitterFeed(false);
+    }
+  };
+
+  const handleViewTwitterProfile = (username: string) => {
+    setSelectedTwitterUser(username === selectedTwitterUser ? null : username);
+    setTwitterTab(1); // Switch to X Feed tab
+  };
+
+  // Reload Twitter feed when selected user changes
+  useEffect(() => {
+    if (twitterTab === 1) {
+      loadTwitterFeed();
+    }
+  }, [selectedTwitterUser]);
 
   // Export: copy wallet data (name, emoji, and address) to clipboard as JSON
   const handleExportAddresses = () => {
@@ -599,15 +698,15 @@ export default function TrackersPage() {
             </div>
 
             {/* Resizer Handle */}
-            {/* <div
+            <div
               className="group relative flex h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-blue-500/30"
               onMouseDown={() => setIsResizing(true)}
             >
               <div className="absolute h-16 w-1 rounded-full bg-neutral-700 transition-colors group-hover:bg-blue-500" />
-            </div> */}
+            </div>
 
             {/* Right Column: Twitter Alerts */}
-            {/* <div
+            <div
               className="flex h-full min-h-[530px] flex-col border border-neutral-800/50 bg-neutral-900/50 px-2 shadow-xl backdrop-blur-sm"
               style={{
                 width: `${sidebarWidth}px`,
@@ -615,20 +714,164 @@ export default function TrackersPage() {
                 maxWidth: "800px",
               }}
             >
-              <div className="mb-4 flex items-center justify-between border-b border-neutral-800/50 pb-4 pt-4">
-                <h3 className="text-lg font-semibold text-white">
-                  Twitter Alerts
-                </h3>
+              {/* Twitter Tabs Header */}
+              <div className="flex items-center justify-between border-b border-neutral-800/50 pb-2 pt-4">
+                <div className="flex gap-2">
+                  {TWITTER_TABS.map((tab, i) => (
+                    <button
+                      key={tab}
+                      className={`cursor-pointer rounded-lg px-3 py-1 text-xs transition-all duration-300 ${
+                        twitterTab === i
+                          ? "bg-[#1DA1F2] font-medium text-white"
+                          : "font-medium text-neutral-400 hover:bg-neutral-800/50 hover:text-white"
+                      }`}
+                      onClick={() => setTwitterTab(i)}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+                {twitterTab === 0 && (
+                  <button 
+                    className="rounded-lg bg-[#1DA1F2] px-3 py-1 text-xs font-semibold text-white transition-all duration-300 hover:bg-[#1A8CD8] cursor-pointer"
+                    onClick={() => setShowAddTwitterModal(true)}
+                  >
+                    Add Handle
+                  </button>
+                )}
               </div>
-              <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                <span className="mb-4 text-neutral-400">
-                  Start tracking accounts to see Twitter alerts!
-                </span>
-                <button className="rounded-lg bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-3 font-semibold text-white shadow-lg shadow-blue-500/20 transition-all duration-300 hover:from-blue-500 hover:to-blue-700">
-                  Add Twitter Handles
-                </button>
+
+              {/* Twitter Content */}
+              <div className="flex-1 overflow-y-auto">
+                {twitterTab === 0 ? (
+                  // Tracked Accounts Tab
+                  <>
+                    {twitterAccounts.length === 0 ? (
+                      <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                        <span className="mb-4 text-neutral-400">
+                          No Twitter accounts tracked yet
+                        </span>
+                      </div>
+                    ) : (
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-white/20">
+                            <th className="px-2 py-2 text-left text-sm text-neutral-400">Account</th>
+                            <th className="px-2 py-2 text-left text-sm text-neutral-400">Followers</th>
+                            <th className="px-2 py-2 text-left text-sm text-neutral-400">Added</th>
+                            <th className="px-2 py-2 text-right text-sm text-neutral-400">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {twitterAccounts.map((account) => (
+                            <TwitterAccountRow
+                              key={account.id}
+                              account={account}
+                              onRemove={handleRemoveTwitterAccount}
+                              onViewProfile={handleViewTwitterProfile}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </>
+                ) : (
+                  // X Feed Tab
+                  <>
+                    {twitterAccounts.length === 0 ? (
+                      <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                        <span className="mb-4 text-neutral-400">
+                          Add Twitter accounts to see their feed
+                        </span>
+                      </div>
+                    ) : loadingTwitterFeed ? (
+                      <div className="flex h-full flex-col items-center justify-center py-8">
+                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+                        <span className="mt-4 text-neutral-400">Loading feed...</span>
+                      </div>
+                    ) : twitterFeed.length === 0 ? (
+                      <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                        <span className="text-neutral-400">
+                          No tweets found
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 p-2">
+                        {selectedTwitterUser && (
+                          <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-500/10 px-3 py-2">
+                            <span className="text-xs text-blue-400">
+                              Showing tweets from @{selectedTwitterUser}
+                            </span>
+                            <button
+                              onClick={() => setSelectedTwitterUser(null)}
+                              className="text-xs text-neutral-400 hover:text-white"
+                            >
+                              Show All
+                            </button>
+                          </div>
+                        )}
+                        {twitterFeed.map((tweet) => (
+                          <div
+                            key={tweet.id}
+                            className="rounded-lg border border-neutral-800/50 bg-neutral-900/50 p-3 transition-all duration-300 hover:border-blue-500/30 hover:bg-neutral-800/30"
+                          >
+                            {/* Tweet Header */}
+                            <div className="mb-2 flex items-start gap-2">
+                              {tweet.authorProfileImage ? (
+                                <img
+                                  src={tweet.authorProfileImage}
+                                  alt={tweet.authorName}
+                                  className="h-8 w-8 rounded-full"
+                                />
+                              ) : (
+                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-xs font-bold text-white">
+                                  {tweet.authorName.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-white text-sm truncate">
+                                    {tweet.authorName}
+                                  </span>
+                                  <span className="text-neutral-400 text-xs truncate">
+                                    @{tweet.authorUsername}
+                                  </span>
+                                </div>
+                                <span className="text-neutral-500 text-xs">
+                                  {new Date(tweet.createdAt).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            {/* Tweet Text */}
+                            <p className="mb-2 text-sm text-neutral-200 whitespace-pre-wrap break-words">
+                              {tweet.text}
+                            </p>
+                            
+                            {/* Tweet Stats */}
+                            <div className="flex items-center gap-4 text-xs text-neutral-400">
+                              <span>💬 {tweet.replyCount || 0}</span>
+                              <span>🔁 {tweet.retweetCount || 0}</span>
+                              <span>❤️ {tweet.likeCount || 0}</span>
+                              {tweet.url && (
+                                <a
+                                  href={tweet.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="ml-auto text-blue-400 hover:text-blue-300"
+                                >
+                                  View on X →
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-            </div> */}
+            </div>
           </div>
         </div>
       </div>
@@ -641,7 +884,7 @@ export default function TrackersPage() {
         mode={"import"}
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
-        onImport={async (imported) => {
+        onImport={async (imported, onProgress) => {
           try {
             // Transform imported wallets to support different formats
             const transformedWallets = imported.map((wallet: any) => {
@@ -666,8 +909,10 @@ export default function TrackersPage() {
             // Add each wallet to backend
             let successCount = 0;
             let errorCount = 0;
+            const total = transformedWallets.length;
             
-            for (const wallet of transformedWallets) {
+            for (let i = 0; i < transformedWallets.length; i++) {
+              const wallet = transformedWallets[i];
               try {
                 await addTrackedWallet(wallet.address, wallet.name, user?.id, wallet.emoji);
                 successCount++;
@@ -678,6 +923,8 @@ export default function TrackersPage() {
                   errorCount++;
                 }
               }
+              // Update progress after each wallet
+              onProgress?.(i + 1, total);
             }
             
             // Reload from backend
@@ -689,6 +936,7 @@ export default function TrackersPage() {
             console.error('Import error:', error);
             setToast('Failed to import wallets');
             setTimeout(() => setToast(""), 3000);
+            throw error; // Re-throw so modal can handle it
           }
         }}
         wallets={wallets}
@@ -704,6 +952,11 @@ export default function TrackersPage() {
           onClose={() => setScannedWallet(null)}
         />
       )}
+      <AddTwitterHandleModal
+        isOpen={showAddTwitterModal}
+        onClose={() => setShowAddTwitterModal(false)}
+        onAddTwitterHandle={handleAddTwitterAccount}
+      />
 
       {/* Bottom Navigation/Footer */}
       {/* <div className="fixed bottom-0 left-0 z-40 flex w-full items-center justify-between border-t border-emerald-950/50 bg-neutral-900/80 px-6 py-3 text-xs backdrop-blur-md">
