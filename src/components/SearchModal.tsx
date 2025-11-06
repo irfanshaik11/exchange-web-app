@@ -7,18 +7,17 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import Image from 'next/image';
 import { formatSmartNumber } from "~/utils/db";
-import { FaBolt, FaClock, FaChartLine, FaTelegramPlane } from "react-icons/fa";
-import usePaginatedTokensWebSocket from "~/hooks/usePaginatedTokensWebSocket";
+import { FaBolt, FaClock, FaChartLine, FaSearch, FaUser, FaRegCopy } from "react-icons/fa";
 import { FaRocket, FaFire, FaCrown, FaGraduationCap } from "react-icons/fa";
 import InterstatePopout from "./InterstatePopout";
 import { LuChartNoAxesColumn } from "react-icons/lu";
 import { TbDropletHalf2Filled } from "react-icons/tb";
-import { CiUser, CiGlobe } from "react-icons/ci";
 import { fetchTokenMetadata } from "~/utils/functions";
-import { withImageFallback, normalizeImageUrl, extractMetaImage } from "~/utils/images";
-import AvatarImage from '~/components/AvatarImage';
+import { extractMetaImage } from "~/utils/images";
+import FastImage from "./FastImage";
+import { IoShareSocialOutline } from "react-icons/io5";
+import { LuPill } from "react-icons/lu";
 import type { Timeframe } from "../pages/index";
 
 // Token type
@@ -63,6 +62,181 @@ const sortByOptions = [
   { key: "liquidity" as const, icon: TbDropletHalf2Filled },
 ];
 
+const DEFAULT_PROTOCOL_COLOR = "#22c55e";
+const DEFAULT_PROTOCOL_ICON = "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
+
+const rawProtocolColorMap: Record<string, string> = {
+  pump: DEFAULT_PROTOCOL_COLOR,
+  "pump.fun": DEFAULT_PROTOCOL_COLOR,
+  bonk: "#ff6b35",
+  bags: DEFAULT_PROTOCOL_COLOR,
+  moonshot: "#eab308",
+  moonshoot: "#eab308",
+  moonit: "#eab308",
+  heaven: "#8b5cf6",
+  "daos.fun": "#06b6d4",
+  candle: "#f59e0b",
+  sugar: "#ec4899",
+  believe: "#10b981",
+  jupiter: "#8b5cf6",
+  boop: "#134577",
+  boopfun: "#134577",
+  launchlab: "#3b82f6",
+  dynamic: "#526fff",
+  raydium: "#5c51f7",
+  raydiumlaunchpad: "#5c51f7",
+  meteora: "#ff4662",
+  "meteora_v2": "#ff4662",
+  pump_amm: "#e9ba14",
+  orca: "#0ea5e9",
+};
+
+const normalizedProtocolColorMap: Record<string, string> = Object.fromEntries(
+  Object.entries(rawProtocolColorMap).map(([key, value]) => [key.toLowerCase().replace(/\s+/g, "").replace(/_/g, ""), value])
+);
+
+const AX = {
+  surface: "#1A1A1A",
+  border: "#2A2B33",
+  text: "#E6E7EA",
+  muted: "#9CA3AF",
+  aiCyan: "#06B6D4",
+  glowBlue: "rgba(59, 130, 246, 0.35)",
+};
+
+function normalizeKey(value: string) {
+  return value.toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
+}
+
+function normalizeAssetUrl(raw?: string | null): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (s.startsWith("data:")) return s;
+  if (s.startsWith("ipfs://")) {
+    const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+  }
+  if (/^ipfs[/:]/i.test(s)) {
+    const cid = s.replace(/^ipfs[/:]/i, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+  }
+  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s)) return `https://arweave.net/${s}`;
+  if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
+  if (s.startsWith("https://")) return s;
+  return null;
+}
+
+function extractProtocolRaw(token: Partial<Token> & Record<string, any>): string | null {
+  const candidates = [
+    token.launchpad_protocol,
+    token.protocol,
+    token.launchpadName,
+    token.amm,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const value = String(candidate).toLowerCase().trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function shouldFillProtocolBadge(token: Partial<Token> & Record<string, any>): boolean {
+  const raw = extractProtocolRaw(token) || "";
+  return ["meteora", "bonk", "bags", "moonit", "moonshot", "moonshoot"].some((needle) => raw.includes(needle));
+}
+
+function resolveProtocolColor(token: Partial<Token> & Record<string, any>): string {
+  const raw = extractProtocolRaw(token);
+  if (!raw) return DEFAULT_PROTOCOL_COLOR;
+  if (raw.includes("meteora")) return "#ff4662";
+  if (raw.includes("pump")) return DEFAULT_PROTOCOL_COLOR;
+  if (raw.includes("launch")) return "#3b82f6";
+  const normalized = normalizeKey(raw);
+  if (rawProtocolColorMap[raw]) return rawProtocolColorMap[raw];
+  if (normalizedProtocolColorMap[normalized]) return normalizedProtocolColorMap[normalized];
+  if (raw.includes("raydium")) return "#5c51f7";
+  if (raw.includes("moonit") || raw.includes("moonshot") || raw.includes("moonshoot")) return "#eab308";
+  if (raw.includes("boop")) return "#134577";
+  if (raw.includes("bonk")) return "#ff6b35";
+  if (raw.includes("bags")) return DEFAULT_PROTOCOL_COLOR;
+  if (raw.includes("orca")) return "#0ea5e9";
+  if (raw.includes("jupiter")) return "#8b5cf6";
+  return DEFAULT_PROTOCOL_COLOR;
+}
+
+function resolveProtocolIcon(token: Partial<Token> & Record<string, any>): string {
+  const raw = extractProtocolRaw(token);
+  if (!raw) return DEFAULT_PROTOCOL_ICON;
+  if (raw.includes("meteora")) {
+    return "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013";
+  }
+  if (raw.includes("raydium") || raw.includes("launch")) {
+    return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
+  }
+  if (raw.includes("boop")) {
+    return "https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true";
+  }
+  if (raw.includes("moonit") || raw.includes("moonshot") || raw.includes("moonshoot")) {
+    return "https://avatars.githubusercontent.com/u/174132191?s=280&v=4";
+  }
+  if (raw.includes("bonk")) {
+    return "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png";
+  }
+  if (raw.includes("bags")) {
+    return "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw";
+  }
+  if (raw.includes("pump")) return DEFAULT_PROTOCOL_ICON;
+  return DEFAULT_PROTOCOL_ICON;
+}
+
+function resolveTwitterInfo(token: Partial<Token> & Record<string, any>): { url: string | null; handle: string | null } {
+  const candidates = [
+    token.twitter,
+    token.twitter_url,
+    token.x,
+    token.x_url,
+    token.socials?.twitter,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    let value = String(candidate).trim();
+    if (!value) continue;
+    value = value.replace(/^https?:\/\/(www\.)?(twitter\.com|x\.com)\//i, "");
+    value = value.replace(/^@/, "");
+    value = value.split(/[/?#]/)[0];
+    if (!value) continue;
+    const handle = value.toLowerCase();
+    return { handle, url: `https://twitter.com/${handle}` };
+  }
+
+  const fallback = (token.symbol || token.name || "").toLowerCase().replace(/[^a-z0-9_]/gi, "");
+  if (fallback) {
+    return { handle: fallback, url: `https://twitter.com/${fallback}` };
+  }
+  return { url: null, handle: null };
+}
+
+function resolveSearchVolume1h(token: Partial<Token> & Record<string, any>): number {
+  const buy = Number((token as any).total_buy_volume_1h) || 0;
+  const sell = Number((token as any).total_sell_volume_1h) || 0;
+  if (buy || sell) return buy + sell;
+  const direct =
+    (token as any).volume_1h ??
+    (token as any).volume1h ??
+    (token as any).volume60m ??
+    (token as any).volume_60m ??
+    0;
+  if (direct) return Number(direct) || 0;
+  const fallback =
+    (token as any).total_volume_1h ??
+    (token as any).buy_volume_1h ??
+    (token as any).volume_24h ??
+    0;
+  return Number(fallback) || 0;
+}
+
 const getSortingButtonClasses = (isActive: boolean, color: string) => {
   if (isActive) {
     return `border-${color}-500/60 bg-${color}-500/20 text-${color}-300`;
@@ -76,40 +250,6 @@ interface SearchModalProps {
   onSubmit?: (query: string) => void;
   onQueryChange?: (query: string) => void;
   selectedTimeframe?: Timeframe;
-}
-
-export function TokenLogo({ token }: { token: any }) {
-  const [logoUrl, setLogoUrl] = useState<string | null>(token.uri || token.logo || null);
-
-  useEffect(() => {
-    if (token.uri && !logoUrl) {
-      fetchTokenMetadata(token.uri).then((data) => {
-        const img = extractMetaImage(data);
-        if (img) {
-          setLogoUrl(img);
-        }
-      });
-    }
-  }, [token.uri, logoUrl]);
-
-  const handleImageError = useCallback(
-    (e: React.SyntheticEvent<HTMLImageElement>) => {
-      e.currentTarget.style.display = "none";
-      setLogoUrl(null);
-    },
-    [],
-  );
-
-  return (
-    <AvatarImage
-      src={logoUrl || undefined}
-      name={token.name}
-      symbol={token.symbol}
-      width={64}
-      height={64}
-      className="h-16 w-16 rounded-lg border border-neutral-700 object-contain"
-    />
-  );
 }
 
 // The new inner component that contains the actual modal content and logic
@@ -409,12 +549,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
       open={open}
       onClose={onClose}
       align="center"
-      className="mx-auto w-[980px] max-w-[96vw] rounded-xl border border-neutral-800 bg-neutral-900 shadow-2xl transition-all duration-200"
+      className="mx-auto w-[900px] max-w-[94vw] rounded-xl border border-neutral-800 bg-neutral-900 shadow-2xl transition-all duration-200"
       disableClickOutside={false}
     >
       {/* Filter and Sort Controls */}
-      <div className="flex items-center justify-between px-3 pt-3 text-xs font-medium">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-end px-3 pt-3 text-xs font-medium">
+        {/* <div className="flex items-center gap-2">
           {sortingOptions.map((option) => {
             const IconComponent = option.icon;
             const isActive =
@@ -446,7 +586,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
               </button>
             );
           })}
-        </div>
+        </div> */}
 
         <div className="flex items-center gap-2">
           <span className="text-neutral-400">Sort by</span>
@@ -488,9 +628,9 @@ const SearchModalContent = React.memo(function SearchModalContent({
       </div>
 
       {/* Token List */}
-      <div className="h-[550px] flex-1 overflow-hidden px-4 pt-2">
+      <div className="h-[550px] flex-1 overflow-hidden px-4 pt-3">
         <div className="mb-2">
-          <span className="text-sm tracking-wider text-neutral-400">
+          <span className="text-base tracking-wider text-neutral-300">
             {isSearching ? "Search Results" : "Search"} ({displayTokens.length})
           </span>
         </div>
@@ -509,7 +649,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           <ul className="flex h-full flex-col gap-4 overflow-y-auto">
             {displayTokens.map((token) => {
               const mc = formatSmartNumber(token.fully_diluted_value || 0);
-              const vol = formatSmartNumber((token as any).volume_1h || 0);
+              const vol = formatSmartNumber(resolveSearchVolume1h(token));
               const liq = formatSmartNumber(token.total_liquidity_usd || 0);
 
               return (
@@ -573,60 +713,310 @@ const TokenListItem = React.memo(
     liq: string;
     onSelect: (token: Token) => void;
   }) => {
-    const handleClick = useCallback(() => {
+    const [logoUrl, setLogoUrl] = useState<string | null>(token.uri || token.logo || null);
+    const [showXPreview, setShowXPreview] = useState(false);
+    const [xPreviewPosition, setXPreviewPosition] = useState({ x: 0, y: 0 });
+    const xPreviewTimeoutRef = useRef<number | null>(null);
+
+    useEffect(() => {
+      setLogoUrl(token.uri || token.logo || null);
+    }, [token.uri, token.logo, token.mint]);
+
+    useEffect(() => {
+      let cancelled = false;
+      if (token.uri && !logoUrl) {
+        fetchTokenMetadata(token.uri).then((data) => {
+          if (cancelled) return;
+          const img = extractMetaImage(data);
+          if (img) {
+            setLogoUrl(img);
+          }
+        });
+      }
+      return () => {
+        cancelled = true;
+      };
+    }, [token.uri, logoUrl]);
+
+    useEffect(() => {
+      return () => {
+        if (typeof window !== "undefined" && xPreviewTimeoutRef.current != null) {
+          window.clearTimeout(xPreviewTimeoutRef.current);
+        }
+      };
+    }, []);
+
+    const handleSelect = useCallback(() => {
       onSelect(token);
     }, [onSelect, token]);
 
+    const protocolColor = useMemo(() => resolveProtocolColor(token), [token]);
+    const tokenIcon = useMemo(() => resolveProtocolIcon(token), [token]);
+    const fillProtocolBadge = useMemo(() => shouldFillProtocolBadge(token), [token]);
+    const normalizedLogo = useMemo(() => normalizeAssetUrl(logoUrl || token.logo || token.uri), [logoUrl, token.logo, token.uri]);
+    const fallbackAvatar = useMemo(
+      () =>
+        `https://ui-avatars.com/api/?name=${encodeURIComponent(token.symbol || token.name || "T")}&background=0f1012&color=E6E7EA&size=36`,
+      [token.symbol, token.name]
+    );
+    const isPumpToken = useMemo(() => (token.mint || "").toLowerCase().endsWith("pump"), [token.mint]);
+    const twitterInfo = useMemo(() => resolveTwitterInfo(token), [token]);
+    const twitterProfileUrl = twitterInfo.url;
+    const twitterHandle = twitterInfo.handle;
+    const twitterSearchQuery = useMemo(() => `${token.symbol || ""} ${token.name || ""}`.trim(), [token.symbol, token.name]);
+    const twitterSearchUrl = useMemo(
+      () =>
+        twitterSearchQuery
+          ? `https://twitter.com/search?q=${encodeURIComponent(twitterSearchQuery)}`
+          : `https://twitter.com/search?q=${encodeURIComponent(token.symbol || token.name || "")}`,
+      [twitterSearchQuery, token.symbol, token.name]
+    );
+    const shareUrl = useMemo(() => {
+      const path = `/trade/${token.pair_address || token.mint}`;
+      if (typeof window === "undefined") return path;
+      return `${window.location.origin}${path}`;
+    }, [token.pair_address, token.mint]);
+    const twitterBio = useMemo(() => {
+      const candidates = [
+        (token as any).description,
+        (token as any).bio,
+        (token as any).twitter_bio,
+        (token as any).summary,
+      ];
+      for (const candidate of candidates) {
+        if (!candidate) continue;
+        const value = String(candidate).trim();
+        if (value) return value;
+      }
+      const base = token.symbol || token.name || "token";
+      return `Official ${base} community. Join the conversation!`;
+    }, [token]);
+
+    const openLinkInNewTab = useCallback((url: string | null | undefined) => {
+      if (!url) return;
+      if (typeof window === "undefined") return;
+      window.open(url, "_blank", "noopener,noreferrer");
+    }, []);
+
+    const scheduleHideTwitterPreview = useCallback(() => {
+      if (typeof window === "undefined") {
+        setShowXPreview(false);
+        return;
+      }
+      if (xPreviewTimeoutRef.current != null) {
+        window.clearTimeout(xPreviewTimeoutRef.current);
+      }
+      xPreviewTimeoutRef.current = window.setTimeout(() => {
+        setShowXPreview(false);
+        xPreviewTimeoutRef.current = null;
+      }, 120);
+    }, []);
+
+    const handleTwitterProfileMouseEnter = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        if (!twitterProfileUrl) return;
+        if (typeof window === "undefined") return;
+        if (xPreviewTimeoutRef.current != null) {
+          window.clearTimeout(xPreviewTimeoutRef.current);
+        }
+        const rect = event.currentTarget.getBoundingClientRect();
+        setXPreviewPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 12,
+        });
+        setShowXPreview(true);
+      },
+      [twitterProfileUrl]
+    );
+
+    const handleTwitterProfileMouseLeave = useCallback(() => {
+      scheduleHideTwitterPreview();
+    }, [scheduleHideTwitterPreview]);
+
+    const handleTwitterPreviewMouseEnter = useCallback(() => {
+      if (typeof window !== "undefined" && xPreviewTimeoutRef.current != null) {
+        window.clearTimeout(xPreviewTimeoutRef.current);
+      }
+      if (twitterProfileUrl) {
+        setShowXPreview(true);
+      }
+    }, [twitterProfileUrl]);
+
+    const handleTwitterPreviewMouseLeave = useCallback(() => {
+      scheduleHideTwitterPreview();
+    }, [scheduleHideTwitterPreview]);
+
+    const handleTwitterProfileClick = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        if (twitterProfileUrl) openLinkInNewTab(twitterProfileUrl);
+      },
+      [twitterProfileUrl, openLinkInNewTab]
+    );
+
+    const handleSearchClick = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        openLinkInNewTab(twitterSearchUrl);
+      },
+      [openLinkInNewTab, twitterSearchUrl]
+    );
+
+    const handlePumpClick = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        if (!token.mint) return;
+        openLinkInNewTab(`https://pump.fun/coin/${token.mint}`);
+      },
+      [token.mint, openLinkInNewTab]
+    );
+
+    const handleCopyAddress = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        if (!token.pair_address) return;
+        navigator.clipboard.writeText(token.pair_address).catch(() => {});
+      },
+      [token.pair_address]
+    );
+
+    const handleShareLink = useCallback(
+      (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        if (!shareUrl) return;
+        navigator.clipboard.writeText(shareUrl).catch(() => {});
+      },
+      [shareUrl]
+    );
+
+    const ageLabel = useMemo(() => getTokenAge(token.created_at), [token.created_at]);
+
     return (
+      <>
       <li
-        className="flex cursor-pointer items-center justify-between gap-4 rounded px-2 py-2 text-sm transition-colors hover:bg-neutral-700/50"
-        onClick={handleClick}
+          className="relative flex cursor-pointer items-center justify-between gap-6 rounded px-5 py-4 text-base transition-colors hover:bg-neutral-700/40 min-h-[96px]"
+          onClick={handleSelect}
       >
-        <div className="flex w-48 items-center gap-4">
-          <div className="flex-shrink-0">
-            <TokenLogo token={token} />
+          <div className="flex w-72 items-center gap-5">
+            <div
+              className="relative flex items-center justify-center rounded-sm"
+              style={{
+                width: 64,
+                height: 64,
+                overflow: "visible",
+                boxShadow: `0 0 4px ${AX.glowBlue}30`,
+              }}
+            >
+              <div className="relative rounded-sm" style={{ border: "none", padding: 0 }}>
+                <div
+                  className="relative rounded-sm"
+                  style={{
+                    border: `1px solid ${protocolColor}`,
+                    padding: 1,
+                    backgroundColor: "#06070b",
+                  }}
+                >
+                  <div className="relative rounded-sm overflow-hidden" style={{ width: 52, height: 52 }}>
+                    <FastImage
+                      src={normalizedLogo ?? undefined}
+                      fallbackSrc={fallbackAvatar}
+                      alt={token.name || token.symbol || ""}
+                      width={52}
+                      height={52}
+                      className="w-full h-full object-cover"
+                      symbol={token.symbol}
+                      name={token.name}
+                      showBubble={false}
+                    />
           </div>
-          <div className="max-w-[200px] min-w-0">
+                </div>
+              </div>
+              <div
+                className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/5 translate-y-1/4"
+                style={{
+                  width: 16,
+                  height: 16,
+                  border: `1px solid ${protocolColor}`,
+                  boxShadow: `0 0 3px ${protocolColor}60`,
+                }}
+              >
+                <img
+                  src={tokenIcon}
+                  alt="Protocol logo"
+                  className={`${fillProtocolBadge ? "w-full h-full object-cover" : "w-4/5 h-4/5 object-contain"} rounded-full`}
+                  style={{
+                    filter: protocolColor === "#eab308" ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)" : "none",
+                  }}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="max-w-[280px] min-w-0">
             <div className="flex items-center gap-2">
-              <span className="block truncate font-medium text-white">
-                {token.symbol} {token.name}
+                <span className="block truncate text-lg font-semibold text-white">
+                  {token.symbol}
+                </span>
+                <span className="block truncate text-sm text-neutral-400">
+                  {token.name}
               </span>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigator.clipboard.writeText(token.pair_address);
-                }}
-                className="flex-shrink-0 text-neutral-400 transition-colors hover:text-neutral-300"
+                  onClick={handleCopyAddress}
+                  className="flex-shrink-0 text-neutral-400 transition-colors hover:text-emerald-400"
                 title="Copy address"
               >
-                <svg
-                  className="h-4 w-4"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
+                  <FaRegCopy size={12} />
+                </button>
+                <button
+                  onClick={handleShareLink}
+                  className="flex-shrink-0 text-neutral-400 transition-colors hover:text-emerald-400"
+                  title="Copy trade link"
                 >
-                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
-                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
-                </svg>
+                  <IoShareSocialOutline size={14} />
               </button>
             </div>
-            <div className="mt-1 flex items-center gap-2">
-              <span className="text-xs font-medium text-teal-400">{getTokenAge(token.created_at)}</span>
-              <CiUser className="size-4" />
-              <CiGlobe className="size-4" />
-              <FaTelegramPlane className="size-4" />
+              <div className="mt-1 flex items-center gap-2 text-sm">
+                <span className="font-medium text-teal-300">{ageLabel}</span>
+                {isPumpToken && (
+                  <button
+                    onClick={handlePumpClick}
+                    className="text-neutral-400 transition-colors hover:text-emerald-400"
+                    title="View on pump.fun"
+                  >
+                    <LuPill size={12} />
+                  </button>
+                )}
+                <button
+                  onClick={handleSearchClick}
+                  className="text-neutral-400 transition-colors hover:text-emerald-400"
+                  title="Search on X"
+                >
+                  <FaSearch size={12} />
+                </button>
+                <button
+                  onClick={handleTwitterProfileClick}
+                  onMouseEnter={handleTwitterProfileMouseEnter}
+                  onMouseLeave={handleTwitterProfileMouseLeave}
+                  className="text-neutral-400 transition-colors hover:text-emerald-400"
+                  title="View X profile"
+                >
+                  <FaUser size={12} />
+                </button>
             </div>
           </div>
         </div>
 
-        <div className="flex h-full items-center gap-6 text-xs whitespace-nowrap">
+          <div className="flex h-full items-center gap-8 text-sm whitespace-nowrap">
           <span className="text-neutral-400">
-            MC <span className="text-lg font-medium text-white">${mc}</span>
+              MC <span className="text-xl font-semibold text-white">${mc}</span>
           </span>
           <span className="text-neutral-400">
-            V <span className="text-lg font-medium text-white">${vol}</span>
+              V <span className="text-xl font-semibold text-white">${vol}</span>
           </span>
           <span className="text-neutral-400">
-            L <span className="text-lg font-medium text-white">${liq}</span>
+              L <span className="text-xl font-semibold text-white">${liq}</span>
           </span>
         </div>
 
@@ -635,12 +1025,149 @@ const TokenListItem = React.memo(
             e.stopPropagation();
             onSelect(token);
           }}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white transition-colors hover:bg-blue-600"
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white transition-colors hover:bg-emerald-600"
           title="Select token"
         >
           <FaBolt className="h-4 w-4" />
         </button>
       </li>
+
+        {showXPreview && twitterProfileUrl && (
+          <div
+            className="fixed z-[99998] pointer-events-auto"
+            style={{
+              left: `${xPreviewPosition.x}px`,
+              top: `${xPreviewPosition.y}px`,
+              transform: "translate(-50%, 0)",
+            }}
+            onMouseEnter={handleTwitterPreviewMouseEnter}
+            onMouseLeave={handleTwitterPreviewMouseLeave}
+          >
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{
+                width: 260,
+                backgroundColor: AX.surface,
+                border: `1px solid ${AX.border}`,
+                boxShadow: `0 16px 48px rgba(0, 0, 0, 0.45), 0 0 24px ${AX.glowBlue}`,
+              }}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "#2f3336" }}>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: "#1d9bf0" }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#ffffff" }}>
+                      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold" style={{ color: AX.text }}>
+                      @{twitterHandle || "unknown"}
+                    </div>
+                    <div className="text-xs" style={{ color: AX.muted }}>
+                      Live Preview
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className="text-xs font-medium px-2 py-1 rounded-md transition-colors duration-200"
+                  style={{
+                    backgroundColor: AX.aiCyan,
+                    color: "#000000",
+                    border: "none",
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openLinkInNewTab(twitterProfileUrl);
+                  }}
+                >
+                  Open
+                </button>
+              </div>
+              <div className="px-4 py-4 flex gap-3 items-start">
+                <div
+                  className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0"
+                  style={{
+                    border: "2px solid #2f3336",
+                    backgroundColor: "#101114",
+                  }}
+                >
+                  <FastImage
+                    src={normalizedLogo ?? undefined}
+                    fallbackSrc={fallbackAvatar}
+                    alt={`${token.name || token.symbol || ""} avatar`}
+                    width={56}
+                    height={56}
+                    className="w-full h-full object-cover"
+                    symbol={token.symbol}
+                    name={token.name}
+                    showBubble={false}
+                  />
+                </div>
+                <div className="flex-1 flex flex-col gap-1">
+                  <div className="text-sm font-semibold" style={{ color: AX.text }}>
+                    {token.symbol}
+                  </div>
+                  <div className="text-xs" style={{ color: AX.muted }}>
+                    {token.name}
+                  </div>
+                  <div className="text-[11px] leading-relaxed" style={{ color: AX.text }}>
+                    {twitterBio}
+                  </div>
+                </div>
+              </div>
+              <div className="px-4 pb-4 flex items-center gap-2">
+                <button
+                  className="flex-1 px-3 py-2 rounded-full text-xs font-semibold transition-colors duration-200"
+                  style={{
+                    backgroundColor: "#ffffff",
+                    color: "#000000",
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openLinkInNewTab(twitterProfileUrl);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#e7e9ea";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "#ffffff";
+                  }}
+                >
+                  View on X
+                </button>
+                <button
+                  className="px-3 py-2 rounded-full text-xs font-semibold transition-colors duration-200"
+                  style={{
+                    backgroundColor: "transparent",
+                    color: AX.muted,
+                    border: `1px solid ${AX.border}`,
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openLinkInNewTab(twitterSearchUrl);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = AX.aiCyan;
+                    e.currentTarget.style.borderColor = AX.aiCyan;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = AX.muted;
+                    e.currentTarget.style.borderColor = AX.border;
+                  }}
+                >
+                  Search
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   },
 );
