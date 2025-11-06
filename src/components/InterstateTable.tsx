@@ -242,7 +242,7 @@ const TableHeader: React.FC<{
           className={`${header.width} px-4 py-4 text-${header.align} text-xs font-medium tracking-wide uppercase ${
             header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
           }`}
-          style={{ color: AX.text, fontWeight: '300' }}
+          style={{ color: '#787a8d', fontWeight: '300' }}
           onClick={header.key && onSort ? () => onSort(header.key!) : undefined}
         >
           {header.label}
@@ -481,6 +481,25 @@ const TokenInfo: React.FC<{
           <span className="truncate text-xs font-medium" style={{ color: AX.muted }}>
             {token.symbol}
           </span>
+          {/* Copy contract button */}
+          <button
+            className="transition-colors duration-200 cursor-pointer hover:opacity-80"
+            style={{ color: AX.muted }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = AX.aiCyan;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = AX.muted;
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const contractAddress = token.mint || token.pair_address;
+              copyToClipboard(contractAddress, "Contract address copied to clipboard!");
+            }}
+            title="Copy contract address"
+          >
+            <Copy className="w-3.5 h-3.5" />
+          </button>
         </div>
         
         <div className="flex items-center gap-2">
@@ -1147,9 +1166,11 @@ export default function InterstateTable({
     }
   }, [rows, selectedTimeframe]);
 
+  const isDiscoverPage = router.pathname === '/discover';
+  
   return (
     <div className="overflow-x-auto shadow-lg rounded-lg" style={{ 
-      backgroundColor: 'rgba(30, 31, 38, 0.3)', 
+      backgroundColor: isDiscoverPage ? '#101114' : 'rgba(30, 31, 38, 0.3)', 
       border: `1px solid ${AX.border}`,
       borderColor: AX.border 
     }}>
