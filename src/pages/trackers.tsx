@@ -848,6 +848,29 @@ export default function TrackersPage() {
                               {tweet.text}
                             </p>
                             
+                            {/* Tweet Images */}
+                            {tweet.images && tweet.images.length > 0 && (
+                              <div className="mb-2 grid gap-2" style={{
+                                gridTemplateColumns: tweet.images.length === 1 ? '1fr' : 
+                                  tweet.images.length === 2 ? '1fr 1fr' : 
+                                  tweet.images.length === 3 ? '1fr 1fr' : 'repeat(2, 1fr)'
+                              }}>
+                                {tweet.images.map((imageUrl, idx) => (
+                                  <img
+                                    key={idx}
+                                    src={imageUrl}
+                                    alt={`Tweet image ${idx + 1}`}
+                                    className="rounded-lg border border-neutral-700/50 w-full h-auto max-h-96 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => window.open(imageUrl, '_blank')}
+                                    onError={(e) => {
+                                      // Hide image on error
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            
                             {/* Tweet Stats */}
                             <div className="flex items-center gap-4 text-xs text-neutral-400">
                               <span>💬 {tweet.replyCount || 0}</span>

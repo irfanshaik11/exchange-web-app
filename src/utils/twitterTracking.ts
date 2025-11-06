@@ -48,6 +48,7 @@ export interface Tweet {
   retweetCount?: number;
   replyCount?: number;
   url?: string;
+  images?: string[];
 }
 
 /**
