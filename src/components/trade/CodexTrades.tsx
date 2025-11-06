@@ -9,7 +9,7 @@ interface CodexTradesProps {
 }
 
 function getAge(timestamp: number) {
-  const now = Date.now() / 1000; // Convert to seconds
+  const now = Date.now() / 1000; // seconds
   const diffSeconds = now - timestamp;
   const diffMins = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffSeconds / 3600);
@@ -18,6 +18,18 @@ function getAge(timestamp: number) {
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h`;
   return `${diffMins}m`;
+}
+
+function getTimeFromTimestampSec(ts: number) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  // 24h format like 15:26:04
+  return d.toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 function shortAddr(addr: string) {
@@ -125,19 +137,14 @@ function normalizeTrade(
 
   // Try to get solAmount from other trade shapes if not set
   if (solAmount === 0) {
-    // Priority 1: Check originalEvent.data.priceBaseTokenTotal (for WebSocket/Codex events)
     if (trade.originalEvent?.data?.priceBaseTokenTotal) {
       solAmount = parseFloat(String(trade.originalEvent.data.priceBaseTokenTotal)) || 0;
-    }
-    // Priority 2: For WebSocket shape, try to calculate from price/totalUSD
-    else if (hasWsShape && trade.price) {
+    } else if (hasWsShape && trade.price) {
       const price = parseFloat(trade.price);
-      if (price > 10 && price < 300) { // Likely SOL price
+      if (price > 10 && price < 300) {
         solAmount = totalUSD > 0 ? totalUSD / price : 0;
       }
-    }
-    // Priority 3: For backend, check if there's a base token amount field
-    else if (hasBackend && trade.base_token_amount) {
+    } else if (hasBackend && trade.base_token_amount) {
       solAmount = parseFloat(String(trade.base_token_amount)) || 0;
     }
   }
@@ -148,14 +155,14 @@ function normalizeTrade(
 /** Subtle gradient used only for the inline bar, NOT the cell background */
 function heatBarGradient(isBuy: boolean, intensity01: number) {
   const t = clamp01(intensity01);
-  // keep it subtle: 0.10..0.32
   const a = 0.10 + 0.22 * t;
-  const rgb = isBuy ? '16,185,129' /* emerald-500-ish */ : '244,63,94' /* rose-500-ish */;
-  // fade to transparent so the table row background shows through
+  const rgb = isBuy ? '16,185,129' : '244,63,94';
   return `linear-gradient(90deg, rgba(${rgb}, ${a}) 0%, rgba(${rgb}, ${a * 0.6}) 60%, rgba(${rgb}, 0) 100%)`;
 }
 
 const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
+  const [showAge, setShowAge] = React.useState(true); // true = Age, false = Time
+
   const stableToken = React.useMemo(() => {
     if (!token) return null;
     return {
@@ -164,7 +171,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
       name: token.name || '',
       symbol: token.symbol || '',
       mint: token.mint || '',
-      ...token
+      ...token,
     };
   }, [token?.pair_address, token?.decimals, token?.name, token?.symbol, token?.mint]);
 
@@ -196,15 +203,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     });
   }, [displayTrades, stableToken?.decimals]);
 
-  // Robust reference: 95th percentile for USD
   const p95 = React.useMemo(() => {
-    const arr = normalized.map(n => n.totalUSD).filter((x) => Number.isFinite(x) && x >= 0);
+    const arr = normalized.map(n => n.totalUSD).filter(x => Number.isFinite(x) && x >= 0);
     return percentile(arr, 0.95) || 0;
   }, [normalized]);
 
-  // Robust reference: 95th percentile for SOL
   const p95Sol = React.useMemo(() => {
-    const arr = normalized.map(n => n.solAmount).filter((x) => Number.isFinite(x) && x > 0);
+    const arr = normalized.map(n => n.solAmount).filter(x => Number.isFinite(x) && x > 0);
     return percentile(arr, 0.95) || 0;
   }, [normalized]);
 
@@ -248,7 +253,21 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-gray-900 z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
-              <th className="px-2 py-2 text-left">Age ↓</th>
+              <th className="px-2 py-2 text-left">
+                <button
+                  type="button"
+                  onClick={() => setShowAge(prev => !prev)}
+                  className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white"
+                >
+                  <span className="font-medium">
+                    {showAge ? 'Age ↓' : 'Time ↓'}
+                  </span>
+                  <span className="text-xs text-neutral-400">
+                    / {showAge ? 'Time' : 'Age'}
+                  </span>
+                  <span className="text-xs text-neutral-500">▾</span>
+                </button>
+              </th>
               <th className="px-2 py-2 text-left">Price (USD)</th>
               <th className="px-2 py-2 text-left">Amt (USD)</th>
               <th className="px-2 py-2 text-left">Amt (SOL)</th>
@@ -270,68 +289,89 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                 </td>
               </tr>
             ) : (
-              normalized.map((n) => {
+              normalized.map(n => {
                 const age = getAge(n.timestampSec);
+                const timeStr = getTimeFromTimestampSec(n.timestampSec);
                 const tokenAmountStr = formatSmartNumber(n.tokenAmount);
-                const solAmountStr = Number.isFinite(n.solAmount) && n.solAmount > 0 
-                  ? formatSmartNumber(n.solAmount)
-                  : '-';
-                const amtStr = Number.isFinite(n.totalUSD) ? `$${n.totalUSD.toFixed(2)}` : '$0.00';
-                const priceStr = Number.isFinite(n.pricePerToken) ? `$${formatSmallPrice(n.pricePerToken)}` : '$-';
+                const solAmountStr =
+                  Number.isFinite(n.solAmount) && n.solAmount > 0
+                    ? formatSmartNumber(n.solAmount)
+                    : '-';
+                const amtStr = Number.isFinite(n.totalUSD)
+                  ? `$${n.totalUSD.toFixed(2)}`
+                  : '$0.00';
+                const priceStr = Number.isFinite(n.pricePerToken)
+                  ? `$${formatSmallPrice(n.pricePerToken)}`
+                  : '$-';
 
                 const intensity = scaleAmt(n.totalUSD);
                 const gradient = heatBarGradient(n.isBuy, intensity);
-                
+
                 const intensitySol = n.solAmount > 0 ? scaleAmtSol(n.solAmount) : 0;
                 const gradientSol = heatBarGradient(n.isBuy, intensitySol);
 
                 return (
-                  <tr key={n.keyPart || n.idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
-                    <td className="px-2 py-2 text-neutral-300">{age}</td>
+                  <tr
+                    key={n.keyPart || n.idx}
+                    className="border-b border-neutral-800 hover:bg-neutral-800/60"
+                  >
+                    <td className="px-2 py-2 text-neutral-300">
+                      {showAge ? age : timeStr}
+                    </td>
                     <td className={`px-2 py-2 font-semibold ${n.color}`}>{priceStr}</td>
 
-                    {/* HEATMAP BAR for USD - only; cell background stays default */}
-                    <td className="px-2 py-2 font-semibold relative overflow-hidden"
-                        title={`~${(intensity * 100).toFixed(0)}% of recent size`}>
-                      {/* bar (behind content) */}
+                    {/* HEATMAP BAR for USD */}
+                    <td
+                      className="px-2 py-2 font-semibold relative overflow-hidden"
+                      title={`~${(intensity * 100).toFixed(0)}% of recent size`}
+                    >
                       <div
                         aria-hidden
                         className="absolute left-0 top-0 bottom-0 z-0"
                         style={{
                           width: `${Math.max(6, intensity * 100)}%`,
                           backgroundImage: gradient,
-                          // blends with whatever row bg you already have
                           mixBlendMode: 'screen',
                           pointerEvents: 'none',
                           transition: 'width 160ms ease',
                         }}
                       />
-                      {/* amount text */}
-                      <div className={`relative z-10 ${n.isBuy ? 'text-emerald-300' : 'text-red-300'}`}>
+                      <div
+                        className={`relative z-10 ${
+                          n.isBuy ? 'text-emerald-300' : 'text-red-300'
+                        }`}
+                      >
                         {amtStr}
                       </div>
                     </td>
 
-                    {/* HEATMAP BAR for SOL - same functionality as USD */}
-                    <td className="px-2 py-2 font-semibold relative overflow-hidden"
-                        title={n.solAmount > 0 ? `~${(intensitySol * 100).toFixed(0)}% of recent SOL size` : 'No SOL data'}>
+                    {/* HEATMAP BAR for SOL */}
+                    <td
+                      className="px-2 py-2 font-semibold relative overflow-hidden"
+                      title={
+                        n.solAmount > 0
+                          ? `~${(intensitySol * 100).toFixed(0)}% of recent SOL size`
+                          : 'No SOL data'
+                      }
+                    >
                       {n.solAmount > 0 ? (
                         <>
-                          {/* bar (behind content) */}
                           <div
                             aria-hidden
                             className="absolute left-0 top-0 bottom-0 z-0"
                             style={{
                               width: `${Math.max(6, intensitySol * 100)}%`,
                               backgroundImage: gradientSol,
-                              // blends with whatever row bg you already have
                               mixBlendMode: 'screen',
                               pointerEvents: 'none',
                               transition: 'width 160ms ease',
                             }}
                           />
-                          {/* amount text */}
-                          <div className={`relative z-10 ${n.isBuy ? 'text-emerald-300' : 'text-red-300'}`}>
+                          <div
+                            className={`relative z-10 ${
+                              n.isBuy ? 'text-emerald-300' : 'text-red-300'
+                            }`}
+                          >
                             {solAmountStr}
                           </div>
                         </>
@@ -362,7 +402,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
 
         {!!p95 && (
           <div className="px-2 py-2 text-[10px] text-neutral-500 flex items-center gap-2">
-            <span className="inline-block">Amt heat = relative to ~95th percentile</span>
+            <span className="inline-block">
+              Amt heat = relative to ~95th percentile
+            </span>
             <span className="ml-auto">p95: ${p95.toFixed(2)}</span>
           </div>
         )}
