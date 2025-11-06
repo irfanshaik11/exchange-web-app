@@ -28,8 +28,8 @@ const AX = {
       { name: "Portfolio", href: "/portfolio" },
       { name: "Trending", href: "/discover" },
       { name: "Trackers", href: "/trackers" },
-      { name: "Perpetuals", href: "/construction" },
-      { name: "Yield", href: "/construction" },
+      // { name: "Perpetuals", href: "/construction" },
+      // { name: "Yield", href: "/construction" },
       { name: "Rewards", href: "/construction" },
     ];
 
