@@ -1034,7 +1034,7 @@ export default function PulsePage() {
   return (
     <>
       <Head>
-        <title>Trending | Interstate Memeboard</title>
+        <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
       <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#06070b' }}>
@@ -1043,11 +1043,11 @@ export default function PulsePage() {
           <div className="mb-2">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">Trending</h1>
+                <h1 className="text-2xl font-bold">Trenches</h1>
                 <div className="flex items-center gap-2">
                   <Link
                     href="/pulse?chain=sol"
-                    aria-label="View Solana trending tokens"
+                    aria-label="View Solana tokens"
                     className={solanaButtonClasses}
                   >
                     <img
@@ -1062,7 +1062,7 @@ export default function PulsePage() {
                   </Link>
                   <Link
                     href="/pulse?chain=bnb"
-                    aria-label="View BNB trending tokens (beta)"
+                    aria-label="View BNB tokens (beta)"
                     className={bnbButtonClasses}
                   >
                     <SiBinance className="h-4 w-4 text-[#F3BA2F]" />
