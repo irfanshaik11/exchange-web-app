@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState, useRef } from "react";
-import { FaSearch, FaBell, FaWallet, FaBars, FaTimes } from "react-icons/fa";
+import { FaSearch, FaStar, FaWallet, FaBars, FaTimes } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
 import dynamic from "next/dynamic";
@@ -52,10 +52,6 @@ const WatchlistModal = dynamic(() => import("./WatchlistModal"), {
   ssr: false,
 });
 
-const NotificationDropdown = dynamic(() => import("./NotificationDropdown"), {
-  ssr: false,
-});
-
 export default function Header({
   search = "",
   setSearch,
@@ -69,7 +65,6 @@ export default function Header({
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -393,7 +388,7 @@ export default function Header({
             >
               Withdraw
             </button>
-            {/* <button
+            <button
               onClick={() => setWatchlistOpen(true)}
               className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
               style={{ 
@@ -402,10 +397,10 @@ export default function Header({
                 color: AX.muted 
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.08)';
-                e.currentTarget.style.borderColor = '#3b82f6';
-                e.currentTarget.style.color = '#3b82f6';
-                e.currentTarget.style.boxShadow = '0 0 8px rgba(59, 130, 246, 0.3), 0 0 16px rgba(59, 130, 246, 0.15)';
+                e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
+                e.currentTarget.style.borderColor = AX.mint;
+                e.currentTarget.style.color = AX.mint;
+                e.currentTarget.style.boxShadow = 'none';
                 e.currentTarget.style.transform = 'scale(1.02)';
               }}
               onMouseLeave={(e) => {
@@ -415,34 +410,9 @@ export default function Header({
                 e.currentTarget.style.boxShadow = 'none';
                 e.currentTarget.style.transform = 'scale(1)';
               }}
+              title="Watchlist"
             >
               <FaStar size={14} />
-            </button> */}
-            {/* Notification button - visible on all screens */}
-            <button
-              onClick={() => setNotificationOpen(true)}
-              className="flex ml-2 h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
-              style={{ 
-                backgroundColor: AX.surface, 
-                borderColor: AX.border,
-                color: AX.muted 
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
-                e.currentTarget.style.borderColor = '#18c48c';
-                e.currentTarget.style.color = '#18c48c';
-                e.currentTarget.style.boxShadow = '0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)';
-                e.currentTarget.style.transform = 'scale(1.02)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = AX.surface;
-                e.currentTarget.style.borderColor = AX.border;
-                e.currentTarget.style.color = AX.muted;
-                e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              <FaBell size={14} />
             </button>
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
@@ -722,7 +692,6 @@ export default function Header({
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
       <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
       <WatchlistModal open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
-      <NotificationDropdown open={notificationOpen} onClose={() => setNotificationOpen(false)} />
       {/* Search Modal */}
       <SearchModal
         open={searchModalOpen}
