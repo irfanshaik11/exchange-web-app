@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
 import PulseTable from '../components/PulseTable';
+import BnbTable from '../components/BnbTable';
 import PulseControlBar from '../components/PulseControlBar';
 import type { Token } from '~/utils/db';
 import Header from '../components/Header';
@@ -15,6 +18,7 @@ import { useCachedPulseTokens, useCachedLaunchpadData } from '../hooks/useCached
 // import { useCachedFinalStretchTokens, useCachedMigratedTokens } from '../hooks/useCachedTokensAdditional';
 import { env } from '~/env';
 import { rollingTradeCache } from '../utils/rollingTradeCache';
+import { SiBinance, SiSolana } from 'react-icons/si';
 
 interface LaunchpadToken {
   mint: string;
@@ -44,6 +48,29 @@ interface LaunchpadData {
 export default function PulsePage() {
   // Tab navigation state
   const [activeTab, setActiveTab] = useState<'new' | 'final-stretch' | 'migrated'>('new');
+  const router = useRouter();
+  const chain = router.query.chain as string | undefined;
+  const isBnbRoute = chain === 'bnb';
+  const isSolanaRoute = chain === 'sol' || !chain; // Default to Solana if no chain specified
+  const chainButtonBase =
+    'relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]';
+  const solanaButtonClasses = `${chainButtonBase} ${
+    isSolanaRoute
+      ? 'bg-[#222733] text-white shadow-lg shadow-emerald-500/20'
+      : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  }`;
+  const bnbButtonClasses = `${chainButtonBase} ${
+    isBnbRoute
+      ? 'bg-[#222733] text-white shadow-lg shadow-blue-500/20'
+      : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  }`;
+
+  // Redirect to /pulse?chain=sol if no chain parameter is present
+  useEffect(() => {
+    if (router.isReady && !chain) {
+      router.replace('/pulse?chain=sol', undefined, { shallow: true });
+    }
+  }, [router.isReady, chain, router]);
 
   // Keyboard navigation for tabs (mobile only)
   useEffect(() => {
@@ -1007,15 +1034,44 @@ export default function PulsePage() {
   return (
     <>
       <Head>
-        <title>Pulse | Interstate Memeboard</title>
+        <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
       <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#06070b' }}>
         <Header />
         <div className="w-full px-5 pt-2 pb-6">
           <div className="mb-2">
-            <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-bold">Pulse</h1>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold">Trenches</h1>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/pulse?chain=sol"
+                    aria-label="View Solana tokens"
+                    className={solanaButtonClasses}
+                  >
+                    <img
+                      src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                      alt="Solana"
+                      className="h-6 w-6 rounded-full object-contain"
+                      style={{ 
+                        mixBlendMode: 'screen',
+                        filter: 'contrast(1.2)'
+                      }}
+                    />
+                  </Link>
+                  <Link
+                    href="/pulse?chain=bnb"
+                    aria-label="View BNB tokens (beta)"
+                    className={bnbButtonClasses}
+                  >
+                    <SiBinance className="h-4 w-4 text-[#F3BA2F]" />
+                    <span className="absolute -bottom-1 -right-3 rounded-full border border-blue-500 px-1 py-px text-[7px] font-semibold uppercase tracking-[0.18em] text-blue-500 shadow-lg shadow-blue-500/30" style={{ backgroundColor: '#06070b' }}>
+                      Beta
+                    </span>
+                  </Link>
+                </div>
+              </div>
               {/* <PulseControlBar className="mb-0.5" /> */}
             </div>
             
@@ -1071,7 +1127,52 @@ export default function PulsePage() {
             </div>
           </div>
 
-          {isLoading ? (
+          {isBnbRoute ? (
+            <div className="w-full">
+              {/* Mobile: Single table based on active tab */}
+              <div className="lg:hidden">
+                <div className="transition-all duration-300 ease-in-out">
+                  {activeTab === 'new' && (
+                    <BnbTable 
+                      title="New Pairs" 
+                      tokens={enrichedNewPairsToShow as any} 
+                      loading={newPairsLoading} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                  {activeTab === 'final-stretch' && (
+                    <BnbTable 
+                      title="Final Stretch" 
+                      tokens={enrichedFinalStretch as any} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                  {activeTab === 'migrated' && (
+                    <BnbTable 
+                      title="Migrated" 
+                      tokens={enrichedMigrated as any} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                </div>
+              </div>
+              {/* Desktop: All tables horizontally */}
+              <div className="hidden lg:flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+                <BnbTable 
+                  title="New Pairs" 
+                  tokens={enrichedNewPairsToShow as any} 
+                  loading={newPairsLoading} 
+                  isFirstOrLast="first" 
+                  showBubbleMetrics={false} 
+                />
+                <BnbTable title="Final Stretch" tokens={enrichedFinalStretch as any} showBubbleMetrics={false} />
+                <BnbTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" showBubbleMetrics={false} />
+              </div>
+            </div>
+          ) : isLoading ? (
             <div className="w-full">
               {/* Mobile: Single table based on active tab */}
               <div className="lg:hidden">
@@ -1149,5 +1250,3 @@ export default function PulsePage() {
     </>
   );
 }
-
-
