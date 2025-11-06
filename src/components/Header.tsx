@@ -23,15 +23,15 @@ const AX = {
   sell: "#FF4D7F",
 };
 
-    const navLinks = [
-      { name: "Trenches", href: "/pulse" },
-      { name: "Portfolio", href: "/portfolio" },
-      { name: "Trending", href: "/discover" },
-      { name: "Trackers", href: "/trackers" },
-      { name: "Perpetuals", href: "/construction" },
-      { name: "Yield", href: "/construction" },
-      { name: "Rewards", href: "/construction" },
-    ];
+const navLinks = [
+  { name: "Trenches", href: "/pulse" },
+  { name: "Portfolio", href: "/portfolio" },
+  { name: "Trending", href: "/discover" },
+  { name: "Trackers", href: "/trackers" },
+  { name: "Perpetuals", href: "/construction" },
+  { name: "Yield", href: "/construction" },
+  { name: "Rewards", href: "/construction" },
+];
 
 interface HeaderProps {
   search?: string;
@@ -87,16 +87,26 @@ export default function Header({
         }
         // Else, only open when focus isn't in an editable element
         const t = (document.activeElement as HTMLElement) || null;
-        const isEditable = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t as any).isContentEditable);
+        const isEditable =
+          !!t &&
+          (t.tagName === "INPUT" ||
+            t.tagName === "TEXTAREA" ||
+            t.tagName === "SELECT" ||
+            (t as any).isContentEditable);
         if (isEditable) return; // allow normal tabbing in forms
         e.preventDefault();
         setSearchModalOpen(true);
       }
 
       // Toggle on '/' (slash). Some keyboards send '?' with Shift+'/'; we support both.
-      if ((e.key === '/' || e.key === '?') && isPlain) {
+      if ((e.key === "/" || e.key === "?") && isPlain) {
         const t = (document.activeElement as HTMLElement) || null;
-        const isEditable = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || (t as any).isContentEditable);
+        const isEditable =
+          !!t &&
+          (t.tagName === "INPUT" ||
+            t.tagName === "TEXTAREA" ||
+            t.tagName === "SELECT" ||
+            (t as any).isContentEditable);
         if (isEditable) return; // do not steal from inputs
         e.preventDefault();
         setSearchModalOpen((prev) => !prev);
@@ -127,41 +137,41 @@ export default function Header({
   // Close mobile menu when clicking outside or on backdrop
   useEffect(() => {
     if (!mobileMenuOpen) {
-      document.body.style.overflow = '';
+      document.body.style.overflow = "";
       return;
     }
 
     // Prevent body scroll when menu is open
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = "hidden";
 
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       const target = event.target as HTMLElement;
-      
+
       // Don't close if clicking on the hamburger button itself
-      if (target.closest('[data-mobile-menu-toggle]')) {
+      if (target.closest("[data-mobile-menu-toggle]")) {
         return;
       }
-      
+
       // Don't close if clicking inside the menu
       if (mobileMenuRef.current && mobileMenuRef.current.contains(target)) {
         return;
       }
-      
+
       // Close if clicking outside (backdrop or elsewhere)
       setMobileMenuOpen(false);
     };
 
     // Add a small delay to avoid immediate closing when opening
     const timeoutId = setTimeout(() => {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('touchstart', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
     }, 50);
 
     return () => {
       clearTimeout(timeoutId);
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-      document.body.style.overflow = '';
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+      document.body.style.overflow = "";
     };
   }, [mobileMenuOpen]);
 
@@ -179,26 +189,36 @@ export default function Header({
     };
 
     if (profileMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [profileMenuOpen]);
 
   return (
     <>
-      <header className="sticky top-0 z-20 w-full border-b backdrop-blur" style={{ backgroundColor: '#0f1012', borderColor: AX.border }}>
+      <header
+        className="sticky top-0 z-20 w-full border-b backdrop-blur"
+        style={{ backgroundColor: "#0f1012", borderColor: AX.border }}
+      >
         <div
           className="w-full text-center p-0.5 text-sm"
           role="alert"
-          style={{ backgroundColor: '#ddc13d', color: '#0b0c0e', borderBottom: '1px solid #c7ae32' }}
+          style={{
+            backgroundColor: "#ddc13d",
+            color: "#0b0c0e",
+            borderBottom: "1px solid #c7ae32",
+          }}
         >
           [ This terminal is still under development and not ready for production,&nbsp;
           <b>use at your own risk!</b> ]
         </div>
-        <div className="flex max-w-full items-center justify-between border-b px-4 py-2.5" style={{ backgroundColor: '#06070b', borderColor: AX.border }}>
+        <div
+          className="flex max-w-full items-center justify-between border-b px-4 py-2.5"
+          style={{ backgroundColor: "#06070b", borderColor: AX.border }}
+        >
           <div className="flex min-w-0 items-center gap-3">
             {/* Mobile hamburger menu button */}
             <button
@@ -210,7 +230,7 @@ export default function Header({
               className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out z-50 relative"
               style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.text }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
+                e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
                 e.currentTarget.style.borderColor = AX.mint;
               }}
               onMouseLeave={(e) => {
@@ -220,7 +240,7 @@ export default function Header({
             >
               {mobileMenuOpen ? <FaTimes size={14} /> : <FaBars size={14} />}
             </button>
-            
+
             <Link
               href="/pulse"
               className="flex items-center text-xl tracking-tight select-none"
@@ -234,9 +254,13 @@ export default function Header({
               />
             </Link>
             {/* Desktop navigation - hidden on mobile */}
-            <nav className="hidden md:flex ml-6 items-center gap-5" style={{ position: 'relative', zIndex: 1000 }}>
+            <nav
+              className="hidden md:flex ml-6 items-center gap-5"
+              style={{ position: "relative", zIndex: 1000 }}
+            >
               {navLinks.map((link) => {
-                const isActive = router.pathname === link.href || 
+                const isActive =
+                  router.pathname === link.href ||
                   (link.name === "Trenches" && router.pathname.startsWith("/trade/"));
                 return (
                   <Link
@@ -246,7 +270,7 @@ export default function Header({
                       // Use router.push for client-side navigation with fallback
                       router.push(link.href).catch((err: any) => {
                         // Fallback to full page navigation if router.push fails
-                        console.error('Router.push failed, using fallback:', err);
+                        console.error("Router.push failed, using fallback:", err);
                         window.location.href = link.href;
                       });
                     }}
@@ -256,21 +280,22 @@ export default function Header({
                     style={{
                       color: isActive ? AX.mint : AX.text,
                       borderColor: isActive ? AX.mint : "transparent",
-                      position: 'relative',
+                      position: "relative",
                       zIndex: 1001,
-                      pointerEvents: 'auto',
-                      cursor: 'pointer'
+                      pointerEvents: "auto",
+                      cursor: "pointer",
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
                         e.currentTarget.style.color = AX.mint;
-                        e.currentTarget.style.backgroundColor = 'rgba(112, 224, 176, 0.1)';
+                        e.currentTarget.style.backgroundColor =
+                          "rgba(112, 224, 176, 0.1)";
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isActive) {
                         e.currentTarget.style.color = AX.text;
-                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.backgroundColor = "transparent";
                       }
                     }}
                   >
@@ -287,30 +312,43 @@ export default function Header({
                 <button
                   onClick={() => setSearchModalOpen(true)}
                   className="hidden md:flex items-center gap-2 h-8 rounded-full border px-3 pr-2 transition-all duration-300 ease-out"
-                  style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.muted }}
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: AX.border,
+                    color: AX.muted,
+                  }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
-                    e.currentTarget.style.borderColor = '#18c48c';
-                    e.currentTarget.style.boxShadow = '0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)';
-                    e.currentTarget.style.transform = 'scale(1.01)';
+                    e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
+                    e.currentTarget.style.borderColor = "#18c48c";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)";
+                    e.currentTarget.style.transform = "scale(1.01)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = AX.surface;
                     e.currentTarget.style.borderColor = AX.border;
-                    e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.transform = "scale(1)";
                   }}
                 >
                   <FaSearch size={14} />
-                  <span className="text-xs text-neutral-400 whitespace-nowrap">Search tokens…</span>
-                  <span className="ml-auto rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">Tab</span>
+                  <span className="text-xs text-neutral-400 whitespace-nowrap">
+                    Search tokens…
+                  </span>
+                  <span className="ml-auto rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">
+                    Tab
+                  </span>
                 </button>
 
                 {/* Compact icon-only trigger on small screens */}
                 <button
                   onClick={() => setSearchModalOpen(true)}
                   className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
-                  style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.muted }}
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: AX.border,
+                    color: AX.muted,
+                  }}
                 >
                   <FaSearch size={14} />
                 </button>
@@ -318,29 +356,32 @@ export default function Header({
             )}
             {/* SOL Balance Pill - hidden on mobile (will be in mobile menu) */}
             {user && (
-              <div 
+              <div
                 className="hidden md:flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out cursor-default"
-                style={{ 
-                  backgroundColor: AX.surface, 
+                style={{
+                  backgroundColor: AX.surface,
                   borderColor: AX.border,
-                  color: AX.text 
+                  color: AX.text,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
+                  e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
                   e.currentTarget.style.borderColor = AX.mint;
-                  e.currentTarget.style.boxShadow = '0 0 8px rgba(24, 196, 140, 0.2)';
+                  e.currentTarget.style.boxShadow =
+                    "0 0 8px rgba(24, 196, 140, 0.2)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = AX.surface;
                   e.currentTarget.style.borderColor = AX.border;
-                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.boxShadow = "none";
                 }}
               >
                 <FaWallet size={12} style={{ color: AX.muted }} />
-                <span className="text-xs font-medium">{solBalance.toFixed(4)}</span>
-                <img 
-                  src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png" 
-                  alt="SOL" 
+                <span className="text-xs font-medium">
+                  {solBalance.toFixed(4)}
+                </span>
+                <img
+                  src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                  alt="SOL"
                   className="w-3 h-3 rounded-full"
                 />
               </div>
@@ -351,64 +392,66 @@ export default function Header({
               className="hidden md:block ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
               style={{
                 backgroundColor: AX.mint,
-                color: '#000000',
-                border: 'none'
+                color: "#000000",
+                border: "none",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = AX.mintHover;
-                e.currentTarget.style.boxShadow = '0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)';
-                e.currentTarget.style.transform = 'scale(1.02)';
+                e.currentTarget.style.boxShadow =
+                  "0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)";
+                e.currentTarget.style.transform = "scale(1.02)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = AX.mint;
-                e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.transform = "scale(1)";
               }}
             >
               Deposit
             </button>
+
+            {/* UPDATED WITHDRAW BUTTON (desktop) */}
             <button
               onClick={handleWithdrawClick}
               className="hidden md:block ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
               style={{
-                backgroundColor: AX.sell,
-                color: '#000000',
-                border: 'none'
+                backgroundColor: "#0f1012", // dark pill
+                color: "#FFFFFF", // white text
+                border: `1px solid ${AX.border}`, // subtle border
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#E63E6B';
-                e.currentTarget.style.boxShadow = '0 0 8px rgba(255, 77, 127, 0.3), 0 0 16px rgba(255, 77, 127, 0.15)';
-                e.currentTarget.style.transform = 'scale(1.02)';
+                e.currentTarget.style.backgroundColor = "#1A1B1F";
+                e.currentTarget.style.borderColor = AX.mint;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = AX.sell;
-                e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.backgroundColor = "#0f1012";
+                e.currentTarget.style.borderColor = AX.border;
               }}
             >
               Withdraw
             </button>
+
             <button
               onClick={() => setWatchlistOpen(true)}
               className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
-              style={{ 
-                backgroundColor: AX.surface, 
+              style={{
+                backgroundColor: AX.surface,
                 borderColor: AX.border,
-                color: AX.muted 
+                color: AX.muted,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
+                e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
                 e.currentTarget.style.borderColor = AX.mint;
                 e.currentTarget.style.color = AX.mint;
-                e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.transform = 'scale(1.02)';
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.transform = "scale(1.02)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = AX.surface;
                 e.currentTarget.style.borderColor = AX.border;
                 e.currentTarget.style.color = AX.muted;
-                e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.transform = "scale(1)";
               }}
               title="Watchlist"
             >
@@ -416,22 +459,30 @@ export default function Header({
             </button>
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
-              <div ref={profileMenuRef} className="flex group relative cursor-pointer items-center gap-2">
+              <div
+                ref={profileMenuRef}
+                className="flex group relative cursor-pointer items-center gap-2"
+              >
                 {/* Circular profile picture (placeholder) */}
-                <div 
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold text-white select-none" 
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold text-white select-none"
                   style={{ backgroundColor: AX.mint }}
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
                 >
                   {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                 </div>
-                <span className="hidden md:block max-w-[90px] truncate text-sm" style={{ color: AX.text }}>
+                <span
+                  className="hidden md:block max-w-[90px] truncate text-sm"
+                  style={{ color: AX.text }}
+                >
                   {user.name}
                 </span>
                 {/* Dropdown for logout */}
-                <div 
+                <div
                   className={`absolute top-8 right-0 z-50 min-w-[100px] rounded border px-3 py-1.5 shadow-lg transition-opacity ${
-                    profileMenuOpen ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
+                    profileMenuOpen
+                      ? "opacity-100"
+                      : "opacity-0 md:group-hover:opacity-100"
                   }`}
                   style={{ backgroundColor: AX.surface, borderColor: AX.border }}
                 >
@@ -444,10 +495,7 @@ export default function Header({
                       if (typeof window !== "undefined") {
                         document.cookie = "token=; Max-Age=0; path=/;";
                       }
-                      if (
-                        typeof window !== "undefined" &&
-                        window.localStorage
-                      ) {
+                      if (typeof window !== "undefined" && window.localStorage) {
                         window.localStorage.removeItem("token");
                       }
                       if (typeof window !== "undefined") {
@@ -465,22 +513,23 @@ export default function Header({
                   className="ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
                   style={{
                     backgroundColor: AX.mint,
-                    color: '#000000',
-                    border: 'none'
+                    color: "#000000",
+                    border: "none",
                   }}
                   onClick={() => {
                     const event = new CustomEvent("open-login-modal");
                     window.dispatchEvent(event);
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#58B890';
-                    e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)';
-                    e.currentTarget.style.transform = 'scale(1.02)';
+                    e.currentTarget.style.backgroundColor = "#58B890";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)";
+                    e.currentTarget.style.transform = "scale(1.02)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = AX.mint;
-                    e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.transform = "scale(1)";
                   }}
                 >
                   Login
@@ -489,102 +538,95 @@ export default function Header({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 px-3 py-0.5" style={{ backgroundColor: '#06070b' }}>
-          {/* <div className="group relative">
-            <button
-              onClick={() => setWatchlistOpen(true)}
-              className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
-              style={{ color: AX.muted }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.08)';
-                e.currentTarget.style.color = '#3b82f6';
-                e.currentTarget.style.boxShadow = '0 0 6px rgba(59, 130, 246, 0.25), 0 0 12px rgba(59, 130, 246, 0.12)';
-                e.currentTarget.style.transform = 'scale(1.05)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "transparent";
-                e.currentTarget.style.color = AX.muted;
-                e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.transform = 'scale(1)';
-              }}
-            >
-              <FiStar size={14} />
-            </button>
-            <div className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
-                 style={{ 
-                   backgroundColor: AX.surface, 
-                   color: AX.text, 
-                   border: `1px solid ${AX.border}`,
-                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-                 }}>
-              Watchlist
-              <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent"
-                   style={{ borderRightColor: AX.surface }}></div>
-            </div>
-          </div> */}
-          
+        <div
+          className="flex items-center gap-2 px-3 py-0.5"
+          style={{ backgroundColor: "#06070b" }}
+        >
+          {/* extra toolbar section */}
           <div className="group relative">
-            <button 
+            <button
               className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
               style={{ color: AX.muted }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(34, 197, 94, 0.08)';
-                e.currentTarget.style.color = '#22c55e';
-                e.currentTarget.style.boxShadow = '0 0 6px rgba(34, 197, 94, 0.25), 0 0 12px rgba(34, 197, 94, 0.12)';
-                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.backgroundColor = "rgba(34, 197, 94, 0.08)";
+                e.currentTarget.style.color = "#22c55e";
+                e.currentTarget.style.boxShadow =
+                  "0 0 6px rgba(34, 197, 94, 0.25), 0 0 12px rgba(34, 197, 94, 0.12)";
+                e.currentTarget.style.transform = "scale(1.05)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "transparent";
                 e.currentTarget.style.color = AX.muted;
-                e.currentTarget.style.boxShadow = 'none';
-                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.transform = "scale(1)";
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 3v18h18"/>
-                <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M3 3v18h18" />
+                <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
               </svg>
             </button>
             {/* Custom tooltip for Active Positions */}
-            <div className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
-                 style={{ 
-                   backgroundColor: AX.surface, 
-                   color: AX.text, 
-                   border: `1px solid ${AX.border}`,
-                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-                 }}>
+            <div
+              className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
+              style={{
+                backgroundColor: AX.surface,
+                color: AX.text,
+                border: `1px solid ${AX.border}`,
+                boxShadow:
+                  "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+              }}
+            >
               Active Positions
               {/* Tooltip arrow pointing left */}
-              <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent"
-                   style={{ borderRightColor: AX.surface }}></div>
+              <div
+                className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent"
+                style={{ borderRightColor: AX.surface }}
+              ></div>
             </div>
           </div>
-          
-          <div className="h-4 border-r" style={{ borderColor: AX.border }}> </div>
+
+          <div className="h-4 border-r" style={{ borderColor: AX.border }}>
+            {" "}
+          </div>
         </div>
-        
+
         {/* Mobile Menu - slides from left to right */}
         <div
           ref={mobileMenuRef}
           className={`md:hidden fixed top-0 left-0 bottom-0 z-50 transition-all duration-300 ease-out overflow-y-auto ${
-            mobileMenuOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full pointer-events-none'
+            mobileMenuOpen
+              ? "opacity-100 translate-x-0"
+              : "opacity-0 -translate-x-full pointer-events-none"
           }`}
           style={{
             backgroundColor: AX.bg,
             borderRight: `1px solid ${AX.border}`,
-            width: '80%',
-            maxWidth: '320px',
-            height: '100vh',
+            width: "80%",
+            maxWidth: "320px",
+            height: "100vh",
           }}
         >
           {/* Close button at top */}
-          <div className="flex justify-end items-center px-4 py-3 border-b" style={{ borderColor: AX.border }}>
+          <div
+            className="flex justify-end items-center px-4 py-3 border-b"
+            style={{ borderColor: AX.border }}
+          >
             <button
               onClick={() => setMobileMenuOpen(false)}
               className="flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
               style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.text }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(24, 196, 140, 0.08)';
+                e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
                 e.currentTarget.style.borderColor = AX.mint;
               }}
               onMouseLeave={(e) => {
@@ -595,12 +637,13 @@ export default function Header({
               <FaTimes size={14} />
             </button>
           </div>
-          
+
           <div className="px-4 pb-4">
             {/* Navigation Links */}
             <nav className="flex flex-col gap-1 mb-4">
               {navLinks.map((link) => {
-                const isActive = router.pathname === link.href || 
+                const isActive =
+                  router.pathname === link.href ||
                   (link.name === "Trenches" && router.pathname.startsWith("/trade/"));
                 return (
                   <Link
@@ -610,16 +653,19 @@ export default function Header({
                     className="px-4 py-3 text-base font-medium transition-all duration-200 rounded-lg"
                     style={{
                       color: isActive ? AX.mint : AX.text,
-                      backgroundColor: isActive ? 'rgba(24, 196, 140, 0.1)' : 'transparent',
+                      backgroundColor: isActive
+                        ? "rgba(24, 196, 140, 0.1)"
+                        : "transparent",
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
-                        e.currentTarget.style.backgroundColor = 'rgba(112, 224, 176, 0.08)';
+                        e.currentTarget.style.backgroundColor =
+                          "rgba(112, 224, 176, 0.08)";
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!isActive) {
-                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.backgroundColor = "transparent";
                       }
                     }}
                   >
@@ -629,18 +675,23 @@ export default function Header({
               })}
             </nav>
 
-            <div className="border-t pt-4 mb-4" style={{ borderColor: AX.border }}>
+            <div
+              className="border-t pt-4 mb-4"
+              style={{ borderColor: AX.border }}
+            >
               {/* SOL Balance */}
               {user && (
-                <div 
+                <div
                   className="flex items-center gap-2 px-4 py-3 rounded-lg mb-2"
-                  style={{ 
-                    backgroundColor: AX.surface, 
-                    color: AX.text 
+                  style={{
+                    backgroundColor: AX.surface,
+                    color: AX.text,
                   }}
                 >
                   <FaWallet size={14} style={{ color: AX.muted }} />
-                  <span className="text-sm font-medium">{solBalance.toFixed(4)} SOL</span>
+                  <span className="text-sm font-medium">
+                    {solBalance.toFixed(4)} SOL
+                  </span>
                 </div>
               )}
 
@@ -654,11 +705,12 @@ export default function Header({
                   className="w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200"
                   style={{
                     backgroundColor: AX.mint,
-                    color: '#000000',
+                    color: "#000000",
                   }}
                 >
                   Deposit
                 </button>
+                {/* UPDATED WITHDRAW BUTTON (mobile) */}
                 <button
                   onClick={() => {
                     handleWithdrawClick();
@@ -666,32 +718,48 @@ export default function Header({
                   }}
                   className="w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200"
                   style={{
-                    backgroundColor: AX.sell,
-                    color: '#000000',
+                    backgroundColor: "#0f1012",
+                    color: "#FFFFFF",
+                    border: `1px solid ${AX.border}`,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#1A1B1F";
+                    e.currentTarget.style.borderColor = AX.mint;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "#0f1012";
+                    e.currentTarget.style.borderColor = AX.border;
                   }}
                 >
                   Withdraw
                 </button>
               </div>
             </div>
-
           </div>
         </div>
 
         {/* Backdrop overlay when mobile menu is open */}
         <div
           className={`md:hidden fixed inset-0 z-40 transition-opacity duration-300 ${
-            mobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            mobileMenuOpen
+              ? "opacity-100 pointer-events-auto"
+              : "opacity-0 pointer-events-none"
           }`}
           style={{
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
           }}
           onClick={() => setMobileMenuOpen(false)}
         />
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
-      <WithdrawModal isOpen={withdrawOpen} onClose={() => setWithdrawOpen(false)} />
-      <WatchlistModal open={watchlistOpen} onClose={() => setWatchlistOpen(false)} />
+      <WithdrawModal
+        isOpen={withdrawOpen}
+        onClose={() => setWithdrawOpen(false)}
+      />
+      <WatchlistModal
+        open={watchlistOpen}
+        onClose={() => setWatchlistOpen(false)}
+      />
       {/* Search Modal */}
       <SearchModal
         open={searchModalOpen}
@@ -711,7 +779,11 @@ export default function Header({
           if (router.pathname !== "/" && !router.pathname.startsWith("/trade/")) {
             router.push({ pathname: "/", query: { search: trimmed } });
           } else if (router.pathname === "/") {
-            router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
+            router.replace(
+              { pathname: "/", query: { search: trimmed } },
+              undefined,
+              { shallow: true }
+            );
           }
         }}
         onQueryChange={(q) => {
@@ -719,7 +791,10 @@ export default function Header({
 
           // Skip routing updates for short queries (<3 chars)
           if (trimmed.length < 3) {
-            if (router.pathname === "/" && Object.keys(router.query).includes("search")) {
+            if (
+              router.pathname === "/" &&
+              Object.keys(router.query).includes("search")
+            ) {
               router.replace({ pathname: "/" }, undefined, { shallow: true });
             }
             if (setSearch) setSearch(trimmed);
@@ -728,9 +803,17 @@ export default function Header({
 
           // Live updates for longer queries - only redirect to home if not on a trade page
           if (router.pathname !== "/" && !router.pathname.startsWith("/trade/")) {
-            router.push({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
+            router.push(
+              { pathname: "/", query: { search: trimmed } },
+              undefined,
+              { shallow: true }
+            );
           } else if (router.pathname === "/") {
-            router.replace({ pathname: "/", query: { search: trimmed } }, undefined, { shallow: true });
+            router.replace(
+              { pathname: "/", query: { search: trimmed } },
+              undefined,
+              { shallow: true }
+            );
           }
           if (setSearch) setSearch(trimmed);
         }}
