@@ -189,7 +189,7 @@ export default function TradePage() {
 
       if (ageInHours < 1) return { interval: "1m", timeframe: "1h", optimize: false } as const;
       if (ageInHours < 6) return { interval: "1m", timeframe: "4h", optimize: false } as const;
-      if (ageInDays < 1) return { interval: "1m", timeframe: "24h", optimize: false } as const;
+      if (ageInDays < 1) return { interval: "1h", timeframe: "24h", optimize: false } as const;
       if (ageInDays < 7) return { interval: "15m", timeframe: "7d", optimize: false } as const;
       if (ageInDays < 30) return { interval: "1h", timeframe: "30d", optimize: false } as const;
       if (ageInDays < 90) return { interval: "1d", timeframe: "90d", optimize: true } as const;
