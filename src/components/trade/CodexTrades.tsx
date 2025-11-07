@@ -394,7 +394,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
           <thead className="sticky top-0 bg-gray-900 z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
               {/* Age / Time */}
-              <th className="w-[172px] pl-2 pr-0 py-2 text-left">
+              <th className="w-[212px] pl-2 pr-0 py-2 text-left">
                 <button
                   type="button"
                   onClick={() => setShowAge(prev => !prev)}
