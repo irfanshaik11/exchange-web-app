@@ -1,5 +1,8 @@
+import { RiExchangeDollarLine } from "react-icons/ri";
+import { SiSolana } from "react-icons/si";
+import { FaArrowRightArrowLeft } from "react-icons/fa6";
 import React from 'react';
-import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
+import { formatSmartNumber } from '~/utils/db';
 import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
 import type { Token } from '~/utils/db';
 
@@ -9,7 +12,7 @@ interface CodexTradesProps {
 }
 
 function getAge(timestamp: number) {
-  const now = Date.now() / 1000; // Convert to seconds
+  const now = Date.now() / 1000; // seconds
   const diffSeconds = now - timestamp;
   const diffMins = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffSeconds / 3600);
@@ -18,6 +21,17 @@ function getAge(timestamp: number) {
   if (diffDays > 0) return `${diffDays}d`;
   if (diffHours > 0) return `${diffHours}h`;
   return `${diffMins}m`;
+}
+
+function getTimeFromTimestampSec(ts: number) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 function shortAddr(addr: string) {
@@ -38,6 +52,18 @@ function percentile(arr: number[], p: number) {
   if (lo === hi) return a[lo];
   const w = idx - lo;
   return a[lo] * (1 - w) + a[hi] * w;
+}
+
+// Nicely format a USD price for the MC/Price column
+function formatUsdPrice(value: number | null | undefined): string {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v <= 0) return '-';
+
+  if (v >= 1) return `$${v.toFixed(2)}`;
+  if (v >= 0.01) return `$${v.toFixed(4)}`;
+  if (v >= 0.0001) return `$${v.toFixed(6)}`;
+  // very tiny prices → scientific
+  return `$${v.toExponential(2)}`;
 }
 
 /** Normalize trade shapes into a single structure */
@@ -123,21 +149,15 @@ function normalizeTrade(
     maker = trade.maker || trade.trader || '';
   }
 
-  // Try to get solAmount from other trade shapes if not set
   if (solAmount === 0) {
-    // Priority 1: Check originalEvent.data.priceBaseTokenTotal (for WebSocket/Codex events)
     if (trade.originalEvent?.data?.priceBaseTokenTotal) {
       solAmount = parseFloat(String(trade.originalEvent.data.priceBaseTokenTotal)) || 0;
-    }
-    // Priority 2: For WebSocket shape, try to calculate from price/totalUSD
-    else if (hasWsShape && trade.price) {
+    } else if (hasWsShape && trade.price) {
       const price = parseFloat(trade.price);
-      if (price > 10 && price < 300) { // Likely SOL price
+      if (price > 10 && price < 300) {
         solAmount = totalUSD > 0 ? totalUSD / price : 0;
       }
-    }
-    // Priority 3: For backend, check if there's a base token amount field
-    else if (hasBackend && trade.base_token_amount) {
+    } else if (hasBackend && trade.base_token_amount) {
       solAmount = parseFloat(String(trade.base_token_amount)) || 0;
     }
   }
@@ -148,14 +168,55 @@ function normalizeTrade(
 /** Subtle gradient used only for the inline bar, NOT the cell background */
 function heatBarGradient(isBuy: boolean, intensity01: number) {
   const t = clamp01(intensity01);
-  // keep it subtle: 0.10..0.32
-  const a = 0.10 + 0.22 * t;
-  const rgb = isBuy ? '16,185,129' /* emerald-500-ish */ : '244,63,94' /* rose-500-ish */;
-  // fade to transparent so the table row background shows through
-  return `linear-gradient(90deg, rgba(${rgb}, ${a}) 0%, rgba(${rgb}, ${a * 0.6}) 60%, rgba(${rgb}, 0) 100%)`;
+  const a = 0.1 + 0.22 * t;
+  const rgb = isBuy ? '16,185,129' : '244,63,94';
+  return `linear-gradient(90deg, rgba(${rgb}, ${a}) 0%, rgba(${rgb}, ${
+    a * 0.6
+  }) 60%, rgba(${rgb}, 0) 100%)`;
 }
 
+/** MC header icon using react-icons */
+const McHeaderIcon: React.FC = () => (
+  <FaArrowRightArrowLeft
+    className="h-3 w-3 text-neutral-400"
+    aria-hidden="true"
+  />
+);
+
+/** Solana icon using react-icons with gradient fill */
+const SolIcon: React.FC = () => (
+  <>
+    <SiSolana
+      className="h-3 w-3 inline-block -mt-0.5"
+      aria-hidden="true"
+      style={{
+        color: 'unset',
+        fill: 'url(#solana-gradient-positions)',
+        filter: 'none',
+      }}
+    />
+    <svg className="absolute w-0 h-0 pointer-events-none">
+      <defs>
+        <linearGradient
+          id="solana-gradient-positions"
+          x1="0%"
+          y1="0%"
+          x2="100%"
+          y2="0%"
+        >
+          <stop offset="0%" stopColor="#9945FF" />
+          <stop offset="100%" stopColor="#14F195" />
+        </linearGradient>
+      </defs>
+    </svg>
+  </>
+);
+
 const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
+  const [showAge, setShowAge] = React.useState(true); // true = Age, false = Time
+  const [totalMode, setTotalMode] = React.useState<'usd' | 'sol'>('usd');
+  const [mcMode, setMcMode] = React.useState<'mc' | 'price'>('mc'); // MC vs Price toggle
+
   const stableToken = React.useMemo(() => {
     if (!token) return null;
     return {
@@ -164,18 +225,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
       name: token.name || '',
       symbol: token.symbol || '',
       mint: token.mint || '',
-      ...token
+      ...token,
     };
   }, [token?.pair_address, token?.decimals, token?.name, token?.symbol, token?.mint]);
 
   const stableInitialTrades = React.useMemo(() => initialTrades, [initialTrades.length]);
 
-  const {
-    isConnected: wsConnected,
-    loading: wsLoading,
-    error: wsError,
-    trades: wsTrades,
-  } = useOptimizedTradeEventsWebSocket({
+  const { loading: wsLoading, trades: wsTrades } = useOptimizedTradeEventsWebSocket({
     pairAddress: stableToken?.pair_address,
     enabled: !!stableToken?.pair_address,
     initialTrades: stableInitialTrades,
@@ -187,7 +243,6 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
   const displayTrades = wsTrades.length > 0 ? wsTrades : stableInitialTrades;
   const isLoading = wsLoading && stableInitialTrades.length === 0;
 
-  // Normalize first 100 for scaling
   const normalized = React.useMemo(() => {
     const slice = (displayTrades || []).slice(0, 100);
     return slice.map((t, i) => {
@@ -196,15 +251,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     });
   }, [displayTrades, stableToken?.decimals]);
 
-  // Robust reference: 95th percentile for USD
   const p95 = React.useMemo(() => {
-    const arr = normalized.map(n => n.totalUSD).filter((x) => Number.isFinite(x) && x >= 0);
+    const arr = normalized.map(n => n.totalUSD).filter(x => Number.isFinite(x) && x >= 0);
     return percentile(arr, 0.95) || 0;
   }, [normalized]);
 
-  // Robust reference: 95th percentile for SOL
   const p95Sol = React.useMemo(() => {
-    const arr = normalized.map(n => n.solAmount).filter((x) => Number.isFinite(x) && x > 0);
+    const arr = normalized.map(n => n.solAmount).filter(x => Number.isFinite(x) && x > 0);
     return percentile(arr, 0.95) || 0;
   }, [normalized]);
 
@@ -226,7 +279,49 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     [p95Sol, normalized]
   );
 
-  // Skeleton if token absent
+  // derive token supply (supports several possible field names)
+  const supply = React.useMemo(() => {
+    const anyToken = stableToken as any;
+    if (!anyToken) return 0;
+
+    const raw =
+      anyToken?.supply ??
+      anyToken?.total_supply_formatted ??
+      anyToken?.total_supply ??
+      anyToken?.totalSupply ??
+      anyToken?.circulating_supply ??
+      0;
+
+    let num = Number(raw);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+
+    // If it's a gigantic integer, assume it's raw base units and scale by decimals
+    if (num > 1e15 && stableToken?.decimals != null) {
+      const scaled = num / Math.pow(10, stableToken.decimals);
+      return Number.isFinite(scaled) ? scaled : 0;
+    }
+
+    return num;
+  }, [stableToken]);
+
+  // fallback token price (used when a trade doesn't have a valid pricePerToken)
+  const fallbackPriceUsd = React.useMemo(() => {
+    const anyToken = stableToken as any;
+    if (!anyToken) return 0;
+
+    const raw =
+      anyToken?.usd_price ??
+      anyToken?.price_usd ??
+      anyToken?.priceUsd ??
+      anyToken?.last_price_usd ??
+      0;
+
+    const num = Number(raw);
+    return Number.isFinite(num) && num > 0 ? num : 0;
+  }, [stableToken]);
+
+  const p95Display = totalMode === 'usd' ? p95 : p95Sol;
+
   if (!stableToken || (!stableToken.name && !stableToken.symbol)) {
     return (
       <div className="flex-1 min-h-0 p-4">
@@ -245,14 +340,73 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
   return (
     <div className="w-full h-full flex flex-col">
       <div className="flex-1 overflow-y-auto pb-18">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs border-collapse">
           <thead className="sticky top-0 bg-gray-900 z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
-              <th className="px-2 py-2 text-left">Age ↓</th>
-              <th className="px-2 py-2 text-left">Price (USD)</th>
-              <th className="px-2 py-2 text-left">Amt (USD)</th>
-              <th className="px-2 py-2 text-left">Amt (SOL)</th>
-              <th className="px-2 py-2 text-left">Amount (Tokens)</th>
+              {/* Age / Time */}
+              <th className="w-[212px] pl-2 pr-0 py-2 text-left">
+                <button
+                  type="button"
+                  onClick={() => setShowAge(prev => !prev)}
+                  className="inline-flex items-center gap-0.5 text-[11px] text-neutral-300 hover:text-white"
+                >
+                  <span className="font-medium">
+                    {showAge ? 'Age ↓' : 'Time ↓'}
+                  </span>
+                  <span className="text-[10px] text-neutral-400">
+                    / {showAge ? 'Time' : 'Age'}
+                  </span>
+                  <span className="text-[10px] text-neutral-500">▾</span>
+                </button>
+              </th>
+
+              {/* Type */}
+              <th className="pl-0 pr-2 py-2 text-left">
+                Type
+              </th>
+
+              {/* MC / Price column with icon */}
+              <th className="px-2 py-2 text-left">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMcMode(prev => (prev === 'mc' ? 'price' : 'mc'))
+                  }
+                  className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white"
+                >
+                  <span className="font-medium">
+                    {mcMode === 'mc' ? 'MC' : 'Price'}
+                  </span>
+                  <McHeaderIcon />
+                </button>
+              </th>
+
+              {/* Amount */}
+              <th className="px-2 py-2 text-left">Amount</th>
+
+              {/* Total USD / SOL toggle column */}
+              <th className="px-2 py-2 text-left">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTotalMode(prev => (prev === 'usd' ? 'sol' : 'usd'))
+                  }
+                  className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white"
+                >
+                  <span className="font-medium">
+                    {totalMode === 'usd' ? 'Total USD' : 'Total SOL'}
+                  </span>
+                  <RiExchangeDollarLine
+                    className={
+                      totalMode === 'usd'
+                        ? 'h-4 w-4 text-emerald-300 drop-shadow-[0_0_6px_rgba(16,185,129,0.9)]'
+                        : 'h-4 w-4 text-neutral-400'
+                    }
+                  />
+                </button>
+              </th>
+
+              {/* Trader */}
               <th className="px-2 py-2 text-left">Trader</th>
             </tr>
           </thead>
@@ -270,79 +424,122 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                 </td>
               </tr>
             ) : (
-              normalized.map((n) => {
+              normalized.map(n => {
                 const age = getAge(n.timestampSec);
+                const timeStr = getTimeFromTimestampSec(n.timestampSec);
                 const tokenAmountStr = formatSmartNumber(n.tokenAmount);
-                const solAmountStr = Number.isFinite(n.solAmount) && n.solAmount > 0 
-                  ? formatSmartNumber(n.solAmount)
-                  : '-';
-                const amtStr = Number.isFinite(n.totalUSD) ? `$${n.totalUSD.toFixed(2)}` : '$0.00';
-                const priceStr = Number.isFinite(n.pricePerToken) ? `$${formatSmallPrice(n.pricePerToken)}` : '$-';
+                const solAmountStr =
+                  Number.isFinite(n.solAmount) && n.solAmount > 0
+                    ? formatSmartNumber(n.solAmount)
+                    : '-';
+                const amtStr = Number.isFinite(n.totalUSD)
+                  ? `$${n.totalUSD.toFixed(2)}`
+                  : '$0.00';
 
-                const intensity = scaleAmt(n.totalUSD);
-                const gradient = heatBarGradient(n.isBuy, intensity);
-                
+                // MC / Price: (trade price or fallback token price)
+                const unitPriceUsd =
+                  Number.isFinite(n.pricePerToken) && n.pricePerToken > 0
+                    ? n.pricePerToken
+                    : fallbackPriceUsd;
+
+                const mc =
+                  supply > 0 && unitPriceUsd > 0
+                    ? unitPriceUsd * supply
+                    : null;
+
+                const mcStr = mc !== null ? `$${formatSmartNumber(mc)}` : '-';
+                const priceStr = formatUsdPrice(unitPriceUsd);
+
+                const intensityUsd = scaleAmt(n.totalUSD);
+                const gradientUsd = heatBarGradient(n.isBuy, intensityUsd);
+
                 const intensitySol = n.solAmount > 0 ? scaleAmtSol(n.solAmount) : 0;
                 const gradientSol = heatBarGradient(n.isBuy, intensitySol);
 
-                return (
-                  <tr key={n.keyPart || n.idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
-                    <td className="px-2 py-2 text-neutral-300">{age}</td>
-                    <td className={`px-2 py-2 font-semibold ${n.color}`}>{priceStr}</td>
+                const typeLabel = n.isBuy ? 'Buy' : 'Sell';
+                const showingUsd = totalMode === 'usd';
 
-                    {/* HEATMAP BAR for USD - only; cell background stays default */}
-                    <td className="px-2 py-2 font-semibold relative overflow-hidden"
-                        title={`~${(intensity * 100).toFixed(0)}% of recent size`}>
-                      {/* bar (behind content) */}
-                      <div
-                        aria-hidden
-                        className="absolute left-0 top-0 bottom-0 z-0"
-                        style={{
-                          width: `${Math.max(6, intensity * 100)}%`,
-                          backgroundImage: gradient,
-                          // blends with whatever row bg you already have
-                          mixBlendMode: 'screen',
-                          pointerEvents: 'none',
-                          transition: 'width 160ms ease',
-                        }}
-                      />
-                      {/* amount text */}
-                      <div className={`relative z-10 ${n.isBuy ? 'text-emerald-300' : 'text-red-300'}`}>
-                        {amtStr}
-                      </div>
+                const totalValueStr = showingUsd ? amtStr : solAmountStr;
+                const intensity = showingUsd ? intensityUsd : intensitySol;
+                const gradient = showingUsd ? gradientUsd : gradientSol;
+
+                const hasSol = Number.isFinite(n.solAmount) && n.solAmount > 0;
+
+                const title = showingUsd
+                  ? `~${(intensityUsd * 100).toFixed(0)}% of recent USD size`
+                  : hasSol
+                  ? `~${(intensitySol * 100).toFixed(0)}% of recent SOL size`
+                  : 'No SOL data';
+
+                return (
+                  <tr
+                    key={n.keyPart || n.idx}
+                    className="border-b border-neutral-800 hover:bg-neutral-800/60"
+                  >
+                    {/* Age / Time */}
+                    <td className="w-[172px] pl-2 pr-0 py-2 text-neutral-300">
+                      {showAge ? age : timeStr}
                     </td>
 
-                    {/* HEATMAP BAR for SOL - same functionality as USD */}
-                    <td className="px-2 py-2 font-semibold relative overflow-hidden"
-                        title={n.solAmount > 0 ? `~${(intensitySol * 100).toFixed(0)}% of recent SOL size` : 'No SOL data'}>
-                      {n.solAmount > 0 ? (
+                    {/* Type */}
+                    <td
+                      className={`pl-0 pr-2 py-2 font-semibold ${
+                        n.isBuy ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                    >
+                      {typeLabel}
+                    </td>
+
+                    {/* MC / Price */}
+                    <td className="px-2 py-2 text-neutral-300">
+                      {mcMode === 'mc' ? mcStr : priceStr}
+                    </td>
+
+                    {/* Amount */}
+                    <td className="px-2 py-2 text-neutral-300">
+                      {tokenAmountStr}
+                    </td>
+
+                    {/* merged Total column */}
+                    <td
+                      className="px-2 py-2 font-semibold relative overflow-hidden"
+                      title={title}
+                    >
+                      {showingUsd || hasSol ? (
                         <>
-                          {/* bar (behind content) */}
                           <div
                             aria-hidden
                             className="absolute left-0 top-0 bottom-0 z-0"
                             style={{
-                              width: `${Math.max(6, intensitySol * 100)}%`,
-                              backgroundImage: gradientSol,
-                              // blends with whatever row bg you already have
+                              width: `${Math.max(6, intensity * 100)}%`,
+                              backgroundImage: gradient,
                               mixBlendMode: 'screen',
                               pointerEvents: 'none',
                               transition: 'width 160ms ease',
                             }}
                           />
-                          {/* amount text */}
-                          <div className={`relative z-10 ${n.isBuy ? 'text-emerald-300' : 'text-red-300'}`}>
-                            {solAmountStr}
+                          <div
+                            className={`relative z-10 flex items-center gap-1 ${
+                              n.isBuy ? 'text-emerald-300' : 'text-red-300'
+                            }`}
+                          >
+                            {/* Sol icon ALWAYS shown in SOL mode, dimmed if no SOL amount */}
+                            {!showingUsd && (
+                              <span className={hasSol ? '' : 'opacity-40'}>
+                                <SolIcon />
+                              </span>
+                            )}
+                            <span>{totalValueStr}</span>
                           </div>
                         </>
                       ) : (
                         <div className="relative z-10 text-neutral-400">
-                          {solAmountStr}
+                          {totalValueStr}
                         </div>
                       )}
                     </td>
 
-                    <td className="px-2 py-2 text-neutral-300">{tokenAmountStr}</td>
+                    {/* Trader */}
                     <td className="px-2 py-2 text-neutral-300">
                       <a
                         href={`https://solscan.io/account/${n.maker || ''}`}
@@ -358,14 +555,26 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
               })
             )}
           </tbody>
-        </table>
 
-        {!!p95 && (
-          <div className="px-2 py-2 text-[10px] text-neutral-500 flex items-center gap-2">
-            <span className="inline-block">Amt heat = relative to ~95th percentile</span>
-            <span className="ml-auto">p95: ${p95.toFixed(2)}</span>
-          </div>
-        )}
+          {!!p95Display && (
+            <tfoot>
+              <tr>
+                <td colSpan={6}>
+                  <div className="px-2 py-2 text-[10px] text-neutral-500 flex items-center gap-2">
+                    <span className="inline-block">
+                      Total heat = relative to ~95th percentile
+                    </span>
+                    <span className="ml-auto">
+                      {totalMode === 'usd'
+                        ? `p95: $${p95Display.toFixed(2)}`
+                        : `p95: ${p95Display.toFixed(4)} SOL`}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
       </div>
     </div>
   );
