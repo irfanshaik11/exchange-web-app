@@ -1,4 +1,5 @@
 import { RiExchangeDollarLine } from "react-icons/ri";
+import { SiSolana } from "react-icons/si";
 import React from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
@@ -209,57 +210,33 @@ const McHeaderIcon: React.FC = () => (
   </svg>
 );
 
-/** Solana glyph for Total SOL values — three gradient bars like the brand logo */
-const SolanaIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <svg
-    className={className}
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-  >
-    <defs>
-      <linearGradient
-        id="solGradient"
-        x1="0"
-        y1="4"
-        x2="24"
-        y2="20"
-        gradientUnits="userSpaceOnUse"
-      >
-        <stop offset="0%" stopColor="#14F195" />
-        <stop offset="50%" stopColor="#00B2FF" />
-        <stop offset="100%" stopColor="#9945FF" />
-      </linearGradient>
-    </defs>
-    <g transform="translate(4 5)">
-      {/* top bar */}
-      <rect
-        x="0"
-        y="0"
-        width="14"
-        height="2.6"
-        rx="1.3"
-        fill="url(#solGradient)"
-      />
-      {/* middle bar */}
-      <rect
-        x="0"
-        y="4"
-        width="14"
-        height="2.6"
-        rx="1.3"
-        fill="url(#solGradient)"
-      />
-      {/* bottom bar */}
-      <rect
-        x="0"
-        y="8"
-        width="14"
-        height="2.6"
-        rx="1.3"
-        fill="url(#solGradient)"
-      />
-    </g>
-  </svg>
+/** Solana icon using react-icons with gradient fill */
+const SolIcon: React.FC = () => (
+  <>
+    <SiSolana
+      className="h-3 w-3 inline-block -mt-0.5"
+      aria-hidden="true"
+      style={{
+        color: 'unset',
+        fill: 'url(#solana-gradient-positions)',
+        filter: 'none',
+      }}
+    />
+    <svg className="absolute w-0 h-0 pointer-events-none">
+      <defs>
+        <linearGradient
+          id="solana-gradient-positions"
+          x1="0%"
+          y1="0%"
+          x2="100%"
+          y2="0%"
+        >
+          <stop offset="0%" stopColor="#9945FF" />
+          <stop offset="100%" stopColor="#14F195" />
+        </linearGradient>
+      </defs>
+    </svg>
+  </>
 );
 
 const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
@@ -486,7 +463,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                   ? `$${n.totalUSD.toFixed(2)}`
                   : '$0.00';
 
-                // MC & Price: (trade price or fallback token price)
+                // MC / Price: (trade price or fallback token price)
                 const unitPriceUsd =
                   Number.isFinite(n.pricePerToken) && n.pricePerToken > 0
                     ? n.pricePerToken
@@ -513,7 +490,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                 const intensity = showingUsd ? intensityUsd : intensitySol;
                 const gradient = showingUsd ? gradientUsd : gradientSol;
 
-                const hasSol = n.solAmount > 0;
+                const hasSol = Number.isFinite(n.solAmount) && n.solAmount > 0;
 
                 const title = showingUsd
                   ? `~${(intensityUsd * 100).toFixed(0)}% of recent USD size`
@@ -573,9 +550,11 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                               n.isBuy ? 'text-emerald-300' : 'text-red-300'
                             }`}
                           >
-                            {/* Sol icon ONLY when Total SOL is active and we have SOL data */}
-                            {!showingUsd && hasSol && (
-                              <SolanaIcon className="h-3 w-3" />
+                            {/* Sol icon ALWAYS shown in SOL mode, dimmed if no SOL amount */}
+                            {!showingUsd && (
+                              <span className={hasSol ? '' : 'opacity-40'}>
+                                <SolIcon />
+                              </span>
                             )}
                             <span>{totalValueStr}</span>
                           </div>
