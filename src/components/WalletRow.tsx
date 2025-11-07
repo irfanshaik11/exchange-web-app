@@ -39,6 +39,7 @@ function Tooltip({ children, label }: { children: React.ReactNode; label: string
 
 export default function WalletRow({ wallet, watchedWallet, events = [], balance, onRemove, onClick, onNotificationToggle }: WalletRowProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
   
   // Ref to track if we've loaded from localStorage (prevents backend from overriding)
   const hasLoadedFromStorageRef = React.useRef(false);
@@ -137,6 +138,19 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
     setShowDeleteConfirm(false);
   };
 
+  const handleCopyAddress = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(wallet.address);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    } catch (error) {
+      console.error('Failed to copy wallet address:', error);
+    }
+  };
+
   const handleToggleNotifications = async (e: React.MouseEvent) => {
     e.stopPropagation();
     
@@ -232,9 +246,20 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
       <td className="py-3 px-2">
         <div className="flex w-full items-center gap-4">
           <span className="w-28 text-xs text-neutral-400">{formatCreated(wallet.createdAt)}</span>
-          <div className="flex flex-1 min-w-0 items-center gap-2">
+          <div className="flex flex-1 min-w-0 items-start gap-2">
             <span className="text-lg">{wallet.emoji || '💼'}</span>
-            <span className="truncate text-xs font-medium text-neutral-200">{wallet.name || 'N/A'}</span>
+            <div className="flex flex-col min-w-0">
+              <span className="truncate text-xs font-medium text-neutral-200">{wallet.name || 'N/A'}</span>
+              <Tooltip label={copied ? 'Copied!' : 'Click to copy'}>
+                <button
+                  className="mt-0.5 w-fit text-[10px] font-mono text-neutral-400 hover:text-neutral-200 transition-colors underline-offset-2 focus-visible:outline-none cursor-pointer"
+                  onClick={handleCopyAddress}
+                  title="Copy wallet address"
+                >
+                  {wallet.address ? `${wallet.address.slice(0, 4)}...${wallet.address.slice(-4)}` : ''}
+                </button>
+              </Tooltip>
+            </div>
           </div>
           <span className="w-36 text-xs text-neutral-300">
             {balance !== undefined 

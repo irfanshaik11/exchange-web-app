@@ -106,6 +106,9 @@ const EMOJIS = [
   "🚀",
 ];
 
+const MAX_WALLETS = 100;
+const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
+
 export default function TrackersPage() {
   const { user } = useUser();
   const { wsConnected, latestTrades, watchedWallets: globalWatchedWallets, refreshWatchedWallets } = useWalletTracker();
@@ -126,6 +129,23 @@ export default function TrackersPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, { symbol: string | null; name: string | null }>>(new Map());
+  const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
+
+  const normalizeAddress = (address: string | null | undefined) => (address ?? "").trim().toLowerCase();
+  const shortenAddress = (address: string) => {
+    const trimmed = address.trim();
+    if (trimmed.length <= 10) return trimmed;
+    return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+  };
+
+  const showToastMessage = (message: string, duration = 3000) => {
+    setToast(message);
+    setTimeout(() => setToast(""), duration);
+  };
+
+  const showWalletLimitToast = () => {
+    showToastMessage(WALLET_LIMIT_MESSAGE);
+  };
   
   // Twitter state
   const [showAddTwitterModal, setShowAddTwitterModal] = useState(false);
@@ -308,6 +328,11 @@ export default function TrackersPage() {
   }, [isResizing]);
 
   const handleAddWallet = async (address: string, name: string, emoji?: string) => {
+    if (isAtWalletLimit) {
+      showWalletLimitToast();
+      return;
+    }
+
     try {
       // Add to backend
       await addTrackedWallet(address, name, user?.id, emoji);
@@ -316,13 +341,20 @@ export default function TrackersPage() {
       await loadWalletsFromBackend();
       
       setShowAddWalletModal(false);
-      
-      setToast("Wallet added!");
-      setTimeout(() => setToast(""), 3000);
+
+      showToastMessage("Wallet added!");
     } catch (error: any) {
-      setToast(error.message || "Failed to add wallet");
-      setTimeout(() => setToast(""), 3000);
+      const message = error?.message || "Failed to add wallet";
+      showToastMessage(message);
     }
+  };
+
+  const handleOpenAddWalletModal = () => {
+    if (isAtWalletLimit) {
+      showWalletLimitToast();
+      return;
+    }
+    setShowAddWalletModal(true);
   };
 
   const handleRemoveWallet = async (addressToRemove: string) => {
@@ -448,19 +480,111 @@ export default function TrackersPage() {
       try {
         const imported = JSON.parse(event.target?.result as string);
         if (Array.isArray(imported)) {
-          // Add to backend
-          for (const wallet of imported) {
+          const transformedWallets = imported.map((wallet: any) => {
+            if (wallet?.trackedWalletAddress) {
+              return {
+                address: wallet.trackedWalletAddress,
+                name: wallet.name || "Imported Wallet",
+              };
+            }
+            return {
+              address: wallet?.address,
+              name: wallet?.name || "Imported Wallet",
+            };
+          });
+
+          const existingAddresses = new Set(
+            watchedWallets
+              .map((wallet) => normalizeAddress(wallet.address))
+              .filter(Boolean)
+          );
+          const batchAddresses = new Set<string>();
+          const duplicateExisting: string[] = [];
+          const duplicateWithinImport: string[] = [];
+          const invalidWallets: string[] = [];
+          const walletsToAdd: { address: string; name: string }[] = [];
+
+          transformedWallets.forEach((wallet: { address: string; name: string }) => {
+            const normalized = normalizeAddress(wallet.address);
+            if (!normalized) {
+              invalidWallets.push(wallet.address);
+              return;
+            }
+            if (existingAddresses.has(normalized)) {
+              duplicateExisting.push(wallet.address);
+              return;
+            }
+            if (batchAddresses.has(normalized)) {
+              duplicateWithinImport.push(wallet.address);
+              return;
+            }
+            batchAddresses.add(normalized);
+            walletsToAdd.push(wallet);
+          });
+
+          const availableSlots = MAX_WALLETS - watchedWallets.length;
+          if (walletsToAdd.length > availableSlots) {
+            alert(
+              availableSlots > 0
+                ? `You can only add ${availableSlots} more wallet${availableSlots === 1 ? "" : "s"}. Remove some before importing.`
+                : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`
+            );
+            return;
+          }
+
+          let successCount = 0;
+          let errorCount = 0;
+
+          for (const wallet of walletsToAdd) {
             try {
               await addTrackedWallet(wallet.address, wallet.name, user?.id);
+              successCount++;
             } catch (error: any) {
-              if (!error.message?.includes('already exists')) {
+              if (error.message?.includes('already exists')) {
+                duplicateExisting.push(wallet.address);
+              } else {
                 console.error(`Failed to import ${wallet.address}:`, error);
+                errorCount++;
               }
             }
           }
-          // Reload from backend
+
           await loadWalletsFromBackend();
-          alert("Wallets imported successfully!");
+
+          const messageParts: string[] = [];
+          if (successCount > 0) {
+            messageParts.push(`Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`);
+          }
+          if (duplicateExisting.length > 0) {
+            messageParts.push(
+              `${duplicateExisting.length} already tracked (${duplicateExisting
+                .slice(0, 3)
+                .map(shortenAddress)
+                .join(', ')}${
+                duplicateExisting.length > 3 ? ` +${duplicateExisting.length - 3}` : ''
+              })`
+            );
+          }
+          if (duplicateWithinImport.length > 0) {
+            messageParts.push(
+              `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? '' : 's'} in import (${duplicateWithinImport
+                .slice(0, 3)
+                .map(shortenAddress)
+                .join(', ')}${
+                duplicateWithinImport.length > 3 ? ` +${duplicateWithinImport.length - 3}` : ''
+              })`
+            );
+          }
+          if (invalidWallets.length > 0) {
+            messageParts.push(
+              `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? '' : 'es'}`
+            );
+          }
+          if (errorCount > 0) {
+            messageParts.push(`${errorCount} failed`);
+          }
+
+          alert(messageParts.length > 0 ? messageParts.join('. ') : 'No new wallets were imported.');
         } else {
           alert("Invalid wallet file format.");
         }
@@ -505,6 +629,10 @@ export default function TrackersPage() {
                     )}
                   </button>
                 ))}
+                <div className="flex items-center rounded-full bg-neutral-800/60 px-3 py-1 text-[11px] text-neutral-300">
+                  <span className="font-medium text-white">{watchedWallets.length}</span>
+                  <span className="text-neutral-400">/{MAX_WALLETS} wallet{watchedWallets.length === 1 ? "" : "s"}</span>
+                </div>
                 <div className="flex-1" />
                 {/* Search and actions */}
                 <input
@@ -536,7 +664,7 @@ export default function TrackersPage() {
                         color: '#000000',
                         border: 'none'
                       }}
-                      onClick={() => setShowAddWalletModal(true)}
+                      onClick={handleOpenAddWalletModal}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.backgroundColor = '#58B890';
                         e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)';
@@ -929,35 +1057,114 @@ export default function TrackersPage() {
               };
             });
             
+            const existingAddresses = new Set(
+              watchedWallets
+                .map((wallet) => normalizeAddress(wallet.address))
+                .filter(Boolean)
+            );
+            const batchAddresses = new Set<string>();
+            const duplicateExisting: string[] = [];
+            const duplicateWithinImport: string[] = [];
+            const invalidWallets: string[] = [];
+            const walletsToAdd = transformedWallets.filter((wallet) => {
+              const normalized = normalizeAddress(wallet.address);
+              if (!normalized) {
+                invalidWallets.push(wallet.address);
+                return false;
+              }
+              if (existingAddresses.has(normalized)) {
+                duplicateExisting.push(wallet.address);
+                return false;
+              }
+              if (batchAddresses.has(normalized)) {
+                duplicateWithinImport.push(wallet.address);
+                return false;
+              }
+              batchAddresses.add(normalized);
+              return true;
+            });
+
+            const availableSlots = MAX_WALLETS - watchedWallets.length;
+            if (walletsToAdd.length > availableSlots) {
+              const message = availableSlots > 0
+                ? `You can only add ${availableSlots} more wallet${availableSlots === 1 ? '' : 's'}. Remove some before importing.`
+                : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`;
+              throw new Error(message);
+            }
+
             // Add each wallet to backend
             let successCount = 0;
             let errorCount = 0;
-            const total = transformedWallets.length;
+            const total = walletsToAdd.length;
+            let processed = 0;
+            if (total === 0) {
+              onProgress?.(0, 0);
+            } else {
+              onProgress?.(0, total);
+            }
             
-            for (let i = 0; i < transformedWallets.length; i++) {
-              const wallet = transformedWallets[i];
+            for (const wallet of walletsToAdd) {
               try {
                 await addTrackedWallet(wallet.address, wallet.name, user?.id, wallet.emoji);
                 successCount++;
               } catch (error: any) {
                 if (error.message?.includes('already exists')) {
-                  successCount++;
+                  duplicateExisting.push(wallet.address);
                 } else {
                   errorCount++;
                 }
               }
-              // Update progress after each wallet
-              onProgress?.(i + 1, total);
+              processed += 1;
+              if (total > 0) {
+                onProgress?.(processed, total);
+              }
             }
             
             // Reload from backend
             await loadWalletsFromBackend();
             
-            setToast(`Imported ${successCount} wallet(s)${errorCount > 0 ? ` (${errorCount} failed)` : ''}`);
+            const messageParts: string[] = [];
+            if (successCount > 0) {
+              messageParts.push(`Imported ${successCount} wallet${successCount === 1 ? '' : 's'}`);
+            }
+            if (duplicateExisting.length > 0) {
+              messageParts.push(
+                `${duplicateExisting.length} already tracked (${duplicateExisting
+                  .slice(0, 3)
+                  .map(shortenAddress)
+                  .join(', ')}${
+                  duplicateExisting.length > 3 ? ` +${duplicateExisting.length - 3}` : ''
+                })`
+              );
+            }
+            if (duplicateWithinImport.length > 0) {
+              messageParts.push(
+                `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? '' : 's'} in import (${duplicateWithinImport
+                  .slice(0, 3)
+                  .map(shortenAddress)
+                  .join(', ')}${
+                  duplicateWithinImport.length > 3 ? ` +${duplicateWithinImport.length - 3}` : ''
+                })`
+              );
+            }
+            if (invalidWallets.length > 0) {
+              messageParts.push(
+                `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? '' : 'es'}`
+              );
+            }
+            if (errorCount > 0) {
+              messageParts.push(`${errorCount} failed`);
+            }
+
+            const toastMessage = messageParts.length > 0
+              ? messageParts.join('. ')
+              : 'No new wallets were imported.';
+
+            setToast(toastMessage);
             setTimeout(() => setToast(""), 3000);
           } catch (error) {
             console.error('Import error:', error);
-            setToast('Failed to import wallets');
+            setToast((error as Error)?.message || 'Failed to import wallets');
             setTimeout(() => setToast(""), 3000);
             throw error; // Re-throw so modal can handle it
           }

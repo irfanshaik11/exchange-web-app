@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Wallet } from '~/utils/functions';
+import { formatSmartNumber } from '~/utils/functions';
 import InterstatePopout from './InterstatePopout';
 import { FaRegCopy, FaCheck, FaStar, FaSearch, FaRegChartBar, FaBell, FaExternalLinkAlt, FaArrowUp, FaArrowDown, FaRegCalendar } from 'react-icons/fa';
 import { FiExternalLink } from 'react-icons/fi';
@@ -450,10 +451,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
                         <th className="py-3 px-4 text-left font-semibold">Time</th>
                         <th className="py-3 px-4 text-left font-semibold">Token</th>
                         <th className="py-3 px-4 text-center font-semibold">Side</th>
-                        <th className="py-3 px-4 text-right font-semibold">Amount</th>
-                        <th className="py-3 px-4 text-right font-semibold">Price (USD)</th>
-                        <th className="py-3 px-4 text-right font-semibold">Value</th>
-                        <th className="py-3 px-4 text-left font-semibold">Venue</th>
+                        <th className="py-3 px-4 text-right font-semibold">Bought</th>
+                        <th className="py-3 px-4 text-right font-semibold">Sold</th>
+                        <th className="py-3 px-4 text-right font-semibold">PnL</th>
                         <th className="py-3 px-4 text-center font-semibold">Tx</th>
                       </tr>
                     </thead>
@@ -479,27 +479,42 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
                             amount = trade.amount;
                           } else if (typeof trade.amount === 'string') {
                             amount = parseFloat(trade.amount);
-                          } else if (trade.amount && typeof trade.amount === 'object' && trade.amount.toNumber) {
+                          } else if (trade.amount && typeof trade.amount === 'object' && typeof trade.amount.toNumber === 'function') {
                             amount = trade.amount.toNumber();
                           }
-                          
+
                           // Handle different data formats for priceUsd
-                          let priceUsd = null;
+                          let priceUsd: number | null = null;
                           if (typeof trade.priceUsd === 'number') {
                             priceUsd = trade.priceUsd;
                           } else if (typeof trade.priceUsd === 'string') {
-                            priceUsd = parseFloat(trade.priceUsd);
-                          } else if (trade.priceUsd && typeof trade.priceUsd === 'object' && trade.priceUsd.toNumber) {
+                            const parsed = parseFloat(trade.priceUsd);
+                            priceUsd = Number.isFinite(parsed) ? parsed : null;
+                          } else if (trade.priceUsd && typeof trade.priceUsd === 'object' && typeof trade.priceUsd.toNumber === 'function') {
                             priceUsd = trade.priceUsd.toNumber();
                           }
-                          
-                          const value = priceUsd ? amount * priceUsd : null;
+
+                          const value = priceUsd !== null && Number.isFinite(amount)
+                            ? amount * priceUsd
+                            : null;
+                          const pnl = value !== null
+                            ? (trade.side === 'sell' ? value : -value)
+                            : null;
+                          const pnlDisplay = pnl !== null && Number.isFinite(pnl)
+                            ? `${pnl >= 0 ? '+' : '-'}$${formatSmartNumber(Math.abs(pnl))}`
+                            : '—';
                           const timeAgo = trade.ts ? formatTimeAgo(trade.ts) : 'Unknown';
                           
                           // Use fetched metadata as fallback
                           const metadata = tokenMetadata.get(trade.mint);
                           const displaySymbol = trade.symbol || metadata?.symbol || 'Unknown';
                           const displayName = trade.name || metadata?.name;
+                          const boughtDisplay = trade.side === 'buy' && Number.isFinite(amount)
+                            ? `${formatSmartNumber(Math.abs(amount))} ${displaySymbol}`
+                            : '—';
+                          const soldDisplay = trade.side === 'sell' && Number.isFinite(amount)
+                            ? `${formatSmartNumber(Math.abs(amount))} ${displaySymbol}`
+                            : '—';
                           
                           return (
                             <tr key={trade.id || idx} className="hover:bg-neutral-800 transition-colors">
@@ -526,16 +541,13 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
                                 </span>
                               </td>
                               <td className="py-3 px-4 text-right text-neutral-300">
-                                {amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                                {boughtDisplay}
                               </td>
                               <td className="py-3 px-4 text-right text-neutral-300">
-                                {priceUsd ? `$${priceUsd.toLocaleString(undefined, { maximumFractionDigits: 6 })}` : '—'}
+                                {soldDisplay}
                               </td>
                               <td className="py-3 px-4 text-right text-neutral-300">
-                                {value ? `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}
-                              </td>
-                              <td className="py-3 px-4 text-neutral-400 text-xs">
-                                {trade.venue || 'Unknown'}
+                                {pnlDisplay}
                               </td>
                               <td className="py-3 px-4 text-center">
                                 <a
