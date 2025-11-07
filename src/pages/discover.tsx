@@ -1,5 +1,5 @@
 // src/pages/discover.tsx
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import InterstateTable from '../components/InterstateTable';
@@ -32,7 +32,7 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
 export default function DiscoverPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'trending' | 'dex' | 'live'>('trending');
+  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'dex' | 'live'>('trending');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -64,6 +64,9 @@ export default function DiscoverPage() {
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [newPairsRaw, setNewPairsRaw] = useState<TokenWithDexPaid[]>([]);
+  const [newPairsLoading, setNewPairsLoading] = useState(false);
+  const [newPairsError, setNewPairsError] = useState<string | null>(null);
 
   // 🔒 Image cache: tokenId -> { cover?: string; avatar?: string }
   const imageCacheRef = useRef<Map<string, { cover?: string; avatar?: string }>>(new Map());
@@ -111,6 +114,78 @@ export default function DiscoverPage() {
     const isWrappedSolMint = token.mint.startsWith('So111');
     
     return isWrappedSolSymbol || isWrappedSolMint;
+  }, []);
+
+  const isZeroLiquidityToken = useCallback((token: any): boolean => {
+    if (!token) return false;
+
+    const rawValue =
+      token.liquidity_usd ??
+      token.total_liquidity_usd ??
+      token.total_liquidityUsd ??
+      token.totalLiquidityUsd ??
+      null;
+
+    if (rawValue === undefined || rawValue === null || rawValue === '') {
+      return false;
+    }
+
+    const liquidity = Number(rawValue);
+    if (Number.isNaN(liquidity)) {
+      return false;
+    }
+
+    return liquidity === 0;
+  }, []);
+
+  const getNewPairTimestamp = useCallback((token: any): number => {
+    if (!token) return 0;
+
+    let v: any =
+      token?.migrated_time ??
+      token?.migratedTime ??
+      token?.launch_time ??
+      token?.launchTime ??
+      token?.created_at ??
+      token?.createdAt ??
+      token?.firstSeen ??
+      token?.first_seen ??
+      token?.pair_created_at ??
+      token?.pairCreatedAt ??
+      token?.timestamp ??
+      token?.ts ??
+      null;
+
+    if (v && typeof v === 'object') {
+      if ('Time' in v && typeof (v as any).Time === 'string') {
+        v = (v as any).Time;
+      } else if ('time' in v && typeof (v as any).time === 'string') {
+        v = (v as any).time;
+      } else if ('seconds' in v && typeof (v as any).seconds === 'number') {
+        const sec = Number((v as any).seconds);
+        return sec > 1e12 ? sec : sec > 1e9 ? sec * 1000 : 0;
+      } else if ('millis' in v && typeof (v as any).millis === 'number') {
+        const ms = Number((v as any).millis);
+        return ms > 0 ? ms : 0;
+      }
+    }
+
+    if (!v) return 0;
+    if (typeof v === 'number') {
+      return v > 1e12 ? v : v > 1e9 ? v * 1000 : 0;
+    }
+    if (typeof v === 'string') {
+      const n = Number(v);
+      if (!Number.isNaN(n) && n > 0) {
+        return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
+      }
+      const d = Date.parse(v);
+      return Number.isNaN(d) ? 0 : d;
+    }
+    if (v instanceof Date) {
+      return v.getTime();
+    }
+    return 0;
   }, []);
 
   const pickImageCandidates = (t: any) => {
@@ -197,6 +272,153 @@ export default function DiscoverPage() {
   } = usePumpPortalWebSocket({
     enabled: activeTab === 'live', // Only connect when on live tab
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const fetchNewPairs = async () => {
+      if (cancelled) {
+        return;
+      }
+
+      setNewPairsLoading(true);
+
+      try {
+        const response = await fetch(`/api/token-service/getAllTokens?filter=new&limit=50&t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+
+        const payload = await response.json();
+        if (cancelled) {
+          return;
+        }
+
+        if (Array.isArray(payload)) {
+          const normalizePulseToken = (token: any): TokenWithDexPaid => {
+            const toNumber = (value: any): number => {
+              if (typeof value === 'number') {
+                return Number.isFinite(value) ? value : 0;
+              }
+              if (typeof value === 'string') {
+                const cleaned = value.trim();
+                if (!cleaned) return 0;
+                const parsed = Number(cleaned);
+                return Number.isFinite(parsed) ? parsed : 0;
+              }
+              return 0;
+            };
+
+            const sumVolumes = (buy: any, sell: any): number => toNumber(buy) + toNumber(sell);
+
+            const normalized: Record<string, any> = {
+              ...token,
+            };
+
+            const marketCap = toNumber(token.market_cap_usd ?? token.marketCapUsd ?? token.fully_diluted_value);
+            const liquidity = toNumber(token.liquidity_usd ?? token.total_liquidity_usd ?? token.total_liquidityUsd);
+
+            normalized.market_cap_usd = marketCap;
+            normalized.fully_diluted_value = marketCap;
+
+            normalized.liquidity_usd = liquidity;
+            normalized.total_liquidity_usd = liquidity;
+
+            normalized.volume_24h =
+              toNumber(token.volume_24h ?? token.volume24h) ||
+              sumVolumes(token.total_buy_volume_24h, token.total_sell_volume_24h);
+            normalized.volume_6h =
+              toNumber(token.volume_6h ?? token.volume6h) ||
+              sumVolumes(token.total_buy_volume_6h, token.total_sell_volume_6h);
+            normalized.volume_1h =
+              toNumber(token.volume_1h ?? token.volume1h) ||
+              sumVolumes(token.total_buy_volume_1h, token.total_sell_volume_1h);
+            normalized.volume_5m =
+              toNumber(token.volume_5m ?? token.volume5m) ||
+              sumVolumes(token.total_buy_volume_5m, token.total_sell_volume_5m);
+
+            const normalizePercent = (value: any) => {
+              const num = toNumber(value);
+              return Number.isFinite(num) ? num : 0;
+            };
+
+            normalized.price_percent_change_24h = normalizePercent(
+              token.price_percent_change_24h ?? token.price_change_24h ?? token.priceChange24h
+            );
+            normalized.price_percent_change_6h = normalizePercent(
+              token.price_percent_change_6h ?? token.price_change_6h ?? token.priceChange6h
+            );
+            normalized.price_percent_change_1h = normalizePercent(
+              token.price_percent_change_1h ?? token.price_change_1h ?? token.priceChange1h
+            );
+            normalized.price_percent_change_5m = normalizePercent(
+              token.price_percent_change_5m ?? token.price_change_5m ?? token.priceChange5m
+            );
+
+            if (!normalized.created_at && token.launch_time) {
+              normalized.created_at = token.launch_time;
+            }
+
+            return normalized as TokenWithDexPaid;
+          };
+
+          const filtered = payload.filter((token: any) => {
+            if (isZeroLiquidityToken(token)) {
+              return false;
+            }
+            if (!token || !token.mint || isWrappedSol(token)) {
+              return false;
+            }
+            return true;
+          }) as TokenWithDexPaid[];
+
+          const deduped: TokenWithDexPaid[] = [];
+          const seenKeys = new Set<string>();
+
+          for (const token of filtered) {
+            const key = (token?.pair_address || token?.mint) as string | undefined;
+            if (!key || seenKeys.has(key)) {
+              continue;
+            }
+            seenKeys.add(key);
+            deduped.push(normalizePulseToken(token));
+          }
+
+          setNewPairsRaw(deduped);
+          setNewPairsError(null);
+        }
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+        const message = err instanceof Error ? err.message : 'Failed to fetch new pairs';
+        setNewPairsError(message);
+        console.error('[Discover] Failed to fetch new pairs:', err);
+      } finally {
+        if (!cancelled) {
+          setNewPairsLoading(false);
+        }
+      }
+    };
+
+    fetchNewPairs();
+    intervalId = setInterval(() => fetchNewPairs(), 60_000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isZeroLiquidityToken, isWrappedSol]);
 
   // Debug log to track timeframe changes
   // useEffect(() => {
@@ -676,12 +898,132 @@ export default function DiscoverPage() {
       }
       
       setDisplayed(uniqueSafe);
-    } else {
-      // dex OR live → same sliced data; Live Pump renders a different UI
+    } else if (activeTab === "dex") {
+      // dex tab → show limited slice
       const safe = filteredTokens.filter(t => t && t.mint && !isWrappedSol(t));
       setDisplayed(safe.slice(0, 10));
+    } else {
+      setDisplayed([]);
     }
   }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol]);
+
+  const processedNewPairs = useMemo(() => {
+    if (!newPairsRaw || newPairsRaw.length === 0) {
+      return [] as TokenWithDexPaid[];
+    }
+
+    const base = newPairsRaw.filter((token) => token && token.mint && !isWrappedSol(token));
+    const filtered = applyFilters(base);
+    const sortedTokens = filtered.map((token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid);
+
+    sortedTokens.sort((a, b) => {
+      if (!a || !b) return 0;
+      let aVal = 0;
+      let bVal = 0;
+
+      if (sortKey === 'volume') {
+        aVal = getVolumeForTimeframe(a, selectedTimeframe);
+        bVal = getVolumeForTimeframe(b, selectedTimeframe);
+      } else if (sortKey === 'liquidity' || sortKey === 'total_liquidity_usd') {
+        aVal = Number((a as any).total_liquidity_usd) || 0;
+        bVal = Number((b as any).total_liquidity_usd) || 0;
+      } else if (sortKey === 'market_cap_total' || sortKey === 'fully_diluted_value') {
+        aVal = Number((a as any).fully_diluted_value) || 0;
+        bVal = Number((b as any).fully_diluted_value) || 0;
+      } else {
+        aVal = Number((a as any)[sortKey]) || 0;
+        bVal = Number((b as any)[sortKey]) || 0;
+      }
+
+      const diff = sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      if (diff !== 0) {
+        return diff;
+      }
+
+      const tsA = getNewPairTimestamp(a);
+      const tsB = getNewPairTimestamp(b);
+      return tsB - tsA;
+    });
+
+    const seenMints = new Set<string>();
+    const seenAddresses = new Set<string>();
+    const unique: TokenWithDexPaid[] = [];
+
+    for (const token of sortedTokens) {
+      const mint = token?.mint;
+      const address = (token as any)?.pair_address;
+
+      if (mint && seenMints.has(mint)) continue;
+      if (address && seenAddresses.has(address)) continue;
+
+      if (mint) seenMints.add(mint);
+      if (address) seenAddresses.add(address);
+      unique.push(token);
+    }
+
+    return unique;
+  }, [newPairsRaw, applyFilters, getVolumeForTimeframe, getNewPairTimestamp, isWrappedSol, sortDirection, sortKey, selectedTimeframe]);
+
+  const newPairsRows = useMemo(
+    () =>
+      processedNewPairs.map((token, index) => ({
+        token,
+        i: index,
+      })),
+    [processedNewPairs]
+  );
+
+  const renderPrimaryTable = () => {
+    if (displayed.length > 0) {
+      return (
+        <InterstateTable
+          rows={displayed.map((token, i) => ({
+            token: token as Token,
+            i,
+          }))}
+          onQuickBuy={handleQuickBuy}
+          sortKey={sortKey}
+          sortDirection={sortDirection}
+          setSort={handleSort}
+          selectedTimeframe={selectedTimeframe}
+          quickBuyAmount={Number(quickBuyAmount) || 0}
+        />
+      );
+    }
+
+    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
+      return (
+        <InterstateTable
+          rows={allTokens.map((token, i) => ({
+            token: token as Token,
+            i,
+          }))}
+          onQuickBuy={handleQuickBuy}
+          sortKey={sortKey}
+          sortDirection={sortDirection}
+          setSort={handleSort}
+          selectedTimeframe={selectedTimeframe}
+          quickBuyAmount={Number(quickBuyAmount) || 0}
+        />
+      );
+    }
+
+    if (tokensLoading) {
+      return (
+        <div className="space-y-4">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
+          ))}
+        </div>
+      );
+    }
+
+    if (tokenError) {
+      return <div className="py-10 text-center text-red-400">{tokenError}</div>;
+    }
+
+    return <div className="py-10 text-center text-[#9CA3AF]">No tokens found.</div>;
+  };
 
 
   /* ------- map tokens -> PumpItem for Live Pump (uses cached images) ------- */
@@ -838,11 +1180,17 @@ export default function DiscoverPage() {
               Trending
             </button>
             <button
+              className={`text-lg font-light transition-colors ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              onClick={() => setActiveTab("newPairs")}
+            >
+              New Pairs
+            </button>
+            {/* <button
               className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("dex")}
             >
               DEX Screener
-            </button>
+            </button> */}
             {/* <button
               className={`text-lg font-light transition-colors ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("live")}
@@ -862,7 +1210,7 @@ export default function DiscoverPage() {
             </div> */}
 
             {/* Timeframes - hide when on live tab */}
-            {activeTab !== 'live' && (
+            {activeTab !== 'live' && activeTab !== 'newPairs' && (
               <div className="flex max-w-7xl items-center gap-3 text-sm font-medium">
                 {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
                   <button
@@ -1106,47 +1454,45 @@ export default function DiscoverPage() {
                 ))}
               </div>
             )
-          ) : displayed.length > 0 ? (
-            <InterstateTable
-              rows={displayed.map((token, i) => ({
-                token: token as Token,
-                i: i,
-              }))}
-              onQuickBuy={handleQuickBuy}
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              setSort={handleSort}
-              selectedTimeframe={selectedTimeframe}
-              quickBuyAmount={Number(quickBuyAmount) || 0}
-            />
-          ) : (allTokens && Array.isArray(allTokens) && allTokens.length > 0) ? (
-            // Fallback: show raw data immediately if available (even if loading state hasn't updated yet)
-            <InterstateTable
-              rows={allTokens.map((token, i) => ({
-                token: token as Token,
-                i: i,
-              }))}
-              onQuickBuy={handleQuickBuy}
-              sortKey={sortKey}
-              sortDirection={sortDirection}
-              setSort={handleSort}
-              selectedTimeframe={selectedTimeframe}
-              quickBuyAmount={Number(quickBuyAmount) || 0}
-            />
-          ) : tokensLoading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
-              ))}
-            </div>
-          ) : tokenError ? (
-            <div className="py-10 text-center text-red-400">
-              {tokenError}
-            </div>
+          ) : activeTab === 'newPairs' ? (
+            <section aria-label="New Pairs">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-white">New Pairs</h2>
+                {newPairsLoading && (
+                  <span className="text-xs font-medium text-[#9CA3AF]">
+                    Updating…
+                  </span>
+                )}
+              </div>
+
+              {newPairsLoading && processedNewPairs.length === 0 ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
+                  ))}
+                </div>
+              ) : newPairsError ? (
+                <div className="py-10 text-center text-red-400">
+                  {newPairsError}
+                </div>
+              ) : processedNewPairs.length > 0 ? (
+                <InterstateTable
+                  rows={newPairsRows}
+                  onQuickBuy={handleQuickBuy}
+                  sortKey={sortKey}
+                  sortDirection={sortDirection}
+                  setSort={handleSort}
+                  selectedTimeframe={selectedTimeframe}
+                  quickBuyAmount={Number(quickBuyAmount) || 0}
+                />
+              ) : (
+                <div className="py-10 text-center text-[#9CA3AF]">
+                  No new pairs available right now. Check back shortly.
+                </div>
+              )}
+            </section>
           ) : (
-            <div className="py-10 text-center text-[#9CA3AF]">
-              No tokens found.
-            </div>
+            renderPrimaryTable()
           )}
         </main>
 

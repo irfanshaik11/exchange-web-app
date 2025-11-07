@@ -51,6 +51,7 @@ export default function PulsePage() {
   const router = useRouter();
   const chain = router.query.chain as string | undefined;
   const isBnbRoute = chain === 'bnb';
+  const isMonadRoute = chain === 'monad';
   const isSolanaRoute = chain === 'sol' || !chain; // Default to Solana if no chain specified
   const chainButtonBase =
     'relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]';
@@ -62,6 +63,11 @@ export default function PulsePage() {
   const bnbButtonClasses = `${chainButtonBase} ${
     isBnbRoute
       ? 'bg-[#222733] text-white shadow-lg shadow-blue-500/20'
+      : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  }`;
+  const monadButtonClasses = `${chainButtonBase} ${
+    isMonadRoute
+      ? 'bg-[#222733] text-white shadow-lg shadow-purple-500/20'
       : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
   }`;
 
@@ -134,6 +140,22 @@ export default function PulsePage() {
   const [httpNewTick, setHttpNewTick] = useState(0);
   const [httpMigrated, setHttpMigrated] = useState<any[]>([]);
   const [httpMigratedTick, setHttpMigratedTick] = useState(0);
+  const isZeroLiquidityToken = useCallback((token: any) => {
+    if (!token) return false;
+
+    const rawValue = token.liquidity_usd ?? token.total_liquidity_usd;
+    if (rawValue === undefined || rawValue === null || rawValue === '') {
+      return false;
+    }
+
+    const liquidity = Number(rawValue);
+    if (Number.isNaN(liquidity)) {
+      return false;
+    }
+
+    return liquidity === 0;
+  }, []);
+
   const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
 
   const [httpFinalStretchTick, setHttpFinalStretchTick] = useState(0);
@@ -278,6 +300,11 @@ export default function PulsePage() {
       console.log(`[Pulse] 🔄 CALLBACK CALLED - onMigratedToken is working!`);
       console.log(`[Pulse] 🔄 BEFORE onMigratedToken - current httpMigrated count: ${httpMigrated.length}`);
 
+      if (isZeroLiquidityToken(token)) {
+        console.log(`[Pulse] ⛔ Skipping migrated token from websocket due to zero liquidity:`, token?.name, token?.mint);
+        return;
+      }
+
       // Remove from FINAL_STRETCH column
       setHttpFinalStretch(prev => {
         const filtered = prev.filter(t => t.mint !== token.mint);
@@ -381,9 +408,24 @@ export default function PulsePage() {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            setHttpNew(data as any[]);
+            const filteredData = (data as any[]).filter((token) => {
+              if (isZeroLiquidityToken(token)) {
+                console.log('[Pulse] ⛔ Skipping new token with zero liquidity from initial poll:', token?.name, token?.mint);
+                return false;
+              }
+              return true;
+            });
+
+            if (filteredData.length === 0) {
+              console.log('[Pulse] ⚠️ All new tokens filtered due to zero liquidity. Clearing new pairs list.');
+              setHttpNew([]);
+              setHttpNewTick((t) => t + 1);
+              return;
+            }
+
+            setHttpNew(filteredData);
             setHttpNewTick((t) => t + 1);
-            console.log(`[Pulse] Initial poll loaded ${data.length} NEW tokens`);
+            console.log(`[Pulse] Initial poll loaded ${filteredData.length} NEW tokens (after filtering)`);
           }
         }
       } catch (error) {
@@ -421,9 +463,24 @@ export default function PulsePage() {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            setHttpFinalStretch(data as any[]);
+            const filteredData = (data as any[]).filter((token) => {
+              if (isZeroLiquidityToken(token)) {
+                console.log('[Final Stretch] ⛔ Skipping token with zero liquidity from immediate poll:', token?.name, token?.mint);
+                return false;
+              }
+              return true;
+            });
+
+            if (filteredData.length === 0) {
+              console.log('[Final Stretch] ⚠️ All tokens filtered due to zero liquidity. Clearing final stretch list.');
+              setHttpFinalStretch([]);
+              setHttpFinalStretchTick((t) => t + 1);
+              return;
+            }
+
+            setHttpFinalStretch(filteredData as any[]);
             setHttpFinalStretchTick((t) => t + 1);
-            console.log(`[Final Stretch] Immediate poll got ${data.length} tokens`);
+            console.log(`[Final Stretch] Immediate poll got ${filteredData.length} tokens (after filtering)`);
           }
         }
       } catch (error) {
@@ -652,7 +709,13 @@ export default function PulsePage() {
       if (!key) continue;
       if (!uniq.has(key)) uniq.set(key, t);
     }
-    const vals = Array.from(uniq.values());
+    const vals = Array.from(uniq.values()).filter((token) => {
+      if (isZeroLiquidityToken(token)) {
+        console.log('[Pulse] ⛔ buildNewPairs filtered zero-liquidity token:', token?.name, token?.mint);
+        return false;
+      }
+      return true;
+    });
     
     const withTs: any[] = [];
     const withoutTs: any[] = [];
@@ -679,8 +742,18 @@ export default function PulsePage() {
     // Always show timestamped first, then non-timestamped afterwards
     const result = withTs.concat(withoutTs);
     
-    // Final guard: never return empty if we have combinedNewPairs available
-    return result.length > 0 ? result : combinedNewPairs;
+    if (result.length === 0) {
+      const fallback = combinedNewPairs.filter((token) => {
+        if (isZeroLiquidityToken(token)) {
+          console.log('[Pulse] ⛔ buildNewPairs fallback filtered zero-liquidity token:', token?.name, token?.mint);
+          return false;
+        }
+        return true;
+      });
+      return fallback;
+    }
+
+    return result;
   };
 
   const buildMigrated = (): any[] => {
@@ -698,7 +771,13 @@ export default function PulsePage() {
     }
 
     // Use all tokens - migrated_pool_address is optional and may not always be set at migration time
-    const filteredSource = source;
+    const filteredSource = source.filter((token: any) => {
+      if (isZeroLiquidityToken(token)) {
+        console.log('[Pulse] ⛔ buildMigrated filtered zero-liquidity token:', token?.name, token?.mint);
+        return false;
+      }
+      return true;
+    });
 
     const withTs: any[] = [];
     const withoutTs: any[] = [];
@@ -737,9 +816,21 @@ export default function PulsePage() {
       return [];
     }
     
+    const filteredSource = source.filter((token: any) => {
+      if (isZeroLiquidityToken(token)) {
+        console.log('[Final Stretch] ⛔ buildFinalStretch filtered zero-liquidity token:', token?.name, token?.mint);
+        return false;
+      }
+      return true;
+    });
+
+    if (filteredSource.length === 0) {
+      return [];
+    }
+    
     const withTs: any[] = [];
     const withoutTs: any[] = [];
-    for (const t of source) {
+    for (const t of filteredSource) {
       const ts = getTs(t);
       if (ts > 0) withTs.push(t); else withoutTs.push(t);
     }
@@ -882,8 +973,26 @@ export default function PulsePage() {
           const data = await response.json();
           console.log(`[Pulse] 🔄 Fetched ${data.length} migrated tokens from API`);
           if (data.length > 0) {
+            const filteredData = data.filter((token: any) => {
+              if (!token) return false;
+
+              if (isZeroLiquidityToken(token)) {
+                console.log('[Pulse] ⛔ Skipping migrated token with zero liquidity:', token?.name, token?.mint);
+                return false;
+              }
+
+              return true;
+            });
+
+            if (filteredData.length === 0) {
+              console.log('[Pulse] ⚠️ All migrated tokens filtered due to zero liquidity. Clearing migrated list.');
+              setHttpMigrated([]);
+              setHttpMigratedTick(prev => prev + 1);
+              return;
+            }
+
             // Add timestamp to each token for proper sorting
-            const tokensWithTimestamp = data.map((token: any) => ({
+            const tokensWithTimestamp = filteredData.map((token: any) => ({
               ...token,
               created_at: token.migrated_time || new Date().toISOString(),
               timestamp: Date.now()
@@ -1070,6 +1179,20 @@ export default function PulsePage() {
                       Beta
                     </span>
                   </Link>
+                  <Link
+                    href="/pulse?chain=monad"
+                    aria-label="View Monad tokens (coming soon)"
+                    className={monadButtonClasses}
+                  >
+                    <img
+                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                      alt="Monad"
+                      className="h-7 w-7 rounded-full object-cover bg-black/60 p-0.5"
+                    />
+                    <span className="absolute -bottom-1 -right-4 rounded-full border border-purple-400 px-1 py-px text-[7px] font-semibold uppercase tracking-[0.18em] text-purple-300 shadow-lg shadow-purple-500/30" style={{ backgroundColor: '#06070b' }}>
+                      Soon
+                    </span>
+                  </Link>
                 </div>
               </div>
               {/* <PulseControlBar className="mb-0.5" /> */}
@@ -1171,6 +1294,26 @@ export default function PulsePage() {
                 <BnbTable title="Final Stretch" tokens={enrichedFinalStretch as any} showBubbleMetrics={false} />
                 <BnbTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" showBubbleMetrics={false} />
               </div>
+            </div>
+          ) : isMonadRoute ? (
+            <div className="mt-12 flex flex-col items-center justify-center gap-6 rounded-2xl border border-neutral-800/80 bg-[#0a0b10] px-6 py-16 text-center shadow-inner shadow-black/40">
+              <img
+                src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                alt="Monad"
+                className="h-24 w-24 rounded-full object-cover bg-black/60 p-1"
+              />
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold text-neutral-100">Monad support is on the way</h2>
+                <p className="max-w-md text-sm text-neutral-400">
+                  We&apos;re building out dedicated flows for Monad tokens. Check back soon for real-time liquidity and launch data.
+                </p>
+              </div>
+              <button
+                onClick={() => router.push('/pulse?chain=sol')}
+                className="inline-flex items-center gap-2 rounded-full border border-neutral-700/70 bg-neutral-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-200 transition-colors hover:border-emerald-500/60 hover:bg-neutral-800"
+              >
+                Back to Solana
+              </button>
             </div>
           ) : isLoading ? (
             <div className="w-full">
