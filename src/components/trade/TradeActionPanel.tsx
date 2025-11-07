@@ -23,6 +23,7 @@ import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import HighSlippageWarningDialog from "../HighSlippageWarningDialog";
+import LowLiquidityWarningDialog from "../LowLiquidityWarningDialog";
 import { BsCoin, BsPersonGear } from "react-icons/bs";
 import { RiGhostLine } from "react-icons/ri";
 import { LuChefHat } from "react-icons/lu";
@@ -62,6 +63,9 @@ const tabBtn =
 const num = (v: any) => (typeof v === "number" ? v : 0);
 const allowDecimal = (v: string) => /^\d*([.]\d{0,9})?$/.test(v);
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+
+const LOW_LIQUIDITY_WARNING_THRESHOLD = 1_000; // USD
+const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
 
 function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
   const s = side;
@@ -513,15 +517,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
   // High slippage warning dialog state
   const [showSlippageWarning, setShowSlippageWarning] = useState(false);
-  const [bypassSlippageCheck, setBypassSlippageCheck] = useState(false);
+  const [showLiquidityWarning, setShowLiquidityWarning] = useState(false);
+  const [pendingTradeOptions, setPendingTradeOptions] = useState<{ skipLiquidity?: boolean; skipSlippage?: boolean } | null>(null);
   const tradeButtonRef = useRef<HTMLButtonElement>(null);
-
-  // When user confirms high slippage, programmatically trigger the button click
-  useEffect(() => {
-    if (bypassSlippageCheck && tradeButtonRef.current) {
-      tradeButtonRef.current.click();
-    }
-  }, [bypassSlippageCheck]);
 
   // Position data for this token
   const [positionData, setPositionData] = useState<{
@@ -835,6 +833,24 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   // Extract stats for easier access
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
 
+  const liquidityUsd = useMemo(() => {
+    if (!token) return 0;
+    const possibleValues = [
+      token.total_liquidity_usd,
+      (token as any).liquidity_usd,
+      (token as any).liquidityUsd,
+      (token as any).total_liquidityUsd,
+    ];
+    for (const value of possibleValues) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return numeric;
+      }
+    }
+    // Fall back to zero if we have no positive readings
+    return Number(token.total_liquidity_usd) || 0;
+  }, [token]);
+
   // Fetch creator address from token-service
   useEffect(() => {
     const fetchCreatorAddress = async () => {
@@ -899,15 +915,253 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     setPresetDrafts(next.map(String));
   };
 
+  const initiateTrade = useCallback(
+    async (overrides?: { skipLiquidity?: boolean; skipSlippage?: boolean }) => {
+      const options = {
+        skipLiquidity: overrides?.skipLiquidity ?? false,
+        skipSlippage: overrides?.skipSlippage ?? false,
+      };
+
+      setPendingTradeOptions(options);
+
+      if (!user?.bearerToken) {
+        setSuccessMessage(null);
+        showCenteredErrorToast("Authentication required to create orders.");
+        setPendingTradeOptions(null);
+        return;
+      }
+
+      const shouldCheckLiquidity =
+        mode === "buy" && tab === "market" && !options.skipLiquidity;
+
+      if (shouldCheckLiquidity) {
+        setPendingTradeOptions({ ...options, skipLiquidity: true });
+        setShowLiquidityWarning(true);
+        return;
+      }
+
+      const shouldCheckSlippage = tab === "market" && !options.skipSlippage;
+
+      if (shouldCheckSlippage) {
+        const slippagePercent = (settings.maxSlippage || 0.2) * 100;
+        if (slippagePercent >= HIGH_SLIPPAGE_WARNING_THRESHOLD) {
+          setPendingTradeOptions({ ...options, skipSlippage: true });
+          setShowSlippageWarning(true);
+          return;
+        }
+      }
+
+      setPendingTradeOptions(null);
+      setIsLoading(true);
+      setSuccessMessage(null);
+
+      if (tab === "limit") {
+        if (!amount || !targetMC) {
+          setSuccessMessage(null);
+          showCenteredErrorToast("Amount and Target Market Cap are required for limit orders.");
+          setIsLoading(false);
+          return;
+        }
+        const numericAmount = Number(amount);
+        const numericTargetMC = Number(targetMC);
+        if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+          setSuccessMessage(null);
+          showCenteredErrorToast("Enter a valid amount.");
+          setIsLoading(false);
+          return;
+        }
+        if (!Number.isFinite(numericTargetMC) || numericTargetMC <= 0) {
+          setSuccessMessage(null);
+          showCenteredErrorToast("Enter a valid target market cap.");
+          setIsLoading(false);
+          return;
+        }
+        let pendingToastId: string | null = null;
+        let clearToastTimeout = () => undefined;
+        try {
+          pendingToastId = showTransactionPendingToast("Attempting transaction...");
+          clearToastTimeout = startTransactionToastTimeout(pendingToastId);
+          await createLimitOrder(
+            {
+              tokenAddress: token.mint || "",
+              amount: Number(amount),
+              type: mode === "buy" ? "Buy" : "Sell",
+              direction: "Above",
+              targetMC: Number(targetMC),
+              currentPrice: token.usd_price,
+              currentMarketCap: token.market_cap_usd || token.fully_diluted_value,
+              tokenName: token.name,
+              tokenSymbol: token.symbol,
+              tokenDecimals: token.decimals,
+              poolAddress: effectivePoolAddress,
+              pairAddress: token.pair_address || "",
+              poolType: getPoolTypeFromToken(token),
+            },
+            user.bearerToken
+          );
+          clearToastTimeout();
+          updateTransactionToast(
+            pendingToastId,
+            "success",
+            `✅ Limit order for ${token.symbol} created successfully!`
+          );
+          setSuccessMessage(`Limit order for ${token.symbol} created successfully!`);
+          setAmount("");
+          setTargetMC("");
+        } catch (error: any) {
+          clearToastTimeout();
+          const errorMsg =
+            error.message?.length > 60 ? `${error.message.substring(0, 57)}...` : error.message || "Failed to create limit order";
+          updateTransactionToast(pendingToastId, "error", `❌ Failed to create limit order: ${errorMsg}`);
+          setSuccessMessage(null);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      if (mode === "buy") {
+        const requested = Number(amount || 0);
+        if (!requested || requested <= 0) {
+          setIsLoading(false);
+          setSuccessMessage(null);
+          showEnhancedToast("error", "Please enter a valid SOL amount", {
+            title: "Invalid Amount",
+          });
+          return;
+        }
+      } else if (mode === "sell") {
+        const percentage = Number(amount || 0);
+        if (!percentage || percentage <= 0) {
+          setIsLoading(false);
+          setSuccessMessage(null);
+          showEnhancedToast("error", "Please enter a valid percentage", {
+            title: "Invalid Percentage",
+          });
+          return;
+        }
+        if (percentage > 100) {
+          setIsLoading(false);
+          setSuccessMessage(null);
+          showEnhancedToast("error", "Percentage cannot exceed 100%", {
+            title: "Invalid Percentage",
+          });
+          return;
+        }
+      }
+
+      const result = await executeEnhancedTrade({
+        token,
+        amount: Number(amount),
+        side: mode,
+        settings,
+        user: { bearerToken: user.bearerToken, id: user.id },
+        solBalance: Number(solBalance),
+        solPriceUsd: 150,
+        onSuccess: async (txHash, stats) => {
+          console.log("✅ Enhanced Trade successful:", { txHash, stats });
+          setSuccessMessage(
+            `✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${stats.tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(
+              txHash
+            ).slice(0, 8)}...`
+          );
+
+          setTimeout(async () => {
+            try {
+              const trades = await getTradeActivityByUser(user.id.toString());
+              const tokenTrades = trades.filter(
+                (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+              );
+
+              if (tokenTrades.length > 0) {
+                let bought = 0;
+                let boughtUsdValue = 0;
+                let sold = 0;
+                let soldUsdValue = 0;
+
+                tokenTrades.forEach((trade: any) => {
+                  if (trade.type === "Buy") {
+                    bought += Number(trade.tokenAmount) || 0;
+                    boughtUsdValue += Number(trade.usdValue) || 0;
+                  } else if (trade.type === "Sell") {
+                    sold += Number(trade.tokenAmount) || 0;
+                    soldUsdValue += Number(trade.usdValue) || 0;
+                  }
+                });
+
+                const remaining = bought - sold;
+                const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
+                const remainingUsdValue = remaining * avgBoughtPrice;
+                const pnl = soldUsdValue + remainingUsdValue - boughtUsdValue;
+                const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
+
+                const newData = {
+                  bought,
+                  boughtUsdValue,
+                  sold,
+                  soldUsdValue,
+                  remaining,
+                  remainingUsdValue,
+                  pnl,
+                  pnlPercentage,
+                };
+
+                setPositionData(newData);
+                console.log("🔄 TradeActionPanel - Position data refreshed after trade:", newData);
+              }
+            } catch (error) {
+              console.error("Error refreshing position data:", error);
+            }
+          }, 2000);
+        },
+        onError: (error) => {
+          console.error("❌ Enhanced Trade failed:", error);
+          setSuccessMessage(null);
+        },
+        onWarning: (warnings) => {
+          console.warn("⚠️ Pre-transaction warnings:", warnings);
+        },
+      });
+
+      setIsLoading(false);
+
+      return result;
+    },
+    [
+      amount,
+      mode,
+      settings,
+      solBalance,
+      tab,
+      targetMC,
+      token,
+      user,
+      effectivePoolAddress,
+    ]
+  );
+
   // High slippage warning handlers
   const handleSlippageWarningContinue = useCallback(() => {
     setShowSlippageWarning(false);
-    setBypassSlippageCheck(true); // Set flag to bypass check and continue with trade
-  }, []);
+    const next = { ...(pendingTradeOptions || {}), skipSlippage: true };
+    void initiateTrade(next);
+  }, [pendingTradeOptions, initiateTrade]);
 
   const handleSlippageWarningCancel = useCallback(() => {
     setShowSlippageWarning(false);
-    setBypassSlippageCheck(false);
+    setPendingTradeOptions(null);
+    setIsLoading(false);
+  }, []);
+
+  const handleLiquidityWarningContinue = useCallback(() => {
+    setShowLiquidityWarning(false);
+    const next = { ...(pendingTradeOptions || {}), skipLiquidity: true };
+    void initiateTrade(next);
+  }, [pendingTradeOptions, initiateTrade]);
+
+  const handleLiquidityWarningCancel = useCallback(() => {
+    setShowLiquidityWarning(false);
+    setPendingTradeOptions(null);
     setIsLoading(false);
   }, []);
 
@@ -1532,212 +1786,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             mode === "buy" ? "bg-[#70E0B0] text-black hover:bg-[#58B890]" : "bg-[#FF4D7F] text-black hover:opacity-90"
           )}
           disabled={!amount || isLoading || (tab === "limit" && !targetMC)}
-          onClick={async () => {
-            if (!user?.bearerToken) {
-              setSuccessMessage(null);
-              showCenteredErrorToast("Authentication required to create orders.");
-              return;
-            }
-
-            // Check for high slippage BEFORE executing market trades (not limit orders)
-            if (tab === "market" && !bypassSlippageCheck) {
-              const slippagePercent = (settings.maxSlippage || 0.2) * 100;
-              const HIGH_SLIPPAGE_THRESHOLD = 50;
-
-              if (slippagePercent >= HIGH_SLIPPAGE_THRESHOLD) {
-                setIsLoading(true); // Show loading state
-                setShowSlippageWarning(true);
-                return; // Don't execute yet, wait for user confirmation
-              }
-            }
-
-            // Reset bypass flag for next trade
-            if (bypassSlippageCheck) {
-              setBypassSlippageCheck(false);
-            }
-
-            // Continue with normal flow
-            setIsLoading(true);
-            setSuccessMessage(null);
-
-            if (tab === "limit") {
-              if (!amount || !targetMC) {
-                setSuccessMessage(null);
-                showCenteredErrorToast("Amount and Target Market Cap are required for limit orders.");
-                setIsLoading(false);
-                return;
-              }
-              const numericAmount = Number(amount);
-              const numericTargetMC = Number(targetMC);
-              if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-                setSuccessMessage(null);
-                showCenteredErrorToast("Enter a valid amount.");
-                setIsLoading(false);
-                return;
-              }
-              if (!Number.isFinite(numericTargetMC) || numericTargetMC <= 0) {
-                setSuccessMessage(null);
-                showCenteredErrorToast("Enter a valid target market cap.");
-                setIsLoading(false);
-                return;
-              }
-              let pendingToastId: string | null = null;
-              let clearToastTimeout = () => undefined;
-              try {
-                pendingToastId = showTransactionPendingToast("Attempting transaction...");
-                clearToastTimeout = startTransactionToastTimeout(pendingToastId);
-                await createLimitOrder(
-                  {
-                    tokenAddress: token.mint || '', // Use token mint address, not pool address
-                    amount: Number(amount),
-                    type: mode === "buy" ? "Buy" : "Sell",
-                    direction: "Above",
-                    targetMC: Number(targetMC),
-                    // Send context data from frontend
-                    currentPrice: token.usd_price,
-                    currentMarketCap: token.market_cap_usd || token.fully_diluted_value,
-                    tokenName: token.name,
-                    tokenSymbol: token.symbol,
-                    tokenDecimals: token.decimals,
-                    poolAddress: effectivePoolAddress, // For trading: migrated_pool_address || pair_address
-                    pairAddress: token.pair_address || '', // For market cap tracking: always pair_address
-                    poolType: getPoolTypeFromToken(token),
-                  },
-                  user.bearerToken
-                );
-                clearToastTimeout();
-                updateTransactionToast(
-                  pendingToastId,
-                  "success",
-                  `✅ Limit order for ${token.symbol} created successfully!`
-                );
-                setSuccessMessage(`Limit order for ${token.symbol} created successfully!`);
-                setAmount("");
-                setTargetMC("");
-              } catch (error: any) {
-                clearToastTimeout();
-                const errorMsg = error.message?.length > 60 
-                  ? error.message.substring(0, 57) + '...' 
-                  : error.message || 'Failed to create limit order';
-                updateTransactionToast(
-                  pendingToastId,
-                  "error",
-                  `❌ Failed to create limit order: ${errorMsg}`
-                );
-                setSuccessMessage(null);
-              } finally {
-                setIsLoading(false);
-              }
-              return;
-            }
-
-            // Market flow
-            // Basic input validation only - enhanced trade handler will do full validation
-            if (mode === "buy") {
-              const requested = Number(amount || 0);
-              if (!requested || requested <= 0) {
-                setIsLoading(false);
-                setSuccessMessage(null);
-                showEnhancedToast('error', 'Please enter a valid SOL amount', {
-                  title: 'Invalid Amount',
-                });
-                return;
-              }
-            } else if (mode === "sell") {
-              const percentage = Number(amount || 0);
-              if (!percentage || percentage <= 0) {
-                setIsLoading(false);
-                setSuccessMessage(null);
-                showEnhancedToast('error', 'Please enter a valid percentage', {
-                  title: 'Invalid Percentage',
-                });
-                return;
-              }
-              if (percentage > 100) {
-                setIsLoading(false);
-                setSuccessMessage(null);
-                showEnhancedToast('error', 'Percentage cannot exceed 100%', {
-                  title: 'Invalid Percentage',
-                });
-                return;
-              }
-            }
-
-            // Use enhanced trade handler for better UX (includes all pre-validation)
-            console.log(`🔍 Trading ${token.symbol} - Using Enhanced Trade Handler`);
-            console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
-
-            const result = await executeEnhancedTrade({
-              token,
-              amount: Number(amount),
-              side: mode,
-              settings,
-              user: { bearerToken: user.bearerToken, id: user.id },
-              solBalance: Number(solBalance),
-              solPriceUsd: 150, // Get real SOL price if available
-              onSuccess: async (txHash, stats) => {
-                console.log('✅ Enhanced Trade successful:', { txHash, stats });
-                setSuccessMessage(`✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${stats.tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`);
-                
-                // Refresh position data after successful trade
-                setTimeout(async () => {
-                  try {
-                    const trades = await getTradeActivityByUser(user.id.toString());
-                    const tokenTrades = trades.filter((trade: any) => 
-                      trade.tokenAddress?.toLowerCase() === (token.mint || '').toLowerCase()
-                    );
-                    
-                    if (tokenTrades.length > 0) {
-                      let bought = 0;
-                      let boughtUsdValue = 0;
-                      let sold = 0;
-                      let soldUsdValue = 0;
-                      
-                      tokenTrades.forEach((trade: any) => {
-                        if (trade.type === 'Buy') {
-                          bought += Number(trade.tokenAmount) || 0;
-                          boughtUsdValue += Number(trade.usdValue) || 0;
-                        } else if (trade.type === 'Sell') {
-                          sold += Number(trade.tokenAmount) || 0;
-                          soldUsdValue += Number(trade.usdValue) || 0;
-                        }
-                      });
-                      
-                      const remaining = bought - sold;
-                      const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
-                      const remainingUsdValue = remaining * avgBoughtPrice;
-                      const pnl = (soldUsdValue + remainingUsdValue) - boughtUsdValue;
-                      const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
-                      
-                      const newData = {
-                        bought,
-                        boughtUsdValue,
-                        sold,
-                        soldUsdValue,
-                        remaining,
-                        remainingUsdValue,
-                        pnl,
-                        pnlPercentage,
-                      };
-                      
-                      setPositionData(newData);
-                      console.log('🔄 TradeActionPanel - Position data refreshed after trade:', newData);
-                    }
-                  } catch (error) {
-                    console.error('Error refreshing position data:', error);
-                  }
-                }, 2000);
-              },
-              onError: (error) => {
-                console.error('❌ Enhanced Trade failed:', error);
-                setSuccessMessage(null);
-              },
-              onWarning: (warnings) => {
-                console.warn('⚠️ Pre-transaction warnings:', warnings);
-              },
-            });
-
-            setIsLoading(false);
+          onClick={() => {
+            void initiateTrade();
           }}
         >
           {isLoading ? (
@@ -1942,6 +1992,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         slippagePercent={(settings.maxSlippage || 0.2) * 100}
         onContinue={handleSlippageWarningContinue}
         onCancel={handleSlippageWarningCancel}
+      />
+      <LowLiquidityWarningDialog
+        isOpen={showLiquidityWarning}
+        liquidityUsd={Number(liquidityUsd) || 0}
+        thresholdUsd={LOW_LIQUIDITY_WARNING_THRESHOLD}
+        onContinue={handleLiquidityWarningContinue}
+        onCancel={handleLiquidityWarningCancel}
       />
     </div>
   );
