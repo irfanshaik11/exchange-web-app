@@ -1,3 +1,4 @@
+import { RiExchangeDollarLine } from "react-icons/ri";
 import React from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
@@ -49,6 +50,18 @@ function percentile(arr: number[], p: number) {
   if (lo === hi) return a[lo];
   const w = idx - lo;
   return a[lo] * (1 - w) + a[hi] * w;
+}
+
+// Nicely format a USD price for the MC/Price column
+function formatUsdPrice(value: number | null | undefined): string {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v <= 0) return '-';
+
+  if (v >= 1) return `$${v.toFixed(2)}`;
+  if (v >= 0.01) return `$${v.toFixed(4)}`;
+  if (v >= 0.0001) return `$${v.toFixed(6)}`;
+  // very tiny prices → scientific
+  return `$${v.toExponential(2)}`;
 }
 
 /** Normalize trade shapes into a single structure */
@@ -160,58 +173,6 @@ function heatBarGradient(isBuy: boolean, intensity01: number) {
   }) 60%, rgba(${rgb}, 0) 100%)`;
 }
 
-/** Icon: dollar with circular arrows, color comes from currentColor */
-const UsdSolToggleIcon: React.FC<{ active: boolean }> = ({ active }) => (
-  <svg
-    className={`h-4 w-4 ${active ? 'text-emerald-300' : 'text-neutral-400'}`}
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-  >
-    {/* outer circular arrows */}
-    <path
-      d="M7 6h3.6A5.4 5.4 0 0 1 16 11.4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M14.2 5 11.5 4 12 6.9"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M17 18h-3.6A5.4 5.4 0 0 1 8 12.6"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M9.8 19 12.5 20 12 17.1"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    {/* dollar sign */}
-    <path
-      d="M12 8.2v7.6M10.3 9.4C10.7 8.7 11.3 8.4 12 8.4c1 0 1.8.6 1.8 1.5 0 1-.7 1.4-1.8 1.7-1.1.3-1.8.7-1.8 1.7 0 .9.8 1.5 1.8 1.5.7 0 1.3-.3 1.7-1"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
 /** Static MC header icon: left/right arrows */
 const McHeaderIcon: React.FC = () => (
   <svg
@@ -304,6 +265,7 @@ const SolanaIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
 const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
   const [showAge, setShowAge] = React.useState(true); // true = Age, false = Time
   const [totalMode, setTotalMode] = React.useState<'usd' | 'sol'>('usd');
+  const [mcMode, setMcMode] = React.useState<'mc' | 'price'>('mc'); // MC vs Price toggle
 
   const stableToken = React.useMemo(() => {
     if (!token) return null;
@@ -428,35 +390,45 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
   return (
     <div className="w-full h-full flex flex-col">
       <div className="flex-1 overflow-y-auto pb-18">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs border-collapse">
           <thead className="sticky top-0 bg-gray-900 z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
               {/* Age / Time */}
-              <th className="pl-2 pr-1 py-2 text-left">
+              <th className="w-[172px] pl-2 pr-0 py-2 text-left">
                 <button
                   type="button"
                   onClick={() => setShowAge(prev => !prev)}
-                  className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white"
+                  className="inline-flex items-center gap-0.5 text-[11px] text-neutral-300 hover:text-white"
                 >
                   <span className="font-medium">
                     {showAge ? 'Age ↓' : 'Time ↓'}
                   </span>
-                  <span className="text-xs text-neutral-400">
+                  <span className="text-[10px] text-neutral-400">
                     / {showAge ? 'Time' : 'Age'}
                   </span>
-                  <span className="text-xs text-neutral-500">▾</span>
+                  <span className="text-[10px] text-neutral-500">▾</span>
                 </button>
               </th>
 
               {/* Type */}
-              <th className="pl-1 pr-2 py-2 text-left">Type</th>
+              <th className="pl-0 pr-2 py-2 text-left">
+                Type
+              </th>
 
-              {/* MC column with icon */}
+              {/* MC / Price column with icon */}
               <th className="px-2 py-2 text-left">
-                <div className="inline-flex items-center gap-1">
-                  <span>MC</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMcMode(prev => (prev === 'mc' ? 'price' : 'mc'))
+                  }
+                  className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white"
+                >
+                  <span className="font-medium">
+                    {mcMode === 'mc' ? 'MC' : 'Price'}
+                  </span>
                   <McHeaderIcon />
-                </div>
+                </button>
               </th>
 
               {/* Amount */}
@@ -474,7 +446,13 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                   <span className="font-medium">
                     {totalMode === 'usd' ? 'Total USD' : 'Total SOL'}
                   </span>
-                  <UsdSolToggleIcon active={totalMode === 'usd'} />
+                  <RiExchangeDollarLine
+                    className={
+                      totalMode === 'usd'
+                        ? 'h-4 w-4 text-emerald-300 drop-shadow-[0_0_6px_rgba(16,185,129,0.9)]'
+                        : 'h-4 w-4 text-neutral-400'
+                    }
+                  />
                 </button>
               </th>
 
@@ -508,7 +486,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                   ? `$${n.totalUSD.toFixed(2)}`
                   : '$0.00';
 
-                // MC: (trade price or fallback token price) * supply
+                // MC & Price: (trade price or fallback token price)
                 const unitPriceUsd =
                   Number.isFinite(n.pricePerToken) && n.pricePerToken > 0
                     ? n.pricePerToken
@@ -520,6 +498,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                     : null;
 
                 const mcStr = mc !== null ? `$${formatSmartNumber(mc)}` : '-';
+                const priceStr = formatUsdPrice(unitPriceUsd);
 
                 const intensityUsd = scaleAmt(n.totalUSD);
                 const gradientUsd = heatBarGradient(n.isBuy, intensityUsd);
@@ -548,22 +527,22 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                     className="border-b border-neutral-800 hover:bg-neutral-800/60"
                   >
                     {/* Age / Time */}
-                    <td className="pl-2 pr-1 py-2 text-neutral-300">
+                    <td className="w-[172px] pl-2 pr-0 py-2 text-neutral-300">
                       {showAge ? age : timeStr}
                     </td>
 
                     {/* Type */}
                     <td
-                      className={`pl-1 pr-2 py-2 font-semibold ${
+                      className={`pl-0 pr-2 py-2 font-semibold ${
                         n.isBuy ? 'text-emerald-400' : 'text-red-400'
                       }`}
                     >
                       {typeLabel}
                     </td>
 
-                    {/* MC */}
+                    {/* MC / Price */}
                     <td className="px-2 py-2 text-neutral-300">
-                      {mcStr}
+                      {mcMode === 'mc' ? mcStr : priceStr}
                     </td>
 
                     {/* Amount */}
@@ -624,20 +603,26 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
               })
             )}
           </tbody>
-        </table>
 
-        {!!p95Display && (
-          <div className="px-2 py-2 text-[10px] text-neutral-500 flex items-center gap-2">
-            <span className="inline-block">
-              Total heat = relative to ~95th percentile
-            </span>
-            <span className="ml-auto">
-              {totalMode === 'usd'
-                ? `p95: $${p95Display.toFixed(2)}`
-                : `p95: ${p95Display.toFixed(4)} SOL`}
-            </span>
-          </div>
-        )}
+          {!!p95Display && (
+            <tfoot>
+              <tr>
+                <td colSpan={6}>
+                  <div className="px-2 py-2 text-[10px] text-neutral-500 flex items-center gap-2">
+                    <span className="inline-block">
+                      Total heat = relative to ~95th percentile
+                    </span>
+                    <span className="ml-auto">
+                      {totalMode === 'usd'
+                        ? `p95: $${p95Display.toFixed(2)}`
+                        : `p95: ${p95Display.toFixed(4)} SOL`}
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
       </div>
     </div>
   );
