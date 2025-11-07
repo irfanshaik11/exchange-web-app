@@ -13,7 +13,6 @@ import {
 } from "react-icons/fa";
 import InterstateTooltip from "./InterstateTooltip";
 import InterstateButton from "./InterstateButton";
-import toast from "react-hot-toast";
 import CustomCheckbox from './CustomCheckbox';
 
 const presetLabels = ["PRESET 1", "PRESET 2", "PRESET 3"];
@@ -110,6 +109,27 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
     sideProp || "buy"
   );
   const [expanded, setExpanded] = useState(false);
+  
+  // Local input state for proper editing (allows empty strings during typing)
+  const [slippageInput, setSlippageInput] = useState<string>("");
+  const [priorityInput, setPriorityInput] = useState<string>("");
+  const [bribeInput, setBribeInput] = useState<string>("");
+  const [lastSyncedKey, setLastSyncedKey] = React.useState<string>("");
+  
+  // Sync local input state with settings when preset/side changes (not on every preset update)
+  React.useEffect(() => {
+    const currentKey = `${activePreset}-${side}`;
+    // Only sync if we've switched preset or side
+    if (currentKey !== lastSyncedKey) {
+      const currentSettings = side === "buy"
+        ? presets[activePreset].quickBuySettings
+        : presets[activePreset].quickSellSettings;
+      setSlippageInput((currentSettings.maxSlippage * 100).toString());
+      setPriorityInput(currentSettings.priority.toString());
+      setBribeInput(currentSettings.bribe.toString());
+      setLastSyncedKey(currentKey);
+    }
+  }, [activePreset, side, presets, lastSyncedKey]);
 
   // Helper to update a field in the correct preset and side
   const updateSetting = (key: keyof QuickBuySettings, value: any) => {
@@ -213,30 +233,34 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
           <div className="flex flex-col items-center rounded-lg border border-[#2A2B33] overflow-hidden">
             <div className="relative w-full flex items-center justify-center bg-[#17191E]">
               <input
-                type="number"
-                min={0.1}
-                max={100}
-                step={0.01}
+                type="text"
+                inputMode="decimal"
                 className="w-full bg-[#17191E] text-center text-[#E6E7EA] py-2 text-sm outline-none border-b border-[#2A2B33] rounded-t-lg [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                 style={{ textAlign: 'center', lineHeight: '1.5' }}
-                value={settings.maxSlippage * 100}
+                value={slippageInput}
                 onChange={e => {
-                  let val = Number(e.target.value);
-                  // Clamp between 0.1 and 100
-                  if (val < 0.1 && val !== 0) val = 0.1; // Allow 0 for typing, will be clamped on blur
-                  if (val > 100) val = 100;
-                  // Round to 2 decimal places
-                  val = Math.round(val * 100) / 100;
-                  updateSetting('maxSlippage', val / 100);
-                }}
-                onBlur={e => {
-                  // On blur, ensure minimum of 0.1%
-                  let val = Number(e.target.value);
-                  if (val < 0.1) {
-                    val = 0.1;
-                    updateSetting('maxSlippage', val / 100);
+                  const val = e.target.value;
+                  // Allow empty string, numbers, and single decimal point
+                  if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                    setSlippageInput(val);
+                    const numVal = Number(val);
+                    if (!isNaN(numVal) && val !== "") {
+                      updateSetting('maxSlippage', numVal / 100);
+                    }
                   }
                 }}
+                onBlur={e => {
+                  const numVal = Number(e.target.value);
+                  if (isNaN(numVal) || e.target.value === "") {
+                    // Reset to current setting if invalid
+                    setSlippageInput((settings.maxSlippage * 100).toString());
+                  } else {
+                    // Ensure it's synced
+                    updateSetting('maxSlippage', numVal / 100);
+                    setSlippageInput(numVal.toString());
+                  }
+                }}
+                onFocus={e => e.target.select()}
                 onWheel={e => (e.target as HTMLInputElement).blur()}
               />
               <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-[#9CA3AF]">%</span>
@@ -249,29 +273,34 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
           <div className="flex flex-col items-center rounded-lg border border-[#2A2B33] overflow-hidden">
             <div className="w-full flex items-center justify-center bg-[#17191E]">
               <input
-                type="number"
-                min={0.0001}
-                max={10.0}
-                step={0.0001}
+                type="text"
+                inputMode="decimal"
                 className="w-full bg-[#17191E] text-center text-[#E6E7EA] py-2 text-sm outline-none border-b border-[#2A2B33] rounded-t-lg [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                 style={{ textAlign: 'center', lineHeight: '1.5' }}
-                value={settings.priority}
+                value={priorityInput}
                 onChange={e => {
-                  let val = Number(e.target.value);
-                  // Allow 0 during typing, clamp max
-                  if (val > 10.0) val = 10.0;
-                  // Round to 6 decimal places
-                  val = Math.round(val * 1000000) / 1000000;
-                  updateSetting('priority', val);
-                }}
-                onBlur={e => {
-                  let val = Number(e.target.value);
-                  if (val < 0.0001) {
-                    toast.error('Priority fee cannot be 0 or negative. Minimum is 0.0001 SOL');
-                    val = 0.0001;
-                    updateSetting('priority', val);
+                  const val = e.target.value;
+                  // Allow empty string, numbers, negative sign, and decimal point
+                  if (val === "" || /^-?\d*\.?\d*$/.test(val)) {
+                    setPriorityInput(val);
+                    const numVal = Number(val);
+                    if (!isNaN(numVal) && val !== "" && val !== "-") {
+                      updateSetting('priority', numVal);
+                    }
                   }
                 }}
+                onBlur={e => {
+                  const numVal = Number(e.target.value);
+                  if (isNaN(numVal) || e.target.value === "" || e.target.value === "-") {
+                    // Reset to current setting if invalid
+                    setPriorityInput(settings.priority.toString());
+                  } else {
+                    // Ensure it's synced
+                    updateSetting('priority', numVal);
+                    setPriorityInput(numVal.toString());
+                  }
+                }}
+                onFocus={e => e.target.select()}
                 onWheel={e => (e.target as HTMLInputElement).blur()}
               />
             </div>
@@ -283,30 +312,34 @@ const QuickBuy: React.FC<QuickBuyProps> = ({
           <div className="flex flex-col items-center rounded-lg border border-[#2A2B33] overflow-hidden">
             <div className="w-full flex items-center justify-center bg-[#17191E]">
               <input
-                type="number"
-                min={0}
-                max={10.0}
-                step={0.0001}
+                type="text"
+                inputMode="decimal"
                 className="w-full bg-[#17191E] text-center text-[#E6E7EA] py-2 text-sm outline-none border-b border-[#2A2B33] rounded-t-lg [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                 style={{ textAlign: 'center', lineHeight: '1.5' }}
-                value={settings.bribe}
+                value={bribeInput}
                 onChange={e => {
-                  let val = Number(e.target.value);
-                  // Clamp max (allow 0 for bribe, it's optional)
-                  if (val < 0) val = 0;
-                  if (val > 10.0) val = 10.0;
-                  // Round to 6 decimal places
-                  val = Math.round(val * 1000000) / 1000000;
-                  updateSetting('bribe', val);
-                }}
-                onBlur={e => {
-                  let val = Number(e.target.value);
-                  if (val < 0) {
-                    toast.error('Bribe fee cannot be negative. Set to 0 SOL');
-                    val = 0;
-                    updateSetting('bribe', val);
+                  const val = e.target.value;
+                  // Allow empty string, numbers, negative sign, and decimal point
+                  if (val === "" || /^-?\d*\.?\d*$/.test(val)) {
+                    setBribeInput(val);
+                    const numVal = Number(val);
+                    if (!isNaN(numVal) && val !== "" && val !== "-") {
+                      updateSetting('bribe', numVal);
+                    }
                   }
                 }}
+                onBlur={e => {
+                  const numVal = Number(e.target.value);
+                  if (isNaN(numVal) || e.target.value === "" || e.target.value === "-") {
+                    // Reset to current setting if invalid
+                    setBribeInput(settings.bribe.toString());
+                  } else {
+                    // Ensure it's synced
+                    updateSetting('bribe', numVal);
+                    setBribeInput(numVal.toString());
+                  }
+                }}
+                onFocus={e => e.target.select()}
                 onWheel={e => (e.target as HTMLInputElement).blur()}
               />
             </div>

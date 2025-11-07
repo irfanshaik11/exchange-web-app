@@ -31,9 +31,9 @@ export interface QuickBuyPreset {
 }
 
 const defaultSettings: QuickBuySettings = {
-  maxSlippage: 0.2,
+  maxSlippage: 0.2, // 20%
   priority: 0.001,
-  bribe: 0.00,
+  bribe: 0, // No bribe by default (was 0.01)
   mevMode: 'off',
   autoFee: false,
   maxFee: 0,
@@ -48,25 +48,22 @@ const defaultPresets: QuickBuyPreset[] = [
 
 const QuickBuyContext = createContext<QuickBuyContextType | undefined>(undefined);
 
-// Helper function to validate and clamp settings
+// Helper function to validate settings (no clamping - allows free editing)
 function validateSettings(settings: QuickBuySettings): QuickBuySettings {
+  // Just return settings as-is, allowing any values
+  // Only ensure numbers are valid (not NaN)
   const validated = { ...settings };
-
-  // Validate slippage: min 0.001 (0.1%), max 1.0 (100%), round to 4 decimals
-  if (validated.maxSlippage < 0.001) validated.maxSlippage = 0.001;
-  if (validated.maxSlippage > 1.0) validated.maxSlippage = 1.0;
-  validated.maxSlippage = Math.round(validated.maxSlippage * 10000) / 10000;
-
-  // Validate priority: min 0.0001 SOL, max 10.0 SOL, round to 6 decimals
-  if (validated.priority < 0.0001) validated.priority = 0.0001;
-  if (validated.priority > 10.0) validated.priority = 10.0;
-  validated.priority = Math.round(validated.priority * 1000000) / 1000000;
-
-  // Validate bribe: min 0 SOL (optional), max 10.0 SOL, round to 6 decimals
-  if (validated.bribe < 0) validated.bribe = 0;
-  if (validated.bribe > 10.0) validated.bribe = 10.0;
-  validated.bribe = Math.round(validated.bribe * 1000000) / 1000000;
-
+  
+  if (isNaN(validated.maxSlippage) || validated.maxSlippage === null || validated.maxSlippage === undefined) {
+    validated.maxSlippage = defaultSettings.maxSlippage;
+  }
+  if (isNaN(validated.priority) || validated.priority === null || validated.priority === undefined) {
+    validated.priority = defaultSettings.priority;
+  }
+  if (isNaN(validated.bribe) || validated.bribe === null || validated.bribe === undefined) {
+    validated.bribe = defaultSettings.bribe;
+  }
+  
   return validated;
 }
 
@@ -77,11 +74,12 @@ export function QuickBuyProvider({ children }: { children: ReactNode }) {
     // Moved inside function to avoid running during render
     if (typeof window !== 'undefined') {
       // Only remove on first load, not every render
-      const shouldReset = sessionStorage.getItem('quickBuySettingsReset') !== 'true';
+      // Updated reset key to force new reset with bribe = 0 default
+      const shouldReset = sessionStorage.getItem('quickBuySettingsReset_v2') !== 'true';
       if (shouldReset) {
         localStorage.removeItem('quickBuySettings');
-        sessionStorage.setItem('quickBuySettingsReset', 'true');
-        console.log('🧹 Cleared localStorage quickBuySettings');
+        sessionStorage.setItem('quickBuySettingsReset_v2', 'true');
+        console.log('🧹 Cleared localStorage quickBuySettings (forced reset for bribe fix)');
         console.log('🔧 Default settings:', defaultSettings);
       }
     }

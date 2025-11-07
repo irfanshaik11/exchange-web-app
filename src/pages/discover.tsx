@@ -15,6 +15,8 @@ import FilterPopout from '../components/FilterPopout';
 import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { showCenteredErrorToast, showTransactionPendingToast, startTransactionToastTimeout, updateTransactionToast } from "~/utils/toast";
+import { executeEnhancedTrade, type EnhancedTradeParams } from "~/utils/enhancedTradeHandler";
+import { showEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
@@ -390,9 +392,8 @@ export default function DiscoverPage() {
         console.log("\n❌ QUICK BUY FAILED:");
         console.log("  Response:", JSON.stringify(data, null, 2));
         console.log("  Missing transaction hash");
-        updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
-        showCenteredErrorToast("❌ Quick Buy failed - no transaction hash returned");
         clearToastTimeout();
+        updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
       const logFn = (e as any)?.expected ? console.warn : console.error;
@@ -407,36 +408,29 @@ export default function DiscoverPage() {
 
       logFn('Quick Buy error:', e);
 
+      // Always clear timeout and update pending toast on error
+      clearToastTimeout();
+      
       if (e instanceof ApiError) {
-        clearToastTimeout();
         if (e.code === 'NO_ACTIVE_POOL') {
           updateTransactionToast(pendingToastId, "error", `⚠️ Pool unavailable for ${token.symbol}`);
-          showCenteredErrorToast(`⚠️ Pool unavailable for ${token.symbol}`);
         } else if (e.code === 'INSUFFICIENT_BALANCE') {
           updateTransactionToast(pendingToastId, "error", `⚠️ Insufficient balance`);
-          showCenteredErrorToast(`⚠️ Insufficient balance`);
         } else if (e.code === 'TX_FAILED') {
           updateTransactionToast(pendingToastId, "error", `❌ Trade failed. Try adjusting slippage or amount.`);
-          showCenteredErrorToast(`❌ Trade failed. Try adjusting slippage or amount.`);
         } else if (e.code === 'NO_HOLDINGS') {
           updateTransactionToast(pendingToastId, "error", `❌ No ${token.symbol} to sell`);
-          showCenteredErrorToast(`❌ No ${token.symbol} to sell`);
         } else if (e.code === 'AMOUNT_TOO_SMALL') {
           updateTransactionToast(pendingToastId, "error", `❌ Amount too small (min 0.001 SOL)`);
-          showCenteredErrorToast(`❌ Amount too small (min 0.001 SOL)`);
         } else if (e.code === 'POOL_UNAVAILABLE') {
           updateTransactionToast(pendingToastId, "error", `⚠️ Pool has insufficient liquidity`);
-          showCenteredErrorToast(`⚠️ Pool has insufficient liquidity`);
         } else {
           const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
           updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
-          showCenteredErrorToast(`❌ ${msg}`);
         }
       } else {
         // Unexpected error - show generic message
         updateTransactionToast(pendingToastId, "error", "❌ Trade failed. Please try again.");
-        showCenteredErrorToast(`❌ Trade failed. Please try again.`);
-        clearToastTimeout();
       }
     }
   };
