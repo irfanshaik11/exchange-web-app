@@ -16,6 +16,8 @@ import {
   startTransactionToastTimeout,
   updateTransactionToast,
 } from "~/utils/toast";
+import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
+import { showEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
@@ -1154,24 +1156,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   const value = Number(e.target.value);
                   if (mode === "buy" && value > 0) {
                     const poolType = getPoolTypeFromToken(token);
-                    const minimums: Record<string, number> = {
-                      "meteora amm v2": 0.0001,
-                      "meteora amm v1": 0.0001,
-                      "Raydium CPMM": 0.00001,
-                      "Raydium AMM": 0.00001,
-                      "PumpAmm": 0.000001,
-                      "Pumpfun": 0.000001,
-                      "meteora dbc": 0.000001,
-                    };
-                    const minAmount = minimums[poolType] || 0.000001;
+                    const minAmount = 0.001; // Standard minimum for all pools
                     
                     if (value < minAmount) {
                       setAmount(String(minAmount));
-                      const protocolName = token.launchpad_protocol || token.protocol || poolType;
-                      showCenteredErrorToast(
-                        `Amount auto-corrected to minimum: ${minAmount} SOL for ${protocolName}`,
-                        { duration: 4000 }
-                      );
+                      showEnhancedToast('warning', `Amount auto-corrected to minimum: ${minAmount} SOL`, {
+                        title: 'Minimum Amount',
+                      });
                     }
                   }
                 }}
@@ -1625,13 +1616,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 setTargetMC("");
               } catch (error: any) {
                 clearToastTimeout();
+                const errorMsg = error.message?.length > 60 
+                  ? error.message.substring(0, 57) + '...' 
+                  : error.message || 'Failed to create limit order';
                 updateTransactionToast(
                   pendingToastId,
                   "error",
-                  `❌ Failed to create limit order`
+                  `❌ Failed to create limit order: ${errorMsg}`
                 );
                 setSuccessMessage(null);
-                showCenteredErrorToast(`Failed to create limit order: ${error.message}`);
               } finally {
                 setIsLoading(false);
               }
@@ -1639,380 +1632,111 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             }
 
             // Market flow
+            // Basic input validation only - enhanced trade handler will do full validation
             if (mode === "buy") {
               const requested = Number(amount || 0);
-              const safetyBuffer = 0.003;
-              const priorityFee = settings.priority || 0;
-              const bribeFee = settings.bribe || 0;
-              const totalFees = safetyBuffer + priorityFee + bribeFee;
-              const required = requested + totalFees;
-
               if (!requested || requested <= 0) {
                 setIsLoading(false);
                 setSuccessMessage(null);
-                showCenteredErrorToast("Enter a valid amount.");
-                return;
-              }
-              
-              // Check minimum amounts based on pool type
-              const poolType = getPoolTypeFromToken(token);
-              const minimums: Record<string, number> = {
-                "meteora amm v2": 0.0001, // Meteora CPAMM minimum
-                "meteora amm v1": 0.0001,
-                "Raydium CPMM": 0.00001,
-                "Raydium AMM": 0.00001,
-                "PumpAmm": 0.000001,
-                "Pumpfun": 0.000001,
-                "meteora dbc": 0.000001,
-              };
-              
-              const poolMinimum = minimums[poolType];
-              const minAmount = Math.max(0.0001, poolMinimum ?? 0); // Enforce global 0.0001 SOL floor
-              
-              if (requested < minAmount) {
-                setIsLoading(false);
-                const protocolName = token.launchpad_protocol || token.protocol || poolType || "this pool";
-                setSuccessMessage(null);
-                showCenteredErrorToast(`Minimum trade amount: ${minAmount} SOL for ${protocolName}`, {
-                  duration: 5000,
+                showEnhancedToast('error', 'Please enter a valid SOL amount', {
+                  title: 'Invalid Amount',
                 });
                 return;
               }
-              
-              if (solBalance < required) {
-                setIsLoading(false);
-                const need = Math.max(required - solBalance, 0);
-                const msg = `Insufficient balance!\nTrade: ${requested.toFixed(4)} SOL\nFees: ${totalFees.toFixed(4)} SOL (priority: ${priorityFee.toFixed(4)}, bribe: ${bribeFee.toFixed(4)}, buffer: 0.003)\nTotal needed: ${required.toFixed(4)} SOL\nMissing: ${need.toFixed(4)} SOL`;
-                setSuccessMessage(null);
-                showCenteredErrorToast(
-                  `Insufficient balance! Need ${required.toFixed(4)} SOL (missing ${need.toFixed(4)} SOL). Please fund your wallet.`
-                );
-                return;
-              }
             } else if (mode === "sell") {
-              // Validate sell percentage
               const percentage = Number(amount || 0);
               if (!percentage || percentage <= 0) {
                 setIsLoading(false);
                 setSuccessMessage(null);
-                showCenteredErrorToast("Enter a valid percentage.");
+                showEnhancedToast('error', 'Please enter a valid percentage', {
+                  title: 'Invalid Percentage',
+                });
                 return;
               }
               if (percentage > 100) {
                 setIsLoading(false);
                 setSuccessMessage(null);
-                showCenteredErrorToast("Percentage cannot exceed 100%.");
+                showEnhancedToast('error', 'Percentage cannot exceed 100%', {
+                  title: 'Invalid Percentage',
+                });
                 return;
               }
             }
 
-            // Use shared pool type detection
-            const poolType = getPoolTypeFromToken(token);
-            console.log(`🔍 Trading ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
+            // Use enhanced trade handler for better UX (includes all pre-validation)
+            console.log(`🔍 Trading ${token.symbol} - Using Enhanced Trade Handler`);
             console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
 
-            // Wrap in try-catch to prevent Next.js error overlay in dev mode
-            let tradingError: any = null;
-            let pendingToastId: string | null = null;
-            let clearToastTimeout = () => undefined;
-             
-            try {
-              pendingToastId = showTransactionPendingToast("Attempting transaction...");
-              clearToastTimeout = startTransactionToastTimeout(pendingToastId);
-              const tradeParams = {
-                amount: Number(amount),
-                poolAddress: effectivePoolAddress,
-                originalPairAddress: token.pair_address || '', // Original pair address from token-service
-                baseMint: token.mint || '',
-                quoteMint: SOL_MINT_ADDRESS,
-                mevProtection: (settings.mevMode == "off" ? 0 : 1) as 0 | 1,
-                poolType,
-                // Preset trading parameters
-                slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
-                priorityFee: settings.priority || 0.001, // Default 0.001 SOL
-                bribe: settings.bribe ?? 0.05, // Default 0.05 SOL when unset
-                mevMode: settings.mevMode,
-                autoFee: settings.autoFee || false,
-                maxFee: settings.maxFee || 0,
-                rpc: settings.rpc,
-                // Debugging metadata
-                tokenName: token.name,
-                tokenSymbol: token.symbol,
-              };
-              console.log(`🎯 Trading with presets:`, {
-                slippage: `${tradeParams.slippage.toFixed(2)}%`,
-                priorityFee: `${tradeParams.priorityFee} SOL`,
-                bribe: `${tradeParams.bribe} SOL`,
-                mevMode: tradeParams.mevMode,
-                autoFee: tradeParams.autoFee,
-              });
-              const tr = mode === "buy"
-                ? await tradeBuy(tradeParams, user.bearerToken)
-                    .catch((err) => {
-                      // Use console.warn for expected errors, console.error for unexpected
-                      const logFn = (err as any)?.expected ? console.warn : console.error;
-                      logFn("[Trade] Buy error caught and handled:", err.message || err);
-                      tradingError = err;
-                      return null;
-                    })
-                : await tradeSellPercentage({
-                    tokenAddress: token.mint || '',
-                    percentageToSell: Number(amount), // Use the percentage from input
-                    poolAddress: effectivePoolAddress,
-                    baseMint: token.mint || '',
-                    quoteMint: SOL_MINT_ADDRESS,
-                    poolType,
-                    originalPairAddress: token.pair_address || '', // Original pair address from token-service
-                    // Preset trading parameters
-                    slippage: (settings.maxSlippage || 0.2) * 100, // Convert decimal to percentage (0.2 -> 20)
-                    priorityFee: settings.priority || 0.001,
-                    bribe: settings.bribe ?? 0.05,
-                  }, user.bearerToken)
-                    .catch((err) => {
-                      // Use console.warn for expected errors, console.error for unexpected
-                      const logFn = (err as any)?.expected ? console.warn : console.error;
-                      logFn("[Trade] Sell error caught and handled:", err.message || err);
-                      tradingError = err;
-                      return null;
-                    });
-              
-              if (!tradingError) {
-                const txHash = tr?.hash || tr?.txid;
-                const tokenAmount = tr?.amount || tr?.tokenAmount;
-                if (tr && txHash) {
-                  clearToastTimeout();
-                  updateTransactionToast(
-                    pendingToastId,
-                    "success",
-                    `✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`
-                  );
-                  setSuccessMessage(`✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`);
-                } else {
-                  clearToastTimeout();
-                  updateTransactionToast(
-                    pendingToastId,
-                    "error",
-                    "❌ Trade failed. Please try again."
-                  );
-                  setSuccessMessage(null);
-                  showCenteredErrorToast("❌ Trade failed. Please try again.");
-                }
+            const result = await executeEnhancedTrade({
+              token,
+              amount: Number(amount),
+              side: mode,
+              settings,
+              user: { bearerToken: user.bearerToken, id: user.id },
+              solBalance: Number(solBalance),
+              solPriceUsd: 150, // Get real SOL price if available
+              onSuccess: async (txHash, stats) => {
+                console.log('✅ Enhanced Trade successful:', { txHash, stats });
+                setSuccessMessage(`✅ Trade successful! ${mode === "buy" ? "Bought" : "Sold"} ${stats.tokenAmount || "tokens"} ${token.symbol}. Tx: ${String(txHash).slice(0, 8)}...`);
                 
-                // Refresh position data after successful trade by recalculating from trade activity
-                if (tr && txHash) {
-                  setTimeout(async () => {
-                    try {
-                      const trades = await getTradeActivityByUser(user.id.toString());
-                      const tokenTrades = trades.filter((trade: any) => 
-                        trade.tokenAddress?.toLowerCase() === token.mint || ''?.toLowerCase()
-                      );
+                // Refresh position data after successful trade
+                setTimeout(async () => {
+                  try {
+                    const trades = await getTradeActivityByUser(user.id.toString());
+                    const tokenTrades = trades.filter((trade: any) => 
+                      trade.tokenAddress?.toLowerCase() === (token.mint || '').toLowerCase()
+                    );
+                    
+                    if (tokenTrades.length > 0) {
+                      let bought = 0;
+                      let boughtUsdValue = 0;
+                      let sold = 0;
+                      let soldUsdValue = 0;
                       
-                      if (tokenTrades.length > 0) {
-                        let bought = 0;
-                        let boughtUsdValue = 0;
-                        let sold = 0;
-                        let soldUsdValue = 0;
-                        
-                        tokenTrades.forEach((trade: any) => {
-                          if (trade.type === 'Buy') {
-                            bought += Number(trade.tokenAmount) || 0;
-                            boughtUsdValue += Number(trade.usdValue) || 0;
-                          } else if (trade.type === 'Sell') {
-                            sold += Number(trade.tokenAmount) || 0;
-                            soldUsdValue += Number(trade.usdValue) || 0;
-                          }
-                        });
-                        
-                        const remaining = bought - sold;
-                        const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
-                        const remainingUsdValue = remaining * avgBoughtPrice;
-                        const pnl = (soldUsdValue + remainingUsdValue) - boughtUsdValue;
-                        const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
-                        
-                        const newData = {
-                          bought,
-                          boughtUsdValue,
-                          sold,
-                          soldUsdValue,
-                          remaining,
-                          remainingUsdValue,
-                          pnl,
-                          pnlPercentage,
-                        };
-                        
-                        setPositionData(newData);
-                        console.log('🔄 TradeActionPanel - Position data refreshed after trade:', newData);
-                      }
-                    } catch (error) {
-                      console.error('Error refreshing position data:', error);
+                      tokenTrades.forEach((trade: any) => {
+                        if (trade.type === 'Buy') {
+                          bought += Number(trade.tokenAmount) || 0;
+                          boughtUsdValue += Number(trade.usdValue) || 0;
+                        } else if (trade.type === 'Sell') {
+                          sold += Number(trade.tokenAmount) || 0;
+                          soldUsdValue += Number(trade.usdValue) || 0;
+                        }
+                      });
+                      
+                      const remaining = bought - sold;
+                      const avgBoughtPrice = bought > 0 ? boughtUsdValue / bought : 0;
+                      const remainingUsdValue = remaining * avgBoughtPrice;
+                      const pnl = (soldUsdValue + remainingUsdValue) - boughtUsdValue;
+                      const pnlPercentage = boughtUsdValue > 0 ? (pnl / boughtUsdValue) * 100 : 0;
+                      
+                      const newData = {
+                        bought,
+                        boughtUsdValue,
+                        sold,
+                        soldUsdValue,
+                        remaining,
+                        remainingUsdValue,
+                        pnl,
+                        pnlPercentage,
+                      };
+                      
+                      setPositionData(newData);
+                      console.log('🔄 TradeActionPanel - Position data refreshed after trade:', newData);
                     }
-                  }, 2000); // Wait 2 seconds for backend to process
-                }
-              }
-            } catch (error: any) {
-              // Catch any other errors
-              tradingError = error;
-              clearToastTimeout();
-            }
-            
-            // Handle errors outside try-catch to prevent Next.js overlay
-            if (tradingError) {
-              const error = tradingError;
-              setSuccessMessage(null);
-              // Use console.warn for expected validation errors, console.error for unexpected errors
-              const logFn = (error as any)?.expected ? console.warn : console.error;
-              logFn("Trade error caught:", error);
-              
-              let errorMessage = "Trade failed. Please try again.";
-              let suggestions: string[] = [];
-              let showToast = true;
-              let errorToastShown = false;
-              const pushErrorToast = (text: string, options?: ToastOptions) => {
-                if (/slippage/i.test(text)) {
-                  return;
-                }
-                errorToastShown = true;
-                showCenteredErrorToast(text, options);
-              };
-              
-              // Handle structured API errors
-              if (error instanceof ApiError) {
-                errorMessage = error.message;
-                suggestions = error.suggestions || [];
-                
-                // Special handling for specific error codes
-                if (error.code === 'AMOUNT_TOO_SMALL') {
-                  const minAmount = (error.details as any)?.minimumAmount || 0.0001;
-                  const protocol = (error.details as any)?.protocol || 'this DEX';
-                  errorMessage = `💰 Amount Too Small`;
-                  pushErrorToast(
-                    `Minimum trade amount: ${minAmount} SOL for ${protocol}. Please increase your amount.`,
-                    { duration: 6000 }
-                  );
-                  setIsLoading(false); // Critical Fix #12: Reset loading state before early return
-                  return; // Don't show suggestions toast
-                } else if (error.code === 'NO_ACTIVE_POOL') {
-                  errorMessage = `⚠️ Pool Unavailable: ${error.message}`;
-                  pushErrorToast(`Pool unavailable for ${token.symbol}`, { duration: 5000 });
-                } else if (error.code === 'POOL_GRADUATED') {
-                  errorMessage = `🎓 Pool Graduated: This pool has completed its bonding curve. A new pool may be available.`;
-                  pushErrorToast(`Pool graduated for ${token.symbol}`, { duration: 5000 });
-                } else if (error.code === 'SERVICE_UNAVAILABLE') {
-                  errorMessage = `⏸️ Service Temporarily Unavailable: ${error.message}`;
-                  pushErrorToast(`Trading service unavailable. Try a different token.`, { duration: 6000 });
-                } else if (error.code === 'TRADE_FAILED') {
-                  errorMessage = `❌ Trade Failed: This pool configuration is not currently supported.`;
-                  suggestions = error.suggestions || ['Try a different token on a supported DEX'];
-                } else if (error.code === 'POOL_UNAVAILABLE') {
-                  errorMessage = `⚠️ Pool Unavailable: ${error.message}`;
-                  pushErrorToast(`Pool has insufficient liquidity`, { duration: 5000 });
-                } else if (error.code === 'TX_FAILED') {
-                  errorMessage = `❌ Transaction Failed: ${error.message}`;
-                  pushErrorToast(`Trade could not be completed. Try again or use a different token.`, { duration: 5000 });
-                } else if (error.code === 'NO_HOLDINGS') {
-                  // Critical Fix #5: No Holdings Check
-                  errorMessage = `❌ No ${token.symbol || 'tokens'} to Sell: You don't own any of this token.`;
-                  pushErrorToast(`You don't own any ${token.symbol || 'tokens'}. Cannot sell.`, { duration: 5000 });
-                  setIsLoading(false); // Critical Fix #12: Reset loading state before early return
-                  return; // Don't show suggestions toast
-                } else if (error.code === 'VALIDATION_ERROR') {
-                  // Critical Fix #7: Check if it's a minimum amount error
-                  if (error.details?.amount?.message?.includes('at least')) {
-                    errorMessage = `💰 Amount Too Small: ${error.details.amount.message}`;
-                    pushErrorToast('Trade amount must be at least 0.001 SOL', { duration: 5000 });
-                    suggestions.push('Increase your trade amount to at least 0.001 SOL (~$0.20 USD)');
-                    suggestions.push('Smaller amounts may fail due to transaction fees');
-                  } else {
-                    // Generic validation error
-                    errorMessage = `❌ Validation Error: ${error.message}`;
-                    pushErrorToast(`Invalid trade parameters`, { duration: 4000 });
+                  } catch (error) {
+                    console.error('Error refreshing position data:', error);
                   }
-                } else if (error.code === 'INVALID_POOL_TYPE') {
-                  // Critical Fix #6: Empty Pool Type Validation
-                  errorMessage = `⚠️ Pool Type Error: ${error.message || 'This token\'s trading pool is not supported'}`;
-                  pushErrorToast('Trading pool not supported for this token', { duration: 5000 });
-                  if (error.suggestions && Array.isArray(error.suggestions)) {
-                    error.suggestions.forEach((s: string) => suggestions.push(s));
-                  }
-                }
-              } else {
-                // Handle known error patterns from error message
-                if (error.message?.includes("AMOUNT_TOO_SMALL") || error.message?.includes("Amount too small") || error.message?.includes("at least 0.001")) {
-                  // Critical Fix #7: Minimum Trade Amount Validation (fallback)
-                  errorMessage = `💰 Amount Too Small: Minimum 0.001 SOL required`;
-                  pushErrorToast("Trade amount must be at least 0.001 SOL", { duration: 6000 });
-                  suggestions.push('Increase your trade amount to at least 0.001 SOL (~$0.20 USD)');
-                  suggestions.push('Smaller amounts may fail due to transaction fees');
-                } else if (error.message?.includes("Insufficient SOL balance") || error.message?.includes("INSUFFICIENT_BALANCE")) {
-                  errorMessage = `💰 Insufficient SOL balance. Add SOL and try again.`;
-                } else if (error.message?.includes("insufficient funds")) {
-                  errorMessage = `💰 Insufficient funds. Please add SOL.`;
-                } else if (error.message?.includes("NO_HOLDINGS") || error.message?.includes("no token account") || error.message?.includes("do not own") || error.message?.includes("Insufficient token holdings")) {
-                  // Critical Fix #5: No Holdings Check (fallback for non-structured errors)
-                  errorMessage = `❌ You don't own any ${token.symbol || 'tokens'}. Cannot sell.`;
-                  pushErrorToast(`No ${token.symbol || 'tokens'} to sell`, { duration: 5000 });
-                } else if (error.message?.includes("Invalid account discriminator") || error.message?.includes("INVALID_POOL_ADDRESS")) {
-                  errorMessage = `❌ Invalid pool address. The pool data may be outdated.`;
-                  suggestions.push("Try refreshing the page to get updated pool information");
-                } else if (error.message?.includes("TokenAccountNotFoundError")) {
-                  errorMessage = `❌ Token account not found. The pool may not exist.`;
-                  suggestions.push("This token may not have an active trading pool");
-                } else if (error.message?.includes("Pool is completed") || error.message?.includes("POOL_GRADUATED")) {
-                  errorMessage = `🎓 This pool has graduated and is no longer active.`;
-                  suggestions.push("The token may have migrated to a new pool");
-                  suggestions.push("Try refreshing to see if a new pool is available");
-                } else if (error.message?.includes('INVALID_POOL_TYPE') || error.message?.includes('Invalid pool') || error.message?.includes('Unsupported pool')) {
-                  // Critical Fix #6: Empty Pool Type Validation (fallback for non-structured errors)
-                  errorMessage = `⚠️ This token's trading pool is not supported`;
-                  pushErrorToast('Pool type not supported', { duration: 4000 });
-                  suggestions.push('This token may not have a supported trading pool');
-                  suggestions.push('Try refreshing the page to get updated pool information');
-                }
-              }
+                }, 2000);
+              },
+              onError: (error) => {
+                console.error('❌ Enhanced Trade failed:', error);
+                setSuccessMessage(null);
+              },
+              onWarning: (warnings) => {
+                console.warn('⚠️ Pre-transaction warnings:', warnings);
+              },
+            });
 
-              // Remove any slippage-specific suggestions/messages surfaced from backend responses
-              suggestions = suggestions.filter((s) => !/slippage/i.test(s));
-              if (/slippage/i.test(errorMessage)) {
-                errorMessage = "❌ Trade could not be completed. Please try again.";
-              }
-              
-              // Always display user-friendly error message in the UI
-              // Make sure we have a helpful message
-              if (!errorMessage || errorMessage === "Unknown error") {
-                errorMessage = "❌ Trade could not be completed. Please try a different token or check your connection.";
-              }
-              
-              // Improve common generic errors to be more helpful
-              if (errorMessage.includes("Buy tx was failed") || errorMessage.includes("tx was failed")) {
-                errorMessage = "❌ Trade Failed: Pool may have insufficient liquidity. Try a different token with higher volume.";
-                if (!suggestions.length) {
-                  suggestions = ['Look for tokens with higher 24h volume', 'Try tokens on Pump.fun or Meteora'];
-                }
-              } else if (errorMessage.includes("fetch failed") || errorMessage.includes("Failed to fetch")) {
-                errorMessage = "❌ Network Error: Could not connect to trading service. Check your internet connection.";
-              } else if (errorMessage.includes("Not Found") && !errorMessage.includes("Pool")) {
-                errorMessage = "❌ Token Not Found: This token may not have active trading pools. Try a different token.";
-              }
-              
-              if (!errorToastShown) {
-                pushErrorToast(errorMessage);
-              }
-              
-              // Show suggestions if available
-              if (suggestions.length > 0 && showToast) {
-                console.log("Error suggestions:", suggestions);
-                try {
-                  setTimeout(() => {
-                    pushErrorToast(`💡 ${suggestions[0]}`, { duration: 6000 });
-                  }, 1000);
-                } catch (toastError) {
-                  // Silently fail if toast errors
-                  console.error("Toast error:", toastError);
-                }
-              }
-            }
-            
-            // Always set loading to false
             setIsLoading(false);
           }}
         >

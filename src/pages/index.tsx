@@ -26,6 +26,7 @@ import InterstateButton from "../components/InterstateButton";
 import InterstateTable from "../components/InterstateTable";
 import toast from "react-hot-toast";
 import { formatSmartNumber } from "~/utils/db";
+import { showTransactionPendingToast, startTransactionToastTimeout, updateTransactionToast } from "~/utils/toast";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { FilterProvider, useFilter } from '../components/FilterContext';
@@ -286,6 +287,10 @@ export default function Home() {
       console.log("❌ No user found");
       return;
     }
+    
+    let pendingToastId: string | null = null;
+    let clearToastTimeout = () => undefined;
+    
     try {
       const poolType = getPoolTypeFromToken(token);
       const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
@@ -293,6 +298,11 @@ export default function Home() {
       console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
       
       const settings = presets[activePreset].quickBuySettings;
+      
+      // Show pending toast and start timeout
+      pendingToastId = showTransactionPendingToast("Attempting transaction...");
+      clearToastTimeout = startTransactionToastTimeout(pendingToastId);
+      
       const data = await tradeBuy({
         poolAddress: effectivePoolAddress,
         baseMint: token.mint,
@@ -320,12 +330,16 @@ export default function Home() {
 
       if (data && txHash) {
         console.log(`✅ Quick Buy successful! Hash: ${txHash}`);
-        toast.success(
-          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`,
+        clearToastTimeout();
+        updateTransactionToast(
+          pendingToastId,
+          "success",
+          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
         );
       } else {
         console.log('❌ Quick Buy failed - no transaction hash returned');
-        toast.error("❌ Quick Buy failed - no transaction hash returned");
+        clearToastTimeout();
+        updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
       }
     } catch (e: any) {
       console.error('Quick Buy error:', e);
@@ -337,19 +351,28 @@ export default function Home() {
         fullError: e
       });
       
+      // Always clear timeout and update pending toast on error
+      clearToastTimeout();
+      
       // Handle structured API errors
       if (e instanceof ApiError) {
         if (e.code === 'NO_ACTIVE_POOL') {
-          toast.error(`⚠️ Pool unavailable for ${token.symbol}. No active trading pools found.`, { duration: 5000 });
-          if (e.suggestions && e.suggestions.length > 0) {
-            setTimeout(() => {
-              toast.error(`💡 ${e.suggestions[0]}`, { duration: 5000 });
-            }, 500);
-          }
+          updateTransactionToast(pendingToastId, "error", `⚠️ Pool unavailable for ${token.symbol}`);
+        } else if (e.code === 'INSUFFICIENT_BALANCE') {
+          updateTransactionToast(pendingToastId, "error", `⚠️ Insufficient balance`);
+        } else if (e.code === 'TX_FAILED') {
+          updateTransactionToast(pendingToastId, "error", `❌ Trade failed. Try adjusting slippage or amount.`);
+        } else if (e.code === 'NO_HOLDINGS') {
+          updateTransactionToast(pendingToastId, "error", `❌ No ${token.symbol} to sell`);
+        } else if (e.code === 'AMOUNT_TOO_SMALL') {
+          updateTransactionToast(pendingToastId, "error", `❌ Amount too small (min 0.001 SOL)`);
+        } else if (e.code === 'POOL_UNAVAILABLE') {
+          updateTransactionToast(pendingToastId, "error", `⚠️ Pool has insufficient liquidity`);
         } else if (e.code === 'POOL_GRADUATED') {
-          toast.error(`🎓 Pool graduated for ${token.symbol}. Token may have migrated to a new pool.`, { duration: 5000 });
+          updateTransactionToast(pendingToastId, "error", `🎓 Pool graduated. Token may have migrated to a new pool.`);
         } else {
-          toast.error(`❌ Quick Buy failed: ${e.message}`, { duration: 5000 });
+          const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
+          updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
         }
       } else {
         // Handle generic errors with better messages
@@ -359,7 +382,8 @@ export default function Home() {
         } else if (errorMsg.includes("TokenAccountNotFoundError") || errorMsg.includes("Pool account does not exist")) {
           errorMsg = `Pool not found. The token may not have an active trading pool.`;
         }
-        toast.error(`❌ Quick Buy failed: ${errorMsg}`, { duration: 5000 });
+        const msg = errorMsg.length > 80 ? errorMsg.substring(0, 77) + '...' : errorMsg;
+        updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
       }
     }
   }
