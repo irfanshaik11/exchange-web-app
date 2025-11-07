@@ -1,5 +1,6 @@
 import { RiExchangeDollarLine } from "react-icons/ri";
 import { SiSolana } from "react-icons/si";
+import { FaArrowRightArrowLeft } from "react-icons/fa6";
 import React from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
@@ -174,40 +175,12 @@ function heatBarGradient(isBuy: boolean, intensity01: number) {
   }) 60%, rgba(${rgb}, 0) 100%)`;
 }
 
-/** Static MC header icon: left/right arrows */
+/** MC header icon using react-icons */
 const McHeaderIcon: React.FC = () => (
-  <svg
+  <FaArrowRightArrowLeft
     className="h-3 w-3 text-neutral-400"
-    viewBox="0 0 24 24"
     aria-hidden="true"
-  >
-    {/* left arrow */}
-    <path
-      d="M10 7L6 11l4 4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <path
-      d="M6 11h12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    {/* right arrow */}
-    <path
-      d="M14 9l4 3-4 3"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
+  />
 );
 
 /** Solana icon using react-icons with gradient fill */
