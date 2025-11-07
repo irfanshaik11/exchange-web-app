@@ -463,9 +463,24 @@ export default function PulsePage() {
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data) && data.length > 0) {
-            setHttpFinalStretch(data as any[]);
+            const filteredData = (data as any[]).filter((token) => {
+              if (isZeroLiquidityToken(token)) {
+                console.log('[Final Stretch] ⛔ Skipping token with zero liquidity from immediate poll:', token?.name, token?.mint);
+                return false;
+              }
+              return true;
+            });
+
+            if (filteredData.length === 0) {
+              console.log('[Final Stretch] ⚠️ All tokens filtered due to zero liquidity. Clearing final stretch list.');
+              setHttpFinalStretch([]);
+              setHttpFinalStretchTick((t) => t + 1);
+              return;
+            }
+
+            setHttpFinalStretch(filteredData as any[]);
             setHttpFinalStretchTick((t) => t + 1);
-            console.log(`[Final Stretch] Immediate poll got ${data.length} tokens`);
+            console.log(`[Final Stretch] Immediate poll got ${filteredData.length} tokens (after filtering)`);
           }
         }
       } catch (error) {
@@ -801,9 +816,21 @@ export default function PulsePage() {
       return [];
     }
     
+    const filteredSource = source.filter((token: any) => {
+      if (isZeroLiquidityToken(token)) {
+        console.log('[Final Stretch] ⛔ buildFinalStretch filtered zero-liquidity token:', token?.name, token?.mint);
+        return false;
+      }
+      return true;
+    });
+
+    if (filteredSource.length === 0) {
+      return [];
+    }
+    
     const withTs: any[] = [];
     const withoutTs: any[] = [];
-    for (const t of source) {
+    for (const t of filteredSource) {
       const ts = getTs(t);
       if (ts > 0) withTs.push(t); else withoutTs.push(t);
     }

@@ -132,25 +132,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           const totalSellers24h = r.total_sellers_24h ?? 0;
           const uniqueWallets24h = r.unique_wallets_24h ?? 0;
 
+          const parseNumber = (value: any, fallback = 0) => {
+            if (value === null || value === undefined || value === '') return fallback;
+            const num = Number(value);
+            return Number.isFinite(num) ? num : fallback;
+          };
+
           return {
             mint: r.mint || r.mint_address || r.Mint || null,
             pair_address: r.pair_address || null,
             name: r.name || r.token_name || '',
             symbol: r.symbol || r.token_symbol || '',
-            usd_price: r.price_usd ?? 0,
-            fully_diluted_value: r.market_cap_usd ?? 0,
-            volume_24h: r.volume_24h ?? 0,
-            price_percent_change_1h: r.price_change_1h ?? 0,
-            bonding_curve_progress: parseFloat(r.bonding_pct ?? 0), // bonding_pct is already a percentage
-            graduation_percent: parseFloat(r.graduation_percent ?? 0), // graduation_percent for hover display (snake_case)
-            graduationPercent: parseFloat(r.graduation_percent ?? 0), // graduation_percent for hover display (camelCase for compatibility)
-            bonding_pct: parseFloat(r.bonding_pct ?? 0), // Also include raw bonding_pct for fallback
+            usd_price: parseNumber(r.usd_price ?? r.price_usd ?? r.priceUsd, 0),
+            price_usd: parseNumber(r.price_usd ?? r.usd_price ?? r.priceUsd, 0),
+            fully_diluted_value: parseNumber(r.fully_diluted_value ?? r.market_cap_usd ?? r.fdv_usd, 0),
+            market_cap_usd: parseNumber(r.market_cap_usd ?? r.fully_diluted_value ?? r.fdv_usd, 0),
+            liquidity_usd: parseNumber(r.liquidity_usd ?? r.liquidityUsd, 0),
+            volume_24h: parseNumber(r.volume_24h ?? r.volume24h, 0),
+            price_percent_change_1h: parseNumber(r.price_percent_change_1h ?? r.price_change_1h, 0),
+            price_percent_change_6h: parseNumber(r.price_percent_change_6h ?? r.price_change_6h, 0),
+            price_percent_change_24h: parseNumber(r.price_percent_change_24h ?? r.price_change_24h, 0),
+            price_change_24h: parseNumber(r.price_change_24h ?? r.price_percent_change_24h, 0),
+            bonding_curve_progress: parseNumber(r.bonding_curve_progress ?? r.bonding_pct, 0), // bonding_pct is already a percentage
+            graduation_percent: parseNumber(r.graduation_percent, 0), // graduation_percent for hover display (snake_case)
+            graduationPercent: parseNumber(r.graduation_percent, 0), // graduation_percent for hover display (camelCase for compatibility)
+            bonding_pct: parseNumber(r.bonding_pct, 0), // Also include raw bonding_pct for fallback
             created_at: r.launch_time || r.created_at || null,
             launch_time: r.launch_time || null,
             launchpad_protocol: r.launchpad_protocol || null, // Pass through protocol for filtering and colors
+            status: r.status || null,
             // Optional extra fields used by the UI
             logo: r.logo || r.uri || r.image || null,
             image: r.image || r.uri || r.logo || null,
+            uri: r.uri || null,
             // TX data fields from Codex API with fallback logic for older tokens
             total_buy_volume_5m: (r.total_buy_volume_5m ?? 0) || estimateFrom24h(totalBuyVolume24h, '5m'),
             total_buy_volume_1h: (r.total_buy_volume_1h ?? 0) || estimateFrom24h(totalBuyVolume24h, '1h'),
@@ -180,9 +194,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             unique_wallets_1h: (r.unique_wallets_1h ?? 0) || Math.max(1, Math.floor(uniqueWallets24h / 24)),
             unique_wallets_6h: (r.unique_wallets_6h ?? 0) || Math.max(1, Math.floor(uniqueWallets24h / 4)),
             unique_wallets_24h: uniqueWallets24h,
-            price_percent_change_5m: r.price_percent_change_5m ?? 0,
-            price_percent_change_6h: r.price_percent_change_6h ?? 0,
-            price_percent_change_24h: r.price_percent_change_24h ?? 0,
+            price_percent_change_5m: parseNumber(r.price_percent_change_5m, 0),
             // Social links
             links: r.links || null,
           };
