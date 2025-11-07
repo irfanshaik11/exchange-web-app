@@ -370,11 +370,40 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
   // derive token supply (supports several possible field names)
   const supply = React.useMemo(() => {
     const anyToken = stableToken as any;
+    if (!anyToken) return 0;
+
     const raw =
       anyToken?.supply ??
+      anyToken?.total_supply_formatted ??
       anyToken?.total_supply ??
       anyToken?.totalSupply ??
+      anyToken?.circulating_supply ??
       0;
+
+    let num = Number(raw);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+
+    // If it's a gigantic integer, assume it's raw base units and scale by decimals
+    if (num > 1e15 && stableToken?.decimals != null) {
+      const scaled = num / Math.pow(10, stableToken.decimals);
+      return Number.isFinite(scaled) ? scaled : 0;
+    }
+
+    return num;
+  }, [stableToken]);
+
+  // fallback token price (used when a trade doesn't have a valid pricePerToken)
+  const fallbackPriceUsd = React.useMemo(() => {
+    const anyToken = stableToken as any;
+    if (!anyToken) return 0;
+
+    const raw =
+      anyToken?.usd_price ??
+      anyToken?.price_usd ??
+      anyToken?.priceUsd ??
+      anyToken?.last_price_usd ??
+      0;
+
     const num = Number(raw);
     return Number.isFinite(num) && num > 0 ? num : 0;
   }, [stableToken]);
@@ -479,11 +508,17 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                   ? `$${n.totalUSD.toFixed(2)}`
                   : '$0.00';
 
-                // market cap per trade: price * supply
+                // MC: (trade price or fallback token price) * supply
+                const unitPriceUsd =
+                  Number.isFinite(n.pricePerToken) && n.pricePerToken > 0
+                    ? n.pricePerToken
+                    : fallbackPriceUsd;
+
                 const mc =
-                  supply > 0 && Number.isFinite(n.pricePerToken) && n.pricePerToken > 0
-                    ? n.pricePerToken * supply
+                  supply > 0 && unitPriceUsd > 0
+                    ? unitPriceUsd * supply
                     : null;
+
                 const mcStr = mc !== null ? `$${formatSmartNumber(mc)}` : '-';
 
                 const intensityUsd = scaleAmt(n.totalUSD);
