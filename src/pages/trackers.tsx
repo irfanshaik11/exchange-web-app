@@ -2,9 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Head from "next/head";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import {
-  getActivePositionsByUser,
-} from "~/utils/functions";
+import { getActivePositionsByUser } from "~/utils/functions";
 import type { PositionRow, Wallet } from "~/utils/functions";
 import AddWalletModal from "../components/AddWalletModal";
 import WalletRow from "../components/WalletRow";
@@ -111,7 +109,12 @@ const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
 
 export default function TrackersPage() {
   const { user } = useUser();
-  const { wsConnected, latestTrades, watchedWallets: globalWatchedWallets, refreshWatchedWallets } = useWalletTracker();
+  const {
+    wsConnected,
+    latestTrades,
+    watchedWallets: globalWatchedWallets,
+    refreshWatchedWallets,
+  } = useWalletTracker();
   const [activeTab, setActiveTab] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -124,14 +127,24 @@ export default function TrackersPage() {
   const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(384); // 384px = w-96
   const [isResizing, setIsResizing] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileMainTab, setMobileMainTab] = useState<"wallets" | "twitter">(
+    "wallets",
+  );
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
-  const [walletEvents, setWalletEvents] = useState<Record<string, WalletEvent[]>>({});
-  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [walletEvents, setWalletEvents] = useState<
+    Record<string, WalletEvent[]>
+  >({});
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
+    {},
+  );
   const walletsRef = useRef<Wallet[]>([]);
-  const [tokenMetadata, setTokenMetadata] = useState<Map<string, { symbol: string | null; name: string | null }>>(new Map());
-  const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
+  const [tokenMetadata, setTokenMetadata] = useState<
+    Map<string, { symbol: string | null; name: string | null }>
+  >(new Map());
 
-  const normalizeAddress = (address: string | null | undefined) => (address ?? "").trim().toLowerCase();
+  const normalizeAddress = (address: string | null | undefined) =>
+    (address ?? "").trim().toLowerCase();
   const shortenAddress = (address: string) => {
     const trimmed = address.trim();
     if (trimmed.length <= 10) return trimmed;
@@ -146,19 +159,38 @@ export default function TrackersPage() {
   const showWalletLimitToast = () => {
     showToastMessage(WALLET_LIMIT_MESSAGE);
   };
-  
+
   // Twitter state
   const [showAddTwitterModal, setShowAddTwitterModal] = useState(false);
   const [twitterAccounts, setTwitterAccounts] = useState<TwitterAccount[]>([]);
   const [twitterFeed, setTwitterFeed] = useState<Tweet[]>([]);
   const [twitterTab, setTwitterTab] = useState(0);
   const [loadingTwitterFeed, setLoadingTwitterFeed] = useState(false);
-  const [selectedTwitterUser, setSelectedTwitterUser] = useState<string | null>(null);
+  const [selectedTwitterUser, setSelectedTwitterUser] = useState<string | null>(
+    null,
+  );
+  const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
+  const showWalletSection = !isMobile || mobileMainTab === "wallets";
+  const showTwitterSection = !isMobile || mobileMainTab === "twitter";
 
   // Keep walletsRef in sync with wallets state
   useEffect(() => {
     walletsRef.current = wallets;
   }, [wallets]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleResize = () => {
+      const currentlyMobile = window.innerWidth < 1024;
+      setIsMobile(currentlyMobile);
+      if (!currentlyMobile) {
+        setMobileMainTab("wallets");
+      }
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // Load wallets when user changes or page loads
   useEffect(() => {
@@ -187,10 +219,10 @@ export default function TrackersPage() {
     try {
       // Fetch wallets from backend
       const tracked = await getTrackedWallets(user?.id);
-      
+
       // Also refresh global watched wallets
       await refreshWatchedWallets();
-      
+
       // Add mock wallets for testing if no wallets exist
       // const mockWallets = tracked.length === 0 ? [
       //     {
@@ -215,36 +247,36 @@ export default function TrackersPage() {
       //       createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
       //     },
       // ] : [];
-      
+
       const allWallets = tracked;
       setWatchedWallets(allWallets);
-      
+
       // Convert backend wallets to frontend format
-      const frontendWallets: Wallet[] = allWallets.map(w => ({
+      const frontendWallets: Wallet[] = allWallets.map((w) => ({
         address: w.address,
         name: w.walletName || w.address.slice(0, 8),
         createdAt: new Date(w.createdAt).getTime(),
         emoji: w.emoji || EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
       }));
-      
+
       setWallets(frontendWallets);
-      
+
       // Set mock balances for testing
       // const mockBalances: Record<string, number> = {};
       // frontendWallets.forEach(wallet => {
       //   mockBalances[wallet.address] = Math.random() * 100; // Random balance between 0-100 SOL
       // });
       // setWalletBalances(mockBalances);
-      
+
       // Fetch real balances for tracked wallets
       allWallets.forEach(async (wallet) => {
         const balance = await getWalletSolBalance(wallet.address);
         if (balance !== null) {
-          setWalletBalances(prev => ({ ...prev, [wallet.address]: balance }));
+          setWalletBalances((prev) => ({ ...prev, [wallet.address]: balance }));
         }
       });
     } catch (error) {
-      console.error('Failed to load wallets:', error);
+      console.error("Failed to load wallets:", error);
     }
   };
 
@@ -268,24 +300,27 @@ export default function TrackersPage() {
   // Fetch token metadata for live trades
   useEffect(() => {
     if (latestTrades.length === 0) return;
-    
+
     // Extract unique mints that don't have symbol
     const mintsToFetch = latestTrades
-      .filter(trade => trade.mint && !trade.symbol)
-      .map(trade => trade.mint)
+      .filter((trade) => trade.mint && !trade.symbol)
+      .map((trade) => trade.mint)
       .filter((mint, idx, arr) => arr.indexOf(mint) === idx); // unique
-    
+
     if (mintsToFetch.length === 0) {
-      console.log('[Live Trades] No mints to fetch, all trades have symbols');
+      console.log("[Live Trades] No mints to fetch, all trades have symbols");
       return;
     }
-    
-    console.log('[Live Trades] Fetching metadata for tokens:', mintsToFetch);
-    
+
+    console.log("[Live Trades] Fetching metadata for tokens:", mintsToFetch);
+
     batchFetchTokenMetadata(mintsToFetch)
-      .then(metadata => {
-        console.log('[Live Trades] Successfully fetched metadata:', Object.fromEntries(metadata));
-        setTokenMetadata(prev => {
+      .then((metadata) => {
+        console.log(
+          "[Live Trades] Successfully fetched metadata:",
+          Object.fromEntries(metadata),
+        );
+        setTokenMetadata((prev) => {
           const updated = new Map(prev);
           metadata.forEach((value, key) => {
             updated.set(key, value);
@@ -293,11 +328,10 @@ export default function TrackersPage() {
           return updated;
         });
       })
-      .catch(err => {
-        console.error('[Live Trades] Error fetching token metadata:', err);
+      .catch((err) => {
+        console.error("[Live Trades] Error fetching token metadata:", err);
       });
   }, [latestTrades]);
-
 
   // Handle sidebar resizing
   useEffect(() => {
@@ -327,7 +361,11 @@ export default function TrackersPage() {
     };
   }, [isResizing]);
 
-  const handleAddWallet = async (address: string, name: string, emoji?: string) => {
+  const handleAddWallet = async (
+    address: string,
+    name: string,
+    emoji?: string,
+  ) => {
     if (isAtWalletLimit) {
       showWalletLimitToast();
       return;
@@ -336,10 +374,10 @@ export default function TrackersPage() {
     try {
       // Add to backend
       await addTrackedWallet(address, name, user?.id, emoji);
-      
+
       // Reload from backend (this will also refresh global watched wallets)
       await loadWalletsFromBackend();
-      
+
       setShowAddWalletModal(false);
 
       showToastMessage("Wallet added!");
@@ -361,15 +399,17 @@ export default function TrackersPage() {
     try {
       if (addressToRemove === "all") {
         // Remove all wallets
-        await Promise.all(wallets.map(w => removeTrackedWallet(w.address, user?.id)));
+        await Promise.all(
+          wallets.map((w) => removeTrackedWallet(w.address, user?.id)),
+        );
       } else {
         // Remove single wallet
         await removeTrackedWallet(addressToRemove, user?.id);
       }
-      
+
       // Reload from backend (this will also refresh global watched wallets)
       await loadWalletsFromBackend();
-      
+
       setToast("Wallet removed");
       setTimeout(() => setToast(""), 3000);
     } catch (error: any) {
@@ -426,20 +466,20 @@ export default function TrackersPage() {
     setLoadingTwitterFeed(true);
     try {
       let tweets: Tweet[] = [];
-      
+
       if (selectedTwitterUser) {
         // Load tweets from specific user
         tweets = await getUserTweets(selectedTwitterUser, 20);
       } else {
         // Load tweets from all tracked accounts
-        const usernames = twitterAccounts.map(acc => acc.username);
+        const usernames = twitterAccounts.map((acc) => acc.username);
         tweets = await getTwitterFeed(usernames, 20);
       }
-      
+
       setTwitterFeed(tweets);
     } catch (error) {
-      console.error('Error loading Twitter feed:', error);
-      setToast('Failed to load Twitter feed');
+      console.error("Error loading Twitter feed:", error);
+      setToast("Failed to load Twitter feed");
       setTimeout(() => setToast(""), 3000);
     } finally {
       setLoadingTwitterFeed(false);
@@ -461,8 +501,8 @@ export default function TrackersPage() {
   // Export: copy wallet data (name, emoji, and address) to clipboard as JSON
   const handleExportAddresses = () => {
     const walletsData = wallets.map((w) => ({
-      name: w.name || 'Unnamed Wallet',
-      emoji: w.emoji || '👻',
+      name: w.name || "Unnamed Wallet",
+      emoji: w.emoji || "👻",
       address: w.address,
     }));
     const jsonString = JSON.stringify(walletsData, null, 2);
@@ -496,7 +536,7 @@ export default function TrackersPage() {
           const existingAddresses = new Set(
             watchedWallets
               .map((wallet) => normalizeAddress(wallet.address))
-              .filter(Boolean)
+              .filter(Boolean),
           );
           const batchAddresses = new Set<string>();
           const duplicateExisting: string[] = [];
@@ -504,30 +544,32 @@ export default function TrackersPage() {
           const invalidWallets: string[] = [];
           const walletsToAdd: { address: string; name: string }[] = [];
 
-          transformedWallets.forEach((wallet: { address: string; name: string }) => {
-            const normalized = normalizeAddress(wallet.address);
-            if (!normalized) {
-              invalidWallets.push(wallet.address);
-              return;
-            }
-            if (existingAddresses.has(normalized)) {
-              duplicateExisting.push(wallet.address);
-              return;
-            }
-            if (batchAddresses.has(normalized)) {
-              duplicateWithinImport.push(wallet.address);
-              return;
-            }
-            batchAddresses.add(normalized);
-            walletsToAdd.push(wallet);
-          });
+          transformedWallets.forEach(
+            (wallet: { address: string; name: string }) => {
+              const normalized = normalizeAddress(wallet.address);
+              if (!normalized) {
+                invalidWallets.push(wallet.address);
+                return;
+              }
+              if (existingAddresses.has(normalized)) {
+                duplicateExisting.push(wallet.address);
+                return;
+              }
+              if (batchAddresses.has(normalized)) {
+                duplicateWithinImport.push(wallet.address);
+                return;
+              }
+              batchAddresses.add(normalized);
+              walletsToAdd.push(wallet);
+            },
+          );
 
           const availableSlots = MAX_WALLETS - watchedWallets.length;
           if (walletsToAdd.length > availableSlots) {
             alert(
               availableSlots > 0
                 ? `You can only add ${availableSlots} more wallet${availableSlots === 1 ? "" : "s"}. Remove some before importing.`
-                : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`
+                : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`,
             );
             return;
           }
@@ -540,7 +582,7 @@ export default function TrackersPage() {
               await addTrackedWallet(wallet.address, wallet.name, user?.id);
               successCount++;
             } catch (error: any) {
-              if (error.message?.includes('already exists')) {
+              if (error.message?.includes("already exists")) {
                 duplicateExisting.push(wallet.address);
               } else {
                 console.error(`Failed to import ${wallet.address}:`, error);
@@ -553,38 +595,48 @@ export default function TrackersPage() {
 
           const messageParts: string[] = [];
           if (successCount > 0) {
-            messageParts.push(`Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`);
+            messageParts.push(
+              `Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`,
+            );
           }
           if (duplicateExisting.length > 0) {
             messageParts.push(
               `${duplicateExisting.length} already tracked (${duplicateExisting
                 .slice(0, 3)
                 .map(shortenAddress)
-                .join(', ')}${
-                duplicateExisting.length > 3 ? ` +${duplicateExisting.length - 3}` : ''
-              })`
+                .join(", ")}${
+                duplicateExisting.length > 3
+                  ? ` +${duplicateExisting.length - 3}`
+                  : ""
+              })`,
             );
           }
           if (duplicateWithinImport.length > 0) {
             messageParts.push(
-              `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? '' : 's'} in import (${duplicateWithinImport
+              `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} in import (${duplicateWithinImport
                 .slice(0, 3)
                 .map(shortenAddress)
-                .join(', ')}${
-                duplicateWithinImport.length > 3 ? ` +${duplicateWithinImport.length - 3}` : ''
-              })`
+                .join(", ")}${
+                duplicateWithinImport.length > 3
+                  ? ` +${duplicateWithinImport.length - 3}`
+                  : ""
+              })`,
             );
           }
           if (invalidWallets.length > 0) {
             messageParts.push(
-              `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? '' : 'es'}`
+              `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
             );
           }
           if (errorCount > 0) {
             messageParts.push(`${errorCount} failed`);
           }
 
-          alert(messageParts.length > 0 ? messageParts.join('. ') : 'No new wallets were imported.');
+          alert(
+            messageParts.length > 0
+              ? messageParts.join(". ")
+              : "No new wallets were imported.",
+          );
         } else {
           alert("Invalid wallet file format.");
         }
@@ -602,594 +654,731 @@ export default function TrackersPage() {
       <Head>
         <title>Trackers | Interstate Memeboard</title>
       </Head>
-			<div className="mb-20">
-      <div className="flex min-h-screen flex-col bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-neutral-100">
-        <Header />
-        <div className="w-full flex-grow">
-          {/* Main Content Area: Two Columns */}
-          <div className="flex h-full flex-row">
-            {/* Left Column: Wallet Manager / Live Trades Table */}
-            <div className="h-full min-h-[530px] flex-1 border border-neutral-800/50 bg-neutral-900/50 px-4 shadow-xl backdrop-blur-sm">
-              <div className="flex gap-4 border-b border-neutral-800/50 py-2">
-                {TABS.map((tab, i) => (
+      <div className="mb-20">
+        <div className="flex min-h-screen flex-col bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-neutral-100">
+          <Header />
+          <div className="w-full flex-grow">
+            {/* Main Content Area: Two Columns */}
+            <div className="flex h-full flex-col gap-4 lg:flex-row">
+              {isMobile && (
+                <div className="flex w-full rounded-full bg-neutral-800/60 p-1 text-xs font-medium text-neutral-400">
                   <button
-                    key={tab}
-                    className={`cursor-pointer rounded-lg px-2 py-1 text-xs transition-all duration-300 ${
-                      activeTab === i
-                        ? "bg-[#21222B] font-medium text-white"
-                        : "font-medium text-neutral-400 hover:bg-neutral-800/50 hover:text-white"
+                    className={`flex-1 rounded-full px-3 py-2 transition-colors duration-200 ${
+                      mobileMainTab === "wallets"
+                        ? "bg-[#70E0B0] text-neutral-900 font-semibold"
+                        : "text-neutral-300 hover:text-white"
                     }`}
-                    onClick={() => setActiveTab(i)}
+                    onClick={() => setMobileMainTab("wallets")}
                   >
-                    {tab}
-                    {tab === "Live Trades" && (
-                      <span className="ml-1 animate-pulse text-sm text-pink-400">
-                        •
-                      </span>
-                    )}
+                    Wallet Tracker
                   </button>
-                ))}
-                <div className="flex items-center rounded-full bg-neutral-800/60 px-3 py-1 text-[11px] text-neutral-300">
-                  <span className="font-medium text-white">{watchedWallets.length}</span>
-                  <span className="text-neutral-400">/{MAX_WALLETS} wallet{watchedWallets.length === 1 ? "" : "s"}</span>
+                  <button
+                    className={`flex-1 rounded-full px-3 py-2 transition-colors duration-200 ${
+                      mobileMainTab === "twitter"
+                        ? "bg-[#70E0B0] text-neutral-900 font-semibold"
+                        : "text-neutral-300 hover:text-white"
+                    }`}
+                    onClick={() => setMobileMainTab("twitter")}
+                  >
+                    X Tracker
+                  </button>
                 </div>
-                <div className="flex-1" />
-                {/* Search and actions */}
-                <input
-                  type="text"
-                  placeholder="Search by name or addr..."
-                  className="mr-4 w-60 rounded-full border border-neutral-800 bg-neutral-900/50 px-4 py-0 text-xs text-neutral-200 backdrop-blur-sm transition-all duration-300 focus:border-transparent focus:ring-2 focus:ring-blue-500/50 focus:outline-none"
-                  disabled={activeTab === 1}
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                {activeTab === 0 && (
-                  <>
-                    <button
-                      className="mr-2 rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
-                      onClick={() => setShowImportModal(true)}
-                    >
-                      Import
-                    </button>
-                    <button
-                      className="mr-2 rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
-                      onClick={handleExportAddresses}
-                    >
-                      Export
-                    </button>
-                    <button
-                      className="rounded-full px-4 py-1 text-xs font-semibold transition-all duration-300"
-                      style={{
-                        backgroundColor: '#70E0B0',
-                        color: '#000000',
-                        border: 'none'
-                      }}
-                      onClick={handleOpenAddWalletModal}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#58B890';
-                        e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)';
-                        e.currentTarget.style.transform = 'scale(1.02)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#70E0B0';
-                        e.currentTarget.style.boxShadow = 'none';
-                        e.currentTarget.style.transform = 'scale(1)';
-                      }}
-                    >
-                      Add Wallet
-                    </button>
-                  </>
-                )}
-              </div>
-              {activeTab === 0 ? (
-                <>
-                  <div className="flex items-center border-b border-white/20 p-2">
-                    <div className="flex w-full items-center gap-4 text-xs font-medium text-neutral-400">
-                      <span className="w-28">Created</span>
-                      <span className="flex-1 min-w-0">Name</span>
-                      <span className="w-36">Balance</span>
-                      <span className="w-40">Actions</span>
-                      <span className="w-24 text-right">
+              )}
+              {showWalletSection && (
+                <div className="h-full min-h-[530px] w-full flex-1 border border-neutral-800/50 bg-neutral-900/50 px-4 shadow-xl backdrop-blur-sm">
+                  <div className="flex flex-wrap items-center gap-2 border-b border-neutral-800/50 py-2">
+                    <div className="flex items-center gap-2">
+                      {TABS.map((tab, i) => (
                         <button
-                          className="whitespace-nowrap text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
-                          onClick={() => handleRemoveWallet("all")}
+                          key={tab}
+                          className={`cursor-pointer rounded-lg px-2 py-1 text-xs transition-all duration-300 ${
+                            activeTab === i
+                              ? "bg-[#21222B] font-medium text-white"
+                              : "font-medium text-neutral-400 hover:bg-neutral-800/50 hover:text-white"
+                          }`}
+                          onClick={() => setActiveTab(i)}
                         >
-                          Remove All
+                          {tab}
+                          {tab === "Live Trades" && (
+                            <span className="ml-1 animate-pulse text-sm text-pink-400">
+                              •
+                            </span>
+                          )}
                         </button>
-                      </span>
+                      ))}
+                      <div className="flex items-center rounded-full bg-neutral-800/60 px-3 py-1 text-[11px] text-neutral-300">
+                        <span className="font-medium text-white">
+                          {watchedWallets.length}
+                        </span>
+                        <span className="text-neutral-400">
+                          /{MAX_WALLETS} wallet
+                          {watchedWallets.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex-1" />
+                    <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
+                      <input
+                        type="text"
+                        placeholder="Search by name or addr..."
+                        className="flex-1 min-w-[200px] rounded-full border border-neutral-800 bg-neutral-900/50 px-4 py-0 text-xs text-neutral-200 backdrop-blur-sm transition-all duration-300 focus:border-transparent focus:ring-2 focus:ring-[#70E0B0]/50 focus:outline-none sm:w-60"
+                        disabled={activeTab === 1}
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                      {activeTab === 0 && (
+                        <>
+                          <button
+                            className="rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
+                            onClick={() => setShowImportModal(true)}
+                          >
+                            Import
+                          </button>
+                          <button
+                            className="rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
+                            onClick={handleExportAddresses}
+                          >
+                            Export
+                          </button>
+                          <button
+                            className="rounded-full px-4 py-1 text-xs font-semibold transition-all duration-300"
+                            style={{
+                              backgroundColor: "#70E0B0",
+                              color: "#000000",
+                              border: "none",
+                            }}
+                            onClick={handleOpenAddWalletModal}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#58B890";
+                              e.currentTarget.style.boxShadow =
+                                "0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)";
+                              e.currentTarget.style.transform = "scale(1.02)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#70E0B0";
+                              e.currentTarget.style.boxShadow = "none";
+                              e.currentTarget.style.transform = "scale(1)";
+                            }}
+                          >
+                            Add Wallet
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
-                  {wallets.length === 0 ? (
-                    <div className="flex h-64 flex-col items-center justify-center">
-                      <span className="text-neutral-400">
-                        No wallets added yet.
-                      </span>
-                    </div>
-                  ) : (
-                    <table className="w-full text-xs">
-                      <tbody>
-                        {filteredWallets.map((wallet) => {
-                          const watched = watchedWallets.find(ww => ww.address === wallet.address);
-                          const events = walletEvents[wallet.address] || [];
-                          const balance = walletBalances[wallet.address];
-                          return (
-                            <WalletRow
-                              key={wallet.address}
-                              wallet={wallet}
-                              watchedWallet={watched}
-                              events={events}
-                              balance={balance}
-                              onRemove={handleRemoveWallet}
-                              onClick={setScannedWallet}
-                              onNotificationToggle={async (address, enabled) => {
-                                // Refresh the global watched wallets to sync the state
-                                await refreshWatchedWallets();
-                              }}
-                            />
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                </>
-              ) : (
-                <>
-                  {latestTrades.length === 0 ? (
-                    <div className="flex h-64 flex-col items-center justify-center">
-                      <span className="text-neutral-400">
-                        No live trades yet. Add wallets to start tracking!
-                      </span>
-                      <span className="mt-2 text-xs text-neutral-500">
-                        {wsConnected ? '🟢 Connected' : '🔴 Disconnected'}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 300px)' }}>
-                      <table className="mt-2 w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-white/20">
-                            <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">Time</th>
-                            <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">Wallet</th>
-                            <th className="w-12 px-2 py-2 text-left text-sm text-neutral-400">Side</th>
-                            <th className="w-32 px-2 py-2 text-left text-sm text-neutral-400">Token</th>
-                            <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">Amount</th>
-                            <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">Price</th>
-                            <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">Venue</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {latestTrades.map((trade, idx) => {
-                            const wallet = wallets.find(w => w.address === trade.wallet);
-                            const timeAgo = new Date(trade.at).toLocaleTimeString();
-                            
-                            // Use fetched metadata as fallback
-                            const metadata = tokenMetadata.get(trade.mint);
-                            const displaySymbol = trade.symbol || metadata?.symbol || trade.mint.slice(0, 8) + '...';
-                            const displayName = trade.name || metadata?.name;
-                            
-                            // Debug log for first trade
-                            if (idx === 0) {
-                              console.log('[Live Trades Display]', {
-                                mint: trade.mint,
-                                tradeSymbol: trade.symbol,
-                                tradeName: trade.name,
-                                metadata: metadata,
-                                displaySymbol: displaySymbol,
-                                displayName: displayName,
-                                totalMetadata: tokenMetadata.size
-                              });
-                            }
-                            
-                            return (
-                              <tr
-                                key={`${trade.tx}-${idx}`}
-                                className="border-b border-neutral-800/50 transition-colors duration-300 hover:bg-neutral-800/30"
-                              >
-                                <td className="w-20 px-2 py-2 text-neutral-400">
-                                  {timeAgo}
-                                </td>
-                                <td className="w-24 px-2 py-2 font-mono">
-                                  <span className="truncate" title={trade.wallet}>
-                                    {wallet?.emoji || '💼'} {wallet?.name || trade.wallet.slice(0, 4) + '...'}
-                                  </span>
-                                </td>
-                                <td className="w-12 px-2 py-2">
-                                  <span className={`rounded px-1 py-0.5 text-[10px] font-semibold ${
-                                    trade.side === 'buy' 
-                                      ? 'bg-green-500/20 text-green-400' 
-                                      : 'bg-red-500/20 text-red-400'
-                                  }`}>
-                                    {trade.side.toUpperCase()}
-                                  </span>
-                                </td>
-                                <td className="w-32 px-2 py-2 font-mono text-blue-300" title={displayName || undefined}>
-                                  {displaySymbol}
-                                </td>
-                                <td className="w-24 px-2 py-2 text-neutral-200">
-                                  {trade.amount.toFixed(2)}
-                                </td>
-                                <td className="w-24 px-2 py-2 text-neutral-300">
-                                  {trade.price_usd ? `$${trade.price_usd.toFixed(6)}` : '-'}
-                                </td>
-                                <td className="w-20 px-2 py-2 text-neutral-400">
-                                  {trade.venue || 'Unknown'}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Resizer Handle */}
-            <div
-              className="group relative flex h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-blue-500/30"
-              onMouseDown={() => setIsResizing(true)}
-            >
-              <div className="absolute h-16 w-1 rounded-full bg-neutral-700 transition-colors group-hover:bg-blue-500" />
-            </div>
-
-            {/* Right Column: Twitter Alerts */}
-            <div
-              className="flex h-full min-h-[530px] flex-col border border-neutral-800/50 bg-neutral-900/50 px-2 shadow-xl backdrop-blur-sm"
-              style={{
-                width: `${sidebarWidth}px`,
-                minWidth: "300px",
-                maxWidth: "800px",
-              }}
-            >
-              {/* Twitter Tabs Header */}
-              <div className="flex items-center justify-between border-b border-neutral-800/50 pb-2 pt-4">
-                <div className="flex gap-2">
-                  {TWITTER_TABS.map((tab, i) => (
-                    <button
-                      key={tab}
-                      className={`cursor-pointer rounded-lg px-3 py-1 text-xs transition-all duration-300 ${
-                        twitterTab === i
-                          ? "bg-[#1DA1F2] font-medium text-white"
-                          : "font-medium text-neutral-400 hover:bg-neutral-800/50 hover:text-white"
-                      }`}
-                      onClick={() => setTwitterTab(i)}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-                {twitterTab === 0 && (
-                  <button 
-                    className="rounded-lg bg-[#1DA1F2] px-3 py-1 text-xs font-semibold text-white transition-all duration-300 hover:bg-[#1A8CD8] cursor-pointer"
-                    onClick={() => setShowAddTwitterModal(true)}
-                  >
-                    Add Handle
-                  </button>
-                )}
-              </div>
-
-              {/* Twitter Content */}
-              <div className="flex-1 overflow-y-auto">
-                {twitterTab === 0 ? (
-                  // Tracked Accounts Tab
-                  <>
-                    {twitterAccounts.length === 0 ? (
-                      <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                        <span className="mb-4 text-neutral-400">
-                          No Twitter accounts tracked yet
-                        </span>
-                      </div>
-                    ) : (
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-white/20">
-                            <th className="px-2 py-2 text-left text-sm text-neutral-400">Account</th>
-                            <th className="px-2 py-2 text-left text-sm text-neutral-400">Followers</th>
-                            <th className="px-2 py-2 text-left text-sm text-neutral-400">Added</th>
-                            <th className="px-2 py-2 text-right text-sm text-neutral-400">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {twitterAccounts.map((account) => (
-                            <TwitterAccountRow
-                              key={account.id}
-                              account={account}
-                              onRemove={handleRemoveTwitterAccount}
-                              onViewProfile={handleViewTwitterProfile}
-                            />
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </>
-                ) : (
-                  // X Feed Tab
-                  <>
-                    {twitterAccounts.length === 0 ? (
-                      <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                        <span className="mb-4 text-neutral-400">
-                          Add Twitter accounts to see their feed
-                        </span>
-                      </div>
-                    ) : loadingTwitterFeed ? (
-                      <div className="flex h-full flex-col items-center justify-center py-8">
-                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
-                        <span className="mt-4 text-neutral-400">Loading feed...</span>
-                      </div>
-                    ) : twitterFeed.length === 0 ? (
-                      <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                        <span className="text-neutral-400">
-                          No tweets found
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 p-2">
-                        {selectedTwitterUser && (
-                          <div className="mb-2 flex items-center justify-between rounded-lg bg-blue-500/10 px-3 py-2">
-                            <span className="text-xs text-blue-400">
-                              Showing tweets from @{selectedTwitterUser}
-                            </span>
+                  {activeTab === 0 ? (
+                    <>
+                      <div className="flex items-center border-b border-white/20 p-2">
+                        <div className="flex w-full items-center gap-4 text-xs font-medium text-neutral-400">
+                          <span className="w-28">Created</span>
+                          <span className="min-w-0 flex-1">Name</span>
+                          <span className="w-36">Balance</span>
+                          <span className="w-40">Actions</span>
+                          <span className="w-24 text-right">
                             <button
-                              onClick={() => setSelectedTwitterUser(null)}
-                              className="text-xs text-neutral-400 hover:text-white"
+                              className="whitespace-nowrap text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
+                              onClick={() => handleRemoveWallet("all")}
                             >
-                              Show All
+                              Remove All
                             </button>
-                          </div>
-                        )}
-                        {twitterFeed.map((tweet) => (
-                          <div
-                            key={tweet.id}
-                            className="rounded-lg border border-neutral-800/50 bg-neutral-900/50 p-3 transition-all duration-300 hover:border-blue-500/30 hover:bg-neutral-800/30"
-                          >
-                            {/* Tweet Header */}
-                            <div className="mb-2 flex items-start gap-2">
-                              {tweet.authorProfileImage ? (
-                                <img
-                                  src={tweet.authorProfileImage}
-                                  alt={tweet.authorName}
-                                  className="h-8 w-8 rounded-full"
-                                />
-                              ) : (
-                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-xs font-bold text-white">
-                                  {tweet.authorName.charAt(0).toUpperCase()}
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-semibold text-white text-sm truncate">
-                                    {tweet.authorName}
-                                  </span>
-                                  <span className="text-neutral-400 text-xs truncate">
-                                    @{tweet.authorUsername}
-                                  </span>
-                                </div>
-                                <span className="text-neutral-500 text-xs">
-                                  {new Date(tweet.createdAt).toLocaleString()}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            {/* Tweet Text */}
-                            <p className="mb-2 text-sm text-neutral-200 whitespace-pre-wrap break-words">
-                              {tweet.text}
-                            </p>
-                            
-                            {/* Tweet Images */}
-                            {tweet.images && tweet.images.length > 0 && (
-                              <div className="mb-2 grid gap-2" style={{
-                                gridTemplateColumns: tweet.images.length === 1 ? '1fr' : 
-                                  tweet.images.length === 2 ? '1fr 1fr' : 
-                                  tweet.images.length === 3 ? '1fr 1fr' : 'repeat(2, 1fr)'
-                              }}>
-                                {tweet.images.map((imageUrl, idx) => (
-                                  <img
-                                    key={idx}
-                                    src={imageUrl}
-                                    alt={`Tweet image ${idx + 1}`}
-                                    className="rounded-lg border border-neutral-700/50 w-full h-auto max-h-96 object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                    onClick={() => window.open(imageUrl, '_blank')}
-                                    onError={(e) => {
-                                      // Hide image on error
-                                      (e.target as HTMLImageElement).style.display = 'none';
+                          </span>
+                        </div>
+                      </div>
+                      {wallets.length === 0 ? (
+                        <div className="flex h-64 flex-col items-center justify-center">
+                          <span className="text-neutral-400">
+                            No wallets added yet.
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[640px] text-xs">
+                            <tbody>
+                              {filteredWallets.map((wallet) => {
+                                const watched = watchedWallets.find(
+                                  (ww) => ww.address === wallet.address,
+                                );
+                                const events =
+                                  walletEvents[wallet.address] || [];
+                                const balance = walletBalances[wallet.address];
+                                return (
+                                  <WalletRow
+                                    key={wallet.address}
+                                    wallet={wallet}
+                                    watchedWallet={watched}
+                                    events={events}
+                                    balance={balance}
+                                    onRemove={handleRemoveWallet}
+                                    onClick={setScannedWallet}
+                                    onNotificationToggle={async (
+                                      address,
+                                      enabled,
+                                    ) => {
+                                      // Refresh the global watched wallets to sync the state
+                                      await refreshWatchedWallets();
                                     }}
                                   />
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {latestTrades.length === 0 ? (
+                        <div className="flex h-64 flex-col items-center justify-center">
+                          <span className="text-neutral-400">
+                            No live trades yet. Add wallets to start tracking!
+                          </span>
+                          <span className="mt-2 text-xs text-neutral-500">
+                            {wsConnected ? "🟢 Connected" : "🔴 Disconnected"}
+                          </span>
+                        </div>
+                      ) : (
+                        <div
+                          className="overflow-x-auto overflow-y-auto"
+                          style={{ maxHeight: "calc(100vh - 300px)" }}
+                        >
+                          <table className="mt-2 w-full min-w-[720px] text-xs">
+                            <thead>
+                              <tr className="border-b border-white/20">
+                                <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">
+                                  Time
+                                </th>
+                                <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
+                                  Wallet
+                                </th>
+                                <th className="w-12 px-2 py-2 text-left text-sm text-neutral-400">
+                                  Side
+                                </th>
+                                <th className="w-32 px-2 py-2 text-left text-sm text-neutral-400">
+                                  Token
+                                </th>
+                                <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
+                                  Amount
+                                </th>
+                                <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
+                                  Price
+                                </th>
+                                <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">
+                                  Venue
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {latestTrades.map((trade, idx) => {
+                                const wallet = wallets.find(
+                                  (w) => w.address === trade.wallet,
+                                );
+                                const timeAgo = new Date(
+                                  trade.at,
+                                ).toLocaleTimeString();
+
+                                // Use fetched metadata as fallback
+                                const metadata = tokenMetadata.get(trade.mint);
+                                const displaySymbol =
+                                  trade.symbol ||
+                                  metadata?.symbol ||
+                                  trade.mint.slice(0, 8) + "...";
+                                const displayName = trade.name || metadata?.name;
+
+                                // Debug log for first trade
+                                if (idx === 0) {
+                                  console.log("[Live Trades Display]", {
+                                    mint: trade.mint,
+                                    tradeSymbol: trade.symbol,
+                                    tradeName: trade.name,
+                                    metadata: metadata,
+                                    displaySymbol: displaySymbol,
+                                    displayName: displayName,
+                                    totalMetadata: tokenMetadata.size,
+                                  });
+                                }
+
+                                return (
+                                  <tr
+                                    key={`${trade.tx}-${idx}`}
+                                    className="border-b border-neutral-800/50 transition-colors duration-300 hover:bg-neutral-800/30"
+                                  >
+                                    <td className="w-20 px-2 py-2 text-neutral-400">
+                                      {timeAgo}
+                                    </td>
+                                    <td className="w-24 px-2 py-2 font-mono">
+                                      <span
+                                        className="truncate"
+                                        title={trade.wallet}
+                                      >
+                                        {wallet?.emoji || "💼"}{" "}
+                                        {wallet?.name ||
+                                          trade.wallet.slice(0, 4) + "..."}
+                                      </span>
+                                    </td>
+                                    <td className="w-12 px-2 py-2">
+                                      <span
+                                        className={`rounded px-1 py-0.5 text-[10px] font-semibold ${
+                                          trade.side === "buy"
+                                            ? "bg-green-500/20 text-green-400"
+                                            : "bg-red-500/20 text-red-400"
+                                        }`}
+                                      >
+                                        {trade.side.toUpperCase()}
+                                      </span>
+                                    </td>
+                                    <td
+                                    className="w-32 px-2 py-2 font-mono text-emerald-300"
+                                      title={displayName || undefined}
+                                    >
+                                      {displaySymbol}
+                                    </td>
+                                    <td className="w-24 px-2 py-2 text-neutral-200">
+                                      {trade.amount.toFixed(2)}
+                                    </td>
+                                    <td className="w-24 px-2 py-2 text-neutral-300">
+                                      {trade.price_usd
+                                        ? `$${trade.price_usd.toFixed(6)}`
+                                        : "-"}
+                                    </td>
+                                    <td className="w-20 px-2 py-2 text-neutral-400">
+                                      {trade.venue || "Unknown"}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {!isMobile && (
+                <div
+                  className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-emerald-400/30 lg:flex"
+                  onMouseDown={() => setIsResizing(true)}
+                >
+                  <div className="absolute h-16 w-1 rounded-full bg-neutral-700 transition-colors group-hover:bg-emerald-400" />
+                </div>
+              )}
+              {showTwitterSection && (
+                <div
+                  className="flex h-full min-h-[530px] w-full flex-col border border-neutral-800/50 bg-neutral-900/50 px-2 shadow-xl backdrop-blur-sm"
+                  style={
+                    isMobile
+                      ? undefined
+                      : {
+                          width: `${sidebarWidth}px`,
+                          minWidth: "300px",
+                          maxWidth: "800px",
+                        }
+                  }
+                >
+                  {/* Twitter Tabs Header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800/50 pt-4 pb-2">
+                    <div className="flex gap-2">
+                      {TWITTER_TABS.map((tab, i) => (
+                        <button
+                          key={tab}
+                          className={`cursor-pointer rounded-lg px-3 py-1 text-xs transition-all duration-300 ${
+                            twitterTab === i
+                              ? "bg-[#70E0B0] font-medium text-neutral-900"
+                              : "font-medium text-neutral-400 hover:bg-neutral-800/50 hover:text-white"
+                          }`}
+                          onClick={() => setTwitterTab(i)}
+                        >
+                          {tab}
+                        </button>
+                      ))}
+                    </div>
+                    {twitterTab === 0 && (
+                      <button
+                        className="cursor-pointer rounded-lg px-3 py-1 text-xs font-semibold text-neutral-900 transition-all duration-300"
+                        style={{
+                          backgroundColor: "#70E0B0",
+                          border: "none",
+                        }}
+                        onClick={() => setShowAddTwitterModal(true)}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = "#58B890";
+                          e.currentTarget.style.boxShadow =
+                            "0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)";
+                          e.currentTarget.style.transform = "scale(1.02)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = "#70E0B0";
+                          e.currentTarget.style.boxShadow = "none";
+                          e.currentTarget.style.transform = "scale(1)";
+                        }}
+                      >
+                        Add Handle
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Twitter Content */}
+                  <div className="flex-1 overflow-y-auto">
+                    {twitterTab === 0 ? (
+                      // Tracked Accounts Tab
+                      <>
+                        {twitterAccounts.length === 0 ? (
+                          <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                            <span className="mb-4 text-neutral-400">
+                              No Twitter accounts tracked yet
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[520px] text-xs">
+                              <thead>
+                                <tr className="border-b border-white/20">
+                                  <th className="px-2 py-2 text-left text-sm text-neutral-400">
+                                    Account
+                                  </th>
+                                  <th className="px-2 py-2 text-left text-sm text-neutral-400">
+                                    Followers
+                                  </th>
+                                  <th className="px-2 py-2 text-left text-sm text-neutral-400">
+                                    Added
+                                  </th>
+                                  <th className="px-2 py-2 text-right text-sm text-neutral-400">
+                                    Actions
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {twitterAccounts.map((account) => (
+                                  <TwitterAccountRow
+                                    key={account.id}
+                                    account={account}
+                                    onRemove={handleRemoveTwitterAccount}
+                                    onViewProfile={handleViewTwitterProfile}
+                                  />
                                 ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      // X Feed Tab
+                      <>
+                        {twitterAccounts.length === 0 ? (
+                          <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                            <span className="mb-4 text-neutral-400">
+                              Add Twitter accounts to see their feed
+                            </span>
+                          </div>
+                        ) : loadingTwitterFeed ? (
+                          <div className="flex h-full flex-col items-center justify-center py-8">
+                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-400 border-t-transparent"></div>
+                            <span className="mt-4 text-neutral-400">
+                              Loading feed...
+                            </span>
+                          </div>
+                        ) : twitterFeed.length === 0 ? (
+                          <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+                            <span className="text-neutral-400">
+                              No tweets found
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="space-y-3 p-2">
+                            {selectedTwitterUser && (
+                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-emerald-500/10 px-3 py-2">
+                                <span className="text-xs text-emerald-400">
+                                  Showing tweets from @{selectedTwitterUser}
+                                </span>
+                                <button
+                                  onClick={() => setSelectedTwitterUser(null)}
+                                  className="text-xs text-neutral-400 hover:text-white"
+                                >
+                                  Show All
+                                </button>
                               </div>
                             )}
-                            
-                            {/* Tweet Stats */}
-                            <div className="flex items-center gap-4 text-xs text-neutral-400">
-                              <span>💬 {tweet.replyCount || 0}</span>
-                              <span>🔁 {tweet.retweetCount || 0}</span>
-                              <span>❤️ {tweet.likeCount || 0}</span>
-                              {tweet.url && (
-                                <a
-                                  href={tweet.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="ml-auto text-blue-400 hover:text-blue-300"
-                                >
-                                  View on X →
-                                </a>
-                              )}
-                            </div>
+                            {twitterFeed.map((tweet) => (
+                              <div
+                                key={tweet.id}
+                                className="rounded-lg border border-neutral-800/50 bg-neutral-900/50 p-3 transition-all duration-300 hover:border-emerald-400/30 hover:bg-neutral-800/30"
+                              >
+                                {/* Tweet Header */}
+                                <div className="mb-2 flex items-start gap-2">
+                                  {tweet.authorProfileImage ? (
+                                    <img
+                                      src={tweet.authorProfileImage}
+                                      alt={tweet.authorName}
+                                      className="h-8 w-8 rounded-full"
+                                    />
+                                  ) : (
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
+                                      {tweet.authorName.charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="truncate text-sm font-semibold text-white">
+                                        {tweet.authorName}
+                                      </span>
+                                      <span className="truncate text-xs text-neutral-400">
+                                        @{tweet.authorUsername}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs text-neutral-500">
+                                      {new Date(tweet.createdAt).toLocaleString()}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Tweet Text */}
+                                <p className="mb-2 whitespace-pre-wrap break-words text-sm text-neutral-200">
+                                  {tweet.text}
+                                </p>
+
+                                {/* Tweet Images */}
+                                {tweet.images && tweet.images.length > 0 && (
+                                  <div
+                                    className="mb-2 grid gap-2"
+                                    style={{
+                                      gridTemplateColumns:
+                                        tweet.images.length === 1
+                                          ? "1fr"
+                                          : tweet.images.length === 2
+                                            ? "1fr 1fr"
+                                            : tweet.images.length === 3
+                                              ? "1fr 1fr"
+                                              : "repeat(2, 1fr)",
+                                    }}
+                                  >
+                                    {tweet.images.map((imageUrl, idx) => (
+                                      <img
+                                        key={idx}
+                                        src={imageUrl}
+                                        alt={`Tweet image ${idx + 1}`}
+                                        className="h-auto max-h-96 w-full cursor-pointer rounded-lg border border-neutral-700/50 object-cover transition-opacity hover:opacity-90"
+                                        onClick={() =>
+                                          window.open(imageUrl, "_blank")
+                                        }
+                                        onError={(e) => {
+                                          (
+                                            e.target as HTMLImageElement
+                                          ).style.display = "none";
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Tweet Stats */}
+                                <div className="flex flex-wrap items-center gap-4 text-xs text-neutral-400">
+                                  <span>💬 {tweet.replyCount || 0}</span>
+                                  <span>🔁 {tweet.retweetCount || 0}</span>
+                                  <span>❤️ {tweet.likeCount || 0}</span>
+                                  {tweet.url && (
+                                  <a
+                                      href={tweet.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    className="ml-auto text-emerald-400 hover:text-emerald-300"
+                                    >
+                                      View on X →
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-              </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
-      <AddWalletModal
-        isOpen={showAddWalletModal}
-        onClose={() => setShowAddWalletModal(false)}
-        onAddWallet={handleAddWallet}
-      />
-      <ImportExportWalletModal
-        mode={"import"}
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-        onImport={async (imported, onProgress) => {
-          try {
-            // Transform imported wallets to support different formats
-            const transformedWallets = imported.map((wallet: any) => {
-              // Handle Axiom.trade format
-              if (wallet.trackedWalletAddress) {
+        <AddWalletModal
+          isOpen={showAddWalletModal}
+          onClose={() => setShowAddWalletModal(false)}
+          onAddWallet={handleAddWallet}
+        />
+        <ImportExportWalletModal
+          mode={"import"}
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          onImport={async (imported, onProgress) => {
+            try {
+              // Transform imported wallets to support different formats
+              const transformedWallets = imported.map((wallet: any) => {
+                // Handle Axiom.trade format
+                if (wallet.trackedWalletAddress) {
+                  return {
+                    address: wallet.trackedWalletAddress,
+                    name: wallet.name || "Imported Wallet",
+                    emoji:
+                      wallet.emoji ||
+                      EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+                    createdAt: Date.now(),
+                  };
+                }
+                // Handle standard format - ensure all required fields exist
                 return {
-                  address: wallet.trackedWalletAddress,
-                  name: wallet.name || 'Imported Wallet',
-                  emoji: wallet.emoji || EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-                  createdAt: Date.now(),
+                  address: wallet.address,
+                  name: wallet.name || "Imported Wallet",
+                  emoji:
+                    wallet.emoji ||
+                    EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+                  createdAt: wallet.createdAt || Date.now(),
                 };
-              }
-              // Handle standard format - ensure all required fields exist
-              return {
-                address: wallet.address,
-                name: wallet.name || 'Imported Wallet',
-                emoji: wallet.emoji || EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
-                createdAt: wallet.createdAt || Date.now(),
-              };
-            });
-            
-            const existingAddresses = new Set(
-              watchedWallets
-                .map((wallet) => normalizeAddress(wallet.address))
-                .filter(Boolean)
-            );
-            const batchAddresses = new Set<string>();
-            const duplicateExisting: string[] = [];
-            const duplicateWithinImport: string[] = [];
-            const invalidWallets: string[] = [];
-            const walletsToAdd = transformedWallets.filter((wallet) => {
-              const normalized = normalizeAddress(wallet.address);
-              if (!normalized) {
-                invalidWallets.push(wallet.address);
-                return false;
-              }
-              if (existingAddresses.has(normalized)) {
-                duplicateExisting.push(wallet.address);
-                return false;
-              }
-              if (batchAddresses.has(normalized)) {
-                duplicateWithinImport.push(wallet.address);
-                return false;
-              }
-              batchAddresses.add(normalized);
-              return true;
-            });
+              });
 
-            const availableSlots = MAX_WALLETS - watchedWallets.length;
-            if (walletsToAdd.length > availableSlots) {
-              const message = availableSlots > 0
-                ? `You can only add ${availableSlots} more wallet${availableSlots === 1 ? '' : 's'}. Remove some before importing.`
-                : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`;
-              throw new Error(message);
-            }
-
-            // Add each wallet to backend
-            let successCount = 0;
-            let errorCount = 0;
-            const total = walletsToAdd.length;
-            let processed = 0;
-            if (total === 0) {
-              onProgress?.(0, 0);
-            } else {
-              onProgress?.(0, total);
-            }
-            
-            for (const wallet of walletsToAdd) {
-              try {
-                await addTrackedWallet(wallet.address, wallet.name, user?.id, wallet.emoji);
-                successCount++;
-              } catch (error: any) {
-                if (error.message?.includes('already exists')) {
+              const existingAddresses = new Set(
+                watchedWallets
+                  .map((wallet) => normalizeAddress(wallet.address))
+                  .filter(Boolean),
+              );
+              const batchAddresses = new Set<string>();
+              const duplicateExisting: string[] = [];
+              const duplicateWithinImport: string[] = [];
+              const invalidWallets: string[] = [];
+              const walletsToAdd = transformedWallets.filter((wallet) => {
+                const normalized = normalizeAddress(wallet.address);
+                if (!normalized) {
+                  invalidWallets.push(wallet.address);
+                  return false;
+                }
+                if (existingAddresses.has(normalized)) {
                   duplicateExisting.push(wallet.address);
-                } else {
-                  errorCount++;
+                  return false;
+                }
+                if (batchAddresses.has(normalized)) {
+                  duplicateWithinImport.push(wallet.address);
+                  return false;
+                }
+                batchAddresses.add(normalized);
+                return true;
+              });
+
+              const availableSlots = MAX_WALLETS - watchedWallets.length;
+              if (walletsToAdd.length > availableSlots) {
+                const message =
+                  availableSlots > 0
+                    ? `You can only add ${availableSlots} more wallet${availableSlots === 1 ? "" : "s"}. Remove some before importing.`
+                    : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`;
+                throw new Error(message);
+              }
+
+              // Add each wallet to backend
+              let successCount = 0;
+              let errorCount = 0;
+              const total = walletsToAdd.length;
+              let processed = 0;
+              if (total === 0) {
+                onProgress?.(0, 0);
+              } else {
+                onProgress?.(0, total);
+              }
+
+              for (const wallet of walletsToAdd) {
+                try {
+                  await addTrackedWallet(
+                    wallet.address,
+                    wallet.name,
+                    user?.id,
+                    wallet.emoji,
+                  );
+                  successCount++;
+                } catch (error: any) {
+                  if (error.message?.includes("already exists")) {
+                    duplicateExisting.push(wallet.address);
+                  } else {
+                    errorCount++;
+                  }
+                }
+                processed += 1;
+                if (total > 0) {
+                  onProgress?.(processed, total);
                 }
               }
-              processed += 1;
-              if (total > 0) {
-                onProgress?.(processed, total);
+
+              // Reload from backend
+              await loadWalletsFromBackend();
+
+              const messageParts: string[] = [];
+              if (successCount > 0) {
+                messageParts.push(
+                  `Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`,
+                );
               }
-            }
-            
-            // Reload from backend
-            await loadWalletsFromBackend();
-            
-            const messageParts: string[] = [];
-            if (successCount > 0) {
-              messageParts.push(`Imported ${successCount} wallet${successCount === 1 ? '' : 's'}`);
-            }
-            if (duplicateExisting.length > 0) {
-              messageParts.push(
-                `${duplicateExisting.length} already tracked (${duplicateExisting
-                  .slice(0, 3)
-                  .map(shortenAddress)
-                  .join(', ')}${
-                  duplicateExisting.length > 3 ? ` +${duplicateExisting.length - 3}` : ''
-                })`
-              );
-            }
-            if (duplicateWithinImport.length > 0) {
-              messageParts.push(
-                `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? '' : 's'} in import (${duplicateWithinImport
-                  .slice(0, 3)
-                  .map(shortenAddress)
-                  .join(', ')}${
-                  duplicateWithinImport.length > 3 ? ` +${duplicateWithinImport.length - 3}` : ''
-                })`
-              );
-            }
-            if (invalidWallets.length > 0) {
-              messageParts.push(
-                `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? '' : 'es'}`
-              );
-            }
-            if (errorCount > 0) {
-              messageParts.push(`${errorCount} failed`);
-            }
+              if (duplicateExisting.length > 0) {
+                messageParts.push(
+                  `${duplicateExisting.length} already tracked (${duplicateExisting
+                    .slice(0, 3)
+                    .map(shortenAddress)
+                    .join(", ")}${
+                    duplicateExisting.length > 3
+                      ? ` +${duplicateExisting.length - 3}`
+                      : ""
+                  })`,
+                );
+              }
+              if (duplicateWithinImport.length > 0) {
+                messageParts.push(
+                  `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} in import (${duplicateWithinImport
+                    .slice(0, 3)
+                    .map(shortenAddress)
+                    .join(", ")}${
+                    duplicateWithinImport.length > 3
+                      ? ` +${duplicateWithinImport.length - 3}`
+                      : ""
+                  })`,
+                );
+              }
+              if (invalidWallets.length > 0) {
+                messageParts.push(
+                  `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
+                );
+              }
+              if (errorCount > 0) {
+                messageParts.push(`${errorCount} failed`);
+              }
 
-            const toastMessage = messageParts.length > 0
-              ? messageParts.join('. ')
-              : 'No new wallets were imported.';
+              const toastMessage =
+                messageParts.length > 0
+                  ? messageParts.join(". ")
+                  : "No new wallets were imported.";
 
-            setToast(toastMessage);
-            setTimeout(() => setToast(""), 3000);
-          } catch (error) {
-            console.error('Import error:', error);
-            setToast((error as Error)?.message || 'Failed to import wallets');
-            setTimeout(() => setToast(""), 3000);
-            throw error; // Re-throw so modal can handle it
-          }
-        }}
-        wallets={wallets}
-      />
-      {toast && (
-        <div className="w-fit animate-fade-in fixed top-8 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white border border-blue-400/50 px-6 py-3 text-sm font-semibold shadow-xl shadow-blue-500/30">
-          {toast}
-        </div>
-      )}
-      {scannedWallet && (
-        <WalletScanPanel
-          wallet={scannedWallet}
-          onClose={() => setScannedWallet(null)}
+              setToast(toastMessage);
+              setTimeout(() => setToast(""), 3000);
+            } catch (error) {
+              console.error("Import error:", error);
+              setToast((error as Error)?.message || "Failed to import wallets");
+              setTimeout(() => setToast(""), 3000);
+              throw error; // Re-throw so modal can handle it
+            }
+          }}
+          wallets={wallets}
         />
-      )}
-      <AddTwitterHandleModal
-        isOpen={showAddTwitterModal}
-        onClose={() => setShowAddTwitterModal(false)}
-        onAddTwitterHandle={handleAddTwitterAccount}
-      />
+        {toast && (
+          <div className="animate-fade-in fixed top-8 left-1/2 z-50 w-fit -translate-x-1/2 rounded-lg border border-emerald-400/50 bg-gradient-to-r from-emerald-500 to-green-500 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-400/30">
+            {toast}
+          </div>
+        )}
+        {scannedWallet && (
+          <WalletScanPanel
+            wallet={scannedWallet}
+            onClose={() => setScannedWallet(null)}
+          />
+        )}
+        <AddTwitterHandleModal
+          isOpen={showAddTwitterModal}
+          onClose={() => setShowAddTwitterModal(false)}
+          onAddTwitterHandle={handleAddTwitterAccount}
+        />
 
-      {/* Bottom Navigation/Footer */}
-      {/* <div className="fixed bottom-0 left-0 z-40 flex w-full items-center justify-between border-t border-emerald-950/50 bg-neutral-900/80 px-6 py-3 text-xs backdrop-blur-md">
+        {/* Bottom Navigation/Footer */}
+        {/* <div className="fixed bottom-0 left-0 z-40 flex w-full items-center justify-between border-t border-emerald-950/50 bg-neutral-900/80 px-6 py-3 text-xs backdrop-blur-md">
         <div className="flex gap-6">
           <button className="flex items-center gap-2 font-semibold text-emerald-400 transition-colors duration-300 hover:text-emerald-300">
             <span className="text-lg">📊</span> Wallet Tracker
@@ -1200,7 +1389,7 @@ export default function TrackersPage() {
             <span className="text-emerald-400">💰</span> $106.8K
           </span>
           <span className="flex items-center gap-2">
-            <span className="text-blue-400">💎</span> $2581
+            <span className="text-emerald-400">💎</span> $2581
           </span>
           <span className="flex items-center gap-2">
             <span className="text-green-400">💸</span> $152.42
@@ -1217,8 +1406,8 @@ export default function TrackersPage() {
           </span>
         </div>
       </div> */}
-      <Footer />
-			</div>
+        <Footer />
+      </div>
     </>
   );
 }
