@@ -16,6 +16,9 @@ interface LimitOrder {
   status: "Active" | "Cancelled" | "Completed" | "Failed";
   createdAt?: string;
   transactionHash?: string; // For completed orders
+  poolType?: string | null;
+  failureReason?: string | null;
+  failureCode?: string | null;
 }
 
 export default function LimitOrdersPanel() {
@@ -50,7 +53,7 @@ export default function LimitOrdersPanel() {
       
       // Update local state
       setOrders(prev => prev.map(order => 
-        order.id === orderId ? { ...order, status: "Cancelled" as const } : order
+        order.id === orderId ? { ...order, status: "Cancelled" as const, failureReason: undefined, failureCode: undefined } : order
       ));
     } catch (error: any) {
       console.error('Failed to cancel order:', error);
@@ -95,6 +98,31 @@ export default function LimitOrdersPanel() {
     
     // Update localStorage
     localStorage.setItem('completedOrders', JSON.stringify(Array.from(completedOrderIds)));
+  }, [orders]);
+
+  useEffect(() => {
+    const cancelledWithReason = orders.filter(
+      o =>
+        (o.status === 'Cancelled' || o.status === 'Failed') &&
+        o.failureReason &&
+        o.failureReason.trim().length > 0
+    );
+
+    const previousRaw = localStorage.getItem('limitOrderFailures');
+    const previousMap: Record<string, string> = previousRaw ? JSON.parse(previousRaw) : {};
+
+    const nextMap: Record<string, string> = {};
+
+    cancelledWithReason.forEach(order => {
+      nextMap[order.id] = order.failureReason!;
+      if (previousMap[order.id] !== order.failureReason) {
+        toast.error(`⚠️ Limit order #${order.id} failed: ${order.failureReason}`, {
+          duration: 10000,
+        });
+      }
+    });
+
+    localStorage.setItem('limitOrderFailures', JSON.stringify(nextMap));
   }, [orders]);
 
   const activeOrders = orders.filter(o => o.status === 'Active');
@@ -290,6 +318,11 @@ export default function LimitOrdersPanel() {
                     {order.status === 'Failed' ? '⚠️ Failed' : '🚫 Cancelled'}
                   </span>
                 </div>
+                {order.failureReason && (
+                  <div className="mt-2 text-xs text-red-400">
+                    {order.failureReason}
+                  </div>
+                )}
               </div>
             ))}
           </div>

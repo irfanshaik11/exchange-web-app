@@ -189,6 +189,15 @@ export interface CreateLimitOrderParams {
   poolAddress?: string; // For trading execution (migrated_pool_address || pair_address)
   pairAddress?: string; // For market cap tracking (always pair_address)
   poolType?: string;
+  // Trading parameter overrides (mirrors quick-buy presets)
+  slippage?: number;
+  priorityFee?: number;
+  bribe?: number;
+  mevProtection?: boolean;
+  mevMode?: "off" | "reduced" | "on";
+  autoFee?: boolean;
+  maxFee?: number;
+  rpc?: string;
 }
 
 interface LimitOrder {
@@ -201,6 +210,10 @@ interface LimitOrder {
   tokenAmount: number;
   status: "Active" | "Cancelled" | "Completed";
   createdAt?: string; // Only present in my_orders response
+  transactionHash?: string | null;
+  poolType?: string | null;
+  failureReason?: string | null;
+  failureCode?: string | null;
 }
 
 interface UpdateLimitOrderParams {

@@ -20,6 +20,7 @@ import useOptimizedTradeEventsWebSocket from "../../hooks/useOptimizedTradeEvent
 import dynamic from "next/dynamic";
 import SimilarTokensPanel from "../../components/trade/SimilarTokensPanel";
 import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPanel";
+import TokenLimitOrders from "../../components/trade/TokenLimitOrders";
 
 // Lazy load heavy components to reduce initial bundle size
 //const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
@@ -367,6 +368,13 @@ export default function TradePage() {
       ? { ...cachedTokenMetadata, mint: cachedTokenMetadata.mint || "", pair_address: cachedTokenMetadata.pair_address || "", created_at: cachedTokenMetadata.created_at || null }
       : optimisticToken);
 
+  const resolvedTokenMint = React.useMemo(() => {
+    if (displayToken?.mint) return displayToken.mint;
+    if (typeof _mint === "string") return _mint;
+    if (typeof id === "string") return id;
+    return undefined;
+  }, [displayToken?.mint, _mint, id]);
+
   const { trades: tradeDataForChart } = useOptimizedTradeEventsWebSocket({
     pairAddress: displayToken?.pair_address || resolvedPairAddress || undefined,
     enabled: !!displayToken?.pair_address || !!resolvedPairAddress,
@@ -628,6 +636,9 @@ export default function TradePage() {
                 {selectedTab === "Trades" && (
                   <CodexTrades token={correctTokenData || displayToken} initialTrades={initialTradeData?.trades || []} />
                 )}
+                <div style={{ display: selectedTab === "Orders" ? "block" : "none" }}>
+                  <TokenLimitOrders />
+                </div>
                 {selectedTab === "Top Traders" && (
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexTopTraders token={displayToken} />
