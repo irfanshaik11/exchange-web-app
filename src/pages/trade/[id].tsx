@@ -368,6 +368,18 @@ export default function TradePage() {
       ? { ...cachedTokenMetadata, mint: cachedTokenMetadata.mint || "", pair_address: cachedTokenMetadata.pair_address || "", created_at: cachedTokenMetadata.created_at || null }
       : optimisticToken);
 
+  const tokenNameForTitle =
+    (typeof token?.name === "string" && token.name.trim()) ||
+    (typeof token?.symbol === "string" && token.symbol.trim()) ||
+    (typeof displayToken?.name === "string" && displayToken.name.trim()) ||
+    (typeof displayToken?.symbol === "string" && displayToken.symbol.trim()) ||
+    (typeof id === "string" && id.trim()) ||
+    "";
+
+  const pageTitle = tokenNameForTitle
+    ? `${tokenNameForTitle} | Trade`
+    : "Trade";
+
   const resolvedTokenMint = React.useMemo(() => {
     if (displayToken?.mint) return displayToken.mint;
     if (typeof _mint === "string") return _mint;
@@ -455,7 +467,7 @@ export default function TradePage() {
 
   return (
     <>
-      <Head><title>{token?.name} | Trade</title></Head>
+      <Head><title>{pageTitle}</title></Head>
 
       <div 
         className="min-h-screen w-full flex flex-col"
