@@ -19,6 +19,7 @@ import { useCachedPulseTokens, useCachedLaunchpadData } from '../hooks/useCached
 import { env } from '~/env';
 import { rollingTradeCache } from '../utils/rollingTradeCache';
 import { SiBinance, SiSolana } from 'react-icons/si';
+import { FaDiscord } from 'react-icons/fa';
 
 interface LaunchpadToken {
   mint: string;
@@ -52,6 +53,8 @@ export default function PulsePage() {
   const chain = router.query.chain as string | undefined;
   const isBnbRoute = chain === 'bnb';
   const isMonadRoute = chain === 'monad';
+  const isBaseRoute = chain === 'base';
+  const isEthereumRoute = chain === 'eth';
   const isSolanaRoute = chain === 'sol' || !chain; // Default to Solana if no chain specified
   const chainButtonBase =
     'relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]';
@@ -68,6 +71,16 @@ export default function PulsePage() {
   const monadButtonClasses = `${chainButtonBase} ${
     isMonadRoute
       ? 'bg-[#222733] text-white shadow-lg shadow-purple-500/20'
+      : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  }`;
+  const baseButtonClasses = `${chainButtonBase} ${
+    isBaseRoute
+      ? 'bg-[#222733] text-white shadow-lg shadow-blue-400/20'
+      : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  }`;
+  const ethButtonClasses = `${chainButtonBase} ${
+    isEthereumRoute
+      ? 'bg-[#222733] text-white shadow-lg shadow-emerald-400/20'
       : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
   }`;
 
@@ -1153,7 +1166,7 @@ export default function PulsePage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold">Trenches</h1>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <Link
                     href="/pulse?chain=sol"
                     aria-label="View Solana tokens"
@@ -1175,21 +1188,49 @@ export default function PulsePage() {
                     className={bnbButtonClasses}
                   >
                     <SiBinance className="h-4 w-4 text-[#F3BA2F]" />
-                    <span className="absolute -bottom-1 -right-3 rounded-full border border-blue-500 px-1 py-px text-[7px] font-semibold uppercase tracking-[0.18em] text-blue-500 shadow-lg shadow-blue-500/30" style={{ backgroundColor: '#06070b' }}>
+                    <span className="absolute -bottom-1 -right-3 rounded-full border border-blue-500 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-blue-500 shadow-lg shadow-blue-500/30" style={{ backgroundColor: '#06070b' }}>
                       Beta
                     </span>
                   </Link>
                   <Link
                     href="/pulse?chain=monad"
-                    aria-label="View Monad tokens (coming soon)"
+                    aria-label="View MegaETH tokens (coming soon)"
                     className={monadButtonClasses}
                   >
                     <img
-                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                      alt="Monad"
+                      src="https://avatars.githubusercontent.com/u/138558126?s=280&v=4"
+                      alt="MegaETH"
                       className="h-7 w-7 rounded-full object-cover bg-black/60 p-0.5"
                     />
-                    <span className="absolute -bottom-1 -right-4 rounded-full border border-purple-400 px-1 py-px text-[7px] font-semibold uppercase tracking-[0.18em] text-purple-300 shadow-lg shadow-purple-500/30" style={{ backgroundColor: '#06070b' }}>
+                    <span className="absolute -bottom-1 -right-4 rounded-full border border-purple-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-purple-300 shadow-lg shadow-purple-500/30" style={{ backgroundColor: '#06070b' }}>
+                      Soon
+                    </span>
+                  </Link>
+                  <Link
+                    href="/pulse?chain=base"
+                    aria-label="View Base tokens (coming soon)"
+                    className={baseButtonClasses}
+                  >
+                    <img
+                      src="https://avatars.githubusercontent.com/u/108554348?s=280&v=4"
+                      alt="Base"
+                      className="h-7 w-7 rounded-full object-cover bg-black/60 p-0.5"
+                    />
+                    <span className="absolute -bottom-1 -right-4 rounded-full border border-sky-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-sky-300 shadow-lg shadow-sky-500/30" style={{ backgroundColor: '#06070b' }}>
+                      Soon
+                    </span>
+                  </Link>
+                  <Link
+                    href="/pulse?chain=eth"
+                    aria-label="View Ethereum tokens (coming soon)"
+                    className={ethButtonClasses}
+                  >
+                    <img
+                      src="https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png"
+                      alt="Ethereum"
+                      className="h-7 w-7 rounded-full object-cover bg-black/60 p-0.5"
+                    />
+                    <span className="absolute -bottom-1 -right-4 rounded-full border border-emerald-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-emerald-300 shadow-lg shadow-emerald-500/30" style={{ backgroundColor: '#06070b' }}>
                       Soon
                     </span>
                   </Link>
@@ -1295,17 +1336,39 @@ export default function PulsePage() {
                 <BnbTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" showBubbleMetrics={false} />
               </div>
             </div>
-          ) : isMonadRoute ? (
+          ) : isMonadRoute || isBaseRoute || isEthereumRoute ? (
             <div className="mt-12 flex flex-col items-center justify-center gap-6 rounded-2xl border border-neutral-800/80 bg-[#0a0b10] px-6 py-16 text-center shadow-inner shadow-black/40">
               <img
-                src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                alt="Monad"
+                src={
+                  isMonadRoute
+                    ? "https://avatars.githubusercontent.com/u/138558126?s=280&v=4"
+                    : isBaseRoute
+                      ? "https://avatars.githubusercontent.com/u/108554348?s=280&v=4"
+                      : "https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png"
+                }
+                alt={
+                  isMonadRoute
+                    ? "MegaETH"
+                    : isBaseRoute
+                      ? "Base"
+                      : "Ethereum"
+                }
                 className="h-24 w-24 rounded-full object-cover bg-black/60 p-1"
               />
               <div className="space-y-2">
-                <h2 className="text-xl font-semibold text-neutral-100">Monad support is on the way</h2>
+                <h2 className="text-xl font-semibold text-neutral-100">
+                  {isMonadRoute
+                    ? 'MegaETH support is on the way'
+                    : isBaseRoute
+                      ? 'Base support is on the way'
+                      : 'Ethereum support is on the way'}
+                </h2>
                 <p className="max-w-md text-sm text-neutral-400">
-                  We&apos;re building out dedicated flows for Monad tokens. Check back soon for real-time liquidity and launch data.
+                  {isMonadRoute
+                    ? 'We\'re building out dedicated flows for MegaETH tokens. Check back soon for real-time liquidity and launch data.'
+                    : isBaseRoute
+                      ? 'We\'re building out dedicated flows for Base tokens. Check back soon for real-time liquidity and launch data.'
+                      : 'We\'re building out dedicated flows for Ethereum tokens. Check back soon for real-time liquidity and launch data.'}
                 </p>
               </div>
               <button
@@ -1314,6 +1377,15 @@ export default function PulsePage() {
               >
                 Back to Solana
               </button>
+              <a
+                href="https://discord.gg/sACYQmCsTJ"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-neutral-700/70 bg-neutral-800/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-200 transition-colors hover:border-purple-500/60 hover:bg-neutral-800"
+              >
+                <FaDiscord className="h-4 w-4 text-[#5865F2]" />
+                Join Discord
+              </a>
             </div>
           ) : isLoading ? (
             <div className="w-full">
