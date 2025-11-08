@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Always request fresh cache-bypass
   params.set('fresh', '1');
   // Only set default limit if no limit is provided
-  if (!params.get('limit')) params.set('limit', '30');
+  if (!params.get('limit')) params.set('limit', '50');
 
   const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
 

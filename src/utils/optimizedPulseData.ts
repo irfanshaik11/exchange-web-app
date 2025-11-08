@@ -35,8 +35,8 @@ export async function fetchCombinedPulseData(): Promise<CombinedTokenResponse> {
       // Fetch all data in parallel
       const [newTokens, finalStretchTokens, migratedTokens, launchpadData] = await Promise.allSettled([
         fetch(`${baseUrl}/v1/pulse/new?limit=30`).then(res => res.json()),
-        fetch(`${baseUrl}/v1/pulse/final-stretch?limit=30`).then(res => res.json()),
-        fetch(`${baseUrl}/v1/pulse/migrated?limit=30`).then(res => res.json()),
+        fetch(`${baseUrl}/v1/pulse/final-stretch?limit=50`).then(res => res.json()),
+        fetch(`${baseUrl}/v1/pulse/migrated?limit=70`).then(res => res.json()),
         fetch(`${baseUrl}/v1/launchpad/tokens?limit=30`).then(res => res.json()),
       ]);
 

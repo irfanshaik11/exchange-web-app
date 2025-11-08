@@ -464,7 +464,7 @@ export default function PulsePage() {
     const immediatePoll = async () => {
       try {
         // Always use Next.js API proxy to avoid CORS issues
-        const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+        const apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
 
         const res = await fetch(apiUrl, {
           cache: 'no-store',
@@ -512,7 +512,7 @@ export default function PulsePage() {
   //   const poll = async () => {
   //     try {
   //       // Always use Next.js API proxy to avoid CORS issues
-  //       const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+  //       const apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
   //
   //       const res = await fetch(apiUrl);
   //       if (!alive) return;
@@ -977,7 +977,7 @@ export default function PulsePage() {
     const fetchInitialMigratedTokens = async () => {
       try {
         console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
-        const url = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/pulse/migrated?limit=50`;
+        const url = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/pulse/migrated?limit=70`;
         console.log(`[Pulse] 🔄 URL:`, url);
         console.log(`[Pulse] 🔄 env.NEXT_PUBLIC_GO_SERVICE_URL:`, env.NEXT_PUBLIC_GO_SERVICE_URL);
         const response = await fetch(url);
