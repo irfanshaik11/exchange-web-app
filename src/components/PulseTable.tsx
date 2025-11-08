@@ -2383,7 +2383,7 @@ function PulseTable({
       }`}
       style={{ 
         backgroundColor: '#101114',
-        borderColor: (title.toLowerCase().includes('new')) ? 'rgba(36, 37, 44, 0.015)' : AX.border,
+        borderColor: AX.border,
         borderStyle: 'solid',
         borderWidth: '1px',
         boxShadow: (title.toLowerCase().includes('new')) ? 'none' : undefined

@@ -12,12 +12,9 @@ import { getTradeActivityByUser } from "~/utils/functions";
 import toast, { type ToastOptions } from "react-hot-toast";
 import {
   showCenteredErrorToast,
-  showTransactionPendingToast,
-  startTransactionToastTimeout,
-  updateTransactionToast,
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
-import { showEnhancedToast } from "~/utils/enhancedToast";
+import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import { SiSolana } from "react-icons/si";
 import useTokenStatsWebSocket from "~/hooks/useTokenStatsWebSocket";
@@ -976,11 +973,44 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           setIsLoading(false);
           return;
         }
-        let pendingToastId: string | null = null;
-        let clearToastTimeout = () => undefined;
+        let initiatingToastId: string | null = null;
         try {
-          pendingToastId = showTransactionPendingToast("Attempting transaction...");
-          clearToastTimeout = startTransactionToastTimeout(pendingToastId);
+          const orderIntentLabel = `${mode === "buy" ? "Buy" : "Sell"} Limit Order`;
+          const numericAmount = Number(amount);
+          const numericTargetMc = Number(targetMC);
+          const formattedAmount =
+            mode === "buy"
+              ? `${Number.isFinite(numericAmount) ? numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 }) : amount} SOL`
+              : `${Number.isFinite(numericAmount) ? numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 }) : amount}%`;
+          const formattedTarget =
+            Number.isFinite(numericTargetMc)
+              ? `$${Math.round(numericTargetMc).toLocaleString()}`
+              : `${targetMC}`;
+          initiatingToastId = showEnhancedToast("loading", "Submitting limit order…", {
+            title: orderIntentLabel,
+            description: `${formattedAmount} • Target ${formattedTarget}`,
+          });
+
+          const sanitizeNumber = (value: unknown, fallback: number): number => {
+            const numeric = typeof value === "string" ? Number(value) : (value as number);
+            return Number.isFinite(numeric) ? numeric : fallback;
+          };
+
+          const quickSettings = settings ?? {};
+          const computedPoolType = getPoolTypeFromToken(token);
+          const slippageValue = sanitizeNumber(quickSettings.maxSlippage, 0.2);
+          const priorityFeeValue = sanitizeNumber(quickSettings.priority, 0.0001);
+          const bribeValue = sanitizeNumber(quickSettings.bribe, 0);
+          const maxFeeValue = sanitizeNumber(quickSettings.maxFee, 0);
+          const mevModeValue =
+            typeof quickSettings.mevMode === "string" ? quickSettings.mevMode : "off";
+          const autoFeeValue = Boolean(quickSettings.autoFee);
+          const mevProtectionValue = mevModeValue !== "off";
+          const rpcValue =
+            typeof quickSettings.rpc === "string" && quickSettings.rpc.trim().length > 0
+              ? quickSettings.rpc.trim()
+              : undefined;
+
           await createLimitOrder(
             {
               tokenAddress: token.mint || "",
@@ -995,24 +1025,44 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               tokenDecimals: token.decimals,
               poolAddress: effectivePoolAddress,
               pairAddress: token.pair_address || "",
-              poolType: getPoolTypeFromToken(token),
+              poolType: computedPoolType,
+              slippage: slippageValue,
+              priorityFee: priorityFeeValue,
+              bribe: bribeValue,
+              mevProtection: mevProtectionValue,
+              mevMode: mevModeValue,
+              autoFee: autoFeeValue,
+              maxFee: maxFeeValue,
+              rpc: rpcValue,
             },
             user.bearerToken
           );
-          clearToastTimeout();
-          updateTransactionToast(
-            pendingToastId,
+          updateEnhancedToast(
+            initiatingToastId,
             "success",
-            `✅ Limit order for ${token.symbol} created successfully!`
+            `${token.symbol} limit order created`,
+            {
+              title: "Limit Order Submitted",
+              description: `${formattedAmount} • Target ${formattedTarget}`,
+            }
           );
           setSuccessMessage(`Limit order for ${token.symbol} created successfully!`);
           setAmount("");
           setTargetMC("");
         } catch (error: any) {
-          clearToastTimeout();
           const errorMsg =
-            error.message?.length > 60 ? `${error.message.substring(0, 57)}...` : error.message || "Failed to create limit order";
-          updateTransactionToast(pendingToastId, "error", `❌ Failed to create limit order: ${errorMsg}`);
+            error?.message?.length > 60 ? `${error.message.substring(0, 57)}...` : error?.message || "Failed to create limit order";
+          if (initiatingToastId) {
+            updateEnhancedToast(initiatingToastId, "error", "Limit order failed", {
+              title: "Unable to Create Limit Order",
+              description: errorMsg,
+            });
+          } else {
+            showEnhancedToast("error", "Limit order failed", {
+              title: "Unable to Create Limit Order",
+              description: errorMsg,
+            });
+          }
           setSuccessMessage(null);
         } finally {
           setIsLoading(false);
