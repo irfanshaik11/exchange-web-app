@@ -204,18 +204,6 @@ export default function Header({
         style={{ backgroundColor: "#0f1012", borderColor: AX.border }}
       >
         <div
-          className="w-full text-center p-0.5 text-sm"
-          role="alert"
-          style={{
-            backgroundColor: "#ddc13d",
-            color: "#0b0c0e",
-            borderBottom: "1px solid #c7ae32",
-          }}
-        >
-          [ This terminal is still under development and not ready for production,&nbsp;
-          <b>use at your own risk!</b> ]
-        </div>
-        <div
           className="flex max-w-full items-center justify-between border-b px-4 py-2.5"
           style={{ backgroundColor: "#06070b", borderColor: AX.border }}
         >

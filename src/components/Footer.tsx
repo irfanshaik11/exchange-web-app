@@ -330,6 +330,18 @@ export default function Footer() {
           </div>
         </div>
       </div>
+      <div
+        className="w-full text-center px-4 py-1 text-xs sm:text-sm"
+        role="alert"
+        style={{
+          backgroundColor: "#ddc13d",
+          color: "#0b0c0e",
+          borderTop: "1px solid #c7ae32",
+        }}
+      >
+        [ This terminal is still under development and not ready for production,&nbsp;
+        <b>use at your own risk!</b> ]
+      </div>
       
       {/* Preset Settings Modal */}
       <QuickBuySettingsModal 
