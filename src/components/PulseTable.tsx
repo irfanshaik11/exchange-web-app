@@ -103,6 +103,8 @@ interface PulseTableProps {
 // Add a simple in-memory cache for token metadata
 const tokenMetadataCache: Record<string, any> = {};
 
+const WS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
 // Smart color system based on token properties
 interface SmartColorProps {
   children: React.ReactNode;
@@ -1277,7 +1279,33 @@ function PulseTable({
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes('new');
   // State for WebSocket real-time updates
-  const [wsTokens, setWsTokens] = useState<Token[]>([]);
+  const wsCacheStorageKey = useMemo(() => {
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes('final')) return 'pulse_ws_cache_final_stretch';
+    if (lowerTitle.includes('migrated')) return 'pulse_ws_cache_migrated';
+    if (lowerTitle.includes('new')) return 'pulse_ws_cache_new';
+    return `pulse_ws_cache_${lowerTitle}`;
+  }, [title]);
+
+  const [wsTokens, setWsTokens] = useState<Token[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const cached = window.localStorage.getItem(wsCacheStorageKey);
+      if (!cached) return [];
+      const parsed = JSON.parse(cached);
+      if (
+        parsed &&
+        Array.isArray(parsed.data) &&
+        typeof parsed.timestamp === 'number' &&
+        Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
+      ) {
+        return parsed.data;
+      }
+    } catch (error) {
+      console.warn('[PulseTable] Failed to restore ws cache:', error);
+    }
+    return [];
+  });
   
   const [filters, setFilters] = useState({
     // Protocols
@@ -1347,9 +1375,45 @@ function PulseTable({
     sortOrder: 'desc'
   });
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const cached = window.localStorage.getItem(wsCacheStorageKey);
+      if (!cached) return;
+      const parsed = JSON.parse(cached);
+      if (
+        parsed &&
+        Array.isArray(parsed.data) &&
+        typeof parsed.timestamp === 'number' &&
+        Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
+      ) {
+        setWsTokens(parsed.data);
+      }
+    } catch (error) {
+      console.warn('[PulseTable] Failed to rehydrate ws cache on key change:', error);
+    }
+  }, [wsCacheStorageKey]);
+
   // Pending filters for Apply button functionality
   const [pendingFilters, setPendingFilters] = useState(filters);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
+  const prevHasSpecificProtocolsRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hasSpecificProtocols =
+      filters.protocols.length > 0 && !filters.protocols.includes('All');
+    if (hasSpecificProtocols) return;
+    try {
+      const payload = {
+        data: wsTokens,
+        timestamp: Date.now(),
+      };
+      window.localStorage.setItem(wsCacheStorageKey, JSON.stringify(payload));
+    } catch (error) {
+      console.warn('[PulseTable] Failed to persist ws cache:', error);
+    }
+  }, [wsTokens, wsCacheStorageKey, filters.protocols]);
 
   // Functions to handle filter changes
   const handleApplyFilters = () => {
@@ -1403,13 +1467,16 @@ function PulseTable({
       
       // Determine the endpoint based on column type
       let endpoint = '/api/token-service/pulse-new';
+      let limit = 50;
       if (title.toLowerCase().includes('final stretch')) {
         endpoint = '/api/token-service/pulse-final-stretch';
+        limit = 50;
       } else if (title.toLowerCase().includes('migrated')) {
         endpoint = '/api/token-service/pulse-migrated';
+        limit = 70;
       }
 
-      const response = await fetch(`${endpoint}?limit=50&protocols=${encodeURIComponent(protocolsParam)}&t=${Date.now()}`);
+      const response = await fetch(`${endpoint}?limit=${limit}&protocols=${encodeURIComponent(protocolsParam)}&t=${Date.now()}`);
       if (response.ok) {
         const data = await response.json();
         setFilteredTokens(Array.isArray(data) ? data : []);
@@ -1562,12 +1629,14 @@ function PulseTable({
       setWsTokens([]); // Clear stale WebSocket tokens when filter changes
     } else {
       // When switching back to 'All', clear filtered tokens and rely on parent data + WebSocket
-      // REMOVED: Redundant HTTP refetch that was causing duplicate API calls
-      // The parent component (pulse.tsx) already handles initial data load
-      // WebSocket handles real-time updates - no need to refetch here
+      // Only reset wsTokens if we previously had a specific protocol filter applied
       setFilteredTokens([]);
-      setWsTokens([]); // Clear WebSocket tokens when filters are removed
+      if (prevHasSpecificProtocolsRef.current) {
+        setWsTokens([]);
+      }
     }
+
+    prevHasSpecificProtocolsRef.current = hasSpecificProtocols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.protocols, title]);
 

@@ -211,6 +211,13 @@ export default function TrackersPage() {
 
   const loadWalletsFromBackend = async () => {
     try {
+      if (!user?.id) {
+        setWatchedWallets([]);
+        setWallets([]);
+        setWalletBalances({});
+        return;
+      }
+
       // Fetch wallets from backend
       const tracked = await getTrackedWallets(user?.id);
 
@@ -617,13 +624,13 @@ export default function TrackersPage() {
         <title>Trackers | Interstate Memeboard</title>
       </Head>
       <div className="mb-20">
-        <div className="flex min-h-screen flex-col bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-neutral-100">
+        <div className="flex min-h-screen flex-col bg-[#050608] text-neutral-100">
           <Header isSticky={false}/>
           <div className="w-full flex-grow">
             {/* Main Content Area: Two Columns */}
-            <div className="flex h-full flex-col gap-4 lg:flex-row">
+            <div className="flex h-full flex-col gap-4 px-4 lg:flex-row">
               {isMobile && (
-                <div className="flex w-full rounded-full bg-neutral-800/60 p-1 text-xs font-medium text-neutral-400">
+                <div className="mt-4 flex w-full rounded-full bg-[#111111] p-1 text-xs font-medium text-neutral-400">
                   <button
                     className={`flex-1 rounded-full px-3 py-2 transition-colors duration-200 ${
                       mobileMainTab === "wallets"
@@ -647,16 +654,21 @@ export default function TrackersPage() {
                 </div>
               )}
               {showWalletSection && (
-                <div className="h-full min-h-[530px] w-full flex-1 border border-neutral-800/50 bg-neutral-900/50 px-4 shadow-xl backdrop-blur-sm">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-neutral-800/50 py-2">
+                <div
+                  className="mt-4 flex h-full min-h-[530px] w-full flex-1 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-4"
+                  style={{
+                    maxHeight: "calc(100vh - 160px)",
+                  }}
+                >
+                  <div className="flex flex-wrap items-center gap-2 border-b border-neutral-800/60 py-2">
                     <div className="flex items-center gap-2">
                       {TABS.map((tab, i) => (
                         <button
                           key={tab}
                           className={`cursor-pointer rounded-lg px-2 py-1 text-xs transition-all duration-300 ${
                             activeTab === i
-                              ? "bg-[#21222B] font-medium text-white"
-                              : "font-medium text-neutral-400 hover:bg-neutral-800/50 hover:text-white"
+                              ? "bg-[#111111] font-medium text-white"
+                              : "font-medium text-neutral-400 hover:bg-[#141414] hover:text-white"
                           }`}
                           onClick={() => setActiveTab(i)}
                         >
@@ -668,11 +680,11 @@ export default function TrackersPage() {
                           )}
                         </button>
                       ))}
-                      <div className="flex items-center rounded-full bg-neutral-800/60 px-3 py-1 text-[11px] text-neutral-300">
+                      <div className="flex items-center rounded-full bg-[#111111] px-3 py-1 text-[11px] text-neutral-300">
                         <span className="font-medium text-white">
                           {watchedWallets.length}
                         </span>
-                        <span className="text-neutral-400">
+                        <span className="ml-1 text-neutral-400">
                           /{MAX_WALLETS} wallet
                           {watchedWallets.length === 1 ? "" : "s"}
                         </span>
@@ -683,7 +695,7 @@ export default function TrackersPage() {
                       <input
                         type="text"
                         placeholder="Search by name or addr..."
-                        className="flex-1 min-w-[200px] rounded-full border border-neutral-800 bg-neutral-900/50 px-4 py-0 text-xs text-neutral-200 backdrop-blur-sm transition-all duration-300 focus:border-transparent focus:ring-2 focus:ring-[#70E0B0]/50 focus:outline-none sm:w-60"
+                        className="flex-1 min-w-[200px] rounded-full border border-neutral-800 bg-[#050608] px-4 py-0 text-xs text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none sm:w-60"
                         disabled={activeTab === 1}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -691,13 +703,13 @@ export default function TrackersPage() {
                       {activeTab === 0 && (
                         <>
                           <button
-                            className="rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text.white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
+                            className="rounded-full bg-[#111111] px-4 py-1 text-xs font-semibold text-white transition-all duration-300 hover:bg-[#181818]"
                             onClick={() => setShowImportModal(true)}
                           >
                             Import
                           </button>
                           <button
-                            className="rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
+                            className="rounded-full bg-[#111111] px-4 py-1 text-xs font-semibold text-white transition-all duration-300 hover:bg-[#181818]"
                             onClick={handleExportAddresses}
                           >
                             Export
@@ -728,195 +740,197 @@ export default function TrackersPage() {
                       )}
                     </div>
                   </div>
-                  {activeTab === 0 ? (
-                    <>
-                      <div className="flex items-center border-b border.white/20 p-2">
-                        <div className="flex w-full items-center gap-4 text-xs font-medium text-neutral-400">
-                          <span className="w-28">Created</span>
-                          <span className="min-w-0 flex-1">Name</span>
-                          <span className="w-36">Balance</span>
-                          <span className="w-40">Actions</span>
-                          <span className="w-24 text-right">
-                            <button
-                              className="whitespace-nowrap text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
-                              onClick={() => handleRemoveWallet("all")}
-                            >
-                              Remove All
-                            </button>
-                          </span>
+                  <div className="flex-1 overflow-y-auto min-h-0">
+                    {activeTab === 0 ? (
+                      <>
+                        <div className="flex items-center border-b border-neutral-800/60 p-2">
+                          <div className="flex w-full items-center gap-4 text-xs font-medium text-neutral-400">
+                            <span className="w-28">Created</span>
+                            <span className="min-w-0 flex-1">Name</span>
+                            <span className="w-36">Balance</span>
+                            <span className="w-40">Actions</span>
+                            <span className="w-24 text-right">
+                              <button
+                                className="whitespace-nowrap text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
+                                onClick={() => handleRemoveWallet("all")}
+                              >
+                                Remove All
+                              </button>
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                      {wallets.length === 0 ? (
-                        <div className="flex h-64 flex-col items-center justify-center">
-                          <span className="text-neutral-400">
-                            No wallets added yet.
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full min-w-[640px] text-xs">
-                            <tbody>
-                              {filteredWallets.map((wallet) => {
-                                const watched = watchedWallets.find(
-                                  (ww) => ww.address === wallet.address,
-                                );
-                                const events =
-                                  walletEvents[wallet.address] || [];
-                                const balance = walletBalances[wallet.address];
-                                return (
-                                  <WalletRow
-                                    key={wallet.address}
-                                    wallet={wallet}
-                                    watchedWallet={watched}
-                                    events={events}
-                                    balance={balance}
-                                    onRemove={handleRemoveWallet}
-                                    onClick={setScannedWallet}
-                                    onNotificationToggle={async (
-                                      address,
-                                      enabled,
-                                    ) => {
-                                      // Refresh the global watched wallets to sync the state
-                                      await refreshWatchedWallets();
-                                    }}
-                                  />
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {latestTrades.length === 0 ? (
-                        <div className="flex h-64 flex-col items-center justify-center">
-                          <span className="text-neutral-400">
-                            No live trades yet. Add wallets to start tracking!
-                          </span>
-                          <span className="mt-2 text-xs text-neutral-500">
-                            {wsConnected ? "🟢 Connected" : "🔴 Disconnected"}
-                          </span>
-                        </div>
-                      ) : (
-                        // PAGE scrolls: only horizontal overflow here
-                        <div className="overflow-x-auto">
-                          <table className="mt-2 w-full min-w-[720px] text-xs">
-                            <thead>
-                              <tr className="border-b border-white/20">
-                                <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">
-                                  Time
-                                </th>
-                                <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
-                                  Wallet
-                                </th>
-                                <th className="w-12 px-2 py-2 text-left text-sm text-neutral-400">
-                                  Side
-                                </th>
-                                <th className="w-32 px-2 py-2 text-left text-sm text-neutral-400">
-                                  Token
-                                </th>
-                                <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
-                                  Amount
-                                </th>
-                                <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
-                                  Price
-                                </th>
-                                <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">
-                                  Venue
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {latestTrades.map((trade, idx) => {
-                                const wallet = wallets.find(
-                                  (w) => w.address === trade.wallet,
-                                );
-                                const timeAgo = new Date(
-                                  trade.at,
-                                ).toLocaleTimeString();
+                        {wallets.length === 0 ? (
+                          <div className="flex h-64 flex-col items-center justify-center">
+                            <span className="text-neutral-400">
+                              No wallets added yet.
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[640px] text-xs">
+                              <tbody>
+                                {filteredWallets.map((wallet) => {
+                                  const watched = watchedWallets.find(
+                                    (ww) => ww.address === wallet.address,
+                                  );
+                                  const events =
+                                    walletEvents[wallet.address] || [];
+                                  const balance = walletBalances[wallet.address];
+                                  return (
+                                    <WalletRow
+                                      key={wallet.address}
+                                      wallet={wallet}
+                                      watchedWallet={watched}
+                                      events={events}
+                                      balance={balance}
+                                      onRemove={handleRemoveWallet}
+                                      onClick={setScannedWallet}
+                                      onNotificationToggle={async (
+                                        address,
+                                        enabled,
+                                      ) => {
+                                        // Refresh the global watched wallets to sync the state
+                                        await refreshWatchedWallets();
+                                      }}
+                                    />
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {latestTrades.length === 0 ? (
+                          <div className="flex h-64 flex-col items-center justify-center">
+                            <span className="text-neutral-400">
+                              No live trades yet. Add wallets to start tracking!
+                            </span>
+                            <span className="mt-2 text-xs text-neutral-500">
+                              {wsConnected ? "🟢 Connected" : "🔴 Disconnected"}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto overflow-y-auto">
+                            <table className="mt-2 w-full min-w-[720px] text-xs">
+                              <thead>
+                                <tr className="border-b border-neutral-800/60">
+                                  <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">
+                                    Time
+                                  </th>
+                                  <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
+                                    Wallet
+                                  </th>
+                                  <th className="w-12 px-2 py-2 text-left text-sm text-neutral-400">
+                                    Side
+                                  </th>
+                                  <th className="w-32 px-2 py-2 text-left text-sm text-neutral-400">
+                                    Token
+                                  </th>
+                                  <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
+                                    Amount
+                                  </th>
+                                  <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
+                                    Price
+                                  </th>
+                                  <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">
+                                    Venue
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {latestTrades.map((trade, idx) => {
+                                  const wallet = wallets.find(
+                                    (w) => w.address === trade.wallet,
+                                  );
+                                  const timeAgo = new Date(
+                                    trade.at,
+                                  ).toLocaleTimeString();
 
-                                // Use fetched metadata as fallback
-                                const metadata = tokenMetadata.get(trade.mint);
-                                const displaySymbol =
-                                  trade.symbol ||
-                                  metadata?.symbol ||
-                                  trade.mint.slice(0, 8) + "...";
-                                const displayName = trade.name || metadata?.name;
+                                  // Use fetched metadata as fallback
+                                  const metadata = tokenMetadata.get(trade.mint);
+                                  const displaySymbol =
+                                    trade.symbol ||
+                                    metadata?.symbol ||
+                                    trade.mint.slice(0, 8) + "...";
+                                  const displayName =
+                                    trade.name || metadata?.name;
 
-                                // Debug log for first trade
-                                if (idx === 0) {
-                                  console.log("[Live Trades Display]", {
-                                    mint: trade.mint,
-                                    tradeSymbol: trade.symbol,
-                                    tradeName: trade.name,
-                                    metadata: metadata,
-                                    displaySymbol: displaySymbol,
-                                    displayName: displayName,
-                                    totalMetadata: tokenMetadata.size,
-                                  });
-                                }
+                                  // Debug log for first trade
+                                  if (idx === 0) {
+                                    console.log("[Live Trades Display]", {
+                                      mint: trade.mint,
+                                      tradeSymbol: trade.symbol,
+                                      tradeName: trade.name,
+                                      metadata: metadata,
+                                      displaySymbol: displaySymbol,
+                                      displayName: displayName,
+                                      totalMetadata: tokenMetadata.size,
+                                    });
+                                  }
 
-                                return (
-                                  <tr
-                                    key={`${trade.tx}-${idx}`}
-                                    className="border-b border-neutral-800/50 transition-colors duration-300 hover:bg-neutral-800/30"
-                                  >
-                                    <td className="w-20 px-2 py-2 text-neutral-400">
-                                      {timeAgo}
-                                    </td>
-                                    <td className="w-24 px-2 py-2 font-mono">
-                                      <span
-                                        className="truncate"
-                                        title={trade.wallet}
-                                      >
-                                        {wallet?.emoji || "💼"}{" "}
-                                        {wallet?.name ||
-                                          trade.wallet.slice(0, 4) + "..."}
-                                      </span>
-                                    </td>
-                                    <td className="w-12 px-2 py-2">
-                                      <span
-                                        className={`rounded px-1 py-0.5 text-[10px] font-semibold ${
-                                          trade.side === "buy"
-                                            ? "bg-green-500/20 text-green-400"
-                                            : "bg-red-500/20 text-red-400"
-                                        }`}
-                                      >
-                                        {trade.side.toUpperCase()}
-                                      </span>
-                                    </td>
-                                    <td
-                                      className="w-32 px-2 py-2 font-mono text-emerald-300"
-                                      title={displayName || undefined}
+                                  return (
+                                    <tr
+                                      key={`${trade.tx}-${idx}`}
+                                      className="border-b border-neutral-800/50 transition-colors duration-300 hover:bg-neutral-900/40"
                                     >
-                                      {displaySymbol}
-                                    </td>
-                                    <td className="w-24 px-2 py-2 text-neutral-200">
-                                      {trade.amount.toFixed(2)}
-                                    </td>
-                                    <td className="w-24 px-2 py-2 text-neutral-300">
-                                      {trade.price_usd
-                                        ? `$${trade.price_usd.toFixed(6)}`
-                                        : "-"}
-                                    </td>
-                                    <td className="w-20 px-2 py-2 text-neutral-400">
-                                      {trade.venue || "Unknown"}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </>
-                  )}
+                                      <td className="w-20 px-2 py-2 text-neutral-400">
+                                        {timeAgo}
+                                      </td>
+                                      <td className="w-24 px-2 py-2 font-mono">
+                                        <span
+                                          className="truncate"
+                                          title={trade.wallet}
+                                        >
+                                          {wallet?.emoji || "💼"}{" "}
+                                          {wallet?.name ||
+                                            trade.wallet.slice(0, 4) + "..."}
+                                        </span>
+                                      </td>
+                                      <td className="w-12 px-2 py-2">
+                                        <span
+                                          className={`rounded px-1 py-0.5 text-[10px] font-semibold ${
+                                            trade.side === "buy"
+                                              ? "bg-green-500/20 text-green-400"
+                                              : "bg-red-500/20 text-red-400"
+                                          }`}
+                                        >
+                                          {trade.side.toUpperCase()}
+                                        </span>
+                                      </td>
+                                      <td
+                                        className="w-32 px-2 py-2 font-mono text-emerald-300"
+                                        title={displayName || undefined}
+                                      >
+                                        {displaySymbol}
+                                      </td>
+                                      <td className="w-24 px-2 py-2 text-neutral-200">
+                                        {trade.amount.toFixed(2)}
+                                      </td>
+                                      <td className="w-24 px-2 py-2 text-neutral-300">
+                                        {trade.price_usd
+                                          ? `$${trade.price_usd.toFixed(6)}`
+                                          : "-"}
+                                      </td>
+                                      <td className="w-20 px-2 py-2 text-neutral-400">
+                                        {trade.venue || "Unknown"}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
               {!isMobile && (
                 <div
-                  className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-emerald-400/30 lg:flex"
+                  className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-emerald-400/10 lg:flex"
                   onMouseDown={() => setIsResizing(true)}
                 >
                   <div className="absolute h-16 w-1 rounded-full bg-neutral-700 transition-colors group-hover:bg-emerald-400" />
@@ -924,19 +938,22 @@ export default function TrackersPage() {
               )}
               {showTwitterSection && (
                 <div
-                  className="flex h-full min-h-[530px] w-full flex-col border border-neutral-800/50 bg-neutral-900/50 px-2 shadow-xl backdrop-blur-sm"
+                  className="mt-4 flex h-full min-h-[530px] w-full flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2"
                   style={
                     isMobile
-                      ? undefined
+                      ? {
+                          maxHeight: "calc(100vh - 160px)",
+                        }
                       : {
                           width: `${sidebarWidth}px`,
                           minWidth: "300px",
                           maxWidth: "800px",
+                          maxHeight: "calc(100vh - 160px)",
                         }
                   }
                 >
                   {/* Twitter Tabs Header */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800/50 pt-4 pb-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800/60 pt-4 pb-2">
                     <div className="flex gap-2">
                       {TWITTER_TABS.map((tab, i) => (
                         <button
@@ -944,7 +961,7 @@ export default function TrackersPage() {
                           className={`cursor-pointer rounded-lg px-3 py-1 text-xs transition-all duration-300 ${
                             twitterTab === i
                               ? "bg-[#70E0B0] font-medium text-neutral-900"
-                              : "font-medium text-neutral-400 hover:bg-neutral-800/50 hover:text-white"
+                              : "font-medium text-neutral-400 hover:bg-[#141414] hover:text-white"
                           }`}
                           onClick={() => setTwitterTab(i)}
                         >
@@ -978,8 +995,7 @@ export default function TrackersPage() {
                   </div>
 
                   {/* Twitter Content */}
-                  {/* No inner vertical scroll: page scrolls */}
-                  <div className="flex-1">
+                  <div className="flex-1 overflow-y-auto min-h-0">
                     {twitterTab === 0 ? (
                       // Tracked Accounts Tab
                       <>
@@ -993,7 +1009,7 @@ export default function TrackersPage() {
                           <div className="overflow-x-auto">
                             <table className="w-full min-w-[520px] text-xs">
                               <thead>
-                                <tr className="border-b border-white/20">
+                                <tr className="border-b border-neutral-800/60">
                                   <th className="px-2 py-2 text-left text-sm text-neutral-400">
                                     Account
                                   </th>
@@ -1033,7 +1049,7 @@ export default function TrackersPage() {
                           </div>
                         ) : loadingTwitterFeed ? (
                           <div className="flex h-full flex-col items-center justify-center py-8">
-                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-400 border-t-transparent"></div>
+                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-400 border-t-transparent" />
                             <span className="mt-4 text-neutral-400">
                               Loading feed...
                             </span>
@@ -1062,7 +1078,7 @@ export default function TrackersPage() {
                             {twitterFeed.map((tweet) => (
                               <div
                                 key={tweet.id}
-                                className="rounded-lg border border-neutral-800/50 bg-neutral-900/50 p-3 transition-all duration-300 hover:border-emerald-400/30 hover:bg-neutral-800/30"
+                                className="rounded-lg border border-neutral-800 bg-[#101010] p-3 transition-all duration-300 hover:border-emerald-400/40 hover:bg-[#141414]"
                               >
                                 {/* Tweet Header */}
                                 <div className="mb-2 flex items-start gap-2">
@@ -1087,7 +1103,9 @@ export default function TrackersPage() {
                                       </span>
                                     </div>
                                     <span className="text-xs text-neutral-500">
-                                      {new Date(tweet.createdAt).toLocaleString()}
+                                      {new Date(
+                                        tweet.createdAt,
+                                      ).toLocaleString()}
                                     </span>
                                   </div>
                                 </div>
@@ -1106,10 +1124,10 @@ export default function TrackersPage() {
                                         tweet.images.length === 1
                                           ? "1fr"
                                           : tweet.images.length === 2
-                                            ? "1fr 1fr"
-                                            : tweet.images.length === 3
-                                              ? "1fr 1fr"
-                                              : "repeat(2, 1fr)",
+                                          ? "1fr 1fr"
+                                          : tweet.images.length === 3
+                                          ? "1fr 1fr"
+                                          : "repeat(2, 1fr)",
                                     }}
                                   >
                                     {tweet.images.map((imageUrl, idx) => (
@@ -1338,8 +1356,6 @@ export default function TrackersPage() {
           onAddTwitterHandle={handleAddTwitterAccount}
         />
 
-        {/* Bottom Navigation/Footer */}
-        {/* ... */}
         <Footer />
       </div>
     </>
