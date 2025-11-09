@@ -13,9 +13,7 @@ import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 import { usePulseWebSocket } from '../hooks/usePulseWebSocket';
 // import { PriorityImageSearcher } from '../utils/imageSearch'; // DISABLED - no external image searches
 import { useImagePreloader } from '../hooks/useImagePreloader';
-import { useCachedPulseTokens, useCachedLaunchpadData } from '../hooks/useCachedTokens';
-// DISABLED: Using HTTP polling instead for real-time data
-// import { useCachedFinalStretchTokens, useCachedMigratedTokens } from '../hooks/useCachedTokensAdditional';
+import { useQueryNewPairs, useQueryLaunchpadData, useQueryFinalStretch, useQueryMigrated } from '../hooks/useQueryTokens';
 import { env } from '~/env';
 import { rollingTradeCache } from '../utils/rollingTradeCache';
 import { SiBinance, SiSolana } from 'react-icons/si';
@@ -116,22 +114,33 @@ export default function PulsePage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
-  // Use cached hooks for immediate data display
+  
+  // React Query hooks - instant cache
   const { 
-    tokens, 
-    loading: tokensLoading, 
+    data: tokens = [], 
+    isLoading: tokensLoading, 
     error: tokensError, 
     isStale: tokensStale,
-    refreshTokens 
-  } = useCachedPulseTokens();
+    refetch: refreshTokens,
+    dataUpdatedAt,
+    isFetching
+  } = useQueryNewPairs();
   
   const { 
-    launchpadData, 
-    loading: launchpadLoading, 
+    data: launchpadData = { new: [], completing: [], completed: [] }, 
+    isLoading: launchpadLoading, 
     error: launchpadError, 
     isStale: launchpadStale,
-    refreshData: refreshLaunchpadData 
-  } = useCachedLaunchpadData();
+    refetch: refreshLaunchpadData 
+  } = useQueryLaunchpadData();
+  
+  const { 
+    data: finalStretchTokensQuery = [], 
+  } = useQueryFinalStretch();
+  
+  const { 
+    data: migratedTokensQuery = [], 
+  } = useQueryMigrated();
 
   // DISABLED: Use HTTP polling instead of cached hooks for real-time data
   // const { 
@@ -406,54 +415,6 @@ export default function PulsePage() {
   // REMOVED: Slow useEffect-based merge - now using instant callbacks above
 
   // REMOVED: Slow useEffect-based merge - now using instant callbacks above
-
-  // Initial HTTP poll for NEW tokens - only runs ONCE on mount
-  // After initial load, relies 100% on WebSocket for real-time updates
-  useEffect(() => {
-    let alive = true;
-    const initialPoll = async () => {
-      try {
-        console.log('[Pulse] Initial poll for NEW tokens...');
-        const apiUrl = `/api/token-service/getAllTokens?filter=new&limit=30&t=${Date.now()}`;
-
-        const res = await fetch(apiUrl);
-        if (!alive) return;
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            const filteredData = (data as any[]).filter((token) => {
-              if (isZeroLiquidityToken(token)) {
-                console.log('[Pulse] ⛔ Skipping new token with zero liquidity from initial poll:', token?.name, token?.mint);
-                return false;
-              }
-              return true;
-            });
-
-            if (filteredData.length === 0) {
-              console.log('[Pulse] ⚠️ All new tokens filtered due to zero liquidity. Clearing new pairs list.');
-              setHttpNew([]);
-              setHttpNewTick((t) => t + 1);
-              return;
-            }
-
-            setHttpNew(filteredData);
-            setHttpNewTick((t) => t + 1);
-            console.log(`[Pulse] Initial poll loaded ${filteredData.length} NEW tokens (after filtering)`);
-          }
-        }
-      } catch (error) {
-        console.error('[Pulse] Initial poll failed:', error);
-      }
-    };
-
-    // Poll ONCE on mount, then rely on WebSocket
-    initialPoll();
-
-    return () => {
-      alive = false;
-    };
-  }, []); // Empty deps - runs only once on mount
-
   // REMOVED: Duplicate HTTP poll for MIGRATED tokens
   // This was calling /api/token-service/pulse-migrated which is slow (1.33s)
   // We already have a direct call to /v1/pulse/migrated below (line ~886) which is fast (57ms)
@@ -645,10 +606,10 @@ export default function PulsePage() {
 
   // Memoize the loading state to prevent unnecessary re-renders
   const isLoading = useMemo(() => {
-    return (tokensLoading && !tokens.length) || 
-           (launchpadLoading && !launchpadData?.new?.length && !launchpadData?.completing?.length && !launchpadData?.completed?.length) ||
-           (httpNewTick === 0 && httpNew.length === 0);
-  }, [tokensLoading, tokens.length, launchpadLoading, launchpadData?.new?.length, launchpadData?.completing?.length, launchpadData?.completed?.length, httpNewTick, httpNew.length]);
+    return !tokens.length && !launchpadData?.new?.length && !httpNew.length;
+  }, [tokens.length, launchpadData?.new?.length, httpNew.length]);
+  
+  const newPairsLoading = isLoading;
   
   const hasError = useMemo(() => {
     return launchpadError && !(launchpadData?.new?.length || 0) && !(launchpadData?.completing?.length || 0) && !(launchpadData?.completed?.length || 0);
@@ -713,168 +674,119 @@ export default function PulsePage() {
   };
 
   const buildNewPairs = (): any[] => {
-    // Use httpNew directly - show all tokens immediately
-    const source = httpNew.length ? httpNew : (wsNewEnriched.length ? wsNewEnriched : combinedNewPairs);
+    // Prefer real-time WS data first, then fall back to combined data (includes launchpad)
+    const source = wsNewEnriched.length
+      ? wsNewEnriched
+      : combinedNewPairs;
     
     const uniq = new Map<string, any>();
     for (const t of source as any[]) {
       const key = (t?.pair_address || t?.mint) as string | undefined;
-      if (!key) continue;
-      if (!uniq.has(key)) uniq.set(key, t);
+      if (!key || uniq.has(key)) continue;
+      uniq.set(key, t);
     }
-    const vals = Array.from(uniq.values()).filter((token) => {
-      if (isZeroLiquidityToken(token)) {
-        console.log('[Pulse] ⛔ buildNewPairs filtered zero-liquidity token:', token?.name, token?.mint);
-        return false;
-      }
-      return true;
-    });
+    const vals = Array.from(uniq.values()).filter((token) => !isZeroLiquidityToken(token));
+    if (vals.length === 0) return combinedNewPairs.filter((token) => !isZeroLiquidityToken(token));
+    
+    // Cache timestamps to avoid repeated Date parsing
+    const tsCache = new Map<any, number>();
+    const getOrCacheTs = (t: any) => {
+      if (!tsCache.has(t)) tsCache.set(t, getTs(t));
+      return tsCache.get(t)!;
+    };
     
     const withTs: any[] = [];
     const withoutTs: any[] = [];
     for (const t of vals) {
-      const ts = getTs(t);
-      if (ts > 0) withTs.push(t); else withoutTs.push(t);
+      (getOrCacheTs(t) > 0 ? withTs : withoutTs).push(t);
     }
     
-    // Sort by timestamp in descending order (newest first)
-    withTs.sort((a, b) => {
-      const tsA = getTs(a);
-      const tsB = getTs(b);
-      return tsB - tsA; // Newest first (descending order)
-    });
-    
-    // For those without a timestamp, try a secondary order by FDV desc then name
+    withTs.sort((a, b) => getOrCacheTs(b) - getOrCacheTs(a));
+    if (withoutTs.length > 0) {
     withoutTs.sort((a, b) => {
-      const fdvA = Number((a as any).fully_diluted_value) || 0;
-      const fdvB = Number((b as any).fully_diluted_value) || 0;
-      if (fdvB !== fdvA) return fdvB - fdvA;
-      return String((a as any).symbol || (a as any).name || '').localeCompare(String((b as any).symbol || (b as any).name || ''));
-    });
-    
-    // Always show timestamped first, then non-timestamped afterwards
-    const result = withTs.concat(withoutTs);
-    
-    if (result.length === 0) {
-      const fallback = combinedNewPairs.filter((token) => {
-        if (isZeroLiquidityToken(token)) {
-          console.log('[Pulse] ⛔ buildNewPairs fallback filtered zero-liquidity token:', token?.name, token?.mint);
-          return false;
-        }
-        return true;
+        const diff = (Number((b as any).fully_diluted_value) || 0) - (Number((a as any).fully_diluted_value) || 0);
+        if (diff !== 0) return diff;
+        const aName = (a as any).symbol || (a as any).name || '';
+        const bName = (b as any).symbol || (b as any).name || '';
+        return aName < bName ? -1 : aName > bName ? 1 : 0;
       });
-      return fallback;
     }
-
-    return result;
+    
+    return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
   };
 
   const buildMigrated = (): any[] => {
-    console.log(`[Pulse] 🔧 buildMigrated called - httpMigrated length: ${httpMigrated.length}`);
-    console.log(`[Pulse] 🔧 buildMigrated httpMigrated tokens:`, httpMigrated.map(t => ({ mint: t.mint, name: t.name, status: t.status })));
-    console.log(`[Pulse] 🔧 buildMigrated httpMigratedTick: ${httpMigratedTick}`);
-    
-    // Use ONLY HTTP pulse-migrated (authoritative by migrated_time) - no fallback to prevent stale data
-    const source = httpMigrated;
-    
-    // No deduplication needed - backend returns clean data
-    if (!Array.isArray(source) || source.length === 0) {
-      console.log(`[Pulse] 🔧 buildMigrated returning empty array - source is empty or not array`);
-      return [];
-    }
+    const source = migratedTokensQuery;
+    if (!Array.isArray(source) || source.length === 0) return [];
 
-    // Use all tokens - migrated_pool_address is optional and may not always be set at migration time
-    const filteredSource = source.filter((token: any) => {
-      if (isZeroLiquidityToken(token)) {
-        console.log('[Pulse] ⛔ buildMigrated filtered zero-liquidity token:', token?.name, token?.mint);
-        return false;
-      }
-      return true;
-    });
+    const filteredSource = source.filter((token: any) => !isZeroLiquidityToken(token));
+    if (filteredSource.length === 0) return [];
+    
+    const tsCache = new Map<any, number>();
+    const getOrCacheTs = (t: any) => {
+      if (!tsCache.has(t)) tsCache.set(t, getTs(t));
+      return tsCache.get(t)!;
+    };
 
     const withTs: any[] = [];
     const withoutTs: any[] = [];
     for (const t of filteredSource) {
-      const ts = getTs(t);
-      console.log(`[Pulse] 🔧 Token ${t.name} timestamp: ${ts}, migrated_time: ${t.migrated_time}, created_at: ${t.created_at}`);
-      if (ts > 0) withTs.push(t); else withoutTs.push(t);
+      (getOrCacheTs(t) > 0 ? withTs : withoutTs).push(t);
     }
-    console.log(`[Pulse] 🔧 buildMigrated - withTs: ${withTs.length}, withoutTs: ${withoutTs.length}`);
     
-    // Sort by timestamp in descending order (newest first - by migrated_time)
-    withTs.sort((a, b) => {
-      const tsA = getTs(a);
-      const tsB = getTs(b);
-      return tsB - tsA; // Newest first (descending order)
-    });
-    
+    withTs.sort((a, b) => getOrCacheTs(b) - getOrCacheTs(a));
+    if (withoutTs.length > 0) {
     withoutTs.sort((a, b) => {
-      const fdvA = Number((a as any).fully_diluted_value) || 0;
-      const fdvB = Number((b as any).fully_diluted_value) || 0;
-      if (fdvB !== fdvA) return fdvB - fdvA;
-      return String((a as any).symbol || (a as any).name || '').localeCompare(String((b as any).symbol || (b as any).name || ''));
-    });
+        const diff = (Number((b as any).fully_diluted_value) || 0) - (Number((a as any).fully_diluted_value) || 0);
+        if (diff !== 0) return diff;
+        const aName = (a as any).symbol || (a as any).name || '';
+        const bName = (b as any).symbol || (b as any).name || '';
+        return aName < bName ? -1 : aName > bName ? 1 : 0;
+      });
+    }
     
-    const result = withTs.concat(withoutTs);
-    console.log(`[Pulse] 🔧 buildMigrated returning ${result.length} tokens:`, result.map(t => ({ name: t.name, status: t.status })));
-    return result;
+    return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
   };
 
   const buildFinalStretch = (): any[] => {
-    // Use ONLY HTTP pulse-final-stretch - no fallback to prevent stale data
-    const source = httpFinalStretch;
+    const source = finalStretchTokensQuery;
+    if (!Array.isArray(source) || source.length === 0) return [];
     
-    // No deduplication needed - backend returns clean data
-    if (!Array.isArray(source) || source.length === 0) {
-      return [];
-    }
+    const filteredSource = source.filter((token: any) => !isZeroLiquidityToken(token));
+    if (filteredSource.length === 0) return [];
     
-    const filteredSource = source.filter((token: any) => {
-      if (isZeroLiquidityToken(token)) {
-        console.log('[Final Stretch] ⛔ buildFinalStretch filtered zero-liquidity token:', token?.name, token?.mint);
-        return false;
-      }
-      return true;
-    });
-
-    if (filteredSource.length === 0) {
-      return [];
-    }
+    const tsCache = new Map<any, number>();
+    const getOrCacheTs = (t: any) => {
+      if (!tsCache.has(t)) tsCache.set(t, getTs(t));
+      return tsCache.get(t)!;
+    };
     
     const withTs: any[] = [];
     const withoutTs: any[] = [];
     for (const t of filteredSource) {
-      const ts = getTs(t);
-      if (ts > 0) withTs.push(t); else withoutTs.push(t);
+      (getOrCacheTs(t) > 0 ? withTs : withoutTs).push(t);
     }
     
-    // Sort by timestamp in descending order (newest first)
-    withTs.sort((a, b) => getTs(b) - getTs(a));
-    
+    withTs.sort((a, b) => getOrCacheTs(b) - getOrCacheTs(a));
+    if (withoutTs.length > 0) {
     withoutTs.sort((a, b) => {
-      const fdvA = Number((a as any).fully_diluted_value) || 0;
-      const fdvB = Number((b as any).fully_diluted_value) || 0;
-      if (fdvB !== fdvA) return fdvB - fdvA;
-      return String((a as any).symbol || (a as any).name || '').localeCompare(String((b as any).symbol || (b as any).name || ''));
-    });
+        const diff = (Number((b as any).fully_diluted_value) || 0) - (Number((a as any).fully_diluted_value) || 0);
+        if (diff !== 0) return diff;
+        const aName = (a as any).symbol || (a as any).name || '';
+        const bName = (b as any).symbol || (b as any).name || '';
+        return aName < bName ? -1 : aName > bName ? 1 : 0;
+      });
+    }
     
-    const result = withTs.concat(withoutTs);
-    return result;
+    return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
   };
 
-  // FORCE new array reference to ensure React.memo sees the change
-  // Include tick values to force re-renders when websocket data updates
-  const newPairsData = useMemo(() => {
-    return [...httpNew];
-  }, [httpNew, httpNewTick]);
-  
-  const migratedData = useMemo(() => {
-    return [...httpMigrated];
-  }, [httpMigrated, httpMigratedTick]);
-  
-  const finalStretchData = useMemo(() => {
-    return [...httpFinalStretch];
-  }, [httpFinalStretch, httpFinalStretchTick]);
+  // Use the processed data from build functions - define early to avoid hoisting issues
+  const newPairsToShow = useMemo(() => buildNewPairs(), [combinedNewPairs, wsNewEnriched]);
+  const migratedToShow = useMemo(() => buildMigrated(), [migratedTokensQuery]);
+  const finalStretchToShow = useMemo(() => buildFinalStretch(), [finalStretchTokensQuery]);
+
+  // REMOVED: Unnecessary array spreads that just create more work
 
   // Track httpNew changes for debugging
   useEffect(() => {
@@ -896,42 +808,28 @@ export default function PulsePage() {
   const { preloadImages } = useImagePreloader();
   
   useEffect(() => {
-    if (newPairsData && newPairsData.length > 0) {
-      console.log(`✅ Using only backend-provided images for ${newPairsData.length} tokens - no external searches`);
-
-      // Preload images for new pairs tokens (priority loading)
-      const imageSources = newPairsData
-        .slice(0, 20) // Preload first 20 tokens
+    if (newPairsToShow && newPairsToShow.length > 0) {
+      const imageSources = newPairsToShow
+        .slice(0, 20)
         .map((token: any) => token.uri || token.image || token.logo)
         .filter(Boolean);
 
       if (imageSources.length > 0) {
-        console.log(`🖼️ Preloading ${imageSources.length} new pairs images from backend`);
         preloadImages(imageSources, { priority: true, timeout: 2000 });
       }
     }
-  }, [newPairsData, preloadImages]);
+  }, [newPairsToShow, preloadImages]);
 
   // Sync rolling trade cache with visible pulse tokens
   useEffect(() => {
     const syncCache = async () => {
       try {
-        // Only sync if we have data
-        if (!newPairsData || !finalStretchData || !migratedData) {
-          console.log('[Pulse] Waiting for data before syncing cache...');
-          return;
-        }
-
-        console.log('[Pulse] Starting cache sync with:', {
-          newPairs: newPairsData.length,
-          finalStretch: finalStretchData.length,
-          migrated: migratedData.length
-        });
+        if (!newPairsToShow.length && !finalStretchToShow.length && !migratedToShow.length) return;
 
         await rollingTradeCache.syncWithPulseTokens(
-          newPairsData.slice(0, 30),
-          finalStretchData.slice(0, 30),
-          migratedData.slice(0, 30)
+          newPairsToShow.slice(0, 30),
+          finalStretchToShow.slice(0, 30),
+          migratedToShow.slice(0, 30)
         );
       } catch (error) {
         console.error('[Pulse] Failed to sync rolling cache:', error);
@@ -939,7 +837,7 @@ export default function PulsePage() {
     };
 
     syncCache();
-  }, [newPairsData, finalStretchData, migratedData]);
+  }, [newPairsToShow, finalStretchToShow, migratedToShow]);
 
   // Log cache stats periodically for debugging
   useEffect(() => {
@@ -1410,7 +1308,7 @@ export default function PulsePage() {
           ) : hasError ? (
             <div className="text-center text-red-400 py-10">
               <div className="text-xl font-semibold mb-2">Error Loading Launchpad Data</div>
-              <div>{launchpadError}</div>
+              <div>{launchpadError?.message || 'Unknown error'}</div>
               <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors">Retry</button>
             </div>
           ) : (
