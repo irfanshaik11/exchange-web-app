@@ -17,7 +17,7 @@ export interface InterstateButtonProps {
   title?: string;
 }
 
-const base = 'rounded-full font-semibold transition focus:outline-none flex items-center justify-center';
+const base = 'rounded-full font-semibold transition focus:outline-none flex items-center justify-center cursor-pointer';
 const variants = {
   primary: 'bg-emerald-500 hover:bg-emerald-400 text-black shadow',
   secondary: 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700',
