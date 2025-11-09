@@ -209,12 +209,6 @@ export default function TrackersPage() {
     }
   }, [twitterTab, twitterAccounts]);
 
-  // Add mock live trades data (currently commented out)
-  // useEffect(() => {
-  //   const mockTrades: TradeEvent[] = [/* mock data removed */];
-  //   setLatestTrades(mockTrades);
-  // }, []);
-
   const loadWalletsFromBackend = async () => {
     try {
       // Fetch wallets from backend
@@ -222,31 +216,6 @@ export default function TrackersPage() {
 
       // Also refresh global watched wallets
       await refreshWatchedWallets();
-
-      // Add mock wallets for testing if no wallets exist
-      // const mockWallets = tracked.length === 0 ? [
-      //     {
-      //       id: 'mock-1',
-      //       ownerId: null,
-      //       address: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
-      //       walletName: 'Whale Wallet',
-      //       createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      //     },
-      //     {
-      //       id: 'mock-2',
-      //       ownerId: null,
-      //       address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-      //       walletName: 'Day Trader',
-      //       createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-      //     },
-      //     {
-      //       id: 'mock-3',
-      //       ownerId: null,
-      //       address: 'EhN4wHn2rQq2u1RGGWQCm8P7QCvL3sWpDpQx8vH9vJhZ',
-      //       walletName: 'Crypto Arbitrageur',
-      //       createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-      //     },
-      // ] : [];
 
       const allWallets = tracked;
       setWatchedWallets(allWallets);
@@ -260,13 +229,6 @@ export default function TrackersPage() {
       }));
 
       setWallets(frontendWallets);
-
-      // Set mock balances for testing
-      // const mockBalances: Record<string, number> = {};
-      // frontendWallets.forEach(wallet => {
-      //   mockBalances[wallet.address] = Math.random() * 100; // Random balance between 0-100 SOL
-      // });
-      // setWalletBalances(mockBalances);
 
       // Fetch real balances for tracked wallets
       allWallets.forEach(async (wallet) => {
@@ -656,7 +618,7 @@ export default function TrackersPage() {
       </Head>
       <div className="mb-20">
         <div className="flex min-h-screen flex-col bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-neutral-100">
-          <Header />
+          <Header isSticky={false}/>
           <div className="w-full flex-grow">
             {/* Main Content Area: Two Columns */}
             <div className="flex h-full flex-col gap-4 lg:flex-row">
@@ -729,7 +691,7 @@ export default function TrackersPage() {
                       {activeTab === 0 && (
                         <>
                           <button
-                            className="rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text-white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
+                            className="rounded-full bg-neutral-800/50 px-4 py-1 text-xs font-semibold text.white backdrop-blur-sm transition-all duration-300 hover:bg-neutral-700"
                             onClick={() => setShowImportModal(true)}
                           >
                             Import
@@ -768,7 +730,7 @@ export default function TrackersPage() {
                   </div>
                   {activeTab === 0 ? (
                     <>
-                      <div className="flex items-center border-b border-white/20 p-2">
+                      <div className="flex items-center border-b border.white/20 p-2">
                         <div className="flex w-full items-center gap-4 text-xs font-medium text-neutral-400">
                           <span className="w-28">Created</span>
                           <span className="min-w-0 flex-1">Name</span>
@@ -837,10 +799,8 @@ export default function TrackersPage() {
                           </span>
                         </div>
                       ) : (
-                        <div
-                          className="overflow-x-auto overflow-y-auto"
-                          style={{ maxHeight: "calc(100vh - 300px)" }}
-                        >
+                        // PAGE scrolls: only horizontal overflow here
+                        <div className="overflow-x-auto">
                           <table className="mt-2 w-full min-w-[720px] text-xs">
                             <thead>
                               <tr className="border-b border-white/20">
@@ -927,7 +887,7 @@ export default function TrackersPage() {
                                       </span>
                                     </td>
                                     <td
-                                    className="w-32 px-2 py-2 font-mono text-emerald-300"
+                                      className="w-32 px-2 py-2 font-mono text-emerald-300"
                                       title={displayName || undefined}
                                     >
                                       {displaySymbol}
@@ -1018,7 +978,8 @@ export default function TrackersPage() {
                   </div>
 
                   {/* Twitter Content */}
-                  <div className="flex-1 overflow-y-auto">
+                  {/* No inner vertical scroll: page scrolls */}
+                  <div className="flex-1">
                     {twitterTab === 0 ? (
                       // Tracked Accounts Tab
                       <>
@@ -1176,11 +1137,11 @@ export default function TrackersPage() {
                                   <span>🔁 {tweet.retweetCount || 0}</span>
                                   <span>❤️ {tweet.likeCount || 0}</span>
                                   {tweet.url && (
-                                  <a
+                                    <a
                                       href={tweet.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                    className="ml-auto text-emerald-400 hover:text-emerald-300"
+                                      className="ml-auto text-emerald-400 hover:text-emerald-300"
                                     >
                                       View on X →
                                     </a>
@@ -1378,34 +1339,7 @@ export default function TrackersPage() {
         />
 
         {/* Bottom Navigation/Footer */}
-        {/* <div className="fixed bottom-0 left-0 z-40 flex w-full items-center justify-between border-t border-emerald-950/50 bg-neutral-900/80 px-6 py-3 text-xs backdrop-blur-md">
-        <div className="flex gap-6">
-          <button className="flex items-center gap-2 font-semibold text-emerald-400 transition-colors duration-300 hover:text-emerald-300">
-            <span className="text-lg">📊</span> Wallet Tracker
-          </button>
-        </div>
-        <div className="flex items-center gap-6 text-neutral-400">
-          <span className="flex items-center gap-2">
-            <span className="text-emerald-400">💰</span> $106.8K
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-emerald-400">💎</span> $2581
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-green-400">💸</span> $152.42
-          </span>
-          <span className="flex items-center gap-2">
-            <span className={wsConnected ? "text-green-400" : "text-red-400"}>🔗</span> 
-            {wsConnected ? "Tracker Connected" : "Tracker Disconnected"}
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-neutral-400">🌐</span> US-W
-          </span>
-          <span className="cursor-pointer text-neutral-400 transition-colors duration-300 hover:text-white">
-            Docs
-          </span>
-        </div>
-      </div> */}
+        {/* ... */}
         <Footer />
       </div>
     </>
