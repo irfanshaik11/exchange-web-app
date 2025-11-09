@@ -62,7 +62,7 @@ export function useCachedFinalStretchTokens() {
 
     try {
       // Use Next.js API route which proxies to the backend
-      const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+      const apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
 
       console.log('[Final Stretch] Fetching from:', apiUrl);
       const response = await fetch(apiUrl);
@@ -183,7 +183,7 @@ export function useCachedMigratedTokens() {
 
     try {
       // Use Next.js API route which proxies to the backend
-      const apiUrl = `/api/token-service/pulse-migrated?limit=30&t=${Date.now()}`;
+      const apiUrl = `/api/token-service/pulse-migrated?limit=70&t=${Date.now()}`;
 
       console.log('[Migrated] Fetching from:', apiUrl);
       const response = await fetch(apiUrl);

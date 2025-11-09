@@ -217,6 +217,13 @@ export default function TrackersPage() {
 
   const loadWalletsFromBackend = async () => {
     try {
+      if (!user?.id) {
+        setWatchedWallets([]);
+        setWallets([]);
+        setWalletBalances({});
+        return;
+      }
+
       // Fetch wallets from backend
       const tracked = await getTrackedWallets(user?.id);
 

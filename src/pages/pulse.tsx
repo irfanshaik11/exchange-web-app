@@ -416,7 +416,54 @@ export default function PulsePage() {
 
   // REMOVED: Slow useEffect-based merge - now using instant callbacks above
   // REMOVED: Duplicate HTTP poll for MIGRATED tokens
-  // REMOVED: Redundant state copying - build functions use React Query data directly
+  // This was calling /api/token-service/pulse-migrated which is slow (1.33s)
+  // We already have a direct call to /v1/pulse/migrated below (line ~886) which is fast (57ms)
+  // Keeping only the fast direct call to avoid redundant requests
+
+  // Immediate poll on mount for Final Stretch tokens (just like New Pairs)
+  useEffect(() => {
+    const immediatePoll = async () => {
+      try {
+        // Always use Next.js API proxy to avoid CORS issues
+        const apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+
+        const res = await fetch(apiUrl, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const filteredData = (data as any[]).filter((token) => {
+              if (isZeroLiquidityToken(token)) {
+                console.log('[Final Stretch] ⛔ Skipping token with zero liquidity from immediate poll:', token?.name, token?.mint);
+                return false;
+              }
+              return true;
+            });
+
+            if (filteredData.length === 0) {
+              console.log('[Final Stretch] ⚠️ All tokens filtered due to zero liquidity. Clearing final stretch list.');
+              setHttpFinalStretch([]);
+              setHttpFinalStretchTick((t) => t + 1);
+              return;
+            }
+
+            setHttpFinalStretch(filteredData as any[]);
+            setHttpFinalStretchTick((t) => t + 1);
+            console.log(`[Final Stretch] Immediate poll got ${filteredData.length} tokens (after filtering)`);
+          }
+        }
+      } catch (error) {
+        console.log('[Final Stretch] Immediate poll failed:', error);
+      }
+    };
+    
+    immediatePoll();
+  }, []);
 
   // DISABLED: HTTP polling for Final Stretch - WebSocket handles all migration events
   // WebSocket broadcasts 'final_stretch_token' events when tokens cross 60% threshold
@@ -426,7 +473,7 @@ export default function PulsePage() {
   //   const poll = async () => {
   //     try {
   //       // Always use Next.js API proxy to avoid CORS issues
-  //       const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+  //       const apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
   //
   //       const res = await fetch(apiUrl);
   //       if (!alive) return;
@@ -802,7 +849,99 @@ export default function PulsePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // REMOVED: Redundant HTTP fetch - React Query already handles migrated tokens
+  // Use the processed data from buildNewPairs function
+  const newPairsToShow = useMemo(() => buildNewPairs(), [httpNew, httpNewTick]);
+  const migratedToShow = useMemo(() => buildMigrated(), [httpMigrated, httpMigratedTick]);
+  const finalStretchToShow = useMemo(() => buildFinalStretch(), [httpFinalStretch, httpFinalStretchTick]);
+  
+  // DEBUG: Log the data being passed to UI
+  useEffect(() => {
+    console.log(`[Pulse] 🎯 UI Data - newPairsToShow: ${newPairsToShow.length}, httpNew: ${httpNew.length}, httpNewTick: ${httpNewTick}`);
+    if (newPairsToShow.length > 0) {
+      console.log(`[Pulse] 🎯 First token in UI:`, newPairsToShow[0]?.name || 'none');
+    }
+  }, [newPairsToShow, httpNew, httpNewTick]);
+
+  // DEBUG: Log migrated data
+  useEffect(() => {
+    console.log(`[Pulse] 🎯 Migrated UI Data - migratedToShow: ${migratedToShow.length}, httpMigrated: ${httpMigrated.length}, httpMigratedTick: ${httpMigratedTick}`);
+    if (migratedToShow.length > 0) {
+      console.log(`[Pulse] 🎯 First migrated token in UI:`, migratedToShow[0]?.name || 'none');
+    }
+  }, [migratedToShow, httpMigrated, httpMigratedTick]);
+
+  // Fetch initial migrated tokens on page load
+  useEffect(() => {
+    const fetchInitialMigratedTokens = async () => {
+      try {
+        console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
+        const url = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/pulse/migrated?limit=70`;
+        console.log(`[Pulse] 🔄 URL:`, url);
+        console.log(`[Pulse] 🔄 env.NEXT_PUBLIC_GO_SERVICE_URL:`, env.NEXT_PUBLIC_GO_SERVICE_URL);
+        const response = await fetch(url);
+        console.log(`[Pulse] 🔄 Response status:`, response.status);
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`[Pulse] 🔄 Fetched ${data.length} migrated tokens from API`);
+          if (data.length > 0) {
+            const filteredData = data.filter((token: any) => {
+              if (!token) return false;
+
+              if (isZeroLiquidityToken(token)) {
+                console.log('[Pulse] ⛔ Skipping migrated token with zero liquidity:', token?.name, token?.mint);
+                return false;
+              }
+
+              return true;
+            });
+
+            if (filteredData.length === 0) {
+              console.log('[Pulse] ⚠️ All migrated tokens filtered due to zero liquidity. Clearing migrated list.');
+              setHttpMigrated([]);
+              setHttpMigratedTick(prev => prev + 1);
+              return;
+            }
+
+            // Add timestamp to each token for proper sorting
+            const tokensWithTimestamp = filteredData.map((token: any) => ({
+              ...token,
+              created_at: token.migrated_time || new Date().toISOString(),
+              timestamp: Date.now()
+            }));
+            console.log(`[Pulse] 🔄 BEFORE setHttpMigrated - current count: ${httpMigrated.length}`);
+            setHttpMigrated(tokensWithTimestamp);
+            setHttpMigratedTick(prev => prev + 1);
+            console.log(`[Pulse] 🔄 Set initial migrated tokens:`, tokensWithTimestamp.map(t => t.name));
+            console.log(`[Pulse] 🔄 AFTER setHttpMigrated - should be ${tokensWithTimestamp.length} tokens`);
+          }
+        } else {
+          console.error(`[Pulse] ❌ HTTP error:`, response.status, response.statusText);
+        }
+      } catch (error) {
+        console.error(`[Pulse] ❌ Failed to fetch initial migrated tokens:`, error);
+      }
+    };
+
+    fetchInitialMigratedTokens();
+  }, []); // Run once on mount
+  // Debug: log top entries order and timestamps (after data is computed)
+  if (typeof window !== 'undefined') {
+    try {
+      const sample = (newPairsData || []).slice(0, 10).map((t: any) => ({
+        addr: t.pair_address || t.mint,
+        ts: getTs(t),
+        created_at: t.created_at || t.createdAt || t.launch_time || t.launchTime,
+        firstSeen: t.firstSeen,
+        updated_at: t.updated_at || t.updatedAt,
+        name: t.name,
+        symbol: t.symbol,
+      }));
+      console.log('[Pulse] NewPairs top10 with timestamps:', sample);
+    } catch {}
+  }
+  const newPairsFallback = newPairsData;
+  // Show loading until at least one source has tried and no data yet
+  const newPairsLoading = (httpNewTick === 0 && wsLoading && newPairsData.length === 0);
 
   // Build a unified list of addresses to fetch realtime market data for (cap 200)
   const realtimeAddrs = useMemo(() => {
