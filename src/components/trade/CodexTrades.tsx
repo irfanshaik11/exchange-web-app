@@ -216,6 +216,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
   const [showAge, setShowAge] = React.useState(true); // true = Age, false = Time
   const [totalMode, setTotalMode] = React.useState<'usd' | 'sol'>('usd');
   const [mcMode, setMcMode] = React.useState<'mc' | 'price'>('mc'); // MC vs Price toggle
+  const [fetchedMarketCap, setFetchedMarketCap] = React.useState<number | null>(null);
 
   const stableToken = React.useMemo(() => {
     if (!token) return null;
@@ -227,7 +228,50 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
       mint: token.mint || '',
       ...token,
     };
-  }, [token?.pair_address, token?.decimals, token?.name, token?.symbol, token?.mint]);
+  }, [token]); // Depend on entire token object to catch all field changes including supply/price
+
+  // Fetch market cap immediately if not available in token
+  React.useEffect(() => {
+    if (!stableToken?.mint) return;
+    
+    // Check if token already has market cap
+    const anyToken = stableToken as any;
+    const existingMc = 
+      anyToken?.market_cap_usd ?? 
+      anyToken?.fully_diluted_value ?? 
+      anyToken?.marketCapUsd ?? 
+      anyToken?.fullyDilutedValue;
+    
+    if (existingMc && Number(existingMc) > 0) {
+      setFetchedMarketCap(null); // Clear fetched value since we have it from token
+      return;
+    }
+
+    // Fetch market cap via API immediately
+    const fetchMarketCap = async () => {
+      try {
+        const response = await fetch('/api/codex/market-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mints: [stableToken.mint] }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          // API returns Record<mint, MarketData>
+          const marketData = data[stableToken.mint];
+          if (marketData?.market_cap_usd && marketData.market_cap_usd > 0) {
+            setFetchedMarketCap(marketData.market_cap_usd);
+          }
+        }
+      } catch (error) {
+        // Silently fail - we'll fall back to calculated market cap
+        console.error('[CodexTrades] Failed to fetch market cap:', error);
+      }
+    };
+
+    fetchMarketCap();
+  }, [stableToken?.mint]);
 
   const stableInitialTrades = React.useMemo(() => initialTrades, [initialTrades.length]);
 
@@ -442,8 +486,20 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                     ? n.pricePerToken
                     : fallbackPriceUsd;
 
-                const mc =
-                  supply > 0 && unitPriceUsd > 0
+                // Get market cap: prioritize token's market cap, then fetched, then calculate
+                const anyToken = stableToken as any;
+                const tokenMarketCap = 
+                  anyToken?.market_cap_usd ?? 
+                  anyToken?.fully_diluted_value ?? 
+                  anyToken?.marketCapUsd ?? 
+                  anyToken?.fullyDilutedValue;
+                
+                const mc = 
+                  (tokenMarketCap && Number(tokenMarketCap) > 0) 
+                    ? Number(tokenMarketCap)
+                    : (fetchedMarketCap && fetchedMarketCap > 0)
+                    ? fetchedMarketCap
+                    : (supply > 0 && unitPriceUsd > 0)
                     ? unitPriceUsd * supply
                     : null;
 
