@@ -32,6 +32,7 @@ import { useWalletTracker } from "../components/WalletTrackerContext";
 import { batchFetchTokenMetadata } from "~/utils/tokenMetadata";
 import AddTwitterHandleModal from "../components/AddTwitterHandleModal";
 import TwitterAccountRow from "../components/TwitterAccountRow";
+import { FiSettings, FiBell, FiShare2, FiRss } from "react-icons/fi";
 
 const TABS = ["Wallet Manager", "Live Trades", "Monitor"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
@@ -682,8 +683,10 @@ export default function TrackersPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="flex flex-wrap items-center gap-2 border-b border-neutral-800/60 py-2">
-                        <div className="flex items-center gap-2">
+                      {/* HEADER BAR – three zones like reference screenshot */}
+                      <div className="flex items-center gap-4 border-b border-neutral-800/60 py-2">
+                        {/* Left: tabs + wallet count */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           {TABS.map((tab, i) => (
                             <button
                               key={tab}
@@ -712,16 +715,21 @@ export default function TrackersPage() {
                             </span>
                           </div>
                         </div>
-                        <div className="flex-1" />
-                        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
+
+                        {/* Middle: search bar (center, max width) */}
+                        <div className="flex-1 flex justify-center">
                           <input
                             type="text"
                             placeholder="Search by name or addr..."
-                            className="flex-1 min-w-[200px] rounded-full border border-neutral-800 bg-[#050608] px-4 py-0 text-xs text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none sm:w-60"
+                            className="w-full max-w-md rounded-full border border-neutral-800 bg-[#050608] px-4 py-1 text-xs text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none"
                             disabled={activeTab === 1}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                           />
+                        </div>
+
+                        {/* Right: actions (Import / Export / icons / Add Wallet) */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           {activeTab === 0 && (
                             <>
                               <button
@@ -736,6 +744,33 @@ export default function TrackersPage() {
                               >
                                 Export
                               </button>
+
+                              {/* Icon buttons */}
+                              <button
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                type="button"
+                              >
+                                <FiSettings className="h-4 w-4" />
+                              </button>
+                              <button
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                type="button"
+                              >
+                                <FiBell className="h-4 w-4" />
+                              </button>
+                              <button
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                type="button"
+                              >
+                                <FiShare2 className="h-4 w-4" />
+                              </button>
+                              <button
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                type="button"
+                              >
+                                <FiRss className="h-4 w-4" />
+                              </button>
+
                               <button
                                 className="rounded-full px-4 py-1 text-xs font-semibold transition-all duration-300"
                                 style={{
@@ -756,8 +791,7 @@ export default function TrackersPage() {
                                   e.currentTarget.style.backgroundColor =
                                     "#70E0B0";
                                   e.currentTarget.style.boxShadow = "none";
-                                  e.currentTarget.style.transform =
-                                    "scale(1)";
+                                  e.currentTarget.style.transform = "scale(1)";
                                 }}
                               >
                                 Add Wallet
@@ -766,6 +800,7 @@ export default function TrackersPage() {
                           )}
                         </div>
                       </div>
+
                       <div className="flex-1 overflow-y-auto min-h-0">
                         {activeTab === 0 ? (
                           <>
