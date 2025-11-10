@@ -54,7 +54,7 @@ const LightweightChart: React.FC<LightweightChartProps> = ({
         width: chartContainerRef.current.clientWidth,
         height: chartContainerRef.current.clientHeight,
         layout: {
-          background: { type: ColorType.Solid, color: '#131722' },
+          background: { type: ColorType.Solid, color: '#000000' },
           textColor: '#d1d4dc',
         },
         grid: {

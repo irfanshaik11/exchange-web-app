@@ -1367,7 +1367,7 @@ Maker: ${walletAddress}`;
           // custom_css_url: '/charting_library/themed.css',
           loading_screen: { backgroundColor: 'transparent' },
           overrides: {
-            'paneProperties.background': '#131722',
+            'paneProperties.background': '#000000',
             'paneProperties.backgroundType': 'solid',
             'paneProperties.vertGridProperties.color': '#2B2B43',
             'paneProperties.horzGridProperties.color': '#2B2B43',
@@ -1375,8 +1375,8 @@ Maker: ${walletAddress}`;
             'scalesProperties.textColor': '#d1d4dc',
             'scalesProperties.lineColor': '#2B2B43',
             // Explicitly set chart type to candlesticks
-            'paneProperties.backgroundGradientStartColor': '#131722',
-            'paneProperties.backgroundGradientEndColor': '#131722',
+            'paneProperties.backgroundGradientStartColor': '#000000',
+            'paneProperties.backgroundGradientEndColor': '#000000',
             'mainSeriesProperties.candleStyle.upColor': '#26a69a',
             'mainSeriesProperties.candleStyle.downColor': '#ef5350',
             'mainSeriesProperties.candleStyle.borderUpColor': '#26a69a',
@@ -1396,7 +1396,7 @@ Maker: ${walletAddress}`;
             'mainSeriesProperties.lineStyle.color': '#26a69a',
             'paneProperties.topMargin': 10,
             'paneProperties.bottomMargin': 10,
-            'paneProperties.legendProperties.background': '#131722',
+            'paneProperties.legendProperties.background': '#000000',
             'paneProperties.legendProperties.color': '#d1d4dc',
           },
           studies_overrides: {
