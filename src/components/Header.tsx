@@ -23,15 +23,16 @@ const AX = {
   sell: "#FF4D7F",
 };
 
-const navLinks = [
-  { name: "Trenches", href: "/pulse" },
-  { name: "Portfolio", href: "/portfolio" },
-  { name: "Trending", href: "/discover" },
-  { name: "Trackers", href: "/trackers" },
-  // { name: "Perpetuals", href: "/construction" },
-  // { name: "Yield", href: "/construction" },
-  { name: "Rewards", href: "/construction" },
-];
+    const navLinks = [
+      { name: "Trenches", href: "/pulse" },
+      { name: "Portfolio", href: "/portfolio" },
+      { name: "Trending", href: "/discover" },
+      { name: "Trackers", href: "/trackers" },
+      // { name: "Perpetuals", href: "/construction" },
+      // { name: "Yield", href: "/construction" },
+      { name: "Rewards", href: "/construction" },
+      { name: "Referrals", href: "/referrals" },
+    ];
 
 interface HeaderProps {
   search?: string;

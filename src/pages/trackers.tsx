@@ -105,7 +105,7 @@ const EMOJIS = [
   "🚀",
 ];
 
-const MAX_WALLETS = 100;
+const MAX_WALLETS = 500;
 const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
 
 export default function TrackersPage() {

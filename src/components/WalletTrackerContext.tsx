@@ -81,8 +81,8 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     const handleTradeEvent = async (event: TradeEvent) => {
       console.log('🔔 Trade event received:', event);
       
-      // Add to latest trades list (keep last 50)
-      setLatestTrades(prev => [event, ...prev].slice(0, 50));
+      // Add to latest trades list (keep last 100)
+      setLatestTrades(prev => [event, ...prev].slice(0, 100));
       
       // Find wallet info for better notification
       const wallet = watchedWalletsRef.current.find(w => w.address === event.wallet);
