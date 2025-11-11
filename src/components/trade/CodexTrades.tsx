@@ -324,12 +324,12 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
 
   if (!stableToken || (!stableToken.name && !stableToken.symbol)) {
     return (
-      <div className="flex-1 min-h-0 p-4">
+      <div className="flex-1 min-h-0 p-4 bg-black">
         <div className="animate-pulse">
-          <div className="h-6 w-32 bg-neutral-700 rounded mb-4" />
+          <div className="h-6 w-32 bg-neutral-900 rounded mb-4" />
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 bg-neutral-700 rounded" />
+              <div key={i} className="h-12 bg-neutral-900 rounded" />
             ))}
           </div>
         </div>
@@ -338,10 +338,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
   }
 
   return (
-    <div className="w-full h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto pb-18">
-        <table className="w-full text-xs border-collapse">
-          <thead className="sticky top-0 bg-gray-900 z-10">
+    <div className="w-full h-full flex flex-col bg-black">
+      <div className="flex-1 overflow-y-auto pb-18 bg-black">
+        <table className="w-full text-xs border-collapse bg-black">
+          <thead className="sticky top-0 bg-black z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
               {/* Age / Time */}
               <th className="w-[212px] pl-2 pr-0 py-2 text-left">
@@ -410,16 +410,16 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
               <th className="px-2 py-2 text-left">Trader</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="bg-black">
             {isLoading ? (
-              <tr>
-                <td colSpan={6} className="text-center py-6 text-neutral-500">
+              <tr className="bg-black">
+                <td colSpan={6} className="text-center py-6 text-neutral-500 bg-black">
                   Loading trades...
                 </td>
               </tr>
             ) : !normalized.length ? (
-              <tr>
-                <td colSpan={6} className="text-center py-6 text-neutral-500">
+              <tr className="bg-black">
+                <td colSpan={6} className="text-center py-6 text-neutral-500 bg-black">
                   No trades available.
                 </td>
               </tr>
@@ -474,7 +474,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                 return (
                   <tr
                     key={n.keyPart || n.idx}
-                    className="border-b border-neutral-800 hover:bg-neutral-800/60"
+                    className="border-b border-neutral-900 hover:bg-neutral-900/60 bg-black"
                   >
                     {/* Age / Time */}
                     <td className="w-[172px] pl-2 pr-0 py-2 text-neutral-300">
@@ -557,9 +557,9 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
           </tbody>
 
           {!!p95Display && (
-            <tfoot>
+            <tfoot className="bg-black">
               <tr>
-                <td colSpan={6}>
+                <td colSpan={6} className="bg-black">
                   <div className="px-2 py-2 text-[10px] text-neutral-500 flex items-center gap-2">
                     <span className="inline-block">
                       Total heat = relative to ~95th percentile
