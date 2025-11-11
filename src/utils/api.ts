@@ -2,6 +2,7 @@
 import { env } from "../env";
 // Critical Fix #10: Network timeout handling
 import { fetchWithTimeout, isTimeoutError as checkTimeoutError } from "./fetchWithTimeout";
+import { getStoredReferralToken } from "./referralStorage";
 
 // Constants
 export const SOL_MINT_ADDRESS = "So11111111111111111111111111111111111111112";
@@ -11,6 +12,27 @@ interface RequestOptions extends RequestInit {
   body?: any;
   /** Bearer token for authenticated endpoints */
   authToken?: string;
+}
+
+export interface ReferralDetails {
+  code: string;
+  label?: string | null;
+  description?: string | null;
+  isDefault: boolean;
+  expiresAt?: string | null;
+  maxUses?: number | null;
+  isActive?: boolean;
+}
+
+export interface ReferralSession {
+  token: string;
+  referral: ReferralDetails;
+}
+
+export interface ReferralValidationSuccess {
+  valid: true;
+  token: string;
+  referral: ReferralDetails;
 }
 
 /**
@@ -52,15 +74,42 @@ async function apiFetch<T = unknown>(
   const { authToken, body, headers, ...rest } = options;
 
   try {
+    const finalHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    };
+
+    if (headers) {
+      if (headers instanceof Headers) {
+        headers.forEach((value, key) => {
+          finalHeaders[key] = value as string;
+        });
+      } else if (Array.isArray(headers)) {
+        headers.forEach(([key, value]) => {
+          finalHeaders[key] = value;
+        });
+      } else {
+        Object.assign(finalHeaders, headers as Record<string, string>);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      const hasReferralHeader = Object.keys(finalHeaders).some(
+        (key) => key.toLowerCase() === 'x-referral-token',
+      );
+      if (!hasReferralHeader) {
+        const referralToken = getStoredReferralToken();
+        if (referralToken) {
+          finalHeaders['X-Referral-Token'] = referralToken;
+        }
+      }
+    }
+
     // Critical Fix #10: Use fetchWithTimeout instead of fetch (45s timeout for trade operations)
     const res = await fetchWithTimeout(
       `${env.NEXT_PUBLIC_BACKEND_URL}${endpoint}`,
       {
-        headers: {
-          "Content-Type": "application/json",
-          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-          ...(headers || {}),
-        },
+        headers: finalHeaders,
         body: body ? JSON.stringify(body) : undefined,
         ...rest,
       },
@@ -84,7 +133,7 @@ async function apiFetch<T = unknown>(
         // Suppress console.error for expected validation errors to prevent Next.js dev overlay
         const EXPECTED_ERROR_CODES = [
           'NO_HOLDINGS', 'INSUFFICIENT_BALANCE', 'VALIDATION_ERROR',
-          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED'
+          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED', 'METEORA_NO_LIQUIDITY', 'TURNKEY_NOT_SUPPORTED'
         ];
         if (EXPECTED_ERROR_CODES.includes(code)) {
           // Mark as expected error (won't trigger Next.js error overlay in dev)
@@ -171,6 +220,21 @@ export const metamaskLogin = (
 export const googleAuthUrl = `${env.NEXT_PUBLIC_BACKEND_URL}/api/users/auth/google`;
 
 /* -------------------------------------------------------------------------- */
+/*                             Referral endpoints                              */
+/* -------------------------------------------------------------------------- */
+
+export const validateReferralCode = (code: string) =>
+  apiFetch<ReferralValidationSuccess>("/api/referrals/validate", {
+    method: "POST",
+    body: { code },
+  });
+
+export const getReferralSession = () =>
+  apiFetch<ReferralSession>("/api/referrals/session", {
+    method: "GET",
+  });
+
+/* -------------------------------------------------------------------------- */
 /*                              Limit Order endpoints                         */
 /* -------------------------------------------------------------------------- */
 
@@ -214,6 +278,14 @@ interface LimitOrder {
   poolType?: string | null;
   failureReason?: string | null;
   failureCode?: string | null;
+  slippage?: number | string;
+  priorityFee?: number | string;
+  bribe?: number | string;
+  mevMode?: string | null;
+  autoFee?: boolean;
+  maxFee?: number | string;
+  mevProtection?: boolean;
+  rpc?: string | null;
 }
 
 interface UpdateLimitOrderParams {
@@ -233,6 +305,15 @@ export const createLimitOrder = (
 
 export const getMyLimitOrders = (authToken: string) =>
   apiFetch<{ orders: LimitOrder[] }>("/api/limit/my_orders", {
+    method: "GET",
+    authToken,
+  });
+
+export const getLimitOrderExecutionResult = (
+  orderId: string | number,
+  authToken: string,
+) =>
+  apiFetch<any>(`/api/limit/execution_result/${orderId}`, {
     method: "GET",
     authToken,
   });

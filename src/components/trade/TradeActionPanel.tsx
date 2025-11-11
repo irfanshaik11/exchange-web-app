@@ -7,7 +7,7 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt, FaTrophy, FaDice, FaUsers, FaChartBar, FaCrown, FaCrosshairs, FaFire } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
 import QuickBuy from "../QuickBuy";
-import { createLimitOrder, tradeBuy, tradeSellPercentage, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { createLimitOrder, tradeBuy, tradeSellPercentage, getLimitOrderExecutionResult, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getTradeActivityByUser } from "~/utils/functions";
 import toast, { type ToastOptions } from "react-hot-toast";
 import {
@@ -63,6 +63,38 @@ const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(mi
 
 const LOW_LIQUIDITY_WARNING_THRESHOLD = 1_000; // USD
 const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
+const LIMIT_ORDER_TOLERANCE_BPS = Number(process.env.NEXT_PUBLIC_LIMIT_ORDER_TOLERANCE_BPS ?? "100");
+const TOKEN_SERVICE_URL = (process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL || "").replace(/\/$/, "");
+const LIMIT_ORDER_STATUS_EVENT = "limit-order-update";
+const LIMIT_ORDER_POLL_INTERVAL_MS = 2000;
+const LIMIT_ORDER_MAX_POLLS = 40;
+const TOKEN_SERVICE_REFRESH_INTERVAL_MS = 1_000;
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchLatestMarketCap(pairAddress: string | undefined | null): Promise<number | null> {
+  if (!TOKEN_SERVICE_URL || !pairAddress) return null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+    const response = await fetch(`${TOKEN_SERVICE_URL}/v1/trade/view?pair_address=${pairAddress}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      console.warn(`⚠️ Token service responded ${response.status} for ${pairAddress}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const marketCap = data?.marketData?.market_cap_usd;
+    return typeof marketCap === "number" && Number.isFinite(marketCap) ? marketCap : null;
+  } catch (error) {
+    console.warn("⚠️ Failed to fetch latest market cap:", error);
+    return null;
+  }
+}
 
 function getCountsAndVol(t: any, side: "buy" | "sell", window: TimeRange) {
   const s = side;
@@ -510,7 +542,124 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
+  const [tokenServiceMarketCap, setTokenServiceMarketCap] = useState<number | null>(null);
+  const [tokenServiceLiquidity, setTokenServiceLiquidity] = useState<number | null>(null);
   const [creatorAddress, setCreatorAddress] = useState<string>("");
+  const isMountedRef = useRef(true);
+  const tokenServiceMarketCapRef = useRef<number | null>(null);
+  const tokenServiceMarketCapFetchedAtRef = useRef<number | null>(null);
+  const manualTargetOverrideRef = useRef<boolean>(false);
+  const lastSliderBaseRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    tokenServiceMarketCapRef.current = tokenServiceMarketCap;
+  }, [tokenServiceMarketCap]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const refreshTokenServiceMarketCap = useCallback(
+    async (force = false): Promise<number | null> => {
+      if (!effectivePoolAddress) {
+        if (isMountedRef.current) {
+          setTokenServiceMarketCap(null);
+          setTokenServiceLiquidity(null);
+          tokenServiceMarketCapRef.current = null;
+          tokenServiceMarketCapFetchedAtRef.current = null;
+        }
+        return null;
+      }
+
+      const now = Date.now();
+      if (
+        !force &&
+        tokenServiceMarketCapRef.current !== null &&
+        tokenServiceMarketCapFetchedAtRef.current !== null &&
+        now - tokenServiceMarketCapFetchedAtRef.current < 10_000
+      ) {
+        return tokenServiceMarketCapRef.current;
+      }
+
+      const latest = await fetchLatestMarketCap(effectivePoolAddress);
+      if (latest !== null && isMountedRef.current) {
+        setTokenServiceMarketCap(latest);
+        tokenServiceMarketCapRef.current = latest;
+        tokenServiceMarketCapFetchedAtRef.current = Date.now();
+      }
+
+      if (latest !== null) {
+        return latest;
+      }
+
+      return tokenServiceMarketCapRef.current;
+    },
+    [effectivePoolAddress]
+  );
+
+  const refreshTokenServiceData = useCallback(
+    async (force = false): Promise<number | null> => {
+      const latestMc = await refreshTokenServiceMarketCap(force);
+
+      if (effectivePoolAddress) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10_000);
+        try {
+          const response = await fetch(`${TOKEN_SERVICE_URL}/v1/trade/view?pair_address=${effectivePoolAddress}`, {
+            signal: controller.signal,
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const liquidity = data?.marketData?.liquidity_usd;
+            if (typeof liquidity === "number" && Number.isFinite(liquidity) && isMountedRef.current) {
+              setTokenServiceLiquidity(liquidity);
+            }
+          }
+        } catch (error) {
+          console.warn("⚠️ Failed to fetch latest liquidity:", error);
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      }
+
+      return latestMc;
+    },
+    [effectivePoolAddress, refreshTokenServiceMarketCap]
+  );
+
+  useEffect(() => {
+    void refreshTokenServiceData(true);
+  }, [refreshTokenServiceData]);
+
+  useEffect(() => {
+    if (tab === "limit") {
+      void refreshTokenServiceData(true);
+    }
+  }, [tab, refreshTokenServiceData]);
+
+  useEffect(() => {
+    if (tab !== "limit" || !effectivePoolAddress) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      await refreshTokenServiceData(true);
+    };
+
+    const intervalId = setInterval(() => {
+      void tick();
+    }, TOKEN_SERVICE_REFRESH_INTERVAL_MS);
+
+    void tick();
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [tab, effectivePoolAddress, refreshTokenServiceData]);
 
   // High slippage warning dialog state
   const [showSlippageWarning, setShowSlippageWarning] = useState(false);
@@ -742,17 +891,31 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   );
 
   const baseMarketCap: number = useMemo(() => {
+    if (tokenServiceMarketCap !== null && Number.isFinite(tokenServiceMarketCap) && tokenServiceMarketCap > 0) {
+      return tokenServiceMarketCap;
+    }
+
     const t: any = token || {};
-    return Number(
-      t.market_cap_usd ??
-        t.marketcap_usd ??
-        t.market_cap ??
-        t.marketcap ??
-        t.fdv_usd ??
-        t.fdv ??
-        0
-    ) || 0;
-  }, [token]);
+    return (
+      Number(
+        t.market_cap_usd ??
+          t.marketcap_usd ??
+          t.market_cap ??
+          t.marketcap ??
+          t.fdv_usd ??
+          t.fdv ??
+          0
+      ) || 0
+    );
+  }, [tokenServiceMarketCap, token]);
+
+  const sliderBaseMarketCap = useMemo(() => {
+    if (baseMarketCap > 0) {
+      return baseMarketCap;
+    }
+    const numericTarget = Number(targetMC);
+    return Number.isFinite(numericTarget) && numericTarget > 0 ? numericTarget : null;
+  }, [baseMarketCap, targetMC]);
 
   // Derive % change from base MC -> targetMC (used to display slider value)
   const derivedPct: number = useMemo(() => {
@@ -771,11 +934,28 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (tab === "limit" && baseMarketCap > 0) {
       const t = Number(targetMC);
       if (!Number.isFinite(t) || t === 0) {
+        manualTargetOverrideRef.current = false;
+        lastSliderBaseRef.current = baseMarketCap;
         setTargetMC(String(Math.round(baseMarketCap)));
         setSliderPct(0);
       }
     }
   }, [tab, baseMarketCap]);
+
+  useEffect(() => {
+    if (tab !== "limit") return;
+    if (!baseMarketCap || baseMarketCap <= 0) return;
+    if (manualTargetOverrideRef.current) return;
+    if (sliderPct !== 0) return;
+
+    const roundedBase = Math.round(baseMarketCap);
+    const currentTarget = Number(targetMC);
+
+    if (!Number.isFinite(currentTarget) || currentTarget !== roundedBase) {
+      lastSliderBaseRef.current = baseMarketCap;
+      setTargetMC(String(roundedBase));
+    }
+  }, [baseMarketCap, tab, sliderPct, targetMC]);
 
   // Sync slider percentage when market cap changes (e.g., from typing)
   useEffect(() => {
@@ -831,6 +1011,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const { buys, sells, volume, buyVolume, sellVolume, netVolume, buyPercentage, sellPercentage } = realTimeStats;
 
   const liquidityUsd = useMemo(() => {
+    if (tokenServiceLiquidity !== null && Number.isFinite(tokenServiceLiquidity) && tokenServiceLiquidity > 0) {
+      return tokenServiceLiquidity;
+    }
     if (!token) return 0;
     const possibleValues = [
       token.total_liquidity_usd,
@@ -846,7 +1029,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
     // Fall back to zero if we have no positive readings
     return Number(token.total_liquidity_usd) || 0;
-  }, [token]);
+  }, [token, tokenServiceLiquidity]);
 
   // Fetch creator address from token-service
   useEffect(() => {
@@ -912,6 +1095,132 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     setPresetDrafts(next.map(String));
   };
 
+  const monitorLimitOrderExecution = useCallback(
+    async ({
+      orderId,
+      initiatingToastId,
+      orderType,
+      targetMarketCap,
+      submittedSolAmount,
+      submittedTokenAmount,
+    }: {
+      orderId: string;
+      initiatingToastId?: string | null;
+      orderType: "Buy" | "Sell";
+      targetMarketCap?: number;
+      submittedSolAmount?: number;
+      submittedTokenAmount?: number;
+    }) => {
+      if (!user?.bearerToken) return;
+
+      const symbolLabel = token?.symbol || token?.name || "Token";
+
+      for (let attempt = 0; attempt < LIMIT_ORDER_MAX_POLLS && isMountedRef.current; attempt++) {
+        if (attempt > 0) {
+          await delay(LIMIT_ORDER_POLL_INTERVAL_MS);
+          if (!isMountedRef.current) {
+            return;
+          }
+        }
+
+        try {
+          const result: any = await getLimitOrderExecutionResult(orderId, user.bearerToken);
+          const status = (result?.status || result?.order?.status) as string | undefined;
+
+          if (status === "Completed") {
+            const resolvedSol = Number(
+              result?.actualSolAmount ?? result?.amount ?? submittedSolAmount ?? 0
+            );
+            const resolvedTokens = Number(
+              result?.actualTokenAmount ?? submittedTokenAmount ?? 0
+            );
+            const txHash =
+              result?.txid ||
+              result?.transactionHash ||
+              result?.trade?.transactionHash ||
+              result?.order?.transactionHash;
+
+            const amountLabel =
+              orderType === "Buy"
+                ? `${resolvedSol.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+                : `${resolvedTokens.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symbolLabel}`;
+
+            const descriptionParts = [amountLabel];
+            if (
+              typeof targetMarketCap === "number" &&
+              Number.isFinite(targetMarketCap) &&
+              targetMarketCap > 0
+            ) {
+              descriptionParts.push(`Target $${Math.round(targetMarketCap).toLocaleString()}`);
+            }
+
+            const description = descriptionParts.join(" • ");
+
+            if (initiatingToastId) {
+              updateEnhancedToast(initiatingToastId, "success", `${symbolLabel} limit order executed`, {
+                title: "Limit Order Executed",
+                description,
+                showExplorerLink: Boolean(txHash),
+                txHash,
+              });
+            } else {
+              showEnhancedToast("success", `${symbolLabel} limit order executed`, {
+                title: "Limit Order Executed",
+                description,
+                showExplorerLink: Boolean(txHash),
+                txHash,
+              });
+            }
+
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent(LIMIT_ORDER_STATUS_EVENT, {
+                  detail: { orderId, status: "Completed" },
+                })
+              );
+            }
+
+            return;
+          }
+
+          if (status === "Failed" || status === "Cancelled") {
+            const failureReason =
+              result?.failureReason ||
+              result?.order?.failureReason ||
+              result?.message ||
+              "Limit order failed to execute.";
+
+            if (initiatingToastId) {
+              updateEnhancedToast(initiatingToastId, "error", "Limit order failed", {
+                title: "Limit Order Failed",
+                description: failureReason,
+              });
+            } else {
+              showEnhancedToast("error", "Limit order failed", {
+                title: "Limit Order Failed",
+                description: failureReason,
+              });
+            }
+
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent(LIMIT_ORDER_STATUS_EVENT, {
+                  detail: { orderId, status },
+                })
+              );
+            }
+
+            return;
+          }
+        } catch (err) {
+          console.warn("[TradeActionPanel] Failed to poll limit order execution result:", err);
+          return;
+        }
+      }
+    },
+    [user?.bearerToken, token?.symbol, token?.name]
+  );
+
   const initiateTrade = useCallback(
     async (overrides?: { skipLiquidity?: boolean; skipSlippage?: boolean }) => {
       const options = {
@@ -928,8 +1237,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         return;
       }
 
+      const liquidityValue = Number(liquidityUsd) || 0;
+      const isLowLiquidity = liquidityValue <= 0 || liquidityValue < LOW_LIQUIDITY_WARNING_THRESHOLD;
       const shouldCheckLiquidity =
-        mode === "buy" && tab === "market" && !options.skipLiquidity;
+        mode === "buy" && isLowLiquidity && !options.skipLiquidity;
 
       if (shouldCheckLiquidity) {
         setPendingTradeOptions({ ...options, skipLiquidity: true });
@@ -978,6 +1289,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           const orderIntentLabel = `${mode === "buy" ? "Buy" : "Sell"} Limit Order`;
           const numericAmount = Number(amount);
           const numericTargetMc = Number(targetMC);
+          const direction = ((): "Above" | "Below" => {
+            if (mode === "buy" && tab === "limit") {
+              return "Below";
+            }
+            if (mode === "sell" && tab === "limit") {
+              return "Above";
+            }
+            if (!Number.isFinite(numericTargetMc) || !Number.isFinite(baseMarketCap) || baseMarketCap <= 0) {
+              return "Above";
+            }
+            return numericTargetMc >= baseMarketCap ? "Above" : "Below";
+          })();
           const formattedAmount =
             mode === "buy"
               ? `${Number.isFinite(numericAmount) ? numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 }) : amount} SOL`
@@ -1011,15 +1334,73 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               ? quickSettings.rpc.trim()
               : undefined;
 
-          await createLimitOrder(
+          let latestMarketCap: number | null = tokenServiceMarketCap ?? baseMarketCap;
+          if (effectivePoolAddress) {
+            const refreshed = await refreshTokenServiceData(true);
+            if (refreshed !== null) {
+              latestMarketCap = refreshed;
+            }
+          }
+
+          const effectiveLiveMc = latestMarketCap ?? baseMarketCap;
+          const isZeroDelta =
+            Number.isFinite(effectiveLiveMc) &&
+            Number.isFinite(numericTargetMc) &&
+            Math.abs((effectiveLiveMc || 0) - numericTargetMc) <= Math.max(1, Math.abs(effectiveLiveMc || 0) * 0.00001);
+
+          if (isZeroDelta) {
+            updateEnhancedToast(
+              initiatingToastId,
+              "error",
+              "Invalid trigger",
+              {
+                title: "Trigger price matches live price",
+                description: "Set a target above or below the live market cap before placing a limit order.",
+              }
+            );
+            setIsLoading(false);
+            setPendingTradeOptions(null);
+            return;
+          }
+
+          if (latestMarketCap && Number.isFinite(latestMarketCap)) {
+            const conditionAlreadyMet =
+              direction === "Below"
+                ? latestMarketCap <= numericTargetMc
+                : latestMarketCap >= numericTargetMc;
+
+            if (conditionAlreadyMet) {
+              const toleranceValue = Number.isFinite(LIMIT_ORDER_TOLERANCE_BPS)
+                ? (numericTargetMc * LIMIT_ORDER_TOLERANCE_BPS) / 10_000
+                : 0;
+              const delta = Math.abs(latestMarketCap - numericTargetMc);
+
+              if (toleranceValue && delta > toleranceValue) {
+                updateEnhancedToast(
+                  initiatingToastId,
+                  "error",
+                  "Market moved",
+                  {
+                    title: "Market cap changed",
+                    description: `Live MC is $${Math.round(latestMarketCap).toLocaleString()} — adjust your target before placing the order.`,
+                  }
+                );
+                setIsLoading(false);
+                setPendingTradeOptions(null);
+                return;
+              }
+            }
+          }
+
+          const limitOrderResponse = await createLimitOrder(
             {
               tokenAddress: token.mint || "",
               amount: Number(amount),
               type: mode === "buy" ? "Buy" : "Sell",
-              direction: "Above",
+              direction,
               targetMC: Number(targetMC),
               currentPrice: token.usd_price,
-              currentMarketCap: token.market_cap_usd || token.fully_diluted_value,
+              currentMarketCap: latestMarketCap ?? token.market_cap_usd ?? token.fully_diluted_value,
               tokenName: token.name,
               tokenSymbol: token.symbol,
               tokenDecimals: token.decimals,
@@ -1037,6 +1418,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             },
             user.bearerToken
           );
+          if (!options.skipLiquidity && liquidityUsd && liquidityUsd < LOW_LIQUIDITY_WARNING_THRESHOLD) {
+            setPendingTradeOptions({ ...(options || {}), skipLiquidity: true });
+            setShowLiquidityWarning(true);
+          }
           updateEnhancedToast(
             initiatingToastId,
             "success",
@@ -1046,6 +1431,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               description: `${formattedAmount} • Target ${formattedTarget}`,
             }
           );
+          if (limitOrderResponse?.order?.id) {
+            const normalizedOrderId = String(limitOrderResponse.order.id);
+            void monitorLimitOrderExecution({
+              orderId: normalizedOrderId,
+              initiatingToastId,
+              orderType: limitOrderResponse.order.type,
+              targetMarketCap: Number(limitOrderResponse.order.targetMC ?? numericTargetMc),
+              submittedSolAmount: Number(limitOrderResponse.order.solAmount ?? numericAmount),
+              submittedTokenAmount: Number(limitOrderResponse.order.tokenAmount ?? 0),
+            });
+          }
           setSuccessMessage(`Limit order for ${token.symbol} created successfully!`);
           setAmount("");
           setTargetMC("");
@@ -1187,6 +1583,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       token,
       user,
       effectivePoolAddress,
+      monitorLimitOrderExecution,
     ]
   );
 
@@ -1459,13 +1856,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   // When user finishes typing, check if amount meets minimum (buy mode only)
                   const value = Number(e.target.value);
                   if (mode === "buy" && value > 0) {
-                    const poolType = getPoolTypeFromToken(token);
-                    const minAmount = 0.001; // Standard minimum for all pools
-                    
+                    const poolType = (getPoolTypeFromToken(token) || token?.launchpad_protocol || '').toLowerCase();
+                    const minimums: Record<string, number> = {
+                      "meteora amm v2": 0.0001,
+                      "meteora amm v1": 0.0001,
+                      "raydium cpmm": 0.0001,
+                      "raydium amm": 0.0001,
+                      "pumpamm": 0.0001,
+                      "pumpfun": 0.0001,
+                      "meteora dbc": 0.0001,
+                    };
+                    const minAmount = minimums[poolType] ?? 0.0001;
+ 
                     if (value < minAmount) {
-                      setAmount(String(minAmount));
-                      showEnhancedToast('warning', `Amount auto-corrected to minimum: ${minAmount} SOL`, {
-                        title: 'Minimum Amount',
+                      showEnhancedToast('error', `Minimum trade size is ${minAmount} SOL`, {
+                        title: 'Amount Too Small',
+                        description: `Increase the amount to at least ${minAmount} SOL before placing the order.`,
                       });
                     }
                   }
@@ -1501,29 +1907,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
           </div>
           
-          {/* Minimum Amount Hint - only for buy mode */}
-          {tab === "market" && mode === "buy" && (() => {
-            const poolType = getPoolTypeFromToken(token);
-            const minimums: Record<string, number> = {
-              "meteora amm v2": 0.0001,
-              "meteora amm v1": 0.0001,
-              "Raydium CPMM": 0.00001,
-              "Raydium AMM": 0.00001,
-              "PumpAmm": 0.000001,
-              "Pumpfun": 0.000001,
-              "meteora dbc": 0.000001,
-            };
-            const minAmount = minimums[poolType];
-            
-            if (minAmount && minAmount > 0.000001) {
-              return (
-                <div className="px-3 py-1.5 text-[10px] text-neutral-500">
-                  ℹ️ Minimum: {minAmount} SOL for {token.launchpad_protocol || token.protocol || poolType}
-                </div>
-              );
-            }
-            return null;
-          })()}
+          {/* Minimum hint removed per request */}
 
           {/* Presets */}
           <div className="border-t border-[#2A2B33] rounded-b-lg overflow-hidden">
@@ -1616,6 +2000,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     placeholder="0"
                     value={targetMC}
                     onChange={(e) => {
+                      manualTargetOverrideRef.current = true;
                       const v = e.target.value.replace(/,/g, ".");
                       if (/^\d*\.?\d*$/.test(v)) setTargetMC(v);
                     }}
@@ -1649,11 +2034,15 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     step={1}
                     value={sliderPct}
                     onChange={(e) => {
-                      if (!baseMarketCap) return;
                       const p = clamp(Number(e.target.value), -100, 100);
                       setSliderPct(p);
-                      const next = Math.round(baseMarketCap * (1 + p / 100));
-                      setTargetMC(String(Math.max(0, next)));
+                      const baseForSlider = (sliderBaseMarketCap ?? Number(targetMC)) || 0;
+                      if (baseForSlider > 0) {
+                        lastSliderBaseRef.current = baseForSlider;
+                        manualTargetOverrideRef.current = false;
+                        const next = Math.round(baseForSlider * (1 + p / 100));
+                        setTargetMC(String(Math.max(0, next)));
+                      }
                     }}
                     className="w-full h-0.5 appearance-none cursor-pointer slider relative z-10 bg-transparent"
                     style={{
@@ -1716,8 +2105,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                     onChange={(e) => {
                       const p = clamp(Number(e.target.value || 0), -100, 100);
                       setSliderPct(p);
-                      if (baseMarketCap) {
-                        const next = Math.round(baseMarketCap * (1 + p / 100));
+                      const baseForSlider = (sliderBaseMarketCap ?? Number(targetMC)) || 0;
+                      if (baseForSlider > 0) {
+                        lastSliderBaseRef.current = baseForSlider;
+                        manualTargetOverrideRef.current = false;
+                        const next = Math.round(baseForSlider * (1 + p / 100));
                         setTargetMC(String(Math.max(0, next)));
                       }
                     }}
@@ -1729,7 +2121,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
 
             {/* helper if base MC is unknown */}
-            {!baseMarketCap ? (
+            {!sliderBaseMarketCap ? (
               <div className="mt-2 text-[9px] text-[#9CA3AF] font-normal">
                 Current market cap unavailable — enter a target value directly to enable the slider.
               </div>

@@ -105,6 +105,56 @@ const tokenMetadataCache: Record<string, any> = {};
 
 const WS_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
+const LIQUIDITY_FIELD_CANDIDATES = [
+  'liquidity_usd',
+  'LiquidityUSD',
+  'liquidityUSD',
+  'total_liquidity_usd',
+  'totalLiquidityUsd',
+  'totalLiquidityUSD',
+  'total_liquidityUSD',
+  'total_liquidity',
+  'liquidity',
+] as const;
+
+const parseLiquidityValue = (value: unknown): number | null => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+  return null;
+};
+
+const hasZeroLiquidity = (token: any): boolean => {
+  if (!token || typeof token !== 'object') {
+    return false;
+  }
+
+  for (const field of LIQUIDITY_FIELD_CANDIDATES) {
+    const numeric = parseLiquidityValue((token as Record<string, unknown>)[field]);
+    if (numeric === null) {
+      continue;
+    }
+    if (numeric === 0) {
+      return true;
+    }
+    if (numeric > 0) {
+      return false;
+    }
+  }
+
+  return false;
+};
+
+const filterNonZeroLiquidity = <T extends Record<string, unknown>>(tokens: T[]): T[] =>
+  tokens.filter((token) => !hasZeroLiquidity(token));
+
 // Smart color system based on token properties
 interface SmartColorProps {
   children: React.ReactNode;
@@ -1299,7 +1349,7 @@ function PulseTable({
         typeof parsed.timestamp === 'number' &&
         Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
       ) {
-        return parsed.data;
+        return filterNonZeroLiquidity(parsed.data as Token[]);
       }
     } catch (error) {
       console.warn('[PulseTable] Failed to restore ws cache:', error);
@@ -1387,7 +1437,7 @@ function PulseTable({
         typeof parsed.timestamp === 'number' &&
         Date.now() - parsed.timestamp <= WS_CACHE_TTL_MS
       ) {
-        setWsTokens(parsed.data);
+        setWsTokens(filterNonZeroLiquidity(parsed.data as Token[]));
       }
     } catch (error) {
       console.warn('[PulseTable] Failed to rehydrate ws cache on key change:', error);
@@ -1479,7 +1529,8 @@ function PulseTable({
       const response = await fetch(`${endpoint}?limit=${limit}&protocols=${encodeURIComponent(protocolsParam)}&t=${Date.now()}`);
       if (response.ok) {
         const data = await response.json();
-        setFilteredTokens(Array.isArray(data) ? data : []);
+        const next = Array.isArray(data) ? data : [];
+        setFilteredTokens(filterNonZeroLiquidity(next as Token[]));
       } else {
         console.error('Failed to fetch filtered tokens:', response.status);
         setFilteredTokens([]);
@@ -1513,25 +1564,43 @@ function PulseTable({
     protocols: filters.protocols.length > 0 ? filters.protocols.flatMap(mapProtocolToBackend) : undefined,
     onNewToken: useCallback((token: any) => {
       if (channel === 'new') {
+        if (hasZeroLiquidity(token)) {
+          console.log('[PulseTable] ⛔ Skipping WebSocket new token with zero liquidity:', token?.name, token?.mint);
+          return;
+        }
         setWsTokens(prev => {
-          const filtered = prev.filter(t => t.mint !== token.mint);
-          return [token as Token, ...filtered].slice(0, 50);
+          const withoutCurrent = prev.filter(t => t.mint !== token.mint);
+          const sanitizedPrev = filterNonZeroLiquidity(withoutCurrent);
+          const next = [token as Token, ...sanitizedPrev];
+          return next.slice(0, 50);
         });
       }
     }, [channel]),
     onFinalStretchToken: useCallback((token: any) => {
       if (channel === 'final_stretch') {
+        if (hasZeroLiquidity(token)) {
+          console.log('[PulseTable] ⛔ Skipping WebSocket final stretch token with zero liquidity:', token?.name, token?.mint);
+          return;
+        }
         setWsTokens(prev => {
-          const filtered = prev.filter(t => t.mint !== token.mint);
-          return [token as Token, ...filtered].slice(0, 50);
+          const withoutCurrent = prev.filter(t => t.mint !== token.mint);
+          const sanitizedPrev = filterNonZeroLiquidity(withoutCurrent);
+          const next = [token as Token, ...sanitizedPrev];
+          return next.slice(0, 50);
         });
       }
     }, [channel]),
     onMigratedToken: useCallback((token: any) => {
       if (channel === 'migrated') {
+        if (hasZeroLiquidity(token)) {
+          console.log('[PulseTable] ⛔ Skipping WebSocket migrated token with zero liquidity:', token?.name, token?.mint);
+          return;
+        }
         setWsTokens(prev => {
-          const filtered = prev.filter(t => t.mint !== token.mint);
-          return [token as Token, ...filtered].slice(0, 50);
+          const withoutCurrent = prev.filter(t => t.mint !== token.mint);
+          const sanitizedPrev = filterNonZeroLiquidity(withoutCurrent);
+          const next = [token as Token, ...sanitizedPrev];
+          return next.slice(0, 50);
         });
       }
     }, [channel]),
@@ -1543,7 +1612,7 @@ function PulseTable({
         if (!prev || prev.length === 0) return prev;
 
         const updatesMap = new Map(updates.map(u => [u.mint, u]));
-        return prev.map(token => {
+        const updatedTokens = prev.map(token => {
           const update = updatesMap.get(token.mint);
           if (!update) return token;
 
@@ -1578,6 +1647,7 @@ function PulseTable({
             updated_at: update.updated_at || token.updated_at,
           };
         });
+        return filterNonZeroLiquidity(updatedTokens as Token[]);
       });
 
       // Also merge into wsTokens (WebSocket new tokens)
@@ -1585,7 +1655,7 @@ function PulseTable({
         if (!prev || prev.length === 0) return prev;
 
         const updatesMap = new Map(updates.map(u => [u.mint, u]));
-        return prev.map(token => {
+        const updatedTokens = prev.map(token => {
           const update = updatesMap.get(token.mint);
           if (!update) return token;
 
@@ -1615,6 +1685,7 @@ function PulseTable({
             updated_at: update.updated_at || token.updated_at,
           };
         });
+        return filterNonZeroLiquidity(updatedTokens as Token[]);
       });
     }, []),
   });
@@ -1902,7 +1973,7 @@ function PulseTable({
     // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
     wsTokens.forEach(token => mergedMap.set(token.mint, token));
 
-    filtered = Array.from(mergedMap.values());
+    filtered = filterNonZeroLiquidity(Array.from(mergedMap.values()) as Token[]);
 
     if (hasSpecificProtocols) {
       console.log(`[PulseTable ${title}] 🔀 Merged filtered tokens: ${filteredTokens.length} HTTP + ${wsTokens.length} WS = ${filtered.length} total`);

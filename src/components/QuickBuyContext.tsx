@@ -32,7 +32,7 @@ export interface QuickBuyPreset {
 
 const defaultSettings: QuickBuySettings = {
   maxSlippage: 0.2, // 20%
-  priority: 0.001,
+  priority: 0.0001,
   bribe: 0, // No bribe by default (was 0.01)
   mevMode: 'off',
   autoFee: false,
@@ -75,11 +75,11 @@ export function QuickBuyProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') {
       // Only remove on first load, not every render
       // Updated reset key to force new reset with bribe = 0 default
-      const shouldReset = sessionStorage.getItem('quickBuySettingsReset_v2') !== 'true';
+      const shouldReset = sessionStorage.getItem('quickBuySettingsReset_v3') !== 'true';
       if (shouldReset) {
         localStorage.removeItem('quickBuySettings');
-        sessionStorage.setItem('quickBuySettingsReset_v2', 'true');
-        console.log('🧹 Cleared localStorage quickBuySettings (forced reset for bribe fix)');
+        sessionStorage.setItem('quickBuySettingsReset_v3', 'true');
+        console.log('🧹 Cleared localStorage quickBuySettings (forced reset for priority fee tweak)');
         console.log('🔧 Default settings:', defaultSettings);
       }
     }

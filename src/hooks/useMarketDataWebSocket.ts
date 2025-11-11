@@ -5,6 +5,7 @@ interface MarketData {
   price_usd: number;
   market_cap_usd: number;
   volume_usd: number;
+  liquidity_usd?: number;
   updated_at: string;
 }
 

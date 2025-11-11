@@ -99,6 +99,13 @@ function shouldFillProtocolBadge(protocol: string) {
   return BADGE_PROTOCOLS.some((needle) => protocol.includes(needle));
 }
 
+function getOrderTypeLabel(order: LimitOrder): string {
+  if (order.type === "Buy") {
+    return order.direction === "Below" ? "Buy Below" : "Buy Above";
+  }
+  return order.direction === "Above" ? "Sell Above" : "Sell Below";
+}
+
 function isValidNumber(value: unknown) {
   const numeric = Number(value);
   return Number.isFinite(numeric);
@@ -389,6 +396,19 @@ export default function TokenLimitOrders() {
   }, [fetchOrders, hasAuth]);
 
   useEffect(() => {
+    if (!hasAuth || typeof window === "undefined") return;
+
+    const handleUpdate = () => {
+      void fetchOrders({ silent: true });
+    };
+
+    window.addEventListener("limit-order-update", handleUpdate);
+    return () => {
+      window.removeEventListener("limit-order-update", handleUpdate);
+    };
+  }, [fetchOrders, hasAuth]);
+
+  useEffect(() => {
     if (!hasAuth) return;
     activeOrders.forEach((order) => {
       void fetchTokenMetadata(order);
@@ -525,10 +545,20 @@ export default function TokenLimitOrders() {
                       ? "text-sky-400"
                       : "text-neutral-500";
 
-                  const rawSlippage = Number(order.slippage);
-                  const slippagePct = Number.isFinite(rawSlippage) ? rawSlippage * 100 : null;
-                  const priorityFee = Number(order.priorityFee);
-                  const bribe = Number(order.bribe);
+                  const normalizeNumber = (value: unknown): number | null => {
+                    const numeric = Number(value);
+                    return Number.isFinite(numeric) ? numeric : null;
+                  };
+
+                  const rawSlippage = normalizeNumber(order.slippage);
+                  const slippagePct =
+                    rawSlippage != null
+                      ? rawSlippage <= 1
+                        ? rawSlippage * 100
+                        : rawSlippage
+                      : null;
+                  const priorityFee = normalizeNumber(order.priorityFee);
+                  const bribe = normalizeNumber(order.bribe);
                   const mevMode =
                     order.mevMode && typeof order.mevMode === "string"
                       ? order.mevMode.charAt(0).toUpperCase() + order.mevMode.slice(1)
@@ -537,7 +567,7 @@ export default function TokenLimitOrders() {
                       : "Off";
 
                   const isBuyOrder = order.type === "Buy";
-                  const typeLabel = isBuyOrder ? "Buy Above" : "Sell Below";
+                  const typeLabel = getOrderTypeLabel(order);
 
                   return (
                     <tr key={order.id} className="bg-neutral-950/20 hover:bg-neutral-900/40">
@@ -619,15 +649,11 @@ export default function TokenLimitOrders() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 text-xs font-semibold">
                         {isBuyOrder ? (
-                          <span className="text-xs font-semibold" style={{ color: "#2fd6a4" }}>
-                            {typeLabel}
-                          </span>
+                          <span style={{ color: "#2fd6a4" }}>{typeLabel}</span>
                         ) : (
-                          <span className="inline-flex rounded-full px-3 py-1 text-xs font-semibold bg-rose-500/10 text-rose-300">
-                            {typeLabel}
-                          </span>
+                          <span className="text-rose-400">{typeLabel}</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-neutral-200">{amount}</td>
@@ -639,11 +665,11 @@ export default function TokenLimitOrders() {
                           </span>
                           <span className="flex items-center gap-1 text-neutral-400">
                             <FaGasPump className="opacity-80" />
-                            {Number.isFinite(priorityFee) ? priorityFee : "—"}
+                            {priorityFee != null ? `${formatAmount(priorityFee, 6)} SOL` : "—"}
                           </span>
                           <span className="flex items-center gap-1 text-neutral-400">
                             <FaCoins className="opacity-80" />
-                            {Number.isFinite(bribe) ? bribe : "—"}
+                            {bribe != null ? `${formatAmount(bribe, 6)} SOL` : "—"}
                           </span>
                           <span className="flex items-center gap-1 text-neutral-400">
                             <FaBan className="opacity-80" />

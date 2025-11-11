@@ -318,16 +318,30 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   };
 
   return (
-    <InterstatePopout open={open} onClose={handleClose} align="center" className={`bg-neutral-900 rounded-xl shadow-2xl w-[350px] p-6 relative text-neutral-100${wiggle ? ' wiggle' : ''}`} disableClickOutside={forceLogin}>
+    <InterstatePopout
+      open={open}
+      onClose={handleClose}
+      align="center"
+      className={`relative w-[460px] max-w-[94vw] overflow-hidden rounded-[28px] border border-white/5 bg-[#0c0f18]/95 p-8 pt-12 shadow-[0_48px_160px_rgba(12,20,33,0.6)] backdrop-blur-xl text-neutral-100 ${wiggle ? ' wiggle' : ''}`}
+      disableClickOutside={forceLogin}
+      overlayClassName="bg-[radial-gradient(circle_at_22%_18%,rgba(16,185,129,0.18),transparent_62%),radial-gradient(circle_at_78%_20%,rgba(59,130,246,0.16),transparent_58%),radial-gradient(circle_at_center,rgba(12,18,32,0.92),rgba(6,8,12,0.96))] backdrop-blur-[18px]"
+    >
+      <div className="pointer-events-none absolute -inset-14 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.25),transparent_55%),radial-gradient(circle_at_bottom_right,rgba(110,231,183,0.12),transparent_55%),radial-gradient(circle_at_top_right,rgba(129,140,248,0.2),transparent_55%)] opacity-80 blur-[90px]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(148,163,184,0.12),transparent_70%)]" />
       <button
-        className="absolute top-3 right-3 text-neutral-400 hover:text-white text-xl"
+        className="absolute right-4 top-4 rounded-full bg-white/5 px-2 text-lg text-neutral-400 transition hover:bg-white/10 hover:text-white"
         onClick={handleClose}
         type="button"
       >
         ×
       </button>
       
-      <div className="text-xl font-bold mb-4 text-center">Login</div>
+      <div className="mb-4 text-center">
+        <p className="text-[0.65rem] uppercase tracking-[0.45em] text-emerald-300/70">
+          Secure Access
+        </p>
+        <h2 className="mt-2 text-2xl font-semibold text-white">Sign in to Narrative</h2>
+      </div>
 
       {ENABLE_EMAIL_AUTH && (
         <>
