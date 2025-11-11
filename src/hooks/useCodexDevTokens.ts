@@ -7,6 +7,7 @@ interface CodexDevToken {
     symbol: string;
     createdAt: number;
     creatorAddress: string;
+    migrated_pool_address?: string | null;
   };
   marketCap: string;
   liquidity: string;
@@ -21,6 +22,7 @@ interface CodexDevTokensResponse {
 
 interface UseCodexDevTokensOptions {
   limit?: number;
+  fetchAll?: boolean; // If true, fetch all tokens for pie chart calculations
 }
 
 export default function useCodexDevTokens(
@@ -44,7 +46,8 @@ export default function useCodexDevTokens(
         setError(null);
         
         // Set default values for parameters
-        const limit = options.limit || 10;
+        // If fetchAll is true, use a large limit to get all tokens for pie chart
+        const limit = options.fetchAll ? 10000 : (options.limit || 10);
         const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
         
         // Build the URL with query parameters
@@ -81,7 +84,7 @@ export default function useCodexDevTokens(
     };
 
     fetchDevTokens();
-  }, [tokenAddress, options.limit]);
+  }, [tokenAddress, options.limit, options.fetchAll]);
 
   return { tokens, isLoading, error };
 }

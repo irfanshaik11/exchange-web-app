@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatSmartNumber } from '~/utils/db';
+import { formatSmartNumber, formatMarketCap } from '~/utils/db';
 import type { TradeRow } from '~/utils/functions';
 
 function getAge(timestamp: string) {
@@ -76,7 +76,7 @@ const TradeTable: React.FC<TradeTableProps> = ({ trades, loading }) => {
                 <tr key={trader + idx} className="border-b border-neutral-800 hover:bg-neutral-800/60">
                   <td className="px-2 py-2">{age}</td>
                   <td className={`px-2 py-2 font-semibold ${type === 'Buy' ? 'text-emerald-400' : 'text-red-400'}`}>{type}</td>
-                  <td className="px-2 py-2">{formatSmartNumber(Number(marketCap))}</td>
+                  <td className="px-2 py-2">{formatMarketCap(Number(marketCap))}</td>
                   <td className="px-2 py-2">{formatSmartNumber(Number(amount))}</td>
                   <td className={`px-2 py-2 font-semibold ${type === 'Buy' ? 'text-emerald-400' : 'text-red-400'}`}>{type === 'Buy' ? '+' : '-'}${formatSmartNumber(Number(totalUSD))}</td>
                   <td className="px-2 py-2">

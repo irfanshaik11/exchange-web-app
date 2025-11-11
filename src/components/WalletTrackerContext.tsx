@@ -34,8 +34,9 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [wsConnection, setWsConnection] = useState<WalletTrackerWebSocket | null>(null);
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(new Map());
-  
+
   const watchedWalletsRef = useRef<WatchWallet[]>([]);
+  const subscribedWalletsRef = useRef<string[]>([]);
   
   // Keep ref in sync with state
   useEffect(() => {
@@ -70,6 +71,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         setWsConnection(null);
         setWsConnected(false);
       }
+      subscribedWalletsRef.current = [];
       return;
     }
 
@@ -79,14 +81,13 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     const handleTradeEvent = async (event: TradeEvent) => {
       console.log('🔔 Trade event received:', event);
       
-      // Add to latest trades list (keep last 50)
-      setLatestTrades(prev => [event, ...prev].slice(0, 50));
+      // Add to latest trades list (keep last 100)
+      setLatestTrades(prev => [event, ...prev].slice(0, 100));
       
       // Find wallet info for better notification
       const wallet = watchedWalletsRef.current.find(w => w.address === event.wallet);
       const walletName = wallet?.walletName || event.wallet.slice(0, 8) + '...';
       const side = event.side === 'buy' ? 'bought' : 'sold';
-      const sideColor = event.side === 'buy' ? '#10b981' : '#ef4444';
       
       // Get token name - fetch from metadata if not in event
       let tokenName = event.symbol || event.name;
@@ -127,44 +128,14 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
       
       // Show toast notification with custom styling
       toast.custom(
-        (t) => (
-          <div
-            className={`${
-              t.visible ? 'animate-enter' : 'animate-leave'
-            } max-w-md w-full bg-neutral-900 shadow-lg rounded-lg pointer-events-auto flex ring-1 ring-black ring-opacity-5`}
-          >
-            <div className="flex-1 w-0 p-4">
-              <div className="flex items-start">
-                <div className="flex-shrink-0 pt-0.5">
-                  <div 
-                    className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold"
-                    style={{ backgroundColor: sideColor }}
-                  >
-                    {event.side === 'buy' ? '📈' : '📉'}
-                  </div>
-                </div>
-                <div className="ml-3 flex-1">
-                  <p className="text-sm font-medium text-white">
-                    {walletName}
-                  </p>
-                  <p className="mt-1 text-sm text-gray-300">
-                    {side} <span className="font-semibold">{tokenName}</span>
-                    {amountDisplay ? ` for ${amountDisplay}` : ''}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="flex border-l border-gray-700">
-              <button
-                onClick={() => toast.dismiss(t.id)}
-                className="w-full border border-transparent rounded-none rounded-r-lg p-4 flex items-center justify-center text-sm font-medium text-gray-400 hover:text-gray-200 focus:outline-none"
-              >
-                ✕
-              </button>
-            </div>
+        () => (
+          <div className="animate-fade-in fixed top-8 left-1/2 z-50 w-fit -translate-x-1/2 rounded-lg border border-emerald-400/50 bg-gradient-to-r from-emerald-500 to-green-500 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-400/30">
+            {walletName} {side}{' '}
+            <span className="font-bold">{tokenName}</span>
+            {amountDisplay ? ` for ${amountDisplay}` : ''}
           </div>
         ),
-        { duration: 5000, position: 'top-right' }
+        { duration: 5000, position: 'top-center' }
       );
     };
 
@@ -180,6 +151,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
             const addresses = watchedWallets.map(w => w.address);
             connection.subscribe(addresses);
             console.log('📡 Subscribed to wallets:', addresses.map(a => a.slice(0, 8) + '...'));
+            subscribedWalletsRef.current = addresses;
           }
         }, 100);
       }
@@ -222,16 +194,33 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         console.log('🔌 Closing WebSocket connection...');
         connection.close();
       }
+      subscribedWalletsRef.current = [];
     };
   }, [user?.id, watchedWallets.length]); // Re-initialize when user changes or wallet count changes
 
   // Update subscriptions when wallet list changes (without recreating connection)
   useEffect(() => {
-    if (wsConnection && wsConnected && watchedWallets.length > 0) {
-      const addresses = watchedWallets.map(w => w.address);
-      console.log('🔄 Updating wallet subscriptions:', addresses.map(a => a.slice(0, 8) + '...'));
-      wsConnection.subscribe(addresses);
+    if (!wsConnection || !wsConnected) {
+      return;
     }
+
+    const addresses = watchedWallets.map(w => w.address);
+    const previous = subscribedWalletsRef.current;
+
+    const toUnsubscribe = previous.filter(addr => !addresses.includes(addr));
+    const toSubscribe = addresses.filter(addr => !previous.includes(addr));
+
+    if (toUnsubscribe.length > 0) {
+      console.log('🚫 Unsubscribing from wallets:', toUnsubscribe.map(a => a.slice(0, 8) + '...'));
+      wsConnection.unsubscribe(toUnsubscribe);
+    }
+
+    if (toSubscribe.length > 0) {
+      console.log('🔄 Subscribing to wallets:', toSubscribe.map(a => a.slice(0, 8) + '...'));
+      wsConnection.subscribe(toSubscribe);
+    }
+
+    subscribedWalletsRef.current = addresses;
   }, [watchedWallets, wsConnected, wsConnection]);
 
   const value: WalletTrackerContextValue = {

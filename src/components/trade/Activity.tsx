@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { formatSmartNumber } from '~/utils/db';
+import { formatSmartNumber, formatMarketCap } from '~/utils/db';
 import type { TradeRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
 import FastImage from '../FastImage';
@@ -411,7 +411,7 @@ const Activity: React.FC<ActivityProps> = ({
                 marketCapValue = null;
               }
               
-              const formattedMarketCap = marketCapValue ? `$${formatSmartNumber(marketCapValue)}` : 'N/A';
+              const formattedMarketCap = marketCapValue ? `$${formatMarketCap(marketCapValue)}` : 'N/A';
               
               // Format amount (USD value)
               // ⚠️ VALIDATION: Detect if usdValue is suspiciously high (likely marketCap or wrong units)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { Token } from "~/utils/db";
-import { formatSmartNumber } from "~/utils/db";
+import { formatSmartNumber, formatMarketCap } from "~/utils/db";
 import {
   FaUser,
   FaGlobe,
@@ -4980,13 +4980,13 @@ function PulseTable({
                              if (hasGreenWave) {
                                return (
                                  <span className="text-sm lg:text-base font-medium" style={{ color: '#526ffe' }}>
-                                   <SmoothNumber value={mcVal} formatter={(val) => `$${formatSmartNumber(val)}`} duration={300} />
+                                   <SmoothNumber value={mcVal} formatter={(val) => `$${formatMarketCap(val)}`} duration={300} />
                                  </span>
                                );
                              }
                              return (
                                <SmartColor token={token} metricType="marketCap" className="text-sm lg:text-base font-medium">
-                                 <SmoothNumber value={mcVal} formatter={(val) => `$${formatSmartNumber(val)}`} duration={300} />
+                                 <SmoothNumber value={mcVal} formatter={(val) => `$${formatMarketCap(val)}`} duration={300} />
                                </SmartColor>
                              );
                            })()}

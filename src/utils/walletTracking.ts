@@ -82,7 +82,7 @@ const WALLET_TRACKER_API_URL = resolveApiUrl();
 // Normalize WS URL: allow users to provide http(s) and convert to ws(s) automatically
 const resolveWsUrl = () => {
   const envWs = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL;
-  if (!envWs) return 'ws://localhost:8082';
+  if (!envWs) return 'ws://localhost:8081';
   if (envWs.startsWith('http://')) return envWs.replace(/^http:\/\//, 'ws://');
   if (envWs.startsWith('https://')) return envWs.replace(/^https:\/\//, 'wss://');
   return envWs;

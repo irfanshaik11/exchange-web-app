@@ -30,7 +30,7 @@ const AX = {
       { name: "Trackers", href: "/trackers" },
       // { name: "Perpetuals", href: "/construction" },
       // { name: "Yield", href: "/construction" },
-      { name: "Rewards", href: "/construction" },
+      { name: "Rewards", href: "/rewards" },
     ];
 
 interface HeaderProps {
@@ -38,6 +38,8 @@ interface HeaderProps {
   setSearch?: (val: string) => void;
   showSearch?: boolean;
   selectedTimeframe?: Timeframe;
+  /** Controls whether the header sticks to the top or scrolls away */
+  isSticky?: boolean;
 }
 
 const DepositModal = dynamic(() => import("./DepositModal"), {
@@ -57,6 +59,7 @@ export default function Header({
   setSearch,
   showSearch = true,
   selectedTimeframe = "1h",
+  isSticky = true,
 }: HeaderProps) {
   const router = useRouter();
   const isDiscover = router.pathname === "/";
@@ -183,7 +186,10 @@ export default function Header({
   // Close profile menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+      if (
+        profileMenuRef.current &&
+        !profileMenuRef.current.contains(event.target as Node)
+      ) {
         setProfileMenuOpen(false);
       }
     };
@@ -200,7 +206,7 @@ export default function Header({
   return (
     <>
       <header
-        className="sticky top-0 z-20 w-full border-b backdrop-blur"
+        className={`${isSticky ? "sticky top-0 z-20" : "relative z-10"} w-full border-b backdrop-blur`}
         style={{ backgroundColor: "#0f1012", borderColor: AX.border }}
       >
         <div
@@ -216,9 +222,14 @@ export default function Header({
                 setMobileMenuOpen(!mobileMenuOpen);
               }}
               className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out z-50 relative"
-              style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.text }}
+              style={{
+                backgroundColor: AX.surface,
+                borderColor: AX.border,
+                color: AX.text,
+              }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
+                e.currentTarget.style.backgroundColor =
+                  "rgba(24, 196, 140, 0.08)";
                 e.currentTarget.style.borderColor = AX.mint;
               }}
               onMouseLeave={(e) => {
@@ -249,7 +260,8 @@ export default function Header({
               {navLinks.map((link) => {
                 const isActive =
                   router.pathname === link.href ||
-                  (link.name === "Trenches" && router.pathname.startsWith("/trade/"));
+                  (link.name === "Trenches" &&
+                    router.pathname.startsWith("/trade/"));
                 return (
                   <Link
                     key={link.name}
@@ -258,7 +270,10 @@ export default function Header({
                       // Use router.push for client-side navigation with fallback
                       router.push(link.href).catch((err: any) => {
                         // Fallback to full page navigation if router.push fails
-                        console.error("Router.push failed, using fallback:", err);
+                        console.error(
+                          "Router.push failed, using fallback:",
+                          err,
+                        );
                         window.location.href = link.href;
                       });
                     }}
@@ -306,7 +321,8 @@ export default function Header({
                     color: AX.muted,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(24, 196, 140, 0.08)";
                     e.currentTarget.style.borderColor = "#18c48c";
                     e.currentTarget.style.boxShadow =
                       "0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)";
@@ -352,7 +368,8 @@ export default function Header({
                   color: AX.text,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(24, 196, 140, 0.08)";
                   e.currentTarget.style.borderColor = AX.mint;
                   e.currentTarget.style.boxShadow =
                     "0 0 8px rgba(24, 196, 140, 0.2)";
@@ -428,7 +445,8 @@ export default function Header({
                 color: AX.muted,
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
+                e.currentTarget.style.backgroundColor =
+                  "rgba(24, 196, 140, 0.08)";
                 e.currentTarget.style.borderColor = AX.mint;
                 e.currentTarget.style.color = AX.mint;
                 e.currentTarget.style.boxShadow = "none";
@@ -472,7 +490,10 @@ export default function Header({
                       ? "opacity-100"
                       : "opacity-0 md:group-hover:opacity-100"
                   }`}
-                  style={{ backgroundColor: AX.surface, borderColor: AX.border }}
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: AX.border,
+                  }}
                 >
                   <InterstateButton
                     variant="danger"
@@ -483,7 +504,10 @@ export default function Header({
                       if (typeof window !== "undefined") {
                         document.cookie = "token=; Max-Age=0; path=/;";
                       }
-                      if (typeof window !== "undefined" && window.localStorage) {
+                      if (
+                        typeof window !== "undefined" &&
+                        window.localStorage
+                      ) {
                         window.localStorage.removeItem("token");
                       }
                       if (typeof window !== "undefined") {
@@ -536,7 +560,8 @@ export default function Header({
               className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
               style={{ color: AX.muted }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(34, 197, 94, 0.08)";
+                e.currentTarget.style.backgroundColor =
+                  "rgba(34, 197, 94, 0.08)";
                 e.currentTarget.style.color = "#22c55e";
                 e.currentTarget.style.boxShadow =
                   "0 0 6px rgba(34, 197, 94, 0.25), 0 0 12px rgba(34, 197, 94, 0.12)";
@@ -612,9 +637,14 @@ export default function Header({
             <button
               onClick={() => setMobileMenuOpen(false)}
               className="flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
-              style={{ backgroundColor: AX.surface, borderColor: AX.border, color: AX.text }}
+              style={{
+                backgroundColor: AX.surface,
+                borderColor: AX.border,
+                color: AX.text,
+              }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
+                e.currentTarget.style.backgroundColor =
+                  "rgba(24, 196, 140, 0.08)";
                 e.currentTarget.style.borderColor = AX.mint;
               }}
               onMouseLeave={(e) => {
@@ -632,7 +662,8 @@ export default function Header({
               {navLinks.map((link) => {
                 const isActive =
                   router.pathname === link.href ||
-                  (link.name === "Trenches" && router.pathname.startsWith("/trade/"));
+                  (link.name === "Trenches" &&
+                    router.pathname.startsWith("/trade/"));
                 return (
                   <Link
                     key={link.name}
@@ -770,7 +801,7 @@ export default function Header({
             router.replace(
               { pathname: "/", query: { search: trimmed } },
               undefined,
-              { shallow: true }
+              { shallow: true },
             );
           }
         }}
@@ -794,13 +825,13 @@ export default function Header({
             router.push(
               { pathname: "/", query: { search: trimmed } },
               undefined,
-              { shallow: true }
+              { shallow: true },
             );
           } else if (router.pathname === "/") {
             router.replace(
               { pathname: "/", query: { search: trimmed } },
               undefined,
-              { shallow: true }
+              { shallow: true },
             );
           }
           if (setSearch) setSearch(trimmed);

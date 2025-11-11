@@ -7,7 +7,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
-import { formatSmartNumber } from "~/utils/db";
+import { formatSmartNumber, formatMarketCap } from "~/utils/db";
 import { FaBolt, FaClock, FaChartLine, FaSearch, FaUser, FaRegCopy } from "react-icons/fa";
 import { FaRocket, FaFire, FaCrown, FaGraduationCap } from "react-icons/fa";
 import InterstatePopout from "./InterstatePopout";
@@ -648,7 +648,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
         ) : (
           <ul className="flex h-full flex-col gap-4 overflow-y-auto">
             {displayTokens.map((token) => {
-              const mc = formatSmartNumber(token.fully_diluted_value || 0);
+              const mc = formatMarketCap(token.fully_diluted_value || 0);
               const vol = formatSmartNumber(resolveSearchVolume1h(token));
               const liq = formatSmartNumber(token.total_liquidity_usd || 0);
 
