@@ -6,7 +6,7 @@ import type { Token } from "../utils/db";
 import InterstatePopout from './InterstatePopout';
 import InterstateButton from './InterstateButton';
 import { useWatchlist } from './WatchlistContext';
-import { formatSmartNumber } from '../utils/db';
+import { formatSmartNumber, formatMarketCap } from '../utils/db';
 import { useRouter } from 'next/router';
 
 interface WatchlistModalProps {
@@ -293,7 +293,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-sm">${formatSmartNumber(marketCap)}</td>
+                <td className="px-4 py-3 text-sm">${formatMarketCap(marketCap)}</td>
                 {/* <td className="px-4 py-3 text-sm">${formatSmartNumber(volume1h)}</td> */}
                 <td className="px-4 py-3 text-sm">${formatSmartNumber(liquidity)}</td>
                 <td className="px-4 py-3">

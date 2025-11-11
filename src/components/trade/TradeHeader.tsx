@@ -56,19 +56,22 @@ const formatMarketCap = (value: string | number | null | undefined): string => {
 
   for (const { value: threshold, suffix } of abbreviations) {
     if (abs >= threshold) {
-      return `${(numericValue / threshold).toFixed(1)}${suffix}`;
+      const formatted = (numericValue / threshold).toFixed(2);
+      return formatted.endsWith(".00")
+        ? `${parseInt(formatted)}${suffix}`
+        : `${formatted}${suffix}`;
     }
   }
 
   if (abs >= 1) {
-    return numericValue.toFixed(1);
+    return numericValue.toFixed(2);
   }
 
   if (abs === 0) {
     return "0";
   }
 
-  return numericValue.toFixed(3);
+  return numericValue.toFixed(2);
 };
 
 const rawProtocolColorMap: Record<string, string> = {

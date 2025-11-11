@@ -9,7 +9,7 @@ import InterstateTooltip from './InterstateTooltip';
 import CustomCheckbox from './CustomCheckbox';
 import { useRouter } from "next/router";
 import type { Token as BaseToken } from "~/utils/db";
-import { formatSmartNumber } from '~/utils/db';
+import { formatSmartNumber, formatMarketCap } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
 import { fetchTokenMetadata } from '~/utils/functions';
 import { withImageFallback, extractMetaImage } from '~/utils/images';
@@ -878,7 +878,7 @@ const MarketCapCell: React.FC<{
       }}>
         {(() => {
           // console.log('MarketCapCell formatSmartNumber call with:', token.fully_diluted_value);
-          return `$${formatSmartNumber(token.fully_diluted_value)}`;
+          return `$${formatMarketCap(token.fully_diluted_value)}`;
         })()}
       </div>
       {/* Commented out percentage display per user request */}
