@@ -68,6 +68,7 @@ export default function useOptimizedTradeEventsWebSocket({
   const hasSetInitialDataRef = useRef(false);
   const seenTradesRef = useRef<Set<string>>(new Set());
   const lastProcessedTimestampRef = useRef<number>(0);
+  const lastPairAddressRef = useRef<string | undefined>(pairAddress);
 
   // Memoized trade processing to avoid unnecessary re-computations
   const processTradeEvent = useCallback((event: TradeEventData) => {
@@ -171,6 +172,14 @@ export default function useOptimizedTradeEventsWebSocket({
     return sortedTrades.slice(0, maxTrades);
   }, [maxTrades]);
 
+  // Reset hasSetInitialDataRef when pairAddress changes (new token)
+  useEffect(() => {
+    if (lastPairAddressRef.current !== pairAddress) {
+      hasSetInitialDataRef.current = false;
+      lastPairAddressRef.current = pairAddress;
+    }
+  }, [pairAddress]);
+
   // Update trades when initialTrades are provided - but only if they look correct
   // This prevents showing cached data with wrong decimal values before websocket provides correct data
   useEffect(() => {
@@ -180,19 +189,34 @@ export default function useOptimizedTradeEventsWebSocket({
         trade.data?.amountNonLiquidityToken || trade.data?.priceUsdTotal
       );
       
-      if (hasCorrectFormat) {
-        // Only use initial trades if they have the correct format
+      // Check if trades are already processed (have side, amount, price, etc. from previous processing)
+      const areAlreadyProcessed = initialTrades.some(trade => 
+        trade.side && trade.amount && trade.price && !trade.data
+      );
+      
+      if (hasCorrectFormat || areAlreadyProcessed) {
+        // Use initial trades if they have correct format OR are already processed (cached)
         if (process.env.NODE_ENV === 'development') {
-          console.log('[useOptimizedTradeEventsWebSocket] Using initial trades with correct format:', initialTrades.length);
+          console.log('[useOptimizedTradeEventsWebSocket] Using initial trades:', initialTrades.length, areAlreadyProcessed ? '(already processed)' : '(raw format)');
         }
         
-        const processedTrades = initialTrades.map(processTradeEvent);
-        const deduplicatedTrades = deduplicateTrades(processedTrades);
-        const managedTrades = manageTradesMemory(deduplicatedTrades);
+        let finalTrades: any[];
+        if (areAlreadyProcessed) {
+          // Trades are already processed, use them directly (just deduplicate and manage memory)
+          finalTrades = manageTradesMemory(deduplicateTrades(initialTrades));
+        } else {
+          // Process raw trades
+          const processedTrades = initialTrades.map(processTradeEvent);
+          const deduplicatedTrades = deduplicateTrades(processedTrades);
+          finalTrades = manageTradesMemory(deduplicatedTrades);
+        }
         
         // Update seen trades set
-        managedTrades.forEach(trade => {
-          seenTradesRef.current.add(`${trade.transactionHash}-${trade.timestamp}`);
+        finalTrades.forEach(trade => {
+          const key = trade.transactionHash && trade.timestamp 
+            ? `${trade.transactionHash}-${trade.timestamp}`
+            : `${trade.pair_address || ''}-${trade.timestamp || Date.now()}`;
+          seenTradesRef.current.add(key);
         });
         
         setState(prev => {
@@ -201,7 +225,7 @@ export default function useOptimizedTradeEventsWebSocket({
           if (prev.trades.length === 0) {
             return {
               ...prev,
-              trades: managedTrades,
+              trades: finalTrades,
               loading: false,
               isConnected: true,
               lastUpdate: new Date().toISOString(),
@@ -225,7 +249,7 @@ export default function useOptimizedTradeEventsWebSocket({
         }
         setState(prev => ({
           ...prev,
-          loading: true, // Keep loading until websocket provides correct data
+          loading: prev.trades.length === 0, // Only show loading if no trades yet
         }));
       }
     }

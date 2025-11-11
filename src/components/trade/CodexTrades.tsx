@@ -11,6 +11,7 @@ import type { Token } from '~/utils/db';
 interface CodexTradesProps {
   token: Token | null;
   initialTrades?: any[];
+  onTradesUpdate?: (trades: any[]) => void; // Callback to update parent cache when trades change
 }
 
 function getAge(timestamp: number) {
@@ -223,7 +224,7 @@ const SolIcon: React.FC = () => (
   </>
 );
 
-const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) => {
+const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [], onTradesUpdate }) => {
   const [showAge, setShowAge] = React.useState(true); // true = Age, false = Time
   const [totalMode, setTotalMode] = React.useState<'usd' | 'sol'>('usd');
   const [mcMode, setMcMode] = React.useState<'mc' | 'price'>('mc'); // MC vs Price toggle
@@ -284,7 +285,116 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     fetchMarketCap();
   }, [stableToken?.mint]);
 
-  const stableInitialTrades = React.useMemo(() => initialTrades, [initialTrades.length]);
+  // Client-side localStorage cache for trades (persists across page reloads)
+  const CACHE_KEY_PREFIX = 'codex_trades_cache_';
+  const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
+  
+  const getCacheKey = (pairAddress: string) => {
+    return `${CACHE_KEY_PREFIX}${pairAddress}`;
+  };
+
+  // Load cached trades from localStorage on mount and when pair address changes
+  const [cachedTradesFromStorage, setCachedTradesFromStorage] = React.useState<any[]>(() => {
+    if (!stableToken?.pair_address || typeof window === 'undefined') return [];
+    
+    try {
+      const cacheKey = getCacheKey(stableToken.pair_address);
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // Check if cache is still valid (not expired)
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS) {
+          return parsed.trades || [];
+        } else {
+          // Cache expired, remove it
+          localStorage.removeItem(cacheKey);
+        }
+      }
+    } catch (error) {
+      console.error('[CodexTrades] Error loading cache:', error);
+    }
+    return [];
+  });
+
+  // Reload cache when pair address changes (user navigates to different token)
+  React.useEffect(() => {
+    if (!stableToken?.pair_address || typeof window === 'undefined') {
+      setCachedTradesFromStorage([]);
+      return;
+    }
+    
+    try {
+      const cacheKey = getCacheKey(stableToken.pair_address);
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS) {
+          setCachedTradesFromStorage(parsed.trades || []);
+        } else {
+          localStorage.removeItem(cacheKey);
+          setCachedTradesFromStorage([]);
+        }
+      } else {
+        setCachedTradesFromStorage([]);
+      }
+    } catch (error) {
+      console.error('[CodexTrades] Error reloading cache:', error);
+      setCachedTradesFromStorage([]);
+    }
+  }, [stableToken?.pair_address]);
+
+  // Save trades to localStorage cache
+  const saveToCache = React.useCallback((trades: any[], pairAddress: string) => {
+    if (!pairAddress || typeof window === 'undefined' || trades.length === 0) return;
+    
+    try {
+      const cacheKey = getCacheKey(pairAddress);
+      const cacheData = {
+        trades,
+        timestamp: Date.now(),
+        pairAddress,
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    } catch (error) {
+      console.error('[CodexTrades] Error saving to cache:', error);
+      // If storage is full, try to clear old entries
+      try {
+        const keys = Object.keys(localStorage);
+        const oldCacheKeys = keys.filter(k => k.startsWith(CACHE_KEY_PREFIX));
+        // Remove oldest cache entries if storage is full
+        if (oldCacheKeys.length > 10) {
+          const sorted = oldCacheKeys.map(key => {
+            try {
+              const item = localStorage.getItem(key);
+              return {
+                key,
+                timestamp: item ? (JSON.parse(item).timestamp || 0) : 0,
+              };
+            } catch {
+              return { key, timestamp: 0 };
+            }
+          }).sort((a, b) => a.timestamp - b.timestamp);
+          
+          // Remove oldest 3 entries
+          sorted.slice(0, 3).forEach(({ key }) => localStorage.removeItem(key));
+        }
+      } catch (clearError) {
+        console.error('[CodexTrades] Error clearing old cache:', clearError);
+      }
+    }
+  }, []);
+
+  // Use cached trades from storage if available, otherwise use initialTrades prop
+  const stableInitialTrades = React.useMemo(() => {
+    // Prioritize cached trades from localStorage (persists across reloads)
+    if (cachedTradesFromStorage.length > 0) {
+      return cachedTradesFromStorage;
+    }
+    // Fallback to initialTrades prop (from API/URL)
+    return initialTrades;
+  }, [cachedTradesFromStorage, initialTrades]);
 
   const { loading: wsLoading, trades: wsTrades } = useOptimizedTradeEventsWebSocket({
     pairAddress: stableToken?.pair_address,
@@ -306,7 +416,23 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     return stableInitialTrades;
   }, [wsTrades, stableInitialTrades]);
   
-  const isLoading = wsLoading && displayTrades.length === 0;
+  // Only show loading if we don't have any trades at all (not even cached ones)
+  // If we have cached trades, show them immediately even if WebSocket is still connecting
+  const isLoading = wsLoading && displayTrades.length === 0 && stableInitialTrades.length === 0;
+
+  // Update parent cache when trades change (for persistence across tab switches)
+  React.useEffect(() => {
+    if (onTradesUpdate && displayTrades.length > 0) {
+      onTradesUpdate(displayTrades);
+    }
+  }, [displayTrades, onTradesUpdate]);
+
+  // Save trades to localStorage cache when they update
+  React.useEffect(() => {
+    if (stableToken?.pair_address && displayTrades.length > 0) {
+      saveToCache(displayTrades, stableToken.pair_address);
+    }
+  }, [displayTrades, stableToken?.pair_address, saveToCache]);
 
   // Helper to extract complete trader address from raw trade data
   const getCompleteTraderAddress = React.useCallback((trade: any): string => {
