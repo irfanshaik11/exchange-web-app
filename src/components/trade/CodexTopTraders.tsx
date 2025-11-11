@@ -155,23 +155,9 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
     }
   }, []);
 
-  // Only show skeleton if we have absolutely no token data (not even optimistic)
-  if (!token || (!token.name && !token.symbol)) {
-    return (
-      <div className="flex-1 min-h-0 p-4">
-        <div className="animate-pulse">
-          <div className="h-6 w-32 bg-neutral-700 rounded mb-4" />
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 bg-neutral-700 rounded" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const shouldShowSkeleton = !token || (!token.name && !token.symbol);
 
-  const { traders, isLoading, error } = useCodexTopTraders(token.mint || '', {
+  const { traders, isLoading, error } = useCodexTopTraders(token?.mint, {
     limit: 20,
     tradingPeriod: 'WEEK'
   });
@@ -193,6 +179,22 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
 
   // Only show loading if we don't have any traders at all (not even cached ones)
   const showLoading = isLoading && displayTraders.length === 0 && cachedTradersFromStorage.length === 0;
+
+  // Only show skeleton if we have absolutely no token data (not even optimistic)
+  if (shouldShowSkeleton) {
+    return (
+      <div className="flex-1 min-h-0 p-4">
+        <div className="animate-pulse">
+          <div className="h-6 w-32 bg-neutral-700 rounded mb-4" />
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-12 bg-neutral-700 rounded" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full">
