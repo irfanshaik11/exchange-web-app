@@ -195,13 +195,27 @@ export default function useOptimizedTradeEventsWebSocket({
           seenTradesRef.current.add(`${trade.transactionHash}-${trade.timestamp}`);
         });
         
-        setState(prev => ({
-          ...prev,
-          trades: managedTrades,
-          loading: false,
-          isConnected: true,
-          lastUpdate: new Date().toISOString(),
-        }));
+        setState(prev => {
+          // Only set initial trades if we don't have any trades yet
+          // This preserves existing trades and prevents them from being replaced
+          if (prev.trades.length === 0) {
+            return {
+              ...prev,
+              trades: managedTrades,
+              loading: false,
+              isConnected: true,
+              lastUpdate: new Date().toISOString(),
+            };
+          } else {
+            // We already have trades - don't replace them, just update connection status
+            return {
+              ...prev,
+              loading: false,
+              isConnected: true,
+              // Keep existing trades unchanged
+            };
+          }
+        });
         hasSetInitialDataRef.current = true;
       } else {
         // Skip initial trades if they don't have correct format - wait for websocket
@@ -260,10 +274,20 @@ export default function useOptimizedTradeEventsWebSocket({
             let updatedTrades: any[];
             
             if (message.data && message.data.getTokenEvents) {
-              // Initial trades - replace existing trades
-              updatedTrades = newTrades;
-              if (process.env.NODE_ENV === 'development') {
-                console.log('Replaced trades with initial data:', updatedTrades.length);
+              // Initial trades - only replace if we don't have any trades yet
+              // This prevents replacing existing trades on reconnection
+              if (prev.trades.length === 0) {
+                updatedTrades = newTrades;
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('Set initial trades (no existing trades):', updatedTrades.length);
+                }
+              } else {
+                // We already have trades - merge new ones instead of replacing
+                const combinedTrades = [...newTrades, ...prev.trades];
+                updatedTrades = manageTradesMemory(deduplicateTrades(combinedTrades));
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('Merged initial trades with existing (preserving existing):', updatedTrades.length, 'existing:', prev.trades.length);
+                }
               }
             } else {
               // Real-time updates - prepend to existing trades

@@ -1,6 +1,8 @@
 import { RiExchangeDollarLine } from "react-icons/ri";
 import { SiSolana } from "react-icons/si";
 import { FaArrowRightArrowLeft } from "react-icons/fa6";
+import { FaFilter } from "react-icons/fa";
+import { IoOpenOutline } from "react-icons/io5";
 import React from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
@@ -55,6 +57,7 @@ function percentile(arr: number[], p: number) {
 }
 
 // Nicely format a USD price for the MC/Price column
+// Shows all decimal values without scientific notation
 function formatUsdPrice(value: number | null | undefined): string {
   const v = Number(value);
   if (!Number.isFinite(v) || v <= 0) return '-';
@@ -62,8 +65,16 @@ function formatUsdPrice(value: number | null | undefined): string {
   if (v >= 1) return `$${v.toFixed(2)}`;
   if (v >= 0.01) return `$${v.toFixed(4)}`;
   if (v >= 0.0001) return `$${v.toFixed(6)}`;
-  // very tiny prices → scientific
-  return `$${v.toExponential(2)}`;
+  if (v >= 0.000001) return `$${v.toFixed(8)}`;
+  if (v >= 0.00000001) return `$${v.toFixed(10)}`;
+  if (v >= 0.0000000001) return `$${v.toFixed(12)}`;
+  if (v >= 0.000000000001) return `$${v.toFixed(14)}`;
+  // For extremely tiny prices, show up to 18 decimal places
+  // Remove trailing zeros for cleaner display
+  const formatted = v.toFixed(18);
+  const trimmed = formatted.replace(/\.?0+$/, '');
+  // Ensure we have at least the decimal point if all zeros were removed
+  return `$${trimmed || formatted}`;
 }
 
 /** Normalize trade shapes into a single structure */
@@ -240,16 +251,60 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
     enableDeduplication: true,
   });
 
-  const displayTrades = wsTrades.length > 0 ? wsTrades : stableInitialTrades;
-  const isLoading = wsLoading && stableInitialTrades.length === 0;
+  // Preserve trades - once we have trades from WebSocket, always use them
+  // This ensures trades don't disappear or change unless new ones arrive
+  const displayTrades = React.useMemo(() => {
+    // If we have WebSocket trades, always use them (they're the source of truth)
+    if (wsTrades.length > 0) {
+      return wsTrades;
+    }
+    // Fallback to initial trades only if WebSocket hasn't provided any yet
+    return stableInitialTrades;
+  }, [wsTrades, stableInitialTrades]);
+  
+  const isLoading = wsLoading && displayTrades.length === 0;
+
+  // Helper to extract complete trader address from raw trade data
+  const getCompleteTraderAddress = React.useCallback((trade: any): string => {
+    const address = 
+      trade.maker || 
+      trade.trader || 
+      trade.taker ||
+      trade.data?.maker ||
+      trade.data?.trader ||
+      trade.data?.taker ||
+      trade.originalEvent?.data?.maker ||
+      trade.originalEvent?.data?.trader ||
+      trade.originalEvent?.maker ||
+      trade.originalEvent?.trader ||
+      '';
+    return (address || '').toString().trim();
+  }, []);
 
   const normalized = React.useMemo(() => {
     const slice = (displayTrades || []).slice(0, 100);
     return slice.map((t, i) => {
       const n = normalizeTrade(t, stableToken?.decimals ?? 9);
-      return { ...n, raw: t, idx: i };
+      // Store the complete address from raw trade
+      const completeAddress = getCompleteTraderAddress(t);
+      const finalAddress = completeAddress || n.maker || '';
+      return { ...n, raw: t, idx: i, completeTraderAddress: finalAddress };
     });
-  }, [displayTrades, stableToken?.decimals]);
+  }, [displayTrades, stableToken?.decimals, getCompleteTraderAddress]);
+
+  // Calculate trade count per trader from all trades
+  const traderTradeCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    const slice = (displayTrades || []).slice(0, 100);
+    slice.forEach(t => {
+      const completeAddress = getCompleteTraderAddress(t);
+      if (completeAddress) {
+        const key = completeAddress.replace(/\./g, '').replace(/\s/g, '').toLowerCase().trim();
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [displayTrades, getCompleteTraderAddress]);
 
   const p95 = React.useMemo(() => {
     const arr = normalized.map(n => n.totalUSD).filter(x => Number.isFinite(x) && x >= 0);
@@ -340,11 +395,11 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
   return (
     <div className="w-full h-full flex flex-col bg-black">
       <div className="flex-1 overflow-y-auto pb-18 bg-black">
-        <table className="w-full text-xs border-collapse bg-black">
+        <table className="w-full text-xs border-collapse bg-black table-fixed">
           <thead className="sticky top-0 bg-black z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
               {/* Age / Time */}
-              <th className="w-[212px] pl-2 pr-0 py-2 text-left">
+              <th className="w-[16.66%] pl-2 pr-0 py-2 text-left">
                 <button
                   type="button"
                   onClick={() => setShowAge(prev => !prev)}
@@ -361,12 +416,12 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
               </th>
 
               {/* Type */}
-              <th className="pl-0 pr-2 py-2 text-left">
+              <th className="w-[16.66%] pl-0 pr-2 py-2 text-left">
                 Type
               </th>
 
               {/* MC / Price column with icon */}
-              <th className="px-2 py-2 text-left">
+              <th className="w-[16.66%] px-2 py-2 text-left">
                 <button
                   type="button"
                   onClick={() =>
@@ -382,10 +437,10 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
               </th>
 
               {/* Amount */}
-              <th className="px-2 py-2 text-left">Amount</th>
+              <th className="w-[16.66%] px-2 py-2 text-left">Amount</th>
 
               {/* Total USD / SOL toggle column */}
-              <th className="px-2 py-2 text-left">
+              <th className="w-[16.66%] px-2 py-2 text-left">
                 <button
                   type="button"
                   onClick={() =>
@@ -407,7 +462,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
               </th>
 
               {/* Trader */}
-              <th className="px-2 py-2 text-left">Trader</th>
+              <th className="w-[16.66%] px-2 py-2 text-left">Trader</th>
             </tr>
           </thead>
           <tbody className="bg-black">
@@ -477,7 +532,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                     className="border-b border-neutral-900 hover:bg-neutral-900/60 bg-black"
                   >
                     {/* Age / Time */}
-                    <td className="w-[172px] pl-2 pr-0 py-2 text-neutral-300">
+                    <td className="pl-2 pr-0 py-2 text-neutral-300">
                       {showAge ? age : timeStr}
                     </td>
 
@@ -540,15 +595,56 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                     </td>
 
                     {/* Trader */}
-                    <td className="px-2 py-2 text-neutral-300">
-                      <a
-                        href={`https://solscan.io/account/${n.maker || ''}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-white hover:text-neutral-300 transition-colors hover:underline"
-                      >
-                        {shortAddr(n.maker || '')}
-                      </a>
+                    <td className="px-2 py-2 text-neutral-300 align-middle">
+                      <div className="flex items-center flex-nowrap gap-4 min-w-0" style={{ lineHeight: '20px' }}>
+                        <a
+                          href={`https://solscan.io/account/${n.maker || ''}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-white hover:text-neutral-300 transition-colors hover:underline flex items-center min-w-0 flex-shrink"
+                          style={{ lineHeight: '20px', height: '20px' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span className="truncate text-xs whitespace-nowrap" style={{ lineHeight: '20px' }}>{shortAddr(n.maker || '')}</span>
+                        </a>
+                        <div className="flex items-center flex-nowrap gap-1.5 flex-shrink-0" style={{ lineHeight: '20px', height: '20px' }}>
+                          {(() => {
+                            const traderKey = (n.completeTraderAddress || n.maker || '').toString()
+                              .replace(/\./g, '').replace(/\s/g, '').toLowerCase().trim();
+                            const count = traderTradeCounts[traderKey] || 0;
+                            if (count > 0) {
+                              return (
+                                <span className="inline-flex items-center justify-center min-w-[20px] px-1.5 text-xs font-medium text-white bg-neutral-800 border border-neutral-700 rounded whitespace-nowrap" style={{ lineHeight: '20px', height: '20px' }}>
+                                  {count}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+                          <a
+                            href={`https://solscan.io/account/${n.maker || ''}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-neutral-400 hover:text-neutral-300 transition-colors inline-flex items-center justify-center flex-shrink-0"
+                            style={{ width: '20px', height: '20px', lineHeight: '20px' }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <IoOpenOutline size={14} className="flex-shrink-0" />
+                          </a>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              // Filter functionality can be added here if needed
+                            }}
+                            className="text-neutral-400 hover:text-neutral-300 transition-colors opacity-60 hover:opacity-100 inline-flex items-center justify-center flex-shrink-0"
+                            style={{ width: '20px', height: '20px', lineHeight: '20px' }}
+                            title="Filter by this trader"
+                          >
+                            <FaFilter size={14} className="flex-shrink-0" />
+                          </button>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 );
