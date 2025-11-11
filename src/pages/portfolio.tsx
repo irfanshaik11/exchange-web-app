@@ -70,6 +70,10 @@ interface TokenMetadataCache {
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const CACHE_KEY = "tokenMetadataCache";
+const POSITIONS_CACHE_KEY = "portfolioPositionsCache";
+const POSITIONS_CACHE_TTL = 60 * 1000; // 1 minute in milliseconds
+const ACTIVITY_CACHE_KEY = "portfolioActivityCache";
+const ACTIVITY_CACHE_TTL = 30 * 1000; // 30 seconds
 
 export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
@@ -80,11 +84,13 @@ export default function PortfolioPage() {
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [loadingTradeHistory, setLoadingTradeHistory] = useState(true);
   const [tradeActivity, setTradeActivity] = useState<TradeRow[]>([]);
+  const [activityFromCache, setActivityFromCache] = useState<TradeRow[] | null>(null);
   const [loadingTradeActivity, setLoadingTradeActivity] = useState(true);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [unrealizedPnlPercentage, setUnrealizedPnlPercentage] = useState(0);
   const [totalValue, setTotalValue] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
+  const [positionsFromCache, setPositionsFromCache] = useState<PositionRow[] | null>(null);
   const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
   const [filteredPositions, setFilteredPositions] = useState<PositionRow[]>([]);
   const [filteredTop100Positions, setFilteredTop100Positions] = useState<PositionRow[]>([]);
@@ -99,6 +105,128 @@ export default function PortfolioPage() {
   // Shared token metadata cache across all tabs
   const [tokenMetadataCache, setTokenMetadataCache] =
     useState<Record<string, TokenMetadataCache>>({});
+  useEffect(() => {
+    if (!user?.id) return;
+    if (typeof window === "undefined") return;
+
+    try {
+      const stored = sessionStorage.getItem(ACTIVITY_CACHE_KEY);
+      if (!stored) return;
+
+      const parsed: Record<string, { trades: TradeRow[]; timestamp: number }> =
+        JSON.parse(stored);
+      const cached = parsed[user.id];
+      if (!cached) return;
+
+      const isFresh = Date.now() - cached.timestamp < ACTIVITY_CACHE_TTL;
+      if (!isFresh) return;
+
+      const cachedTrades = cached.trades;
+      if (!Array.isArray(cachedTrades) || cachedTrades.length === 0) return;
+
+      setActivityFromCache(cachedTrades);
+      setTradeActivity(cachedTrades);
+      setFilteredTradeActivity(cachedTrades);
+      setLoadingTradeActivity(false);
+
+      console.log(
+        `📥 Hydrated ${cachedTrades.length} activity rows from session cache for user ${user.id}`,
+      );
+    } catch (error) {
+      console.error("Error loading cached activity:", error);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (tradeActivity.length === 0) return;
+    if (typeof window === "undefined") return;
+
+    try {
+      const stored = sessionStorage.getItem(ACTIVITY_CACHE_KEY);
+      const parsed: Record<string, { trades: TradeRow[]; timestamp: number }> = stored
+        ? JSON.parse(stored)
+        : {};
+
+      parsed[user.id] = {
+        trades: tradeActivity,
+        timestamp: Date.now(),
+      };
+
+      sessionStorage.setItem(ACTIVITY_CACHE_KEY, JSON.stringify(parsed));
+      console.log(
+        `💽 Cached ${tradeActivity.length} activity rows for user ${user.id}`,
+      );
+    } catch (error) {
+      console.error("Error caching activity:", error);
+    }
+  }, [tradeActivity, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (typeof window === "undefined") return;
+
+    try {
+      const stored = sessionStorage.getItem(POSITIONS_CACHE_KEY);
+      if (!stored) return;
+
+      const parsed: Record<string, { positions: PositionRow[]; timestamp: number }> =
+        JSON.parse(stored);
+      const cached = parsed[user.id];
+      if (!cached) return;
+
+      const isFresh = Date.now() - cached.timestamp < POSITIONS_CACHE_TTL;
+      if (!isFresh) return;
+
+      const cachedPositions = cached.positions;
+      if (!Array.isArray(cachedPositions)) return;
+
+      setPositionsFromCache(cachedPositions);
+      setPositions(cachedPositions);
+      setFilteredPositions(cachedPositions);
+
+      if (cachedPositions.length > 0) {
+        const sortedByUsdValue = [...cachedPositions].sort(
+          (a, b) => b.remainingUsdValue - a.remainingUsdValue,
+        );
+        const topEntries = sortedByUsdValue.slice(0, 100);
+        setTop100Positions(topEntries);
+        setFilteredTop100Positions(topEntries);
+      } else {
+        setTop100Positions([]);
+        setFilteredTop100Positions([]);
+      }
+
+      console.log(
+        `📥 Hydrated ${cachedPositions.length} portfolio positions from session cache`,
+      );
+    } catch (error) {
+      console.error("Error loading cached positions:", error);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (typeof window === "undefined") return;
+
+    try {
+      const stored = sessionStorage.getItem(POSITIONS_CACHE_KEY);
+      const parsed: Record<string, { positions: PositionRow[]; timestamp: number }> = stored
+        ? JSON.parse(stored)
+        : {};
+
+      parsed[user.id] = {
+        positions,
+        timestamp: Date.now(),
+      };
+
+      sessionStorage.setItem(POSITIONS_CACHE_KEY, JSON.stringify(parsed));
+      console.log(`💽 Cached ${positions.length} portfolio positions for user ${user.id}`);
+    } catch (error) {
+      console.error("Error caching portfolio positions:", error);
+    }
+  }, [positions, user?.id]);
+
 
   // Load cache from localStorage on mount
   useEffect(() => {
@@ -231,9 +359,11 @@ export default function PortfolioPage() {
     fetchTradeHistory();
   }, [user?.id]);
 
+  const hasActivityCache = !!(activityFromCache && activityFromCache.length > 0);
+
   // Fetch trade activity only when on Activity tab (index 2 after History commented out)
   useEffect(() => {
-    let isInitialLoad = true;
+    let isInitialLoad = !hasActivityCache;
 
     const fetchTradeActivity = async () => {
       if (user?.id && activeSpotTab === 2) {
@@ -249,10 +379,8 @@ export default function PortfolioPage() {
           console.error("Failed to fetch trade activity:", error);
           setTradeActivity([]);
         } finally {
-          if (isInitialLoad) {
-            setLoadingTradeActivity(false);
-            isInitialLoad = false;
-          }
+          setLoadingTradeActivity(false);
+          isInitialLoad = false;
         }
       }
     };
@@ -267,7 +395,7 @@ export default function PortfolioPage() {
 
       return () => clearInterval(intervalId);
     }
-  }, [user?.id, activeSpotTab]);
+  }, [user?.id, activeSpotTab, hasActivityCache]);
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -1287,6 +1415,7 @@ export default function PortfolioPage() {
                         skipFetch={searchQuery.trim() !== ""}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
+                        initialPositions={positionsFromCache || undefined}
                         tokenMetadataCache={tokenMetadataCache}
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}
@@ -1330,6 +1459,7 @@ export default function PortfolioPage() {
                         skipFetch={searchQuery.trim() !== ""}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
+                        initialPositions={positionsFromCache || undefined}
                         tokenMetadataCache={tokenMetadataCache}
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}

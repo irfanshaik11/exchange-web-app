@@ -101,16 +101,16 @@ export const checkMinimumAmount = (
   poolType: string
 ): ValidationWarning | null => {
   const minimums: Record<string, number> = {
-    'meteora amm v2': 0.001,
-    'meteora amm v1': 0.001,
-    'Raydium CPMM': 0.001,
-    'Raydium AMM': 0.001,
-    'PumpAmm': 0.001,
-    'Pumpfun': 0.001,
-    'meteora dbc': 0.001,
+    'meteora amm v2': 0.0001,
+    'meteora amm v1': 0.0001,
+    'Raydium CPMM': 0.0001,
+    'Raydium AMM': 0.0001,
+    'PumpAmm': 0.0001,
+    'Pumpfun': 0.0001,
+    'meteora dbc': 0.0001,
   };
 
-  const minAmount = minimums[poolType] || 0.001;
+  const minAmount = minimums[poolType] || 0.0001;
   
   if (amount < minAmount) {
     return {

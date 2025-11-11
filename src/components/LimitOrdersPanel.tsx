@@ -21,6 +21,13 @@ interface LimitOrder {
   failureCode?: string | null;
 }
 
+function describeOrderType(order: LimitOrder): string {
+  if (order.type === "Buy") {
+    return order.direction === "Below" ? "Buy Limit (Below)" : "Buy Stop (Above)";
+  }
+  return order.direction === "Above" ? "Sell Limit (Above)" : "Sell Stop (Below)";
+}
+
 export default function LimitOrdersPanel() {
   const { user } = useUser();
   const [orders, setOrders] = useState<LimitOrder[]>([]);
@@ -162,7 +169,7 @@ export default function LimitOrdersPanel() {
                           ? 'bg-green-500/20 text-green-400' 
                           : 'bg-red-500/20 text-red-400'
                       }`}>
-                        {order.type}
+                        {describeOrderType(order)}
                       </span>
                       <span className="text-xs text-neutral-400">
                         Order #{order.id}
@@ -186,7 +193,7 @@ export default function LimitOrdersPanel() {
                       
                       <div className="text-neutral-300">
                         <span className="text-neutral-500">Trigger:</span>{' '}
-                        When MC {order.direction.toLowerCase()}{' '}
+                        When MC {order.direction === 'Above' ? '≥' : '≤'}{' '}
                         <span className="font-semibold text-white">
                           ${Number(order.targetMC).toLocaleString()}
                         </span>
@@ -234,7 +241,7 @@ export default function LimitOrdersPanel() {
                           ? 'bg-green-500/20 text-green-400' 
                           : 'bg-red-500/20 text-red-400'
                       }`}>
-                        {order.type}
+                        {describeOrderType(order)}
                       </span>
                       <span className="text-xs text-green-400 font-semibold">
                         ✅ EXECUTED
@@ -261,7 +268,7 @@ export default function LimitOrdersPanel() {
                       
                       <div className="text-neutral-300">
                         <span className="text-neutral-500">Triggered at:</span>{' '}
-                        MC {order.direction.toLowerCase()}{' '}
+                        MC {order.direction === 'Above' ? '≥' : '≤'}{' '}
                         <span className="font-semibold text-white">
                           ${Number(order.targetMC).toLocaleString()}
                         </span>
@@ -305,14 +312,14 @@ export default function LimitOrdersPanel() {
                 <div className="flex items-center justify-between">
                   <div className="text-neutral-400">
                     <span className={order.type === 'Buy' ? 'text-green-500' : 'text-red-500'}>
-                      {order.type}
+                      {describeOrderType(order)}
                     </span>
                     {' '}
                     {order.type === 'Buy' 
                       ? `${order.solAmount} SOL` 
                       : `${order.tokenAmount}%`}
                     {' '}
-                    at MC {order.direction} ${Number(order.targetMC).toLocaleString()}
+                    at MC {order.direction === 'Above' ? '≥' : '≤'} ${Number(order.targetMC).toLocaleString()}
                   </div>
                   <span className="text-xs text-neutral-500">
                     {order.status === 'Failed' ? '⚠️ Failed' : '🚫 Cancelled'}

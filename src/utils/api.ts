@@ -84,7 +84,7 @@ async function apiFetch<T = unknown>(
         // Suppress console.error for expected validation errors to prevent Next.js dev overlay
         const EXPECTED_ERROR_CODES = [
           'NO_HOLDINGS', 'INSUFFICIENT_BALANCE', 'VALIDATION_ERROR',
-          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED'
+          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED', 'METEORA_NO_LIQUIDITY', 'TURNKEY_NOT_SUPPORTED'
         ];
         if (EXPECTED_ERROR_CODES.includes(code)) {
           // Mark as expected error (won't trigger Next.js error overlay in dev)
@@ -214,6 +214,14 @@ interface LimitOrder {
   poolType?: string | null;
   failureReason?: string | null;
   failureCode?: string | null;
+  slippage?: number | string;
+  priorityFee?: number | string;
+  bribe?: number | string;
+  mevMode?: string | null;
+  autoFee?: boolean;
+  maxFee?: number | string;
+  mevProtection?: boolean;
+  rpc?: string | null;
 }
 
 interface UpdateLimitOrderParams {
@@ -233,6 +241,15 @@ export const createLimitOrder = (
 
 export const getMyLimitOrders = (authToken: string) =>
   apiFetch<{ orders: LimitOrder[] }>("/api/limit/my_orders", {
+    method: "GET",
+    authToken,
+  });
+
+export const getLimitOrderExecutionResult = (
+  orderId: string | number,
+  authToken: string,
+) =>
+  apiFetch<any>(`/api/limit/execution_result/${orderId}`, {
     method: "GET",
     authToken,
   });

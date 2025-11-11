@@ -218,6 +218,44 @@ export const enhanceError = (
           actions: [],
         };
 
+      case 'POOLED_TOKEN_NOT_FOUND':
+        return {
+          title: 'Token Not Found in Pool',
+          description: 'The selected pool does not contain the token anymore. It may have migrated to another DEX.',
+          suggestions: [
+            'Refresh the page to update pool information',
+            'Try selecting a different pool',
+          ],
+          canRetry: true,
+          actions: [{ label: 'Refresh Data', action: 'refresh_data' }],
+        };
+
+      case 'METEORA_NO_LIQUIDITY':
+        return {
+          title: 'No Liquidity in Meteora Pool',
+          description: 'The Meteora pool for this token currently has no liquidity available to trade.',
+          suggestions: [
+            'Wait for liquidity to return or try again later',
+            'Switch to an alternative pool if available',
+            'Try a different token with higher trading activity',
+          ],
+          canRetry: true,
+          actions: [{ label: 'Retry', action: 'retry' }],
+        };
+
+      case 'TURNKEY_NOT_SUPPORTED':
+        return {
+          title: 'Requires Local Wallet',
+          description: 'This pool can only be traded with a locally hosted wallet. Turnkey/hosted wallets are not supported by PumpSwap.',
+          suggestions: [
+            'Switch to a different pool (e.g. Pump.fun or Meteora)',
+            'Use a locally stored wallet to interact with PumpSwap pools',
+            'Contact support if you believe this pool should be supported',
+          ],
+          canRetry: false,
+          actions: [{ label: 'View Explorer', action: 'view_explorer' }],
+        };
+ 
       default:
         return {
           title: 'Trade Failed',

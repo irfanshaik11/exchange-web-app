@@ -32,6 +32,7 @@ interface PositionsProps {
   tokenMetadataCache?: Record<string, TokenMetadata>; // Optional: shared cache
   onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
   isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
+  initialPositions?: PositionRow[]; // Optional: initial positions to hydrate instantly
 }
 
 function shortAddr(addr: string) {
@@ -74,7 +75,8 @@ const Positions: React.FC<PositionsProps> = ({
   showInSOL = false,
   tokenMetadataCache,
   onUpdateCache,
-  isCacheValid
+  isCacheValid,
+  initialPositions
 }) => {
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +86,7 @@ const Positions: React.FC<PositionsProps> = ({
   const [selectedPosition, setSelectedPosition] = useState<PositionRow | null>(null);
   const [solPrice, setSolPrice] = useState<number>(0);
   const router = useRouter();
+  const [hasHydratedFromInitial, setHasHydratedFromInitial] = useState(false);
 
   // Function to refresh positions after a successful sell
   const refreshPositions = async () => {
@@ -104,6 +107,14 @@ const Positions: React.FC<PositionsProps> = ({
       setTokenMetadata(tokenMetadataCache);
     }
   }, [tokenMetadataCache]);
+  
+  useEffect(() => {
+    if (!hasHydratedFromInitial && initialPositions && initialPositions.length > 0) {
+      setPositions(initialPositions);
+      setLoading(false);
+      setHasHydratedFromInitial(true);
+    }
+  }, [initialPositions, hasHydratedFromInitial]);
   
   // Fetch SOL price using Pyth Network with improved error handling
   useEffect(() => {
@@ -328,7 +339,7 @@ const Positions: React.FC<PositionsProps> = ({
       console.log(`🔍 Fetching positions for userId: ${userId}`);
       // Only show loading state on initial load, not on refreshes
       if (isInitialLoad) {
-        setLoading(true);
+        setLoading(!hasHydratedFromInitial);
       }
       try {
         const positions = await getActivePositionsByUser(userId);
@@ -446,7 +457,7 @@ const Positions: React.FC<PositionsProps> = ({
     }, 5000);
     
     return () => clearInterval(intervalId);
-  }, [userId, onPositionsChange, skipFetch, onTokenNamesChange]);
+  }, [userId, onPositionsChange, skipFetch, onTokenNamesChange, hasHydratedFromInitial]);
 
   return (
     <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
