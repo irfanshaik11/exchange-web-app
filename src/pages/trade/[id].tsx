@@ -674,31 +674,31 @@ export default function TradePage() {
             <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col overflow-y-auto">
               <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
               <div className="flex-1 min-h-0 overflow-y-auto">
-                {selectedTab === "Trades" && (
+                <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
                   <CodexTrades 
                     token={correctTokenData || displayToken} 
                     initialTrades={initialTradesForComponent}
                     onTradesUpdate={updateTradesCache}
                   />
-                )}
-                <div style={{ display: selectedTab === "Orders" ? "block" : "none" }}>
+                </div>
+                <div style={{ display: selectedTab === "Orders" ? "block" : "none", height: "100%" }}>
                   <TokenLimitOrders />
                 </div>
-                {selectedTab === "Top Traders" && (
+                <div style={{ display: selectedTab === "Top Traders" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexTopTraders token={displayToken} />
                   </React.Suspense>
-                )}
-                {selectedTab === "Holders" && (
+                </div>
+                <div style={{ display: selectedTab === "Holders" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexHolders token={displayToken} />
                   </React.Suspense>
-                )}
-                {selectedTab === "Dev Tokens" && (
+                </div>
+                <div style={{ display: selectedTab === "Dev Tokens" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexDevTokens token={displayToken} />
                   </React.Suspense>
-                )}
+                </div>
               </div>
             </div>
           </div>
