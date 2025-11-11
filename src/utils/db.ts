@@ -218,5 +218,59 @@ export function formatSmartNumber(val: string | number | null | undefined): stri
   return num.toFixed(3);
 }
 
+/**
+ * Formats market cap values with 2 decimal places (100th place) instead of 3.
+ * Examples:
+ *   1234567    => "1.23M"
+ *   1000       => "1.00K"
+ *   346141     => "346.14K"
+ *   1438000    => "1.44M"
+ */
+export function formatMarketCap(val: string | number | null | undefined): string {
+  if (val === null || val === undefined) return "-";
+
+  const num = typeof val === "string" ? parseFloat(val) : val;
+
+  if (isNaN(num) || !isFinite(num)) {
+    return "-";
+  }
+
+  const abs = Math.abs(num);
+
+  // Handle very small values (< $0.01) with 2 decimal places
+  if (abs > 0 && abs < 0.01) {
+    return num.toFixed(2);
+  }
+
+  // Handle small values (< $1) with 2 decimal places
+  if (abs < 1) {
+    return num.toFixed(2);
+  }
+
+  // Handle values < $1000 with 2 decimal places
+  if (abs < 1000) {
+    return num.toFixed(2);
+  }
+
+  const abbreviations = [
+    { value: 1e12, suffix: "T" },
+    { value: 1e9, suffix: "B" },
+    { value: 1e6, suffix: "M" },
+    { value: 1e3, suffix: "K" },
+  ];
+
+  for (const { value, suffix } of abbreviations) {
+    if (abs >= value) {
+      const formatted = (num / value).toFixed(2);
+      return formatted.endsWith(".00")
+        ? `${parseInt(formatted)}${suffix}`
+        : `${formatted}${suffix}`;
+    }
+  }
+
+  // Fallback for values >= $1000 but < $1K (shouldn't happen with above logic)
+  return num.toFixed(2);
+}
+
 
 

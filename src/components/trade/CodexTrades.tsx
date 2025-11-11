@@ -2,7 +2,7 @@ import { RiExchangeDollarLine } from "react-icons/ri";
 import { SiSolana } from "react-icons/si";
 import { FaArrowRightArrowLeft } from "react-icons/fa6";
 import React from 'react';
-import { formatSmartNumber } from '~/utils/db';
+import { formatSmartNumber, formatMarketCap } from '~/utils/db';
 import useOptimizedTradeEventsWebSocket from '../../hooks/useOptimizedTradeEventsWebSocket';
 import type { Token } from '~/utils/db';
 
@@ -503,7 +503,7 @@ const CodexTrades: React.FC<CodexTradesProps> = ({ token, initialTrades = [] }) 
                     ? unitPriceUsd * supply
                     : null;
 
-                const mcStr = mc !== null ? `$${formatSmartNumber(mc)}` : '-';
+                const mcStr = mc !== null ? `$${formatMarketCap(mc)}` : '-';
                 const priceStr = formatUsdPrice(unitPriceUsd);
 
                 const intensityUsd = scaleAmt(n.totalUSD);
