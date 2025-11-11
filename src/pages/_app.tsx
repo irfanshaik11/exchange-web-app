@@ -15,11 +15,13 @@ import toast from 'react-hot-toast';
 import { mainnet } from 'viem/chains';
 import LoginModal from '../components/LoginModal';
 import { env } from '../env';
+import { useReferralAccess } from '../components/ReferralAccessGate';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
 import { FilterProvider } from '../components/FilterContext';
 import { SolPriceProvider } from '../components/SolPriceContext';
 import { WalletTrackerProvider } from '../components/WalletTrackerContext';
+import { ReferralAccessGate } from '../components/ReferralAccessGate';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -123,8 +125,13 @@ function TokenHandler() {
 
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
+  const { hasAccess } = useReferralAccess();
   const [loginOpen, setLoginOpen] = useState(false);
   useEffect(() => {
+    if (!hasAccess) {
+      if (loginOpen) setLoginOpen(false);
+      return;
+    }
     if (enforceLogin && !userLoading && !user) {
       setLoginOpen(true);
     }
@@ -136,7 +143,7 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const handleLoginClose = () => {
     if (user) setLoginOpen(false);
   };
-  if (!enforceLogin) return null;
+  if (!enforceLogin || !hasAccess) return null;
   return (
     <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
   );
@@ -220,27 +227,29 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       </Head>
       <div className={geist.className}>
         <MobileBlocker>
-          <WagmiProvider config={config}>
-            <QueryClientProvider client={queryClient}>
-              <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
-                <UserProvider>
-                  <TokenHandler />
-                  <SolPriceProvider>
-                    <QuickBuyProvider>
-                      <WatchlistProvider>
-                        <FilterProvider>
-                          <WalletTrackerProvider>
-                            <Component {...pageProps} />
-                          </WalletTrackerProvider>
-                        </FilterProvider>
-                      </WatchlistProvider>
-                    </QuickBuyProvider>
-                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
-                  </SolPriceProvider>
-                </UserProvider>
-              </RainbowKitProvider>
-            </QueryClientProvider>
-          </WagmiProvider>
+          <ReferralAccessGate>
+            <WagmiProvider config={config}>
+              <QueryClientProvider client={queryClient}>
+                <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
+                  <UserProvider>
+                    <TokenHandler />
+                    <SolPriceProvider>
+                      <QuickBuyProvider>
+                        <WatchlistProvider>
+                          <FilterProvider>
+                            <WalletTrackerProvider>
+                              <Component {...pageProps} />
+                            </WalletTrackerProvider>
+                          </FilterProvider>
+                        </WatchlistProvider>
+                      </QuickBuyProvider>
+                      <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                    </SolPriceProvider>
+                  </UserProvider>
+                </RainbowKitProvider>
+              </QueryClientProvider>
+            </WagmiProvider>
+          </ReferralAccessGate>
           <Toaster 
             position="top-right"
             toastOptions={{

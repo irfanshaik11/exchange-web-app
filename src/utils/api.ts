@@ -2,6 +2,7 @@
 import { env } from "../env";
 // Critical Fix #10: Network timeout handling
 import { fetchWithTimeout, isTimeoutError as checkTimeoutError } from "./fetchWithTimeout";
+import { getStoredReferralToken } from "./referralStorage";
 
 // Constants
 export const SOL_MINT_ADDRESS = "So11111111111111111111111111111111111111112";
@@ -11,6 +12,27 @@ interface RequestOptions extends RequestInit {
   body?: any;
   /** Bearer token for authenticated endpoints */
   authToken?: string;
+}
+
+export interface ReferralDetails {
+  code: string;
+  label?: string | null;
+  description?: string | null;
+  isDefault: boolean;
+  expiresAt?: string | null;
+  maxUses?: number | null;
+  isActive?: boolean;
+}
+
+export interface ReferralSession {
+  token: string;
+  referral: ReferralDetails;
+}
+
+export interface ReferralValidationSuccess {
+  valid: true;
+  token: string;
+  referral: ReferralDetails;
 }
 
 /**
@@ -52,15 +74,42 @@ async function apiFetch<T = unknown>(
   const { authToken, body, headers, ...rest } = options;
 
   try {
+    const finalHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    };
+
+    if (headers) {
+      if (headers instanceof Headers) {
+        headers.forEach((value, key) => {
+          finalHeaders[key] = value as string;
+        });
+      } else if (Array.isArray(headers)) {
+        headers.forEach(([key, value]) => {
+          finalHeaders[key] = value;
+        });
+      } else {
+        Object.assign(finalHeaders, headers as Record<string, string>);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      const hasReferralHeader = Object.keys(finalHeaders).some(
+        (key) => key.toLowerCase() === 'x-referral-token',
+      );
+      if (!hasReferralHeader) {
+        const referralToken = getStoredReferralToken();
+        if (referralToken) {
+          finalHeaders['X-Referral-Token'] = referralToken;
+        }
+      }
+    }
+
     // Critical Fix #10: Use fetchWithTimeout instead of fetch (45s timeout for trade operations)
     const res = await fetchWithTimeout(
       `${env.NEXT_PUBLIC_BACKEND_URL}${endpoint}`,
       {
-        headers: {
-          "Content-Type": "application/json",
-          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-          ...(headers || {}),
-        },
+        headers: finalHeaders,
         body: body ? JSON.stringify(body) : undefined,
         ...rest,
       },
@@ -169,6 +218,21 @@ export const metamaskLogin = (
 
 /** Returns the Google OAuth redirect URL (client will navigate to it) */
 export const googleAuthUrl = `${env.NEXT_PUBLIC_BACKEND_URL}/api/users/auth/google`;
+
+/* -------------------------------------------------------------------------- */
+/*                             Referral endpoints                              */
+/* -------------------------------------------------------------------------- */
+
+export const validateReferralCode = (code: string) =>
+  apiFetch<ReferralValidationSuccess>("/api/referrals/validate", {
+    method: "POST",
+    body: { code },
+  });
+
+export const getReferralSession = () =>
+  apiFetch<ReferralSession>("/api/referrals/session", {
+    method: "GET",
+  });
 
 /* -------------------------------------------------------------------------- */
 /*                              Limit Order endpoints                         */

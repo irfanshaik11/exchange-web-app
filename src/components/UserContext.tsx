@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import Cookies from 'js-cookie';
 import { getUserById } from '../utils/api';
 import { getSolBalance } from '~/utils/functions';
+import { clearStoredReferralAccess } from '../utils/referralStorage';
 import toast from 'react-hot-toast';
 
 export interface UserInfo {
@@ -115,6 +116,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSolBalance(0);
     setLastNotifiedBalance(0);
+    if (typeof window !== 'undefined') {
+      clearStoredReferralAccess();
+      window.dispatchEvent(new Event('referral-access-reset'));
+    }
   };
 
   useEffect(() => {

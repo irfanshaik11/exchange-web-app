@@ -85,7 +85,16 @@ export async function getActivePositionsByUser(userId: string): Promise<Position
     return [];
   }
   try {
-    const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}`);
+    const controller =
+      typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    if (controller) {
+      timeoutId = setTimeout(() => controller.abort(), 10000);
+    }
+    const res = await fetch(
+      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}`,
+      controller ? { signal: controller.signal } : {},
+    );
     if (!res.ok) {
       console.error('Failed to fetch active positions:', res.status, res.statusText);
       return [];
@@ -93,8 +102,16 @@ export async function getActivePositionsByUser(userId: string): Promise<Position
     const data = await res.json();
     return Array.isArray(data) ? data : [];
   } catch (err) {
+    if ((err as any)?.name === 'AbortError') {
+      console.warn('getActivePositionsByUser request timed out');
+    } else {
     console.error('Error fetching active positions:', err);
+    }
     return [];
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 
@@ -117,11 +134,32 @@ export async function getTradeHistoryByUser(userId: string): Promise<any[]> {
 
 export async function getTradeActivityByUser(userId: string): Promise<any[]> {
   if (!userId) throw new Error('userId is required');
-  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}`);
+  const controller =
+    typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  if (controller) {
+    timeoutId = setTimeout(() => controller.abort(), 10000);
+  }
+  try {
+    const res = await fetch(
+      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}`,
+      controller ? { signal: controller.signal } : {},
+    );
   if (!res.ok) {
-    throw new Error(`Failed to fetch trade activity by user: ${res.statusText}`);
+      throw new Error(`Failed to fetch trade activity by user: ${res.status} ${res.statusText}`);
   }
   return res.json();
+  } catch (err) {
+    if ((err as any)?.name === 'AbortError') {
+      console.warn('getTradeActivityByUser request timed out');
+      return [];
+    }
+    throw err;
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 export function formatSmartNumber(num: number): string {
