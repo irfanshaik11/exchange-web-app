@@ -84,10 +84,11 @@ export async function getActivePositionsByUser(userId: string): Promise<Position
     console.error('NEXT_PUBLIC_BACKEND_URL is not set');
     return [];
   }
+  
+  const controller =
+    typeof AbortController !== 'undefined' ? new AbortController() : undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
-    const controller =
-      typeof AbortController !== 'undefined' ? new AbortController() : undefined;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     if (controller) {
       timeoutId = setTimeout(() => controller.abort(), 10000);
     }
