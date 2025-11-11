@@ -71,42 +71,200 @@ const AX = {
 };
 
 const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
-  // Only show skeleton if we have absolutely no token data (not even optimistic)
-  if (!token || (!token.name && !token.symbol)) {
-    return (
-      <div className="flex-1 min-h-0 p-4">
-        <div className="animate-pulse">
-          <div className="h-6 w-32 bg-neutral-700 rounded mb-4" />
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-12 bg-neutral-700 rounded" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Client-side localStorage cache for dev tokens (persists across page reloads)
+  const CACHE_KEY_PREFIX_LIMITED = 'codex_dev_tokens_limited_cache_';
+  const CACHE_KEY_PREFIX_ALL = 'codex_dev_tokens_all_cache_';
+  const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
+  
+  const getCacheKey = (mint: string, isAll: boolean) => {
+    return isAll ? `${CACHE_KEY_PREFIX_ALL}${mint}` : `${CACHE_KEY_PREFIX_LIMITED}${mint}`;
+  };
+
+  // Load cached limited tokens from localStorage on mount
+  const [cachedLimitedTokensFromStorage, setCachedLimitedTokensFromStorage] = React.useState<any[]>(() => {
+    if (!token?.mint || typeof window === 'undefined') return [];
+    
+    try {
+      const cacheKey = getCacheKey(token.mint, false);
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS) {
+          return parsed.tokens || [];
+        } else {
+          localStorage.removeItem(cacheKey);
+        }
+      }
+    } catch (error) {
+      console.error('[CodexDevTokens] Error loading limited cache:', error);
+    }
+    return [];
+  });
+
+  // Load cached all tokens from localStorage on mount
+  const [cachedAllTokensFromStorage, setCachedAllTokensFromStorage] = React.useState<any[]>(() => {
+    if (!token?.mint || typeof window === 'undefined') return [];
+    
+    try {
+      const cacheKey = getCacheKey(token.mint, true);
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS) {
+          return parsed.tokens || [];
+        } else {
+          localStorage.removeItem(cacheKey);
+        }
+      }
+    } catch (error) {
+      console.error('[CodexDevTokens] Error loading all cache:', error);
+    }
+    return [];
+  });
+
+  // Reload cache when mint changes
+  React.useEffect(() => {
+    if (!token?.mint || typeof window === 'undefined') {
+      setCachedLimitedTokensFromStorage([]);
+      setCachedAllTokensFromStorage([]);
+      return;
+    }
+    
+    try {
+      // Reload limited tokens cache
+      const limitedCacheKey = getCacheKey(token.mint, false);
+      const limitedCached = localStorage.getItem(limitedCacheKey);
+      if (limitedCached) {
+        const parsed = JSON.parse(limitedCached);
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS) {
+          setCachedLimitedTokensFromStorage(parsed.tokens || []);
+        } else {
+          localStorage.removeItem(limitedCacheKey);
+          setCachedLimitedTokensFromStorage([]);
+        }
+      } else {
+        setCachedLimitedTokensFromStorage([]);
+      }
+
+      // Reload all tokens cache
+      const allCacheKey = getCacheKey(token.mint, true);
+      const allCached = localStorage.getItem(allCacheKey);
+      if (allCached) {
+        const parsed = JSON.parse(allCached);
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS) {
+          setCachedAllTokensFromStorage(parsed.tokens || []);
+        } else {
+          localStorage.removeItem(allCacheKey);
+          setCachedAllTokensFromStorage([]);
+        }
+      } else {
+        setCachedAllTokensFromStorage([]);
+      }
+    } catch (error) {
+      console.error('[CodexDevTokens] Error reloading cache:', error);
+      setCachedLimitedTokensFromStorage([]);
+      setCachedAllTokensFromStorage([]);
+    }
+  }, [token?.mint]);
+
+  // Save tokens to localStorage cache
+  const saveToCache = React.useCallback((tokens: any[], mint: string, isAll: boolean) => {
+    if (!mint || typeof window === 'undefined' || tokens.length === 0) return;
+    
+    try {
+      const cacheKey = getCacheKey(mint, isAll);
+      const cacheData = {
+        tokens,
+        timestamp: Date.now(),
+        mint,
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    } catch (error) {
+      console.error('[CodexDevTokens] Error saving to cache:', error);
+      // If storage is full, try to clear old entries
+      try {
+        const keys = Object.keys(localStorage);
+        const oldCacheKeys = keys.filter(k => 
+          k.startsWith(CACHE_KEY_PREFIX_LIMITED) || k.startsWith(CACHE_KEY_PREFIX_ALL)
+        );
+        if (oldCacheKeys.length > 10) {
+          const sorted = oldCacheKeys.map(key => {
+            try {
+              const item = localStorage.getItem(key);
+              return {
+                key,
+                timestamp: item ? (JSON.parse(item).timestamp || 0) : 0,
+              };
+            } catch {
+              return { key, timestamp: 0 };
+            }
+          }).sort((a, b) => a.timestamp - b.timestamp);
+          sorted.slice(0, 3).forEach(({ key }) => localStorage.removeItem(key));
+        }
+      } catch (clearError) {
+        console.error('[CodexDevTokens] Error clearing old cache:', clearError);
+      }
+    }
+  }, []);
+
+  const shouldShowSkeleton = !token || (!token.name && !token.symbol);
 
   // Fetch all tokens for pie chart calculations
-  const { tokens: allTokens, isLoading: isLoadingAll } = useCodexDevTokens(token.mint || '', {
+  const { tokens: allTokens, isLoading: isLoadingAll } = useCodexDevTokens(token?.mint, {
     fetchAll: true
   });
 
   // Fetch limited tokens for table display
-  const { tokens, isLoading, error } = useCodexDevTokens(token.mint || '', {
+  const { tokens, isLoading, error } = useCodexDevTokens(token?.mint, {
     limit: 10
   });
 
-  // Calculate migrated vs non-migrated counts from all tokens
+  // Use cached tokens if available, otherwise use fetched tokens
+  const displayTokens = React.useMemo(() => {
+    if (tokens.length > 0) {
+      return tokens;
+    }
+    return cachedLimitedTokensFromStorage;
+  }, [tokens, cachedLimitedTokensFromStorage]);
+
+  const displayAllTokens = React.useMemo(() => {
+    if (allTokens.length > 0) {
+      return allTokens;
+    }
+    return cachedAllTokensFromStorage;
+  }, [allTokens, cachedAllTokensFromStorage]);
+
+  // Save to cache when tokens update
+  React.useEffect(() => {
+    if (token?.mint && tokens.length > 0) {
+      saveToCache(tokens, token.mint, false);
+    }
+  }, [tokens, token?.mint, saveToCache]);
+
+  React.useEffect(() => {
+    if (token?.mint && allTokens.length > 0) {
+      saveToCache(allTokens, token.mint, true);
+    }
+  }, [allTokens, token?.mint, saveToCache]);
+
+  // Only show loading if we don't have any tokens at all (not even cached ones)
+  const showLoading = isLoading && displayTokens.length === 0 && cachedLimitedTokensFromStorage.length === 0;
+  const showLoadingAll = isLoadingAll && displayAllTokens.length === 0 && cachedAllTokensFromStorage.length === 0;
+
+  // Calculate migrated vs non-migrated counts from all tokens (use displayAllTokens which includes cache)
   const { migrated, nonMigrated, total } = useMemo(() => {
-    if (!allTokens || allTokens.length === 0) {
+    if (!displayAllTokens || displayAllTokens.length === 0) {
       return { migrated: 0, nonMigrated: 0, total: 0 };
     }
 
     let migratedCount = 0;
     let nonMigratedCount = 0;
 
-    allTokens.forEach((devToken) => {
+    displayAllTokens.forEach((devToken) => {
       // Check if token has migrated_pool_address to determine migration status
       if (devToken.token.migrated_pool_address) {
         migratedCount++;
@@ -116,18 +274,18 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
     });
 
     return { migrated: migratedCount, nonMigrated: nonMigratedCount, total: migratedCount + nonMigratedCount };
-  }, [allTokens]);
+  }, [displayAllTokens]);
 
-  // Calculate highlights
+  // Calculate highlights (use displayAllTokens which includes cache)
   const { topMCAP, lastTokenLaunched } = useMemo(() => {
-    if (!allTokens || allTokens.length === 0) {
+    if (!displayAllTokens || displayAllTokens.length === 0) {
       return { topMCAP: null, lastTokenLaunched: null };
     }
 
     // Find token with highest market cap
-    let topToken = allTokens[0];
-    let maxMCAP = parseFloat(allTokens[0].marketCap || '0');
-    allTokens.forEach((devToken) => {
+    let topToken = displayAllTokens[0];
+    let maxMCAP = parseFloat(displayAllTokens[0].marketCap || '0');
+    displayAllTokens.forEach((devToken) => {
       const mcap = parseFloat(devToken.marketCap || '0');
       if (mcap > maxMCAP) {
         maxMCAP = mcap;
@@ -136,9 +294,9 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
     });
 
     // Find most recently created token
-    let lastToken = allTokens[0];
-    let latestTime = allTokens[0].token.createdAt;
-    allTokens.forEach((devToken) => {
+    let lastToken = displayAllTokens[0];
+    let latestTime = displayAllTokens[0].token.createdAt;
+    displayAllTokens.forEach((devToken) => {
       if (devToken.token.createdAt > latestTime) {
         latestTime = devToken.token.createdAt;
         lastToken = devToken;
@@ -152,7 +310,23 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
       topMCAP: topToken.token.symbol ? `${topToken.token.symbol} (${topMCAPValue})` : null,
       lastTokenLaunched: lastTokenAge ? `${lastTokenAge} ago` : null,
     };
-  }, [allTokens]);
+  }, [displayAllTokens]);
+
+  // Only show skeleton if we have absolutely no token data (not even optimistic)
+  if (shouldShowSkeleton) {
+    return (
+      <div className="flex-1 min-h-0 p-4">
+        <div className="animate-pulse">
+          <div className="h-6 w-32 bg-neutral-700 rounded mb-4" />
+          <div className="space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-12 bg-neutral-700 rounded" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const matteBlack = '#000000';
 
@@ -177,20 +351,20 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
             </tr>
           </thead>
           <tbody style={{ backgroundColor: matteBlack }}>
-            {isLoading ? (
+            {showLoading ? (
               <tr>
                 <td colSpan={5} className="text-center py-6 text-neutral-500">
                   Loading dev tokens...
                 </td>
               </tr>
-            ) : !tokens || tokens.length === 0 ? (
+            ) : !displayTokens || displayTokens.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-6 text-neutral-500">
                   No dev tokens found.
                 </td>
               </tr>
             ) : (
-              tokens.map((devToken, idx) => {
+              displayTokens.map((devToken, idx) => {
                 const age = getAge(devToken.token.createdAt);
                 const marketCap = formatMarketCap(devToken.marketCap);
                 const liquidity = formatLiquidity(devToken.liquidity);
@@ -292,7 +466,7 @@ const CodexDevTokens: React.FC<CodexDevTokensProps> = ({ token }) => {
 
           {/* Right: Pie Chart */}
           <div className="flex-1 flex justify-center items-center" style={{ backgroundColor: matteBlack, minWidth: 0 }}>
-            {isLoadingAll ? (
+            {showLoadingAll ? (
               <div className="flex items-center justify-center" style={{ width: 256, height: 256 }}>
                 <div className="text-sm" style={{ color: AX.muted }}>Loading...</div>
               </div>

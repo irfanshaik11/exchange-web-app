@@ -1,10 +1,14 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import Cookies from 'js-cookie';
-import { getUserById } from '../utils/api';
+
+import { getUserById, ApiError } from '../utils/api';
+import { showEnhancedToast } from '~/utils/enhancedToast';
+const USER_CACHE_KEY = 'codex_user_info_cache';
 import { getSolBalance } from '~/utils/functions';
 import { clearStoredReferralAccess } from '../utils/referralStorage';
 import toast from 'react-hot-toast';
+
 
 export interface UserInfo {
   id: string;
@@ -28,12 +32,41 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserInfo | null>(null);
+  const [user, setUserState] = useState<UserInfo | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const cached = window.localStorage.getItem(USER_CACHE_KEY);
+      if (!cached) return null;
+      return JSON.parse(cached) as UserInfo;
+    } catch (error) {
+      console.warn('Failed to parse cached user, clearing cache', error);
+      window.localStorage.removeItem(USER_CACHE_KEY);
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [solBalance, setSolBalance] = useState(0);
   const [usdcBalance, setUsdcBalance] = useState(0);
   const [lastNotifiedBalance, setLastNotifiedBalance] = useState(0);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
+  const persistUser = useCallback((value: UserInfo | null) => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (value) {
+        window.localStorage.setItem(USER_CACHE_KEY, JSON.stringify(value));
+      } else {
+        window.localStorage.removeItem(USER_CACHE_KEY);
+      }
+    } catch (error) {
+      console.warn('Failed to persist user cache', error);
+    }
+  }, []);
+
+  const setUser = useCallback((value: UserInfo | null) => {
+    setUserState(value);
+    persistUser(value);
+  }, [persistUser]);
 
   const refreshBalance = async () => {
     if (user?.publicKey) {
@@ -62,7 +95,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (newBalance > lastNotifiedBalance && lastNotifiedBalance >= 0 && notificationsEnabled) {
           const depositAmount = newBalance - lastNotifiedBalance;
           console.log(`🚨 DEPOSIT DETECTED: ${depositAmount.toFixed(4)} SOL (from ${lastNotifiedBalance.toFixed(4)} to ${newBalance.toFixed(4)})`);
-          toast.success(`🎉 Deposit received! +${depositAmount.toFixed(4)} SOL`, {
+          showEnhancedToast("success", `🎉 Deposit received! +${depositAmount.toFixed(4)} SOL`, {
             duration: 5000,
             style: {
               background: '#10B981',
@@ -100,12 +133,31 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (fetchedUser) {
         setUser({ bearerToken: token, ...fetchedUser });
       } else {
-        setUser(null);
         Cookies.remove('token');
+        setUser(null);
       }
-    } catch (_) {
-      setUser(null);
-      Cookies.remove('token');
+    } catch (error) {
+      console.error('Failed to refresh user', error);
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        Cookies.remove('token');
+        setUser(null);
+      } else {
+        // Preserve existing cached user state; ensure loading state still clears
+        if (!user) {
+          // Attempt to restore cached user if available
+          if (typeof window !== 'undefined') {
+            try {
+              const cached = window.localStorage.getItem(USER_CACHE_KEY);
+              if (cached) {
+                const parsed = JSON.parse(cached) as UserInfo;
+                setUserState(parsed);
+              }
+            } catch (cacheError) {
+              console.warn('Failed to restore cached user after refresh failure', cacheError);
+            }
+          }
+        }
+      }
     } finally {
       setLoading(false);
     }

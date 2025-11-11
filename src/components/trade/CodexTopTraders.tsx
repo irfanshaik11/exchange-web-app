@@ -59,8 +59,129 @@ function formatPrice(amountUsd: string, tokenAmount: string) {
 }
 
 const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
+  // Client-side localStorage cache for top traders (persists across page reloads)
+  const CACHE_KEY_PREFIX = 'codex_top_traders_cache_';
+  const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache expiry
+  
+  const getCacheKey = (mint: string) => {
+    return `${CACHE_KEY_PREFIX}${mint}`;
+  };
+
+  // Load cached traders from localStorage on mount
+  const [cachedTradersFromStorage, setCachedTradersFromStorage] = React.useState<any[]>(() => {
+    if (!token?.mint || typeof window === 'undefined') return [];
+    
+    try {
+      const cacheKey = getCacheKey(token.mint);
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS) {
+          return parsed.traders || [];
+        } else {
+          localStorage.removeItem(cacheKey);
+        }
+      }
+    } catch (error) {
+      console.error('[CodexTopTraders] Error loading cache:', error);
+    }
+    return [];
+  });
+
+  // Reload cache when mint changes
+  React.useEffect(() => {
+    if (!token?.mint || typeof window === 'undefined') {
+      setCachedTradersFromStorage([]);
+      return;
+    }
+    
+    try {
+      const cacheKey = getCacheKey(token.mint);
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (parsed.timestamp && (now - parsed.timestamp) < CACHE_EXPIRY_MS) {
+          setCachedTradersFromStorage(parsed.traders || []);
+        } else {
+          localStorage.removeItem(cacheKey);
+          setCachedTradersFromStorage([]);
+        }
+      } else {
+        setCachedTradersFromStorage([]);
+      }
+    } catch (error) {
+      console.error('[CodexTopTraders] Error reloading cache:', error);
+      setCachedTradersFromStorage([]);
+    }
+  }, [token?.mint]);
+
+  // Save traders to localStorage cache
+  const saveToCache = React.useCallback((traders: any[], mint: string) => {
+    if (!mint || typeof window === 'undefined' || traders.length === 0) return;
+    
+    try {
+      const cacheKey = getCacheKey(mint);
+      const cacheData = {
+        traders,
+        timestamp: Date.now(),
+        mint,
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+    } catch (error) {
+      console.error('[CodexTopTraders] Error saving to cache:', error);
+      // If storage is full, try to clear old entries
+      try {
+        const keys = Object.keys(localStorage);
+        const oldCacheKeys = keys.filter(k => k.startsWith(CACHE_KEY_PREFIX));
+        if (oldCacheKeys.length > 10) {
+          const sorted = oldCacheKeys.map(key => {
+            try {
+              const item = localStorage.getItem(key);
+              return {
+                key,
+                timestamp: item ? (JSON.parse(item).timestamp || 0) : 0,
+              };
+            } catch {
+              return { key, timestamp: 0 };
+            }
+          }).sort((a, b) => a.timestamp - b.timestamp);
+          sorted.slice(0, 3).forEach(({ key }) => localStorage.removeItem(key));
+        }
+      } catch (clearError) {
+        console.error('[CodexTopTraders] Error clearing old cache:', clearError);
+      }
+    }
+  }, []);
+
+  const shouldShowSkeleton = !token || (!token.name && !token.symbol);
+
+  const { traders, isLoading, error } = useCodexTopTraders(token?.mint, {
+    limit: 20,
+    tradingPeriod: 'WEEK'
+  });
+
+  // Use cached traders if available, otherwise use fetched traders
+  const displayTraders = React.useMemo(() => {
+    if (traders.length > 0) {
+      return traders;
+    }
+    return cachedTradersFromStorage;
+  }, [traders, cachedTradersFromStorage]);
+
+  // Save to cache when traders update
+  React.useEffect(() => {
+    if (token?.mint && traders.length > 0) {
+      saveToCache(traders, token.mint);
+    }
+  }, [traders, token?.mint, saveToCache]);
+
+  // Only show loading if we don't have any traders at all (not even cached ones)
+  const showLoading = isLoading && displayTraders.length === 0 && cachedTradersFromStorage.length === 0;
+
   // Only show skeleton if we have absolutely no token data (not even optimistic)
-  if (!token || (!token.name && !token.symbol)) {
+  if (shouldShowSkeleton) {
     return (
       <div className="flex-1 min-h-0 p-4">
         <div className="animate-pulse">
@@ -74,11 +195,6 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
       </div>
     );
   }
-
-  const { traders, isLoading, error } = useCodexTopTraders(token.mint || '', {
-    limit: 20,
-    tradingPeriod: 'WEEK'
-  });
 
   return (
     <div className="w-full">
@@ -102,20 +218,20 @@ const CodexTopTraders: React.FC<CodexTopTradersProps> = ({ token }) => {
           </tr>
         </thead>
         <tbody>
-          {isLoading ? (
+          {showLoading ? (
             <tr>
               <td colSpan={6} className="text-center py-6 text-neutral-500">
                 Loading top traders...
               </td>
             </tr>
-          ) : !traders || traders.length === 0 ? (
+          ) : !displayTraders || displayTraders.length === 0 ? (
             <tr>
               <td colSpan={6} className="text-center py-6 text-neutral-500">
                 No top traders found.
               </td>
             </tr>
           ) : (
-            traders.map((trader, idx) => {
+            displayTraders.map((trader, idx) => {
               const boughtUsd = parseFloat(trader.amountBoughtUsd);
               const soldUsd = parseFloat(trader.amountSoldUsd);
               const volumeUsd = parseFloat(trader.volumeUsd);
