@@ -1342,6 +1342,27 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             }
           }
 
+          const effectiveLiveMc = latestMarketCap ?? baseMarketCap;
+          const isZeroDelta =
+            Number.isFinite(effectiveLiveMc) &&
+            Number.isFinite(numericTargetMc) &&
+            Math.abs((effectiveLiveMc || 0) - numericTargetMc) <= Math.max(1, Math.abs(effectiveLiveMc || 0) * 0.00001);
+
+          if (isZeroDelta) {
+            updateEnhancedToast(
+              initiatingToastId,
+              "error",
+              "Invalid trigger",
+              {
+                title: "Trigger price matches live price",
+                description: "Set a target above or below the live market cap before placing a limit order.",
+              }
+            );
+            setIsLoading(false);
+            setPendingTradeOptions(null);
+            return;
+          }
+
           if (latestMarketCap && Number.isFinite(latestMarketCap)) {
             const conditionAlreadyMet =
               direction === "Below"

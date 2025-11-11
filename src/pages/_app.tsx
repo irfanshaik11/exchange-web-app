@@ -8,14 +8,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from '../lib/queryClient';
 import { UserProvider, useUser } from "../components/UserContext";
 import { Toaster } from 'react-hot-toast';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Cookies from 'js-cookie';
-import { useRouter } from 'next/router';
-import toast from 'react-hot-toast';
 import { mainnet } from 'viem/chains';
 import LoginModal from '../components/LoginModal';
 import { env } from '../env';
-import { useReferralAccess } from '../components/ReferralAccessGate';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
 import { FilterProvider } from '../components/FilterContext';
@@ -24,6 +21,7 @@ import { WalletTrackerProvider } from '../components/WalletTrackerContext';
 import { ReferralAccessGate } from '../components/ReferralAccessGate';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
+import { showEnhancedToast } from '../utils/enhancedToast';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -105,45 +103,51 @@ const geist = Geist({
 
 function TokenHandler() {
   const { refreshUser } = useUser();
-  const router = useRouter();
+  const hasProcessedTokenRef = useRef(false);
+  const loginToastIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
     const url = new URL(window.location.href);
     const token = url.searchParams.get('token');
     if (token) {
+      if (hasProcessedTokenRef.current) return;
+      hasProcessedTokenRef.current = true;
+
       Cookies.set('token', token, { expires: 7, path: '/' });
       refreshUser().then(() => {
-        toast.success('Logged in successfully!');
+        loginToastIdRef.current = showEnhancedToast('success', 'You are now signed in.', {
+          id: 'login-success-toast',
+          title: 'Welcome back',
+          duration: 3200,
+        });
         // Remove token from URL
         url.searchParams.delete('token');
         window.history.replaceState({}, document.title, url.pathname + url.search);
       });
+    } else {
+      hasProcessedTokenRef.current = false;
     }
-  }, []);
+  }, [refreshUser]);
   return null;
 }
 
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
-  const { hasAccess } = useReferralAccess();
   const [loginOpen, setLoginOpen] = useState(false);
   useEffect(() => {
-    if (!hasAccess) {
-      if (loginOpen) setLoginOpen(false);
-      return;
-    }
     if (enforceLogin && !userLoading && !user) {
       setLoginOpen(true);
     }
     if (user && loginOpen) {
       setLoginOpen(false);
     }
-  }, [user, userLoading, enforceLogin]);
+  }, [user, userLoading, enforceLogin, loginOpen]);
   // Prevent closing if not logged in
   const handleLoginClose = () => {
     if (user) setLoginOpen(false);
   };
-  if (!enforceLogin || !hasAccess) return null;
+  if (!enforceLogin) return null;
   return (
     <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
   );
@@ -227,29 +231,29 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       </Head>
       <div className={geist.className}>
         <MobileBlocker>
-          <ReferralAccessGate>
-            <WagmiProvider config={config}>
-              <QueryClientProvider client={queryClient}>
-                <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
-                  <UserProvider>
-                    <TokenHandler />
-                    <SolPriceProvider>
-                      <QuickBuyProvider>
-                        <WatchlistProvider>
-                          <FilterProvider>
-                            <WalletTrackerProvider>
+          <WagmiProvider config={config}>
+            <QueryClientProvider client={queryClient}>
+              <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
+                <UserProvider>
+                  <TokenHandler />
+                  <SolPriceProvider>
+                    <QuickBuyProvider>
+                      <WatchlistProvider>
+                        <FilterProvider>
+                          <WalletTrackerProvider>
+                            <ReferralAccessGate>
                               <Component {...pageProps} />
-                            </WalletTrackerProvider>
-                          </FilterProvider>
-                        </WatchlistProvider>
-                      </QuickBuyProvider>
-                      <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
-                    </SolPriceProvider>
-                  </UserProvider>
-                </RainbowKitProvider>
-              </QueryClientProvider>
-            </WagmiProvider>
-          </ReferralAccessGate>
+                            </ReferralAccessGate>
+                          </WalletTrackerProvider>
+                        </FilterProvider>
+                      </WatchlistProvider>
+                    </QuickBuyProvider>
+                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                  </SolPriceProvider>
+                </UserProvider>
+              </RainbowKitProvider>
+            </QueryClientProvider>
+          </WagmiProvider>
           <Toaster 
             position="top-right"
             toastOptions={{

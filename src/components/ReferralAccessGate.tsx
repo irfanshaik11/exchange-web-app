@@ -10,6 +10,7 @@ import React, {
 import { useRouter } from "next/router";
 import InterstateButton from "./InterstateButton";
 import { env } from "../env";
+import { useUser } from "./UserContext";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -38,6 +39,11 @@ const ADMIN_OVERRIDE_CODE = "NARRATIVE-ADMIN-247";
 const STORAGE_FLAG_KEY = "referralAccess.granted";
 const STORAGE_META_KEY = "referralAccess.meta";
 
+type StoredAccessMeta = {
+  grantedAt: number;
+  userId?: string | null;
+};
+
 function normalizeReferralInput(raw: string): string {
   return raw.trim().toUpperCase();
 }
@@ -63,9 +69,12 @@ function derivePrefillQuery(router: ReturnType<typeof useRouter>) {
   return null;
 }
 
-function persistAccess() {
+function persistAccess(userId?: string | null) {
   if (typeof window === "undefined") return;
-  const meta = { grantedAt: Date.now() };
+  const meta: StoredAccessMeta = {
+    grantedAt: Date.now(),
+    userId: userId ?? null,
+  };
   try {
     window.sessionStorage.setItem(STORAGE_FLAG_KEY, "true");
     window.sessionStorage.setItem(STORAGE_META_KEY, JSON.stringify(meta));
@@ -94,12 +103,28 @@ function hasStoredAccess(): boolean {
   }
 }
 
+function getStoredAccessMeta(): StoredAccessMeta | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.sessionStorage.getItem(STORAGE_META_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      return parsed as StoredAccessMeta;
+    }
+  } catch (error) {
+    console.warn("Failed to parse referral access metadata", error);
+  }
+  return null;
+}
+
 export function ReferralAccessGate({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const { user, loading: userLoading } = useUser();
   const hasMountedRef = useRef(false);
   const prefillAttemptedRef = useRef(false);
 
@@ -121,11 +146,11 @@ export function ReferralAccessGate({
   const [autoSubmitCode, setAutoSubmitCode] = useState<string | null>(null);
 
   const grantAccess = useCallback(() => {
-    persistAccess();
+    persistAccess(user?.id ?? null);
     setStatus("granted");
     setError(null);
     setInfo("Admin access granted.");
-  }, []);
+  }, [user]);
 
   const revokeAccess = useCallback(() => {
     clearPersistedAccess();
@@ -142,20 +167,39 @@ export function ReferralAccessGate({
       return;
     }
 
-    if (hasStoredAccess()) {
-      setStatus("granted");
-      setInfo("Welcome back.");
-    } else {
-      setStatus("prompt");
+    if (userLoading) {
+      return;
     }
-  }, [requireReferralAccess]);
+
+    if (!hasStoredAccess()) {
+      setStatus("prompt");
+      return;
+    }
+
+    const meta = getStoredAccessMeta();
+    if (!user || !meta || !meta.userId || meta.userId !== user.id) {
+      revokeAccess();
+      return;
+    }
+
+    setStatus("granted");
+    setInfo("Welcome back.");
+  }, [requireReferralAccess, userLoading, user, revokeAccess]);
 
   useEffect(() => {
     if (!requireReferralAccess) return;
     if (hasMountedRef.current) return;
+    if (userLoading) return;
     hasMountedRef.current = true;
     evaluateStoredAccess();
-  }, [requireReferralAccess, evaluateStoredAccess]);
+  }, [requireReferralAccess, evaluateStoredAccess, userLoading]);
+
+  useEffect(() => {
+    if (!requireReferralAccess) return;
+    if (!hasMountedRef.current) return;
+    if (userLoading) return;
+    evaluateStoredAccess();
+  }, [requireReferralAccess, evaluateStoredAccess, userLoading, user]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -220,11 +264,12 @@ export function ReferralAccessGate({
 
   useEffect(() => {
     if (!requireReferralAccess) return;
+    if (userLoading || !user) return;
     if (!autoSubmitCode) return;
     if (status !== "prompt" && status !== "checking") return;
     handleSubmit(autoSubmitCode);
     setAutoSubmitCode(null);
-  }, [autoSubmitCode, status, requireReferralAccess, handleSubmit]);
+  }, [autoSubmitCode, status, requireReferralAccess, handleSubmit, user, userLoading]);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -277,7 +322,7 @@ export function ReferralAccessGate({
     );
   }
 
-  const showOverlay = status === "prompt" || status === "validating";
+  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating");
 
   return (
     <ReferralAccessContext.Provider value={contextValue}>
