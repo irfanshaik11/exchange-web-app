@@ -105,6 +105,11 @@ export default function TradePage() {
   const isDragging = useRef(false);
   const modalTransform = useRef(0);
 
+  // Client-side cache for trades: pairAddress -> trades array
+  // This persists across tab switches so trades don't reload when switching tabs
+  const tradesCacheRef = useRef<Map<string, any[]>>(new Map());
+  const cachedPairAddressRef = useRef<string | null>(null);
+
   const { settings: quickBuySettings, side: quickBuySide } = useQuickBuyQueryParams();
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
 
@@ -387,6 +392,30 @@ export default function TradePage() {
     return undefined;
   }, [displayToken?.mint, _mint, id]);
 
+  // Get current pair address for caching
+  const currentPairAddress = React.useMemo(() => {
+    const currentToken = correctTokenData || displayToken;
+    return currentToken?.pair_address || resolvedPairAddress || '';
+  }, [correctTokenData, displayToken?.pair_address, resolvedPairAddress]);
+
+  // Callback to update trades cache when new trades arrive
+  const updateTradesCache = React.useCallback((newTrades: any[]) => {
+    if (currentPairAddress && newTrades.length > 0) {
+      tradesCacheRef.current.set(currentPairAddress, newTrades);
+    }
+  }, [currentPairAddress]);
+
+  // Get cached trades for current pair address
+  const cachedTrades = React.useMemo(() => {
+    if (!currentPairAddress) return undefined;
+    return tradesCacheRef.current.get(currentPairAddress);
+  }, [currentPairAddress]);
+
+  // Use cached trades if available, otherwise use initial trade data
+  const initialTradesForComponent = React.useMemo(() => {
+    return cachedTrades || initialTradeData?.trades || [];
+  }, [cachedTrades, initialTradeData?.trades]);
+
   const { trades: tradeDataForChart } = useOptimizedTradeEventsWebSocket({
     pairAddress: displayToken?.pair_address || resolvedPairAddress || undefined,
     enabled: !!displayToken?.pair_address || !!resolvedPairAddress,
@@ -645,27 +674,31 @@ export default function TradePage() {
             <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col overflow-y-auto">
               <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
               <div className="flex-1 min-h-0 overflow-y-auto">
-                {selectedTab === "Trades" && (
-                  <CodexTrades token={correctTokenData || displayToken} initialTrades={initialTradeData?.trades || []} />
-                )}
-                <div style={{ display: selectedTab === "Orders" ? "block" : "none" }}>
+                <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
+                  <CodexTrades 
+                    token={correctTokenData || displayToken} 
+                    initialTrades={initialTradesForComponent}
+                    onTradesUpdate={updateTradesCache}
+                  />
+                </div>
+                <div style={{ display: selectedTab === "Orders" ? "block" : "none", height: "100%" }}>
                   <TokenLimitOrders />
                 </div>
-                {selectedTab === "Top Traders" && (
+                <div style={{ display: selectedTab === "Top Traders" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexTopTraders token={displayToken} />
                   </React.Suspense>
-                )}
-                {selectedTab === "Holders" && (
+                </div>
+                <div style={{ display: selectedTab === "Holders" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexHolders token={displayToken} />
                   </React.Suspense>
-                )}
-                {selectedTab === "Dev Tokens" && (
+                </div>
+                <div style={{ display: selectedTab === "Dev Tokens" ? "block" : "none", height: "100%" }}>
                   <React.Suspense fallback={<div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>}>
                     <CodexDevTokens token={displayToken} />
                   </React.Suspense>
-                )}
+                </div>
               </div>
             </div>
           </div>
