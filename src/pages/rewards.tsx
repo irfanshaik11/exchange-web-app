@@ -22,7 +22,7 @@ const referralRows = [
   },
 ];
 
-export default function ReferralsPage() {
+export default function RewardsPage() {
   const [copied, setCopied] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const referralLink = referralCode

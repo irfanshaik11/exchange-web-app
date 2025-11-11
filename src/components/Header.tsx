@@ -30,8 +30,7 @@ const AX = {
       { name: "Trackers", href: "/trackers" },
       // { name: "Perpetuals", href: "/construction" },
       // { name: "Yield", href: "/construction" },
-      { name: "Rewards", href: "/construction" },
-      { name: "Referrals", href: "/referrals" },
+      { name: "Rewards", href: "/rewards" },
     ];
 
 interface HeaderProps {
