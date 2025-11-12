@@ -109,6 +109,9 @@ const EMOJIS = [
 const MAX_WALLETS = 500;
 const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
 
+const getRandomEmoji = () =>
+  EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+
 export default function TrackersPage() {
   const { user } = useUser();
   const {
@@ -151,6 +154,73 @@ export default function TrackersPage() {
     const trimmed = address.trim();
     if (trimmed.length <= 10) return trimmed;
     return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+  };
+
+  const composeImportSummary = ({
+    successCount,
+    duplicateExisting,
+    duplicateWithinImport,
+    invalidWallets,
+    skippedByLimit,
+  }: {
+    successCount: number;
+    duplicateExisting: string[];
+    duplicateWithinImport: string[];
+    invalidWallets: string[];
+    skippedByLimit?: string[];
+  }) => {
+    const messageParts: string[] = [];
+
+    if (successCount > 0) {
+      messageParts.push(
+        `Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`,
+      );
+    }
+    if (duplicateExisting.length > 0) {
+      messageParts.push(
+        `${duplicateExisting.length} already tracked (${duplicateExisting
+          .slice(0, 3)
+          .map(shortenAddress)
+          .join(", ")}${
+          duplicateExisting.length > 3
+            ? ` +${duplicateExisting.length - 3}`
+            : ""
+        })`,
+      );
+    }
+    if (duplicateWithinImport.length > 0) {
+      messageParts.push(
+        `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} in import (${duplicateWithinImport
+          .slice(0, 3)
+          .map(shortenAddress)
+          .join(", ")}${
+          duplicateWithinImport.length > 3
+            ? ` +${duplicateWithinImport.length - 3}`
+            : ""
+        })`,
+      );
+    }
+    if (invalidWallets.length > 0) {
+      messageParts.push(
+        `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
+      );
+    }
+    if (skippedByLimit && skippedByLimit.length > 0) {
+      messageParts.push(
+        `Skipped ${skippedByLimit.length} due to wallet limit (${skippedByLimit
+          .slice(0, 3)
+          .map(shortenAddress)
+          .join(", ")}${
+          skippedByLimit.length > 3
+            ? ` +${skippedByLimit.length - 3}`
+            : ""
+        })`,
+      );
+    }
+
+    return messageParts.length > 0
+      ? messageParts.join(". ")
+      : "No new wallets were imported.";
   };
 
   const showToastMessage = (message: string, duration = 3000) => {
@@ -234,7 +304,7 @@ export default function TrackersPage() {
         address: w.address,
         name: w.walletName || w.address.slice(0, 8),
         createdAt: new Date(w.createdAt).getTime(),
-        emoji: w.emoji || EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+        emoji: w.emoji || getRandomEmoji(),
       }));
 
       setWallets(frontendWallets);
@@ -542,7 +612,7 @@ export default function TrackersPage() {
 
           const availableSlots = MAX_WALLETS - watchedWallets.length;
           if (walletsToAdd.length > availableSlots) {
-            alert(
+            showToastMessage(
               availableSlots > 0
                 ? `You can only add ${availableSlots} more wallet${availableSlots === 1 ? "" : "s"}. Remove some before importing.`
                 : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`,
@@ -550,74 +620,67 @@ export default function TrackersPage() {
             return;
           }
 
-          let successCount = 0;
-          let errorCount = 0;
+          const totalToImport = walletsToAdd.length;
 
-          for (const wallet of walletsToAdd) {
-            try {
-              await addTrackedWallet(wallet.address, wallet.name, user?.id);
-              successCount++;
-            } catch (error: any) {
-              if (error.message?.includes("already exists")) {
-                duplicateExisting.push(wallet.address);
-              } else {
-                console.error(`Failed to import ${wallet.address}:`, error);
-                errorCount++;
-              }
-            }
+          if (totalToImport === 0) {
+            showToastMessage(
+              composeImportSummary({
+                successCount: 0,
+                duplicateExisting,
+                duplicateWithinImport,
+                invalidWallets,
+                skippedByLimit: [],
+              }),
+            );
+            return;
           }
 
-          await loadWalletsFromBackend();
+          try {
+            const bulkResult = await addTrackedWalletsBulk(
+              walletsToAdd.map((wallet) => ({
+                address: wallet.address,
+                name: wallet.name,
+                emoji: getRandomEmoji(),
+              })),
+              user?.id,
+            );
 
-          const messageParts: string[] = [];
-          if (successCount > 0) {
-            messageParts.push(
-              `Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`,
-            );
-          }
-          if (duplicateExisting.length > 0) {
-            messageParts.push(
-              `${duplicateExisting.length} already tracked (${duplicateExisting
-                .slice(0, 3)
-                .map(shortenAddress)
-                .join(", ")}${
-                duplicateExisting.length > 3
-                  ? ` +${duplicateExisting.length - 3}`
-                  : ""
-              })`,
-            );
-          }
-          if (duplicateWithinImport.length > 0) {
-            messageParts.push(
-              `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} in import (${duplicateWithinImport
-                .slice(0, 3)
-                .map(shortenAddress)
-                .join(", ")}${
-                duplicateWithinImport.length > 3
-                  ? ` +${duplicateWithinImport.length - 3}`
-                  : ""
-              })`,
-            );
-          }
-          if (invalidWallets.length > 0) {
-            messageParts.push(
-              `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
-            );
-          }
-          if (errorCount > 0) {
-            messageParts.push(`${errorCount} failed`);
-          }
+            void loadWalletsFromBackend();
 
-          alert(
-            messageParts.length > 0
-              ? messageParts.join(". ")
-              : "No new wallets were imported.",
-          );
+            const combinedDuplicateExisting = Array.from(
+              new Set([
+                ...duplicateExisting,
+                ...(bulkResult.skippedExisting ?? []),
+              ]),
+            );
+
+            const combinedDuplicateWithinImport = Array.from(
+              new Set([
+                ...duplicateWithinImport,
+                ...(bulkResult.skippedDuplicateInput ?? []),
+              ]),
+            );
+
+            showToastMessage(
+              composeImportSummary({
+                successCount: bulkResult.inserted?.length ?? 0,
+                duplicateExisting: combinedDuplicateExisting,
+                duplicateWithinImport: combinedDuplicateWithinImport,
+                invalidWallets,
+                skippedByLimit: bulkResult.skippedByLimit ?? [],
+              }),
+            );
+          } catch (error: any) {
+            console.error("Failed to import wallets in bulk:", error);
+            showToastMessage(
+              error?.message || "Failed to import wallets. Please try again.",
+            );
+          }
         } else {
-          alert("Invalid wallet file format.");
+          showToastMessage("Invalid wallet file format.");
         }
       } catch {
-        alert("Failed to import wallets.");
+        showToastMessage("Failed to import wallets.");
       }
     };
     reader.readAsText(file);
@@ -1273,9 +1336,7 @@ export default function TrackersPage() {
                   return {
                     address: wallet.trackedWalletAddress,
                     name: wallet.name || "Imported Wallet",
-                    emoji:
-                      wallet.emoji ||
-                      EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+                    emoji: wallet.emoji || getRandomEmoji(),
                     createdAt: Date.now(),
                   };
                 }
@@ -1283,9 +1344,7 @@ export default function TrackersPage() {
                 return {
                   address: wallet.address,
                   name: wallet.name || "Imported Wallet",
-                  emoji:
-                    wallet.emoji ||
-                    EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+                  emoji: wallet.emoji || getRandomEmoji(),
                   createdAt: wallet.createdAt || Date.now(),
                 };
               });
@@ -1330,105 +1389,61 @@ export default function TrackersPage() {
               const total = walletsToAdd.length;
               if (total === 0) {
                 onProgress?.(0, 0);
-              } else {
-                onProgress?.(0, total);
-              }
-
-              let bulkResult: Awaited<ReturnType<typeof addTrackedWalletsBulk>> | null =
-                null;
-
-              if (total > 0) {
-                bulkResult = await addTrackedWalletsBulk(
-                  walletsToAdd.map((wallet) => ({
-                    address: wallet.address,
-                    name: wallet.name,
-                    emoji: wallet.emoji,
-                  })),
-                  user?.id,
+                showToastMessage(
+                  composeImportSummary({
+                    successCount: 0,
+                    duplicateExisting,
+                    duplicateWithinImport,
+                    invalidWallets,
+                    skippedByLimit: [],
+                  }),
                 );
-                onProgress?.(total, total);
+                return;
               }
 
-              // Reload from backend
-              await loadWalletsFromBackend();
+              onProgress?.(0, total);
 
-              const backendDuplicateExisting =
-                bulkResult?.skippedExisting ?? [];
-              const backendDuplicateWithinImport =
-                bulkResult?.skippedDuplicateInput ?? [];
-              const skippedByLimit = bulkResult?.skippedByLimit ?? [];
-              const successCount = bulkResult?.inserted?.length ?? 0;
+              const bulkResult = await addTrackedWalletsBulk(
+                walletsToAdd.map((wallet) => ({
+                  address: wallet.address,
+                  name: wallet.name,
+                  emoji: wallet.emoji,
+                })),
+                user?.id,
+              );
+
+              onProgress?.(total, total);
+
+              void loadWalletsFromBackend();
 
               const combinedDuplicateExisting = Array.from(
-                new Set([...duplicateExisting, ...backendDuplicateExisting]),
+                new Set([
+                  ...duplicateExisting,
+                  ...(bulkResult.skippedExisting ?? []),
+                ]),
               );
 
               const combinedDuplicateWithinImport = Array.from(
                 new Set([
                   ...duplicateWithinImport,
-                  ...backendDuplicateWithinImport,
+                  ...(bulkResult.skippedDuplicateInput ?? []),
                 ]),
               );
 
-              const messageParts: string[] = [];
-              if (successCount > 0) {
-                messageParts.push(
-                  `Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`,
-                );
-              }
-              if (combinedDuplicateExisting.length > 0) {
-                messageParts.push(
-                  `${combinedDuplicateExisting.length} already tracked (${combinedDuplicateExisting
-                    .slice(0, 3)
-                    .map(shortenAddress)
-                    .join(", ")}${
-                    combinedDuplicateExisting.length > 3
-                      ? ` +${combinedDuplicateExisting.length - 3}`
-                      : ""
-                  })`,
-                );
-              }
-              if (combinedDuplicateWithinImport.length > 0) {
-                messageParts.push(
-                  `${combinedDuplicateWithinImport.length} duplicate${combinedDuplicateWithinImport.length === 1 ? "" : "s"} in import (${combinedDuplicateWithinImport
-                    .slice(0, 3)
-                    .map(shortenAddress)
-                    .join(", ")}${
-                    combinedDuplicateWithinImport.length > 3
-                      ? ` +${combinedDuplicateWithinImport.length - 3}`
-                      : ""
-                  })`,
-                );
-              }
-              if (invalidWallets.length > 0) {
-                messageParts.push(
-                  `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
-                );
-              }
-              if (skippedByLimit.length > 0) {
-                messageParts.push(
-                  `Skipped ${skippedByLimit.length} due to wallet limit (${skippedByLimit
-                    .slice(0, 3)
-                    .map(shortenAddress)
-                    .join(", ")}${
-                    skippedByLimit.length > 3
-                      ? ` +${skippedByLimit.length - 3}`
-                      : ""
-                  })`,
-                );
-              }
-
-              const toastMessage =
-                messageParts.length > 0
-                  ? messageParts.join(". ")
-                  : "No new wallets were imported.";
-
-              setToast(toastMessage);
-              setTimeout(() => setToast(""), 3000);
+              showToastMessage(
+                composeImportSummary({
+                  successCount: bulkResult.inserted?.length ?? 0,
+                  duplicateExisting: combinedDuplicateExisting,
+                  duplicateWithinImport: combinedDuplicateWithinImport,
+                  invalidWallets,
+                  skippedByLimit: bulkResult.skippedByLimit ?? [],
+                }),
+              );
             } catch (error) {
               console.error("Import error:", error);
-              setToast((error as Error)?.message || "Failed to import wallets");
-              setTimeout(() => setToast(""), 3000);
+              showToastMessage(
+                (error as Error)?.message || "Failed to import wallets",
+              );
               throw error; // Re-throw so modal can handle it
             }
           }}
