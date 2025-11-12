@@ -139,6 +139,55 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
   }
 }
 
+export interface AddTrackedWalletBulkItem {
+	address: string;
+	name?: string | null;
+	emoji?: string | null;
+}
+
+export interface AddTrackedWalletsBulkResult {
+	ok: boolean;
+	inserted: string[];
+	insertedCount: number;
+	skippedExisting: string[];
+	skippedDuplicateInput: string[];
+	skippedByLimit: string[];
+	totalRequested: number;
+	error?: string;
+}
+
+export async function addTrackedWalletsBulk(
+	wallets: AddTrackedWalletBulkItem[],
+	userId?: string,
+): Promise<AddTrackedWalletsBulkResult> {
+	try {
+		const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch/bulk`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				userId: userId || undefined,
+				wallets: wallets.map((wallet) => ({
+					wallet: wallet.address,
+					walletName: wallet.name ?? undefined,
+					emoji: wallet.emoji ?? undefined,
+				})),
+			}),
+		});
+
+		const payload = await response.json();
+
+		if (!response.ok || !payload.ok) {
+			const message = payload?.error || 'Failed to import wallets';
+			throw new Error(message);
+		}
+
+		return payload as AddTrackedWalletsBulkResult;
+	} catch (error) {
+		console.error('Error bulk adding wallets:', error);
+		throw error;
+	}
+}
+
 // Remove a wallet from tracking
 export async function removeTrackedWallet(address: string, userId?: string): Promise<void> {
   try {
