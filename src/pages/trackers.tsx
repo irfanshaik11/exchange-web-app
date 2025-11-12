@@ -10,6 +10,7 @@ import ImportExportWalletModal from "../components/ImportExportWalletModal";
 import WalletScanPanel from "../components/WalletScanPanel";
 import {
   addTrackedWallet,
+  addTrackedWalletsBulk,
   removeTrackedWallet,
   getTrackedWallets,
   getWalletHistory,
@@ -1326,40 +1327,48 @@ export default function TrackersPage() {
               }
 
               // Add each wallet to backend
-              let successCount = 0;
-              let errorCount = 0;
               const total = walletsToAdd.length;
-              let processed = 0;
               if (total === 0) {
                 onProgress?.(0, 0);
               } else {
                 onProgress?.(0, total);
               }
 
-              for (const wallet of walletsToAdd) {
-                try {
-                  await addTrackedWallet(
-                    wallet.address,
-                    wallet.name,
-                    user?.id,
-                    wallet.emoji,
-                  );
-                  successCount++;
-                } catch (error: any) {
-                  if (error.message?.includes("already exists")) {
-                    duplicateExisting.push(wallet.address);
-                  } else {
-                    errorCount++;
-                  }
-                }
-                processed += 1;
-                if (total > 0) {
-                  onProgress?.(processed, total);
-                }
+              let bulkResult: Awaited<ReturnType<typeof addTrackedWalletsBulk>> | null =
+                null;
+
+              if (total > 0) {
+                bulkResult = await addTrackedWalletsBulk(
+                  walletsToAdd.map((wallet) => ({
+                    address: wallet.address,
+                    name: wallet.name,
+                    emoji: wallet.emoji,
+                  })),
+                  user?.id,
+                );
+                onProgress?.(total, total);
               }
 
               // Reload from backend
               await loadWalletsFromBackend();
+
+              const backendDuplicateExisting =
+                bulkResult?.skippedExisting ?? [];
+              const backendDuplicateWithinImport =
+                bulkResult?.skippedDuplicateInput ?? [];
+              const skippedByLimit = bulkResult?.skippedByLimit ?? [];
+              const successCount = bulkResult?.inserted?.length ?? 0;
+
+              const combinedDuplicateExisting = Array.from(
+                new Set([...duplicateExisting, ...backendDuplicateExisting]),
+              );
+
+              const combinedDuplicateWithinImport = Array.from(
+                new Set([
+                  ...duplicateWithinImport,
+                  ...backendDuplicateWithinImport,
+                ]),
+              );
 
               const messageParts: string[] = [];
               if (successCount > 0) {
@@ -1367,26 +1376,26 @@ export default function TrackersPage() {
                   `Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`,
                 );
               }
-              if (duplicateExisting.length > 0) {
+              if (combinedDuplicateExisting.length > 0) {
                 messageParts.push(
-                  `${duplicateExisting.length} already tracked (${duplicateExisting
+                  `${combinedDuplicateExisting.length} already tracked (${combinedDuplicateExisting
                     .slice(0, 3)
                     .map(shortenAddress)
                     .join(", ")}${
-                    duplicateExisting.length > 3
-                      ? ` +${duplicateExisting.length - 3}`
+                    combinedDuplicateExisting.length > 3
+                      ? ` +${combinedDuplicateExisting.length - 3}`
                       : ""
                   })`,
                 );
               }
-              if (duplicateWithinImport.length > 0) {
+              if (combinedDuplicateWithinImport.length > 0) {
                 messageParts.push(
-                  `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} in import (${duplicateWithinImport
+                  `${combinedDuplicateWithinImport.length} duplicate${combinedDuplicateWithinImport.length === 1 ? "" : "s"} in import (${combinedDuplicateWithinImport
                     .slice(0, 3)
                     .map(shortenAddress)
                     .join(", ")}${
-                    duplicateWithinImport.length > 3
-                      ? ` +${duplicateWithinImport.length - 3}`
+                    combinedDuplicateWithinImport.length > 3
+                      ? ` +${combinedDuplicateWithinImport.length - 3}`
                       : ""
                   })`,
                 );
@@ -1396,8 +1405,17 @@ export default function TrackersPage() {
                   `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
                 );
               }
-              if (errorCount > 0) {
-                messageParts.push(`${errorCount} failed`);
+              if (skippedByLimit.length > 0) {
+                messageParts.push(
+                  `Skipped ${skippedByLimit.length} due to wallet limit (${skippedByLimit
+                    .slice(0, 3)
+                    .map(shortenAddress)
+                    .join(", ")}${
+                    skippedByLimit.length > 3
+                      ? ` +${skippedByLimit.length - 3}`
+                      : ""
+                  })`,
+                );
               }
 
               const toastMessage =
