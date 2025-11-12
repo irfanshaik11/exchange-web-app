@@ -542,6 +542,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [sniperAmount, setSniperAmount] = useState("");
   const [sniperSubmitting, setSniperSubmitting] = useState(false);
+  const [migrationMode, setMigrationMode] = useState(false);
+  const [devSellMode, setDevSellMode] = useState(true);
+  const [devSubmitting, setDevSubmitting] = useState(false);
   const [tokenServiceMarketCap, setTokenServiceMarketCap] = useState<number | null>(null);
   const [tokenServiceLiquidity, setTokenServiceLiquidity] = useState<number | null>(null);
   const [creatorAddress, setCreatorAddress] = useState<string>("");
@@ -1090,7 +1093,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       targetMarketCap?: number;
       submittedSolAmount?: number;
       submittedTokenAmount?: number;
-      triggerType?: "marketCap" | "bonding";
+      triggerType?: "marketCap" | "bonding" | "devSell";
       bondingTarget?: number;
     }) => {
       if (!user?.bearerToken) return;
@@ -1108,7 +1111,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         try {
           const result: any = await getLimitOrderExecutionResult(orderId, user.bearerToken);
           const status = (result?.status || result?.order?.status) as string | undefined;
-          const resolvedTriggerType: "marketCap" | "bonding" | undefined =
+          const resolvedTriggerType: "marketCap" | "bonding" | "devSell" | undefined =
             (result?.triggerType as any) ??
             (result?.order?.triggerType as any) ??
             triggerType;
@@ -1144,11 +1147,14 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             if (resolvedTriggerType === "bonding" && typeof normalizedBondingTarget === "number") {
               descriptionParts.push(`Bonding Target ${normalizedBondingTarget.toFixed(2)}%`);
             } else if (
+              resolvedTriggerType === "marketCap" &&
               typeof targetMarketCap === "number" &&
               Number.isFinite(targetMarketCap) &&
               targetMarketCap > 0
             ) {
               descriptionParts.push(`Target $${Math.round(targetMarketCap).toLocaleString()}`);
+            } else if (resolvedTriggerType === "devSell") {
+              descriptionParts.push("Triggered by Dev Sell");
             }
 
             const description = descriptionParts.join(" • ");
@@ -1352,6 +1358,159 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     tokenServiceMarketCap,
     baseMarketCap,
     effectivePoolAddress,
+    monitorLimitOrderExecution,
+  ]);
+
+  const handleCreateDevSellOrder = useCallback(async () => {
+    if (!user?.bearerToken) {
+      showCenteredErrorToast("Authentication required to create orders.");
+      return;
+    }
+    if (!token) return;
+
+    if (!creatorAddress) {
+      showEnhancedToast("error", "Developer wallet unavailable", {
+        title: "Cannot Arm Dev Mirror",
+        description: "We couldn't determine the developer wallet for this token yet."
+      });
+      return;
+    }
+
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      showEnhancedToast("error", "Enter a valid amount", {
+        title: "Invalid Amount",
+        description: mode === "sell"
+          ? "Provide a percentage between 1 and 100 before arming the dev mirror."
+          : "Provide a positive SOL amount before arming the dev mirror.",
+      });
+      return;
+    }
+
+    if (mode === "sell" && numericAmount > 100) {
+      showEnhancedToast("error", "Sell percentage too high", {
+        title: "Invalid Percentage",
+        description: "Enter a percentage between 1 and 100.",
+      });
+      return;
+    }
+
+    const poolAddress = effectivePoolAddress || token.pair_address || token.migrated_pool_address || "";
+    if (!poolAddress) {
+      showEnhancedToast("error", "Pool information unavailable", {
+        title: "Cannot Arm Dev Mirror",
+        description: "We couldn't determine the pool address for this token.",
+      });
+      return;
+    }
+
+    const sanitizeNumber = (value: unknown, fallback: number): number => {
+      const numeric = typeof value === "string" ? Number(value) : (value as number);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    };
+
+    const quickSettings = settings ?? {};
+    const computedPoolType = getPoolTypeFromToken(token);
+    const slippageValue = sanitizeNumber(quickSettings.maxSlippage, 0.2);
+    const priorityFeeValue = sanitizeNumber(quickSettings.priority, 0.0001);
+    const bribeValue = sanitizeNumber(quickSettings.bribe, 0);
+    const maxFeeValue = sanitizeNumber(quickSettings.maxFee, 0);
+    const mevModeValue = typeof quickSettings.mevMode === "string" ? quickSettings.mevMode : "off";
+    const autoFeeValue = Boolean(quickSettings.autoFee);
+    const mevProtectionValue = mevModeValue !== "off";
+    const rpcValue =
+      typeof quickSettings.rpc === "string" && quickSettings.rpc.trim().length > 0
+        ? quickSettings.rpc.trim()
+        : undefined;
+
+    const latestMarketCap =
+      tokenServiceMarketCap !== null && Number.isFinite(tokenServiceMarketCap)
+        ? tokenServiceMarketCap
+        : baseMarketCap;
+
+    const actionLabel = mode === "buy" ? "Buy on Dev Sell" : "Sell on Dev Sell";
+    const formattedAmount = mode === "buy"
+      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+      : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+    const shortDev = creatorAddress.length > 12
+      ? `${creatorAddress.slice(0, 4)}...${creatorAddress.slice(-4)}`
+      : creatorAddress;
+
+    const initiatingToastId = showEnhancedToast("loading", "Arming dev mirror…", {
+      title: actionLabel,
+      description: `${formattedAmount} • Dev Wallet ${shortDev}`,
+    });
+
+    setDevSubmitting(true);
+    try {
+      const response = await createLimitOrder(
+        {
+          tokenAddress: token.mint || "",
+          amount: numericAmount,
+          type: mode === "buy" ? "Buy" : "Sell",
+          direction: mode === "buy" ? "Below" : "Above",
+          triggerType: "devSell",
+          devWallet: creatorAddress,
+          targetMC: latestMarketCap ?? 0,
+          currentMarketCap: latestMarketCap ?? token.market_cap_usd ?? token.fully_diluted_value,
+          currentPrice: token.usd_price,
+          tokenName: token.name,
+          tokenSymbol: token.symbol,
+          tokenDecimals: token.decimals,
+          poolAddress,
+          pairAddress: token.pair_address || "",
+          poolType: computedPoolType,
+          slippage: slippageValue,
+          priorityFee: priorityFeeValue,
+          bribe: bribeValue,
+          mevProtection: mevProtectionValue,
+          mevMode: mevModeValue,
+          autoFee: autoFeeValue,
+          maxFee: maxFeeValue,
+          rpc: rpcValue,
+        },
+        user.bearerToken
+      );
+
+      updateEnhancedToast(initiatingToastId, "success", `${token.symbol} dev mirror armed`, {
+        title: `${actionLabel} Armed`,
+        description: `${formattedAmount} • Dev Wallet ${shortDev}`,
+      });
+
+      if (response?.order?.id) {
+        const normalizedOrderId = String(response.order.id);
+        void monitorLimitOrderExecution({
+          orderId: normalizedOrderId,
+          initiatingToastId,
+          orderType: response.order.type,
+          triggerType: "devSell",
+          targetMarketCap: Number(response.order.targetMC ?? latestMarketCap ?? 0),
+          submittedSolAmount: mode === "buy" ? Number(response.order.solAmount ?? numericAmount) : undefined,
+          submittedTokenAmount: mode === "sell" ? Number(response.order.tokenAmount ?? numericAmount) : undefined,
+        });
+      }
+
+      setAmount("");
+    } catch (error: any) {
+      const message =
+        error?.message?.length > 80 ? `${error.message.substring(0, 77)}…` : error?.message || "Failed to arm dev mirror";
+      updateEnhancedToast(initiatingToastId, "error", "Unable to arm dev mirror", {
+        title: "Dev Mirror Failed",
+        description: message,
+      });
+    } finally {
+      setDevSubmitting(false);
+    }
+  }, [
+    user?.bearerToken,
+    token,
+    amount,
+    mode,
+    creatorAddress,
+    settings,
+    effectivePoolAddress,
+    tokenServiceMarketCap,
+    baseMarketCap,
     monitorLimitOrderExecution,
   ]);
 
@@ -1571,7 +1730,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               orderId: normalizedOrderId,
               initiatingToastId,
               orderType: limitOrderResponse.order.type,
-              triggerType: limitOrderResponse.order.triggerType as "marketCap" | "bonding" | undefined,
+              triggerType: limitOrderResponse.order.triggerType as "marketCap" | "bonding" | "devSell" | undefined,
               bondingTarget: Number(limitOrderResponse.order.bondingTarget ?? NaN),
               targetMarketCap: Number(limitOrderResponse.order.targetMC ?? numericTargetMc),
               submittedSolAmount: Number(limitOrderResponse.order.solAmount ?? numericAmount),
@@ -1748,7 +1907,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     setIsLoading(false);
   }, []);
 
-  const isSniperMode = tab === "adv";
+  const isSniperMode = tab === "adv" && migrationMode;
+  const isDevSellMode = tab === "adv" && devSellMode;
 
   return (
     <div
@@ -1925,7 +2085,55 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         </div>
       )}
 
-    {tab === "adv" && null}
+      {/* ===== E. Migration/Dev Sell Toggle ===== */}
+      {tab === "adv" && (
+        <div className="px-3 pt-2">
+          <div className="mx-auto w-full max-w-xs relative rounded-md border border-[#2A2B33] bg-[#1E1F26] p-0.5">
+            <div
+              className="absolute top-0 left-0 h-full w-1/2 rounded-md transition-transform duration-200"
+              style={{
+                transform: migrationMode ? "translateX(0%)" : "translateX(100%)",
+                background: '#4B5563',
+              }}
+            />
+            <div className="relative flex">
+              <button
+                type="button"
+                className={cx(
+                  "flex-1 py-1.5 text-[12px] font-medium transition-colors duration-200 rounded-md flex items-center justify-center gap-1",
+                  migrationMode ? "text-[#70E0B0]" : "text-[#9CA3AF]"
+                )}
+                onClick={() => {
+                  setMigrationMode(true);
+                  setDevSellMode(false);
+                }}
+              >
+                <span>»</span>
+                Migration
+              </button>
+              <button
+                type="button"
+                className={cx(
+                  "flex-1 py-1.5 text-[12px] font-medium transition-colors duration-200 rounded-md flex items-center justify-center gap-1",
+                  devSellMode ? "text-[#70E0B0]" : "text-[#9CA3AF]"
+                )}
+                onClick={() => {
+                  setDevSellMode(true);
+                  setMigrationMode(false);
+                }}
+              >
+                <span>↑</span>
+                Dev Sell
+              </button>
+            </div>
+          </div>
+          {devSellMode && !creatorAddress && (
+            <div className="mt-2 text-[11px] text-[#FFB347] text-center">
+              Developer wallet not detected yet. Connect to token service to enable dev sell mirroring.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ===== F. Amount ===== */}
       <div className="px-3 pt-2">
@@ -1981,7 +2189,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               />
             </div>
             <div className="flex items-center justify-center w-5 h-5">
-              {mode === "sell" && !isSniperMode ? (
+              {mode === "sell" ? (
                 <span className="text-[14px] font-semibold text-[#E6E7EA]">%</span>
               ) : (
                 <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
@@ -2333,18 +2541,20 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           className={cx(
             baseBtn,
             "w-full h-10 rounded-full text-[14px] cursor-pointer",
-            isSniperMode
-              ? "bg-[#70E0B0] text-black hover:bg-[#58B890]"
-              : mode === "buy"
+            mode === "buy"
               ? "bg-[#70E0B0] text-black hover:bg-[#58B890]"
               : "bg-[#FF4D7F] text-black hover:opacity-90"
           )}
           disabled={isSniperMode
             ? !sniperAmount || Number(sniperAmount) <= 0 || sniperSubmitting
-            : !amount || isLoading || (tab === "limit" && !targetMC)}
+            : isDevSellMode
+              ? !amount || Number(amount) <= 0 || devSubmitting || !creatorAddress
+              : !amount || isLoading || (tab === "limit" && !targetMC)}
           onClick={() => {
             if (isSniperMode) {
               void handleCreateSniperOrder();
+            } else if (isDevSellMode) {
+              void handleCreateDevSellOrder();
             } else {
               void initiateTrade();
             }
@@ -2360,6 +2570,20 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   <>
                     {" "}{prettyAmt(sniperAmount)}
                     <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                  </>
+                )}
+              </span>
+            )
+          ) : isDevSellMode ? (
+            devSubmitting ? (
+              "Arming…"
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                {mode === "buy" ? "Arm Buy on Dev Sell" : "Arm Sell on Dev Sell"}
+                {prettyAmt(amount) && (
+                  <>
+                    {" "}{prettyAmt(amount)}
+                    {mode === "sell" ? <span>%</span> : <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />}
                   </>
                 )}
               </span>
