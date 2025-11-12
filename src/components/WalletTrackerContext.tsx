@@ -1,14 +1,63 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { 
-  createWalletTrackerWebSocket, 
-  type WalletTrackerWebSocket, 
+import {
+  createWalletTrackerWebSocket,
+  type WalletTrackerWebSocket,
   type TradeEvent,
   getTrackedWallets,
   type WatchWallet
 } from '~/utils/walletTracking';
-import type { Wallet } from '~/utils/functions';
 import { useUser } from './UserContext';
+
+const HISTORY_LIMIT = 50;
+const HISTORY_WINDOW_MS = 60 * 60 * 1000;
+
+const LIVE_TRADES_CACHE_PREFIX = 'walletTracker:liveTrades';
+const LIVE_TRADES_CACHE_MAX_ITEMS = HISTORY_LIMIT;
+const LIVE_TRADES_CACHE_MAX_AGE_MS = HISTORY_WINDOW_MS;
+
+const getCacheKey = (userId?: string) =>
+  userId ? `${LIVE_TRADES_CACHE_PREFIX}:user:${userId}` : `${LIVE_TRADES_CACHE_PREFIX}:global`;
+
+const ensureMilliseconds = (timestamp: number | null | undefined) => {
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
+    return Date.now();
+  }
+  return timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
+};
+
+const normalizeTradeForState = (trade: TradeEvent): TradeEvent => ({
+  ...trade,
+  at: ensureMilliseconds(trade.at),
+});
+
+const pruneTrades = (trades: TradeEvent[]) => {
+  const cutoff = Date.now() - LIVE_TRADES_CACHE_MAX_AGE_MS;
+  const tradeByTx = new Map<string, TradeEvent>();
+
+  for (const trade of trades) {
+    const normalized = normalizeTradeForState(trade);
+    if (normalized.at < cutoff) continue;
+    const existing = tradeByTx.get(normalized.tx);
+    if (!existing || normalized.at > existing.at) {
+      tradeByTx.set(normalized.tx, normalized);
+    }
+  }
+
+  return Array.from(tradeByTx.values())
+    .sort((a, b) => b.at - a.at)
+    .slice(0, LIVE_TRADES_CACHE_MAX_ITEMS);
+};
+
+const mergeTrades = (existing: TradeEvent[], additions: TradeEvent[]) => {
+  if (!Array.isArray(additions) || additions.length === 0) {
+    return pruneTrades(existing);
+  }
+  if (!Array.isArray(existing) || existing.length === 0) {
+    return pruneTrades(additions);
+  }
+  return pruneTrades([...additions, ...existing]);
+};
 
 interface WalletTrackerContextValue {
   wsConnected: boolean;
@@ -37,6 +86,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
   const watchedWalletsRef = useRef<WatchWallet[]>([]);
   const subscribedWalletsRef = useRef<string[]>([]);
+  const hydrationRef = useRef(false);
   
   // Keep ref in sync with state
   useEffect(() => {
@@ -80,43 +130,45 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
     const handleTradeEvent = async (event: TradeEvent) => {
       console.log('🔔 Trade event received:', event);
-      
-      // Add to latest trades list (keep last 100)
-      setLatestTrades(prev => [event, ...prev].slice(0, 100));
-      
+
+      const normalizedEvent = normalizeTradeForState(event);
+
+      // Add to latest trades list (keep last hour, max 50)
+      setLatestTrades(prev => mergeTrades(prev, [normalizedEvent]));
+
       // Find wallet info for better notification
-      const wallet = watchedWalletsRef.current.find(w => w.address === event.wallet);
-      const walletName = wallet?.walletName || event.wallet.slice(0, 8) + '...';
-      const side = event.side === 'buy' ? 'bought' : 'sold';
+      const wallet = watchedWalletsRef.current.find(w => w.address === normalizedEvent.wallet);
+      const walletName = wallet?.walletName || normalizedEvent.wallet.slice(0, 8) + '...';
+      const side = normalizedEvent.side === 'buy' ? 'bought' : 'sold';
       
       // Get token name - fetch from metadata if not in event
-      let tokenName = event.symbol || event.name;
+      let tokenName = normalizedEvent.symbol || normalizedEvent.name;
       if (!tokenName) {
-        const metadata = tokenMetadata.get(event.mint);
+        const metadata = tokenMetadata.get(normalizedEvent.mint);
         if (metadata?.symbol) {
           tokenName = metadata.symbol;
         } else {
           // Fetch metadata if not cached
           try {
             const { fetchTokenMetadata } = await import('~/utils/tokenMetadata');
-            const meta = await fetchTokenMetadata(event.mint);
-            tokenName = meta.symbol || event.mint.slice(0, 8) + '...';
+            const meta = await fetchTokenMetadata(normalizedEvent.mint);
+            tokenName = meta.symbol || normalizedEvent.mint.slice(0, 8) + '...';
             // Update metadata state
             setTokenMetadata(prev => {
               const updated = new Map(prev);
-              updated.set(event.mint, meta);
+              updated.set(normalizedEvent.mint, meta);
               return updated;
             });
           } catch (err) {
-            tokenName = event.mint.slice(0, 8) + '...';
+            tokenName = normalizedEvent.mint.slice(0, 8) + '...';
           }
         }
       }
       
       // Format SOL amount
       let amountDisplay = '';
-      if (event.sol_spent !== null && event.sol_spent !== undefined) {
-        const solAmount = Math.abs(event.sol_spent);
+      if (normalizedEvent.sol_spent !== null && normalizedEvent.sol_spent !== undefined) {
+        const solAmount = Math.abs(normalizedEvent.sol_spent);
         if (solAmount >= 1) {
           amountDisplay = `${solAmount.toFixed(2)} SOL`;
         } else if (solAmount >= 0.01) {
@@ -222,6 +274,88 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
     subscribedWalletsRef.current = addresses;
   }, [watchedWallets, wsConnected, wsConnection]);
+
+  // Hydrate cached trades from localStorage (user specific with global fallback)
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const userKey = user?.id ? getCacheKey(user.id) : null;
+      const globalKey = getCacheKey();
+      const raw =
+        (userKey ? window.localStorage.getItem(userKey) : null) ??
+        window.localStorage.getItem(globalKey);
+
+      if (!raw) {
+        hydrationRef.current = true;
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        hydrationRef.current = true;
+        return;
+      }
+
+      const trades = parsed
+        .map((trade): TradeEvent | null => {
+          if (!trade || typeof trade !== 'object') return null;
+          try {
+            return normalizeTradeForState(trade as TradeEvent);
+          } catch {
+            return null;
+          }
+        })
+        .filter((trade): trade is TradeEvent => Boolean(trade));
+
+      if (trades.length > 0) {
+        setLatestTrades(prev => mergeTrades(prev, trades));
+      }
+    } catch (error) {
+      console.error('Failed to hydrate live trades cache:', error);
+    } finally {
+      hydrationRef.current = true;
+    }
+  }, [user?.id]);
+
+  // Periodically prune old trades to keep list within rolling window
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLatestTrades((prev) => pruneTrades(prev));
+    }, 60_000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Persist latest trades to localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined' || !hydrationRef.current) {
+      return;
+    }
+
+    try {
+      const pruned = pruneTrades(latestTrades);
+
+      if (pruned.length === 0) {
+        window.localStorage.removeItem(getCacheKey());
+        if (user?.id) {
+          window.localStorage.removeItem(getCacheKey(user.id));
+        }
+        return;
+      }
+
+      const payload = JSON.stringify(pruned);
+
+      window.localStorage.setItem(getCacheKey(), payload);
+      if (user?.id) {
+        window.localStorage.setItem(getCacheKey(user.id), payload);
+      }
+    } catch (error) {
+      console.error('Failed to persist live trades cache:', error);
+    }
+  }, [latestTrades, user?.id]);
 
   const value: WalletTrackerContextValue = {
     wsConnected,
