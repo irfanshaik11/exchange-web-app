@@ -1240,9 +1240,22 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       showEnhancedToast("error", "Enter a valid sniper amount", {
         title: "Invalid Amount",
-        description: "Provide a positive SOL amount before arming the sniper.",
+        description: mode === "buy" 
+          ? "Provide a positive SOL amount before arming the sniper."
+          : "Provide a percentage between 1 and 100 before arming the sniper.",
       });
       return;
+    }
+
+    // For sell orders, validate percentage
+    if (mode === "sell") {
+      if (numericAmount > 100) {
+        showEnhancedToast("error", "Percentage too high", {
+          title: "Invalid Percentage",
+          description: "Enter a percentage between 1 and 100.",
+        });
+        return;
+      }
     }
 
     const poolAddress = effectivePoolAddress || token.pair_address || token.migrated_pool_address || "";
@@ -1279,11 +1292,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         ? tokenServiceMarketCap
         : baseMarketCap;
 
+    const formattedAmount = mode === "buy"
+      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+      : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+
     const initiatingToastId = showEnhancedToast("loading", "Arming sniper…", {
       title: "Arming Sniper",
-      description: `${numericAmount.toLocaleString(undefined, {
-        maximumFractionDigits: 6,
-      })} SOL • Bonding Target ${targetBonding.toFixed(2)}%`,
+      description: `${formattedAmount} • Bonding Target ${targetBonding.toFixed(2)}%`,
     });
 
     setSniperSubmitting(true);
@@ -1292,7 +1307,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         {
           tokenAddress: token.mint || "",
           amount: numericAmount,
-          type: "Buy",
+          type: mode === "buy" ? "Buy" : "Sell",
           direction: "Above",
           triggerType: "bonding",
           bondingTarget: targetBonding,
@@ -1318,9 +1333,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
 
       updateEnhancedToast(initiatingToastId, "success", `${token.symbol} sniper armed`, {
         title: "Sniper Armed",
-        description: `${numericAmount.toLocaleString(undefined, {
-          maximumFractionDigits: 6,
-        })} SOL • Bonding Target ${targetBonding.toFixed(2)}%`,
+        description: `${formattedAmount} • Bonding Target ${targetBonding.toFixed(2)}%`,
       });
 
       if (response?.order?.id) {
@@ -1328,12 +1341,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         void monitorLimitOrderExecution({
           orderId: normalizedOrderId,
           initiatingToastId,
-          orderType: "Buy",
+          orderType: mode === "buy" ? "Buy" : "Sell",
           triggerType: "bonding",
           bondingTarget: targetBonding,
           targetMarketCap: Number(response.order.targetMC ?? latestMarketCap),
-          submittedSolAmount: numericAmount,
-          submittedTokenAmount: 0,
+          submittedSolAmount: mode === "buy" ? numericAmount : undefined,
+          submittedTokenAmount: mode === "sell" ? numericAmount : undefined,
         });
       }
 
@@ -1354,6 +1367,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     user?.bearerToken,
     token,
     sniperAmount,
+    mode,
     settings,
     tokenServiceMarketCap,
     baseMarketCap,
@@ -1635,6 +1649,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             }
           }
 
+          // Only validate that target MC is different from current MC (basic sanity check)
           const effectiveLiveMc = latestMarketCap ?? baseMarketCap;
           const isZeroDelta =
             Number.isFinite(effectiveLiveMc) &&
@@ -1656,34 +1671,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             return;
           }
 
-          if (latestMarketCap && Number.isFinite(latestMarketCap)) {
-            const conditionAlreadyMet =
-              direction === "Below"
-                ? latestMarketCap <= numericTargetMc
-                : latestMarketCap >= numericTargetMc;
-
-            if (conditionAlreadyMet) {
-              const toleranceValue = Number.isFinite(LIMIT_ORDER_TOLERANCE_BPS)
-                ? (numericTargetMc * LIMIT_ORDER_TOLERANCE_BPS) / 10_000
-                : 0;
-              const delta = Math.abs(latestMarketCap - numericTargetMc);
-
-              if (toleranceValue && delta > toleranceValue) {
-                updateEnhancedToast(
-                  initiatingToastId,
-                  "error",
-                  "Market moved",
-                  {
-                    title: "Market cap changed",
-                    description: `Live MC is $${Math.round(latestMarketCap).toLocaleString()} — adjust your target before placing the order.`,
-                  }
-                );
-                setIsLoading(false);
-                setPendingTradeOptions(null);
-                return;
-              }
-            }
-          }
+          // Removed the "condition already met" validation - limit orders should be allowed
+          // even if the condition is currently met, as the market can move back and forth
+          // The backend will handle execution when the condition is actually met
 
           const limitOrderResponse = await createLimitOrder(
             {
@@ -2569,7 +2559,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 {prettyAmt(sniperAmount) && (
                   <>
                     {" "}{prettyAmt(sniperAmount)}
-                    <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                    {mode === "buy" ? (
+                      <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                    ) : (
+                      <span className="ml-0.5">%</span>
+                    )}
                   </>
                 )}
               </span>
