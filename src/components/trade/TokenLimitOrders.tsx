@@ -28,6 +28,9 @@ interface LimitOrder {
   poolType?: string | null;
   failureReason?: string | null;
   failureCode?: string | null;
+  triggerType?: "marketCap" | "bonding";
+  bondingTarget?: number | string | null;
+  initialBondingPct?: number | string | null;
 }
 
 type TokenMetaInfo = {
@@ -100,10 +103,20 @@ function shouldFillProtocolBadge(protocol: string) {
 }
 
 function getOrderTypeLabel(order: LimitOrder): string {
+  if (order.triggerType === "bonding") {
+    return `${order.type} on Migration`;
+  }
   if (order.type === "Buy") {
     return order.direction === "Below" ? "Buy Below" : "Buy Above";
   }
   return order.direction === "Above" ? "Sell Above" : "Sell Below";
+}
+
+function getOrderTargetLabel(order: LimitOrder): string {
+  if (order.triggerType === "bonding") {
+    return "—";
+  }
+  return formatMarketCap(Number(order.targetMC));
 }
 
 function isValidNumber(value: unknown) {
@@ -275,7 +288,7 @@ export default function TokenLimitOrders() {
                 order.type === "Buy"
                   ? `${formatAmount(Number(order.solAmount))} SOL`
                   : `${formatAmount(Number(order.tokenAmount))} ${symbolLabel}`;
-              const targetLabel = formatMarketCap(Number(order.targetMC));
+              const targetLabel = getOrderTargetLabel(order);
 
               showEnhancedToast("success", `${displayName} limit order filled`, {
                 title: `${order.type} Order Executed`,
@@ -427,7 +440,7 @@ export default function TokenLimitOrders() {
       order?.type === "Buy"
         ? `${formatAmount(Number(order?.solAmount))} SOL`
         : `${formatAmount(Number(order?.tokenAmount))} ${meta.symbol || meta.name || "Tokens"}`;
-    const targetLabel = formatMarketCap(Number(order?.targetMC));
+    const targetLabel = order ? getOrderTargetLabel(order) : "—";
 
     const cancelToastId = showEnhancedToast("loading", "Cancelling limit order…", {
       title: "Cancelling Order",
@@ -536,8 +549,12 @@ export default function TokenLimitOrders() {
                     order.type === "Buy"
                       ? `${formatAmount(Number(order.solAmount))} SOL`
                       : `${formatAmount(Number(order.tokenAmount))} Tokens`;
-                  const targetMC = formatMarketCap(Number(order.targetMC));
+                  const isMigrationOrder = order.triggerType === "bonding";
+                  const targetDisplay = isMigrationOrder ? "—" : formatMarketCap(Number(order.targetMC));
                   const currentMCDisplay = formatMarketCap(meta.marketCap);
+                  const createdLabel = order.createdAt
+                    ? new Date(order.createdAt).toLocaleString()
+                    : "—";
                   const statusColor =
                     order.status === "Active"
                       ? "text-emerald-400"
@@ -565,9 +582,6 @@ export default function TokenLimitOrders() {
                       : order.autoFee
                       ? "Auto"
                       : "Off";
-
-                  const isBuyOrder = order.type === "Buy";
-                  const typeLabel = getOrderTypeLabel(order);
 
                   return (
                     <tr key={order.id} className="bg-neutral-950/20 hover:bg-neutral-900/40">
@@ -649,12 +663,13 @@ export default function TokenLimitOrders() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs font-semibold">
-                        {isBuyOrder ? (
-                          <span style={{ color: "#2fd6a4" }}>{typeLabel}</span>
-                        ) : (
-                          <span className="text-rose-400">{typeLabel}</span>
-                        )}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1 text-sm">
+                          <span style={{ color: order.type === "Buy" ? "#2fd6a4" : "#f87171" }}>
+                            {getOrderTypeLabel(order)}
+                          </span>
+                          <span className="text-xs text-neutral-500">{order.status}</span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-neutral-200">{amount}</td>
                       <td className="px-4 py-3 text-neutral-300">
@@ -682,10 +697,8 @@ export default function TokenLimitOrders() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-neutral-200">
-                        {currentMCDisplay}
-                      </td>
-                      <td className="px-4 py-3 text-neutral-200">{targetMC}</td>
+                      <td className="px-4 py-3 text-neutral-200">{currentMCDisplay}</td>
+                      <td className="px-4 py-3 text-neutral-200">{targetDisplay}</td>
                       <td className="px-4 py-3">
                         {order.status === "Active" ? (
                           <button

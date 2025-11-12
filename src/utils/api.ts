@@ -244,6 +244,8 @@ export interface CreateLimitOrderParams {
   type: "Buy" | "Sell";
   direction: "Above" | "Below";
   targetMC: number;
+  triggerType?: "marketCap" | "bonding";
+  bondingTarget?: number;
   // Optional context data from frontend (for better logging and validation)
   currentPrice?: number | string;
   currentMarketCap?: number | string;
@@ -286,6 +288,9 @@ interface LimitOrder {
   maxFee?: number | string;
   mevProtection?: boolean;
   rpc?: string | null;
+  triggerType?: "marketCap" | "bonding";
+  bondingTarget?: number | null;
+  initialBondingPct?: number | null;
 }
 
 interface UpdateLimitOrderParams {
