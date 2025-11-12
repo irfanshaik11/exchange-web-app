@@ -267,6 +267,8 @@ export interface CreateLimitOrderParams {
   rpc?: string;
 }
 
+type LimitOrderStatus = "Active" | "Cancelled" | "Completed" | "Failed";
+
 interface LimitOrder {
   id: string;
   tokenAddress: string;

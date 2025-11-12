@@ -556,14 +556,14 @@ export default function TokenLimitOrders() {
                     resolvedName || resolvedSymbol,
                   )}&background=1D1D1D&color=FFFFFF`;
 
+                  const isMigrationOrder = order.triggerType === "bonding";
+                  const isDevSellOrder = order.triggerType === "devSell";
                   const amount =
                     order.type === "Buy"
                       ? `${formatAmount(Number(order.solAmount))} SOL`
                       : isDevSellOrder
                       ? `${formatAmount(Number(order.tokenAmount))}%`
                       : `${formatAmount(Number(order.tokenAmount))} Tokens`;
-                  const isMigrationOrder = order.triggerType === "bonding";
-                  const isDevSellOrder = order.triggerType === "devSell";
                   const devWalletLabel = order.devWallet
                     ? `${order.devWallet.slice(0, 4)}...${order.devWallet.slice(-4)}`
                     : "Dev Sell";
