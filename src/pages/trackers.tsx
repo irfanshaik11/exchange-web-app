@@ -403,8 +403,13 @@ export default function TrackersPage() {
 
   // Twitter functions
   const loadTwitterAccounts = async () => {
-    const accounts = await getTrackedTwitterAccounts(user?.id);
-    setTwitterAccounts(accounts);
+    try {
+      const accounts = await getTrackedTwitterAccounts(user?.id);
+      setTwitterAccounts(accounts);
+    } catch (error) {
+      console.error("Failed to load tracked Twitter accounts:", error);
+      setTwitterAccounts([]);
+    }
   };
 
   const handleAddTwitterAccount = async (username: string) => {

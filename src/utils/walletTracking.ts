@@ -273,6 +273,157 @@ export async function getWalletTransactions(address: string, limit: number = 10)
   }
 }
 
+// ===== Trade History Helpers =====
+
+const parseNumeric = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const normalizeTradeHistoryRecord = (record: any): TradeEvent | null => {
+  if (!record || typeof record !== 'object') return null;
+
+  const wallet = record.wallet ?? record.owner ?? record.address;
+  const mint = record.mint ?? record.token ?? record.mint_address;
+  const tx =
+    record.tx ??
+    record.txSig ??
+    record.signature ??
+    record.transaction ??
+    record.transaction_id ??
+    record.id;
+
+  if (typeof wallet !== 'string' || typeof mint !== 'string' || typeof tx !== 'string') {
+    return null;
+  }
+
+  const sideValue = (record.side ?? record.action ?? '').toString().toLowerCase();
+  const side: 'buy' | 'sell' = sideValue === 'sell' ? 'sell' : 'buy';
+
+  const amount =
+    parseNumeric(record.amount ?? record.size ?? record.quantity ?? record.tokenAmount) ?? 0;
+  const solSpent = parseNumeric(record.sol_spent ?? record.solSpent);
+  const priceUsd = parseNumeric(record.price_usd ?? record.priceUsd);
+  const marketCapUsd = parseNumeric(record.market_cap_usd ?? record.marketCapUsd);
+
+  const rawTimestamp =
+    record.at ?? record.ts ?? record.timestamp ?? record.blockTime ?? record.time ?? null;
+  let timestamp = parseNumeric(rawTimestamp);
+  if (timestamp === null && typeof rawTimestamp === 'string') {
+    const parsed = Date.parse(rawTimestamp);
+    timestamp = Number.isFinite(parsed) ? parsed : null;
+  }
+
+  if (timestamp === null) {
+    return null;
+  }
+
+  const timestampMs = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
+
+  return {
+    type: 'trade',
+    wallet,
+    mint,
+    symbol: record.symbol ?? record.tokenSymbol ?? record.ticker ?? null,
+    name: record.name ?? record.tokenName ?? record.project ?? null,
+    side,
+    amount,
+    sol_spent: solSpent,
+    price_usd: priceUsd,
+    market_cap_usd: marketCapUsd,
+    venue: record.venue ?? record.market ?? record.source ?? null,
+    tx,
+    at: timestampMs,
+  };
+};
+
+interface TradeHistoryOptions {
+  limit?: number;
+  windowMs?: number;
+  signal?: AbortSignal;
+}
+
+export async function getWalletTradeHistory(
+  wallets: string[],
+  options: TradeHistoryOptions = {}
+): Promise<TradeEvent[]> {
+  if (!Array.isArray(wallets) || wallets.length === 0) {
+    return [];
+  }
+
+  try {
+    const params = new URLSearchParams();
+    const validWallets = wallets.filter(
+      (wallet): wallet is string => typeof wallet === 'string' && wallet.trim().length > 0
+    );
+
+    validWallets.forEach((wallet) => {
+      params.append('wallets', wallet);
+    });
+
+    validWallets.forEach((wallet) => {
+      params.append('wallet', wallet);
+    });
+
+    if (options.limit !== undefined) {
+      params.set('limit', String(options.limit));
+    }
+    if (options.windowMs !== undefined) {
+      params.set('windowMs', String(options.windowMs));
+    }
+
+    const url = `${WALLET_TRACKER_API_URL}/api/history?${params.toString()}`;
+    console.debug('Fetching wallet trade history', {
+      url,
+      wallets: [...validWallets],
+      limit: options.limit,
+      windowMs: options.windowMs,
+    });
+    const response = await fetch(url, { signal: options.signal });
+    let payload: any = null;
+
+    if (!response.ok) {
+      try {
+        payload = await response.json();
+      } catch {
+        payload = await response.text().catch(() => null);
+      }
+      console.error('Failed to fetch trade history:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: payload,
+      });
+      return [];
+    }
+
+    payload = await response.json();
+    const records: any[] = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.trades)
+      ? payload.trades
+      : Array.isArray(payload?.data)
+      ? payload.data
+      : [];
+
+    const history = records
+      .map((record) => normalizeTradeHistoryRecord(record))
+      .filter((record): record is TradeEvent => Boolean(record));
+
+    return history;
+  } catch (error) {
+    console.error('Error fetching wallet trade history:', error);
+    return [];
+  }
+}
+
 // ===== WebSocket Functions =====
 
 export interface WalletTrackerWebSocket {

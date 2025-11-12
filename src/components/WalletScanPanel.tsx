@@ -151,21 +151,25 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     setHistoryLoading(true);
     setHistoryError(null);
     
-    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
-    
+    const backendUrl =
+      process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || "http://localhost:8081";
+
     fetch(`${backendUrl}/api/history?wallet=${wallet.address}&limit=100`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch history');
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch history");
         return res.json();
       })
-    getWalletHistory(wallet.address, 100)
-      .then(data => {
-        console.log('[History] Received data:', data);
+      .then((data) => {
+        console.log("[History] Received data:", data);
         setHistory(Array.isArray(data) ? data : []);
       })
-      .catch(err => {
-        console.error('[History] Error:', err);
-        setHistoryError(typeof err?.message === 'string' ? err.message : 'Failed to load trading history');
+      .catch((err) => {
+        console.error("[History] Error:", err);
+        setHistoryError(
+          typeof err?.message === "string"
+            ? err.message
+            : "Failed to load trading history",
+        );
         setHistory([]);
       })
       .finally(() => {
