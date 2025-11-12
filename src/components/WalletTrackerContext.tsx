@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { 
-  createWalletTrackerWebSocket, 
-  type WalletTrackerWebSocket, 
+import {
+  createWalletTrackerWebSocket,
+  type WalletTrackerWebSocket,
   type TradeEvent,
   getTrackedWallets,
   type WatchWallet
 } from '~/utils/walletTracking';
-import type { Wallet } from '~/utils/functions';
 import { useUser } from './UserContext';
+import useLiveTrades, { normalizeTrade } from '~/hooks/useLiveTrades';
 
 interface WalletTrackerContextValue {
   wsConnected: boolean;
@@ -30,10 +30,10 @@ export function useWalletTracker() {
 export function WalletTrackerProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
   const [wsConnected, setWsConnected] = useState(false);
-  const [latestTrades, setLatestTrades] = useState<TradeEvent[]>([]);
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
   const [wsConnection, setWsConnection] = useState<WalletTrackerWebSocket | null>(null);
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(new Map());
+  const { trades: latestTrades, appendTrades: appendLiveTrade } = useLiveTrades();
 
   const watchedWalletsRef = useRef<WatchWallet[]>([]);
   const subscribedWalletsRef = useRef<string[]>([]);
@@ -80,43 +80,45 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
     const handleTradeEvent = async (event: TradeEvent) => {
       console.log('🔔 Trade event received:', event);
-      
-      // Add to latest trades list (keep last 100)
-      setLatestTrades(prev => [event, ...prev].slice(0, 100));
-      
+
+      const normalizedEvent = normalizeTrade(event);
+
+      // Add to latest trades list (keep last hour window via hook)
+      appendLiveTrade(normalizedEvent);
+
       // Find wallet info for better notification
-      const wallet = watchedWalletsRef.current.find(w => w.address === event.wallet);
-      const walletName = wallet?.walletName || event.wallet.slice(0, 8) + '...';
-      const side = event.side === 'buy' ? 'bought' : 'sold';
+      const wallet = watchedWalletsRef.current.find(w => w.address === normalizedEvent.wallet);
+      const walletName = wallet?.walletName || normalizedEvent.wallet.slice(0, 8) + '...';
+      const side = normalizedEvent.side === 'buy' ? 'bought' : 'sold';
       
       // Get token name - fetch from metadata if not in event
-      let tokenName = event.symbol || event.name;
+      let tokenName = normalizedEvent.symbol || normalizedEvent.name;
       if (!tokenName) {
-        const metadata = tokenMetadata.get(event.mint);
+        const metadata = tokenMetadata.get(normalizedEvent.mint);
         if (metadata?.symbol) {
           tokenName = metadata.symbol;
         } else {
           // Fetch metadata if not cached
           try {
             const { fetchTokenMetadata } = await import('~/utils/tokenMetadata');
-            const meta = await fetchTokenMetadata(event.mint);
-            tokenName = meta.symbol || event.mint.slice(0, 8) + '...';
+            const meta = await fetchTokenMetadata(normalizedEvent.mint);
+            tokenName = meta.symbol || normalizedEvent.mint.slice(0, 8) + '...';
             // Update metadata state
             setTokenMetadata(prev => {
               const updated = new Map(prev);
-              updated.set(event.mint, meta);
+              updated.set(normalizedEvent.mint, meta);
               return updated;
             });
           } catch (err) {
-            tokenName = event.mint.slice(0, 8) + '...';
+            tokenName = normalizedEvent.mint.slice(0, 8) + '...';
           }
         }
       }
       
       // Format SOL amount
       let amountDisplay = '';
-      if (event.sol_spent !== null && event.sol_spent !== undefined) {
-        const solAmount = Math.abs(event.sol_spent);
+      if (normalizedEvent.sol_spent !== null && normalizedEvent.sol_spent !== undefined) {
+        const solAmount = Math.abs(normalizedEvent.sol_spent);
         if (solAmount >= 1) {
           amountDisplay = `${solAmount.toFixed(2)} SOL`;
         } else if (solAmount >= 0.01) {
