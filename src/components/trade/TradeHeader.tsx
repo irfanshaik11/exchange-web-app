@@ -362,7 +362,12 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const marketData = getMarketData();
   const mcap = marketData?.market_cap_usd || token.market_cap_usd || 0;
   const price = marketData?.price_usd || (token as any).usd_price || (token as any).price_usd || 0;
-  const liq = marketData?.volume_usd || (token as any).total_liquidity_usd || (token as any).liquidity_usd || 0;
+  const liq =
+    marketData?.liquidity_usd ??
+    marketData?.volume_usd ??
+    (token as any).total_liquidity_usd ??
+    (token as any).liquidity_usd ??
+    0;
   const supply = (token as any).total_supply ?? (token as any).supply ?? 0;
   const formattedMarketCap = useMemo(() => formatMarketCap(mcap), [mcap]);
   const isLowLiquidity = Number(liq) < 1000;
@@ -703,7 +708,7 @@ useEffect(() => {
           </div>
 
           <div className="flex items-center gap-2 text-sm" style={{ color: AX.green }}>
-            <span>{getTokenAge((token as any).created_at || (token as any).CreatedAt)}</span>
+            <span>{getTokenAge((token as any).created_at || (token as any).createdAt || (token as any).CreatedAt)}</span>
 
             {isPumpToken && (
               <Link

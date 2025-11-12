@@ -1,10 +1,14 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import Cookies from 'js-cookie';
+
 import { getUserById, ApiError } from '../utils/api';
 import { showEnhancedToast } from '~/utils/enhancedToast';
-
 const USER_CACHE_KEY = 'codex_user_info_cache';
+import { getSolBalance } from '~/utils/functions';
+import { clearStoredReferralAccess } from '../utils/referralStorage';
+import toast from 'react-hot-toast';
+
 
 export interface UserInfo {
   id: string;
@@ -164,6 +168,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSolBalance(0);
     setLastNotifiedBalance(0);
+    if (typeof window !== 'undefined') {
+      clearStoredReferralAccess();
+      window.dispatchEvent(new Event('referral-access-reset'));
+    }
   };
 
   useEffect(() => {

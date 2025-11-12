@@ -30,6 +30,10 @@ export const env = createEnv({
     NEXT_PUBLIC_WALLET_TRACKER_URL: z.string().url().optional(),
     NEXT_PUBLIC_WALLET_TRACKER_WS_URL: z.string().url().optional(),
 		NEXT_PUBLIC_SOLANA_RPC: z.string().url().optional(),
+    NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS: z
+      .preprocess((val) => val === "true" || val === true, z.boolean())
+      .optional(),
+    NEXT_PUBLIC_DEFAULT_REFERRAL_CODE: z.string().optional(),
 
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
@@ -52,6 +56,8 @@ export const env = createEnv({
     NEXT_PUBLIC_WALLET_TRACKER_URL: process.env.NEXT_PUBLIC_WALLET_TRACKER_URL,
     NEXT_PUBLIC_WALLET_TRACKER_WS_URL: process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL,
 		NEXT_PUBLIC_SOLANA_RPC: process.env.NEXT_PUBLIC_SOLANA_RPC,
+		NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS: process.env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS,
+    NEXT_PUBLIC_DEFAULT_REFERRAL_CODE: process.env.NEXT_PUBLIC_DEFAULT_REFERRAL_CODE,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**
