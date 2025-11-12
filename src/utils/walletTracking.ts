@@ -174,11 +174,38 @@ export async function addTrackedWalletsBulk(
 			}),
 		});
 
-		const payload = await response.json();
+		const contentType = response.headers.get('content-type') || '';
+		let payload: any = null;
+
+		if (contentType.includes('application/json')) {
+			try {
+				payload = await response.json();
+			} catch (parseError) {
+				console.error('Failed to parse bulk import response as JSON:', parseError);
+			}
+		} else {
+			// For non-JSON responses (e.g., HTML error pages), capture the text for diagnostics.
+			const textBody = await response.text().catch(() => '');
+			const message =
+				textBody && textBody.trim().length > 0
+					? (textBody.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : textBody)
+					: `HTTP ${response.status} ${response.statusText}`;
+
+			if (!response.ok) {
+				throw new Error(message || 'Failed to import wallets');
+			}
+
+			throw new Error('Received unexpected response from wallet tracker service.');
+		}
+
+		if (!payload || typeof payload !== 'object') {
+			const fallbackMessage = `Unexpected response (status ${response.status}) from wallet tracker service.`;
+			throw new Error(fallbackMessage);
+		}
 
 		if (!response.ok || !payload.ok) {
-			const message = payload?.error || 'Failed to import wallets';
-			throw new Error(message);
+			const message = payload?.error || `HTTP ${response.status} ${response.statusText}`;
+			throw new Error(message || 'Failed to import wallets');
 		}
 
 		return payload as AddTrackedWalletsBulkResult;
