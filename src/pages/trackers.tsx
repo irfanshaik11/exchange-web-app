@@ -615,6 +615,11 @@ export default function TrackersPage() {
     try {
       // Add to backend with notifications enabled by default
       await addTrackedWallet(address, name, user?.id, emoji, true);
+      
+      // Save notification preference to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`wallet_notifications_${address}`, JSON.stringify(true));
+      }
 
       // Reload from backend (this will also refresh global watched wallets)
       await loadWalletsFromBackend();
@@ -880,6 +885,12 @@ export default function TrackersPage() {
                 getRandomEmoji(),
                 true, // Enable notifications by default for imported wallets
               );
+              
+              // Save notification preference to localStorage
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+              }
+              
               successCount++;
             } catch (error: any) {
               if (error?.message?.includes("already exists")) {
@@ -1888,6 +1899,12 @@ export default function TrackersPage() {
                     wallet.emoji,
                     true, // Enable notifications by default for bulk imported wallets
                   );
+                  
+                  // Save notification preference to localStorage
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+                  }
+                  
                   successCount++;
                 } catch (error: any) {
                   if (error?.message?.includes("already exists")) {
