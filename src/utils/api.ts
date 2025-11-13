@@ -405,7 +405,7 @@ export type BuyParams = {
   quoteMint: string;
   amount: number;
   mevProtection?: 0 | 1;
-  poolType?: "PumpAmm" | "Raydium CPMM" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "bags" | "MoonShoot" | "Orca" | ""; // Optional - backend will detect if missing
+  poolType?: "PumpAmm" | "Raydium CPMM" | "Raydium Launchpad" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "Meteora" | "bags" | "MoonShoot" | "Orca" | ""; // Optional - backend will detect if missing
   originalPairAddress?: string; // Original pair address from token-service for trade history
   // Preset trading parameters
   slippage?: number; // Percentage value (0.01-100), e.g., 20 for 20%
