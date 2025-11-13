@@ -29,7 +29,7 @@ const XIcon = ({ size = 14 }: { size?: number }) => (
 );
 
 // Official Solana logo component
-const SolanaIcon = ({ size = 16 }: { size?: number }) => (
+export const SolanaIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 397.7 311.7" fill="currentColor">
     <defs>
       <linearGradient id="solanaGradient" x1="360.8791" y1="351.4553" x2="141.213" y2="-69.2936" gradientUnits="userSpaceOnUse">
