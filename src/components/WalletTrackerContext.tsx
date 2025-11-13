@@ -5,6 +5,7 @@ import {
   type WalletTrackerWebSocket,
   type TradeEvent,
   getTrackedWallets,
+  getWalletTradeHistory,
   type WatchWallet
 } from '~/utils/walletTracking';
 import { useUser } from './UserContext';
@@ -111,6 +112,36 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
       refreshWatchedWallets();
     }
   }, [user?.id]);
+
+  // Fetch initial trade history from backend Redis cache
+  useEffect(() => {
+    if (!user?.id || watchedWallets.length === 0) {
+      return;
+    }
+
+    const fetchInitialTrades = async () => {
+      try {
+        const walletAddresses = watchedWallets.map(w => w.address);
+        console.log(`[WalletTracker] Fetching initial trade history for ${walletAddresses.length} wallets from backend...`);
+        
+        const history = await getWalletTradeHistory(walletAddresses, {
+          limit: HISTORY_LIMIT,
+          windowMs: HISTORY_WINDOW_MS, // 1 hour window
+        });
+        
+        if (history.length > 0) {
+          console.log(`[WalletTracker] Loaded ${history.length} trades from backend Redis cache`);
+          setLatestTrades(prev => mergeTrades(prev, history));
+        } else {
+          console.log('[WalletTracker] No trades found in backend cache');
+        }
+      } catch (error) {
+        console.error('[WalletTracker] Failed to fetch initial trade history:', error);
+      }
+    };
+
+    fetchInitialTrades();
+  }, [user?.id, watchedWallets.length]); // Re-fetch when wallets change
 
   // WebSocket connection for real-time wallet updates
   useEffect(() => {
