@@ -243,7 +243,10 @@ export interface CreateLimitOrderParams {
   amount: number;
   type: "Buy" | "Sell";
   direction: "Above" | "Below";
-  targetMC: number;
+  targetMC?: number | string; // Made optional for bonding triggers
+  triggerType?: "marketCap" | "bonding" | "devSell"; // New field
+  bondingTarget?: number; // New field
+  devWallet?: string; // New field
   // Optional context data from frontend (for better logging and validation)
   currentPrice?: number | string;
   currentMarketCap?: number | string;
@@ -264,15 +267,18 @@ export interface CreateLimitOrderParams {
   rpc?: string;
 }
 
+type LimitOrderStatus = "Active" | "Cancelled" | "Completed" | "Failed";
+
 interface LimitOrder {
   id: string;
   tokenAddress: string;
+  pairAddress?: string | null;
   type: "Buy" | "Sell";
   direction: "Above" | "Below";
-  targetMC: number;
-  solAmount: number;
-  tokenAmount: number;
-  status: "Active" | "Cancelled" | "Completed";
+  targetMC: number | string;
+  solAmount: number | string;
+  tokenAmount: number | string;
+  status: LimitOrderStatus;
   createdAt?: string; // Only present in my_orders response
   transactionHash?: string | null;
   poolType?: string | null;
@@ -286,6 +292,10 @@ interface LimitOrder {
   maxFee?: number | string;
   mevProtection?: boolean;
   rpc?: string | null;
+  triggerType?: "marketCap" | "bonding" | "devSell"; // New field
+  bondingTarget?: number; // New field
+  initialBondingPct?: number; // New field
+  devWallet?: string | null; // New field
 }
 
 interface UpdateLimitOrderParams {

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/router";
 import toast from "react-hot-toast";
 import FastImage from "../FastImage";
 import { useUser } from "../UserContext";
@@ -28,6 +29,10 @@ interface LimitOrder {
   poolType?: string | null;
   failureReason?: string | null;
   failureCode?: string | null;
+  triggerType?: "marketCap" | "bonding" | "devSell";
+  bondingTarget?: number | string | null;
+  initialBondingPct?: number | string | null;
+  devWallet?: string | null;
 }
 
 type TokenMetaInfo = {
@@ -100,10 +105,28 @@ function shouldFillProtocolBadge(protocol: string) {
 }
 
 function getOrderTypeLabel(order: LimitOrder): string {
+  if (order.triggerType === "bonding") {
+    return `${order.type} on Migration`;
+  }
+  if (order.triggerType === "devSell") {
+    return order.type === "Buy" ? "Buy on Dev Sell" : "Sell on Dev Sell";
+  }
   if (order.type === "Buy") {
     return order.direction === "Below" ? "Buy Below" : "Buy Above";
   }
   return order.direction === "Above" ? "Sell Above" : "Sell Below";
+}
+
+function getOrderTargetLabel(order: LimitOrder): string {
+  if (order.triggerType === "bonding") {
+    return "—";
+  }
+  if (order.triggerType === "devSell") {
+    const wallet = order.devWallet || "";
+    if (!wallet) return "Dev Sell";
+    return `${wallet.slice(0, 4)}...${wallet.slice(-4)}`;
+  }
+  return formatMarketCap(Number(order.targetMC));
 }
 
 function isValidNumber(value: unknown) {
@@ -222,6 +245,7 @@ function mergeTokenMeta(...sources: TokenMetaInfo[]): TokenMetaInfo {
 }
 
 export default function TokenLimitOrders() {
+  const router = useRouter();
   const { user } = useUser();
   const [orders, setOrders] = useState<LimitOrder[]>([]);
   const [loading, setLoading] = useState(false);
@@ -275,7 +299,7 @@ export default function TokenLimitOrders() {
                 order.type === "Buy"
                   ? `${formatAmount(Number(order.solAmount))} SOL`
                   : `${formatAmount(Number(order.tokenAmount))} ${symbolLabel}`;
-              const targetLabel = formatMarketCap(Number(order.targetMC));
+              const targetLabel = getOrderTargetLabel(order);
 
               showEnhancedToast("success", `${displayName} limit order filled`, {
                 title: `${order.type} Order Executed`,
@@ -427,7 +451,7 @@ export default function TokenLimitOrders() {
       order?.type === "Buy"
         ? `${formatAmount(Number(order?.solAmount))} SOL`
         : `${formatAmount(Number(order?.tokenAmount))} ${meta.symbol || meta.name || "Tokens"}`;
-    const targetLabel = formatMarketCap(Number(order?.targetMC));
+    const targetLabel = order ? getOrderTargetLabel(order) : "—";
 
     const cancelToastId = showEnhancedToast("loading", "Cancelling limit order…", {
       title: "Cancelling Order",
@@ -532,11 +556,22 @@ export default function TokenLimitOrders() {
                     resolvedName || resolvedSymbol,
                   )}&background=1D1D1D&color=FFFFFF`;
 
+                  const isMigrationOrder = order.triggerType === "bonding";
+                  const isDevSellOrder = order.triggerType === "devSell";
                   const amount =
                     order.type === "Buy"
                       ? `${formatAmount(Number(order.solAmount))} SOL`
+                      : isDevSellOrder
+                      ? `${formatAmount(Number(order.tokenAmount))}%`
                       : `${formatAmount(Number(order.tokenAmount))} Tokens`;
-                  const targetMC = formatMarketCap(Number(order.targetMC));
+                  const devWalletLabel = order.devWallet
+                    ? `${order.devWallet.slice(0, 4)}...${order.devWallet.slice(-4)}`
+                    : "Dev Sell";
+                  const targetDisplay = isMigrationOrder
+                    ? "—"
+                    : isDevSellOrder
+                    ? "—"
+                    : formatMarketCap(Number(order.targetMC));
                   const currentMCDisplay = formatMarketCap(meta.marketCap);
                   const statusColor =
                     order.status === "Active"
@@ -565,9 +600,6 @@ export default function TokenLimitOrders() {
                       : order.autoFee
                       ? "Auto"
                       : "Off";
-
-                  const isBuyOrder = order.type === "Buy";
-                  const typeLabel = getOrderTypeLabel(order);
 
                   return (
                     <tr key={order.id} className="bg-neutral-950/20 hover:bg-neutral-900/40">
@@ -632,9 +664,18 @@ export default function TokenLimitOrders() {
                             </div>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-sm font-semibold text-white">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const navigateAddress = order.pairAddress || order.tokenAddress;
+                                if (navigateAddress) {
+                                  router.push(`/trade/${navigateAddress}`);
+                                }
+                              }}
+                              className="text-sm font-semibold text-white hover:text-[#70E0B0] transition-colors cursor-pointer text-left"
+                            >
                               {resolvedName}
-                            </span>
+                            </button>
                             <div className="flex items-center gap-2 text-xs text-neutral-500">
                               <span className="uppercase tracking-wide">
                                 {resolvedSymbol}
@@ -649,12 +690,13 @@ export default function TokenLimitOrders() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs font-semibold">
-                        {isBuyOrder ? (
-                          <span style={{ color: "#2fd6a4" }}>{typeLabel}</span>
-                        ) : (
-                          <span className="text-rose-400">{typeLabel}</span>
-                        )}
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1 text-sm">
+                          <span style={{ color: order.type === "Buy" ? "#2fd6a4" : "#f87171" }}>
+                            {getOrderTypeLabel(order)}
+                          </span>
+                          <span className="text-xs text-neutral-500">{order.status}</span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-neutral-200">{amount}</td>
                       <td className="px-4 py-3 text-neutral-300">
@@ -675,6 +717,17 @@ export default function TokenLimitOrders() {
                             <FaBan className="opacity-80" />
                             {mevMode}
                           </span>
+                          {isDevSellOrder && order.devWallet && (
+                            <a
+                              href={`https://solscan.io/account/${order.devWallet}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-neutral-400 hover:text-[#70E0B0] transition-colors cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Dev: {devWalletLabel}
+                            </a>
+                          )}
                         </div>
                         {order.createdAt && (
                           <div className="mt-1 text-[10px] text-neutral-500">
@@ -682,10 +735,8 @@ export default function TokenLimitOrders() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-neutral-200">
-                        {currentMCDisplay}
-                      </td>
-                      <td className="px-4 py-3 text-neutral-200">{targetMC}</td>
+                      <td className="px-4 py-3 text-neutral-200">{currentMCDisplay}</td>
+                      <td className="px-4 py-3 text-neutral-200">{targetDisplay}</td>
                       <td className="px-4 py-3">
                         {order.status === "Active" ? (
                           <button

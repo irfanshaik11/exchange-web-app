@@ -115,6 +115,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             pair_address: r.pairAddress || r.pair_address || null,
             name: r.name || '',
             symbol: r.symbol || '',
+            launchpad_protocol: r.launchpad_protocol || r.launchpadProtocol || r.launchpadName || null,
             usd_price: parseFloat(r.priceUSD || r.price_usd || '0'),
             fully_diluted_value: parseFloat(r.marketCap || r.market_cap_usd || '0'),
             volume_5m: timeframe === '5m' ? volumeForTimeframe : 0,

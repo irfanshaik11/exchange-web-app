@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { LuPencil, LuCheck } from "react-icons/lu";
-import { formatSmartNumber, type Token } from "~/utils/db";
+import { formatSmartNumber, formatMarketCap, type Token } from "~/utils/db";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { FaRunning, FaGasPump, FaCoins, FaBan, FaCopy, FaExternalLinkAlt, FaTrophy, FaDice, FaUsers, FaChartBar, FaCrown, FaCrosshairs, FaFire } from "react-icons/fa";
 import InterstateTooltip from "../InterstateTooltip";
@@ -540,8 +540,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   const [sliderPct, setSliderPct] = useState(externalTradeParams?.sliderPct || 0);
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [sniperAmount, setSniperAmount] = useState("");
+  const [sniperSubmitting, setSniperSubmitting] = useState(false);
   const [migrationMode, setMigrationMode] = useState(false);
   const [devSellMode, setDevSellMode] = useState(true);
+  const [devSubmitting, setDevSubmitting] = useState(false);
   const [tokenServiceMarketCap, setTokenServiceMarketCap] = useState<number | null>(null);
   const [tokenServiceLiquidity, setTokenServiceLiquidity] = useState<number | null>(null);
   const [creatorAddress, setCreatorAddress] = useState<string>("");
@@ -638,28 +641,6 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       void refreshTokenServiceData(true);
     }
   }, [tab, refreshTokenServiceData]);
-
-  useEffect(() => {
-    if (tab !== "limit" || !effectivePoolAddress) return;
-
-    let cancelled = false;
-
-    const tick = async () => {
-      if (cancelled) return;
-      await refreshTokenServiceData(true);
-    };
-
-    const intervalId = setInterval(() => {
-      void tick();
-    }, TOKEN_SERVICE_REFRESH_INTERVAL_MS);
-
-    void tick();
-
-    return () => {
-      cancelled = true;
-      clearInterval(intervalId);
-    };
-  }, [tab, effectivePoolAddress, refreshTokenServiceData]);
 
   // High slippage warning dialog state
   const [showSlippageWarning, setShowSlippageWarning] = useState(false);
@@ -1103,6 +1084,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       targetMarketCap,
       submittedSolAmount,
       submittedTokenAmount,
+      triggerType,
+      bondingTarget,
     }: {
       orderId: string;
       initiatingToastId?: string | null;
@@ -1110,6 +1093,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       targetMarketCap?: number;
       submittedSolAmount?: number;
       submittedTokenAmount?: number;
+      triggerType?: "marketCap" | "bonding" | "devSell";
+      bondingTarget?: number;
     }) => {
       if (!user?.bearerToken) return;
 
@@ -1126,6 +1111,19 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         try {
           const result: any = await getLimitOrderExecutionResult(orderId, user.bearerToken);
           const status = (result?.status || result?.order?.status) as string | undefined;
+          const resolvedTriggerType: "marketCap" | "bonding" | "devSell" | undefined =
+            (result?.triggerType as any) ??
+            (result?.order?.triggerType as any) ??
+            triggerType;
+          const resolvedBondingTarget =
+            typeof result?.order?.bondingTarget === "number"
+              ? result.order.bondingTarget
+              : typeof result?.bondingTarget === "number"
+                ? result.bondingTarget
+                : bondingTarget;
+          const normalizedBondingTarget = Number.isFinite(Number(resolvedBondingTarget))
+            ? Number(resolvedBondingTarget)
+            : undefined;
 
           if (status === "Completed") {
             const resolvedSol = Number(
@@ -1146,12 +1144,17 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                 : `${resolvedTokens.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symbolLabel}`;
 
             const descriptionParts = [amountLabel];
-            if (
+            if (resolvedTriggerType === "bonding" && typeof normalizedBondingTarget === "number") {
+              descriptionParts.push(`Bonding Target ${normalizedBondingTarget.toFixed(2)}%`);
+            } else if (
+              resolvedTriggerType === "marketCap" &&
               typeof targetMarketCap === "number" &&
               Number.isFinite(targetMarketCap) &&
               targetMarketCap > 0
             ) {
               descriptionParts.push(`Target $${Math.round(targetMarketCap).toLocaleString()}`);
+            } else if (resolvedTriggerType === "devSell") {
+              descriptionParts.push("Triggered by Dev Sell");
             }
 
             const description = descriptionParts.join(" • ");
@@ -1175,7 +1178,12 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             if (typeof window !== "undefined") {
               window.dispatchEvent(
                 new CustomEvent(LIMIT_ORDER_STATUS_EVENT, {
-                  detail: { orderId, status: "Completed" },
+                  detail: {
+                    orderId,
+                    status: "Completed",
+                    triggerType: resolvedTriggerType,
+                    bondingTarget: normalizedBondingTarget,
+                  },
                 })
               );
             }
@@ -1205,7 +1213,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             if (typeof window !== "undefined") {
               window.dispatchEvent(
                 new CustomEvent(LIMIT_ORDER_STATUS_EVENT, {
-                  detail: { orderId, status },
+                  detail: { orderId, status, triggerType: resolvedTriggerType, bondingTarget: normalizedBondingTarget },
                 })
               );
             }
@@ -1220,6 +1228,305 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     },
     [user?.bearerToken, token?.symbol, token?.name]
   );
+
+  const handleCreateSniperOrder = useCallback(async () => {
+    if (!user?.bearerToken) {
+      showCenteredErrorToast("Authentication required to create orders.");
+      return;
+    }
+    if (!token) return;
+
+    const numericAmount = Number(sniperAmount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      showEnhancedToast("error", "Enter a valid sniper amount", {
+        title: "Invalid Amount",
+        description: mode === "buy" 
+          ? "Provide a positive SOL amount before arming the sniper."
+          : "Provide a percentage between 1 and 100 before arming the sniper.",
+      });
+      return;
+    }
+
+    // For sell orders, validate percentage
+    if (mode === "sell") {
+      if (numericAmount > 100) {
+        showEnhancedToast("error", "Percentage too high", {
+          title: "Invalid Percentage",
+          description: "Enter a percentage between 1 and 100.",
+        });
+        return;
+      }
+    }
+
+    const poolAddress = effectivePoolAddress || token.pair_address || token.migrated_pool_address || "";
+    if (!poolAddress) {
+      showEnhancedToast("error", "Pool information unavailable", {
+        title: "Cannot Arm Sniper",
+        description: "We couldn't determine the pool address for this token.",
+      });
+      return;
+    }
+
+    const targetBonding = 100;
+    const sanitizeNumber = (value: unknown, fallback: number): number => {
+      const numeric = typeof value === "string" ? Number(value) : (value as number);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    };
+
+    const quickSettings = settings ?? {};
+    const computedPoolType = getPoolTypeFromToken(token);
+    const slippageValue = sanitizeNumber(quickSettings.maxSlippage, 0.2);
+    const priorityFeeValue = sanitizeNumber(quickSettings.priority, 0.0001);
+    const bribeValue = sanitizeNumber(quickSettings.bribe, 0);
+    const maxFeeValue = sanitizeNumber(quickSettings.maxFee, 0);
+    const mevModeValue =
+      typeof quickSettings.mevMode === "string" ? quickSettings.mevMode : "off";
+    const autoFeeValue = Boolean(quickSettings.autoFee);
+    const rpcValue =
+      typeof quickSettings.rpc === "string" && quickSettings.rpc.trim().length > 0
+        ? quickSettings.rpc.trim()
+        : undefined;
+
+    const latestMarketCap =
+      tokenServiceMarketCap !== null && Number.isFinite(tokenServiceMarketCap)
+        ? tokenServiceMarketCap
+        : baseMarketCap;
+
+    const formattedAmount = mode === "buy"
+      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+      : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+
+    const initiatingToastId = showEnhancedToast("loading", "Arming sniper…", {
+      title: "Arming Sniper",
+      description: `${formattedAmount} • Bonding Target ${targetBonding.toFixed(2)}%`,
+    });
+
+    setSniperSubmitting(true);
+    try {
+      const response = await createLimitOrder(
+        {
+          tokenAddress: token.mint || "",
+          amount: numericAmount,
+          type: mode === "buy" ? "Buy" : "Sell",
+          direction: "Above",
+          triggerType: "bonding",
+          bondingTarget: targetBonding,
+          targetMC: latestMarketCap,
+          currentMarketCap: latestMarketCap,
+          tokenName: token.name,
+          tokenSymbol: token.symbol,
+          tokenDecimals: token.decimals,
+          poolAddress,
+          pairAddress: token.pair_address || token.migrated_pool_address || "",
+          poolType: computedPoolType,
+          slippage: slippageValue,
+          priorityFee: priorityFeeValue,
+          bribe: bribeValue,
+          mevProtection: quickSettings.mevProtection ?? false,
+          mevMode: mevModeValue,
+          autoFee: autoFeeValue,
+          maxFee: maxFeeValue,
+          rpc: rpcValue,
+        },
+        user.bearerToken
+      );
+
+      updateEnhancedToast(initiatingToastId, "success", `${token.symbol} sniper armed`, {
+        title: "Sniper Armed",
+        description: `${formattedAmount} • Bonding Target ${targetBonding.toFixed(2)}%`,
+      });
+
+      if (response?.order?.id) {
+        const normalizedOrderId = String(response.order.id);
+        void monitorLimitOrderExecution({
+          orderId: normalizedOrderId,
+          initiatingToastId,
+          orderType: mode === "buy" ? "Buy" : "Sell",
+          triggerType: "bonding",
+          bondingTarget: targetBonding,
+          targetMarketCap: Number(response.order.targetMC ?? latestMarketCap),
+          submittedSolAmount: mode === "buy" ? numericAmount : undefined,
+          submittedTokenAmount: mode === "sell" ? numericAmount : undefined,
+        });
+      }
+
+      setSniperAmount("");
+    } catch (error: any) {
+      const errorMsg =
+        error?.message?.length > 80
+          ? `${error.message.substring(0, 77)}…`
+          : error?.message || "Failed to arm sniper";
+      updateEnhancedToast(initiatingToastId, "error", "Unable to arm sniper", {
+        title: "Sniper Failed",
+        description: errorMsg,
+      });
+    } finally {
+      setSniperSubmitting(false);
+    }
+  }, [
+    user?.bearerToken,
+    token,
+    sniperAmount,
+    mode,
+    settings,
+    tokenServiceMarketCap,
+    baseMarketCap,
+    effectivePoolAddress,
+    monitorLimitOrderExecution,
+  ]);
+
+  const handleCreateDevSellOrder = useCallback(async () => {
+    if (!user?.bearerToken) {
+      showCenteredErrorToast("Authentication required to create orders.");
+      return;
+    }
+    if (!token) return;
+
+    if (!creatorAddress) {
+      showEnhancedToast("error", "Developer wallet unavailable", {
+        title: "Cannot Arm Dev Mirror",
+        description: "We couldn't determine the developer wallet for this token yet."
+      });
+      return;
+    }
+
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      showEnhancedToast("error", "Enter a valid amount", {
+        title: "Invalid Amount",
+        description: mode === "sell"
+          ? "Provide a percentage between 1 and 100 before arming the dev mirror."
+          : "Provide a positive SOL amount before arming the dev mirror.",
+      });
+      return;
+    }
+
+    if (mode === "sell" && numericAmount > 100) {
+      showEnhancedToast("error", "Sell percentage too high", {
+        title: "Invalid Percentage",
+        description: "Enter a percentage between 1 and 100.",
+      });
+      return;
+    }
+
+    const poolAddress = effectivePoolAddress || token.pair_address || token.migrated_pool_address || "";
+    if (!poolAddress) {
+      showEnhancedToast("error", "Pool information unavailable", {
+        title: "Cannot Arm Dev Mirror",
+        description: "We couldn't determine the pool address for this token.",
+      });
+      return;
+    }
+
+    const sanitizeNumber = (value: unknown, fallback: number): number => {
+      const numeric = typeof value === "string" ? Number(value) : (value as number);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    };
+
+    const quickSettings = settings ?? {};
+    const computedPoolType = getPoolTypeFromToken(token);
+    const slippageValue = sanitizeNumber(quickSettings.maxSlippage, 0.2);
+    const priorityFeeValue = sanitizeNumber(quickSettings.priority, 0.0001);
+    const bribeValue = sanitizeNumber(quickSettings.bribe, 0);
+    const maxFeeValue = sanitizeNumber(quickSettings.maxFee, 0);
+    const mevModeValue = typeof quickSettings.mevMode === "string" ? quickSettings.mevMode : "off";
+    const autoFeeValue = Boolean(quickSettings.autoFee);
+    const mevProtectionValue = mevModeValue !== "off";
+    const rpcValue =
+      typeof quickSettings.rpc === "string" && quickSettings.rpc.trim().length > 0
+        ? quickSettings.rpc.trim()
+        : undefined;
+
+    const latestMarketCap =
+      tokenServiceMarketCap !== null && Number.isFinite(tokenServiceMarketCap)
+        ? tokenServiceMarketCap
+        : baseMarketCap;
+
+    const actionLabel = mode === "buy" ? "Buy on Dev Sell" : "Sell on Dev Sell";
+    const formattedAmount = mode === "buy"
+      ? `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`
+      : `${numericAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+    const shortDev = creatorAddress.length > 12
+      ? `${creatorAddress.slice(0, 4)}...${creatorAddress.slice(-4)}`
+      : creatorAddress;
+
+    const initiatingToastId = showEnhancedToast("loading", "Arming dev mirror…", {
+      title: actionLabel,
+      description: `${formattedAmount} • Dev Wallet ${shortDev}`,
+    });
+
+    setDevSubmitting(true);
+    try {
+      const response = await createLimitOrder(
+        {
+          tokenAddress: token.mint || "",
+          amount: numericAmount,
+          type: mode === "buy" ? "Buy" : "Sell",
+          direction: mode === "buy" ? "Below" : "Above",
+          triggerType: "devSell",
+          devWallet: creatorAddress,
+          targetMC: latestMarketCap ?? 0,
+          currentMarketCap: latestMarketCap ?? token.market_cap_usd ?? token.fully_diluted_value,
+          currentPrice: token.usd_price,
+          tokenName: token.name,
+          tokenSymbol: token.symbol,
+          tokenDecimals: token.decimals,
+          poolAddress,
+          pairAddress: token.pair_address || "",
+          poolType: computedPoolType,
+          slippage: slippageValue,
+          priorityFee: priorityFeeValue,
+          bribe: bribeValue,
+          mevProtection: mevProtectionValue,
+          mevMode: mevModeValue,
+          autoFee: autoFeeValue,
+          maxFee: maxFeeValue,
+          rpc: rpcValue,
+        },
+        user.bearerToken
+      );
+
+      updateEnhancedToast(initiatingToastId, "success", `${token.symbol} dev mirror armed`, {
+        title: `${actionLabel} Armed`,
+        description: `${formattedAmount} • Dev Wallet ${shortDev}`,
+      });
+
+      if (response?.order?.id) {
+        const normalizedOrderId = String(response.order.id);
+        void monitorLimitOrderExecution({
+          orderId: normalizedOrderId,
+          initiatingToastId,
+          orderType: response.order.type,
+          triggerType: "devSell",
+          targetMarketCap: Number(response.order.targetMC ?? latestMarketCap ?? 0),
+          submittedSolAmount: mode === "buy" ? Number(response.order.solAmount ?? numericAmount) : undefined,
+          submittedTokenAmount: mode === "sell" ? Number(response.order.tokenAmount ?? numericAmount) : undefined,
+        });
+      }
+
+      setAmount("");
+    } catch (error: any) {
+      const message =
+        error?.message?.length > 80 ? `${error.message.substring(0, 77)}…` : error?.message || "Failed to arm dev mirror";
+      updateEnhancedToast(initiatingToastId, "error", "Unable to arm dev mirror", {
+        title: "Dev Mirror Failed",
+        description: message,
+      });
+    } finally {
+      setDevSubmitting(false);
+    }
+  }, [
+    user?.bearerToken,
+    token,
+    amount,
+    mode,
+    creatorAddress,
+    settings,
+    effectivePoolAddress,
+    tokenServiceMarketCap,
+    baseMarketCap,
+    monitorLimitOrderExecution,
+  ]);
 
   const initiateTrade = useCallback(
     async (overrides?: { skipLiquidity?: boolean; skipSlippage?: boolean }) => {
@@ -1342,6 +1649,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             }
           }
 
+          // Only validate that target MC is different from current MC (basic sanity check)
           const effectiveLiveMc = latestMarketCap ?? baseMarketCap;
           const isZeroDelta =
             Number.isFinite(effectiveLiveMc) &&
@@ -1363,34 +1671,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             return;
           }
 
-          if (latestMarketCap && Number.isFinite(latestMarketCap)) {
-            const conditionAlreadyMet =
-              direction === "Below"
-                ? latestMarketCap <= numericTargetMc
-                : latestMarketCap >= numericTargetMc;
-
-            if (conditionAlreadyMet) {
-              const toleranceValue = Number.isFinite(LIMIT_ORDER_TOLERANCE_BPS)
-                ? (numericTargetMc * LIMIT_ORDER_TOLERANCE_BPS) / 10_000
-                : 0;
-              const delta = Math.abs(latestMarketCap - numericTargetMc);
-
-              if (toleranceValue && delta > toleranceValue) {
-                updateEnhancedToast(
-                  initiatingToastId,
-                  "error",
-                  "Market moved",
-                  {
-                    title: "Market cap changed",
-                    description: `Live MC is $${Math.round(latestMarketCap).toLocaleString()} — adjust your target before placing the order.`,
-                  }
-                );
-                setIsLoading(false);
-                setPendingTradeOptions(null);
-                return;
-              }
-            }
-          }
+          // Removed the "condition already met" validation - limit orders should be allowed
+          // even if the condition is currently met, as the market can move back and forth
+          // The backend will handle execution when the condition is actually met
 
           const limitOrderResponse = await createLimitOrder(
             {
@@ -1437,6 +1720,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               orderId: normalizedOrderId,
               initiatingToastId,
               orderType: limitOrderResponse.order.type,
+              triggerType: limitOrderResponse.order.triggerType as "marketCap" | "bonding" | "devSell" | undefined,
+              bondingTarget: Number(limitOrderResponse.order.bondingTarget ?? NaN),
               targetMarketCap: Number(limitOrderResponse.order.targetMC ?? numericTargetMc),
               submittedSolAmount: Number(limitOrderResponse.order.solAmount ?? numericAmount),
               submittedTokenAmount: Number(limitOrderResponse.order.tokenAmount ?? 0),
@@ -1611,6 +1896,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     setPendingTradeOptions(null);
     setIsLoading(false);
   }, []);
+
+  const isSniperMode = tab === "adv" && migrationMode;
+  const isDevSellMode = tab === "adv" && devSellMode;
 
   return (
     <div
@@ -1829,6 +2117,11 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
               </button>
             </div>
           </div>
+          {devSellMode && !creatorAddress && (
+            <div className="mt-2 text-[11px] text-[#FFB347] text-center">
+              Developer wallet not detected yet. Connect to token service to enable dev sell mirroring.
+            </div>
+          )}
         </div>
       )}
 
@@ -1837,7 +2130,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         <div className="mx-auto w-full max-w-xl relative rounded-lg border border-[#2A2B33] bg-[#1E1F26]">
           <div className="flex items-center justify-between gap-3 px-3 py-1.5">
             <div className="flex items-center gap-1">
-              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">Amount</span>
+              <span className="text-[10px] font-semibold text-[#9CA3AF] uppercase tracking-wide">
+                {isSniperMode ? "Sniper Amount" : "Amount"}
+              </span>
               <input
                 type="text"
                 inputMode="decimal"
@@ -1847,13 +2142,18 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                            placeholder:text-[#9CA3AF] focus:outline-none"
                 style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
                 placeholder="0.00"
-                value={amount}
+                value={isSniperMode ? sniperAmount : amount}
                 onChange={(e) => {
                   const raw = e.target.value.replace(/,/g, ".");
-                  if (allowDecimal(raw)) setAmount(raw);
+                  if (!allowDecimal(raw)) return;
+                  if (isSniperMode) {
+                    setSniperAmount(raw);
+                  } else {
+                    setAmount(raw);
+                  }
                 }}
                 onBlur={(e) => {
-                  // When user finishes typing, check if amount meets minimum (buy mode only)
+                  if (isSniperMode) return;
                   const value = Number(e.target.value);
                   if (mode === "buy" && value > 0) {
                     const poolType = (getPoolTypeFromToken(token) || token?.launchpad_protocol || '').toLowerCase();
@@ -1867,7 +2167,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                       "meteora dbc": 0.0001,
                     };
                     const minAmount = minimums[poolType] ?? 0.0001;
- 
+
                     if (value < minAmount) {
                       showEnhancedToast('error', `Minimum trade size is ${minAmount} SOL`, {
                         title: 'Amount Too Small',
@@ -1880,10 +2180,8 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </div>
             <div className="flex items-center justify-center w-5 h-5">
               {mode === "sell" ? (
-                // Show % symbol for sell mode
                 <span className="text-[14px] font-semibold text-[#E6E7EA]">%</span>
               ) : (
-                // Show SOL logo for buy mode
                 <svg width="16" height="16" viewBox="0 0 397.7 311.7" fill="none">
                   <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear)"/>
                   <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear)"/>
@@ -1914,7 +2212,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             <div className="grid grid-cols-5">
               {amountPresets.map((opt, i) => {
                 const currentValue = editingPresets ? (presetDrafts[i] || "") : String(opt);
-                const active = amount === currentValue;
+                const active = (isSniperMode ? sniperAmount : amount) === currentValue;
                 if (editingPresets) {
                   return (
                     <div key={i} className="h-9 border-r border-[#2A2B33] last:border-r-0 min-w-0">
@@ -1950,7 +2248,13 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                         ? "bg-[#2A2B33] text-[#E6E7EA]"
                         : "bg-[#17191E] hover:bg-[#1E1F26] text-[#E6E7EA]"
                     )}
-                    onClick={() => setAmount(String(opt))}
+                    onClick={() => {
+                      if (isSniperMode) {
+                        setSniperAmount(String(opt));
+                      } else {
+                        setAmount(String(opt));
+                      }
+                    }}
                   >
                     {opt}
                   </button>
@@ -2184,38 +2488,40 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       {/* Previously showed inline success/error messages; replaced by centered toasts */}
 
       {/* Helper line */}
-      <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
-        {amount ? (
-          <>
-            You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span>
-            {mode === "sell" ? (
-              <span className="text-[#E6E7EA] font-semibold">%</span>
-            ) : (
-              <div className="inline-block w-3 h-3 ml-1 align-middle">
-                <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
-                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
-                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
-                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
-                  <defs>
-                    <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                    <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                    <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-            )}
-          </>
-        ) : null}
+      {!isSniperMode && (
+        <div className="px-3 mt-1.5 text-right text-[11px] text-[#9CA3AF]">
+          {amount ? (
+            <>
+              You'll {mode === "buy" ? "spend" : "sell"} <span className="text-[#E6E7EA] font-semibold">{amount}</span>
+              {mode === "sell" ? (
+                <span className="text-[#E6E7EA] font-semibold">%</span>
+              ) : (
+                <div className="inline-block w-3 h-3 ml-1 align-middle">
+                  <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                    <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_helper)"/>
+                    <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_helper)"/>
+                    <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_helper)"/>
+                    <defs>
+                      <linearGradient id="paint0_linear_helper" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
+                        <stop offset="0" stopColor="#00FFA3"/>
+                        <stop offset="1" stopColor="#DC1FFF"/>
+                      </linearGradient>
+                      <linearGradient id="paint1_linear_helper" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
+                        <stop offset="0" stopColor="#00FFA3"/>
+                        <stop offset="1" stopColor="#DC1FFF"/>
+                      </linearGradient>
+                      <linearGradient id="paint2_linear_helper" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
+                        <stop offset="0" stopColor="#00FFA3"/>
+                        <stop offset="1" stopColor="#DC1FFF"/>
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
+              )}
+            </>
+          ) : null}
         </div>
+      )}
 
       {/* Primary action */}
       <div className="px-3 py-2">
@@ -2225,14 +2531,58 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
           className={cx(
             baseBtn,
             "w-full h-10 rounded-full text-[14px] cursor-pointer",
-            mode === "buy" ? "bg-[#70E0B0] text-black hover:bg-[#58B890]" : "bg-[#FF4D7F] text-black hover:opacity-90"
+            mode === "buy"
+              ? "bg-[#70E0B0] text-black hover:bg-[#58B890]"
+              : "bg-[#FF4D7F] text-black hover:opacity-90"
           )}
-          disabled={!amount || isLoading || (tab === "limit" && !targetMC)}
+          disabled={isSniperMode
+            ? !sniperAmount || Number(sniperAmount) <= 0 || sniperSubmitting
+            : isDevSellMode
+              ? !amount || Number(amount) <= 0 || devSubmitting || !creatorAddress
+              : !amount || isLoading || (tab === "limit" && !targetMC)}
           onClick={() => {
-            void initiateTrade();
+            if (isSniperMode) {
+              void handleCreateSniperOrder();
+            } else if (isDevSellMode) {
+              void handleCreateDevSellOrder();
+            } else {
+              void initiateTrade();
+            }
           }}
         >
-          {isLoading ? (
+          {isSniperMode ? (
+            sniperSubmitting ? (
+              "Arming…"
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                Arm Sniper {token.symbol}
+                {prettyAmt(sniperAmount) && (
+                  <>
+                    {" "}{prettyAmt(sniperAmount)}
+                    {mode === "buy" ? (
+                      <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />
+                    ) : (
+                      <span className="ml-0.5">%</span>
+                    )}
+                  </>
+                )}
+              </span>
+            )
+          ) : isDevSellMode ? (
+            devSubmitting ? (
+              "Arming…"
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                {mode === "buy" ? "Arm Buy on Dev Sell" : "Arm Sell on Dev Sell"}
+                {prettyAmt(amount) && (
+                  <>
+                    {" "}{prettyAmt(amount)}
+                    {mode === "sell" ? <span>%</span> : <SiSolana className="h-4 w-4 -mt-px" aria-hidden="true" />}
+                  </>
+                )}
+              </span>
+            )
+          ) : isLoading ? (
             "Processing..."
           ) : (
             <span className="inline-flex items-center gap-1">
@@ -2250,7 +2600,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
             </span>
           )}
         </button>
-        </div>
+      </div>
 
       {/* footer mini stats */}
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>

@@ -10,9 +10,9 @@ interface LimitOrder {
   tokenAddress: string;
   type: "Buy" | "Sell";
   direction: "Above" | "Below";
-  targetMC: number;
-  solAmount: number;
-  tokenAmount: number;
+  targetMC: number | string;
+  solAmount: number | string;
+  tokenAmount: number | string;
   status: "Active" | "Cancelled" | "Completed" | "Failed";
   createdAt?: string;
   transactionHash?: string; // For completed orders

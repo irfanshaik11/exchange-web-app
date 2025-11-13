@@ -11,6 +11,7 @@ export type PoolType =
   | "meteora amm v2" 
   | "bags" 
   | "MoonShoot" 
+  | "Orca"
   | "";
 
 /**
@@ -63,6 +64,9 @@ export function getPoolTypeFromToken(token: Token): PoolType {
   }
   if (protocolLower.includes("moonshoot")) {
     return "MoonShoot";
+  }
+  if (protocolLower.includes("orca")) {
+    return "Orca";
   }
   
   // Default: try to guess based on token address
