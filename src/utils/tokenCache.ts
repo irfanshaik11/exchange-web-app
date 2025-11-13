@@ -330,13 +330,17 @@ export async function getCachedTradeData(pairAddress: string): Promise<any | nul
       { pair_address: pairAddress },
       async () => {
         const response = await fetch(`${baseUrl}/v1/trade/view?pair_address=${pairAddress}`);
-        if (!response.ok) throw new Error('Failed to fetch');
+        if (!response.ok) {
+          console.warn(`[TokenCache] Trade data fetch failed for ${pairAddress}: ${response.status}`);
+          throw new Error('Failed to fetch');
+        }
         return response.json();
       },
       CACHE_CONFIGS.FREQUENT.ttl
     );
   } catch (error) {
-    console.error('[TokenCache] Failed to get trade data:', error);
+    console.warn('[TokenCache] Failed to get trade data for', pairAddress, error);
+    // Return null instead of throwing to allow the page to load with partial data
     return null;
   }
 }

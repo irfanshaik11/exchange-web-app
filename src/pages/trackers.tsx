@@ -29,10 +29,11 @@ import {
 } from "~/utils/twitterTracking";
 import { useUser } from "../components/UserContext";
 import { useWalletTracker } from "../components/WalletTrackerContext";
-import { batchFetchTokenMetadata } from "~/utils/tokenMetadata";
 import AddTwitterHandleModal from "../components/AddTwitterHandleModal";
 import TwitterAccountRow from "../components/TwitterAccountRow";
 import { FiSettings, FiBell, FiShare2, FiRss } from "react-icons/fi";
+import { SiSolana } from "react-icons/si";
+import { RiExchangeDollarLine } from "react-icons/ri";
 
 const TABS = ["Wallet Manager", "Live Trades", "Monitor"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
@@ -144,8 +145,10 @@ export default function TrackersPage() {
   );
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
-    Map<string, { symbol: string | null; name: string | null }>
+    Map<string, { symbol: string | null; name: string | null; image: string | null; launchpad_protocol?: string | null; market_cap_usd?: number | null }>
   >(new Map());
+  const fetchedMintsRef = useRef<Set<string>>(new Set());
+  const [showUSD, setShowUSD] = useState(false); // Toggle between USD and SOL display
 
   const normalizeAddress = (address: string | null | undefined) =>
     (address ?? "").trim().toLowerCase();
@@ -342,40 +345,84 @@ export default function TrackersPage() {
     setWatchedWallets(globalWatchedWallets);
   }, [globalWatchedWallets]);
 
-  // Fetch token metadata for live trades
+  // Fetch token metadata for live trades (including image, protocol, market cap from Go service)
+  // Updates progressively as each fetch completes for faster rendering
   useEffect(() => {
     if (latestTrades.length === 0) return;
 
-    // Extract unique mints that don't have symbol
-    const mintsToFetch = latestTrades
-      .filter((trade) => trade.mint && !trade.symbol)
-      .map((trade) => trade.mint)
-      .filter((mint, idx, arr) => arr.indexOf(mint) === idx); // unique
+    // Extract unique trades that we haven't fetched yet
+    const tradesToFetch = latestTrades.filter(
+      (trade) => !fetchedMintsRef.current.has(trade.mint)
+    );
 
-    if (mintsToFetch.length === 0) {
-      console.log("[Live Trades] No mints to fetch, all trades have symbols");
+    if (tradesToFetch.length === 0) {
       return;
     }
 
-    console.log("[Live Trades] Fetching metadata for tokens:", mintsToFetch);
+    console.log("[Live Trades] Fetching metadata for", tradesToFetch.length, "tokens");
+    
+    // Mark these mints as being fetched to prevent duplicate requests
+    tradesToFetch.forEach(trade => fetchedMintsRef.current.add(trade.mint));
 
-    batchFetchTokenMetadata(mintsToFetch)
-      .then((metadata) => {
-        console.log(
-          "[Live Trades] Successfully fetched metadata:",
-          Object.fromEntries(metadata),
-        );
-        setTokenMetadata((prev) => {
-          const updated = new Map(prev);
-          metadata.forEach((value, key) => {
-            updated.set(key, value);
+    // Fetch each token's metadata independently and update state immediately when ready
+    // This allows progressive rendering instead of waiting for all fetches
+    tradesToFetch.forEach(async (trade) => {
+      try {
+        const goServiceUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+        
+        // Use pair_address if available for faster lookup, otherwise search by mint
+        let url: string;
+        if (trade.pair_address) {
+          url = `${goServiceUrl}/v1/trade/view?pair_address=${trade.pair_address}`;
+        } else {
+          url = `${goServiceUrl}/v1/token/search?mint=${trade.mint}&limit=1`;
+        }
+        
+        console.log(`[Live Trades] Fetching ${trade.mint.slice(0, 6)}...`);
+        
+        const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        
+        if (!response.ok) {
+          console.warn(`[Live Trades] API error for ${trade.mint.slice(0, 6)}...: ${response.status}`);
+          return;
+        }
+        
+        const data = await response.json();
+        
+        // Extract token metadata from response
+        let token;
+        if (trade.pair_address) {
+          token = data.token || data;
+        } else {
+          token = Array.isArray(data) ? data[0] : (data.tokens?.[0] || data);
+        }
+        
+        if (token) {
+          const metadata = {
+            symbol: token.symbol || trade.symbol || null,
+            name: token.name || trade.name || null,
+            image: token.uri || token.image || token.logo || null,
+            launchpad_protocol: token.launchpad_protocol || token.protocol || null,
+            market_cap_usd: token.market_cap_usd || token.marketCapUsd || token.fully_diluted_value || null,
+          };
+          
+          // Update state immediately for this token (progressive rendering)
+          setTokenMetadata((prev) => {
+            const updated = new Map(prev);
+            updated.set(trade.mint, metadata);
+            return updated;
           });
-          return updated;
-        });
-      })
-      .catch((err) => {
-        console.error("[Live Trades] Error fetching token metadata:", err);
-      });
+          
+          console.log(`[Live Trades] ✅ ${metadata.symbol || metadata.name || trade.mint.slice(0, 6)}`, {
+            image: !!metadata.image,
+            protocol: metadata.launchpad_protocol,
+            mc: metadata.market_cap_usd ? `$${(metadata.market_cap_usd / 1_000_000).toFixed(2)}M` : 'N/A'
+          });
+        }
+      } catch (error) {
+        console.warn(`[Live Trades] Fetch failed for ${trade.mint.slice(0, 6)}...`, error);
+      }
+    });
   }, [latestTrades]);
 
   // Handle sidebar resizing
@@ -479,8 +526,8 @@ export default function TrackersPage() {
   // Twitter functions
   const loadTwitterAccounts = async () => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.id);
-      setTwitterAccounts(accounts);
+    const accounts = await getTrackedTwitterAccounts(user?.id);
+    setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
       setTwitterAccounts([]);
@@ -930,6 +977,15 @@ export default function TrackersPage() {
                               </div>
                             ) : (
                               <div className="overflow-x-auto overflow-y-auto">
+                                {/* SVG gradient for Solana icon */}
+                                <svg className="absolute w-0 h-0 pointer-events-none">
+                                  <defs>
+                                    <linearGradient id="solana-gradient-tracker" x1="0%" y1="0%" x2="100%" y2="100%">
+                                      <stop offset="0%" style={{ stopColor: '#00FFA3', stopOpacity: 1 }} />
+                                      <stop offset="100%" style={{ stopColor: '#DC1FFF', stopOpacity: 1 }} />
+                                    </linearGradient>
+                                  </defs>
+                                </svg>
                                 <table className="mt-2 w-full min-w-[720px] text-xs">
                                   <thead>
                                     <tr className="border-b border-neutral-800/60">
@@ -946,13 +1002,19 @@ export default function TrackersPage() {
                                         Token
                                       </th>
                                       <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
-                                        Amount
+                                        <div className="flex items-center gap-1">
+                                          <span>Amount</span>
+                                          <button
+                                            onClick={() => setShowUSD(!showUSD)}
+                                            className={`transition-colors ${showUSD ? 'text-green-400' : 'text-neutral-400 hover:text-neutral-300'}`}
+                                            title={showUSD ? 'Switch to SOL' : 'Switch to USD'}
+                                          >
+                                            <RiExchangeDollarLine className="h-4 w-4" />
+                                          </button>
+                                        </div>
                                       </th>
                                       <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
-                                        Price
-                                      </th>
-                                      <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">
-                                        Venue
+                                        MC
                                       </th>
                                     </tr>
                                   </thead>
@@ -965,16 +1027,74 @@ export default function TrackersPage() {
                                         trade.at,
                                       ).toLocaleTimeString();
 
-                                      // Use fetched metadata as fallback
+                                      // Prioritize websocket data (symbol/name) over metadata
                                       const metadata = tokenMetadata.get(
                                         trade.mint,
                                       );
+                                      
+                                      // Priority: websocket symbol > metadata symbol > websocket name > metadata name > fallback
                                       const displaySymbol =
                                         trade.symbol ||
                                         metadata?.symbol ||
+                                        trade.name ||
+                                        metadata?.name ||
                                         trade.mint.slice(0, 8) + "...";
-                                      const displayName =
-                                        trade.name || metadata?.name;
+                                      const displayName = trade.name || metadata?.name;
+                                      
+                                      // Debug: Log what we're displaying
+                                      if (displaySymbol === trade.mint.slice(0, 8) + "...") {
+                                        console.log('[Live Trades] Showing fallback address for', trade.mint.slice(0, 8), {
+                                          trade_symbol: trade.symbol,
+                                          trade_name: trade.name,
+                                          metadata_symbol: metadata?.symbol,
+                                          metadata_name: metadata?.name,
+                                          has_metadata: !!metadata,
+                                        });
+                                      }
+                                      
+                                      // Get token image URL - prioritize metadata image
+                                      const tokenImageUrl = metadata?.image;
+                                      const launchpadProtocol = metadata?.launchpad_protocol?.toLowerCase() || '';
+                                      
+                                      // Get protocol icon (exact logic from PulseTable)
+                                      const getProtocolIcon = (protocol: string): string => {
+                                        if (!protocol) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                                        if (protocol.includes('pump')) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                                        if (protocol.includes('meteora')) return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
+                                        if (protocol.includes('raydium')) return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                                        if (protocol.includes('boop')) return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
+                                        if (protocol.includes('moonit') || protocol.includes('moonshot') || protocol.includes('moonshoot')) return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+                                        if (protocol.includes('bonk')) return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+                                        if (protocol.includes('bags')) return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
+                                        if (protocol.includes('launch')) return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                                        return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                                      };
+                                      
+                                      // Get protocol color (exact logic from PulseTable)
+                                      const getProtocolColor = (protocol: string): string => {
+                                        if (!protocol) return '#22c55e';
+                                        if (protocol.includes('pump')) return '#22c55e';
+                                        if (protocol.includes('meteora')) return '#ff4662';
+                                        if (protocol.includes('raydium')) return '#5c51f7';
+                                        if (protocol.includes('moonit') || protocol.includes('moonshot') || protocol.includes('moonshoot')) return '#eab308';
+                                        if (protocol.includes('boop')) return '#134577';
+                                        if (protocol.includes('bonk')) return '#ff6b35';
+                                        if (protocol.includes('bags')) return '#22c55e';
+                                        if (protocol.includes('launch')) return '#3b82f6';
+                                        if (protocol.includes('orca')) return '#0ea5e9';
+                                        if (protocol.includes('jupiter')) return '#8b5cf6';
+                                        return '#22c55e';
+                                      };
+                                      
+                                      const protocolIcon = getProtocolIcon(launchpadProtocol);
+                                      const protocolColor = getProtocolColor(launchpadProtocol);
+                                      
+                                      // Check if token should have full circle image (no white space)
+                                      const isMeteora = launchpadProtocol.includes('meteora');
+                                      const isBonk = launchpadProtocol.includes('bonk');
+                                      const isBags = launchpadProtocol.includes('bags');
+                                      const isMoonit = launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot');
+                                      const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
 
                                       return (
                                         <tr
@@ -1006,24 +1126,177 @@ export default function TrackersPage() {
                                               {trade.side.toUpperCase()}
                                             </span>
                                           </td>
-                                          <td
-                                            className="w-32 px-2 py-2 font-mono text-emerald-300"
+                                          <td className="w-32 px-2 py-2">
+                                            <button
+                                              onClick={async () => {
+                                                // Use liquidity pool / trading pair address (pair_address) for navigation
+                                                // This should be pre-resolved by WalletTrackerContext, but we have a fallback
+                                                let tokenAddress = trade.pair_address;
+                                                
+                                                // Fallback: if pair_address is not available, resolve it now
+                                                if (!tokenAddress && trade.mint) {
+                                                  console.log('[Trackers] pair_address not found, resolving from mint:', trade.mint);
+                                                  
+                                                  try {
+                                                    // First try to get it from token search (most reliable)
+                                                    const searchResponse = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`);
+                                                    
+                                                    if (searchResponse.ok) {
+                                                      const searchData = await searchResponse.json();
+                                                      if (searchData.tokens && searchData.tokens.length > 0) {
+                                                        const token = searchData.tokens[0];
+                                                        tokenAddress = token.pair_address || token.poolId;
+                                                        console.log('[Trackers] Resolved pair_address from search:', tokenAddress);
+                                                      }
+                                                    }
+                                                    
+                                                    // Fallback to hydrate-pair if search didn't work
+                                                    if (!tokenAddress) {
+                                                      const hydrateResponse = await fetch('/api/token-service/hydrate-pair', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ mint: trade.mint }),
+                                                      });
+                                                      
+                                                      if (hydrateResponse.ok) {
+                                                        const hydrateData = await hydrateResponse.json();
+                                                        tokenAddress = hydrateData.pair_address || hydrateData.poolId;
+                                                        console.log('[Trackers] Resolved pair_address from hydrate:', tokenAddress);
+                                                      }
+                                                    }
+                                                  } catch (error) {
+                                                    console.warn('[Trackers] Failed to resolve pair_address:', error);
+                                                  }
+                                                }
+                                                
+                                                // Final fallback to mint if resolution failed
+                                                if (!tokenAddress) {
+                                                  tokenAddress = trade.mint;
+                                                  console.warn('[Trackers] Using mint as fallback:', tokenAddress);
+                                                }
+
+                                                console.log('[Trackers] Navigating with address:', tokenAddress, 'for token:', displaySymbol);
+                                                window.location.href = `/trade/${tokenAddress}`;
+                                              }}
+                                              className="flex items-center gap-2 font-mono text-emerald-300 hover:text-emerald-200 transition-colors cursor-pointer"
                                             title={displayName || undefined}
                                           >
-                                            {displaySymbol}
+                                              {/* Token icon with protocol badge (smaller version of PulseTable) */}
+                                              <div className="relative flex items-center justify-center flex-shrink-0"
+                                                   style={{ width: 28, height: 28 }}>
+                                                {/* Main token image with border */}
+                                                <div 
+                                                  className="relative rounded-sm"
+                                                  style={{
+                                                    border: `1px solid ${protocolColor}B3`,
+                                                    padding: '2px',
+                                                    backgroundColor: '#06070b'
+                                                  }}
+                                                >
+                                                  <div className="relative rounded-sm overflow-hidden"
+                                                       style={{ width: 22, height: 22 }}>
+                                                    {tokenImageUrl ? (
+                                                      <img
+                                                        src={tokenImageUrl}
+                                                        alt={displaySymbol}
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                          e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol)}&background=0f1012&color=E6E7EA&size=22`;
+                                                        }}
+                                                      />
+                                                    ) : (
+                                                      <img
+                                                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol)}&background=0f1012&color=E6E7EA&size=22`}
+                                                        alt={displaySymbol}
+                                                        className="w-full h-full object-cover"
+                                                      />
+                                                    )}
+                                                  </div>
+                                                </div>
+                                                
+                                                {/* Protocol badge icon (bottom-right corner) */}
+                                                <div 
+                                                  className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/4 translate-y-1/4"
+                                                  style={{ 
+                                                    width: 10, 
+                                                    height: 10,
+                                                    border: `1px solid ${protocolColor}`,
+                                                    boxShadow: `0 0 2px ${protocolColor}60`
+                                                  }}
+                                                >
+                                                  <img
+                                                    src={protocolIcon}
+                                                    alt="Protocol"
+                                                    className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+                                                    style={{
+                                                      filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
+                                                    }}
+                                                  />
+                                                </div>
+                                              </div>
+                                              <span className="font-semibold text-white">{displaySymbol}</span>
+                                            </button>
                                           </td>
                                           <td className="w-24 px-2 py-2 text-neutral-200">
-                                            {trade.amount.toFixed(2)}
+                                            <div className="flex items-center gap-1">
+                                              {showUSD ? (
+                                                <span className="text-green-400 font-semibold">$</span>
+                                              ) : (
+                                                <SiSolana
+                                                  className="h-3 w-3 inline-block flex-shrink-0"
+                                                  aria-hidden="true"
+                                                  style={{
+                                                    color: 'unset',
+                                                    fill: 'url(#solana-gradient-tracker)',
+                                                    filter: 'none',
+                                                  }}
+                                                />
+                                              )}
+                                              <span>
+                                                {(() => {
+                                                  if (showUSD) {
+                                                    // Display USD price from websocket
+                                                    if (trade.price_usd !== null && trade.price_usd !== undefined) {
+                                                      // Format USD with commas and 2 decimal places
+                                                      return new Intl.NumberFormat('en-US', {
+                                                        minimumFractionDigits: 2,
+                                                        maximumFractionDigits: 2
+                                                      }).format(trade.price_usd);
+                                                    }
+                                                    return '-';
+                                                  } else {
+                                                    // Display SOL amount with 4 decimal places
+                                                    if (trade.sol_spent !== null && trade.sol_spent !== undefined) {
+                                                      // Check if value is in lamports (very large numbers) and convert to SOL
+                                                      let solAmount = Math.abs(trade.sol_spent);
+                                                      if (solAmount > 1000) {
+                                                        // Likely in lamports, convert to SOL (1 SOL = 1e9 lamports)
+                                                        solAmount = solAmount / 1e9;
+                                                      }
+                                                      return solAmount.toFixed(4);
+                                                    }
+                                                    // Fallback to token amount if sol_spent is not available
+                                                    return `${trade.amount.toFixed(4)} tokens`;
+                                                  }
+                                                })()}
+                                              </span>
+                                            </div>
                                           </td>
                                           <td className="w-24 px-2 py-2 text-neutral-300">
-                                            {trade.price_usd
-                                              ? `$${trade.price_usd.toFixed(
-                                                  6,
-                                                )}`
-                                              : "-"}
-                                          </td>
-                                          <td className="w-20 px-2 py-2 text-neutral-400">
-                                            {trade.venue || "Unknown"}
+                                            {(() => {
+                                              const marketCap = metadata?.market_cap_usd;
+                                              if (!marketCap || marketCap === 0) return <span className="text-neutral-500">-</span>;
+                                              
+                                              if (marketCap >= 1_000_000_000) {
+                                                return `$${(marketCap / 1_000_000_000).toFixed(2)}B`;
+                                              } else if (marketCap >= 1_000_000) {
+                                                return `$${(marketCap / 1_000_000).toFixed(2)}M`;
+                                              } else if (marketCap >= 1_000) {
+                                                return `$${(marketCap / 1_000).toFixed(2)}K`;
+                                              } else {
+                                                return `$${marketCap.toFixed(2)}`;
+                                              }
+                                            })()}
                                           </td>
                                         </tr>
                                       );
@@ -1407,7 +1680,7 @@ export default function TrackersPage() {
                   }
                 }
                 processed += 1;
-                onProgress?.(processed, total);
+                  onProgress?.(processed, total);
               }
 
               await loadWalletsFromBackend();
@@ -1454,3 +1727,4 @@ export default function TrackersPage() {
     </>
   );
 }
+
