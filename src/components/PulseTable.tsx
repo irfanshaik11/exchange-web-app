@@ -55,7 +55,7 @@ import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { useSolPrice } from "~/components/SolPriceContext";
-import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { tradeBuy, createLimitOrder, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
@@ -67,7 +67,7 @@ import {
   updateTransactionToast,
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
-import { showEnhancedToast } from "~/utils/enhancedToast";
+import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
@@ -1290,6 +1290,7 @@ function PulseTable({
   const [slippage, setSlippage] = useState(0);
   const [priority, setPriority] = useState(0);
   const [bribe, setBribe] = useState(0);
+  const [sniperSubmitting, setSniperSubmitting] = useState(false);
   const [activeFilterTab, setActiveFilterTab] = useState('New Pairs');
   const [activeCategoryTab, setActiveCategoryTab] = useState('Audit');
   const [selectedPill, setSelectedPill] = useState('P1'); // Each column has its own preset selection
@@ -1808,6 +1809,17 @@ function PulseTable({
   // Quick buy functionality
   const { user, solBalance } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
+  
+  useEffect(() => {
+    if (!showSnipeModal) return;
+    const presetIndex = getPresetIndex();
+    const preset = presets[presetIndex];
+    const quickSettings = (preset?.quickBuySettings ?? {}) as any;
+    setSlippage(quickSettings.maxSlippage ?? 0);
+    setPriority(quickSettings.priority ?? 0);
+    setBribe(quickSettings.bribe ?? 0);
+    setSniperSubmitting(false);
+  }, [showSnipeModal, presets, selectedPill]);
   
   // Get the preset index from the selected pill for this column
   const getPresetIndex = () => {
@@ -2448,6 +2460,141 @@ function PulseTable({
       return `${a.slice(0, 4)}...${a.slice(-4)}`;
     } catch {
       return "-";
+    }
+  };
+  
+  const handleArmSniper = async () => {
+    const token = selectedToken;
+    if (!token) return;
+
+    if (!user?.bearerToken || !user?.id) {
+      showEnhancedToast('warning', 'Please connect your wallet to arm a sniper', {
+        title: 'Wallet Required',
+        description: 'Sign in with your wallet to create sniper orders.',
+      });
+      return;
+    }
+
+    const amountValue = parseFloat(thunderAmount);
+    if (!Number.isFinite(amountValue) || amountValue <= 0) {
+      showEnhancedToast('error', 'Enter a valid SOL amount', {
+        title: 'Invalid Amount',
+        description: 'Provide a positive SOL amount before arming the sniper.',
+      });
+      return;
+    }
+
+    const poolAddress =
+      (token as any).migrated_pool_address ||
+      token.pair_address ||
+      (token as any).pool_address ||
+      '';
+
+    if (!poolAddress) {
+      showEnhancedToast('error', 'Pool information unavailable', {
+        title: 'Cannot Arm Sniper',
+        description: 'We could not determine the pool address for this token.',
+      });
+      return;
+    }
+
+    const sanitizeNumber = (value: unknown, fallback: number): number => {
+      const numeric = typeof value === "string" ? Number(value) : (value as number);
+      return Number.isFinite(numeric) ? numeric : fallback;
+    };
+
+    const presetIndex = getPresetIndex();
+    const presetSettings = (presets[presetIndex]?.quickBuySettings ?? {}) as any;
+    const slippageValue = sanitizeNumber(presetSettings.maxSlippage, slippage || 0.2);
+    const priorityFeeValue = sanitizeNumber(presetSettings.priority, priority || 0.0001);
+    const bribeValue = sanitizeNumber(presetSettings.bribe, bribe || 0);
+    const maxFeeValue = sanitizeNumber(presetSettings.maxFee, 0);
+    const mevModeValue =
+      typeof presetSettings.mevMode === "string" ? presetSettings.mevMode : "off";
+    const autoFeeValue = Boolean(presetSettings.autoFee);
+    const rpcValue =
+      typeof presetSettings.rpc === "string" && presetSettings.rpc.trim().length > 0
+        ? presetSettings.rpc.trim()
+        : undefined;
+
+    const latestMarketCap = Number(
+      (token as any).market_cap_usd ??
+        (token as any).marketcap_usd ??
+        (token as any).fdv_usd ??
+        (token as any).fdv ??
+        0
+    );
+
+    const targetBonding = 100;
+    const initiatingToastId = showEnhancedToast('loading', 'Arming sniper…', {
+      title: 'Arming Sniper',
+      description: `${amountValue.toLocaleString(undefined, {
+        maximumFractionDigits: 6,
+      })} SOL • Bonding Target ${targetBonding.toFixed(2)}%`,
+    });
+
+    setSniperSubmitting(true);
+
+    try {
+      const response = await createLimitOrder(
+        {
+          tokenAddress: token.mint || "",
+          amount: amountValue,
+          type: "Buy",
+          direction: "Above",
+          triggerType: "bonding",
+          bondingTarget: targetBonding,
+          targetMC: latestMarketCap,
+          currentMarketCap: latestMarketCap,
+          tokenName: token.name,
+          tokenSymbol: token.symbol,
+          tokenDecimals: token.decimals,
+          poolAddress,
+          pairAddress: token.pair_address || (token as any).migrated_pool_address || "",
+          poolType: getPoolTypeFromToken(token),
+          slippage: slippageValue,
+          priorityFee: priorityFeeValue,
+          bribe: bribeValue,
+          mevProtection: presetSettings.mevProtection ?? false,
+          mevMode: mevModeValue,
+          autoFee: autoFeeValue,
+          maxFee: maxFeeValue,
+          rpc: rpcValue,
+        },
+        user.bearerToken
+      );
+
+      updateEnhancedToast(initiatingToastId, 'success', `${token.symbol} sniper armed`, {
+        title: 'Sniper Armed',
+        description: `${amountValue.toLocaleString(undefined, {
+          maximumFractionDigits: 6,
+        })} SOL • Bonding Target 100%`,
+      });
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("limit-order-update", {
+            detail: { status: "Pending", triggerType: "bonding", bondingTarget: targetBonding },
+          })
+        );
+      }
+
+      if (response?.order?.id) {
+        console.log("📡 Sniper order created:", response.order.id);
+      }
+
+      setShowSnipeModal(false);
+    } catch (error: any) {
+      const message =
+        error?.message?.length > 80
+          ? `${error.message.substring(0, 77)}…`
+          : error?.message || "Failed to arm sniper";
+      updateEnhancedToast(initiatingToastId, 'error', 'Unable to arm sniper', {
+        title: 'Sniper Failed',
+        description: message,
+      });
+    } finally {
+      setSniperSubmitting(false);
     }
   };
   const getAgeLabel = (token: any): string => {
@@ -5461,17 +5608,22 @@ function PulseTable({
               </button>
             </div>
           </div>
+          <p className="mx-3 mb-2 text-[11px] text-neutral-400">
+            Sniper executes automatically when bonding reaches 100%.
+          </p>
 
           {/* Buy Button - Matching preset popup */}
           <div className="mx-4 mb-4">
             <button
               onClick={() => {
-                handleQuickBuy(selectedToken);
-                setShowSnipeModal(false);
+                void handleArmSniper();
               }}
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-black font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
+              disabled={sniperSubmitting}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 disabled:cursor-not-allowed text-black font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
             >
-              Buy {selectedToken.symbol} {thunderAmount || '0'}
+              {sniperSubmitting
+                ? "Arming…"
+                : `Arm Sniper ${selectedToken.symbol} ${thunderAmount || '0'} SOL @ 100%`}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="3" y1="6" x2="21" y2="6"></line>
                 <line x1="3" y1="12" x2="21" y2="12"></line>

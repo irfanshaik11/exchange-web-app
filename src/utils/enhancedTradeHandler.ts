@@ -71,7 +71,14 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
   let progressTracker: TransactionProgressTracker | null = null;
 
   try {
-    // Step 1: Pre-transaction validation
+    // Step 1: Show toast IMMEDIATELY when user clicks (before validation)
+    // This gives instant feedback that the action was registered
+    toastId = showEnhancedToast('loading', 'Preparing transaction...', {
+      title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
+      description: 'Validating parameters...',
+    });
+
+    // Step 2: Pre-transaction validation
     const poolType = getPoolTypeFromToken(token);
     const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
 
@@ -84,13 +91,27 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       };
       if (onError) onError(error);
       
-      showEnhancedToast('error', error.description, {
-        title: error.title,
-        suggestions: error.suggestions,
-        // Duration handled by priority system (5s for errors)
-      });
+      if (toastId) {
+        updateEnhancedToast(toastId, 'error', error.description, {
+          title: error.title,
+          suggestions: error.suggestions,
+        });
+      } else {
+        showEnhancedToast('error', error.description, {
+          title: error.title,
+          suggestions: error.suggestions,
+        });
+      }
       
       return { success: false, error };
+    }
+
+    // Update toast to show we're checking
+    if (toastId) {
+      updateEnhancedToast(toastId, 'loading', 'Checking balance and parameters...', {
+        title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
+        description: 'Checking balance and parameters...',
+      });
     }
 
     // Perform pre-transaction checks
@@ -114,11 +135,17 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       if (criticalWarnings.length > 0) {
         // Show critical warnings and stop
         criticalWarnings.forEach(warning => {
-        showEnhancedToast('error', warning.message, {
-          title: warning.title,
-          suggestions: warning.suggestion ? [warning.suggestion] : [],
-          // Duration handled by priority system (5s for errors)
-        });
+          if (toastId) {
+            updateEnhancedToast(toastId, 'error', warning.message, {
+              title: warning.title,
+              suggestions: warning.suggestion ? [warning.suggestion] : [],
+            });
+          } else {
+            showEnhancedToast('error', warning.message, {
+              title: warning.title,
+              suggestions: warning.suggestion ? [warning.suggestion] : [],
+            });
+          }
         });
         
         return { 
@@ -138,21 +165,29 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         
         // Show first warning as toast
         const firstWarning = otherWarnings[0];
-        showEnhancedToast('warning', firstWarning.message, {
-          title: firstWarning.title,
-          suggestions: firstWarning.suggestion ? [firstWarning.suggestion] : [],
-          // Duration handled by priority system (4s for warnings)
-        });
+        if (toastId) {
+          updateEnhancedToast(toastId, 'warning', firstWarning.message, {
+            title: firstWarning.title,
+            suggestions: firstWarning.suggestion ? [firstWarning.suggestion] : [],
+          });
+        } else {
+          showEnhancedToast('warning', firstWarning.message, {
+            title: firstWarning.title,
+            suggestions: firstWarning.suggestion ? [firstWarning.suggestion] : [],
+          });
+        }
       }
     }
 
-    // Step 2: Show progress toast and start transaction
-    toastId = showEnhancedToast('loading', 'Preparing transaction...', {
-      title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
-      description: 'Validating parameters...',
-    });
+    // Step 3: Update toast to show we're submitting
+    if (toastId) {
+      updateEnhancedToast(toastId, 'loading', 'Submitting transaction to blockchain...', {
+        title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
+        description: 'Submitting transaction to blockchain...',
+      });
+    }
 
-    // Create progress tracker
+    // Create progress tracker (but don't use artificial delays - update based on actual progress)
     progressTracker = new TransactionProgressTracker((stage) => {
       if (toastId) {
         updateEnhancedToast(toastId, 'loading', stage.message, {
@@ -162,15 +197,10 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       }
     });
 
-    // Auto-progress through stages (in background)
-    const progressPromise = progressTracker.autoProgress([
-      'validating',
-      'checking_pool',
-      'preparing',
-      'submitting',
-    ]);
+    // Update to submitting stage immediately (no artificial delays)
+    progressTracker.setStage('submitting');
 
-    // Step 3: Execute trade - NO RETRIES, NO PARAMETER ADJUSTMENTS
+    // Step 4: Execute trade - NO RETRIES, NO PARAMETER ADJUSTMENTS
     // Users control their own settings, we just execute once
     const tradeParams: any = {
       poolAddress: effectivePoolAddress,
@@ -191,9 +221,11 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       tokenSymbol: token.symbol,
     };
 
-    const result = side === 'buy'
-      ? await tradeBuy(tradeParams, user.bearerToken)
-      : await tradeSellPercentage(
+    // Execute trade with timeout protection
+    // Backend should return immediately (~300ms), but add timeout as safety
+    const tradePromise = side === 'buy'
+      ? tradeBuy(tradeParams, user.bearerToken)
+      : tradeSellPercentage(
           {
             ...tradeParams,
             tokenAddress: token.mint,
@@ -202,17 +234,27 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
           user.bearerToken
         );
 
-    // Stop progress tracker
-    if (progressTracker) progressTracker.complete();
+    // Add timeout check (30 seconds max - should never happen with new backend)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Request timeout - backend took too long to respond')), 30000);
+    });
+
+    const result = await Promise.race([tradePromise, timeoutPromise]);
+
+    // Stop progress tracker immediately when we get the response
+    if (progressTracker) {
+      progressTracker.complete();
+    }
 
     // Step 4: Handle success
     const resultAny = result as any; // Type assertion for runtime properties
     const txHash = result?.hash || resultAny?.txid;
     
-    // For BUY: tokenAmount is returned
+    // For BUY: tokenAmount is returned (may be 0 if pending)
     // For SELL: we sold a percentage, display the percentage not token amount
     const tokenAmount = resultAny?.amount || resultAny?.tokenAmount;
     const percentageSold = side === 'sell' ? amount : undefined;
+    const isPending = resultAny?.pending === true; // Backend returned immediately, metadata still processing
 
     if (result && txHash) {
       const networkFee = 0.00001; // Reduced from 0.001
@@ -233,18 +275,20 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
       // Show success toast with stats
       if (toastId) {
+        // Show success message - same for pending or confirmed
         const title = side === 'buy' 
-          ? `Bought ${tokenAmount || 'tokens'} ${token.symbol}!`
-          : `Sold ${percentageSold}% of ${token.symbol}!`;
+          ? `Bought ${token.symbol}!`
+          : `Sold ${token.symbol}!`;
         
         // Safely format price - ensure it's a number
         const priceStr = token.usd_price && typeof token.usd_price === 'number' 
           ? `$${token.usd_price.toFixed(6)}`
           : '$0';
           
+        // Show transaction hash and amount spent
         const description = side === 'buy'
-          ? `Spent: ${formatSol(amount)} SOL • Price: ${priceStr} • Fees: ${formatSol(stats.fees.total)} SOL`
-          : `Tx Hash: ${txHash.slice(0, 8)}... • Fees: ${formatSol(stats.fees.total)} SOL`;
+          ? `Spent: ${formatSol(amount)} SOL • Tx: ${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 8)}`
+          : `Tx: ${txHash.slice(0, 8)}...${txHash.substring(txHash.length - 8)}`;
         
         updateEnhancedToast(toastId, 'success', '', {
           title,
@@ -296,10 +340,13 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         });
       }
 
+      // On error: No transaction hash = no Solscan link
+      // Only show explorer link for successful transactions
       updateEnhancedToast(toastId, 'error', enhancedError.description, {
         title: enhancedError.title,
         suggestions: enhancedError.suggestions,
         actions,
+        showExplorerLink: false, // Explicitly don't show Solscan link for errors
         duration: 6000, // 6s for errors with actions/suggestions (needs time to read)
       });
     }

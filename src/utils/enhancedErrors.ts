@@ -190,15 +190,17 @@ export const enhanceError = (
         const errorMessage = error.message || '';
         if (errorMessage.toLowerCase().includes('insufficient') || 
             errorMessage.toLowerCase().includes('balance') ||
-            errorMessage.toLowerCase().includes('not enough')) {
+            errorMessage.toLowerCase().includes('not enough') ||
+            errorMessage.toLowerCase().includes('insufficient funds for rent') ||
+            (errorMessage.toLowerCase().includes('insufficient funds') && errorMessage.toLowerCase().includes('rent'))) {
           return {
             title: 'Insufficient SOL Balance',
             description: errorMessage || 'You don\'t have enough SOL to complete this trade including fees',
             suggestions: [
-              'Deposit more SOL to your wallet',
+              'Add more SOL to your wallet (need extra ~0.0025 SOL for token account creation)',
               'Try trading a smaller amount',
               context.priorityFee ? `Reduce priority fee (currently ${context.priorityFee.toFixed(4)} SOL)` : 'Lower your priority fee',
-              'Check your bribe setting - it may be set too high',
+              'Token account creation requires ~0.002 SOL in rent - ensure you have enough SOL',
             ],
             canRetry: false,
             actions: [],
@@ -273,6 +275,24 @@ export const enhanceError = (
 
   // Handle generic errors
   const errorMsg = error.message || 'Unknown error';
+
+  // Insufficient funds for rent - this is a balance issue
+  if (errorMsg.includes('insufficient funds for rent') || 
+      errorMsg.includes('insufficient funds') && errorMsg.includes('rent') ||
+      errorMsg.includes('account') && errorMsg.includes('insufficient funds')) {
+    return {
+      title: 'Insufficient SOL Balance',
+      description: 'Your wallet doesn\'t have enough SOL to cover the transaction fees and token account rent',
+      suggestions: [
+        'Add more SOL to your wallet (need extra ~0.0025 SOL for token account creation)',
+        'Try trading a smaller amount',
+        context.priorityFee ? `Reduce priority fee (currently ${context.priorityFee.toFixed(4)} SOL)` : 'Lower your priority fee',
+        'Token account creation requires ~0.002 SOL in rent - ensure you have enough SOL',
+      ],
+      canRetry: false,
+      actions: [],
+    };
+  }
 
   // Network/RPC errors
   if (errorMsg.includes('fetch failed') || errorMsg.includes('Failed to fetch')) {
