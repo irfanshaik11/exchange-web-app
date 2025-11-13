@@ -30,7 +30,7 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
 export default function DiscoverPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'dex' | 'live'>('trending');
+  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'dex' | 'live'>('newPairs');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -283,7 +283,8 @@ export default function DiscoverPage() {
       setNewPairsLoading(true);
 
       try {
-        const response = await fetch(`/api/token-service/getAllTokens?filter=new&limit=50&t=${Date.now()}`, {
+        // Use Next.js API proxy to avoid CORS issues (same as PulseTable)
+        const response = await fetch(`/api/token-service/pulse-new?limit=200&t=${Date.now()}`, {
           cache: 'no-store',
           headers: {
             'Cache-Control': 'no-cache',
@@ -316,6 +317,16 @@ export default function DiscoverPage() {
             };
 
             const sumVolumes = (buy: any, sell: any): number => toNumber(buy) + toNumber(sell);
+
+            // Helper to get first non-empty string from multiple candidates
+            const getFirstString = (...candidates: any[]): string | undefined => {
+              for (const candidate of candidates) {
+                if (typeof candidate === 'string' && candidate.trim() !== '') {
+                  return candidate.trim();
+                }
+              }
+              return undefined;
+            };
 
             const normalized: Record<string, any> = {
               ...token,
@@ -365,6 +376,84 @@ export default function DiscoverPage() {
               normalized.created_at = token.launch_time;
             }
 
+            // CRITICAL: Preserve launchpad_protocol for pool type detection
+            // This is essential for Meteora and other tokens to determine the correct pool type
+            if (token.launchpad_protocol) {
+              normalized.launchpad_protocol = token.launchpad_protocol;
+            } else if (token.launchpadProtocol) {
+              normalized.launchpad_protocol = token.launchpadProtocol;
+            } else if (token.protocol) {
+              normalized.launchpad_protocol = token.protocol;
+            }
+
+            // CRITICAL: Extract and normalize pool address fields
+            // This ensures Meteora and other tokens have proper pair_address for trading
+            // Check for migrated pool address first (for graduated tokens)
+            const migratedPoolAddress = getFirstString(
+              token.migrated_pool_address,
+              token.migratedPoolAddress,
+              token.migrated_poolAddress,
+              token.migrated_pool?.address,
+              token.migratedPool?.address,
+              token.target_pool_address,
+              token.targetPoolAddress,
+            );
+
+            // Check for original pair address
+            const originalPairAddress = getFirstString(
+              token.pair_address,
+              token.pairAddress,
+              token.bonding_curve?.address,
+              token.bondingCurveKey,
+            );
+
+            // Check for fallback pool address fields
+            const fallbackPoolAddress = getFirstString(
+              token.poolAddress,
+              token.pool_address,
+              token.amm_id,
+              token.ammId,
+              typeof token.pool === 'string' && token.pool.length >= 32 ? token.pool : undefined,
+            );
+
+            // Set migrated_pool_address if found
+            if (migratedPoolAddress) {
+              normalized.migrated_pool_address = migratedPoolAddress;
+            }
+
+            // Set pair_address - prioritize original, then migrated, then fallback
+            // This is critical for trading - enhancedTradeHandler needs either pair_address or migrated_pool_address
+            const effectivePairAddress = originalPairAddress || migratedPoolAddress || fallbackPoolAddress;
+            
+            // Special handling for pump.fun tokens only:
+            // Pump.fun can use mint as pool address - backend will resolve it to bonding curve
+            // Meteora tokens require the actual DBC pool address, not the mint
+            const protocol = normalized.launchpad_protocol?.toLowerCase() || '';
+            const isPumpFun = protocol.includes('pump.fun') || protocol.includes('pumpfun') || protocol === 'pump';
+            
+            if (effectivePairAddress && effectivePairAddress !== token.mint) {
+              // Valid pool address that's different from mint
+              normalized.pair_address = effectivePairAddress;
+            } else if (isPumpFun && token.mint) {
+              // For pump.fun tokens only, use mint as pair_address if no other pool address is available
+              // Backend has special handling to resolve mint to bonding curve address for pump.fun
+              normalized.pair_address = token.mint;
+              console.log(`[Discover] Pump.fun token ${token.symbol || token.mint} using mint as pair_address (backend will resolve to bonding curve)`, {
+                launchpad_protocol: normalized.launchpad_protocol,
+                mint: token.mint,
+                pair_address: normalized.pair_address
+              });
+            } else if (effectivePairAddress === token.mint && !isPumpFun) {
+              // If pair_address equals mint for non-pump.fun tokens (like Meteora), it's invalid
+              // Meteora requires the actual DBC pool address, not the mint
+              console.warn(`[Discover] Token ${token.symbol || token.mint} has pair_address equal to mint (invalid for ${protocol || 'this protocol'}), not setting pair_address`);
+              // Don't set pair_address - this will trigger the proper error in enhancedTradeHandler
+            } else if (!effectivePairAddress && !isPumpFun) {
+              // No valid pool address found for non-pump.fun tokens
+              // Meteora and other protocols need the actual pool address from the API
+              console.warn(`[Discover] Token ${token.symbol || token.mint} (${protocol || 'unknown protocol'}) has no valid pool address - trading will be blocked`);
+            }
+
             return normalized as TokenWithDexPaid;
           };
 
@@ -373,6 +462,11 @@ export default function DiscoverPage() {
               return false;
             }
             if (!token || !token.mint || isWrappedSol(token)) {
+              return false;
+            }
+            // Filter out Meteora tokens from new pairs
+            const protocol = (token.launchpad_protocol || token.launchpadProtocol || token.protocol || '').toLowerCase();
+            if (protocol.includes('meteora')) {
               return false;
             }
             return true;
@@ -736,7 +830,17 @@ export default function DiscoverPage() {
       return [] as TokenWithDexPaid[];
     }
 
-    const base = newPairsRaw.filter((token) => token && token.mint && !isWrappedSol(token));
+    const base = newPairsRaw.filter((token) => {
+      if (!token || !token.mint || isWrappedSol(token)) {
+        return false;
+      }
+      // Filter out Meteora tokens from new pairs
+      const protocol = ((token as any).launchpad_protocol || (token as any).launchpadProtocol || (token as any).protocol || '').toLowerCase();
+      if (protocol.includes('meteora')) {
+        return false;
+      }
+      return true;
+    });
     const filtered = applyFilters(base);
     const sortedTokens = filtered.map((token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid);
 
@@ -997,12 +1101,12 @@ export default function DiscoverPage() {
         {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-8 max-w-[98%]">
           <div className="flex max-w-7xl items-center gap-6">
-            <button
+            {/* <button
               className={`text-lg font-light transition-colors ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
-            </button>
+            </button> */}
             <button
               className={`text-lg font-light transition-colors ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("newPairs")}
