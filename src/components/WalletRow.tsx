@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Wallet } from '~/utils/functions';
 import type { WatchWallet, WalletEvent } from '~/utils/walletTracking';
 import { toggleWalletNotifications } from '~/utils/walletTracking';
+import { SolanaIcon } from './Footer';
 import { FaBell, FaBellSlash, FaChartBar, FaTrash } from 'react-icons/fa';
 
 interface WalletRowProps {
@@ -262,11 +263,16 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
             </div>
           </div>
           <span className="w-36 text-xs text-neutral-300">
-            {balance !== undefined 
-              ? <span className="text-green-400 font-mono">{balance.toFixed(4)} SOL</span>
-              : watchedWallet 
-                ? <span className="text-yellow-400">Loading...</span>
-                : <span className="text-neutral-500">-</span>}
+            {balance !== undefined ? (
+              <span className="flex items-center gap-1 text-green-400 font-mono">
+                <SolanaIcon size={12} />
+                <span>{balance.toFixed(4)}</span>
+              </span>
+            ) : watchedWallet ? (
+              <span className="text-yellow-400">Loading...</span>
+            ) : (
+              <span className="text-neutral-500">-</span>
+            )}
           </span>
           <div className="w-40 flex items-center gap-2">
 						<Tooltip label={notificationsEnabled ? "Notifications ON" : "Notifications OFF"}>

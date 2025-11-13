@@ -248,7 +248,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
     // Step 4: Handle success
     const resultAny = result as any; // Type assertion for runtime properties
-    const txHash = result?.hash || resultAny?.txid;
+    const txHash = resultAny?.hash || resultAny?.txid;
     
     // For BUY: tokenAmount is returned (may be 0 if pending)
     // For SELL: we sold a percentage, display the percentage not token amount

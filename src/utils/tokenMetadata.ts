@@ -1,14 +1,22 @@
 // Backend API URL
 const WALLET_TRACKER_API_URL = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
 
+// Token metadata interface
+export interface TokenMetadata {
+  symbol: string | null;
+  name: string | null;
+  image: string | null;
+  launchpad_protocol?: string | null;
+}
+
 // Cache for token metadata to avoid repeated fetches
-const metadataCache = new Map<string, { symbol: string | null; name: string | null }>();
+const metadataCache = new Map<string, TokenMetadata>();
 
 /**
  * Fetch token metadata via secure backend (using Helius DAS API)
  * This keeps API keys secure and provides better coverage than manually parsing Metaplex metadata
  */
-export async function fetchTokenMetadata(mintAddress: string): Promise<{ symbol: string | null; name: string | null }> {
+export async function fetchTokenMetadata(mintAddress: string): Promise<TokenMetadata> {
   // Check cache first
   if (metadataCache.has(mintAddress)) {
     const cached = metadataCache.get(mintAddress)!;
@@ -37,7 +45,14 @@ export async function fetchTokenMetadata(mintAddress: string): Promise<{ symbol:
     const data = await response.json();
     
     if (data.ok && data.metadata && data.metadata[mintAddress]) {
-      const result = data.metadata[mintAddress];
+      const apiResult = data.metadata[mintAddress];
+      // Ensure all required fields are present
+      const result: TokenMetadata = {
+        symbol: apiResult.symbol || null,
+        name: apiResult.name || null,
+        image: apiResult.image || apiResult.logo || apiResult.uri || null,
+        launchpad_protocol: apiResult.launchpad_protocol || apiResult.protocol || null,
+      };
       console.log(`[TokenMetadata] Successfully fetched for ${mintAddress.slice(0, 8)}...`, result);
       metadataCache.set(mintAddress, result);
       return result;
@@ -49,7 +64,7 @@ export async function fetchTokenMetadata(mintAddress: string): Promise<{ symbol:
   }
 
   // Return null if unable to fetch
-  const fallback = { symbol: null, name: null };
+  const fallback: TokenMetadata = { symbol: null, name: null, image: null, launchpad_protocol: null };
   console.log(`[TokenMetadata] Using fallback for ${mintAddress.slice(0, 8)}...`);
   metadataCache.set(mintAddress, fallback);
   return fallback;
@@ -58,8 +73,8 @@ export async function fetchTokenMetadata(mintAddress: string): Promise<{ symbol:
 /**
  * Batch fetch token metadata for multiple mints via secure backend
  */
-export async function batchFetchTokenMetadata(mintAddresses: string[]): Promise<Map<string, { symbol: string | null; name: string | null }>> {
-  const results = new Map<string, { symbol: string | null; name: string | null }>();
+export async function batchFetchTokenMetadata(mintAddresses: string[]): Promise<Map<string, TokenMetadata>> {
+  const results = new Map<string, TokenMetadata>();
   
   // Filter out already cached addresses
   const uncachedAddresses = mintAddresses.filter(addr => !metadataCache.has(addr));
@@ -104,7 +119,13 @@ export async function batchFetchTokenMetadata(mintAddresses: string[]): Promise<
       
       if (data.ok && data.metadata) {
         chunk.forEach((mintAddress) => {
-          const metadata = data.metadata[mintAddress] || { symbol: null, name: null };
+          const apiResult = data.metadata[mintAddress];
+          const metadata: TokenMetadata = {
+            symbol: apiResult?.symbol || null,
+            name: apiResult?.name || null,
+            image: apiResult?.image || apiResult?.logo || apiResult?.uri || null,
+            launchpad_protocol: apiResult?.launchpad_protocol || apiResult?.protocol || null,
+          };
           results.set(mintAddress, metadata);
           metadataCache.set(mintAddress, metadata);
           console.log(`[TokenMetadata] Batch fetched ${mintAddress.slice(0, 8)}...`, metadata);

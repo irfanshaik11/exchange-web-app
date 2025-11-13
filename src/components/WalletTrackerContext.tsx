@@ -129,9 +129,147 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     let reconnectTimeout: NodeJS.Timeout | null = null;
 
     const handleTradeEvent = async (event: TradeEvent) => {
-      console.log('🔔 Trade event received:', event);
+      console.log('🔔 Trade event received:', {
+        mint: event.mint,
+        pair_address: event.pair_address,
+        symbol: event.symbol,
+        name: event.name,
+        side: event.side,
+      });
 
       const normalizedEvent = normalizeTradeForState(event);
+
+      // Get token name/symbol FIRST and enrich the event before showing
+      let tokenName = normalizedEvent.symbol || normalizedEvent.name;
+      let tokenMetadataResolved = false;
+      
+      // Try to get from existing metadata cache
+      if (!tokenName) {
+        const cachedMetadata = tokenMetadata.get(normalizedEvent.mint);
+        if (cachedMetadata?.symbol || cachedMetadata?.name) {
+          tokenName = cachedMetadata.symbol || cachedMetadata.name;
+          // Update the event with cached data
+          normalizedEvent.symbol = cachedMetadata.symbol;
+          normalizedEvent.name = cachedMetadata.name;
+          tokenMetadataResolved = true;
+        }
+      }
+      
+      // If still no token name, fetch from backend
+      if (!tokenName || !tokenMetadataResolved) {
+        try {
+          // Try to fetch from Go service first (most reliable for token names)
+          const goServiceUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+          let tokenData = null;
+          
+          // Try search endpoint first
+          try {
+            const searchResponse = await fetch(`${goServiceUrl}/v1/token/search?mint=${normalizedEvent.mint}&limit=1`, {
+              signal: AbortSignal.timeout(3000)
+            });
+            if (searchResponse.ok) {
+              const searchData = await searchResponse.json();
+              tokenData = Array.isArray(searchData) ? searchData[0] : (searchData.tokens?.[0] || null);
+              console.log('✅ Fetched token data from Go service:', {
+                symbol: tokenData?.symbol,
+                name: tokenData?.name,
+              });
+            }
+          } catch (searchError) {
+            console.warn('⚠️ Go service search failed:', searchError);
+          }
+          
+          // Update token name and enrich the event with fetched data
+          if (tokenData) {
+            tokenName = tokenData.symbol || tokenData.name || tokenName;
+            
+            // IMPORTANT: Update the event object itself with fetched metadata
+            normalizedEvent.symbol = tokenData.symbol || normalizedEvent.symbol;
+            normalizedEvent.name = tokenData.name || normalizedEvent.name;
+            
+            // Also resolve pair_address while we're at it
+            if (!normalizedEvent.pair_address) {
+              normalizedEvent.pair_address = tokenData.pair_address || tokenData.poolId;
+            }
+            
+            // Cache the metadata
+            setTokenMetadata(prev => {
+              const updated = new Map(prev);
+              updated.set(normalizedEvent.mint, {
+                symbol: tokenData.symbol,
+                name: tokenData.name,
+                image: tokenData.uri || tokenData.image || tokenData.logo,
+                launchpad_protocol: tokenData.launchpad_protocol || tokenData.protocol,
+                market_cap_usd: tokenData.market_cap_usd || tokenData.marketCapUsd || tokenData.fully_diluted_value,
+              });
+              return updated;
+            });
+          }
+          
+          // Fallback: try fetchTokenMetadata utility (only if Go service failed)
+          if (!tokenName || tokenName === normalizedEvent.mint.slice(0, 8) + '...') {
+            try {
+              const { fetchTokenMetadata } = await import('~/utils/tokenMetadata');
+              const meta = await fetchTokenMetadata(normalizedEvent.mint);
+              if (meta?.symbol || meta?.name) {
+                tokenName = meta.symbol || meta.name;
+                // Update the event object
+                normalizedEvent.symbol = meta.symbol || normalizedEvent.symbol;
+                normalizedEvent.name = meta.name || normalizedEvent.name;
+                // Update metadata state
+                setTokenMetadata(prev => {
+                  const updated = new Map(prev);
+                  updated.set(normalizedEvent.mint, meta);
+                  return updated;
+                });
+              }
+            } catch (err) {
+              console.warn('⚠️ fetchTokenMetadata failed:', err);
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to fetch token metadata for notification:', error);
+        }
+      }
+      
+      // Final fallback to shortened mint address
+      if (!tokenName) {
+        tokenName = normalizedEvent.mint.slice(0, 6) + '...';
+      }
+
+      // Resolve pair_address if not already present (for better navigation UX)
+      if (!normalizedEvent.pair_address && normalizedEvent.mint) {
+        try {
+          // First try to search for the token to get its pair_address
+          const searchResponse = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(normalizedEvent.mint)}&limit=1`);
+          
+          if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            if (searchData.tokens && searchData.tokens.length > 0) {
+              const token = searchData.tokens[0];
+              normalizedEvent.pair_address = token.pair_address || token.poolId;
+              console.log('✅ Resolved pair_address from search for', normalizedEvent.mint, '→', normalizedEvent.pair_address);
+            }
+          }
+          
+          // Fallback to hydrate-pair if search didn't work
+          if (!normalizedEvent.pair_address) {
+            const hydrateResponse = await fetch('/api/token-service/hydrate-pair', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mint: normalizedEvent.mint }),
+            });
+            
+            if (hydrateResponse.ok) {
+              const hydrateData = await hydrateResponse.json();
+              normalizedEvent.pair_address = hydrateData.pair_address || hydrateData.poolId;
+              console.log('✅ Resolved pair_address from hydrate for', normalizedEvent.mint, '→', normalizedEvent.pair_address);
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to resolve pair_address for trade event:', error);
+        }
+      }
 
       // Add to latest trades list (keep last hour, max 50)
       setLatestTrades(prev => mergeTrades(prev, [normalizedEvent]));
@@ -140,30 +278,6 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
       const wallet = watchedWalletsRef.current.find(w => w.address === normalizedEvent.wallet);
       const walletName = wallet?.walletName || normalizedEvent.wallet.slice(0, 8) + '...';
       const side = normalizedEvent.side === 'buy' ? 'bought' : 'sold';
-      
-      // Get token name - fetch from metadata if not in event
-      let tokenName = normalizedEvent.symbol || normalizedEvent.name;
-      if (!tokenName) {
-        const metadata = tokenMetadata.get(normalizedEvent.mint);
-        if (metadata?.symbol) {
-          tokenName = metadata.symbol;
-        } else {
-          // Fetch metadata if not cached
-          try {
-            const { fetchTokenMetadata } = await import('~/utils/tokenMetadata');
-            const meta = await fetchTokenMetadata(normalizedEvent.mint);
-            tokenName = meta.symbol || normalizedEvent.mint.slice(0, 8) + '...';
-            // Update metadata state
-            setTokenMetadata(prev => {
-              const updated = new Map(prev);
-              updated.set(normalizedEvent.mint, meta);
-              return updated;
-            });
-          } catch (err) {
-            tokenName = normalizedEvent.mint.slice(0, 8) + '...';
-          }
-        }
-      }
       
       // Format SOL amount
       let amountDisplay = '';
@@ -177,6 +291,8 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
           amountDisplay = `${solAmount.toFixed(4)} SOL`;
         }
       }
+      
+      console.log('📢 Showing notification with token name:', tokenName);
       
       // Show toast notification with custom styling
       toast.custom(

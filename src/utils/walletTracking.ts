@@ -40,6 +40,7 @@ export interface TradeEvent {
   type: 'trade';
   wallet: string;
   mint: string;
+  pair_address?: string; // Optional: preferred for navigation
   symbol: string | null;
   name: string | null;
   side: 'buy' | 'sell';
@@ -332,6 +333,7 @@ const normalizeTradeHistoryRecord = (record: any): TradeEvent | null => {
     type: 'trade',
     wallet,
     mint,
+    pair_address: record.pair_address ?? record.pairAddress ?? record.poolId ?? undefined,
     symbol: record.symbol ?? record.tokenSymbol ?? record.ticker ?? null,
     name: record.name ?? record.tokenName ?? record.project ?? null,
     side,
