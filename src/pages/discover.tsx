@@ -12,10 +12,8 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
-import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
-import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
-import { showCenteredErrorToast, showTransactionPendingToast, startTransactionToastTimeout, updateTransactionToast } from "~/utils/toast";
-import { executeEnhancedTrade, type EnhancedTradeParams } from "~/utils/enhancedTradeHandler";
+import { SOL_MINT_ADDRESS } from "~/utils/api";
+import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
@@ -425,236 +423,62 @@ export default function DiscoverPage() {
   //   console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
   // }, [selectedTimeframe]);
 
-  // QUICK BUY handler – with detailed logging (same as PulseTable)
+  // QUICK BUY handler – using enhanced trade flow (same as PulseTable)
   const handleQuickBuy = async (token: Token) => {
-    console.log("🎯 handleQuickBuy called for token:", token.symbol);
-    console.log("\n" + "=".repeat(80));
-    console.log("📋 QUICK BUY DATA VERIFICATION - DISCOVER PAGE");
-    console.log("=".repeat(80));
-
-    console.log("\n📊 [TRENDING] FULL TOKEN OBJECT:");
-    console.log(JSON.stringify(token, null, 2));
-
-    if (!user) {
-      console.log("❌ No user found");
-      showCenteredErrorToast("⚠️ Please connect your wallet to trade");
+    console.log("🎯 Enhanced Quick Buy called for token:", token.symbol);
+    
+    if (!user?.bearerToken || !user?.id) {
+      console.log("❌ User not logged in");
+      showEnhancedToast('warning', 'Please connect your wallet to trade', {
+        title: 'Authentication Required',
+      });
       return;
     }
 
-    if (!user.bearerToken) {
-      console.log("❌ Missing bearer token for user");
-      showCenteredErrorToast("⚠️ Authentication required to trade.");
-      return;
-    }
-
-    const buyAmount = Number(quickBuyAmount);
-    if (!Number.isFinite(buyAmount) || buyAmount <= 0) {
+    const buyAmount = parseFloat(quickBuyAmount);
+    if (isNaN(buyAmount) || buyAmount <= 0) {
       console.log("❌ Invalid buy amount:", quickBuyAmount);
-      showCenteredErrorToast("⚠️ Please enter a valid SOL amount (minimum 0.0001 SOL)");
+      showEnhancedToast('warning', 'Please enter a valid SOL amount (minimum 0.001 SOL)', {
+        title: 'Invalid Amount',
+      });
       return;
     }
 
-    let pendingToastId: string | null = null;
-    let clearToastTimeout = () => undefined;
-    try {
-      const poolType = getPoolTypeFromToken(token);
-      const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
-      if (!effectivePoolAddress) {
-        console.log("❌ Missing pool address for token", token.symbol);
-        showCenteredErrorToast("⚠️ Trading pool not available for this token yet. Please try later.");
-        return;
-      }
-
-      const preset = presets[activePreset];
-      if (!preset) {
-        console.log("❌ Quick buy preset missing for index", activePreset);
-        showCenteredErrorToast("⚠️ Quick buy preset not configured. Please update your presets and retry.");
-        return;
-      }
-
-      const settings = preset.quickBuySettings;
-      const minimums: Record<string, number> = {
-        "meteora amm v2": 0.0001,
-        "meteora amm v1": 0.0001,
-        "Raydium CPMM": 0.00001,
-        "PumpAmm": 0.000001,
-        "Pumpfun": 0.000001,
-        "meteora dbc": 0.000001,
-      };
-      const poolMinimum = minimums[poolType];
-      const minAmount = Math.max(0.0001, poolMinimum ?? 0);
-      if (buyAmount < minAmount) {
-        const protocolName = token.launchpad_protocol || token.protocol || poolType || "this pool";
-        console.log("❌ Quick Buy amount below minimum", { buyAmount, minAmount, protocolName });
-        showCenteredErrorToast(
-          `Minimum trade amount: ${minAmount} SOL for ${protocolName}. Please increase your amount.`,
-          { duration: 6000 }
-        );
-        return;
-      }
-
-      const safetyBuffer = 0.003;
-      const priorityFee = settings.priority || 0;
-      const bribeFee = settings.bribe || 0;
-      const totalFees = safetyBuffer + priorityFee + bribeFee;
-      const totalRequired = buyAmount + totalFees;
-
-      if (!Number.isFinite(solBalance) || solBalance <= 0) {
-        console.log("❌ SOL balance unavailable or zero", solBalance);
-        showCenteredErrorToast("⚠️ Insufficient SOL balance. Please fund your wallet before trading.");
-        return;
-      }
-
-      if (totalRequired > solBalance) {
-        const missing = Math.max(totalRequired - solBalance, 0);
-        console.log("❌ Not enough SOL for quick buy", { totalRequired, solBalance, missing });
-        showCenteredErrorToast(
-          `Insufficient balance! Need ${totalRequired.toFixed(4)} SOL (missing ${missing.toFixed(4)} SOL). Please fund your wallet.`,
-          { duration: 6000 }
-        );
-        return;
-      }
-
-      console.log("\n⚙️ PRESET SETTINGS:");
-      console.log(`  Active Preset: P${activePreset + 1} (from selectedPill: ${selectedPill})`);
-      console.log(`  Slippage: ${(settings.maxSlippage || 0.4) * 100}% (${settings.maxSlippage || 0.4} decimal)`);
-      console.log(`  Priority Fee: ${settings.priority || 0.0001} SOL`);
-      console.log(`  Bribe: ${settings.bribe || 0} SOL`);
-      console.log(`  MEV Mode: ${settings.mevMode}`);
-      console.log(`  MEV Protection: ${settings.mevMode === "off" ? 0 : 1}`);
-      console.log(`  Auto Fee: ${settings.autoFee || false}`);
-      console.log(`  Max Fee: ${settings.maxFee || 0} SOL`);
-      console.log(`  RPC: ${settings.rpc || "(default)"}`);
-
-      const payload: any = {
-        poolAddress: effectivePoolAddress,
-        baseMint: token.mint,
-        quoteMint: SOL_MINT_ADDRESS,
-        amount: buyAmount,
-        mevProtection: (settings.mevMode === "off" ? 0 : 1) as 0 | 1,
-        poolType,
-        originalPairAddress: token.pair_address,
-        slippage: (settings.maxSlippage || 0.4) * 100,
-        priorityFee: settings.priority || 0.0001,
-        bribe: settings.bribe || 0,
-        mevMode: settings.mevMode,
-        autoFee: settings.autoFee || false,
-        maxFee: settings.maxFee || 0,
-        tokenName: token.name,
-        tokenSymbol: token.symbol,
-      };
-      if (settings.rpc) {
-        payload.rpc = settings.rpc;
-      }
-      
-      console.log("\n📤 COMPLETE PAYLOAD BEING SENT TO API:");
-      console.log(JSON.stringify(payload, null, 2));
-      console.log("\n📤 PAYLOAD SUMMARY:");
-      console.log("  poolAddress:", payload.poolAddress);
-      console.log("  baseMint:", payload.baseMint);
-      console.log("  quoteMint:", payload.quoteMint);
-      console.log("  amount:", payload.amount, "SOL");
-      console.log("  poolType:", payload.poolType);
-      console.log("  slippage:", payload.slippage, "%");
-      console.log("  priorityFee:", payload.priorityFee, "SOL");
-      console.log("  bribe:", payload.bribe, "SOL");
-      console.log("  mevProtection:", payload.mevProtection);
-      console.log("  mevMode:", payload.mevMode);
-      console.log("  originalPairAddress:", payload.originalPairAddress);
-      console.log("=".repeat(80) + "\n");
-      
-      pendingToastId = showTransactionPendingToast("Attempting transaction...");
-      clearToastTimeout = startTransactionToastTimeout(pendingToastId);
-      const data = await tradeBuy(payload, user.bearerToken);
-       
-      console.log("\n📥 API RESPONSE RECEIVED:");
-      console.log(JSON.stringify(data, null, 2));
-       
-      const txHash = data?.hash || data?.txid;
-      const tokenAmount = data?.amount || data?.tokenAmount;
- 
-      if (data && txHash) {
-        console.log("\n✅ QUICK BUY SUCCESS:");
-        console.log("  Transaction Hash:", txHash);
-        console.log("  Token Amount:", tokenAmount || 'N/A');
-        console.log("  Token Symbol:", token.symbol);
-        console.log("  Full Response:", JSON.stringify(data, null, 2));
-
-        try {
-          console.log("\n🔄 Backfilling token after Quick Buy...");
-          const backfillResponse = await fetch('/api/token-service/backfill-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mint: token.mint,
-              name: token.name,
-              symbol: token.symbol,
-              uri: token.uri,
-              market_cap_usd: token.fully_diluted_value,
-              liquidity_usd: token.total_liquidity_usd,
-              pair_address: token.pair_address || token.migrated_pool_address
-            })
-          });
-
-          if (backfillResponse.ok) {
-            console.log('✅ Token backfilled successfully to token-service');
-          } else {
-            console.warn('⚠️ Token backfill failed (token may already exist or service unavailable)');
-          }
-        } catch (backfillError) {
-          console.error('❌ Error backfilling token:', backfillError);
-        }
-        updateTransactionToast(
-          pendingToastId,
-          "success",
-          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
-        );
-        clearToastTimeout();
-      } else {
-        console.log("\n❌ QUICK BUY FAILED:");
-        console.log("  Response:", JSON.stringify(data, null, 2));
-        console.log("  Missing transaction hash");
-        clearToastTimeout();
-        updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
-      }
-    } catch (e: any) {
-      const logFn = (e as any)?.expected ? console.warn : console.error;
-
-      console.log("\n❌ QUICK BUY ERROR:");
-      console.log("  Error Type:", e?.constructor?.name || typeof e);
-      console.log("  Error Message:", e?.message || String(e));
-      console.log("  Error Code:", e?.code || 'N/A');
-      console.log("  Error Details:", e?.details || 'N/A');
-      console.log("  Full Error Object:", e);
-      console.log("  Full Error JSON:", JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
-
-      logFn('Quick Buy error:', e);
-
-      // Always clear timeout and update pending toast on error
-      clearToastTimeout();
-      
-      if (e instanceof ApiError) {
-        if (e.code === 'NO_ACTIVE_POOL') {
-          updateTransactionToast(pendingToastId, "error", `⚠️ Pool unavailable for ${token.symbol}`);
-        } else if (e.code === 'INSUFFICIENT_BALANCE') {
-          updateTransactionToast(pendingToastId, "error", `⚠️ Insufficient balance`);
-        } else if (e.code === 'TX_FAILED') {
-          updateTransactionToast(pendingToastId, "error", `❌ Trade failed. Try adjusting slippage or amount.`);
-        } else if (e.code === 'NO_HOLDINGS') {
-          updateTransactionToast(pendingToastId, "error", `❌ No ${token.symbol} to sell`);
-        } else if (e.code === 'AMOUNT_TOO_SMALL') {
-          updateTransactionToast(pendingToastId, "error", `❌ Amount too small (min 0.001 SOL)`);
-        } else if (e.code === 'POOL_UNAVAILABLE') {
-          updateTransactionToast(pendingToastId, "error", `⚠️ Pool has insufficient liquidity`);
-        } else {
-          const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
-          updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
-        }
-      } else {
-        // Unexpected error - show generic message
-        updateTransactionToast(pendingToastId, "error", "❌ Trade failed. Please try again.");
-      }
+    // Get preset based on selected pill (local state) or activePreset (global)
+    const presetIndex = parseInt(selectedPill.replace('P', '')) - 1;
+    const preset = presets[presetIndex];
+    if (!preset) {
+      console.log("❌ Quick buy preset missing for index", presetIndex);
+      showEnhancedToast('error', 'Quick buy preset not configured', {
+        title: 'Configuration Error',
+        suggestions: ['Update your presets in settings'],
+      });
+      return;
     }
+
+    const settings = preset.quickBuySettings;
+
+    // Execute enhanced trade with all features
+    const result = await executeEnhancedTrade({
+      token,
+      amount: buyAmount,
+      side: 'buy',
+      settings,
+      user: { bearerToken: user.bearerToken, id: user.id },
+      solBalance: Number(solBalance || 0),
+      solPriceUsd: 150, // TODO: Get real SOL price
+      onSuccess: (txHash, stats) => {
+        console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });
+      },
+      onError: (error) => {
+        console.error('❌ Enhanced Quick Buy failed:', error);
+      },
+      onWarning: (warnings) => {
+        console.warn('⚠️ Pre-transaction warnings:', warnings);
+      },
+    });
+
+    return result;
   };
 
   const handleTimeframeClick = (tf: string) => {
