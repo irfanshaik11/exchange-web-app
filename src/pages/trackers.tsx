@@ -15,6 +15,7 @@ import {
   getWalletHistory,
   getWalletSolBalance,
   getWalletsLastActive,
+  toggleWalletNotifications,
   type WatchWallet,
   type WalletEvent,
   type TradeEvent,
@@ -131,6 +132,7 @@ export default function TrackersPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [toast, setToast] = useState("");
   const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
+  const [isTogglingAllNotifications, setIsTogglingAllNotifications] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(384); // 384px = w-96
   const [isResizing, setIsResizing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -317,6 +319,21 @@ export default function TrackersPage() {
   const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = !isMobile || mobileMainTab === "twitter";
+  
+  // Calculate if all notifications are enabled
+  const allNotificationsEnabled = watchedWallets.length > 0 && watchedWallets.every(w => w.notificationsEnabled);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 Notification Status:', {
+      totalWallets: watchedWallets.length,
+      allNotificationsEnabled,
+      walletStates: watchedWallets.map(w => ({
+        address: w.address.slice(0, 8),
+        enabled: w.notificationsEnabled
+      }))
+    });
+  }, [watchedWallets, allNotificationsEnabled]);
 
   // Keep walletsRef in sync with wallets state
   useEffect(() => {
@@ -639,6 +656,54 @@ export default function TrackersPage() {
     } catch (error: any) {
       setToast(error.message || "Failed to remove wallet");
       setTimeout(() => setToast(""), 3000);
+    }
+  };
+
+  // Toggle all wallet notifications
+  const handleToggleAllNotifications = async () => {
+    if (watchedWallets.length === 0) {
+      console.log('No wallets to toggle');
+      return;
+    }
+    
+    if (isTogglingAllNotifications) {
+      console.log('⏳ Already toggling, please wait...');
+      return;
+    }
+    
+    setIsTogglingAllNotifications(true);
+    
+    try {
+      // Determine new state: if all are enabled, disable all. Otherwise, enable all.
+      const newState = !allNotificationsEnabled;
+      console.log(`🔔 Toggle all notifications: ${allNotificationsEnabled} → ${newState}`);
+      console.log(`📊 Toggling ${watchedWallets.length} wallets`);
+      
+      // Toggle each wallet's notifications
+      const togglePromises = watchedWallets.map(wallet => {
+        console.log(`  - ${wallet.address.slice(0, 8)}... from ${wallet.notificationsEnabled} to ${newState}`);
+        return toggleWalletNotifications(wallet.address, newState, wallet.ownerId || undefined);
+      });
+      
+      const results = await Promise.all(togglePromises);
+      console.log('✅ All API calls completed:', results);
+      
+      // Update localStorage for each wallet
+      watchedWallets.forEach(wallet => {
+        const storageKey = `wallet_notifications_${wallet.address}`;
+        localStorage.setItem(storageKey, JSON.stringify(newState));
+        console.log(`💾 Saved to localStorage: ${wallet.address.slice(0, 8)}... = ${newState}`);
+      });
+      
+      // Reload from backend to refresh state
+      console.log('🔄 Reloading wallets from backend...');
+      await loadWalletsFromBackend();
+      await refreshWatchedWallets();
+      console.log('✅ State refreshed - Ready for next toggle');
+    } catch (error) {
+      console.error('❌ Failed to toggle all notifications:', error);
+    } finally {
+      setIsTogglingAllNotifications(false);
     }
   };
 
@@ -983,10 +1048,13 @@ export default function TrackersPage() {
                                 <FiSettings className="h-4 w-4" />
                               </button>
                               <button
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                className={`flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] transition-all duration-300 hover:bg-[#181818] ${isTogglingAllNotifications ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
                                 type="button"
+                                onClick={handleToggleAllNotifications}
+                                disabled={isTogglingAllNotifications}
+                                title={isTogglingAllNotifications ? "Toggling..." : allNotificationsEnabled ? "Disable all notifications" : "Enable all notifications"}
                               >
-                                <FiBell className="h-4 w-4" />
+                                <FiBell className={`h-4 w-4 ${allNotificationsEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
                               </button>
                               <button
                                 className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
