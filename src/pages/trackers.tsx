@@ -345,8 +345,8 @@ export default function TrackersPage() {
     setWatchedWallets(globalWatchedWallets);
   }, [globalWatchedWallets]);
 
-  // Fetch token metadata for live trades (including image, protocol, market cap from Go service)
-  // Updates progressively as each fetch completes for faster rendering
+  // Fetch token metadata for live trades using /v1/trade/view endpoint
+  // This provides the most complete data: image, protocol, market cap
   useEffect(() => {
     if (latestTrades.length === 0) return;
 
@@ -364,60 +364,80 @@ export default function TrackersPage() {
     // Mark these mints as being fetched to prevent duplicate requests
     tradesToFetch.forEach(trade => fetchedMintsRef.current.add(trade.mint));
 
-    // Fetch each token's metadata independently and update state immediately when ready
-    // This allows progressive rendering instead of waiting for all fetches
+    // Fetch each token's metadata independently using /v1/trade/view endpoint
     tradesToFetch.forEach(async (trade) => {
       try {
         const goServiceUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+        let pairAddress = trade.pair_address;
         
-        // Use pair_address if available for faster lookup, otherwise search by mint
-        let url: string;
-        if (trade.pair_address) {
-          url = `${goServiceUrl}/v1/trade/view?pair_address=${trade.pair_address}`;
-        } else {
-          url = `${goServiceUrl}/v1/token/search?mint=${trade.mint}&limit=1`;
+        // If pair_address is not available, resolve it first
+        if (!pairAddress) {
+          console.log(`[Live Trades] Resolving pair_address for ${trade.mint.slice(0, 6)}...`);
+          try {
+            const searchResponse = await fetch(`${goServiceUrl}/v1/token/search?mint=${trade.mint}&limit=1`, {
+              signal: AbortSignal.timeout(3000)
+            });
+            if (searchResponse.ok) {
+              const searchData = await searchResponse.json();
+              const tokenData = Array.isArray(searchData) ? searchData[0] : (searchData.tokens?.[0] || null);
+              pairAddress = tokenData?.pair_address || tokenData?.poolId;
+              console.log(`[Live Trades] Resolved pair_address: ${pairAddress}`);
+            }
+          } catch (err) {
+            console.warn(`[Live Trades] Failed to resolve pair_address for ${trade.mint.slice(0, 6)}`, err);
+          }
         }
         
-        console.log(`[Live Trades] Fetching ${trade.mint.slice(0, 6)}...`);
-        
-        const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-        
-        if (!response.ok) {
-          console.warn(`[Live Trades] API error for ${trade.mint.slice(0, 6)}...: ${response.status}`);
-          return;
-        }
-        
-        const data = await response.json();
-        
-        // Extract token metadata from response
-        let token;
-        if (trade.pair_address) {
-          token = data.token || data;
-        } else {
-          token = Array.isArray(data) ? data[0] : (data.tokens?.[0] || data);
-        }
-        
-        if (token) {
-          const metadata = {
-            symbol: token.symbol || trade.symbol || null,
-            name: token.name || trade.name || null,
-            image: token.uri || token.image || token.logo || null,
-            launchpad_protocol: token.launchpad_protocol || token.protocol || null,
-            market_cap_usd: token.market_cap_usd || token.marketCapUsd || token.fully_diluted_value || null,
-          };
+        // Now fetch using /v1/trade/view with the pair_address
+        if (pairAddress) {
+          const url = `${goServiceUrl}/v1/trade/view?pair_address=${pairAddress}`;
+          console.log(`[Live Trades] Fetching from /v1/trade/view for ${trade.mint.slice(0, 6)}...`);
           
-          // Update state immediately for this token (progressive rendering)
-          setTokenMetadata((prev) => {
-            const updated = new Map(prev);
-            updated.set(trade.mint, metadata);
-            return updated;
-          });
+          const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
           
-          console.log(`[Live Trades] ✅ ${metadata.symbol || metadata.name || trade.mint.slice(0, 6)}`, {
-            image: !!metadata.image,
-            protocol: metadata.launchpad_protocol,
-            mc: metadata.market_cap_usd ? `$${(metadata.market_cap_usd / 1_000_000).toFixed(2)}M` : 'N/A'
-          });
+          if (!response.ok) {
+            console.warn(`[Live Trades] API error for ${trade.mint.slice(0, 6)}...: ${response.status}`);
+            return;
+          }
+          
+          const data = await response.json();
+          const token = data.token || data;
+          
+          if (token) {
+            const metadata = {
+              symbol: token.symbol || trade.symbol || null,
+              name: token.name || trade.name || null,
+              image: token.uri || token.image || token.logo || null,
+              launchpad_protocol: token.launchpad_protocol || token.protocol || null,
+              market_cap_usd: token.market_cap_usd || token.marketCapUsd || token.fully_diluted_value || null,
+            };
+            
+            console.log(`[Live Trades] 📦 Raw token data for ${trade.mint.slice(0, 6)}:`, {
+              token_uri: token.uri,
+              token_image: token.image,
+              token_logo: token.logo,
+              token_protocol: token.launchpad_protocol,
+              token_protocol_alt: token.protocol,
+              token_mc: token.market_cap_usd,
+              token_mc_alt: token.marketCapUsd,
+              token_mc_fdv: token.fully_diluted_value,
+            });
+            
+            // Update state immediately for this token (progressive rendering)
+            setTokenMetadata((prev) => {
+              const updated = new Map(prev);
+              updated.set(trade.mint, metadata);
+              return updated;
+            });
+            
+            console.log(`[Live Trades] ✅ Stored metadata for ${metadata.symbol || metadata.name || trade.mint.slice(0, 6)}:`, {
+              image: metadata.image ? metadata.image.slice(0, 50) + '...' : 'NONE',
+              protocol: metadata.launchpad_protocol || 'NONE',
+              mc: metadata.market_cap_usd ? `$${(metadata.market_cap_usd / 1_000_000).toFixed(2)}M` : 'NONE'
+            });
+          }
+        } else {
+          console.warn(`[Live Trades] Could not resolve pair_address for ${trade.mint.slice(0, 6)}, skipping metadata fetch`);
         }
       } catch (error) {
         console.warn(`[Live Trades] Fetch failed for ${trade.mint.slice(0, 6)}...`, error);
