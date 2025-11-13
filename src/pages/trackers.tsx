@@ -14,6 +14,7 @@ import {
   getTrackedWallets,
   getWalletHistory,
   getWalletSolBalance,
+  getWalletsLastActive,
   type WatchWallet,
   type WalletEvent,
   type TradeEvent,
@@ -143,6 +144,9 @@ export default function TrackersPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
     {},
   );
+  const [lastActiveMap, setLastActiveMap] = useState<
+    Record<string, number | null | undefined>
+  >({});
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
     Map<string, { symbol: string | null; name: string | null; image: string | null; launchpad_protocol?: string | null; market_cap_usd?: number | null }>
@@ -237,6 +241,68 @@ export default function TrackersPage() {
 
   const showWalletLimitToast = () => {
     showToastMessage(WALLET_LIMIT_MESSAGE);
+  };
+
+  const formatTokenAge = (input: unknown): string | null => {
+    if (input === null || input === undefined) return null;
+
+    let timestampMs: number | null = null;
+
+    if (typeof input === "number") {
+      timestampMs = input < 1_000_000_000_000 ? input * 1000 : input;
+    } else if (typeof input === "string") {
+      const numeric = Number(input);
+      if (!Number.isNaN(numeric) && numeric > 0) {
+        timestampMs = numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
+      } else {
+        const parsed = Date.parse(input);
+        if (!Number.isNaN(parsed)) {
+          timestampMs = parsed;
+        }
+      }
+    } else if (input instanceof Date && !Number.isNaN(input.getTime())) {
+      timestampMs = input.getTime();
+    }
+
+    if (timestampMs === null || Number.isNaN(timestampMs)) {
+      return null;
+    }
+
+    const diff = Date.now() - timestampMs;
+    if (!Number.isFinite(diff) || diff < 0) {
+      return "Just now";
+    }
+
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    const week = 7 * day;
+    const month = 30 * day;
+    const year = 365 * day;
+
+    if (diff < minute) return "Just now";
+    if (diff < hour) {
+      const mins = Math.floor(diff / minute);
+      return `${mins} min${mins === 1 ? "" : "s"} ago`;
+    }
+    if (diff < day) {
+      const hours = Math.floor(diff / hour);
+      return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+    }
+    if (diff < week) {
+      const days = Math.floor(diff / day);
+      return `${days} day${days === 1 ? "" : "s"} ago`;
+    }
+    if (diff < month) {
+      const weeks = Math.floor(diff / week);
+      return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+    }
+    if (diff < year) {
+      const months = Math.floor(diff / month);
+      return `${months} month${months === 1 ? "" : "s"} ago`;
+    }
+    const years = Math.floor(diff / year);
+    return `${years} year${years === 1 ? "" : "s"} ago`;
   };
 
   // Twitter state
@@ -344,6 +410,51 @@ export default function TrackersPage() {
   useEffect(() => {
     setWatchedWallets(globalWatchedWallets);
   }, [globalWatchedWallets]);
+  useEffect(() => {
+    const addresses = watchedWallets
+      .map((wallet) => wallet.address)
+      .filter((address): address is string => typeof address === "string" && address.length > 0);
+
+    if (addresses.length === 0) {
+      setLastActiveMap({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchLastActive = async () => {
+      try {
+        const results = await getWalletsLastActive(addresses);
+        if (cancelled) return;
+
+        const map: Record<string, number | null> = {};
+        results.forEach((item) => {
+          map[item.wallet] =
+            typeof item.lastActive === "number" ? item.lastActive : null;
+        });
+
+        // Ensure we have entries for every requested address
+        addresses.forEach((address) => {
+          if (!(address in map)) {
+            map[address] = null;
+          }
+        });
+
+        setLastActiveMap(map);
+      } catch (error) {
+        console.error("Failed to fetch last active timestamps:", error);
+        if (!cancelled) {
+          setLastActiveMap((prev) => ({ ...prev }));
+        }
+      }
+    };
+
+    fetchLastActive();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [watchedWallets]);
 
   // Fetch token metadata for live trades using /v1/trade/view endpoint
   // This provides the most complete data: image, protocol, market cap
@@ -410,6 +521,7 @@ export default function TrackersPage() {
               image: token.uri || token.image || token.logo || null,
               launchpad_protocol: token.launchpad_protocol || token.protocol || null,
               market_cap_usd: token.market_cap_usd || token.marketCapUsd || token.fully_diluted_value || null,
+              createdAt: token.created_at || token.createdAt || token.CreatedAt || null,
             };
             
             console.log(`[Live Trades] 📦 Raw token data for ${trade.mint.slice(0, 6)}:`, {
@@ -927,6 +1039,7 @@ export default function TrackersPage() {
                                 <span className="w-28">Created</span>
                                 <span className="min-w-0 flex-1">Name</span>
                                 <span className="w-36">Balance</span>
+                                <span className="w-28">Last Active</span>
                                 <span className="w-40">Actions</span>
                                 <span className="w-24 text-right">
                                   <button
@@ -964,6 +1077,7 @@ export default function TrackersPage() {
                                           watchedWallet={watched}
                                           events={events}
                                           balance={balance}
+                                          lastActive={lastActiveMap[wallet.address]}
                                           onRemove={handleRemoveWallet}
                                           onClick={setScannedWallet}
                                           onNotificationToggle={async (
@@ -1116,6 +1230,13 @@ export default function TrackersPage() {
                                       const isMoonit = launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot');
                                       const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
 
+                                      const tokenAgeLabel = formatTokenAge(
+                                        metadata?.createdAt ??
+                                          (trade as any).created_at ??
+                                          (trade as any).createdAt ??
+                                          null,
+                                      );
+
                                       return (
                                         <tr
                                           key={`${trade.tx}-${idx}`}
@@ -1254,7 +1375,16 @@ export default function TrackersPage() {
                                                   />
                                                 </div>
                                               </div>
-                                              <span className="font-semibold text-white">{displaySymbol}</span>
+                                              <div className="flex flex-col leading-tight text-left">
+                                                <span className="font-semibold text-white">
+                                                  {displaySymbol}
+                                                </span>
+                                                {tokenAgeLabel && (
+                                                  <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+                                                    {tokenAgeLabel}
+                                                  </span>
+                                                )}
+                                              </div>
                                             </button>
                                           </td>
                                           <td className="w-24 px-2 py-2 text-neutral-200">

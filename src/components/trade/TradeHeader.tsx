@@ -351,6 +351,13 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   const [xPreviewPosition, setXPreviewPosition] = useState({ x: 0, y: 0 });
   const xPreviewTimeoutRef = useRef<number | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  const tokenAgeLabel = useMemo(() => {
+    const createdAt =
+      (token as any).created_at ||
+      (token as any).createdAt ||
+      (token as any).CreatedAt;
+    return getTokenAge(createdAt);
+  }, [token]);
 
   const { isConnected: wsConnected, loading: wsLoading, error: wsError, getMarketData } =
     useMarketDataWebSocket({
@@ -708,7 +715,7 @@ useEffect(() => {
           </div>
 
           <div className="flex items-center gap-2 text-sm" style={{ color: AX.green }}>
-            <span>{getTokenAge((token as any).created_at || (token as any).createdAt || (token as any).CreatedAt)}</span>
+            <span>{tokenAgeLabel}</span>
 
             {isPumpToken && (
               <Link

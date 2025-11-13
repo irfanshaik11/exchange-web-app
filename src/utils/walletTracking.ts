@@ -53,6 +53,13 @@ export interface TradeEvent {
   at: number;
 }
 
+export interface WalletLastActiveResult {
+	wallet: string;
+	lastActive: number | null;
+	ok: boolean;
+	error?: string;
+}
+
 // ===== Frontend Display Types =====
 export interface TrackedWallet {
   address: string;
@@ -138,6 +145,38 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
     console.error('Error adding wallet:', error);
     throw error;
   }
+}
+
+export async function getWalletsLastActive(wallets: string[]): Promise<WalletLastActiveResult[]> {
+	try {
+		if (!Array.isArray(wallets) || wallets.length === 0) {
+			return [];
+		}
+
+		const response = await fetch(`${WALLET_TRACKER_API_URL}/api/wallets/last-active`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ wallets }),
+		});
+
+		const payload = await response.json().catch(() => null);
+
+		if (!response.ok) {
+			const message =
+				payload?.error ||
+				(response.statusText ? `HTTP ${response.status} ${response.statusText}` : 'Failed to fetch last active wallets');
+			throw new Error(message);
+		}
+
+		if (!payload || typeof payload !== 'object' || payload.ok !== true || !Array.isArray(payload.data)) {
+			throw new Error('Unexpected response while fetching last active wallets');
+		}
+
+		return payload.data as WalletLastActiveResult[];
+	} catch (error) {
+		console.error('Error fetching wallets last active timestamp:', error);
+		throw error;
+	}
 }
 
 // Remove a wallet from tracking

@@ -10,6 +10,7 @@ interface WalletRowProps {
   watchedWallet?: WatchWallet;
   events?: WalletEvent[];
   balance?: number;
+  lastActive?: number | null;
   onRemove: (address: string) => void;
   onClick?: (wallet: Wallet) => void;
   onNotificationToggle?: (address: string, enabled: boolean) => void;
@@ -38,7 +39,16 @@ function Tooltip({ children, label }: { children: React.ReactNode; label: string
   );
 }
 
-export default function WalletRow({ wallet, watchedWallet, events = [], balance, onRemove, onClick, onNotificationToggle }: WalletRowProps) {
+export default function WalletRow({
+  wallet,
+  watchedWallet,
+  events = [],
+  balance,
+  lastActive,
+  onRemove,
+  onClick,
+  onNotificationToggle,
+}: WalletRowProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   
@@ -239,6 +249,52 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
     }
   };
 
+  const formatLastActive = (timestamp: number | null | undefined) => {
+    if (timestamp === undefined) {
+      return "Loading...";
+    }
+    if (timestamp === null) {
+      return "No activity yet";
+    }
+
+    const now = Date.now();
+    const diff = now - timestamp;
+    if (!Number.isFinite(diff) || diff < 0) {
+      return "Just now";
+    }
+
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    const week = 7 * day;
+    const month = 30 * day;
+    const year = 365 * day;
+
+    if (diff < minute) return "Just now";
+    if (diff < hour) {
+      const mins = Math.floor(diff / minute);
+      return `${mins} min${mins === 1 ? "" : "s"} ago`;
+    }
+    if (diff < day) {
+      const hours = Math.floor(diff / hour);
+      return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+    }
+    if (diff < week) {
+      const days = Math.floor(diff / day);
+      return `${days} day${days === 1 ? "" : "s"} ago`;
+    }
+    if (diff < month) {
+      const weeks = Math.floor(diff / week);
+      return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+    }
+    if (diff < year) {
+      const months = Math.floor(diff / month);
+      return `${months} month${months === 1 ? "" : "s"} ago`;
+    }
+    const years = Math.floor(diff / year);
+    return `${years} yr${years === 1 ? "" : "s"} ago`;
+  };
+
   return (
     <tr
       key={wallet.address}
@@ -273,6 +329,9 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
             ) : (
               <span className="text-neutral-500">-</span>
             )}
+          </span>
+          <span className="w-28 text-xs text-neutral-300">
+            {formatLastActive(lastActive)}
           </span>
           <div className="w-40 flex items-center gap-2">
 						<Tooltip label={notificationsEnabled ? "Notifications ON" : "Notifications OFF"}>
