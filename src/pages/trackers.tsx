@@ -613,8 +613,8 @@ export default function TrackersPage() {
     }
 
     try {
-      // Add to backend
-      await addTrackedWallet(address, name, user?.id, emoji);
+      // Add to backend with notifications enabled by default
+      await addTrackedWallet(address, name, user?.id, emoji, true);
 
       // Reload from backend (this will also refresh global watched wallets)
       await loadWalletsFromBackend();
@@ -878,6 +878,7 @@ export default function TrackersPage() {
                 wallet.name,
                 user?.id,
                 getRandomEmoji(),
+                true, // Enable notifications by default for imported wallets
               );
               successCount++;
             } catch (error: any) {
@@ -1885,6 +1886,7 @@ export default function TrackersPage() {
                     wallet.name,
                     user?.id,
                     wallet.emoji,
+                    true, // Enable notifications by default for bulk imported wallets
                   );
                   successCount++;
                 } catch (error: any) {
