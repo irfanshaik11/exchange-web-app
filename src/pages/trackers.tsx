@@ -1231,8 +1231,7 @@ export default function TrackersPage() {
                                       const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
 
                                       const tokenAgeLabel = formatTokenAge(
-                                        metadata?.createdAt ??
-                                          (trade as any).created_at ??
+                                        (trade as any).created_at ??
                                           (trade as any).createdAt ??
                                           null,
                                       );
