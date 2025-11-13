@@ -3,12 +3,14 @@ import type { Token } from "./db";
 export type PoolType = 
   | "PumpAmm" 
   | "Raydium CPMM" 
+  | "Raydium Launchpad" 
   | "Pumpfun" 
   | "launchLab" 
   | "bonk" 
   | "meteora dbc" 
   | "meteora amm v1" 
   | "meteora amm v2" 
+  | "Meteora" 
   | "bags" 
   | "MoonShoot" 
   | "Orca"
@@ -41,17 +43,35 @@ export function getPoolTypeFromToken(token: Token): PoolType {
   if (protocolLower.includes("pump.fun") || protocolLower.includes("pumpfun") || protocolLower === "pump") {
     return "Pumpfun";
   }
+  // Raydium Launchpad detection - check before CPMM
+  if (
+    protocolLower.includes("raydium") && 
+    (protocolLower.includes("launchpad") || protocolLower === "raydiumlaunchpad")
+  ) {
+    return "Raydium Launchpad";
+  }
   if (protocolLower.includes("raydium") && protocolLower.includes("cpmm")) {
     return "Raydium CPMM";
   }
-  if (protocolLower.includes("meteora") && protocolLower.includes("dbc")) {
-    return "meteora dbc";
-  }
-  if (protocolLower.includes("meteora") && protocolLower.includes("v1")) {
-    return "meteora amm v1";
-  }
-  if (protocolLower.includes("meteora") && protocolLower.includes("v2")) {
-    return "meteora amm v2";
+  // Meteora protocol detection - check for specific variants first
+  if (protocolLower.includes("meteora")) {
+    if (protocolLower.includes("dbc")) {
+      return "meteora dbc";
+    }
+    if (protocolLower.includes("v1") || protocolLower.includes("amm v1")) {
+      return "meteora amm v1";
+    }
+    if (protocolLower.includes("v2") || protocolLower.includes("amm v2")) {
+      return "meteora amm v2";
+    }
+    // If just "meteora" without variant, return "Meteora" for DLMM pools
+    // Backend can still auto-detect the specific type from the pool address if needed
+    if (protocolLower === "meteora") {
+      console.log(`ℹ️ Protocol is "meteora" without specific variant for ${token.symbol}. Using generic "Meteora" pool type.`);
+      return "Meteora"; // Generic Meteora (usually DLMM)
+    }
+    // If it contains "meteora" but we couldn't determine variant, return generic Meteora
+    return "Meteora"; // Generic Meteora (usually DLMM)
   }
   if (protocolLower.includes("launchlab")) {
     return "launchLab";

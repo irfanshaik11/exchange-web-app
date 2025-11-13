@@ -18,6 +18,62 @@ import { enhanceError, type EnhancedError } from './enhancedErrors';
 import type { QuickBuySettings } from '~/components/QuickBuyContext';
 import { getPoolTypeFromToken } from './poolTypeDetection';
 
+// Helper function to get first valid string from multiple candidates
+function getFirstString(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return undefined;
+}
+
+// Comprehensive pool address detection - checks all possible fields
+function getEffectivePoolAddress(token: Token): string | undefined {
+  // Get migrated pool address if available (highest priority)
+  const migratedPoolAddress = getFirstString(
+    (token as any).migrated_pool_address,
+    (token as any).migratedPoolAddress,
+    (token as any).migrated_poolAddress,
+    (token as any).migrated_pool?.address,
+    (token as any).migratedPool?.address,
+    (token as any).target_pool_address,
+    (token as any).targetPoolAddress,
+  );
+
+  // Get original pair address
+  const originalPairAddress = getFirstString(
+    token.pair_address,
+    (token as any).pairAddress,
+    (token as any).bondingCurveKey,
+    (token as any).bonding_curve_key,
+    (token as any).bonding_curve_address,
+    (token as any).bondingCurve?.address,
+    (token as any).bonding_curve?.address,
+  );
+
+  // Get fallback pool address
+  const fallbackPoolAddress = getFirstString(
+    (token as any).poolAddress,
+    (token as any).pool_address,
+    (token as any).amm_id,
+    (token as any).ammId,
+    typeof (token as any).pool === 'string' && (token as any).pool.length >= 32 ? (token as any).pool : undefined,
+  );
+
+  // Effective pool address (prioritize migrated, then original, then fallback)
+  const effectivePoolAddress = getFirstString(
+    migratedPoolAddress,
+    originalPairAddress,
+    fallbackPoolAddress,
+  );
+
+  return effectivePoolAddress;
+}
+
 export interface EnhancedTradeParams {
   token: Token;
   amount: number;
@@ -80,30 +136,42 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
     // Step 2: Pre-transaction validation
     const poolType = getPoolTypeFromToken(token);
-    const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
+    // Use comprehensive pool address detection
+    let effectivePoolAddress = getEffectivePoolAddress(token);
 
+    // CRITICAL FIX: If poolAddress equals token mint, it's not a valid pool address
+    // This happens when frontend sends token mint as pool address
+    if (effectivePoolAddress && effectivePoolAddress === token.mint) {
+      console.warn('[EnhancedTrade] Pool address equals token mint - treating as missing. Backend will discover pool.', {
+        tokenMint: token.mint,
+        tokenSymbol: token.symbol,
+        invalidPoolAddress: effectivePoolAddress,
+      });
+      effectivePoolAddress = undefined; // Trigger backend pool discovery
+    }
+
+    // If no pool address found, still allow the request to go through
+    // The backend can discover pools using the token mint
     if (!effectivePoolAddress) {
-      const error: EnhancedError = {
-        title: 'Pool Address Missing',
-        description: 'Trading pool not available for this token yet',
-        suggestions: ['Try refreshing the page', 'Token may not have launched yet'],
-        canRetry: false,
-      };
-      if (onError) onError(error);
+      console.warn('[EnhancedTrade] No pool address found in token data, backend will attempt pool discovery', {
+        tokenMint: token.mint,
+        tokenSymbol: token.symbol,
+        launchpad_protocol: (token as any).launchpad_protocol,
+        availableFields: {
+          migrated_pool_address: (token as any).migrated_pool_address,
+          pair_address: token.pair_address,
+          poolAddress: (token as any).poolAddress,
+          pool_address: (token as any).pool_address,
+        }
+      });
       
+      // Update toast to indicate we're discovering the pool
       if (toastId) {
-        updateEnhancedToast(toastId, 'error', error.description, {
-          title: error.title,
-          suggestions: error.suggestions,
-        });
-      } else {
-        showEnhancedToast('error', error.description, {
-          title: error.title,
-          suggestions: error.suggestions,
+        updateEnhancedToast(toastId, 'loading', 'Discovering trading pool...', {
+          title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
+          description: 'Finding available trading pool...',
         });
       }
-      
-      return { success: false, error };
     }
 
     // Update toast to show we're checking
@@ -202,14 +270,15 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
     // Step 4: Execute trade - NO RETRIES, NO PARAMETER ADJUSTMENTS
     // Users control their own settings, we just execute once
+    // Note: If effectivePoolAddress is missing, backend will use pool discovery
     const tradeParams: any = {
-      poolAddress: effectivePoolAddress,
+      poolAddress: effectivePoolAddress || undefined, // Allow undefined - backend will discover
       baseMint: token.mint,
       quoteMint: SOL_MINT_ADDRESS,
       amount,
       mevProtection: (settings.mevMode === "off" ? 0 : 1) as 0 | 1,
-      poolType,
-      originalPairAddress: token.pair_address,
+      poolType: poolType || undefined, // Always send poolType if detected (helps backend with discovery)
+      originalPairAddress: token.pair_address || undefined,
       slippage: (settings.maxSlippage || 0.4) * 100,
       priorityFee: settings.priority || 0.0001,
       bribe: settings.bribe || 0,
