@@ -131,8 +131,8 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
         wallet: address, 
         walletName: name || undefined,
         userId: userId || undefined,
-        emoji: emoji || undefined,
-        notificationsEnabled: notificationsEnabled
+        emoji: emoji || undefined
+        // Note: notificationsEnabled is set via a separate API call below
       }),
     });
     
@@ -141,6 +141,16 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
       const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
       const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to add wallet'));
       throw new Error(msg || 'Failed to add wallet');
+    }
+    
+    // Enable notifications if requested (separate API call)
+    if (notificationsEnabled) {
+      try {
+        await toggleWalletNotifications(address, true, userId);
+      } catch (notifError) {
+        console.warn('Failed to enable notifications for wallet, but wallet was added successfully:', notifError);
+        // Don't throw - wallet was added successfully, notification toggle can be done manually
+      }
     }
   } catch (error) {
     console.error('Error adding wallet:', error);
