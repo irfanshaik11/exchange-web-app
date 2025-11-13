@@ -3,7 +3,9 @@ import type { Wallet } from '~/utils/functions';
 import type { WatchWallet, WalletEvent } from '~/utils/walletTracking';
 import { toggleWalletNotifications } from '~/utils/walletTracking';
 import { SolanaIcon } from './Footer';
-import { FaBell, FaBellSlash, FaChartBar, FaTrash } from 'react-icons/fa';
+import { FiBell, FiBarChart2, FiTrash2 } from 'react-icons/fi';
+import { TbChartBubble } from 'react-icons/tb';
+import { IoLogoRss } from 'react-icons/io5';
 
 interface WalletRowProps {
   wallet: Wallet;
@@ -18,23 +20,45 @@ interface WalletRowProps {
 
 function Tooltip({ children, label }: { children: React.ReactNode; label: string }) {
   const [show, setShow] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const triggerRef = React.useRef<HTMLSpanElement>(null);
+
+  const handleMouseEnter = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+      });
+    }
+    setShow(true);
+  };
+
   return (
     <span className="relative flex flex-col items-center">
       <span
-        onMouseEnter={() => setShow(true)}
+        ref={triggerRef}
+        onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setShow(false)}
-        onFocus={() => setShow(true)}
+        onFocus={handleMouseEnter}
         onBlur={() => setShow(false)}
         tabIndex={0}
         className="focus:outline-none"
       >
         {children}
       </span>
-      <span
-        className={`absolute -top-7 left-1/2 -translate-x-1/2 z-50 px-2 py-1 rounded-md bg-neutral-900 text-white text-sm font-normal shadow border border-neutral-700 whitespace-nowrap transition-all duration-200 ${show ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-1 pointer-events-none'}`}
-      >
-        {label}
-      </span>
+      {show && (
+        <span
+          className="fixed px-2 py-1 rounded-md bg-neutral-900 text-white text-[11px] font-normal shadow-lg border border-neutral-700 whitespace-nowrap -translate-x-1/2 -translate-y-full"
+          style={{ 
+            zIndex: 99999,
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+          }}
+        >
+          {label}
+        </span>
+      )}
     </span>
   );
 }
@@ -51,6 +75,8 @@ export default function WalletRow({
 }: WalletRowProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [analyticsEnabled, setAnalyticsEnabled] = React.useState(false);
+  const [feedEnabled, setFeedEnabled] = React.useState(false);
   
   // Ref to track if we've loaded from localStorage (prevents backend from overriding)
   const hasLoadedFromStorageRef = React.useRef(false);
@@ -333,54 +359,84 @@ export default function WalletRow({
           <span className="w-28 text-xs text-neutral-300">
             {formatLastActive(lastActive)}
           </span>
-          <div className="w-40 flex items-center gap-2">
+          <div className="flex-1 flex items-center justify-end gap-1.5">
+						{/* Bell - Notification Toggle */}
 						<Tooltip label={notificationsEnabled ? "Notifications ON" : "Notifications OFF"}>
 							<button 
-								className={`p-1.5 rounded-md hover:bg-neutral-800 transition-all duration-200 ${isTogglingNotification ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
-								title={notificationsEnabled ? "Click to disable notifications" : "Click to enable notifications"}
+								className={`p-2 rounded-md transition-all duration-200 ${isTogglingNotification ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:bg-neutral-800/50'}`}
 								onClick={handleToggleNotifications}
 								disabled={isTogglingNotification}
 							>
-								{notificationsEnabled ? (
-									<FaBell className="text-sm text-emerald-400" />
-								) : (
-									<FaBellSlash className="text-sm text-neutral-500" />
-								)}
+								<FiBell className={`text-base ${notificationsEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
 							</button>
 						</Tooltip>
-            <Tooltip label="Scan Address">
-              <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors cursor-pointer" title="Scan" onClick={() => onClick && onClick(wallet)}>
-                <FaChartBar className="text-sm text-blue-300" />
-              </button>
-            </Tooltip>
-            {showDeleteConfirm ? (
-              <div className="flex gap-1">
-                <button 
-                  className="px-2 py-1 rounded-md bg-red-500 hover:bg-red-600 transition-colors text-white text-xs font-medium cursor-pointer" 
-                  title="Confirm Delete"
-                  onClick={handleConfirmDelete}
-                >
-                  ✓
-                </button>
-                <button 
-                  className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 transition-colors text-white text-xs font-medium cursor-pointer" 
-                  title="Cancel"
-                  onClick={handleCancelDelete}
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <button 
-                className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors cursor-pointer"
-                title="Delete" 
-                onClick={handleDeleteClick}
-              >
-                <FaTrash className="text-sm text-red-400" />
-              </button>
-            )}
+
+						{/* Chart Bubble Icon - Toggle Button */}
+						<Tooltip label={analyticsEnabled ? "Analytics ON" : "Analytics OFF"}>
+							<button 
+								className="p-2 rounded-md hover:bg-neutral-800/50 transition-all duration-200 cursor-pointer"
+								onClick={(e) => {
+									e.stopPropagation();
+									setAnalyticsEnabled(!analyticsEnabled);
+								}}
+							>
+								<TbChartBubble className={`text-base ${analyticsEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
+							</button>
+						</Tooltip>
+
+						{/* RSS Icon - Toggle Button */}
+						<Tooltip label={feedEnabled ? "Feed ON" : "Feed OFF"}>
+							<button 
+								className="p-2 rounded-md hover:bg-neutral-800/50 transition-all duration-200 cursor-pointer"
+								onClick={(e) => {
+									e.stopPropagation();
+									setFeedEnabled(!feedEnabled);
+								}}
+							>
+								<IoLogoRss className={`text-base ${feedEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
+							</button>
+						</Tooltip>
+
+						{/* Chart - Scan Address */}
+						<Tooltip label="Scan Wallet">
+							<button 
+								className="p-2 rounded-md hover:bg-neutral-800/50 transition-all duration-200 cursor-pointer" 
+								onClick={(e) => {
+									e.stopPropagation();
+									onClick && onClick(wallet);
+								}}
+							>
+								<FiBarChart2 className="text-base text-neutral-400 hover:text-pink-500 transition-colors" />
+							</button>
+						</Tooltip>
+
+						{/* Delete */}
+						{showDeleteConfirm ? (
+							<div className="flex gap-1">
+								<button 
+									className="px-2 py-1 rounded-md bg-pink-500 hover:bg-pink-600 transition-colors text-white text-xs font-medium cursor-pointer" 
+									onClick={handleConfirmDelete}
+								>
+									✓
+								</button>
+								<button 
+									className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 transition-colors text-white text-xs font-medium cursor-pointer" 
+									onClick={handleCancelDelete}
+								>
+									✕
+								</button>
+							</div>
+						) : (
+							<Tooltip label="Delete Wallet">
+								<button 
+									className="p-2 rounded-md hover:bg-neutral-800/50 transition-all duration-200 cursor-pointer"
+									onClick={handleDeleteClick}
+								>
+									<FiTrash2 className="text-base text-neutral-400 hover:text-pink-500 transition-colors" />
+								</button>
+							</Tooltip>
+						)}
           </div>
-          <span className="w-24"></span>
         </div>
       </td>
     </tr>

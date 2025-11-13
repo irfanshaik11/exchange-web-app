@@ -1040,15 +1040,14 @@ export default function TrackersPage() {
                                 <span className="min-w-0 flex-1">Name</span>
                                 <span className="w-36">Balance</span>
                                 <span className="w-28">Last Active</span>
-                                <span className="w-40">Actions</span>
-                                <span className="w-24 text-right">
+                                <div className="flex-1 flex items-center justify-end">
                                   <button
                                     className="whitespace-nowrap text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
                                     onClick={() => handleRemoveWallet("all")}
                                   >
                                     Remove All
                                   </button>
-                                </span>
+                                </div>
                               </div>
                             </div>
                             {wallets.length === 0 ? (
