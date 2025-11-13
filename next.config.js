@@ -12,6 +12,8 @@ const config = {
   devIndicators: {
     position: "bottom-right",
   },
+  // Transpile these packages to fix CommonJS/ESM issues
+  transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit'],
   // Optimize package imports for faster loading
   experimental: {
     optimizePackageImports: ['react-icons'],
@@ -24,23 +26,11 @@ const config = {
   turbopack: {
     // Turbopack settings
   },
-  webpack: (config, { isServer }) => {
-    // Handle CommonJS modules that don't support named exports
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "@vanilla-extract/sprinkles/createUtils":
-        "@vanilla-extract/sprinkles/createUtils",
-    };
-
-    // Force CommonJS modules to be treated as CommonJS
-    config.module.rules.push({
-      test: /node_modules\/@vanilla-extract\/sprinkles/,
-      type: "javascript/auto",
-    });
-
-    // Handle module resolution for Node 18
-    config.resolve.extensionAlias = {
-      ".js": [".js", ".ts", ".tsx"],
+  webpack: (config) => {
+    // Handle @react-native-async-storage warning (optional dependency for MetaMask SDK)
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      '@react-native-async-storage/async-storage': false,
     };
 
     return config;
