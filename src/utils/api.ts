@@ -367,6 +367,11 @@ export const getWithdrawalHistory = (authToken: string) =>
     authToken,
   });
 
+export const getWithdrawalFee = () =>
+  apiFetch<{ fee: number; rentExemptMinimum: number; fallbackFee: number; minimumReserve: number }>("/api/users/withdrawal-fee", {
+    method: "GET",
+  });
+
 export const updateLimitOrder = (
   params: UpdateLimitOrderParams,
   authToken: string,
