@@ -219,7 +219,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
   }, [toast]);
 
   return (
-    <InterstatePopout open={true} onClose={onClose} align="center" className="md:w-[80%] w-[90%] h-[calc(100vh-120px)] p-0 bg-transparent shadow-none" overlayClassName="z-50">
+    <InterstatePopout open={true} onClose={onClose} align="center" zIndex={9999} className="md:w-[80%] w-[90%] h-[calc(100vh-120px)] p-0 bg-transparent shadow-none">
       <div className="relative w-full h-[calc(100vh-120px)] bg-black border border-neutral-700 shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-8 pt-6 pb-3 border-b border-neutral-800 relative">

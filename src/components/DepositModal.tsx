@@ -68,7 +68,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose }) => {
   if (!open && !show) return null;
 
   return (
-    <InterstatePopout open={open} onClose={onClose} align="center" className="relative mx-4 w-full max-w-md rounded-lg border border-neutral-700 bg-neutral-900 p-6 py-4 text-neutral-100 shadow-2xl">
+    <InterstatePopout open={open} onClose={onClose} align="center" zIndex={9999} className="relative mx-4 w-full max-w-md rounded-lg border border-neutral-700 bg-neutral-900 p-6 py-4 text-neutral-100 shadow-2xl">
       <div className="mb-2 flex flex-row items-center justify-between">
         <h2 className="text-xl font-bold text-white">Deposit</h2>
         <InterstateButton variant="icon" size="sm" onClick={onClose} className="text-xl"><FaTimes size={20} /></InterstateButton>

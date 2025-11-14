@@ -22,7 +22,7 @@ export default function NotificationDropdown({ open, onClose }: NotificationDrop
   if (!open && !show) return null;
 
   return (
-    <InterstatePopout open={open} onClose={onClose} align="top-right" className="bg-neutral-900 rounded-xl shadow-2xl w-full max-w-sm mt-16 mr-8 p-0 relative text-neutral-100" overlayClassName="items-start justify-end">
+    <InterstatePopout open={open} onClose={onClose} align="top-right" zIndex={9999} className="bg-neutral-900 rounded-xl shadow-2xl w-full max-w-sm mt-16 mr-8 p-0 relative text-neutral-100" overlayClassName="items-start justify-end">
       <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800">
         <span className="text-lg font-semibold">Notifications</span>
         <div className="flex items-center gap-4">
