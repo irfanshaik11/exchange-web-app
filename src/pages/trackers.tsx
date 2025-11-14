@@ -1197,30 +1197,6 @@ export default function TrackersPage() {
                           </>
                         ) : activeTab === 1 ? (
                           <>
-                            {/* Connection Status Indicator */}
-                            <div className="mb-3 flex items-center gap-3 rounded-lg border border-neutral-800/50 bg-neutral-900/30 px-4 py-2">
-                              <div className="flex items-center gap-2">
-                                <div className={`h-2 w-2 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                                <span className="text-xs font-medium text-neutral-300">
-                                  {wsConnected ? 'WebSocket Connected' : 'WebSocket Disconnected'}
-                                </span>
-                              </div>
-                              <div className="h-4 w-px bg-neutral-700" />
-                              <span className="text-xs text-neutral-400">
-                                {wsConnected 
-                                  ? `Monitoring ${watchedWallets.length} wallet${watchedWallets.length !== 1 ? 's' : ''} for trades`
-                                  : 'Waiting for connection...'}
-                              </span>
-                              {latestTrades.length > 0 && (
-                                <>
-                                  <div className="h-4 w-px bg-neutral-700" />
-                                  <span className="text-xs text-neutral-400">
-                                    {latestTrades.length} trade{latestTrades.length !== 1 ? 's' : ''} (last hour)
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                            
                             {latestTrades.length === 0 ? (
                               <div className="flex h-64 flex-col items-center justify-center">
                                 <span className="text-neutral-400">

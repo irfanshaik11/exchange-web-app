@@ -100,7 +100,6 @@ const resolveWsUrl = () => {
 };
 
 const WALLET_TRACKER_WS_URL = resolveWsUrl();
-console.log('🔧 [Config] WebSocket URL configured:', WALLET_TRACKER_WS_URL);
 
 // ===== API Functions =====
 
@@ -494,24 +493,11 @@ export function createWalletTrackerWebSocket(
   onDisconnect?: () => void
 ): WalletTrackerWebSocket {
   const wsUrl = `${WALLET_TRACKER_WS_URL}/ws`;
-  console.log('🔌 [WebSocket Factory] Creating connection', {
-    url: wsUrl,
-    envVar: process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL,
-    resolvedBase: WALLET_TRACKER_WS_URL,
-    fullUrl: wsUrl
-  });
-  
   const ws = new WebSocket(wsUrl);
   let isAlive = true;
   let connectionEstablished = false;
 
   ws.onopen = () => {
-    console.log('✅ [WebSocket Factory] Connection opened successfully!', {
-      url: wsUrl,
-      readyState: ws.readyState,
-      protocol: ws.protocol,
-      timestamp: new Date().toISOString()
-    });
     isAlive = true;
     connectionEstablished = true;
     onConnect?.();
@@ -530,101 +516,43 @@ export function createWalletTrackerWebSocket(
       
       // Handle subscription confirmation
       if (data.type === 'subscribed') {
-        console.log('✅ Subscription confirmed for wallets:', data.wallets);
         return;
       }
       
       // Handle trade events
       if (data.type === 'trade') {
-        console.log('📊 Trade event received:', data);
         onTradeEvent(data as TradeEvent);
       }
     } catch (error) {
-      console.error('❌ Error parsing WebSocket message:', error);
+      // Silent fail
     }
   };
 
   ws.onerror = (error) => {
-    console.error('❌ [WebSocket Factory] Error occurred!', {
-      error,
-      url: wsUrl,
-      readyState: ws.readyState,
-      connectionEstablished,
-      timestamp: new Date().toISOString()
-    });
     if (!connectionEstablished) {
-      console.error('❌ [WebSocket Factory] Connection was never established!');
-      console.error('📋 Troubleshooting checklist:');
-      console.error('  1. Is the WebSocket server running?');
-      console.error('  2. URL configured:', wsUrl);
-      console.error('  3. ENV var NEXT_PUBLIC_WALLET_TRACKER_WS_URL:', process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL);
-      console.error('  4. Check network/firewall settings');
+      console.error('WebSocket connection error - check NEXT_PUBLIC_WALLET_TRACKER_WS_URL:', wsUrl);
     }
   };
 
   ws.onclose = (event) => {
-    console.log('🔌 [WebSocket Factory] Connection closed', {
-      code: event.code,
-      reason: event.reason || 'No reason provided',
-      wasClean: event.wasClean,
-      url: wsUrl,
-      connectionEstablished,
-      timestamp: new Date().toISOString()
-    });
     isAlive = false;
-    
-    if (!connectionEstablished) {
-      console.error('❌ [WebSocket Factory] Connection closed before being established!');
-      console.error('Common causes:');
-      console.error('  • WebSocket server not running');
-      console.error('  • Wrong URL:', wsUrl);
-      console.error('  • Network/firewall blocking connection');
-      console.error('  • Server rejected connection');
-    }
-    
     onDisconnect?.();
   };
 
   const subscribe = (wallets: string[]) => {
-    console.log('📡 [WebSocket Factory] Subscribe requested', {
-      wallets: wallets.map(w => w.slice(0, 8) + '...'),
-      count: wallets.length,
-      readyState: ws.readyState,
-      isOpen: ws.readyState === WebSocket.OPEN
-    });
-    
     if (ws.readyState === WebSocket.OPEN) {
       const message = { method: 'subscribe', wallets };
       ws.send(JSON.stringify(message));
-      console.log('✅ [WebSocket Factory] Subscribe message sent');
-    } else {
-      console.error('❌ [WebSocket Factory] Cannot subscribe - WebSocket not open!', {
-        readyState: ws.readyState,
-        CONNECTING: WebSocket.CONNECTING,
-        OPEN: WebSocket.OPEN,
-        CLOSING: WebSocket.CLOSING,
-        CLOSED: WebSocket.CLOSED
-      });
     }
   };
 
   const unsubscribe = (wallets: string[]) => {
-    console.log('📡 [WebSocket Factory] Unsubscribe requested', {
-      wallets: wallets.map(w => w.slice(0, 8) + '...'),
-      count: wallets.length,
-      readyState: ws.readyState
-    });
-    
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ method: 'unsubscribe', wallets }));
-      console.log('✅ [WebSocket Factory] Unsubscribe message sent');
-    } else {
-      console.warn('⚠️ [WebSocket Factory] Cannot unsubscribe - WebSocket not open');
     }
   };
 
   const close = () => {
-    console.log('Closing WebSocket connection...');
     ws.close();
   };
 
