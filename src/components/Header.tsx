@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState, useRef } from "react";
-import { FaSearch, FaStar, FaWallet, FaBars, FaTimes } from "react-icons/fa";
+import { FaSearch, FaStar, FaWallet, FaBars, FaTimes, FaClipboard } from "react-icons/fa";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
+import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiStar } from "react-icons/fi";
@@ -73,6 +74,51 @@ export default function Header({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  // Handler for Paste CA button
+  const handlePasteCA = async () => {
+    try {
+      // Request clipboard permission and read text
+      const text = await navigator.clipboard.readText();
+      const trimmed = text.trim();
+
+      // Validate if it looks like a Solana address (base58, typically 32-44 chars)
+      // Solana addresses don't start with 0x, they use base58 encoding
+      const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
+
+      if (isSolanaAddress) {
+        // Redirect to trade page with the address
+        router.push(`/trade/${trimmed}`);
+        toast.success("Navigating to token...", {
+          duration: 2000,
+          style: {
+            background: '#1E1F26',
+            color: '#E6E7EA',
+            border: '1px solid #70E0B0',
+          }
+        });
+      } else {
+        toast.error("Invalid token address in clipboard", {
+          duration: 3000,
+          style: {
+            background: '#1E1F26',
+            color: '#E6E7EA',
+            border: '1px solid #ff6b6b',
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Clipboard read error:', error);
+      toast.error("Failed to read clipboard. Please grant permission.", {
+        duration: 3000,
+        style: {
+          background: '#1E1F26',
+          color: '#E6E7EA',
+          border: '1px solid #ff6b6b',
+        }
+      });
+    }
+  };
 
   // Toggle Search modal with Tab and '/' (outside of inputs)
   useEffect(() => {
@@ -355,6 +401,49 @@ export default function Header({
                   }}
                 >
                   <FaSearch size={14} />
+                </button>
+
+                {/* Paste CA button - desktop */}
+                <button
+                  onClick={handlePasteCA}
+                  className="hidden md:flex items-center gap-2 h-8 rounded-full border px-3 transition-all duration-300 ease-out"
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: AX.border,
+                    color: AX.muted,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(24, 196, 140, 0.08)";
+                    e.currentTarget.style.borderColor = "#18c48c";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)";
+                    e.currentTarget.style.transform = "scale(1.01)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.transform = "scale(1)";
+                  }}
+                >
+                  <FaClipboard size={13} />
+                  <span className="text-xs text-neutral-400 whitespace-nowrap">
+                    Paste CA
+                  </span>
+                </button>
+
+                {/* Paste CA button - mobile (icon only) */}
+                <button
+                  onClick={handlePasteCA}
+                  className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: AX.border,
+                    color: AX.muted,
+                  }}
+                >
+                  <FaClipboard size={13} />
                 </button>
               </div>
             )}
