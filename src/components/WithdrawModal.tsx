@@ -5,7 +5,7 @@ import { FaTimes, FaCopy, FaHistory, FaArrowLeft, FaExternalLinkAlt, FaCheckCirc
 import InterstateButton from "./InterstateButton";
 import InterstateTooltip from "./InterstateTooltip";
 import { useUser } from "./UserContext";
-import { withdrawSOL, getWithdrawalHistory } from "~/utils/api";
+import { withdrawSOL, getWithdrawalHistory, getWithdrawalFee } from "~/utils/api";
 import toast from "react-hot-toast";
 
 interface WithdrawModalProps {
@@ -35,10 +35,20 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [history, setHistory] = useState<WithdrawalTransaction[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [withdrawalFee, setWithdrawalFee] = useState<number>(0.0005); // Dynamic fee, fallback to 0.0005
+  const [rentExemptMinimum, setRentExemptMinimum] = useState<number>(0.00089); // Rent-exempt minimum
+  const [minimumReserve, setMinimumReserve] = useState<number>(0.00139); // Fee + rent
+  const [feeLoading, setFeeLoading] = useState(false);
   
-  const WITHDRAWAL_FEE = 0.001; // 0.001 SOL network fee
   const MIN_WITHDRAWAL = 0.001;
   const MAX_WITHDRAWAL = 100;
+
+  // Fetch dynamic withdrawal fee when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchWithdrawalFee();
+    }
+  }, [isOpen]);
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -58,6 +68,21 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
     }
   }, [view, user?.bearerToken]);
 
+  const fetchWithdrawalFee = async () => {
+    setFeeLoading(true);
+    try {
+      const result = await getWithdrawalFee();
+      setWithdrawalFee(result.fee);
+      setRentExemptMinimum(result.rentExemptMinimum || 0.00089);
+      setMinimumReserve(result.minimumReserve || (result.fee + (result.rentExemptMinimum || 0.00089)));
+    } catch (error) {
+      console.error("Failed to fetch withdrawal fee:", error);
+      // Keep the fallback values
+    } finally {
+      setFeeLoading(false);
+    }
+  };
+
   const fetchHistory = async () => {
     if (!user?.bearerToken) return;
     
@@ -74,8 +99,8 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
   };
 
   const handleMaxClick = () => {
-    // Calculate max withdrawal (balance - fee)
-    const maxAmount = Math.max(0, solBalance - WITHDRAWAL_FEE);
+    // Calculate max withdrawal using actual minimum reserve (fee + rent)
+    const maxAmount = Math.max(0, solBalance - minimumReserve);
     setWithdrawAmount(maxAmount.toFixed(4));
   };
 
@@ -101,9 +126,9 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
       return;
     }
 
-    const totalRequired = amount + WITHDRAWAL_FEE;
+    const totalRequired = amount + withdrawalFee;
     if (totalRequired > solBalance) {
-      setMessage({ type: "error", text: `Insufficient balance. You need ${totalRequired.toFixed(4)} SOL (including ${WITHDRAWAL_FEE} SOL fee).` });
+      setMessage({ type: "error", text: `Insufficient balance. You need ${totalRequired.toFixed(4)} SOL (including ${withdrawalFee.toFixed(4)} SOL fee).` });
       return;
     }
 
@@ -127,6 +152,7 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
 
     setIsLoading(true);
     setMessage(null);
+    setTxSignature(null); // Reset previous signature
 
     try {
       // Call the actual withdrawal API
@@ -135,17 +161,30 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
         destinationAddress: destinationAddress.trim(),
       }, user.bearerToken);
       
-      // Store transaction signature for user to track
+      // Clear loading state immediately on success
+      setIsLoading(false);
+      
+      // Store transaction signature immediately (transaction is sent, confirmation happens in background)
       if (result.txSignature) {
         setTxSignature(result.txSignature);
+        
+        // Show success message with Solscan link immediately
+        setMessage({
+          type: "success",
+          text: `✅ Withdrawal sent! ${amount.toFixed(4)} SOL to ${destinationAddress.slice(0, 8)}...${destinationAddress.slice(-8)}`,
+        });
+        
+        // Show toast immediately
+        toast.success(`Withdrawal sent! ${amount.toFixed(4)} SOL`, {
+          duration: 5000,
+        });
+      } else {
+        setMessage({
+          type: "success",
+          text: `✅ Withdrawal successful! ${amount.toFixed(4)} SOL sent to ${destinationAddress.slice(0, 8)}...${destinationAddress.slice(-8)}`,
+        });
+        toast.success(`Withdrawal successful! ${amount.toFixed(4)} SOL sent`);
       }
-      
-      setMessage({
-        type: "success",
-        text: `✅ Withdrawal successful! ${amount.toFixed(4)} SOL sent to ${destinationAddress.slice(0, 8)}...${destinationAddress.slice(-8)}`,
-      });
-      
-      toast.success(`Withdrawal successful! ${amount.toFixed(4)} SOL sent`);
       
       // Refresh balance after successful withdrawal
       refreshBalance();
@@ -154,15 +193,14 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
       
     } catch (error: any) {
       console.error("Withdrawal failed:", error);
+      setIsLoading(false);
       const errorMessage = error.message || "❌ Withdrawal failed. Please try again.";
       setMessage({ type: "error", text: errorMessage });
       toast.error(errorMessage);
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const totalWithdrawalAmount = Number(withdrawAmount || 0) + WITHDRAWAL_FEE;
+  const totalWithdrawalAmount = Number(withdrawAmount || 0) + withdrawalFee;
   const isFormValid = 
     withdrawAmount && 
     Number(withdrawAmount) >= MIN_WITHDRAWAL && 
@@ -281,7 +319,9 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
                   </div>
                   <div className="flex items-center justify-between text-xs text-[#9CA3AF]">
                     <span>Network fee</span>
-                    <span className="text-white">{WITHDRAWAL_FEE.toFixed(4)} SOL</span>
+                    <span className="text-white">
+                      {feeLoading ? "..." : withdrawalFee.toFixed(4)} SOL
+                    </span>
                   </div>
                   <div className="flex items-center justify-between text-xs font-medium text-white border-t border-[#2A2B33] pt-1">
                     <span>Total deducted</span>

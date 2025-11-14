@@ -85,7 +85,7 @@ const resolveApiUrl = () => {
   }
 };
 
-const WALLET_TRACKER_API_URL = resolveApiUrl();
+export const WALLET_TRACKER_API_URL = resolveApiUrl();
 
 // Normalize WS URL: allow users to provide http(s) and convert to ws(s) automatically
 const resolveWsUrl = () => {

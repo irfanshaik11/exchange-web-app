@@ -1,9 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Head from "next/head";
 import { Copy, Gift, Users, Wallet } from "lucide-react";
 import Header from "~/components/Header";
 import InterstateButton from "~/components/InterstateButton";
 import Footer from '~/components/Footer';
+import { useUser } from "~/components/UserContext";
+import { ensureReferralCodeForUser, fetchReferralCodeForUser } from "~/utils/referrals";
 
 const referralRows = [
   {
@@ -23,22 +25,84 @@ const referralRows = [
 ];
 
 export default function RewardsPage() {
+  const { user } = useUser();
   const [copied, setCopied] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [loadingReferral, setLoadingReferral] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [referralError, setReferralError] = useState<string | null>(null);
   const referralLink = referralCode
     ? `https://app.narrative.trade?referrer=${referralCode}`
     : "";
 
-  const handleGenerateCode = useCallback(() => {
-    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let code = "";
-    for (let index = 0; index < 6; index += 1) {
-      const randomIndex = Math.floor(Math.random() * alphabet.length);
-      code += alphabet[randomIndex];
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!user?.id) {
+      setReferralCode(null);
+      setReferralError(null);
+      setLoadingReferral(false);
+      return () => {
+        cancelled = true;
+      };
     }
-    setReferralCode(code);
-    setCopied(false);
-  }, []);
+
+    const loadReferral = async () => {
+      try {
+        setLoadingReferral(true);
+        setReferralError(null);
+        const record = await fetchReferralCodeForUser(user.id);
+        if (cancelled) return;
+        if (record) {
+          setReferralCode(record.referralCode);
+        } else {
+          setReferralCode(null);
+        }
+        setCopied(false);
+      } catch (error: any) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to load referral code";
+        setReferralError(message);
+        setReferralCode(null);
+      } finally {
+        if (!cancelled) {
+          setLoadingReferral(false);
+        }
+      }
+    };
+
+    loadReferral();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const handleGenerateCode = useCallback(async () => {
+    if (!user?.id) {
+      setReferralError("Sign in to generate a referral code.");
+      return;
+    }
+
+    try {
+      setIsGenerating(true);
+      setReferralError(null);
+      const record = await ensureReferralCodeForUser(user.id);
+      setReferralCode(record.referralCode);
+      setCopied(false);
+    } catch (error: any) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to generate referral code";
+      setReferralError(message);
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [user?.id]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -249,11 +313,14 @@ export default function RewardsPage() {
                 {!referralCode && (
                   <InterstateButton
                     className="w-full sm:w-auto"
-                    onClick={handleGenerateCode}
+                    disabled={loadingReferral || isGenerating || !user?.id}
+                    onClick={() => {
+                      void handleGenerateCode();
+                    }}
                     size="md"
                     variant="primary"
                   >
-                    Generate referral code
+                    {isGenerating ? "Generating..." : "Generate referral code"}
                   </InterstateButton>
                 )}
                 <div className="rounded-3xl border border-neutral-800 bg-neutral-950/60 px-6 py-5 text-sm shadow-inner shadow-black/40">
@@ -261,12 +328,17 @@ export default function RewardsPage() {
                     Referral code
                   </p>
                   <p className="mt-3 text-3xl font-semibold text-white">
-                    {referralCode ?? "------"}
+                    {loadingReferral
+                      ? "Loading..."
+                      : referralCode ?? "------"}
                   </p>
                   <p className="mt-2 text-xs text-neutral-500">
                     Generate your code to link every trader you invite directly
                     to your rewards.
                   </p>
+                  {referralError && (
+                    <p className="mt-3 text-xs text-red-400">{referralError}</p>
+                  )}
                 </div>
               </div>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">

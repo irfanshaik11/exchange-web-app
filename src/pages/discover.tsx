@@ -62,7 +62,24 @@ export default function DiscoverPage() {
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [newPairsRaw, setNewPairsRaw] = useState<TokenWithDexPaid[]>([]);
+  const [newPairsRaw, setNewPairsRaw] = useState<TokenWithDexPaid[]>(() => {
+    // Initialize with cached data if available (no loading state)
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('discover_new_pairs_cache');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - parsed.timestamp;
+          if (age < 60 * 1000 && parsed.data && parsed.data.length > 0) {
+            return parsed.data;
+          }
+        }
+      } catch {
+        // Ignore cache errors on init
+      }
+    }
+    return [];
+  });
   const [newPairsLoading, setNewPairsLoading] = useState(false);
   const [newPairsError, setNewPairsError] = useState<string | null>(null);
 
@@ -275,17 +292,142 @@ export default function DiscoverPage() {
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    const fetchNewPairs = async () => {
+    const CACHE_KEY = 'discover_new_pairs_cache';
+    const CACHE_TTL = 30 * 1000; // 30 seconds
+    const STALE_THRESHOLD = 60 * 1000; // 60 seconds - use stale cache if available
+
+    // Check if we already have valid cached data in state - if so, skip fetching
+    // This prevents re-fetching when navigating back to the page
+    if (newPairsRaw.length > 0) {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - parsed.timestamp;
+          // If we have data in state and cache is still valid, skip fetching
+          if (age < STALE_THRESHOLD && parsed.data && parsed.data.length > 0) {
+            console.log('[Discover] Already have cached data in state, skipping re-fetch on navigation');
+            // Just set up the refresh interval for stale cache updates
+            intervalId = setInterval(() => {
+              if (cancelled) return;
+              const cachedData = localStorage.getItem(CACHE_KEY);
+              if (cachedData) {
+                const parsed = JSON.parse(cachedData);
+                const age = Date.now() - parsed.timestamp;
+                // Only refresh if cache is stale (will be handled by fetchNewPairs below)
+                if (age > CACHE_TTL) {
+                  // Trigger a silent background refresh
+                  fetch(`/api/token-service/pulse-new?limit=200`, {
+                    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+                  })
+                    .then(res => res.json())
+                    .then(data => {
+                      if (!cancelled && Array.isArray(data) && data.length > 0) {
+                        // Process and save to cache (simplified - just update cache)
+                        localStorage.setItem(CACHE_KEY, JSON.stringify({
+                          data,
+                          timestamp: Date.now(),
+                        }));
+                      }
+                    })
+                    .catch(err => console.error('[Discover] Background refresh failed:', err));
+                }
+              }
+            }, 60_000);
+            
+            return () => {
+              cancelled = true;
+              if (intervalId) {
+                clearInterval(intervalId);
+              }
+            };
+          }
+        }
+      } catch {
+        // Continue with normal flow if check fails
+      }
+    }
+
+    // Load from cache on mount
+    const loadFromCache = (): TokenWithDexPaid[] | null => {
+      try {
+        if (typeof window === 'undefined') return null;
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - parsed.timestamp;
+          if (age < STALE_THRESHOLD) {
+            console.log(`[Discover] Loaded ${parsed.data.length} new pairs from cache (age: ${Math.round(age / 1000)}s)`);
+            return parsed.data;
+          } else {
+            // Cache expired, remove it
+            localStorage.removeItem(CACHE_KEY);
+          }
+        }
+      } catch (err) {
+        console.warn('[Discover] Failed to load cache:', err);
+        localStorage.removeItem(CACHE_KEY);
+      }
+      return null;
+    };
+
+    // Save to cache
+    const saveToCache = (data: TokenWithDexPaid[]) => {
+      try {
+        if (typeof window === 'undefined') return;
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          data,
+          timestamp: Date.now(),
+        }));
+        console.log(`[Discover] Cached ${data.length} new pairs`);
+      } catch (err) {
+        console.warn('[Discover] Failed to save cache:', err);
+      }
+    };
+
+    const fetchNewPairs = async (useCache = true, showLoading = false) => {
       if (cancelled) {
         return;
       }
 
-      setNewPairsLoading(true);
+      // Try to load from cache first
+      if (useCache) {
+        const cached = loadFromCache();
+        if (cached && cached.length > 0) {
+          // Update data silently (no loading state)
+          setNewPairsRaw(cached);
+          setNewPairsError(null);
+          setNewPairsLoading(false);
+          
+          // Check if cache is stale and refresh in background
+          try {
+            const cachedData = localStorage.getItem(CACHE_KEY);
+            if (cachedData) {
+              const parsed = JSON.parse(cachedData);
+              const age = Date.now() - parsed.timestamp;
+              if (age > CACHE_TTL) {
+                // Cache is stale, refresh in background (silently)
+                console.log('[Discover] Cache is stale, refreshing in background');
+                fetchNewPairs(false, false).catch(err => {
+                  console.error('[Discover] Background refresh failed:', err);
+                });
+              }
+            }
+          } catch {
+            // Ignore cache read errors
+          }
+          return;
+        }
+      }
+
+      // Only show loading if explicitly requested (first load with no cache)
+      if (showLoading) {
+        setNewPairsLoading(true);
+      }
 
       try {
-        // Use Next.js API proxy to avoid CORS issues (same as PulseTable)
-        const response = await fetch(`/api/token-service/pulse-new?limit=200&t=${Date.now()}`, {
-          cache: 'no-store',
+        // Use Next.js API proxy - remove timestamp to allow server-side caching
+        const response = await fetch(`/api/token-service/pulse-new?limit=200`, {
           headers: {
             'Cache-Control': 'no-cache',
             Pragma: 'no-cache',
@@ -484,8 +626,12 @@ export default function DiscoverPage() {
             deduped.push(normalizePulseToken(token));
           }
 
+          // Update data silently (no loading animation)
           setNewPairsRaw(deduped);
           setNewPairsError(null);
+          
+          // Save to cache
+          saveToCache(deduped);
         }
       } catch (err) {
         if (cancelled) {
@@ -494,15 +640,40 @@ export default function DiscoverPage() {
         const message = err instanceof Error ? err.message : 'Failed to fetch new pairs';
         setNewPairsError(message);
         console.error('[Discover] Failed to fetch new pairs:', err);
+        
+        // If fetch failed and we have cached data, use it (silently)
+        if (useCache) {
+          const cached = loadFromCache();
+          if (cached && cached.length > 0) {
+            console.log('[Discover] Using cached data after fetch failure');
+            setNewPairsRaw(cached);
+            setNewPairsError(null);
+          }
+        }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && showLoading) {
           setNewPairsLoading(false);
         }
       }
     };
 
-    fetchNewPairs();
-    intervalId = setInterval(() => fetchNewPairs(), 60_000);
+    // Check if we already have data from initial state (cached)
+    const hasInitialData = newPairsRaw.length > 0;
+    
+    if (hasInitialData) {
+      // We have cached data from initial state, don't show loading, just refresh in background silently
+      // Ensure loading is false since we have cached data
+      setNewPairsLoading(false);
+      fetchNewPairs(false, false).catch(err => {
+        console.error('[Discover] Background fetch failed:', err);
+      });
+    } else {
+      // No cache, fetch with loading state only on first load
+      fetchNewPairs(true, true);
+    }
+    
+    // Refresh every 60 seconds (silently, no loading state)
+    intervalId = setInterval(() => fetchNewPairs(true, false), 60_000);
 
     return () => {
       cancelled = true;
@@ -510,7 +681,7 @@ export default function DiscoverPage() {
         clearInterval(intervalId);
       }
     };
-  }, [isZeroLiquidityToken, isWrappedSol]);
+  }, []); // Empty deps - only run once on mount, cache prevents re-fetching
 
   // Debug log to track timeframe changes
   // useEffect(() => {
@@ -1393,7 +1564,7 @@ export default function DiscoverPage() {
                 )}
               </div>
 
-              {newPairsLoading && processedNewPairs.length === 0 ? (
+              {newPairsLoading && processedNewPairs.length === 0 && newPairsRaw.length === 0 ? (
                 <div className="space-y-4">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
