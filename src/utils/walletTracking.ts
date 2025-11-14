@@ -176,6 +176,61 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
   }
 }
 
+export interface BulkWalletInsertResponse {
+  ok: boolean;
+  inserted: string[];
+  insertedCount: number;
+  skippedExisting: string[];
+  skippedDuplicateInput: string[];
+  skippedByLimit: string[];
+  totalRequested: number;
+  error?: string;
+}
+
+type BulkWalletEntry = {
+  wallet: string;
+  walletName?: string | null;
+  emoji?: string | null;
+};
+
+export async function addTrackedWalletsBulk(
+  wallets: BulkWalletEntry[],
+  userId?: string | number
+): Promise<BulkWalletInsertResponse> {
+  if (!wallets || wallets.length === 0) {
+    return {
+      ok: true,
+      inserted: [],
+      insertedCount: 0,
+      skippedExisting: [],
+      skippedDuplicateInput: [],
+      skippedByLimit: [],
+      totalRequested: 0,
+    };
+  }
+
+  try {
+    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        wallets,
+        ...(userId ? { userId } : {}),
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok === false) {
+      throw new Error(payload?.error || 'Failed to add wallets in bulk');
+    }
+
+    return payload as BulkWalletInsertResponse;
+  } catch (error) {
+    console.error('Error adding wallets in bulk:', error);
+    throw error;
+  }
+}
+
 export async function getWalletsLastActive(wallets: string[]): Promise<WalletLastActiveResult[]> {
 	try {
 		if (!Array.isArray(wallets) || wallets.length === 0) {

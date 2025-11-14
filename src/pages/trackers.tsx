@@ -11,6 +11,7 @@ import ImportExportWalletModal from "../components/ImportExportWalletModal";
 import WalletScanPanel from "../components/WalletScanPanel";
 import {
   addTrackedWallet,
+  addTrackedWalletsBulk,
   removeTrackedWallet,
   getTrackedWallets,
   getWalletHistory,
@@ -40,6 +41,11 @@ import { RiExchangeDollarLine } from "react-icons/ri";
 
 const TABS = ["Wallet Manager", "Live Trades", "Monitor"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
+const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
+const getLiveTradesCacheKey = (userId?: string) =>
+  userId
+    ? `${LIVE_TRADES_CACHE_PREFIX}:user:${userId}`
+    : `${LIVE_TRADES_CACHE_PREFIX}:global`;
 
 // Normalize asset URLs (IPFS, Arweave, etc.)
 function normalizeAssetUrl(raw?: string | null): string | null {
@@ -190,6 +196,7 @@ export default function TrackersPage() {
   const [tokenMetadata, setTokenMetadata] = useState<
     Map<string, { symbol: string | null; name: string | null; image: string | null; launchpad_protocol?: string | null; market_cap_usd?: number | null }>
   >(new Map());
+  const [cachedLiveTrades, setCachedLiveTrades] = useState<TradeEvent[]>([]);
   const fetchedMintsRef = useRef<Set<string>>(new Set());
   const [showUSD, setShowUSD] = useState(false); // Toggle between USD and SOL display
 
@@ -430,6 +437,37 @@ export default function TrackersPage() {
       loadTwitterFeed();
     }
   }, [twitterTab, twitterAccounts]);
+
+  // Hydrate cached live trades so the Live Trades tab renders instantly on reload
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const userKey = user?.id ? getLiveTradesCacheKey(user.id) : null;
+      const raw =
+        (userKey ? window.localStorage.getItem(userKey) : null) ??
+        window.localStorage.getItem(getLiveTradesCacheKey());
+
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setCachedLiveTrades(parsed as TradeEvent[]);
+      }
+    } catch (error) {
+      console.error("Failed to hydrate live trades cache:", error);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (latestTrades.length > 0) {
+      setCachedLiveTrades(latestTrades);
+    }
+  }, [latestTrades]);
 
   const loadWalletsFromBackend = async () => {
     try {
@@ -817,6 +855,8 @@ export default function TrackersPage() {
       wallet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wallet.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+  const liveTradesToRender =
+    latestTrades.length > 0 ? latestTrades : cachedLiveTrades;
 
   // Twitter functions
   const loadTwitterAccounts = async () => {
@@ -917,11 +957,13 @@ export default function TrackersPage() {
               return {
                 address: wallet.trackedWalletAddress,
                 name: wallet.name || "Imported Wallet",
+                emoji: wallet.emoji || getRandomEmoji(),
               };
             }
             return {
               address: wallet?.address,
               name: wallet?.name || "Imported Wallet",
+              emoji: wallet?.emoji || getRandomEmoji(),
             };
           });
 
@@ -934,7 +976,7 @@ export default function TrackersPage() {
           const duplicateExisting: string[] = [];
           const duplicateWithinImport: string[] = [];
           const invalidWallets: string[] = [];
-          const walletsToAdd: { address: string; name: string }[] = [];
+          const walletsToAdd: { address: string; name: string; emoji?: string }[] = [];
 
           transformedWallets.forEach(
             (wallet: { address: string; name: string }) => {
@@ -966,33 +1008,21 @@ export default function TrackersPage() {
             return;
           }
 
-          let successCount = 0;
+          const bulkPayload = walletsToAdd.map((wallet) => ({
+            wallet: wallet.address,
+            walletName: wallet.name,
+            emoji: wallet.emoji || getRandomEmoji(),
+          }));
+
+          await addTrackedWalletsBulk(bulkPayload, user?.id);
+
+          let successCount = walletsToAdd.length;
           let errorCount = 0;
 
-          for (const wallet of walletsToAdd) {
-            try {
-              await addTrackedWallet(
-                wallet.address,
-                wallet.name,
-                user?.id,
-                getRandomEmoji(),
-                true, // Enable notifications by default for imported wallets
-              );
-              
-              // Save notification preference to localStorage
-              if (typeof window !== 'undefined') {
-                localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
-              }
-              
-              successCount++;
-            } catch (error: any) {
-              if (error?.message?.includes("already exists")) {
-                duplicateExisting.push(wallet.address);
-              } else {
-                console.error(`Failed to import ${wallet.address}:`, error);
-                errorCount++;
-              }
-            }
+          if (typeof window !== 'undefined') {
+            walletsToAdd.forEach((wallet) => {
+              localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+            });
           }
 
           await loadWalletsFromBackend();
@@ -1269,7 +1299,7 @@ export default function TrackersPage() {
                           </>
                         ) : activeTab === 1 ? (
                           <>
-                            {latestTrades.length === 0 ? (
+                            {liveTradesToRender.length === 0 ? (
                               <div className="flex h-64 flex-col items-center justify-center">
                                 <span className="text-neutral-400">
                                   {wsConnected 
@@ -1326,7 +1356,7 @@ export default function TrackersPage() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {latestTrades.map((trade, idx) => {
+                                    {liveTradesToRender.map((trade, idx) => {
                                       const wallet = wallets.find(
                                         (w) => w.address === trade.wallet,
                                       );
@@ -1980,32 +2010,21 @@ export default function TrackersPage() {
               onProgress?.(0, total);
 
               let processed = 0;
-              for (const wallet of walletsToAdd) {
-                try {
-                  await addTrackedWallet(
-                    wallet.address,
-                    wallet.name,
-                    user?.id,
-                    wallet.emoji,
-                    true, // Enable notifications by default for bulk imported wallets
-                  );
-                  
-                  // Save notification preference to localStorage
-                  if (typeof window !== 'undefined') {
-                    localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
-                  }
-                  
-                  successCount++;
-                } catch (error: any) {
-                  if (error?.message?.includes("already exists")) {
-                    duplicateExisting.push(wallet.address);
-                  } else {
-                    console.error(`Failed to import ${wallet.address}:`, error);
-                    errorCount++;
-                  }
-                }
-                processed += 1;
-                  onProgress?.(processed, total);
+              const bulkPayload = walletsToAdd.map((wallet) => ({
+                wallet: wallet.address,
+                walletName: wallet.name,
+                emoji: wallet.emoji || getRandomEmoji(),
+              }));
+
+              await addTrackedWalletsBulk(bulkPayload, user?.id);
+              successCount = walletsToAdd.length;
+              processed = walletsToAdd.length;
+              onProgress?.(processed, total);
+
+              if (typeof window !== 'undefined') {
+                walletsToAdd.forEach((wallet) => {
+                  localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+                });
               }
 
               await loadWalletsFromBackend();
