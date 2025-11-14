@@ -135,7 +135,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
             limit: HISTORY_LIMIT,
             windowMs: HISTORY_WINDOW_MS,
           }),
-          new Promise<TradeEvent[]>((resolve) => setTimeout(() => resolve([]), 3000))
+          new Promise<TradeEvent[]>((resolve) => setTimeout(() => resolve([]), 4000))
         ]);
         
         if (history.length > 0) {
