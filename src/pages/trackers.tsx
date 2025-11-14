@@ -439,6 +439,14 @@ export default function TrackersPage() {
       await refreshWatchedWallets();
 
       const allWallets = tracked;
+      
+      // Only update state and cache if we actually got wallets
+      // This prevents empty arrays from overwriting cache on errors
+      if (allWallets.length === 0) {
+        console.log('No wallets returned from backend - keeping cached data');
+        return;
+      }
+      
       setWatchedWallets(allWallets);
 
       // Convert backend wallets to frontend format
@@ -495,6 +503,7 @@ export default function TrackersPage() {
       });
     } catch (error) {
       console.error("Failed to load wallets:", error);
+      // Don't clear state on error - keep showing cached data
     }
   };
 
