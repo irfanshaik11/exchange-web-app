@@ -90,14 +90,17 @@ const WALLET_TRACKER_API_URL = resolveApiUrl();
 // Normalize WS URL: allow users to provide http(s) and convert to ws(s) automatically
 const resolveWsUrl = () => {
   const envWs = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL;
-  if (!envWs) return 'ws://localhost:8081';
+  if (!envWs) {
+    console.warn('⚠️ NEXT_PUBLIC_WALLET_TRACKER_WS_URL not set, using default: ws://localhost:8081');
+    return 'ws://localhost:8081';
+  }
   if (envWs.startsWith('http://')) return envWs.replace(/^http:\/\//, 'ws://');
   if (envWs.startsWith('https://')) return envWs.replace(/^https:\/\//, 'wss://');
   return envWs;
 };
 
-// WebSocket is on a different port (8082), so we need to handle this properly
 const WALLET_TRACKER_WS_URL = resolveWsUrl();
+console.log('🔧 [Config] WebSocket URL configured:', WALLET_TRACKER_WS_URL);
 
 // ===== API Functions =====
 
@@ -490,14 +493,25 @@ export function createWalletTrackerWebSocket(
   onConnect?: () => void,
   onDisconnect?: () => void
 ): WalletTrackerWebSocket {
-  console.log('Creating WebSocket connection to:', `${WALLET_TRACKER_WS_URL}/ws`);
+  const wsUrl = `${WALLET_TRACKER_WS_URL}/ws`;
+  console.log('🔌 [WebSocket Factory] Creating connection', {
+    url: wsUrl,
+    envVar: process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL,
+    resolvedBase: WALLET_TRACKER_WS_URL,
+    fullUrl: wsUrl
+  });
   
-  const ws = new WebSocket(`${WALLET_TRACKER_WS_URL}/ws`);
+  const ws = new WebSocket(wsUrl);
   let isAlive = true;
   let connectionEstablished = false;
 
   ws.onopen = () => {
-    console.log('✅ WebSocket connection opened successfully');
+    console.log('✅ [WebSocket Factory] Connection opened successfully!', {
+      url: wsUrl,
+      readyState: ws.readyState,
+      protocol: ws.protocol,
+      timestamp: new Date().toISOString()
+    });
     isAlive = true;
     connectionEstablished = true;
     onConnect?.();
@@ -531,50 +545,81 @@ export function createWalletTrackerWebSocket(
   };
 
   ws.onerror = (error) => {
-    console.error('❌ WebSocket error:', error);
+    console.error('❌ [WebSocket Factory] Error occurred!', {
+      error,
+      url: wsUrl,
+      readyState: ws.readyState,
+      connectionEstablished,
+      timestamp: new Date().toISOString()
+    });
     if (!connectionEstablished) {
-      console.error('Connection was never established. Check if WebSocket server is running on:', `${WALLET_TRACKER_WS_URL}/ws`);
-      console.error('Make sure to:');
-      console.error('  1. Start the WebSocket server: npm run dev:ws');
-      console.error('  2. Check NEXT_PUBLIC_WALLET_TRACKER_WS_URL in .env.local');
-      console.error('  3. Verify port 8082 is accessible');
+      console.error('❌ [WebSocket Factory] Connection was never established!');
+      console.error('📋 Troubleshooting checklist:');
+      console.error('  1. Is the WebSocket server running?');
+      console.error('  2. URL configured:', wsUrl);
+      console.error('  3. ENV var NEXT_PUBLIC_WALLET_TRACKER_WS_URL:', process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL);
+      console.error('  4. Check network/firewall settings');
     }
   };
 
   ws.onclose = (event) => {
-    console.log('WebSocket connection closed:', {
+    console.log('🔌 [WebSocket Factory] Connection closed', {
       code: event.code,
       reason: event.reason || 'No reason provided',
-      wasClean: event.wasClean
+      wasClean: event.wasClean,
+      url: wsUrl,
+      connectionEstablished,
+      timestamp: new Date().toISOString()
     });
     isAlive = false;
     
     if (!connectionEstablished) {
-      console.error('❌ Connection closed before it was established');
-      console.error('This usually means:');
-      console.error('  - WebSocket server is not running (npm run dev:ws)');
-      console.error('  - Wrong URL configured:', `${WALLET_TRACKER_WS_URL}/ws`);
-      console.error('  - Firewall or network issue blocking port 8082');
+      console.error('❌ [WebSocket Factory] Connection closed before being established!');
+      console.error('Common causes:');
+      console.error('  • WebSocket server not running');
+      console.error('  • Wrong URL:', wsUrl);
+      console.error('  • Network/firewall blocking connection');
+      console.error('  • Server rejected connection');
     }
     
     onDisconnect?.();
   };
 
   const subscribe = (wallets: string[]) => {
+    console.log('📡 [WebSocket Factory] Subscribe requested', {
+      wallets: wallets.map(w => w.slice(0, 8) + '...'),
+      count: wallets.length,
+      readyState: ws.readyState,
+      isOpen: ws.readyState === WebSocket.OPEN
+    });
+    
     if (ws.readyState === WebSocket.OPEN) {
-      console.log('📡 Subscribing to wallets:', wallets);
-      ws.send(JSON.stringify({ method: 'subscribe', wallets }));
+      const message = { method: 'subscribe', wallets };
+      ws.send(JSON.stringify(message));
+      console.log('✅ [WebSocket Factory] Subscribe message sent');
     } else {
-      console.warn('⚠️  Cannot subscribe: WebSocket not open. State:', ws.readyState);
+      console.error('❌ [WebSocket Factory] Cannot subscribe - WebSocket not open!', {
+        readyState: ws.readyState,
+        CONNECTING: WebSocket.CONNECTING,
+        OPEN: WebSocket.OPEN,
+        CLOSING: WebSocket.CLOSING,
+        CLOSED: WebSocket.CLOSED
+      });
     }
   };
 
   const unsubscribe = (wallets: string[]) => {
+    console.log('📡 [WebSocket Factory] Unsubscribe requested', {
+      wallets: wallets.map(w => w.slice(0, 8) + '...'),
+      count: wallets.length,
+      readyState: ws.readyState
+    });
+    
     if (ws.readyState === WebSocket.OPEN) {
-      console.log('📡 Unsubscribing from wallets:', wallets);
       ws.send(JSON.stringify({ method: 'unsubscribe', wallets }));
+      console.log('✅ [WebSocket Factory] Unsubscribe message sent');
     } else {
-      console.warn('⚠️  Cannot unsubscribe: WebSocket not open');
+      console.warn('⚠️ [WebSocket Factory] Cannot unsubscribe - WebSocket not open');
     }
   };
 
