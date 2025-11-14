@@ -194,11 +194,41 @@ export default function TrackersPage() {
   >({});
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
-    Map<string, { symbol: string | null; name: string | null; image: string | null; launchpad_protocol?: string | null; market_cap_usd?: number | null }>
+    Map<
+      string,
+      {
+        symbol: string | null;
+        name: string | null;
+        image: string | null;
+        launchpad_protocol?: string | null;
+        market_cap_usd?: number | null;
+        createdAt?: string | null;
+      }
+    >
   >(new Map());
   const [cachedLiveTrades, setCachedLiveTrades] = useState<TradeEvent[]>([]);
   const fetchedMintsRef = useRef<Set<string>>(new Set());
   const [showUSD, setShowUSD] = useState(false); // Toggle between USD and SOL display
+
+  const ensureNotificationsEnabled = async (walletsToEnable: { address: string }[]) => {
+    if (!walletsToEnable.length) return;
+    try {
+      const results = await Promise.allSettled(
+        walletsToEnable.map((wallet) =>
+          toggleWalletNotifications(wallet.address, true, user?.id),
+        ),
+      );
+      const failures = results.filter((result) => result.status === "rejected");
+      if (failures.length > 0) {
+        console.warn(
+          `[Trackers] Failed to enable notifications for ${failures.length} wallet(s)`,
+          failures,
+        );
+      }
+    } catch (error) {
+      console.warn("[Trackers] Failed to enable notifications after bulk add:", error);
+    }
+  };
 
   const normalizeAddress = (address: string | null | undefined) =>
     (address ?? "").trim().toLowerCase();
@@ -1015,6 +1045,7 @@ export default function TrackersPage() {
           }));
 
           await addTrackedWalletsBulk(bulkPayload, user?.id);
+          await ensureNotificationsEnabled(walletsToAdd);
 
           let successCount = walletsToAdd.length;
           let errorCount = 0;
@@ -2017,6 +2048,7 @@ export default function TrackersPage() {
               }));
 
               await addTrackedWalletsBulk(bulkPayload, user?.id);
+              await ensureNotificationsEnabled(walletsToAdd);
               successCount = walletsToAdd.length;
               processed = walletsToAdd.length;
               onProgress?.(processed, total);
