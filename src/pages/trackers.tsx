@@ -744,13 +744,27 @@ export default function TrackersPage() {
         await Promise.all(
           wallets.map((w) => removeTrackedWallet(w.address, user?.id)),
         );
+        
+        // Clear all state
+        setWatchedWallets([]);
+        setWallets([]);
+        setWalletBalances({});
+        
+        // Clear cache
+        if (typeof window !== "undefined" && user?.id) {
+          const cacheKey = `walletTracker:wallets:${user.id}`;
+          localStorage.removeItem(cacheKey);
+        }
+        
+        // Refresh global watched wallets
+        await refreshWatchedWallets();
       } else {
         // Remove single wallet
         await removeTrackedWallet(addressToRemove, user?.id);
+        
+        // Reload from backend (this will also refresh global watched wallets)
+        await loadWalletsFromBackend();
       }
-
-      // Reload from backend (this will also refresh global watched wallets)
-      await loadWalletsFromBackend();
 
       setToast("Wallet removed");
       setTimeout(() => setToast(""), 3000);
