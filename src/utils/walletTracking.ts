@@ -90,13 +90,15 @@ const WALLET_TRACKER_API_URL = resolveApiUrl();
 // Normalize WS URL: allow users to provide http(s) and convert to ws(s) automatically
 const resolveWsUrl = () => {
   const envWs = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL;
-  if (!envWs) return 'ws://localhost:8081';
+  if (!envWs) {
+    console.warn('⚠️ NEXT_PUBLIC_WALLET_TRACKER_WS_URL not set, using default: ws://localhost:8081');
+    return 'ws://localhost:8081';
+  }
   if (envWs.startsWith('http://')) return envWs.replace(/^http:\/\//, 'ws://');
   if (envWs.startsWith('https://')) return envWs.replace(/^https:\/\//, 'wss://');
   return envWs;
 };
 
-// WebSocket is on a different port (8082), so we need to handle this properly
 const WALLET_TRACKER_WS_URL = resolveWsUrl();
 
 // ===== API Functions =====
@@ -490,14 +492,12 @@ export function createWalletTrackerWebSocket(
   onConnect?: () => void,
   onDisconnect?: () => void
 ): WalletTrackerWebSocket {
-  console.log('Creating WebSocket connection to:', `${WALLET_TRACKER_WS_URL}/ws`);
-  
-  const ws = new WebSocket(`${WALLET_TRACKER_WS_URL}/ws`);
+  const wsUrl = `${WALLET_TRACKER_WS_URL}/ws`;
+  const ws = new WebSocket(wsUrl);
   let isAlive = true;
   let connectionEstablished = false;
 
   ws.onopen = () => {
-    console.log('✅ WebSocket connection opened successfully');
     isAlive = true;
     connectionEstablished = true;
     onConnect?.();
@@ -516,70 +516,43 @@ export function createWalletTrackerWebSocket(
       
       // Handle subscription confirmation
       if (data.type === 'subscribed') {
-        console.log('✅ Subscription confirmed for wallets:', data.wallets);
         return;
       }
       
       // Handle trade events
       if (data.type === 'trade') {
-        console.log('📊 Trade event received:', data);
         onTradeEvent(data as TradeEvent);
       }
     } catch (error) {
-      console.error('❌ Error parsing WebSocket message:', error);
+      // Silent fail
     }
   };
 
   ws.onerror = (error) => {
-    console.error('❌ WebSocket error:', error);
     if (!connectionEstablished) {
-      console.error('Connection was never established. Check if WebSocket server is running on:', `${WALLET_TRACKER_WS_URL}/ws`);
-      console.error('Make sure to:');
-      console.error('  1. Start the WebSocket server: npm run dev:ws');
-      console.error('  2. Check NEXT_PUBLIC_WALLET_TRACKER_WS_URL in .env.local');
-      console.error('  3. Verify port 8082 is accessible');
+      console.error('WebSocket connection error - check NEXT_PUBLIC_WALLET_TRACKER_WS_URL:', wsUrl);
     }
   };
 
   ws.onclose = (event) => {
-    console.log('WebSocket connection closed:', {
-      code: event.code,
-      reason: event.reason || 'No reason provided',
-      wasClean: event.wasClean
-    });
     isAlive = false;
-    
-    if (!connectionEstablished) {
-      console.error('❌ Connection closed before it was established');
-      console.error('This usually means:');
-      console.error('  - WebSocket server is not running (npm run dev:ws)');
-      console.error('  - Wrong URL configured:', `${WALLET_TRACKER_WS_URL}/ws`);
-      console.error('  - Firewall or network issue blocking port 8082');
-    }
-    
     onDisconnect?.();
   };
 
   const subscribe = (wallets: string[]) => {
     if (ws.readyState === WebSocket.OPEN) {
-      console.log('📡 Subscribing to wallets:', wallets);
-      ws.send(JSON.stringify({ method: 'subscribe', wallets }));
-    } else {
-      console.warn('⚠️  Cannot subscribe: WebSocket not open. State:', ws.readyState);
+      const message = { method: 'subscribe', wallets };
+      ws.send(JSON.stringify(message));
     }
   };
 
   const unsubscribe = (wallets: string[]) => {
     if (ws.readyState === WebSocket.OPEN) {
-      console.log('📡 Unsubscribing from wallets:', wallets);
       ws.send(JSON.stringify({ method: 'unsubscribe', wallets }));
-    } else {
-      console.warn('⚠️  Cannot unsubscribe: WebSocket not open');
     }
   };
 
   const close = () => {
-    console.log('Closing WebSocket connection...');
     ws.close();
   };
 

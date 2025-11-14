@@ -4,6 +4,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { getActivePositionsByUser } from "~/utils/functions";
 import type { PositionRow, Wallet } from "~/utils/functions";
+import { formatMarketCap } from "~/utils/db";
 import AddWalletModal from "../components/AddWalletModal";
 import WalletRow from "../components/WalletRow";
 import ImportExportWalletModal from "../components/ImportExportWalletModal";
@@ -39,6 +40,26 @@ import { RiExchangeDollarLine } from "react-icons/ri";
 
 const TABS = ["Wallet Manager", "Live Trades", "Monitor"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
+
+// Normalize asset URLs (IPFS, Arweave, etc.)
+function normalizeAssetUrl(raw?: string | null): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (s.startsWith("data:")) return s;
+  if (s.startsWith("ipfs://")) {
+    const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+  }
+  if (/^ipfs[/:]/i.test(s)) {
+    const cid = s.replace(/^ipfs[/:]/i, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+  }
+  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s)) return `https://arweave.net/${s}`;
+  if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
+  if (s.startsWith("https://")) return s;
+  return null;
+}
+
 const EMOJIS = [
   "💰",
   "🚀",
@@ -354,7 +375,30 @@ export default function TrackersPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Load wallets when user changes or page loads
+  // Hydrate wallets from localStorage cache on mount
+  useEffect(() => {
+    if (typeof window === "undefined" || !user?.id) return;
+    
+    const cacheKey = `walletTracker:wallets:${user.id}`;
+    const cached = localStorage.getItem(cacheKey);
+    
+    if (cached) {
+      try {
+        const parsedCache = JSON.parse(cached);
+        if (parsedCache.wallets && parsedCache.watchedWallets) {
+          setWallets(parsedCache.wallets);
+          setWatchedWallets(parsedCache.watchedWallets);
+          if (parsedCache.balances) {
+            setWalletBalances(parsedCache.balances);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to hydrate wallets from cache:", error);
+      }
+    }
+  }, [user?.id]);
+
+  // Load wallets when user changes or page loads (fetches fresh data in background)
   useEffect(() => {
     loadWalletsFromBackend();
   }, [user?.id]);
@@ -377,6 +421,14 @@ export default function TrackersPage() {
         setWatchedWallets([]);
         setWallets([]);
         setWalletBalances({});
+        // Clear cache
+        if (typeof window !== "undefined") {
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('walletTracker:wallets:')) {
+              localStorage.removeItem(key);
+            }
+          });
+        }
         return;
       }
 
@@ -399,11 +451,46 @@ export default function TrackersPage() {
 
       setWallets(frontendWallets);
 
+      // Cache wallets to localStorage
+      if (typeof window !== "undefined") {
+        const cacheKey = `walletTracker:wallets:${user.id}`;
+        const cacheData = {
+          wallets: frontendWallets,
+          watchedWallets: allWallets,
+          balances: {},
+          timestamp: Date.now(),
+        };
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        } catch (error) {
+          console.error("Failed to cache wallets:", error);
+        }
+      }
+
       // Fetch real balances for tracked wallets
       allWallets.forEach(async (wallet) => {
         const balance = await getWalletSolBalance(wallet.address);
         if (balance !== null) {
-          setWalletBalances((prev) => ({ ...prev, [wallet.address]: balance }));
+          setWalletBalances((prev) => {
+            const updated = { ...prev, [wallet.address]: balance };
+            
+            // Update balance in cache
+            if (typeof window !== "undefined") {
+              const cacheKey = `walletTracker:wallets:${user.id}`;
+              const cached = localStorage.getItem(cacheKey);
+              if (cached) {
+                try {
+                  const cacheData = JSON.parse(cached);
+                  cacheData.balances = updated;
+                  localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+                } catch (error) {
+                  // Silent fail
+                }
+              }
+            }
+            
+            return updated;
+          });
         }
       });
     } catch (error) {
@@ -1179,13 +1266,14 @@ export default function TrackersPage() {
                             {latestTrades.length === 0 ? (
                               <div className="flex h-64 flex-col items-center justify-center">
                                 <span className="text-neutral-400">
-                                  No live trades yet. Add wallets to start
-                                  tracking!
+                                  {wsConnected 
+                                    ? "Listening for trades from tracked wallets..."
+                                    : "No live trades yet. Add wallets to start tracking!"}
                                 </span>
                                 <span className="mt-2 text-xs text-neutral-500">
                                   {wsConnected
-                                    ? "🟢 Connected"
-                                    : "🔴 Disconnected"}
+                                    ? "✅ Connected and ready"
+                                    : "🔴 Disconnected - Check console for details"}
                                 </span>
                               </div>
                             ) : (
@@ -1211,7 +1299,7 @@ export default function TrackersPage() {
                                       <th className="w-12 px-2 py-2 text-left text-sm text-neutral-400">
                                         Side
                                       </th>
-                                      <th className="w-32 px-2 py-2 text-left text-sm text-neutral-400">
+                                      <th className="w-48 px-2 py-2 text-left text-sm text-neutral-400">
                                         Token
                                       </th>
                                       <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
@@ -1265,8 +1353,12 @@ export default function TrackersPage() {
                                         });
                                       }
                                       
-                                      // Get token image URL - prioritize metadata image
-                                      const tokenImageUrl = metadata?.image;
+                                      // Get token image URL - prioritize metadata image and normalize it
+                                      const rawImg = metadata?.image;
+                                      const tokenImageUrl = normalizeAssetUrl(rawImg);
+                                      const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                        displaySymbol || "T"
+                                      )}&background=0f1012&color=E6E7EA&size=28`;
                                       const launchpadProtocol = metadata?.launchpad_protocol?.toLowerCase() || '';
                                       
                                       // Get protocol icon (exact logic from PulseTable)
@@ -1345,7 +1437,7 @@ export default function TrackersPage() {
                                               {trade.side.toUpperCase()}
                                             </span>
                                           </td>
-                                          <td className="w-32 px-2 py-2">
+                                          <td className="w-48 px-2 py-2">
                                             <button
                                               onClick={async () => {
                                                 // Use liquidity pool / trading pair address (pair_address) for navigation
@@ -1414,22 +1506,14 @@ export default function TrackersPage() {
                                                 >
                                                   <div className="relative rounded-sm overflow-hidden"
                                                        style={{ width: 22, height: 22 }}>
-                                                    {tokenImageUrl ? (
-                                                      <img
-                                                        src={tokenImageUrl}
-                                                        alt={displaySymbol}
-                                                        className="w-full h-full object-cover"
-                                                        onError={(e) => {
-                                                          e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol)}&background=0f1012&color=E6E7EA&size=22`;
-                                                        }}
-                                                      />
-                                                    ) : (
-                                                      <img
-                                                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol)}&background=0f1012&color=E6E7EA&size=22`}
-                                                        alt={displaySymbol}
-                                                        className="w-full h-full object-cover"
-                                                      />
-                                                    )}
+                                                    <img
+                                                      src={tokenImageUrl || fallbackAvatar}
+                                                      alt={displayName || displaySymbol}
+                                                      className="w-full h-full object-cover"
+                                                      onError={(e) => {
+                                                        e.currentTarget.src = fallbackAvatar;
+                                                      }}
+                                                    />
                                                   </div>
                                                 </div>
                                                 
@@ -1453,15 +1537,13 @@ export default function TrackersPage() {
                                                   />
                                                 </div>
                                               </div>
-                                              <div className="flex flex-col leading-tight text-left">
-                                                <span className="font-semibold text-white">
-                                                  {displaySymbol}
+                                              <div className="flex flex-col min-w-0 leading-tight text-left">
+                                                <span className="font-medium text-sm text-neutral-100 truncate">
+                                                  {displayName || displaySymbol}
                                                 </span>
-                                                {tokenAgeLabel && (
-                                                  <span className="text-[10px] uppercase tracking-wide text-neutral-500">
-                                                    {tokenAgeLabel}
-                                                  </span>
-                                                )}
+                                                <span className="text-xs text-neutral-400 font-mono truncate" title={trade.mint}>
+                                                  {trade.mint.slice(0, 4)}...{trade.mint.slice(-4)}
+                                                </span>
                                               </div>
                                             </button>
                                           </td>
@@ -1514,16 +1596,7 @@ export default function TrackersPage() {
                                             {(() => {
                                               const marketCap = metadata?.market_cap_usd;
                                               if (!marketCap || marketCap === 0) return <span className="text-neutral-500">-</span>;
-                                              
-                                              if (marketCap >= 1_000_000_000) {
-                                                return `$${(marketCap / 1_000_000_000).toFixed(2)}B`;
-                                              } else if (marketCap >= 1_000_000) {
-                                                return `$${(marketCap / 1_000_000).toFixed(2)}M`;
-                                              } else if (marketCap >= 1_000) {
-                                                return `$${(marketCap / 1_000).toFixed(2)}K`;
-                                              } else {
-                                                return `$${marketCap.toFixed(2)}`;
-                                              }
+                                              return `$${formatMarketCap(marketCap)}`;
                                             })()}
                                           </td>
                                         </tr>
