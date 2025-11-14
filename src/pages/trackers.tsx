@@ -60,6 +60,22 @@ function normalizeAssetUrl(raw?: string | null): string | null {
   return null;
 }
 
+// Calculate token age in human-readable format (e.g., "19m", "2h", "5d")
+function getTokenAge(createdAt: string | number | null | undefined): string {
+  if (!createdAt && createdAt !== 0) return "";
+  let timestamp = createdAt as any;
+  if (typeof timestamp === "number" && timestamp < 10000000000) timestamp *= 1000;
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return "";
+  const ms = Date.now() - d.getTime();
+  const mins = Math.floor(ms / 60000);
+  const hours = Math.floor(ms / 3600000);
+  const days = Math.floor(ms / 86400000);
+  if (days > 0) return `${days}d`;
+  if (hours > 0) return `${hours}h`;
+  return `${mins}m`;
+}
+
 const EMOJIS = [
   "💰",
   "🚀",
@@ -569,7 +585,7 @@ export default function TrackersPage() {
     };
   }, [watchedWallets]);
 
-  // Fetch token metadata for live trades using /v1/trade/view endpoint
+  // Fetch token metadata for live trades using API routes (like trade page does)
   // This provides the most complete data: image, protocol, market cap
   useEffect(() => {
     if (latestTrades.length === 0) return;
@@ -582,50 +598,36 @@ export default function TrackersPage() {
     if (tradesToFetch.length === 0) {
       return;
     }
-
-    console.log("[Live Trades] Fetching metadata for", tradesToFetch.length, "tokens");
     
     // Mark these mints as being fetched to prevent duplicate requests
     tradesToFetch.forEach(trade => fetchedMintsRef.current.add(trade.mint));
 
-    // Fetch each token's metadata independently using /v1/trade/view endpoint
-    tradesToFetch.forEach(async (trade) => {
-      try {
-        const goServiceUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-        let pairAddress = trade.pair_address;
-        
-        // If pair_address is not available, resolve it first
-        if (!pairAddress) {
-          console.log(`[Live Trades] Resolving pair_address for ${trade.mint.slice(0, 6)}...`);
-          try {
-            const searchResponse = await fetch(`${goServiceUrl}/v1/token/search?mint=${trade.mint}&limit=1`, {
-              signal: AbortSignal.timeout(3000)
-            });
-            if (searchResponse.ok) {
-              const searchData = await searchResponse.json();
-              const tokenData = Array.isArray(searchData) ? searchData[0] : (searchData.tokens?.[0] || null);
-              pairAddress = tokenData?.pair_address || tokenData?.poolId;
-              console.log(`[Live Trades] Resolved pair_address: ${pairAddress}`);
-            }
-          } catch (err) {
-            console.warn(`[Live Trades] Failed to resolve pair_address for ${trade.mint.slice(0, 6)}`, err);
+    // Fetch all tokens in parallel using Promise.allSettled for maximum speed
+    Promise.allSettled(
+      tradesToFetch.map(async (trade) => {
+        try {
+          // Try to use pair_address if available, otherwise use mint_address
+          const params = new URLSearchParams();
+          if (trade.pair_address) {
+            params.set('pair_address', trade.pair_address);
+          } else {
+            params.set('mint_address', trade.mint);
           }
-        }
-        
-        // Now fetch using /v1/trade/view with the pair_address
-        if (pairAddress) {
-          const url = `${goServiceUrl}/v1/trade/view?pair_address=${pairAddress}`;
-          console.log(`[Live Trades] Fetching from /v1/trade/view for ${trade.mint.slice(0, 6)}...`);
           
-          const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const response = await fetch(`/api/token-service/trade-view?${params.toString()}`, {
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
           
           if (!response.ok) {
-            console.warn(`[Live Trades] API error for ${trade.mint.slice(0, 6)}...: ${response.status}`);
-            return;
+            throw new Error(`HTTP ${response.status}`);
           }
           
           const data = await response.json();
-          const token = data.token || data;
+          const token = data?.token;
           
           if (token) {
             const metadata = {
@@ -637,37 +639,18 @@ export default function TrackersPage() {
               createdAt: token.created_at || token.createdAt || token.CreatedAt || null,
             };
             
-            console.log(`[Live Trades] 📦 Raw token data for ${trade.mint.slice(0, 6)}:`, {
-              token_uri: token.uri,
-              token_image: token.image,
-              token_logo: token.logo,
-              token_protocol: token.launchpad_protocol,
-              token_protocol_alt: token.protocol,
-              token_mc: token.market_cap_usd,
-              token_mc_alt: token.marketCapUsd,
-              token_mc_fdv: token.fully_diluted_value,
-            });
-            
             // Update state immediately for this token (progressive rendering)
             setTokenMetadata((prev) => {
               const updated = new Map(prev);
               updated.set(trade.mint, metadata);
               return updated;
             });
-            
-            console.log(`[Live Trades] ✅ Stored metadata for ${metadata.symbol || metadata.name || trade.mint.slice(0, 6)}:`, {
-              image: metadata.image ? metadata.image.slice(0, 50) + '...' : 'NONE',
-              protocol: metadata.launchpad_protocol || 'NONE',
-              mc: metadata.market_cap_usd ? `$${(metadata.market_cap_usd / 1_000_000).toFixed(2)}M` : 'NONE'
-            });
           }
-        } else {
-          console.warn(`[Live Trades] Could not resolve pair_address for ${trade.mint.slice(0, 6)}, skipping metadata fetch`);
+        } catch (error) {
+          // Silent fail - will use fallback UI
         }
-      } catch (error) {
-        console.warn(`[Live Trades] Fetch failed for ${trade.mint.slice(0, 6)}...`, error);
-      }
-    });
+      })
+    );
   }, [latestTrades]);
 
   // Handle sidebar resizing
@@ -1560,13 +1543,24 @@ export default function TrackersPage() {
                                                   />
                                                 </div>
                                               </div>
-                                              <div className="flex flex-col min-w-0 leading-tight text-left">
-                                                <span className="font-medium text-sm text-neutral-100 truncate">
-                                                  {displayName || displaySymbol}
+                                              <div className="flex items-center gap-1.5 min-w-0 leading-tight text-left">
+                                                <span className="font-medium text-base text-neutral-100 truncate">
+                                                  {displaySymbol}
                                                 </span>
-                                                <span className="text-xs text-neutral-400 font-mono truncate" title={trade.mint}>
-                                                  {trade.mint.slice(0, 4)}...{trade.mint.slice(-4)}
-                                                </span>
+                                                {(() => {
+                                                  const age = getTokenAge(metadata?.createdAt);
+                                                  if (age) {
+                                                    return (
+                                                      <>
+                                                        <span className="text-neutral-500">•</span>
+                                                        <span className="text-sm text-green-400 font-medium whitespace-nowrap">
+                                                          {age}
+                                                        </span>
+                                                      </>
+                                                    );
+                                                  }
+                                                  return null;
+                                                })()}
                                               </div>
                                             </button>
                                           </td>
