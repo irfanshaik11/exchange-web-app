@@ -4,6 +4,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { getActivePositionsByUser } from "~/utils/functions";
 import type { PositionRow, Wallet } from "~/utils/functions";
+import { formatMarketCap } from "~/utils/db";
 import AddWalletModal from "../components/AddWalletModal";
 import WalletRow from "../components/WalletRow";
 import ImportExportWalletModal from "../components/ImportExportWalletModal";
@@ -14,6 +15,8 @@ import {
   getTrackedWallets,
   getWalletHistory,
   getWalletSolBalance,
+  getWalletsLastActive,
+  toggleWalletNotifications,
   type WatchWallet,
   type WalletEvent,
   type TradeEvent,
@@ -37,6 +40,26 @@ import { RiExchangeDollarLine } from "react-icons/ri";
 
 const TABS = ["Wallet Manager", "Live Trades", "Monitor"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
+
+// Normalize asset URLs (IPFS, Arweave, etc.)
+function normalizeAssetUrl(raw?: string | null): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (s.startsWith("data:")) return s;
+  if (s.startsWith("ipfs://")) {
+    const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+  }
+  if (/^ipfs[/:]/i.test(s)) {
+    const cid = s.replace(/^ipfs[/:]/i, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+  }
+  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s)) return `https://arweave.net/${s}`;
+  if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
+  if (s.startsWith("https://")) return s;
+  return null;
+}
+
 const EMOJIS = [
   "💰",
   "🚀",
@@ -130,6 +153,7 @@ export default function TrackersPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [toast, setToast] = useState("");
   const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
+  const [isTogglingAllNotifications, setIsTogglingAllNotifications] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(384); // 384px = w-96
   const [isResizing, setIsResizing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -143,6 +167,9 @@ export default function TrackersPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
     {},
   );
+  const [lastActiveMap, setLastActiveMap] = useState<
+    Record<string, number | null | undefined>
+  >({});
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
     Map<string, { symbol: string | null; name: string | null; image: string | null; launchpad_protocol?: string | null; market_cap_usd?: number | null }>
@@ -239,6 +266,68 @@ export default function TrackersPage() {
     showToastMessage(WALLET_LIMIT_MESSAGE);
   };
 
+  const formatTokenAge = (input: unknown): string | null => {
+    if (input === null || input === undefined) return null;
+
+    let timestampMs: number | null = null;
+
+    if (typeof input === "number") {
+      timestampMs = input < 1_000_000_000_000 ? input * 1000 : input;
+    } else if (typeof input === "string") {
+      const numeric = Number(input);
+      if (!Number.isNaN(numeric) && numeric > 0) {
+        timestampMs = numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
+      } else {
+        const parsed = Date.parse(input);
+        if (!Number.isNaN(parsed)) {
+          timestampMs = parsed;
+        }
+      }
+    } else if (input instanceof Date && !Number.isNaN(input.getTime())) {
+      timestampMs = input.getTime();
+    }
+
+    if (timestampMs === null || Number.isNaN(timestampMs)) {
+      return null;
+    }
+
+    const diff = Date.now() - timestampMs;
+    if (!Number.isFinite(diff) || diff < 0) {
+      return "Just now";
+    }
+
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    const week = 7 * day;
+    const month = 30 * day;
+    const year = 365 * day;
+
+    if (diff < minute) return "Just now";
+    if (diff < hour) {
+      const mins = Math.floor(diff / minute);
+      return `${mins} min${mins === 1 ? "" : "s"} ago`;
+    }
+    if (diff < day) {
+      const hours = Math.floor(diff / hour);
+      return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+    }
+    if (diff < week) {
+      const days = Math.floor(diff / day);
+      return `${days} day${days === 1 ? "" : "s"} ago`;
+    }
+    if (diff < month) {
+      const weeks = Math.floor(diff / week);
+      return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+    }
+    if (diff < year) {
+      const months = Math.floor(diff / month);
+      return `${months} month${months === 1 ? "" : "s"} ago`;
+    }
+    const years = Math.floor(diff / year);
+    return `${years} year${years === 1 ? "" : "s"} ago`;
+  };
+
   // Twitter state
   const [showAddTwitterModal, setShowAddTwitterModal] = useState(false);
   const [twitterAccounts, setTwitterAccounts] = useState<TwitterAccount[]>([]);
@@ -251,6 +340,21 @@ export default function TrackersPage() {
   const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = !isMobile || mobileMainTab === "twitter";
+  
+  // Calculate if all notifications are enabled
+  const allNotificationsEnabled = watchedWallets.length > 0 && watchedWallets.every(w => w.notificationsEnabled);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 Notification Status:', {
+      totalWallets: watchedWallets.length,
+      allNotificationsEnabled,
+      walletStates: watchedWallets.map(w => ({
+        address: w.address.slice(0, 8),
+        enabled: w.notificationsEnabled
+      }))
+    });
+  }, [watchedWallets, allNotificationsEnabled]);
 
   // Keep walletsRef in sync with wallets state
   useEffect(() => {
@@ -271,7 +375,30 @@ export default function TrackersPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Load wallets when user changes or page loads
+  // Hydrate wallets from localStorage cache on mount
+  useEffect(() => {
+    if (typeof window === "undefined" || !user?.id) return;
+    
+    const cacheKey = `walletTracker:wallets:${user.id}`;
+    const cached = localStorage.getItem(cacheKey);
+    
+    if (cached) {
+      try {
+        const parsedCache = JSON.parse(cached);
+        if (parsedCache.wallets && parsedCache.watchedWallets) {
+          setWallets(parsedCache.wallets);
+          setWatchedWallets(parsedCache.watchedWallets);
+          if (parsedCache.balances) {
+            setWalletBalances(parsedCache.balances);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to hydrate wallets from cache:", error);
+      }
+    }
+  }, [user?.id]);
+
+  // Load wallets when user changes or page loads (fetches fresh data in background)
   useEffect(() => {
     loadWalletsFromBackend();
   }, [user?.id]);
@@ -294,6 +421,14 @@ export default function TrackersPage() {
         setWatchedWallets([]);
         setWallets([]);
         setWalletBalances({});
+        // Clear cache
+        if (typeof window !== "undefined") {
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('walletTracker:wallets:')) {
+              localStorage.removeItem(key);
+            }
+          });
+        }
         return;
       }
 
@@ -304,6 +439,14 @@ export default function TrackersPage() {
       await refreshWatchedWallets();
 
       const allWallets = tracked;
+      
+      // Only update state and cache if we actually got wallets
+      // This prevents empty arrays from overwriting cache on errors
+      if (allWallets.length === 0) {
+        console.log('No wallets returned from backend - keeping cached data');
+        return;
+      }
+      
       setWatchedWallets(allWallets);
 
       // Convert backend wallets to frontend format
@@ -316,15 +459,51 @@ export default function TrackersPage() {
 
       setWallets(frontendWallets);
 
+      // Cache wallets to localStorage
+      if (typeof window !== "undefined") {
+        const cacheKey = `walletTracker:wallets:${user.id}`;
+        const cacheData = {
+          wallets: frontendWallets,
+          watchedWallets: allWallets,
+          balances: {},
+          timestamp: Date.now(),
+        };
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        } catch (error) {
+          console.error("Failed to cache wallets:", error);
+        }
+      }
+
       // Fetch real balances for tracked wallets
       allWallets.forEach(async (wallet) => {
         const balance = await getWalletSolBalance(wallet.address);
         if (balance !== null) {
-          setWalletBalances((prev) => ({ ...prev, [wallet.address]: balance }));
+          setWalletBalances((prev) => {
+            const updated = { ...prev, [wallet.address]: balance };
+            
+            // Update balance in cache
+            if (typeof window !== "undefined") {
+              const cacheKey = `walletTracker:wallets:${user.id}`;
+              const cached = localStorage.getItem(cacheKey);
+              if (cached) {
+                try {
+                  const cacheData = JSON.parse(cached);
+                  cacheData.balances = updated;
+                  localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+                } catch (error) {
+                  // Silent fail
+                }
+              }
+            }
+            
+            return updated;
+          });
         }
       });
     } catch (error) {
       console.error("Failed to load wallets:", error);
+      // Don't clear state on error - keep showing cached data
     }
   };
 
@@ -344,6 +523,51 @@ export default function TrackersPage() {
   useEffect(() => {
     setWatchedWallets(globalWatchedWallets);
   }, [globalWatchedWallets]);
+  useEffect(() => {
+    const addresses = watchedWallets
+      .map((wallet) => wallet.address)
+      .filter((address): address is string => typeof address === "string" && address.length > 0);
+
+    if (addresses.length === 0) {
+      setLastActiveMap({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchLastActive = async () => {
+      try {
+        const results = await getWalletsLastActive(addresses);
+        if (cancelled) return;
+
+        const map: Record<string, number | null> = {};
+        results.forEach((item) => {
+          map[item.wallet] =
+            typeof item.lastActive === "number" ? item.lastActive : null;
+        });
+
+        // Ensure we have entries for every requested address
+        addresses.forEach((address) => {
+          if (!(address in map)) {
+            map[address] = null;
+          }
+        });
+
+        setLastActiveMap(map);
+      } catch (error) {
+        console.error("Failed to fetch last active timestamps:", error);
+        if (!cancelled) {
+          setLastActiveMap((prev) => ({ ...prev }));
+        }
+      }
+    };
+
+    fetchLastActive();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [watchedWallets]);
 
   // Fetch token metadata for live trades using /v1/trade/view endpoint
   // This provides the most complete data: image, protocol, market cap
@@ -410,6 +634,7 @@ export default function TrackersPage() {
               image: token.uri || token.image || token.logo || null,
               launchpad_protocol: token.launchpad_protocol || token.protocol || null,
               market_cap_usd: token.market_cap_usd || token.marketCapUsd || token.fully_diluted_value || null,
+              createdAt: token.created_at || token.createdAt || token.CreatedAt || null,
             };
             
             console.log(`[Live Trades] 📦 Raw token data for ${trade.mint.slice(0, 6)}:`, {
@@ -484,8 +709,13 @@ export default function TrackersPage() {
     }
 
     try {
-      // Add to backend
-      await addTrackedWallet(address, name, user?.id, emoji);
+      // Add to backend with notifications enabled by default
+      await addTrackedWallet(address, name, user?.id, emoji, true);
+      
+      // Save notification preference to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`wallet_notifications_${address}`, JSON.stringify(true));
+      }
 
       // Reload from backend (this will also refresh global watched wallets)
       await loadWalletsFromBackend();
@@ -527,6 +757,54 @@ export default function TrackersPage() {
     } catch (error: any) {
       setToast(error.message || "Failed to remove wallet");
       setTimeout(() => setToast(""), 3000);
+    }
+  };
+
+  // Toggle all wallet notifications
+  const handleToggleAllNotifications = async () => {
+    if (watchedWallets.length === 0) {
+      console.log('No wallets to toggle');
+      return;
+    }
+    
+    if (isTogglingAllNotifications) {
+      console.log('⏳ Already toggling, please wait...');
+      return;
+    }
+    
+    setIsTogglingAllNotifications(true);
+    
+    try {
+      // Determine new state: if all are enabled, disable all. Otherwise, enable all.
+      const newState = !allNotificationsEnabled;
+      console.log(`🔔 Toggle all notifications: ${allNotificationsEnabled} → ${newState}`);
+      console.log(`📊 Toggling ${watchedWallets.length} wallets`);
+      
+      // Toggle each wallet's notifications
+      const togglePromises = watchedWallets.map(wallet => {
+        console.log(`  - ${wallet.address.slice(0, 8)}... from ${wallet.notificationsEnabled} to ${newState}`);
+        return toggleWalletNotifications(wallet.address, newState, wallet.ownerId || undefined);
+      });
+      
+      const results = await Promise.all(togglePromises);
+      console.log('✅ All API calls completed:', results);
+      
+      // Update localStorage for each wallet
+      watchedWallets.forEach(wallet => {
+        const storageKey = `wallet_notifications_${wallet.address}`;
+        localStorage.setItem(storageKey, JSON.stringify(newState));
+        console.log(`💾 Saved to localStorage: ${wallet.address.slice(0, 8)}... = ${newState}`);
+      });
+      
+      // Reload from backend to refresh state
+      console.log('🔄 Reloading wallets from backend...');
+      await loadWalletsFromBackend();
+      await refreshWatchedWallets();
+      console.log('✅ State refreshed - Ready for next toggle');
+    } catch (error) {
+      console.error('❌ Failed to toggle all notifications:', error);
+    } finally {
+      setIsTogglingAllNotifications(false);
     }
   };
 
@@ -701,7 +979,14 @@ export default function TrackersPage() {
                 wallet.name,
                 user?.id,
                 getRandomEmoji(),
+                true, // Enable notifications by default for imported wallets
               );
+              
+              // Save notification preference to localStorage
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+              }
+              
               successCount++;
             } catch (error: any) {
               if (error?.message?.includes("already exists")) {
@@ -871,10 +1156,13 @@ export default function TrackersPage() {
                                 <FiSettings className="h-4 w-4" />
                               </button>
                               <button
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                className={`flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] transition-all duration-300 hover:bg-[#181818] ${isTogglingAllNotifications ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
                                 type="button"
+                                onClick={handleToggleAllNotifications}
+                                disabled={isTogglingAllNotifications}
+                                title={isTogglingAllNotifications ? "Toggling..." : allNotificationsEnabled ? "Disable all notifications" : "Enable all notifications"}
                               >
-                                <FiBell className="h-4 w-4" />
+                                <FiBell className={`h-4 w-4 ${allNotificationsEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
                               </button>
                               <button
                                 className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
@@ -927,15 +1215,15 @@ export default function TrackersPage() {
                                 <span className="w-28">Created</span>
                                 <span className="min-w-0 flex-1">Name</span>
                                 <span className="w-36">Balance</span>
-                                <span className="w-40">Actions</span>
-                                <span className="w-24 text-right">
+                                <span className="w-28">Last Active</span>
+                                <div className="flex-1 flex items-center justify-end">
                                   <button
                                     className="whitespace-nowrap text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
                                     onClick={() => handleRemoveWallet("all")}
                                   >
                                     Remove All
                                   </button>
-                                </span>
+                                </div>
                               </div>
                             </div>
                             {wallets.length === 0 ? (
@@ -964,6 +1252,7 @@ export default function TrackersPage() {
                                           watchedWallet={watched}
                                           events={events}
                                           balance={balance}
+                                          lastActive={lastActiveMap[wallet.address]}
                                           onRemove={handleRemoveWallet}
                                           onClick={setScannedWallet}
                                           onNotificationToggle={async (
@@ -986,13 +1275,14 @@ export default function TrackersPage() {
                             {latestTrades.length === 0 ? (
                               <div className="flex h-64 flex-col items-center justify-center">
                                 <span className="text-neutral-400">
-                                  No live trades yet. Add wallets to start
-                                  tracking!
+                                  {wsConnected 
+                                    ? "Listening for trades from tracked wallets..."
+                                    : "No live trades yet. Add wallets to start tracking!"}
                                 </span>
                                 <span className="mt-2 text-xs text-neutral-500">
                                   {wsConnected
-                                    ? "🟢 Connected"
-                                    : "🔴 Disconnected"}
+                                    ? "✅ Connected and ready"
+                                    : "🔴 Disconnected - Check console for details"}
                                 </span>
                               </div>
                             ) : (
@@ -1018,7 +1308,7 @@ export default function TrackersPage() {
                                       <th className="w-12 px-2 py-2 text-left text-sm text-neutral-400">
                                         Side
                                       </th>
-                                      <th className="w-32 px-2 py-2 text-left text-sm text-neutral-400">
+                                      <th className="w-48 px-2 py-2 text-left text-sm text-neutral-400">
                                         Token
                                       </th>
                                       <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
@@ -1072,8 +1362,12 @@ export default function TrackersPage() {
                                         });
                                       }
                                       
-                                      // Get token image URL - prioritize metadata image
-                                      const tokenImageUrl = metadata?.image;
+                                      // Get token image URL - prioritize metadata image and normalize it
+                                      const rawImg = metadata?.image;
+                                      const tokenImageUrl = normalizeAssetUrl(rawImg);
+                                      const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                        displaySymbol || "T"
+                                      )}&background=0f1012&color=E6E7EA&size=28`;
                                       const launchpadProtocol = metadata?.launchpad_protocol?.toLowerCase() || '';
                                       
                                       // Get protocol icon (exact logic from PulseTable)
@@ -1116,6 +1410,12 @@ export default function TrackersPage() {
                                       const isMoonit = launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot');
                                       const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
 
+                                      const tokenAgeLabel = formatTokenAge(
+                                        (trade as any).created_at ??
+                                          (trade as any).createdAt ??
+                                          null,
+                                      );
+
                                       return (
                                         <tr
                                           key={`${trade.tx}-${idx}`}
@@ -1146,7 +1446,7 @@ export default function TrackersPage() {
                                               {trade.side.toUpperCase()}
                                             </span>
                                           </td>
-                                          <td className="w-32 px-2 py-2">
+                                          <td className="w-48 px-2 py-2">
                                             <button
                                               onClick={async () => {
                                                 // Use liquidity pool / trading pair address (pair_address) for navigation
@@ -1215,22 +1515,14 @@ export default function TrackersPage() {
                                                 >
                                                   <div className="relative rounded-sm overflow-hidden"
                                                        style={{ width: 22, height: 22 }}>
-                                                    {tokenImageUrl ? (
-                                                      <img
-                                                        src={tokenImageUrl}
-                                                        alt={displaySymbol}
-                                                        className="w-full h-full object-cover"
-                                                        onError={(e) => {
-                                                          e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol)}&background=0f1012&color=E6E7EA&size=22`;
-                                                        }}
-                                                      />
-                                                    ) : (
-                                                      <img
-                                                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displaySymbol)}&background=0f1012&color=E6E7EA&size=22`}
-                                                        alt={displaySymbol}
-                                                        className="w-full h-full object-cover"
-                                                      />
-                                                    )}
+                                                    <img
+                                                      src={tokenImageUrl || fallbackAvatar}
+                                                      alt={displayName || displaySymbol}
+                                                      className="w-full h-full object-cover"
+                                                      onError={(e) => {
+                                                        e.currentTarget.src = fallbackAvatar;
+                                                      }}
+                                                    />
                                                   </div>
                                                 </div>
                                                 
@@ -1254,7 +1546,14 @@ export default function TrackersPage() {
                                                   />
                                                 </div>
                                               </div>
-                                              <span className="font-semibold text-white">{displaySymbol}</span>
+                                              <div className="flex flex-col min-w-0 leading-tight text-left">
+                                                <span className="font-medium text-sm text-neutral-100 truncate">
+                                                  {displayName || displaySymbol}
+                                                </span>
+                                                <span className="text-xs text-neutral-400 font-mono truncate" title={trade.mint}>
+                                                  {trade.mint.slice(0, 4)}...{trade.mint.slice(-4)}
+                                                </span>
+                                              </div>
                                             </button>
                                           </td>
                                           <td className="w-24 px-2 py-2 text-neutral-200">
@@ -1306,16 +1605,7 @@ export default function TrackersPage() {
                                             {(() => {
                                               const marketCap = metadata?.market_cap_usd;
                                               if (!marketCap || marketCap === 0) return <span className="text-neutral-500">-</span>;
-                                              
-                                              if (marketCap >= 1_000_000_000) {
-                                                return `$${(marketCap / 1_000_000_000).toFixed(2)}B`;
-                                              } else if (marketCap >= 1_000_000) {
-                                                return `$${(marketCap / 1_000_000).toFixed(2)}M`;
-                                              } else if (marketCap >= 1_000) {
-                                                return `$${(marketCap / 1_000).toFixed(2)}K`;
-                                              } else {
-                                                return `$${marketCap.toFixed(2)}`;
-                                              }
+                                              return `$${formatMarketCap(marketCap)}`;
                                             })()}
                                           </td>
                                         </tr>
@@ -1689,7 +1979,14 @@ export default function TrackersPage() {
                     wallet.name,
                     user?.id,
                     wallet.emoji,
+                    true, // Enable notifications by default for bulk imported wallets
                   );
+                  
+                  // Save notification preference to localStorage
+                  if (typeof window !== 'undefined') {
+                    localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+                  }
+                  
                   successCount++;
                 } catch (error: any) {
                   if (error?.message?.includes("already exists")) {

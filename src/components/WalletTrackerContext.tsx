@@ -5,6 +5,7 @@ import {
   type WalletTrackerWebSocket,
   type TradeEvent,
   getTrackedWallets,
+  getWalletTradeHistory,
   type WatchWallet
 } from '~/utils/walletTracking';
 import { useUser } from './UserContext';
@@ -87,6 +88,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
   const watchedWalletsRef = useRef<WatchWallet[]>([]);
   const subscribedWalletsRef = useRef<string[]>([]);
   const hydrationRef = useRef(false);
+  const initialHistoryFetchedRef = useRef(false);
   
   // Keep ref in sync with state
   useEffect(() => {
@@ -112,10 +114,46 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     }
   }, [user?.id]);
 
+  // Reset history fetch flag when user changes
+  useEffect(() => {
+    initialHistoryFetchedRef.current = false;
+  }, [user?.id]);
+
+  // Fetch initial trade history from backend Redis cache (optional - doesn't block WebSocket)
+  useEffect(() => {
+    if (!user?.id || watchedWallets.length === 0 || initialHistoryFetchedRef.current) {
+      return;
+    }
+
+    const fetchInitialTrades = async () => {
+      try {
+        initialHistoryFetchedRef.current = true;
+        const walletAddresses = watchedWallets.map(w => w.address);
+        
+        const history = await Promise.race([
+          getWalletTradeHistory(walletAddresses, {
+            limit: HISTORY_LIMIT,
+            windowMs: HISTORY_WINDOW_MS,
+          }),
+          new Promise<TradeEvent[]>((resolve) => setTimeout(() => resolve([]), 3000))
+        ]);
+        
+        if (history.length > 0) {
+          setLatestTrades(prev => mergeTrades(prev, history));
+        }
+      } catch (error) {
+        // Silent fail - WebSocket will still work
+      }
+    };
+
+    // Fetch after a delay to let WebSocket connect first
+    const timeoutId = setTimeout(fetchInitialTrades, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [user?.id, watchedWallets.length])
+
   // WebSocket connection for real-time wallet updates
   useEffect(() => {
-    if (!user?.id || watchedWallets.length === 0) {
-      // Close connection if no wallets to watch
+    if (!user?.id) {
       if (wsConnection) {
         wsConnection.close();
         setWsConnection(null);
@@ -129,14 +167,6 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     let reconnectTimeout: NodeJS.Timeout | null = null;
 
     const handleTradeEvent = async (event: TradeEvent) => {
-      console.log('🔔 Trade event received:', {
-        mint: event.mint,
-        pair_address: event.pair_address,
-        symbol: event.symbol,
-        name: event.name,
-        side: event.side,
-      });
-
       const normalizedEvent = normalizeTradeForState(event);
 
       // Get token name/symbol FIRST and enrich the event before showing
@@ -170,13 +200,9 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
             if (searchResponse.ok) {
               const searchData = await searchResponse.json();
               tokenData = Array.isArray(searchData) ? searchData[0] : (searchData.tokens?.[0] || null);
-              console.log('✅ Fetched token data from Go service:', {
-                symbol: tokenData?.symbol,
-                name: tokenData?.name,
-              });
             }
           } catch (searchError) {
-            console.warn('⚠️ Go service search failed:', searchError);
+            // Silent fail
           }
           
           // Update token name and enrich the event with fetched data
@@ -224,11 +250,11 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
                 });
               }
             } catch (err) {
-              console.warn('⚠️ fetchTokenMetadata failed:', err);
+              // Silent fail
             }
           }
         } catch (error) {
-          console.warn('⚠️ Failed to fetch token metadata for notification:', error);
+          // Silent fail
         }
       }
       
@@ -248,7 +274,6 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
             if (searchData.tokens && searchData.tokens.length > 0) {
               const token = searchData.tokens[0];
               normalizedEvent.pair_address = token.pair_address || token.poolId;
-              console.log('✅ Resolved pair_address from search for', normalizedEvent.mint, '→', normalizedEvent.pair_address);
             }
           }
           
@@ -263,11 +288,10 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
             if (hydrateResponse.ok) {
               const hydrateData = await hydrateResponse.json();
               normalizedEvent.pair_address = hydrateData.pair_address || hydrateData.poolId;
-              console.log('✅ Resolved pair_address from hydrate for', normalizedEvent.mint, '→', normalizedEvent.pair_address);
             }
           }
         } catch (error) {
-          console.warn('⚠️ Failed to resolve pair_address for trade event:', error);
+          // Silent fail
         }
       }
 
@@ -292,8 +316,6 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         }
       }
       
-      console.log('📢 Showing notification with token name:', tokenName);
-      
       // Show toast notification with custom styling
       toast.custom(
         () => (
@@ -308,17 +330,14 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     };
 
     const handleConnect = () => {
-      console.log('✅ WebSocket connected successfully');
       setWsConnected(true);
       
       // Subscribe to all tracked wallets after connection is established
-      if (watchedWallets.length > 0 && connection) {
-        // Small delay to ensure WebSocket is fully ready
+      if (watchedWalletsRef.current.length > 0 && connection) {
         setTimeout(() => {
           if (connection?.ws.readyState === WebSocket.OPEN) {
-            const addresses = watchedWallets.map(w => w.address);
+            const addresses = watchedWalletsRef.current.map(w => w.address);
             connection.subscribe(addresses);
-            console.log('📡 Subscribed to wallets:', addresses.map(a => a.slice(0, 8) + '...'));
             subscribedWalletsRef.current = addresses;
           }
         }, 100);
@@ -326,19 +345,16 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     };
 
     const handleDisconnect = () => {
-      console.log('⚠️ WebSocket disconnected, will attempt to reconnect...');
       setWsConnected(false);
       
       // Attempt to reconnect after 3 seconds
       reconnectTimeout = setTimeout(() => {
-        console.log('🔄 Attempting to reconnect WebSocket...');
         initializeWebSocket();
       }, 3000);
     };
 
     const initializeWebSocket = () => {
       try {
-        console.log('🔌 Initializing WebSocket connection...');
         connection = createWalletTrackerWebSocket(
           handleTradeEvent,
           handleConnect,
@@ -346,25 +362,25 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         );
         setWsConnection(connection);
       } catch (error) {
-        console.error('❌ Failed to initialize WebSocket:', error);
+        console.error('WebSocket failed to initialize:', error);
       }
     };
 
     // Initialize WebSocket connection
     initializeWebSocket();
 
-    // Cleanup on unmount or when wallets change
+    // Cleanup on unmount or when user changes
     return () => {
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
       }
       if (connection) {
-        console.log('🔌 Closing WebSocket connection...');
+        console.log('🔌 Closing WebSocket connection (cleanup)...');
         connection.close();
       }
       subscribedWalletsRef.current = [];
     };
-  }, [user?.id, watchedWallets.length]); // Re-initialize when user changes or wallet count changes
+  }, [user?.id]); // Only re-initialize when user changes, not when wallets change
 
   // Update subscriptions when wallet list changes (without recreating connection)
   useEffect(() => {
@@ -379,12 +395,10 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     const toSubscribe = addresses.filter(addr => !previous.includes(addr));
 
     if (toUnsubscribe.length > 0) {
-      console.log('🚫 Unsubscribing from wallets:', toUnsubscribe.map(a => a.slice(0, 8) + '...'));
       wsConnection.unsubscribe(toUnsubscribe);
     }
 
     if (toSubscribe.length > 0) {
-      console.log('🔄 Subscribing to wallets:', toSubscribe.map(a => a.slice(0, 8) + '...'));
       wsConnection.subscribe(toSubscribe);
     }
 

@@ -7,7 +7,7 @@ import "./src/env.js";
 /** @type {import("next").NextConfig} */
 const config = {
   reactStrictMode: true,
-  output: "standalone",
+  // output: "standalone", // Temporarily disabled to fix build
   // Disable error overlay and loading indicators in development
   devIndicators: {
     position: "bottom-right",

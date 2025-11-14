@@ -53,6 +53,13 @@ export interface TradeEvent {
   at: number;
 }
 
+export interface WalletLastActiveResult {
+	wallet: string;
+	lastActive: number | null;
+	ok: boolean;
+	error?: string;
+}
+
 // ===== Frontend Display Types =====
 export interface TrackedWallet {
   address: string;
@@ -83,13 +90,15 @@ const WALLET_TRACKER_API_URL = resolveApiUrl();
 // Normalize WS URL: allow users to provide http(s) and convert to ws(s) automatically
 const resolveWsUrl = () => {
   const envWs = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL;
-  if (!envWs) return 'ws://localhost:8081';
+  if (!envWs) {
+    console.warn('⚠️ NEXT_PUBLIC_WALLET_TRACKER_WS_URL not set, using default: ws://localhost:8081');
+    return 'ws://localhost:8081';
+  }
   if (envWs.startsWith('http://')) return envWs.replace(/^http:\/\//, 'ws://');
   if (envWs.startsWith('https://')) return envWs.replace(/^https:\/\//, 'wss://');
   return envWs;
 };
 
-// WebSocket is on a different port (8082), so we need to handle this properly
 const WALLET_TRACKER_WS_URL = resolveWsUrl();
 
 // ===== API Functions =====
@@ -100,22 +109,38 @@ export async function getTrackedWallets(userId?: string): Promise<WatchWallet[]>
     const url = userId 
       ? `${WALLET_TRACKER_API_URL}/api/watch?userId=${encodeURIComponent(userId)}`
       : `${WALLET_TRACKER_API_URL}/api/watch`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      const ct = response.headers.get('content-type') || '';
-      const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
-      const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to fetch wallets'));
-      throw new Error(msg || 'Failed to fetch wallets');
+    
+    // Add 10 second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const ct = response.headers.get('content-type') || '';
+        const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
+        const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to fetch wallets'));
+        throw new Error(msg || 'Failed to fetch wallets');
+      }
+      
+      return await response.json();
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Request timed out after 10 seconds');
+      }
+      throw fetchError;
     }
-    return await response.json();
   } catch (error) {
     console.error('Error fetching tracked wallets:', error);
-    return [];
+    throw error; // Throw instead of returning empty array
   }
 }
 
 // Add a wallet to tracking
-export async function addTrackedWallet(address: string, name?: string, userId?: string, emoji?: string): Promise<void> {
+export async function addTrackedWallet(address: string, name?: string, userId?: string, emoji?: string, notificationsEnabled: boolean = true): Promise<void> {
   try {
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch`, {
       method: 'POST',
@@ -125,6 +150,7 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
         walletName: name || undefined,
         userId: userId || undefined,
         emoji: emoji || undefined
+        // Note: notificationsEnabled is set via a separate API call below
       }),
     });
     
@@ -134,10 +160,52 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
       const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to add wallet'));
       throw new Error(msg || 'Failed to add wallet');
     }
+    
+    // Enable notifications if requested (separate API call)
+    if (notificationsEnabled) {
+      try {
+        await toggleWalletNotifications(address, true, userId);
+      } catch (notifError) {
+        console.warn('Failed to enable notifications for wallet, but wallet was added successfully:', notifError);
+        // Don't throw - wallet was added successfully, notification toggle can be done manually
+      }
+    }
   } catch (error) {
     console.error('Error adding wallet:', error);
     throw error;
   }
+}
+
+export async function getWalletsLastActive(wallets: string[]): Promise<WalletLastActiveResult[]> {
+	try {
+		if (!Array.isArray(wallets) || wallets.length === 0) {
+			return [];
+		}
+
+		const response = await fetch(`${WALLET_TRACKER_API_URL}/api/wallets/last-active`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ wallets }),
+		});
+
+		const payload = await response.json().catch(() => null);
+
+		if (!response.ok) {
+			const message =
+				payload?.error ||
+				(response.statusText ? `HTTP ${response.status} ${response.statusText}` : 'Failed to fetch last active wallets');
+			throw new Error(message);
+		}
+
+		if (!payload || typeof payload !== 'object' || payload.ok !== true || !Array.isArray(payload.data)) {
+			throw new Error('Unexpected response while fetching last active wallets');
+		}
+
+		return payload.data as WalletLastActiveResult[];
+	} catch (error) {
+		console.error('Error fetching wallets last active timestamp:', error);
+		throw error;
+	}
 }
 
 // Remove a wallet from tracking
@@ -440,14 +508,12 @@ export function createWalletTrackerWebSocket(
   onConnect?: () => void,
   onDisconnect?: () => void
 ): WalletTrackerWebSocket {
-  console.log('Creating WebSocket connection to:', `${WALLET_TRACKER_WS_URL}/ws`);
-  
-  const ws = new WebSocket(`${WALLET_TRACKER_WS_URL}/ws`);
+  const wsUrl = `${WALLET_TRACKER_WS_URL}/ws`;
+  const ws = new WebSocket(wsUrl);
   let isAlive = true;
   let connectionEstablished = false;
 
   ws.onopen = () => {
-    console.log('✅ WebSocket connection opened successfully');
     isAlive = true;
     connectionEstablished = true;
     onConnect?.();
@@ -466,70 +532,43 @@ export function createWalletTrackerWebSocket(
       
       // Handle subscription confirmation
       if (data.type === 'subscribed') {
-        console.log('✅ Subscription confirmed for wallets:', data.wallets);
         return;
       }
       
       // Handle trade events
       if (data.type === 'trade') {
-        console.log('📊 Trade event received:', data);
         onTradeEvent(data as TradeEvent);
       }
     } catch (error) {
-      console.error('❌ Error parsing WebSocket message:', error);
+      // Silent fail
     }
   };
 
   ws.onerror = (error) => {
-    console.error('❌ WebSocket error:', error);
     if (!connectionEstablished) {
-      console.error('Connection was never established. Check if WebSocket server is running on:', `${WALLET_TRACKER_WS_URL}/ws`);
-      console.error('Make sure to:');
-      console.error('  1. Start the WebSocket server: npm run dev:ws');
-      console.error('  2. Check NEXT_PUBLIC_WALLET_TRACKER_WS_URL in .env.local');
-      console.error('  3. Verify port 8082 is accessible');
+      console.error('WebSocket connection error - check NEXT_PUBLIC_WALLET_TRACKER_WS_URL:', wsUrl);
     }
   };
 
   ws.onclose = (event) => {
-    console.log('WebSocket connection closed:', {
-      code: event.code,
-      reason: event.reason || 'No reason provided',
-      wasClean: event.wasClean
-    });
     isAlive = false;
-    
-    if (!connectionEstablished) {
-      console.error('❌ Connection closed before it was established');
-      console.error('This usually means:');
-      console.error('  - WebSocket server is not running (npm run dev:ws)');
-      console.error('  - Wrong URL configured:', `${WALLET_TRACKER_WS_URL}/ws`);
-      console.error('  - Firewall or network issue blocking port 8082');
-    }
-    
     onDisconnect?.();
   };
 
   const subscribe = (wallets: string[]) => {
     if (ws.readyState === WebSocket.OPEN) {
-      console.log('📡 Subscribing to wallets:', wallets);
-      ws.send(JSON.stringify({ method: 'subscribe', wallets }));
-    } else {
-      console.warn('⚠️  Cannot subscribe: WebSocket not open. State:', ws.readyState);
+      const message = { method: 'subscribe', wallets };
+      ws.send(JSON.stringify(message));
     }
   };
 
   const unsubscribe = (wallets: string[]) => {
     if (ws.readyState === WebSocket.OPEN) {
-      console.log('📡 Unsubscribing from wallets:', wallets);
       ws.send(JSON.stringify({ method: 'unsubscribe', wallets }));
-    } else {
-      console.warn('⚠️  Cannot unsubscribe: WebSocket not open');
     }
   };
 
   const close = () => {
-    console.log('Closing WebSocket connection...');
     ws.close();
   };
 
