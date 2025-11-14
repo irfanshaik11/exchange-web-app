@@ -375,7 +375,30 @@ export default function TrackersPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Load wallets when user changes or page loads
+  // Hydrate wallets from localStorage cache on mount
+  useEffect(() => {
+    if (typeof window === "undefined" || !user?.id) return;
+    
+    const cacheKey = `walletTracker:wallets:${user.id}`;
+    const cached = localStorage.getItem(cacheKey);
+    
+    if (cached) {
+      try {
+        const parsedCache = JSON.parse(cached);
+        if (parsedCache.wallets && parsedCache.watchedWallets) {
+          setWallets(parsedCache.wallets);
+          setWatchedWallets(parsedCache.watchedWallets);
+          if (parsedCache.balances) {
+            setWalletBalances(parsedCache.balances);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to hydrate wallets from cache:", error);
+      }
+    }
+  }, [user?.id]);
+
+  // Load wallets when user changes or page loads (fetches fresh data in background)
   useEffect(() => {
     loadWalletsFromBackend();
   }, [user?.id]);
@@ -398,6 +421,14 @@ export default function TrackersPage() {
         setWatchedWallets([]);
         setWallets([]);
         setWalletBalances({});
+        // Clear cache
+        if (typeof window !== "undefined") {
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('walletTracker:wallets:')) {
+              localStorage.removeItem(key);
+            }
+          });
+        }
         return;
       }
 
@@ -420,11 +451,46 @@ export default function TrackersPage() {
 
       setWallets(frontendWallets);
 
+      // Cache wallets to localStorage
+      if (typeof window !== "undefined") {
+        const cacheKey = `walletTracker:wallets:${user.id}`;
+        const cacheData = {
+          wallets: frontendWallets,
+          watchedWallets: allWallets,
+          balances: {},
+          timestamp: Date.now(),
+        };
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        } catch (error) {
+          console.error("Failed to cache wallets:", error);
+        }
+      }
+
       // Fetch real balances for tracked wallets
       allWallets.forEach(async (wallet) => {
         const balance = await getWalletSolBalance(wallet.address);
         if (balance !== null) {
-          setWalletBalances((prev) => ({ ...prev, [wallet.address]: balance }));
+          setWalletBalances((prev) => {
+            const updated = { ...prev, [wallet.address]: balance };
+            
+            // Update balance in cache
+            if (typeof window !== "undefined") {
+              const cacheKey = `walletTracker:wallets:${user.id}`;
+              const cached = localStorage.getItem(cacheKey);
+              if (cached) {
+                try {
+                  const cacheData = JSON.parse(cached);
+                  cacheData.balances = updated;
+                  localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+                } catch (error) {
+                  // Silent fail
+                }
+              }
+            }
+            
+            return updated;
+          });
         }
       });
     } catch (error) {
