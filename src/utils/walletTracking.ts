@@ -109,17 +109,33 @@ export async function getTrackedWallets(userId?: string): Promise<WatchWallet[]>
     const url = userId 
       ? `${WALLET_TRACKER_API_URL}/api/watch?userId=${encodeURIComponent(userId)}`
       : `${WALLET_TRACKER_API_URL}/api/watch`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      const ct = response.headers.get('content-type') || '';
-      const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
-      const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to fetch wallets'));
-      throw new Error(msg || 'Failed to fetch wallets');
+    
+    // Add 10 second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const ct = response.headers.get('content-type') || '';
+        const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
+        const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to fetch wallets'));
+        throw new Error(msg || 'Failed to fetch wallets');
+      }
+      
+      return await response.json();
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error('Request timed out after 10 seconds');
+      }
+      throw fetchError;
     }
-    return await response.json();
   } catch (error) {
     console.error('Error fetching tracked wallets:', error);
-    return [];
+    throw error; // Throw instead of returning empty array
   }
 }
 
