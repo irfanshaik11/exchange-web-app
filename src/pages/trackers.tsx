@@ -1119,7 +1119,7 @@ export default function TrackersPage() {
               {/* LEFT: WALLET SECTION */}
               {showWalletSection && (
                 <div
-                  className="mt-4 flex h-full min-h-[530px] w-full flex-1 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-4"
+                  className="mt-4 flex h-full min-h-[530px] flex-1 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-4 min-w-0"
                   style={{
                     maxHeight: "calc(100vh - 160px)",
                   }}
@@ -1145,9 +1145,9 @@ export default function TrackersPage() {
                   ) : (
                     <>
                       {/* HEADER BAR – three zones like reference screenshot */}
-                      <div className="flex items-center gap-4 border-b border-neutral-800/60 py-2">
+                      <div className="flex flex-wrap items-center gap-4 border-b border-neutral-800/60 py-2">
                         {/* Left: tabs + wallet count */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2">
                           {TABS.map((tab, i) => (
                             <button
                               key={tab}
@@ -1190,7 +1190,7 @@ export default function TrackersPage() {
                         </div>
 
                         {/* Right: actions (Import / Export / icons / Add Wallet) */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2">
                           {activeTab === 0 && (
                             <>
                               <button
@@ -1705,7 +1705,7 @@ export default function TrackersPage() {
               {/* RIGHT: TWITTER SECTION */}
               {showTwitterSection && (
                 <div
-                  className="mt-4 flex h-full min-h-[530px] w-full flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2"
+                  className="mt-4 flex h-full min-h-[530px] flex-shrink-0 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2"
                   style={
                     isMobile
                       ? {
