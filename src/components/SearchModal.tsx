@@ -496,8 +496,18 @@ const SearchModalContent = React.memo(function SearchModalContent({
       clearTimeout(searchTimeoutRef.current);
     }
     
-    // Don't search automatically - only on Enter key press
-  }, []);
+    // Search automatically if query is at least 2 characters (debounced 300ms)
+    if (newQuery.trim().length >= 2) {
+      searchTimeoutRef.current = setTimeout(() => {
+        searchTokens(newQuery);
+      }, 300);
+    } else {
+      // Clear results if query is too short
+      setSearchResults([]);
+      setHasSearched(false);
+      setSearchLoading(false);
+    }
+  }, [searchTokens]);
 
   const updateFilter = useCallback((filterName: keyof SearchFilters) => {
     setFilters((prev) => ({ ...prev, [filterName]: !prev[filterName] }));
@@ -618,7 +628,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
           onKeyDown={handleInputKeyDown}
-          placeholder="Search by name, ticker, or CA… (live search)"
+          placeholder="Search by name, ticker, or CA… (type to search)"
           className="w-full bg-transparent text-[20px] outline-none placeholder:text-neutral-500"
         />
         <div className="absolute top-1/2 right-4 -translate-y-1/2 flex items-center gap-1">
@@ -643,7 +653,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           <p className="text-sm text-neutral-500">
             {hasSearched
               ? "No results found. Try a different search term."
-              : "Type a search term and press Enter to search tokens (e.g., 'pepe', 'sol', 'pump')..."}
+              : "Type at least 2 characters to search tokens (e.g., 'pepe', 'sol', 'pump')..."}
           </p>
         ) : (
           <ul className="flex h-full flex-col gap-4 overflow-y-auto">
