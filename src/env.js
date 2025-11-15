@@ -9,6 +9,9 @@ export const env = createEnv({
   server: {
     NODE_ENV: z.enum(["development", "test", "production"]),
     NEON_DB_API_KEY: z.string(),
+    X_API_KEY: z.string().optional(),
+    X_API_KEY_SECRET: z.string().optional(),
+    X_BEARER_TOKEN: z.string().optional(),
   },
 
   /**
@@ -45,6 +48,9 @@ export const env = createEnv({
   runtimeEnv: {
     NODE_ENV: process.env.NODE_ENV,
     NEON_DB_API_KEY: process.env.NEON_DB_API_KEY,
+    X_API_KEY: process.env.X_API_KEY,
+    X_API_KEY_SECRET: process.env.X_API_KEY_SECRET,
+    X_BEARER_TOKEN: process.env.X_BEARER_TOKEN,
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
     NEXT_PUBLIC_GO_SERVICE_URL: process.env.NEXT_PUBLIC_GO_SERVICE_URL,
     NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL,
@@ -71,3 +77,4 @@ export const env = createEnv({
    */
   emptyStringAsUndefined: true,
 });
+
