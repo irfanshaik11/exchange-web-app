@@ -39,7 +39,7 @@ import { FiSettings, FiBell, FiShare2, FiRss } from "react-icons/fi";
 import { SiSolana } from "react-icons/si";
 import { RiExchangeDollarLine } from "react-icons/ri";
 
-const TABS = ["Wallet Manager", "Live Trades", "Monitor"];
+const TABS = ["Wallet Manager", "Live Trades"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const getLiveTradesCacheKey = (userId?: string) =>
@@ -1159,7 +1159,7 @@ export default function TrackersPage() {
                               onClick={() => setActiveTab(i)}
                             >
                               {tab}
-                              {(tab === "Live Trades" || tab === "Monitor") && (
+                              {tab === "Live Trades" && (
                                 <span className="ml-1 animate-pulse text-sm text-pink-400">
                                   •
                                 </span>
@@ -1328,7 +1328,7 @@ export default function TrackersPage() {
                               </div>
                             )}
                           </>
-                        ) : activeTab === 1 ? (
+                        ) : (
                           <>
                             {liveTradesToRender.length === 0 ? (
                               <div className="flex h-64 flex-col items-center justify-center">
@@ -1685,13 +1685,6 @@ export default function TrackersPage() {
                               </div>
                             )}
                           </>
-                        ) : (
-                          // Monitor tab
-                          <div className="flex h-64 flex-col items-center justify-center">
-                            <span className="text-neutral-400 text-sm">
-                              No token activity yet
-                            </span>
-                          </div>
                         )}
                       </div>
                     </>
