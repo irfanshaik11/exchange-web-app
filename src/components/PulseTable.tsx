@@ -4754,6 +4754,7 @@ function PulseTable({
                               if (tooltip) tooltip.style.opacity = '0';
                             }}
                             onClick={async (e) => {
+                              e.preventDefault();
                               e.stopPropagation();
                               try {
                                 await navigator.clipboard.writeText(token.mint);
