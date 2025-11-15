@@ -13,9 +13,10 @@ interface TradeTabsProps {
   selectedTab: string;
   setSelectedTab: (tab: string) => void;
   onInstantTradeClick?: () => void;
+  isInstantTradeOpen?: boolean;
 }
 
-const TradeTabs: React.FC<TradeTabsProps> = ({ selectedTab, setSelectedTab, onInstantTradeClick }) => {
+const TradeTabs: React.FC<TradeTabsProps> = ({ selectedTab, setSelectedTab, onInstantTradeClick, isInstantTradeOpen = false }) => {
   return (
     <div className="flex gap-4 pt-2 text-xs border-b border-emerald-950 items-center">
       {tabs.map(tab => (
@@ -29,11 +30,11 @@ const TradeTabs: React.FC<TradeTabsProps> = ({ selectedTab, setSelectedTab, onIn
       ))}
       {onInstantTradeClick && (
         <button
-          className="px-3 py-1 font-semibold text-neutral-400 hover:text-white flex items-center gap-2 transition-colors"
+          className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full border border-[#70E0B0] bg-[#101114] text-[#70E0B0]"
           onClick={onInstantTradeClick}
         >
-          <FaBolt className="w-3 h-3" />
-          Instant Trade
+          <FaBolt className={`w-3 h-3 ${isInstantTradeOpen ? 'text-[#70E0B0]' : 'text-[#70E0B0]'}`} />
+          <span>Instant Trade</span>
         </button>
       )}
     </div>

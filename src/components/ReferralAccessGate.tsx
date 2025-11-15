@@ -153,6 +153,16 @@ export function ReferralAccessGate({
   const [metamaskLoading, setMetamaskLoading] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [showQuests, setShowQuests] = useState(false);
+  const [showWaitlist, setShowWaitlist] = useState(false);
+  const [waitlistForm, setWaitlistForm] = useState({
+    email: "",
+    name: "",
+    walletAddress: "",
+    referralSource: "",
+    additionalNotes: "",
+    walletType: "" as "metamask" | "phantom" | "",
+  });
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [questProgress, setQuestProgress] = useState({
     xp: 0,
     rank: "Unranked",
@@ -378,9 +388,17 @@ export function ReferralAccessGate({
         Cookies.set("token", token, { expires: 7, path: "/" });
         await refreshUser();
         setInfo("Phantom login successful!");
-        // Show quest system after successful wallet login
+        // Show waitlist modal after successful wallet login
         setShowWalletOptions(false);
-        setShowQuests(true);
+        // Pre-fill wallet address in waitlist form
+        if (phantomWallet.publicKey) {
+          setWaitlistForm(prev => ({
+            ...prev,
+            walletAddress: phantomWallet.publicKey,
+            walletType: "phantom",
+          }));
+        }
+        setShowWaitlist(true);
       } else {
         setError("Phantom login failed - no token received");
       }
@@ -447,9 +465,17 @@ export function ReferralAccessGate({
         Cookies.set("token", token, { expires: 7, path: "/" });
         await refreshUser();
         setInfo("MetaMask login successful!");
-        // Show quest system after successful wallet login
+        // Show waitlist modal after successful wallet login
         setShowWalletOptions(false);
-        setShowQuests(true);
+        // Pre-fill wallet address in waitlist form
+        if (metaMaskWallet.address) {
+          setWaitlistForm(prev => ({
+            ...prev,
+            walletAddress: metaMaskWallet.address,
+            walletType: "metamask",
+          }));
+        }
+        setShowWaitlist(true);
       } else {
         setError("MetaMask login failed - no token received");
       }
@@ -487,7 +513,7 @@ export function ReferralAccessGate({
     );
   }
 
-  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests;
+  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist;
 
   return (
     <ReferralAccessContext.Provider value={contextValue}>
@@ -687,6 +713,171 @@ export function ReferralAccessGate({
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Waitlist Modal */}
+      {showWaitlist && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl overflow-y-auto">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-24 left-16 h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" />
+            <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />
+            <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-blue-400/10 blur-3xl" />
+          </div>
+
+          <div className="relative z-[9999] w-full max-w-2xl px-6 md:px-0 py-8">
+            <div className="rounded-3xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(59,130,246,0.12)]">
+              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10">
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.35em] text-blue-400/80">
+                      Join Waitlist
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold text-white md:text-3xl">
+                      Get Early Access
+                    </h2>
+                  </div>
+                  <InterstateButton
+                    variant="icon"
+                    size="sm"
+                    onClick={() => {
+                      setShowWaitlist(false);
+                      grantAccess();
+                    }}
+                    className="text-xl"
+                  >
+                    ×
+                  </InterstateButton>
+                </div>
+
+                <p className="text-sm text-neutral-300/90 md:text-base mb-6">
+                  Help us get to know you better. Fill out the form below to join our waitlist and be among the first to access Narrative.
+                </p>
+
+                <form
+                  className="space-y-6"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setWaitlistSubmitting(true);
+                    
+                    // TODO: Submit waitlist data to backend
+                    // For now, just log the data and grant access
+                    console.log("Waitlist submission:", waitlistForm);
+                    
+                    // Simulate API call
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    setWaitlistSubmitting(false);
+                    setShowWaitlist(false);
+                    grantAccess();
+                  }}
+                >
+                  {/* Email */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      value={waitlistForm.email}
+                      onChange={(e) => setWaitlistForm(prev => ({ ...prev, email: e.target.value }))}
+                      placeholder="your.email@example.com"
+                      required
+                      className="w-full rounded-2xl border border-neutral-700/60 bg-neutral-900/70 px-5 py-4 text-white placeholder:text-neutral-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    />
+                  </div>
+
+                  {/* Name */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={waitlistForm.name}
+                      onChange={(e) => setWaitlistForm(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="John Doe"
+                      className="w-full rounded-2xl border border-neutral-700/60 bg-neutral-900/70 px-5 py-4 text-white placeholder:text-neutral-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    />
+                  </div>
+
+                  {/* Wallet Address (pre-filled, read-only) */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
+                      Wallet Address
+                    </label>
+                    <input
+                      type="text"
+                      value={waitlistForm.walletAddress}
+                      readOnly
+                      className="w-full rounded-2xl border border-neutral-700/60 bg-neutral-800/50 px-5 py-4 text-neutral-400 cursor-not-allowed"
+                    />
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Connected via {waitlistForm.walletType === "metamask" ? "MetaMask" : "Phantom"}
+                    </p>
+                  </div>
+
+                  {/* Referral Source */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
+                      How did you hear about us?
+                    </label>
+                    <select
+                      value={waitlistForm.referralSource}
+                      onChange={(e) => setWaitlistForm(prev => ({ ...prev, referralSource: e.target.value }))}
+                      className="w-full rounded-2xl border border-neutral-700/60 bg-neutral-900/70 px-5 py-4 text-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    >
+                      <option value="">Select an option</option>
+                      <option value="twitter">Twitter / X</option>
+                      <option value="discord">Discord</option>
+                      <option value="friend">Friend Referral</option>
+                      <option value="reddit">Reddit</option>
+                      <option value="youtube">YouTube</option>
+                      <option value="google">Google Search</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* Additional Notes */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
+                      Additional Notes (Optional)
+                    </label>
+                    <textarea
+                      value={waitlistForm.additionalNotes}
+                      onChange={(e) => setWaitlistForm(prev => ({ ...prev, additionalNotes: e.target.value }))}
+                      placeholder="Tell us about yourself, your trading experience, or what you're most excited about..."
+                      rows={4}
+                      className="w-full rounded-2xl border border-neutral-700/60 bg-neutral-900/70 px-5 py-4 text-white placeholder:text-neutral-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 resize-none"
+                    />
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="flex gap-3 pt-4">
+                    <InterstateButton
+                      type="button"
+                      fullWidth
+                      onClick={() => {
+                        setShowWaitlist(false);
+                        grantAccess();
+                      }}
+                      className="h-12 text-base uppercase tracking-[0.4em] bg-neutral-800 text-white hover:bg-neutral-700"
+                    >
+                      Skip for Now
+                    </InterstateButton>
+                    <InterstateButton
+                      type="submit"
+                      fullWidth
+                      loading={waitlistSubmitting}
+                      className="h-12 text-base uppercase tracking-[0.4em] bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                      Submit & Continue
+                    </InterstateButton>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
