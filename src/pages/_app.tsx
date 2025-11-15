@@ -9,6 +9,7 @@ import { queryClient } from '../lib/queryClient';
 import { UserProvider, useUser } from "../components/UserContext";
 import { Toaster } from 'react-hot-toast';
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/router';
 import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
 import LoginModal from '../components/LoginModal';
@@ -22,6 +23,7 @@ import { ReferralAccessGate } from '../components/ReferralAccessGate';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
+import { storeReferralCodeHint } from '~/utils/referralStorage';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -132,6 +134,27 @@ function TokenHandler() {
   return null;
 }
 
+function ReferralTracker() {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    const [, searchPart] = router.asPath.split('?');
+    if (!searchPart) return;
+    const params = new URLSearchParams(searchPart);
+    const candidateKeys = ['referrer', 'ref', 'referral', 'code', 'referralCode'];
+    for (const key of candidateKeys) {
+      const value = params.get(key);
+      if (value && typeof value === 'string' && value.trim().length > 0) {
+        storeReferralCodeHint(value);
+        break;
+      }
+    }
+  }, [router.isReady, router.asPath]);
+
+  return null;
+}
+
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
   const [loginOpen, setLoginOpen] = useState(false);
@@ -236,6 +259,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
               <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
                 <UserProvider>
                   <TokenHandler />
+                  <ReferralTracker />
                   <SolPriceProvider>
                     <QuickBuyProvider>
                       <WatchlistProvider>

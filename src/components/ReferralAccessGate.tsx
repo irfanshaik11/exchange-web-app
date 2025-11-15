@@ -15,6 +15,9 @@ import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import { useMetaMaskWallet } from "../hooks/useMetaMaskWallet";
 import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin } from "../utils/api";
 import Cookies from "js-cookie";
+import { storeReferralCodeHint } from "~/utils/referralStorage";
+import { WALLET_TRACKER_API_URL } from "~/utils/walletTracking";
+import { recordReferralUsage } from "~/utils/referrals";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -262,6 +265,7 @@ export function ReferralAccessGate({
 
     const prefill = derivePrefillQuery(router);
     if (prefill) {
+      storeReferralCodeHint(prefill);
       setCodeInput(prefill);
       setAutoSubmitCode(prefill);
       prefillAttemptedRef.current = true;
@@ -272,7 +276,7 @@ export function ReferralAccessGate({
   }, [router.isReady, router.asPath, requireReferralAccess, router]);
 
   const handleSubmit = useCallback(
-    (incomingCode?: string) => {
+    async (incomingCode?: string) => {
       if (!requireReferralAccess) return;
 
       const raw = incomingCode ?? codeInput;
@@ -286,15 +290,72 @@ export function ReferralAccessGate({
       setError(null);
       setInfo(null);
 
+      // Handle admin override code
       if (normalized === ADMIN_OVERRIDE_CODE) {
+        storeReferralCodeHint(normalized);
         grantAccess();
         return;
       }
 
-      setStatus("prompt");
-      setError("That code is not recognized. Please double-check with your inviter.");
+      try {
+        // Validate referral code against backend API
+        const response = await fetch(
+          `${WALLET_TRACKER_API_URL}/api/referrals/code?referralCode=${encodeURIComponent(normalized)}`
+        );
+
+        if (response.status === 404) {
+          setStatus("prompt");
+          setError("That code is not recognized. Please double-check with your inviter.");
+          return;
+        }
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => null);
+          const errorMessage =
+            errorData?.error || errorData?.message || "Failed to validate referral code.";
+          setStatus("prompt");
+          setError(errorMessage);
+          return;
+        }
+
+        const data = await response.json();
+        if (!data?.ok || !data?.data?.referralCode) {
+          setStatus("prompt");
+          setError("Invalid referral code. Please try again.");
+          return;
+        }
+
+        // Store the referral code hint for later use
+        storeReferralCodeHint(normalized);
+
+        // If user is signed in, record the referral usage immediately
+        if (user?.id) {
+          try {
+            await recordReferralUsage(user.id, normalized);
+            setInfo("Referral code recorded successfully!");
+          } catch (recordError: any) {
+            // If it's already recorded, that's fine - continue
+            if (recordError?.message?.includes("already")) {
+              setInfo("Referral code already recorded.");
+            } else {
+              console.warn("Failed to record referral usage:", recordError);
+              // Continue anyway - we'll record it later if needed
+            }
+          }
+        }
+
+        // Grant access with the validated referral code
+        grantAccess();
+      } catch (error: any) {
+        console.error("Error validating referral code:", error);
+        setStatus("prompt");
+        setError(
+          error?.message ||
+            "Failed to validate referral code. Please check your connection and try again."
+        );
+      }
     },
-    [requireReferralAccess, codeInput, grantAccess],
+    [requireReferralAccess, codeInput, grantAccess, user],
   );
 
   useEffect(() => {
@@ -312,13 +373,7 @@ export function ReferralAccessGate({
     if (!searchPart) return;
 
     const params = new URLSearchParams(searchPart);
-    const keysToDelete = [
-      "ref",
-      "referral",
-      "referrer",
-      "code",
-      "referralCode",
-    ];
+    const keysToDelete = ["ref", "referral", "code", "referralCode"];
 
     let mutated = false;
     keysToDelete.forEach((key) => {
