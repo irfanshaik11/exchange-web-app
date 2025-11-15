@@ -429,10 +429,9 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
           : '$0';
           
         // Show transaction hash and amount spent
-        const pendingSuffix = isPending ? ' • Pending confirmation…' : '';
         const description = side === 'buy'
-          ? `Spent: ${formatSol(amount)} SOL • Tx: ${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 8)}${pendingSuffix}`
-          : `Tx: ${txHash.slice(0, 8)}...${txHash.substring(txHash.length - 8)}${pendingSuffix}`;
+          ? `Spent: ${formatSol(amount)} SOL • Tx: ${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 8)}`
+          : `Tx: ${txHash.slice(0, 8)}...${txHash.substring(txHash.length - 8)}`;
         
         updateEnhancedToast(toastId, 'success', '', {
           title,
