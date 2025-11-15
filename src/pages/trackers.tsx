@@ -1270,7 +1270,7 @@ export default function TrackersPage() {
                           <>
                             <div className="flex items-center border-b border-neutral-800/60 p-2">
                               <div className="flex w-full items-center gap-4 text-xs font-medium text-neutral-400">
-                                <span className="w-28">Created</span>
+                                <span className="w-28 flex justify-center">Created</span>
                                 <span className="min-w-0 flex-1">Name</span>
                                 <span className="w-36">Balance</span>
                                 <span className="w-28">Last Active</span>
