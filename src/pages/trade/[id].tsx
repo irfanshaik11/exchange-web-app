@@ -10,6 +10,7 @@ import CustomSolanaChart from "../../components/CustomSolanaChart";
 
 import TradeActionPanel from "../../components/trade/TradeActionPanel";
 import TradeTabs from "../../components/trade/TradeTabs";
+import InstantTradeModal from "../../components/trade/InstantTradeModal";
 import useSingleTokenPolling from "../../hooks/useSingleTokenPolling";
 import useInitialTradeData from "../../hooks/useInitialTradeData";
 import useBackgroundOHLCPreload from "../../hooks/useBackgroundOHLCPreload";
@@ -98,6 +99,7 @@ export default function TradePage() {
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
+  const [isInstantTradeOpen, setIsInstantTradeOpen] = useState(false);
 
   const modalDragRef = useRef<HTMLDivElement | null>(null);
   const dragStartY = useRef(0);
@@ -672,7 +674,11 @@ export default function TradePage() {
 
             {/* BOTTOM pane (tabs + tables) */}
             <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col overflow-y-auto">
-              <TradeTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
+              <TradeTabs 
+                selectedTab={selectedTab} 
+                setSelectedTab={setSelectedTab} 
+                onInstantTradeClick={() => setIsInstantTradeOpen(true)}
+              />
               <div className="flex-1 min-h-0 overflow-y-auto">
                 <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
                   <CodexTrades 
@@ -836,6 +842,13 @@ export default function TradePage() {
         @keyframes slideDown { from { transform: translateY(0); } to { transform: translateY(100%); } }
         body.modal-open { overflow: hidden; }
       `}</style>
+
+      {/* Instant Trade Modal */}
+      <InstantTradeModal
+        isOpen={isInstantTradeOpen}
+        onClose={() => setIsInstantTradeOpen(false)}
+        token={correctTokenData || displayToken}
+      />
     </>
   );
 }
