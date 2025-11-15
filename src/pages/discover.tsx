@@ -276,7 +276,8 @@ export default function DiscoverPage() {
   } = usePaginatedTokensWithFallback({
     // Always use trending endpoint
     filter: 'trending',
-    timeframe: selectedTimeframe
+    timeframe: selectedTimeframe,
+    limit: 200 // Fetch 200 tokens for trending tab
   });
 
   // PumpPortal WebSocket for live pump section
@@ -1272,12 +1273,12 @@ export default function DiscoverPage() {
         {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-8 max-w-[98%]">
           <div className="flex max-w-7xl items-center gap-6">
-            {/* <button
+             <button
               className={`text-lg font-light transition-colors ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
-            </button> */}
+            </button>
             <button
               className={`text-lg font-light transition-colors ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("newPairs")}
