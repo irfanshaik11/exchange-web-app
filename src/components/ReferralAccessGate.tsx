@@ -408,7 +408,7 @@ export function ReferralAccessGate({
                     type="submit"
                     fullWidth
                     loading={status === "validating"}
-                    className="h-14 text-base uppercase tracking-[0.4em]"
+                    className="h-14 text-base uppercase tracking-[0.4em] bg-black text-white hover:bg-neutral-900"
                   >
                     Unlock Access
                   </InterstateButton>
@@ -417,9 +417,20 @@ export function ReferralAccessGate({
                 <div className="mt-8 space-y-4 text-xs text-neutral-500 md:text-sm">
                   <p>
                     Lost your code? Reach out to the team on Discord to request
-                    a new invitation. Referral access ties directly to your
-                    account activity.
+                    a new invitation.
                   </p>
+                  <p>
+                    No Code? Click here for access
+                  </p>
+                  <InterstateButton
+                    type="submit"
+                    fullWidth
+                    loading={status === "validating"}
+                    className="h-14 text-base uppercase tracking-[0.4em] bg-black text-white hover:bg-neutral-900"
+                  >
+                    Join Waitlist
+                  </InterstateButton>
+
                 </div>
               </div>
             </div>
@@ -429,4 +440,3 @@ export function ReferralAccessGate({
     </ReferralAccessContext.Provider>
   );
 }
-
