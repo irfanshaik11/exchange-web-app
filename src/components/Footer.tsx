@@ -160,7 +160,7 @@ export default function Footer() {
               >
                 <FaWallet size={9} className="sm:w-3 sm:h-3" />
                 <SolanaIcon size={12} />
-                <span className="text-[11px] sm:text-xs font-medium leading-none">{Number.isFinite(solBalance) ? solBalance.toFixed(2) : '0.00'}</span>
+                <span className="text-[11px] sm:text-xs font-medium leading-none">{Number.isFinite(solBalance) ? solBalance.toFixed(4) : '0.0000'}</span>
               </button>
           </div>
         </div>
