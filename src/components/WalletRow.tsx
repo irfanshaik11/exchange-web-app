@@ -267,7 +267,7 @@ export default function WalletRow({
         return `${mins} min`;
       } else {
         const hours = Math.floor(diff / hour);
-        return `${hours} hour${hours > 1 ? 's' : ''}`;
+        return `${hours}h`;
       }
     } else {
       const date = new Date(timestamp);
@@ -303,7 +303,7 @@ export default function WalletRow({
     }
     if (diff < day) {
       const hours = Math.floor(diff / hour);
-      return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+      return `${hours}h ago`;
     }
     if (diff < week) {
       const days = Math.floor(diff / day);
@@ -328,7 +328,19 @@ export default function WalletRow({
     >
       <td className="py-3 px-2">
         <div className="flex w-full items-center gap-4">
-          <span className="w-28 text-xs text-neutral-400">{formatCreated(wallet.createdAt)}</span>
+          <button
+            type="button"
+            className="w-28 flex justify-center text-xs text-neutral-400 hover:text-white transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (wallet.address) {
+                window.open(`https://solscan.io/account/${wallet.address}`, "_blank");
+              }
+            }}
+            title="View wallet on Solscan"
+          >
+            {formatCreated(wallet.createdAt)}
+          </button>
           <div className="flex flex-1 min-w-0 items-start gap-2">
             <span className="text-lg">{wallet.emoji || '💼'}</span>
             <div className="flex flex-col min-w-0">
