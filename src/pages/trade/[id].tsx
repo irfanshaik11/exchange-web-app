@@ -678,6 +678,7 @@ export default function TradePage() {
                 selectedTab={selectedTab} 
                 setSelectedTab={setSelectedTab} 
                 onInstantTradeClick={() => setIsInstantTradeOpen(true)}
+                isInstantTradeOpen={isInstantTradeOpen}
               />
               <div className="flex-1 min-h-0 overflow-y-auto">
                 <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
