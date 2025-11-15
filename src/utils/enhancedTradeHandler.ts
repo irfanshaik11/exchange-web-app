@@ -400,115 +400,6 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     const isPending = resultAny?.pending === true; // Backend returned immediately, metadata still processing
 
     if (result && txHash && (!errorMessage || errorMessage === 'none')) {
-      // If transaction is pending, wait for confirmation and check if it succeeded
-      if (isPending && txHash) {
-        // Update toast to show we're waiting for confirmation
-        if (toastId) {
-          updateEnhancedToast(toastId, 'loading', 'Waiting for transaction confirmation...', {
-            title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
-            description: 'Checking transaction status...',
-          });
-        }
-
-        // Wait for confirmation and check transaction status
-        try {
-          // Get RPC endpoint from environment or use default
-          const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
-          const connection = new Connection(rpcUrl, 'confirmed');
-
-          // Wait for confirmation (max 30 seconds)
-          const confirmationStatus = await Promise.race([
-            connection.confirmTransaction(txHash, 'confirmed'),
-            new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('Transaction confirmation timeout')), 30000);
-            }),
-          ]) as any;
-
-          // Check transaction status
-          const txStatus = await connection.getTransaction(txHash, {
-            commitment: 'confirmed',
-            maxSupportedTransactionVersion: 0,
-          });
-
-          // If transaction has an error, show error toast
-          if (txStatus?.meta?.err) {
-            const txError = txStatus.meta.err;
-            const errorStr = typeof txError === 'object' ? JSON.stringify(txError) : String(txError);
-            
-            console.error('[EnhancedTrade] Transaction confirmed but failed:', errorStr);
-
-            let enhancedError: EnhancedError;
-            if (errorStr.includes('6023') || errorStr.includes('Not enough tokens to sell') || errorStr.includes('not enough tokens')) {
-              enhancedError = {
-                title: 'Insufficient Token Balance',
-                description: 'You don\'t have enough tokens to sell',
-                suggestions: [
-                  'Check your token balance',
-                  'You may need to buy tokens before selling',
-                  'Try selling a smaller percentage',
-                ],
-                canRetry: false,
-                actions: [],
-              };
-            } else if (errorStr.includes('NotAuthorized') || errorStr.includes('6000')) {
-              enhancedError = {
-                title: 'Transaction Authorization Failed',
-                description: 'The transaction was not authorized. This may be a temporary issue.',
-                suggestions: [
-                  'Try again in a few seconds',
-                  'Check if you have sufficient balance',
-                  'Verify your wallet connection',
-                ],
-                canRetry: true,
-              };
-            } else {
-              // Generic on-chain error
-              enhancedError = enhanceError(new ApiError(`Transaction failed: ${errorStr}`, 'TX_FAILED'), {
-                token,
-                amount,
-                slippage: (settings.maxSlippage || 0.4) * 100,
-                priorityFee: settings.priority || 0.0001,
-                poolType: getPoolTypeFromToken(token),
-                mevMode: settings.mevMode,
-                rpcUrl: settings.rpc,
-              });
-            }
-
-            // Stop progress tracker
-            if (progressTracker) progressTracker.fail();
-
-            // Show error toast
-            if (toastId) {
-              updateEnhancedToast(toastId, 'error', enhancedError.description, {
-                title: enhancedError.title,
-                suggestions: enhancedError.suggestions,
-                actions: enhancedError.canRetry ? [{ 
-                  label: 'Retry', 
-                  onClick: () => {
-                    dismissToast(toastId);
-                    // Re-execute trade with same parameters
-                    executeEnhancedTrade(params);
-                  }
-                }] : [],
-                showExplorerLink: true,
-                txHash,
-                duration: 6000,
-              });
-            }
-
-            if (onError) onError(enhancedError);
-            
-            return { success: false, error: enhancedError };
-          }
-
-          // Transaction succeeded - continue with success flow
-        } catch (confirmationError: any) {
-          // Confirmation check failed or timed out - still show success but with warning
-          console.warn('[EnhancedTrade] Could not confirm transaction status:', confirmationError);
-          // Continue with success flow (transaction was sent, backend will process)
-        }
-      }
-
       const networkFee = 0.00001; // Reduced from 0.001
       const stats: TradeStats = {
         txHash,
@@ -538,9 +429,10 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
           : '$0';
           
         // Show transaction hash and amount spent
+        const pendingSuffix = isPending ? ' • Pending confirmation…' : '';
         const description = side === 'buy'
-          ? `Spent: ${formatSol(amount)} SOL • Tx: ${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 8)}`
-          : `Tx: ${txHash.slice(0, 8)}...${txHash.substring(txHash.length - 8)}`;
+          ? `Spent: ${formatSol(amount)} SOL • Tx: ${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 8)}${pendingSuffix}`
+          : `Tx: ${txHash.slice(0, 8)}...${txHash.substring(txHash.length - 8)}${pendingSuffix}`;
         
         updateEnhancedToast(toastId, 'success', '', {
           title,
@@ -552,6 +444,19 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       }
 
       if (onSuccess) onSuccess(txHash, stats);
+      
+      if (isPending && txHash) {
+        void monitorPendingConfirmation({
+          txHash,
+          token,
+          amount,
+          side,
+          settings,
+          toastId,
+          params,
+          onError,
+        });
+      }
       
       return { success: true, txHash, stats };
     } else {
@@ -608,6 +513,121 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     return { success: false, error: enhancedError };
   } finally {
     if (progressTracker) progressTracker.clear();
+  }
+}
+
+async function monitorPendingConfirmation({
+  txHash,
+  token,
+  amount,
+  side,
+  settings,
+  toastId,
+  params,
+  onError,
+}: {
+  txHash: string;
+  token: Token;
+  amount: number;
+  side: 'buy' | 'sell';
+  settings: QuickBuySettings;
+  toastId: string | null;
+  params: EnhancedTradeParams;
+  onError?: (error: EnhancedError) => void;
+}) {
+  try {
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(rpcUrl, 'confirmed');
+
+    await Promise.race([
+      connection.confirmTransaction(txHash, 'confirmed'),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 30000);
+      }),
+    ]);
+
+    const txStatus = await connection.getTransaction(txHash, {
+      commitment: 'confirmed',
+      maxSupportedTransactionVersion: 0,
+    });
+
+    if (txStatus?.meta?.err) {
+      const txError = txStatus.meta.err;
+      const errorStr = typeof txError === 'object' ? JSON.stringify(txError) : String(txError);
+
+      console.error('[EnhancedTrade] Transaction confirmed but failed:', errorStr);
+
+      let enhancedError: EnhancedError;
+      if (errorStr.includes('6023') || errorStr.includes('Not enough tokens to sell') || errorStr.includes('not enough tokens')) {
+        enhancedError = {
+          title: 'Insufficient Token Balance',
+          description: 'You don\'t have enough tokens to sell',
+          suggestions: [
+            'Check your token balance',
+            'You may need to buy tokens before selling',
+            'Try selling a smaller percentage',
+          ],
+          canRetry: false,
+          actions: [],
+        };
+      } else if (errorStr.includes('NotAuthorized') || errorStr.includes('6000')) {
+        enhancedError = {
+          title: 'Transaction Authorization Failed',
+          description: 'The transaction was not authorized. This may be a temporary issue.',
+          suggestions: [
+            'Try again in a few seconds',
+            'Check if you have sufficient balance',
+            'Verify your wallet connection',
+          ],
+          canRetry: true,
+        };
+      } else {
+        enhancedError = enhanceError(new ApiError(`Transaction failed: ${errorStr}`, 'TX_FAILED'), {
+          token,
+          amount,
+          slippage: (settings.maxSlippage || 0.4) * 100,
+          priorityFee: settings.priority || 0.0001,
+          poolType: getPoolTypeFromToken(token),
+          mevMode: settings.mevMode,
+          rpcUrl: settings.rpc,
+        });
+      }
+
+      if (toastId) {
+        updateEnhancedToast(toastId, 'error', enhancedError.description, {
+          title: enhancedError.title,
+          suggestions: enhancedError.suggestions,
+          actions: enhancedError.canRetry ? [{
+            label: 'Retry',
+            onClick: () => {
+              if (toastId) {
+                dismissToast(toastId);
+              }
+              executeEnhancedTrade(params);
+            }
+          }] : [],
+          showExplorerLink: true,
+          txHash,
+          duration: 6000,
+        });
+      }
+
+      if (onError) onError(enhancedError);
+      return;
+    }
+
+    if (toastId) {
+      updateEnhancedToast(toastId, 'success', '', {
+        title: `${side === 'buy' ? 'Bought' : 'Sold'} ${token.symbol}!`,
+        description: `Confirmed: Tx ${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 8)}`,
+        showExplorerLink: true,
+        txHash,
+        duration: 6000,
+      });
+    }
+  } catch (confirmationError) {
+    console.warn('[EnhancedTrade] Could not confirm transaction status:', confirmationError);
+    // Leave existing toast message as-is; backend background job will update history when ready.
   }
 }
 
