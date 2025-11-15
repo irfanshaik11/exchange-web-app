@@ -1043,20 +1043,124 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     }
   }, [token.mint || '']);
 
-  // amount presets - different for buy vs sell
-  const buyPresets = [0.01, 0.1, 0.5, 1];
-  const sellPresets = [10, 25, 50, 100];
+  // amount presets - different for buy vs sell (load from localStorage or use defaults)
+  const [buyPresets, setBuyPresets] = useState<number[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tradeActionPanelBuyPresets');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length === 4) {
+            return parsed;
+          }
+        } catch (e) {
+          // Use defaults
+        }
+      }
+    }
+    return [0.01, 0.1, 0.5, 1];
+  });
+
+  const [sellPresets, setSellPresets] = useState<number[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tradeActionPanelSellPresets');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length === 4) {
+            return parsed;
+          }
+        } catch (e) {
+          // Use defaults
+        }
+      }
+    }
+    return [10, 25, 50, 100];
+  });
+
   const [amountPresets, setAmountPresets] = useState<number[]>(buyPresets);
   const [editingPresets, setEditingPresets] = useState(false);
   const [presetDrafts, setPresetDrafts] = useState<string[]>(buyPresets.map(String));
+
+  // Listen for preset updates from other components (like InstantTradeModal)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handlePresetUpdate = (e: CustomEvent) => {
+      if (e.detail?.type === 'buy' && Array.isArray(e.detail.presets)) {
+        setBuyPresets(e.detail.presets);
+        // Always update current presets if we're in buy mode
+        if (mode === 'buy') {
+          setAmountPresets(e.detail.presets);
+          setPresetDrafts(e.detail.presets.map(String));
+        }
+      } else if (e.detail?.type === 'sell' && Array.isArray(e.detail.presets)) {
+        setSellPresets(e.detail.presets);
+        // Always update current presets if we're in sell mode
+        if (mode === 'sell') {
+          setAmountPresets(e.detail.presets);
+          setPresetDrafts(e.detail.presets.map(String));
+        }
+      }
+    };
+
+    window.addEventListener('tradePresetsUpdated', handlePresetUpdate as EventListener);
+    
+    // Also listen for storage events as a fallback (in case event doesn't fire)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'tradeActionPanelBuyPresets' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length === 4) {
+            setBuyPresets(parsed);
+            if (mode === 'buy') {
+              setAmountPresets(parsed);
+              setPresetDrafts(parsed.map(String));
+            }
+          }
+        } catch (err) {
+          // Ignore parse errors
+        }
+      } else if (e.key === 'tradeActionPanelSellPresets' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length === 4) {
+            setSellPresets(parsed);
+            if (mode === 'sell') {
+              setAmountPresets(parsed);
+              setPresetDrafts(parsed.map(String));
+            }
+          }
+        } catch (err) {
+          // Ignore parse errors
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('tradePresetsUpdated', handlePresetUpdate as EventListener);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [mode]);
   
-  // Update presets when mode changes and clear amount
+  // Update presets when mode changes OR when buyPresets/sellPresets change (from InstantTradeModal)
   useEffect(() => {
     const newPresets = mode === "sell" ? sellPresets : buyPresets;
     setAmountPresets(newPresets);
     setPresetDrafts(newPresets.map(String));
-    // Clear amount when switching modes to avoid confusion
-    setAmount("");
+    // Only clear amount when switching modes, not when presets update
+    // setAmount(""); // Commented out to preserve user input when presets change
+  }, [mode, buyPresets, sellPresets]);
+  
+  // Clear amount only when mode changes (not when presets update)
+  const prevModeRef = useRef<"buy" | "sell">(mode);
+  useEffect(() => {
+    if (prevModeRef.current !== mode) {
+      setAmount("");
+      prevModeRef.current = mode;
+    }
   }, [mode]);
   
   useEffect(() => setPresetDrafts(amountPresets.map(String)), [amountPresets]);
@@ -1074,6 +1178,27 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
     setEditingPresets(false);
     // Force re-render by updating the drafts
     setPresetDrafts(next.map(String));
+    
+    // Update the appropriate preset array and save to localStorage
+    if (mode === "buy") {
+      setBuyPresets(next);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('tradeActionPanelBuyPresets', JSON.stringify(next));
+        // Dispatch event to notify other components
+        window.dispatchEvent(new CustomEvent('tradePresetsUpdated', {
+          detail: { type: 'buy', presets: next }
+        }));
+      }
+    } else {
+      setSellPresets(next);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('tradeActionPanelSellPresets', JSON.stringify(next));
+        // Dispatch event to notify other components
+        window.dispatchEvent(new CustomEvent('tradePresetsUpdated', {
+          detail: { type: 'sell', presets: next }
+        }));
+      }
+    }
   };
 
   const monitorLimitOrderExecution = useCallback(

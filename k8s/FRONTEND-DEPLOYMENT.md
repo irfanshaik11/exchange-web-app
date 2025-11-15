@@ -429,9 +429,9 @@ env:
   - name: NODE_ENV
     value: "production"
   - name: NEXT_PUBLIC_BACKEND_URL
-    value: "https://api.narrative.trade"
+    value: "https://backend.narrative.trade"
   - name: NEXT_PUBLIC_WEBSOCKET_URL
-    value: "https://ws.narrative.trade"
+    value: "https://token-service.narrative.trade"
 ```
 
 ## Performance Optimization
