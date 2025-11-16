@@ -69,6 +69,7 @@ export default function Header({
   const { user, loading: userLoading, solBalance } = useUser();
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [depositInitialTab, setDepositInitialTab] = useState<'convert' | 'deposit' | 'buy'>('deposit');
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
@@ -333,12 +334,23 @@ export default function Header({
   }, [showSearch, searchModalOpen]);
 
   // Handles opening the deposit modal
-  const handleDepositClick = () => {
+  const handleDepositClick = (tab: 'convert' | 'deposit' | 'buy' = 'deposit') => {
     const token = Cookies.get("token");
     if (token && !user && !userLoading) {
       // Optionally, refresh user here if needed
     }
+    setDepositInitialTab(tab);
     setDepositOpen(true);
+  };
+
+  // Handles opening the convert tab
+  const handleConvertClick = () => {
+    handleDepositClick('convert');
+  };
+
+  // Handles opening the buy tab
+  const handleBuyClick = () => {
+    handleDepositClick('buy');
   };
 
   // Handles opening the withdraw modal
@@ -865,47 +877,100 @@ export default function Header({
                         </div>
                       </div>
 
-                      {/* Deposit/Withdraw Buttons */}
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            setWalletDropdownOpen(false);
-                            handleDepositClick();
-                          }}
-                          className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
-                          style={{
-                            backgroundColor: AX.mint,
-                            color: "#000000",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = AX.mintHover;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = AX.mint;
-                          }}
-                        >
-                          Deposit
-                        </button>
-                        <button
-                          onClick={() => {
-                            setWalletDropdownOpen(false);
-                            handleWithdrawClick();
-                          }}
-                          className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
-                          style={{
-                            backgroundColor: "#0f1012",
-                            color: "#ffffff",
-                            border: "1px solid #2A2B33",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = "#1A1B1F";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = "#0f1012";
-                          }}
-                        >
-                          Withdraw
-                        </button>
+                      {/* Action Buttons */}
+                      <div className="space-y-2">
+                        {/* Deposit/Withdraw Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setWalletDropdownOpen(false);
+                              handleDepositClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+                            style={{
+                              backgroundColor: AX.mint,
+                              color: "#000000",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = AX.mintHover;
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = AX.mint;
+                            }}
+                          >
+                            Deposit
+                          </button>
+                          <button
+                            onClick={() => {
+                              setWalletDropdownOpen(false);
+                              handleWithdrawClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+                            style={{
+                              backgroundColor: "#0f1012",
+                              color: "#ffffff",
+                              border: "1px solid #2A2B33",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1A1B1F";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#0f1012";
+                            }}
+                          >
+                            Withdraw
+                          </button>
+                        </div>
+
+                        {/* Convert/Buy Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setWalletDropdownOpen(false);
+                              handleConvertClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5"
+                            style={{
+                              backgroundColor: "#0f1012",
+                              color: "#ffffff",
+                              border: "1px solid #2A2B33",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1A1B1F";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#0f1012";
+                            }}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            Convert
+                          </button>
+                          <button
+                            onClick={() => {
+                              setWalletDropdownOpen(false);
+                              handleBuyClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5"
+                            style={{
+                              backgroundColor: "#0f1012",
+                              color: "#ffffff",
+                              border: "1px solid #2A2B33",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1A1B1F";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#0f1012";
+                            }}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            Buy
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -916,7 +981,7 @@ export default function Header({
             {/* Deposit Button - visible when user is logged in */}
             {user && (
               <button
-                onClick={handleDepositClick}
+                onClick={() => handleDepositClick()}
                 className="hidden md:flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out flex-shrink-0"
                 style={{
                   backgroundColor: AX.mint,
@@ -1259,7 +1324,7 @@ export default function Header({
           </div>
         </div>
       </header>
-      <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
+      <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} initialTab={depositInitialTab} />
       <WithdrawModal
         isOpen={withdrawOpen}
         onClose={() => setWithdrawOpen(false)}
