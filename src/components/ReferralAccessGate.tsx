@@ -172,6 +172,7 @@ export function ReferralAccessGate({
   const [postReplied, setPostReplied] = useState(false);
   const [discordJoined, setDiscordJoined] = useState(false);
   const [showCongratsModal, setShowCongratsModal] = useState(false);
+  const [waitlistNumber, setWaitlistNumber] = useState<number | null>(null);
 
   // Calculate quest progress
   const questProgressData = useMemo(() => {
@@ -463,8 +464,33 @@ export function ReferralAccessGate({
     }
   }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth]);
 
+  // Retrieve waitlist number from URL query parameter or sessionStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (router.isReady) {
+        const numberFromQuery = router.query.number;
+        if (numberFromQuery && typeof numberFromQuery === "string") {
+          const number = parseInt(numberFromQuery, 10);
+          if (!isNaN(number)) {
+            setWaitlistNumber(number);
+            sessionStorage.setItem("waitlistNumber", number.toString());
+            return;
+          }
+        }
+      }
+      
+      // Fallback to sessionStorage
+      const stored = sessionStorage.getItem("waitlistNumber");
+      if (stored) {
+        setWaitlistNumber(parseInt(stored, 10));
+      }
+    }
+  }, [router.isReady, router.query.number]);
+
   // Handle Twitter linking
   const handleLinkTwitter = useCallback(() => {
+    // Mark as completed immediately when button is clicked
+    setTwitterLinked(true);
     const currentPath = router.asPath.split('?')[0];
     const returnUrl = `${currentPath}?twitter_success=true`;
     window.open(`/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`, '_blank');
@@ -789,7 +815,6 @@ export function ReferralAccessGate({
                     Get Early Access
                   </h2>
                 </div>
-
                 
                 <p className="text-xs text-neutral-300/90 mb-3">
                   Help us get to know you better. Fill out the form below to join our waitlist and be among the first to access Narrative.
@@ -800,6 +825,15 @@ export function ReferralAccessGate({
                   onSubmit={async (e) => {
                     e.preventDefault();
                     setWaitlistSubmitting(true);
+                    
+                    // Generate a random waitlist number if not already set
+                    if (!waitlistNumber) {
+                      const randomNumber = Math.floor(Math.random() * 10000) + 1;
+                      setWaitlistNumber(randomNumber);
+                      if (typeof window !== "undefined") {
+                        sessionStorage.setItem("waitlistNumber", randomNumber.toString());
+                      }
+                    }
                     
                     // TODO: Submit waitlist data to backend
                     // For now, just log the data and grant access
@@ -818,14 +852,18 @@ export function ReferralAccessGate({
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
                       Link Your Twitter
                     </label>
-                    {twitterLinked && twitterUsername ? (
+                    {twitterLinked ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                           </svg>
                           <div>
-                            <p className="text-white font-medium">@{twitterUsername}</p>
+                            {twitterUsername ? (
+                              <p className="text-white font-medium">@{twitterUsername}</p>
+                            ) : (
+                              <p className="text-white font-medium">Twitter Linked</p>
+                            )}
                             <p className="text-xs text-blue-300/80">Twitter account linked</p>
                           </div>
                         </div>
@@ -1075,15 +1113,26 @@ export function ReferralAccessGate({
                   <InterstateButton
                     type="button"
                     onClick={() => {
+                      // Generate a random waitlist number if not already set
+                      if (!waitlistNumber) {
+                        const randomNumber = Math.floor(Math.random() * 10000) + 1;
+                        setWaitlistNumber(randomNumber);
+                        if (typeof window !== "undefined") {
+                          sessionStorage.setItem("waitlistNumber", randomNumber.toString());
+                        }
+                      }
                       setShowCongratsModal(true);
                     }}
                     fullWidth
-                    className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700"
+                    disabled={questProgressData.completedCount < questProgressData.totalQuests}
+                    className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-purple-600"
                   >
                     Complete All Quests
                   </InterstateButton>
                   <p className="mt-2 text-xs text-center text-neutral-400">
-                    Click to join the waitlist and get early access
+                    {questProgressData.completedCount < questProgressData.totalQuests
+                      ? `Complete all quests above to continue (${questProgressData.completedCount}/${questProgressData.totalQuests})`
+                      : "Click to join the waitlist and get early access"}
                   </p>
                 </div>
               </div>
@@ -1092,52 +1141,71 @@ export function ReferralAccessGate({
         </div>
       )}
 
-      {/* Congrats / Waitlist Confirmation Modal (Skeleton) */}
+      {/* Waitlist Confirmation Modal */}
       {showCongratsModal && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl p-4">
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute -top-24 left-16 h-64 w-64 rounded-full bg-emerald-500/20 blur-3xl" />
             <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
             <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-amber-400/10 blur-3xl" />
           </div>
-          <div className="relative z-[10001] w-full max-w-md px-6 md:px-0">
+
+          <div className="relative z-[10001] w-full max-w-md">
             <div className="rounded-2xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(16,185,129,0.12)]">
-              <div className="rounded-[calc(1rem-1px)] bg-neutral-950/95 p-6 md:p-8">
-                <div className="mb-4">
-                  <div className="h-4 w-28 rounded bg-neutral-800 animate-pulse" />
-                </div>
-                <div className="mb-2">
-                  <h2 className="text-xl md:text-2xl font-semibold text-white">
-                    Congrats! You joined the waitlist
-                  </h2>
-                </div>
-                <p className="text-sm text-neutral-300/90 mb-6">
-                  We&apos;ll notify you when access is granted. In the meantime, this section is a placeholder.
-                </p>
-                {/* Skeleton content */}
-                <div className="space-y-3 mb-6">
-                  <div className="h-10 w-full rounded-xl bg-neutral-900 border border-neutral-800 animate-pulse" />
-                  <div className="h-10 w-full rounded-xl bg-neutral-900 border border-neutral-800 animate-pulse" />
-                  <div className="h-10 w-2/3 rounded-xl bg-neutral-900 border border-neutral-800 animate-pulse" />
-                </div>
-                <div className="flex gap-3">
+              <div className="rounded-[calc(1rem-1px)] bg-neutral-950/95 p-8 md:p-10">
+                <div className="text-center">
+                  <div className="mb-6 flex justify-center">
+                    <div className="h-16 w-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                      <svg
+                        className="w-8 h-8 text-emerald-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">
+                    You are on the waitlist!
+                  </h1>
+
+                  {waitlistNumber ? (
+                    <div className="mb-6">
+                      <p className="text-sm text-neutral-400 mb-2">Your waitlist number</p>
+                      <div className="inline-block px-6 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                        <span className="text-3xl md:text-4xl font-bold text-emerald-400">
+                          #{waitlistNumber}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-6">
+                      <div className="inline-block px-6 py-3 rounded-xl bg-neutral-800/50">
+                        <div className="h-8 w-20 bg-neutral-700/50 rounded animate-pulse" />
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-sm text-neutral-300/90 mb-8 max-w-sm mx-auto">
+                    Thank you for completing all quests! We'll notify you when your spot is ready.
+                  </p>
+
                   <InterstateButton
                     type="button"
-                    fullWidth
-                    onClick={() => setShowCongratsModal(false)}
-                    className="h-11 text-sm uppercase tracking-[0.3em] bg-black text-white hover:bg-neutral-900"
-                  >
-                    Close
-                  </InterstateButton>
-                  <InterstateButton
-                    type="button"
-                    fullWidth
                     onClick={() => {
-                      setShowCongratsModal(false);
+                      window.location.href = "https://www.narrative.trade";
                     }}
-                    className="h-11 text-sm uppercase tracking-[0.3em] bg-emerald-600 text-white hover:bg-emerald-700"
+                    fullWidth
+                    className="h-12 text-base uppercase tracking-[0.4em] bg-emerald-600 text-white hover:bg-emerald-700"
                   >
-                    Okay
+                    Return Home
                   </InterstateButton>
                 </div>
               </div>
@@ -1371,3 +1439,4 @@ export function ReferralAccessGate({
     </ReferralAccessContext.Provider>
   );
 }
+
