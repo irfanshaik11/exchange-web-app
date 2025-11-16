@@ -401,6 +401,51 @@ export const updateRpcEndpoint = (
   });
 
 /* -------------------------------------------------------------------------- */
+/*                               Waitlist endpoints                           */
+/* -------------------------------------------------------------------------- */
+
+export const joinWaitlist = (params: {
+  userId?: number;
+  walletId?: string;
+  telegramId?: string;
+}) =>
+  apiFetch<{ waitlist: {
+    id: number;
+    userId?: number | null;
+    walletId?: string | null;
+    waitlistNumber: string; // bigint as string
+    telegramId?: string | null;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+    joinedAt: string;
+    invitedAt?: string | null;
+    activatedAt?: string | null;
+    updatedAt: string;
+  } }>("/api/waitlist/join", {
+    method: "POST",
+    body: params,
+  });
+
+export const getWaitlistStatus = (params: { userId?: number; walletId?: string }) => {
+  const qs = new URLSearchParams();
+  if (params.userId) qs.set('userId', String(params.userId));
+  if (params.walletId) qs.set('walletId', String(params.walletId));
+  return apiFetch<{ waitlist: {
+    id: number;
+    userId?: number | null;
+    walletId?: string | null;
+    waitlistNumber: string;
+    telegramId?: string | null;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+    joinedAt: string;
+    invitedAt?: string | null;
+    activatedAt?: string | null;
+    updatedAt: string;
+  } }>(`/api/waitlist/status?${qs.toString()}`, {
+    method: "GET",
+  });
+};
+
+/* -------------------------------------------------------------------------- */
 /*                               Trade endpoints                              */
 /* -------------------------------------------------------------------------- */
 
