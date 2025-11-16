@@ -1,4 +1,4 @@
-@import "tailwindcss";
+q@import "tailwindcss";
 @import './interstate.css';
 
 /* Prevent black screen flash */
@@ -26,6 +26,16 @@ html, body {
 /* make the scrollbar hidden */
 ::-webkit-scrollbar {
   display: none;
+}
+
+/* Utility class to hide scrollbar while maintaining scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
 }
 
 /* TradingView Widget Styling - Official Look */
