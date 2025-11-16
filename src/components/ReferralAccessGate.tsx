@@ -171,6 +171,7 @@ export function ReferralAccessGate({
   const [postReposted, setPostReposted] = useState(false);
   const [postReplied, setPostReplied] = useState(false);
   const [discordJoined, setDiscordJoined] = useState(false);
+  const [showCongratsModal, setShowCongratsModal] = useState(false);
 
   // Calculate quest progress
   const questProgressData = useMemo(() => {
@@ -1073,7 +1074,9 @@ export function ReferralAccessGate({
                 <div className="mt-4 pt-3 border-t border-neutral-700/60">
                   <InterstateButton
                     type="button"
-                    onClick={() => {}}
+                    onClick={() => {
+                      setShowCongratsModal(true);
+                    }}
                     fullWidth
                     className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700"
                   >
@@ -1082,6 +1085,60 @@ export function ReferralAccessGate({
                   <p className="mt-2 text-xs text-center text-neutral-400">
                     Click to join the waitlist and get early access
                   </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Congrats / Waitlist Confirmation Modal (Skeleton) */}
+      {showCongratsModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-24 left-16 h-64 w-64 rounded-full bg-emerald-500/20 blur-3xl" />
+            <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
+            <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-amber-400/10 blur-3xl" />
+          </div>
+          <div className="relative z-[10001] w-full max-w-md px-6 md:px-0">
+            <div className="rounded-2xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(16,185,129,0.12)]">
+              <div className="rounded-[calc(1rem-1px)] bg-neutral-950/95 p-6 md:p-8">
+                <div className="mb-4">
+                  <div className="h-4 w-28 rounded bg-neutral-800 animate-pulse" />
+                </div>
+                <div className="mb-2">
+                  <h2 className="text-xl md:text-2xl font-semibold text-white">
+                    Congrats! You joined the waitlist
+                  </h2>
+                </div>
+                <p className="text-sm text-neutral-300/90 mb-6">
+                  We&apos;ll notify you when access is granted. In the meantime, this section is a placeholder.
+                </p>
+                {/* Skeleton content */}
+                <div className="space-y-3 mb-6">
+                  <div className="h-10 w-full rounded-xl bg-neutral-900 border border-neutral-800 animate-pulse" />
+                  <div className="h-10 w-full rounded-xl bg-neutral-900 border border-neutral-800 animate-pulse" />
+                  <div className="h-10 w-2/3 rounded-xl bg-neutral-900 border border-neutral-800 animate-pulse" />
+                </div>
+                <div className="flex gap-3">
+                  <InterstateButton
+                    type="button"
+                    fullWidth
+                    onClick={() => setShowCongratsModal(false)}
+                    className="h-11 text-sm uppercase tracking-[0.3em] bg-black text-white hover:bg-neutral-900"
+                  >
+                    Close
+                  </InterstateButton>
+                  <InterstateButton
+                    type="button"
+                    fullWidth
+                    onClick={() => {
+                      setShowCongratsModal(false);
+                    }}
+                    className="h-11 text-sm uppercase tracking-[0.3em] bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    Okay
+                  </InterstateButton>
                 </div>
               </div>
             </div>
