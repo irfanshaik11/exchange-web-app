@@ -15,9 +15,6 @@ import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import { useMetaMaskWallet } from "../hooks/useMetaMaskWallet";
 import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin } from "../utils/api";
 import Cookies from "js-cookie";
-import { storeReferralCodeHint } from "~/utils/referralStorage";
-import { WALLET_TRACKER_API_URL } from "~/utils/walletTracking";
-import { recordReferralUsage } from "~/utils/referrals";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -157,16 +154,7 @@ export function ReferralAccessGate({
   const [walletError, setWalletError] = useState<string | null>(null);
   const [showQuests, setShowQuests] = useState(false);
   const [showWaitlist, setShowWaitlist] = useState(false);
-  const [waitlistForm, setWaitlistForm] = useState({
-    email: "",
-    name: "",
-    walletAddress: "",
-    referralSource: "",
-    additionalNotes: "",
-    walletType: "" as "metamask" | "phantom" | "",
-    twitterLinked: false,
-    twitterUsername: "",
-  });
+  const [waitlistForm, setWaitlistForm] = useState({});
   const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
   const [questProgress, setQuestProgress] = useState({
     xp: 0,
@@ -174,10 +162,14 @@ export function ReferralAccessGate({
     nextRankXp: 200,
     completedQuests: [] as string[],
   });
-  const [showLinkXModal, setShowLinkXModal] = useState(false);
-  const [linkXUsername, setLinkXUsername] = useState("");
-  const [linkXLoading, setLinkXLoading] = useState(false);
-  const [linkXError, setLinkXError] = useState<string | null>(null);
+  const [twitterLinked, setTwitterLinked] = useState(false);
+  const [twitterUsername, setTwitterUsername] = useState<string | null>(null);
+  const [checkingTwitter, setCheckingTwitter] = useState(false);
+  const [narrativeFollowed, setNarrativeFollowed] = useState(false);
+  const [postLiked, setPostLiked] = useState(false);
+  const [postReposted, setPostReposted] = useState(false);
+  const [postReplied, setPostReplied] = useState(false);
+  const [telegramConnected, setTelegramConnected] = useState(false);
 
   // Wallet hooks
   const phantomWallet = usePhantomWallet();
@@ -265,7 +257,6 @@ export function ReferralAccessGate({
 
     const prefill = derivePrefillQuery(router);
     if (prefill) {
-      storeReferralCodeHint(prefill);
       setCodeInput(prefill);
       setAutoSubmitCode(prefill);
       prefillAttemptedRef.current = true;
@@ -276,7 +267,7 @@ export function ReferralAccessGate({
   }, [router.isReady, router.asPath, requireReferralAccess, router]);
 
   const handleSubmit = useCallback(
-    async (incomingCode?: string) => {
+    (incomingCode?: string) => {
       if (!requireReferralAccess) return;
 
       const raw = incomingCode ?? codeInput;
@@ -290,72 +281,15 @@ export function ReferralAccessGate({
       setError(null);
       setInfo(null);
 
-      // Handle admin override code
       if (normalized === ADMIN_OVERRIDE_CODE) {
-        storeReferralCodeHint(normalized);
         grantAccess();
         return;
       }
 
-      try {
-        // Validate referral code against backend API
-        const response = await fetch(
-          `${WALLET_TRACKER_API_URL}/api/referrals/code?referralCode=${encodeURIComponent(normalized)}`
-        );
-
-        if (response.status === 404) {
-          setStatus("prompt");
-          setError("That code is not recognized. Please double-check with your inviter.");
-          return;
-        }
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          const errorMessage =
-            errorData?.error || errorData?.message || "Failed to validate referral code.";
-          setStatus("prompt");
-          setError(errorMessage);
-          return;
-        }
-
-        const data = await response.json();
-        if (!data?.ok || !data?.data?.referralCode) {
-          setStatus("prompt");
-          setError("Invalid referral code. Please try again.");
-          return;
-        }
-
-        // Store the referral code hint for later use
-        storeReferralCodeHint(normalized);
-
-        // If user is signed in, record the referral usage immediately
-        if (user?.id) {
-          try {
-            await recordReferralUsage(user.id, normalized);
-            setInfo("Referral code recorded successfully!");
-          } catch (recordError: any) {
-            // If it's already recorded, that's fine - continue
-            if (recordError?.message?.includes("already")) {
-              setInfo("Referral code already recorded.");
-            } else {
-              console.warn("Failed to record referral usage:", recordError);
-              // Continue anyway - we'll record it later if needed
-            }
-          }
-        }
-
-        // Grant access with the validated referral code
-        grantAccess();
-      } catch (error: any) {
-        console.error("Error validating referral code:", error);
-        setStatus("prompt");
-        setError(
-          error?.message ||
-            "Failed to validate referral code. Please check your connection and try again."
-        );
-      }
+      setStatus("prompt");
+      setError("That code is not recognized. Please double-check with your inviter.");
     },
-    [requireReferralAccess, codeInput, grantAccess, user],
+    [requireReferralAccess, codeInput, grantAccess],
   );
 
   useEffect(() => {
@@ -373,7 +307,13 @@ export function ReferralAccessGate({
     if (!searchPart) return;
 
     const params = new URLSearchParams(searchPart);
-    const keysToDelete = ["ref", "referral", "code", "referralCode"];
+    const keysToDelete = [
+      "ref",
+      "referral",
+      "referrer",
+      "code",
+      "referralCode",
+    ];
 
     let mutated = false;
     keysToDelete.forEach((key) => {
@@ -402,6 +342,78 @@ export function ReferralAccessGate({
       metaMaskWallet.refreshConnection();
     }
   }, [showWalletOptions, phantomWallet, metaMaskWallet]);
+
+  // Check Twitter authentication status
+  const checkTwitterAuth = useCallback(async () => {
+    setCheckingTwitter(true);
+    try {
+      const response = await fetch('/api/twitter/verify-auth');
+      const data = await response.json();
+      if (data.authenticated && data.user) {
+        setTwitterLinked(true);
+        setTwitterUsername(data.user.username);
+      } else {
+        setTwitterLinked(false);
+        setTwitterUsername(null);
+      }
+    } catch (error) {
+      console.error('Error checking Twitter auth:', error);
+      setTwitterLinked(false);
+      setTwitterUsername(null);
+    } finally {
+      setCheckingTwitter(false);
+    }
+  }, []);
+
+  // Check Twitter status when waitlist modal opens or URL changes (after OAuth callback)
+  useEffect(() => {
+    if (showWaitlist) {
+      checkTwitterAuth();
+    }
+  }, [showWaitlist, checkTwitterAuth]);
+
+  // Check for Twitter OAuth callback in URL
+  useEffect(() => {
+    if (!router.isReady) return;
+    const { twitter_error, twitter_success } = router.query;
+    
+    if (twitter_success === 'true') {
+      checkTwitterAuth();
+      // Clean up URL
+      const [pathPart, searchPart] = router.asPath.split('?');
+      if (searchPart) {
+        const params = new URLSearchParams(searchPart);
+        params.delete('twitter_success');
+        const cleaned = params.toString();
+        router.replace(
+          cleaned ? `${pathPart}?${cleaned}` : pathPart,
+          undefined,
+          { shallow: true }
+        );
+      }
+    } else if (twitter_error) {
+      setError(`Twitter linking failed: ${twitter_error}`);
+      // Clean up URL
+      const [pathPart, searchPart] = router.asPath.split('?');
+      if (searchPart) {
+        const params = new URLSearchParams(searchPart);
+        params.delete('twitter_error');
+        const cleaned = params.toString();
+        router.replace(
+          cleaned ? `${pathPart}?${cleaned}` : pathPart,
+          undefined,
+          { shallow: true }
+        );
+      }
+    }
+  }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth]);
+
+  // Handle Twitter linking
+  const handleLinkTwitter = useCallback(() => {
+    const currentPath = router.asPath.split('?')[0];
+    const returnUrl = `${currentPath}?twitter_success=true`;
+    window.location.href = `/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`;
+  }, [router.asPath]);
 
   // Phantom Wallet Login handler
   const handlePhantomLogin = useCallback(async () => {
@@ -451,14 +463,6 @@ export function ReferralAccessGate({
         setInfo("Phantom login successful!");
         // Show waitlist modal after successful wallet login
         setShowWalletOptions(false);
-        // Pre-fill wallet address in waitlist form
-        if (phantomWallet.publicKey) {
-          setWaitlistForm(prev => ({
-            ...prev,
-            walletAddress: phantomWallet.publicKey,
-            walletType: "phantom",
-          }));
-        }
         setShowWaitlist(true);
       } else {
         setError("Phantom login failed - no token received");
@@ -528,14 +532,6 @@ export function ReferralAccessGate({
         setInfo("MetaMask login successful!");
         // Show waitlist modal after successful wallet login
         setShowWalletOptions(false);
-        // Pre-fill wallet address in waitlist form
-        if (metaMaskWallet.address) {
-          setWaitlistForm(prev => ({
-            ...prev,
-            walletAddress: metaMaskWallet.address,
-            walletType: "metamask",
-          }));
-        }
         setShowWaitlist(true);
       } else {
         setError("MetaMask login failed - no token received");
@@ -660,7 +656,7 @@ export function ReferralAccessGate({
                     type="submit"
                     fullWidth
                     loading={status === "validating"}
-                    className="h-14 text-base uppercase tracking-[0.4em] bg-black text-white hover:bg-neutral-900"
+                    className="h-14 text-base uppercase tracking-[0.4em] !bg-black text-white hover:!bg-neutral-900 border-[0.5px] border-white"
                   >
                     Unlock Access
                   </InterstateButton>
@@ -678,101 +674,12 @@ export function ReferralAccessGate({
                     type="button"
                     fullWidth
                     onClick={() => {
-                      setShowWalletOptions(!showWalletOptions);
-                      setWalletError(null);
+                      setShowWaitlist(true);
                     }}
                     className="h-14 text-base uppercase tracking-[0.4em] bg-black text-white hover:bg-neutral-900"
                   >
                     Join Waitlist
                   </InterstateButton>
-
-                  {walletError && (
-                    <p className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                      {walletError}
-                    </p>
-                  )}
-
-                  {/* Wallet Options */}
-                  {showWalletOptions && (
-                    <div className="mt-4 overflow-hidden transition-all duration-300 ease-in-out">
-                      <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50">
-                        <div className="text-xs text-neutral-400 mb-3 font-medium">Choose your wallet</div>
-                        <div className="space-y-2">
-                          {/* MetaMask */}
-                          <button
-                            type="button"
-                            className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
-                              metaMaskWallet.isConnected
-                                ? "bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50"
-                                : "bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50"
-                            } ${metamaskLoading || metaMaskWallet.connecting ? "opacity-50 cursor-not-allowed" : ""}`}
-                            onClick={() => {
-                              setPhantomLoading(false);
-                              handleMetamaskLogin();
-                            }}
-                            disabled={metamaskLoading || metaMaskWallet.connecting}
-                          >
-                            <div className="flex items-center gap-3">
-                              <img src="/MetaMask-icon-fox.svg" alt="MetaMask" className="w-5 h-5" />
-                              <div className="flex flex-col items-start">
-                                <span className="font-medium text-sm">MetaMask</span>
-                                {metaMaskWallet.isConnected && metaMaskWallet.address && (
-                                  <span className="text-xs text-green-400">
-                                    Connected: {metaMaskWallet.address.slice(0, 6)}...{metaMaskWallet.address.slice(-4)}
-                                  </span>
-                                )}
-                                {metaMaskWallet.connecting && (
-                                  <span className="text-xs text-yellow-400">Connecting...</span>
-                                )}
-                                {metaMaskWallet.error && !metaMaskWallet.isInstalled && (
-                                  <span className="text-xs text-red-400">Not installed</span>
-                                )}
-                              </div>
-                            </div>
-                            {metaMaskWallet.isConnected && (
-                              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                            )}
-                          </button>
-
-                          {/* Phantom */}
-                          <button
-                            type="button"
-                            className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
-                              phantomWallet.isConnected 
-                                ? "bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50" 
-                                : "bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50"
-                            } ${phantomLoading || phantomWallet.connecting ? "opacity-50 cursor-not-allowed" : ""}`}
-                            onClick={() => {
-                              setMetamaskLoading(false);
-                              handlePhantomLogin();
-                            }}
-                            disabled={phantomLoading || phantomWallet.connecting}
-                          >
-                            <div className="flex items-center gap-3">
-                              <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-5 h-5 rounded-full" />
-                              <div className="flex flex-col items-start">
-                                <span className="font-medium text-sm">Phantom</span>
-                                {phantomWallet.isConnected && phantomWallet.publicKey && (
-                                  <span className="text-xs text-green-400">
-                                    Connected: {phantomWallet.publicKey.slice(0, 4)}...{phantomWallet.publicKey.slice(-4)}
-                                  </span>
-                                )}
-                                {phantomWallet.connecting && (
-                                  <span className="text-xs text-yellow-400">Connecting...</span>
-                                )}
-                                {phantomWallet.error && !phantomWallet.isInstalled && (
-                                  <span className="text-xs text-red-400">Not installed</span>
-                                )}
-                              </div>
-                            </div>
-                            {phantomWallet.isConnected && (
-                              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -789,49 +696,27 @@ export function ReferralAccessGate({
             <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-blue-400/10 blur-3xl" />
           </div>
 
-          <div className="relative z-[9999] w-full max-w-2xl px-6 md:px-0 py-8">
-            <div className="rounded-3xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(59,130,246,0.12)]">
-              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10">
-                <div className="mb-6 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.35em] text-blue-400/80">
-                      Join Waitlist
-                    </p>
-                    <h2 className="mt-2 text-2xl font-semibold text-white md:text-3xl">
-                      Get Early Access
-                    </h2>
-                  </div>
-                  <InterstateButton
-                    variant="icon"
-                    size="sm"
-                    onClick={() => {
-                      setShowWaitlist(false);
-                      grantAccess();
-                    }}
-                    className="text-xl"
-                  >
-                    ×
-                  </InterstateButton>
+          <div className="relative z-[9999] w-full max-w-md px-4 md:px-0 py-2">
+            <div className="rounded-xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(59,130,246,0.12)]">
+              <div className="rounded-[calc(1rem-1px)] bg-neutral-950/95 p-4 md:p-5">
+                <div className="mb-3">
+                  <p className="text-xs uppercase tracking-[0.35em] text-blue-400/80">
+                    Join Waitlist
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-white md:text-xl">
+                    Get Early Access
+                  </h2>
                 </div>
 
-                <p className="text-sm text-neutral-300/90 md:text-base mb-6">
+                
+                <p className="text-xs text-neutral-300/90 mb-3">
                   Help us get to know you better. Fill out the form below to join our waitlist and be among the first to access Narrative.
                 </p>
 
                 <form
-                  className="space-y-6"
+                  className="space-y-3"
                   onSubmit={async (e) => {
                     e.preventDefault();
-                    
-                    // Validate Twitter is linked
-                    if (!waitlistForm.twitterLinked || !waitlistForm.twitterUsername) {
-                      // Open link X modal if not linked
-                      setShowLinkXModal(true);
-                      setLinkXError(null);
-                      setLinkXUsername("");
-                      return;
-                    }
-                    
                     setWaitlistSubmitting(true);
                     
                     // TODO: Submit waitlist data to backend
@@ -848,265 +733,296 @@ export function ReferralAccessGate({
                 >
                   {/* Link Twitter */}
                   <div>
-                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
-                      Link your Twitter (Earn 25 XP)
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Link Your Twitter
                     </label>
-                    {waitlistForm.twitterLinked ? (
-                      <div className="w-full rounded-2xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 24 24">
+                    {twitterLinked && twitterUsername ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                           </svg>
                           <div>
-                            <div className="text-white font-medium">@{waitlistForm.twitterUsername}</div>
-                            <div className="text-xs text-green-400">Twitter account linked</div>
+                            <p className="text-white font-medium">@{twitterUsername}</p>
+                            <p className="text-xs text-blue-300/80">Twitter account linked</p>
                           </div>
                         </div>
-                        <button
+                        <InterstateButton
                           type="button"
-                          onClick={() => {
-                            setWaitlistForm(prev => ({ ...prev, twitterLinked: false, twitterUsername: "" }));
-                            setShowLinkXModal(true);
-                            setLinkXError(null);
-                            setLinkXUsername("");
-                          }}
-                          className="text-xs text-neutral-400 hover:text-white underline"
+                          onClick={handleLinkTwitter}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
                         >
-                          Change
-                        </button>
+                          Re-link
+                        </InterstateButton>
                       </div>
                     ) : (
                       <InterstateButton
                         type="button"
+                        onClick={handleLinkTwitter}
+                        loading={checkingTwitter}
                         fullWidth
-                        onClick={() => {
-                          setShowLinkXModal(true);
-                          setLinkXError(null);
-                          setLinkXUsername("");
-                        }}
-                        className="h-12 text-base uppercase tracking-[0.4em] bg-blue-600 text-white hover:bg-blue-700"
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
                       >
-                        Link your Twitter
-                      </InterstateButton>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
-                      Follow @narrative_hq (Earn 25 XP)
-                    </label>
-                    {waitlistForm.twitterLinked ? (
-                      <div className="w-full rounded-2xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                          </svg>
-                          <div>
-                            <div className="text-white font-medium">@{waitlistForm.twitterUsername}</div>
-                            <div className="text-xs text-green-400">Twitter account linked</div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWaitlistForm(prev => ({ ...prev, twitterLinked: false, twitterUsername: "" }));
-                            setShowLinkXModal(true);
-                            setLinkXError(null);
-                            setLinkXUsername("");
-                          }}
-                          className="text-xs text-neutral-400 hover:text-white underline"
-                        >
-                          Change
-                        </button>
-                      </div>
-                    ) : (
-                      <InterstateButton
-                        type="button"
-                        fullWidth
-                        onClick={() => {
-                          setShowLinkXModal(true);
-                          setLinkXError(null);
-                          setLinkXUsername("");
-                        }}
-                        className="h-12 text-base uppercase tracking-[0.4em] bg-blue-600 text-white hover:bg-blue-700"
-                      >
-                        Follow @narrative_hq
-                      </InterstateButton>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
-                      Like a post (Earn 25 XP)
-                    </label>
-                    {waitlistForm.twitterLinked ? (
-                      <div className="w-full rounded-2xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                          </svg>
-                          <div>
-                            <div className="text-white font-medium">@{waitlistForm.twitterUsername}</div>
-                            <div className="text-xs text-green-400">Twitter account linked</div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWaitlistForm(prev => ({ ...prev, twitterLinked: false, twitterUsername: "" }));
-                            setShowLinkXModal(true);
-                            setLinkXError(null);
-                            setLinkXUsername("");
-                          }}
-                          className="text-xs text-neutral-400 hover:text-white underline"
-                        >
-                          Change
-                        </button>
-                      </div>
-                    ) : (
-                      <InterstateButton
-                        type="button"
-                        fullWidth
-                        onClick={() => {
-                          setShowLinkXModal(true);
-                          setLinkXError(null);
-                          setLinkXUsername("");
-                        }}
-                        className="h-12 text-base uppercase tracking-[0.4em] bg-blue-600 text-white hover:bg-blue-700"
-                      >
-                        Like a post
-                      </InterstateButton>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
-                      Repost a post (Earn 25 XP)
-                    </label>
-                    {waitlistForm.twitterLinked ? (
-                      <div className="w-full rounded-2xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                          </svg>
-                          <div>
-                            <div className="text-white font-medium">@{waitlistForm.twitterUsername}</div>
-                            <div className="text-xs text-green-400">Twitter account linked</div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWaitlistForm(prev => ({ ...prev, twitterLinked: false, twitterUsername: "" }));
-                            setShowLinkXModal(true);
-                            setLinkXError(null);
-                            setLinkXUsername("");
-                          }}
-                          className="text-xs text-neutral-400 hover:text-white underline"
-                        >
-                          Change
-                        </button>
-                      </div>
-                    ) : (
-                      <InterstateButton
-                        type="button"
-                        fullWidth
-                        onClick={() => {
-                          setShowLinkXModal(true);
-                          setLinkXError(null);
-                          setLinkXUsername("");
-                        }}
-                        className="h-12 text-base uppercase tracking-[0.4em] bg-blue-600 text-white hover:bg-blue-700"
-                      >
-                        Repost a post
-                      </InterstateButton>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
-                      Reply to a post (Earn 25 XP)
-                    </label>
-                    {waitlistForm.twitterLinked ? (
-                      <div className="w-full rounded-2xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                          </svg>
-                          <div>
-                            <div className="text-white font-medium">@{waitlistForm.twitterUsername}</div>
-                            <div className="text-xs text-green-400">Twitter account linked</div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWaitlistForm(prev => ({ ...prev, twitterLinked: false, twitterUsername: "" }));
-                            setShowLinkXModal(true);
-                            setLinkXError(null);
-                            setLinkXUsername("");
-                          }}
-                          className="text-xs text-neutral-400 hover:text-white underline"
-                        >
-                          Change
-                        </button>
-                      </div>
-                    ) : (
-                      <InterstateButton
-                        type="button"
-                        fullWidth
-                        onClick={() => {
-                          setShowLinkXModal(true);
-                          setLinkXError(null);
-                          setLinkXUsername("");
-                        }}
-                        className="h-12 text-base uppercase tracking-[0.4em] bg-blue-600 text-white hover:bg-blue-700"
-                      >
-                        Reply to a post
-                      </InterstateButton>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
-                      Follow @narrative_hq (Earn 25 XP)
-                    </label>
-                    {waitlistForm.twitterLinked ? (
-                      <div className="w-full rounded-2xl border border-green-500/40 bg-green-500/10 px-5 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <svg className="w-5 h-5 text-green-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                          </svg>
-                          <div>
-                            <div className="text-white font-medium">@{waitlistForm.twitterUsername}</div>
-                            <div className="text-xs text-green-400">Twitter account linked</div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setWaitlistForm(prev => ({ ...prev, twitterLinked: false, twitterUsername: "" }));
-                            setShowLinkXModal(true);
-                            setLinkXError(null);
-                            setLinkXUsername("");
-                          }}
-                          className="text-xs text-neutral-400 hover:text-white underline"
-                        >
-                          Change
-                        </button>
-                      </div>
-                    ) : (
-                      <InterstateButton
-                        type="button"
-                        fullWidth
-                        onClick={() => {
-                          setShowLinkXModal(true);
-                          setLinkXError(null);
-                          setLinkXUsername("");
-                        }}
-                        className="h-12 text-base uppercase tracking-[0.4em] bg-blue-600 text-white hover:bg-blue-700"
-                      >
-                        Connect Telegram
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                        Link Your Twitter
                       </InterstateButton>
                     )}
                   </div>
 
+                  {/* Follow narrative_hq */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Follow @narrative_hq
+                    </label>
+                    {narrativeFollowed ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                          </svg>
+                          <div>
+                            <p className="text-white font-medium">@narrative_hq</p>
+                            <p className="text-xs text-blue-300/80">Following</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://twitter.com/narrative_hq", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Open Twitter
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          setNarrativeFollowed(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                        Follow @narrative_hq
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Like a post */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Like a post by @narrative_hq (Earn 25 xp)
+                    </label>
+                    {postLiked ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/>
+                          </svg>
+                          <div>
+                            <p className="text-white font-medium">Post liked</p>
+                            <p className="text-xs text-blue-300/80">Thank you for the like!</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://twitter.com/narrative_hq", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          View Posts
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          setPostLiked(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/>
+                        </svg>
+                        Like a Post
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Repost a post */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Repost a post by @narrative_hq
+                    </label>
+                    {postReposted ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M4.75 3.79l4.603 4.3-1.706 1.82L6 8.38v7.24c0 .97.784 1.75 1.75 1.75H13V20H7.75c-2.347 0-4.25-1.9-4.25-4.25V8.38L1.853 9.91.147 8.09l4.603-4.3zm11.5 2.71H11V4h5.25c2.347 0 4.25 1.9 4.25 4.25v7.24l1.647-1.53 1.706 1.82-4.603 4.3-4.603-4.3 1.706-1.82L18 15.62V8.38c0-.97-.784-1.75-1.75-1.75z"/>
+                          </svg>
+                          <div>
+                            <p className="text-white font-medium">Post reposted</p>
+                            <p className="text-xs text-blue-300/80">Thank you for sharing!</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://twitter.com/narrative_hq", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          View Posts
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          setPostReposted(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M4.75 3.79l4.603 4.3-1.706 1.82L6 8.38v7.24c0 .97.784 1.75 1.75 1.75H13V20H7.75c-2.347 0-4.25-1.9-4.25-4.25V8.38L1.853 9.91.147 8.09l4.603-4.3zm11.5 2.71H11V4h5.25c2.347 0 4.25 1.9 4.25 4.25v7.24l1.647-1.53 1.706 1.82-4.603 4.3-4.603-4.3 1.706-1.82L18 15.62V8.38c0-.97-.784-1.75-1.75-1.75z"/>
+                        </svg>
+                        Repost a Post
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Reply to a post */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Reply to a post by @narrative_hq
+                    </label>
+                    {postReplied ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.09 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/>
+                          </svg>
+                          <div>
+                            <p className="text-white font-medium">Post replied</p>
+                            <p className="text-xs text-blue-300/80">Thank you for engaging!</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://twitter.com/narrative_hq", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          View Posts
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          setPostReplied(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.09 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/>
+                        </svg>
+                        Reply to a Post
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Connect Telegram */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Connect Telegram
+                    </label>
+                    {telegramConnected ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.17 1.858-.896 6.654-.896 6.654s-.05.39-.224.468c-.175.078-.437-.039-.437-.039l-1.9-1.336-1.006-.84-1.4.98s-.21.13-.39.078c-.18-.052-.31-.21-.31-.21l-.84-2.11-1.4-4.72s-.09-.22.04-.34c.13-.12.3-.08.3-.08l5.3 3.2 2.1 1.24s.23.13.31.04c.08-.09.05-.27.05-.27l-1-4.94s-.07-.28.12-.35c.19-.07.44.05.44.05l1.5.9 1.4.84s.16.1.26.03c.1-.07.08-.24.08-.24z"/>
+                          </svg>
+                          <div>
+                            <p className="text-white font-medium">Telegram Connected</p>
+                            <p className="text-xs text-blue-300/80">You're connected to our Telegram</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://t.me/narrative_hq", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Open Telegram
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://t.me/narrative_hq", "_blank");
+                          setTelegramConnected(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.17 1.858-.896 6.654-.896 6.654s-.05.39-.224.468c-.175.078-.437-.039-.437-.039l-1.9-1.336-1.006-.84-1.4.98s-.21.13-.39.078c-.18-.052-.31-.21-.31-.21l-.84-2.11-1.4-4.72s-.09-.22.04-.34c.13-.12.3-.08.3-.08l5.3 3.2 2.1 1.24s.23.13.31.04c.08-.09.05-.27.05-.27l-1-4.94s-.07-.28.12-.35c.19-.07.44.05.44.05l1.5.9 1.4.84s.16.1.26.03c.1-.07.08-.24.08-.24z"/>
+                        </svg>
+                        Connect Telegram
+                      </InterstateButton>
+                    )}
+                  </div>
                 </form>
+
+                {/* Complete all quests button */}
+                <div className="mt-4 pt-3 border-t border-neutral-700/60">
+                  <InterstateButton
+                    type="button"
+                    onClick={() => {
+                      const allQuestsCompleted = 
+                        twitterLinked && 
+                        narrativeFollowed && 
+                        postLiked && 
+                        postReposted && 
+                        postReplied && 
+                        telegramConnected;
+                      
+                      if (allQuestsCompleted) {
+                        setShowWaitlist(false);
+                        grantAccess();
+                      } else {
+                        setError("Please complete all quests to continue");
+                      }
+                    }}
+                    fullWidth
+                    className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700"
+                  >
+                    Complete All Quests
+                  </InterstateButton>
+                  <p className="mt-2 text-xs text-center text-neutral-400">
+                    {twitterLinked && narrativeFollowed && postLiked && postReposted && postReplied && telegramConnected
+                      ? "All quests completed! Click to continue."
+                      : "Complete all quests above to unlock access"}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -1122,43 +1038,28 @@ export function ReferralAccessGate({
             <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-purple-400/10 blur-3xl" />
           </div>
 
-          <div className="relative z-[9999] w-full max-w-lg px-6 md:px-0 py-8">
+          <div className="relative z-[9999] w-full max-w-2xl px-6 md:px-0 py-8">
             <div className="rounded-3xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(147,51,234,0.12)]">
-              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-6 md:p-8">
-                {/* Rank Section - Header */}
+              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10">
+                {/* Rank Section */}
                 <div className="mb-8">
-                  <div className="flex items-start gap-4">
-                    {/* Hexagonal icon */}
-                    <div className="h-14 w-14 flex-shrink-0 relative">
-                      <svg className="w-full h-full" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path
-                          d="M24 2L42 10V26L24 34L6 26V10L24 2Z"
-                          fill="url(#hexGradient)"
-                          stroke="rgba(168, 85, 247, 0.4)"
-                          strokeWidth="1.5"
-                        />
-                        <defs>
-                          <linearGradient id="hexGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="rgba(168, 85, 247, 0.3)" />
-                            <stop offset="100%" stopColor="rgba(147, 51, 234, 0.3)" />
-                          </linearGradient>
-                        </defs>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-purple-500/20 to-purple-600/20 border border-purple-500/30 flex items-center justify-center">
+                      <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                       </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                        </svg>
-                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-lg font-semibold text-white mb-3">{questProgress.rank}</div>
-                      <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden mb-2">
-                        <div
-                          className="h-full bg-gradient-to-r from-purple-500 to-purple-600 transition-all duration-300"
-                          style={{ width: `${Math.min((questProgress.xp / questProgress.nextRankXp) * 100, 100)}%` }}
-                        />
+                    <div className="flex-1">
+                      <div className="text-lg font-bold text-white">{questProgress.rank}</div>
+                      <div className="mt-2">
+                        <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-purple-600 transition-all duration-300"
+                            style={{ width: `${Math.min((questProgress.xp / questProgress.nextRankXp) * 100, 100)}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="text-sm text-neutral-400">
+                      <div className="mt-2 text-xs text-neutral-400">
                         Next rank: {Math.max(0, questProgress.nextRankXp - questProgress.xp)} XP left
                       </div>
                     </div>
@@ -1166,27 +1067,24 @@ export function ReferralAccessGate({
                 </div>
 
                 {/* Complete Quests Section */}
-                <div className="mb-6">
-                  <h2 className="text-xl font-bold text-white mb-1">Complete Quests</h2>
+                <div className="mb-8">
+                  <h2 className="text-2xl font-bold text-white mb-2">Complete Quests</h2>
                   <p className="text-sm text-neutral-400 mb-4">Earn XP to rank up and earn future rewards.</p>
                   
                   <div className="space-y-3">
                     {/* Link your X */}
-                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-medium mb-0.5">Link your X</div>
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Link your X</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          if (!questProgress.completedQuests.includes("link-x")) {
-                            setShowLinkXModal(true);
-                            setLinkXError(null);
-                            setLinkXUsername("");
-                          }
+                          // TODO: Implement X linking
+                          window.open("https://twitter.com/intent/tweet?text=Check%20out%20Narrative!", "_blank");
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg flex-shrink-0"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
                         disabled={questProgress.completedQuests.includes("link-x")}
                       >
                         {questProgress.completedQuests.includes("link-x") ? "Completed" : "Link X"}
@@ -1194,9 +1092,9 @@ export function ReferralAccessGate({
                     </div>
 
                     {/* Follow @TradeBoba */}
-                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-medium mb-0.5">Follow @TradeBoba</div>
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Follow @TradeBoba</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1209,7 +1107,7 @@ export function ReferralAccessGate({
                           // TODO: Implement follow action
                           window.open("https://twitter.com/TradeBoba", "_blank");
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg flex-shrink-0"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
                         disabled={questProgress.completedQuests.includes("follow-tradeboba")}
                       >
                         {questProgress.completedQuests.includes("follow-tradeboba") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Follow" : "Link X First"}
@@ -1217,9 +1115,9 @@ export function ReferralAccessGate({
                     </div>
 
                     {/* Like a post */}
-                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-medium mb-0.5">Like a post</div>
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Like a post</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1231,7 +1129,7 @@ export function ReferralAccessGate({
                           }
                           // TODO: Implement like action
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg flex-shrink-0"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
                         disabled={questProgress.completedQuests.includes("like-post")}
                       >
                         {questProgress.completedQuests.includes("like-post") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Like" : "Link X First"}
@@ -1239,9 +1137,9 @@ export function ReferralAccessGate({
                     </div>
 
                     {/* Repost a post */}
-                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-medium mb-0.5">Repost a post</div>
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Repost a post</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1253,7 +1151,7 @@ export function ReferralAccessGate({
                           }
                           // TODO: Implement repost action
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg flex-shrink-0"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
                         disabled={questProgress.completedQuests.includes("repost-post")}
                       >
                         {questProgress.completedQuests.includes("repost-post") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Repost" : "Link X First"}
@@ -1261,9 +1159,9 @@ export function ReferralAccessGate({
                     </div>
 
                     {/* Reply to a post */}
-                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-medium mb-0.5">Reply to a post</div>
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Reply to a post</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1275,7 +1173,7 @@ export function ReferralAccessGate({
                           }
                           // TODO: Implement reply action
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg flex-shrink-0"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
                         disabled={questProgress.completedQuests.includes("reply-post")}
                       >
                         {questProgress.completedQuests.includes("reply-post") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Reply" : "Link X First"}
@@ -1283,9 +1181,9 @@ export function ReferralAccessGate({
                     </div>
 
                     {/* Connect Telegram */}
-                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white font-medium mb-0.5">Connect Telegram</div>
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Connect Telegram</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1293,7 +1191,7 @@ export function ReferralAccessGate({
                         onClick={() => {
                           // TODO: Implement Telegram connection
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg flex-shrink-0"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
                         disabled={questProgress.completedQuests.includes("connect-telegram")}
                       >
                         {questProgress.completedQuests.includes("connect-telegram") ? "Completed" : "Connect"}
@@ -1302,190 +1200,51 @@ export function ReferralAccessGate({
                   </div>
                 </div>
 
-                {/* Bonus Quest Separator */}
-                <div className="relative my-6">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-neutral-700"></div>
-                  </div>
-                  <div className="relative flex justify-center">
-                    <span className="bg-neutral-950 px-3 text-sm text-neutral-400">Bonus Quest</span>
-                  </div>
-                </div>
-
                 {/* Bonus Quest */}
                 <div className="mb-6">
-                  <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-white font-medium mb-0.5">Complete all quests</div>
+                  <div className="text-center text-sm text-neutral-400 mb-4">Bonus Quest</div>
+                  <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="text-white font-medium mb-1">Complete all quests</div>
                       <div className="text-xs text-neutral-400">Earn 50 XP</div>
                     </div>
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-neutral-300 text-sm rounded-lg flex-shrink-0 cursor-default"
-                      disabled
-                    >
+                    <div className="text-sm text-neutral-400">
                       {questProgress.completedQuests.length}/6 steps
-                    </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Link X Modal */}
-      {showLinkXModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl">
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute -top-24 left-16 h-64 w-64 rounded-full bg-purple-500/20 blur-3xl" />
-            <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-purple-500/10 blur-3xl" />
-          </div>
-
-          <div className="relative z-[10000] w-full max-w-md px-6 md:px-0">
-            <div className="rounded-3xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(147,51,234,0.12)]">
-              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10">
-                <div className="mb-6 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.35em] text-purple-400/80">
-                      Link Your X Account
-                    </p>
-                    <h2 className="mt-2 text-2xl font-semibold text-white md:text-3xl">
-                      Connect Twitter
-                    </h2>
-                  </div>
+                {/* Action Buttons */}
+                <div className="flex gap-3">
                   <InterstateButton
-                    variant="icon"
-                    size="sm"
+                    type="button"
+                    fullWidth
                     onClick={() => {
-                      setShowLinkXModal(false);
-                      setLinkXError(null);
-                      setLinkXUsername("");
+                      setShowQuests(false);
+                      grantAccess();
                     }}
-                    className="text-xl"
-                    disabled={linkXLoading}
+                    className="h-12 text-base uppercase tracking-[0.4em] bg-purple-600 text-white hover:bg-purple-700"
                   >
-                    ×
+                    Skip for Now
+                  </InterstateButton>
+                  <InterstateButton
+                    type="button"
+                    fullWidth
+                    onClick={() => {
+                      // TODO: Check if all quests completed, then grant access
+                      if (questProgress.completedQuests.length >= 6) {
+                        grantAccess();
+                        setShowQuests(false);
+                      } else {
+                        alert("Complete more quests to unlock access!");
+                      }
+                    }}
+                    className="h-12 text-base uppercase tracking-[0.4em] bg-black text-white hover:bg-neutral-900"
+                    disabled={questProgress.completedQuests.length < 6}
+                  >
+                    Continue
                   </InterstateButton>
                 </div>
-
-                <p className="text-sm text-neutral-300/90 md:text-base mb-6">
-                  Enter your X (Twitter) username to link your account and earn 25 XP.
-                </p>
-
-                <form
-                  className="space-y-6"
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    setLinkXError(null);
-                    
-                    // Validate username
-                    const cleanUsername = linkXUsername.trim().replace(/^@/, "");
-                    if (!cleanUsername) {
-                      setLinkXError("Please enter your X username");
-                      return;
-                    }
-                    
-                    // Basic Twitter username validation
-                    if (!/^[A-Za-z0-9_]{1,15}$/.test(cleanUsername)) {
-                      setLinkXError("Invalid X username format");
-                      return;
-                    }
-                    
-                    setLinkXLoading(true);
-                    
-                    try {
-                      // TODO: Implement actual X account linking API call
-                      // For now, simulate the linking process
-                      await new Promise((resolve) => setTimeout(resolve, 1500));
-                      
-                      // Mark quest as completed and update XP
-                      setQuestProgress((prev) => {
-                        const newCompleted = [...prev.completedQuests, "link-x"];
-                        const newXp = prev.xp + 25;
-                        return {
-                          ...prev,
-                          completedQuests: newCompleted,
-                          xp: newXp,
-                        };
-                      });
-                      
-                      // Update waitlist form if waitlist is open
-                      if (showWaitlist) {
-                        setWaitlistForm((prev) => ({
-                          ...prev,
-                          twitterLinked: true,
-                          twitterUsername: cleanUsername,
-                        }));
-                      }
-                      
-                      setShowLinkXModal(false);
-                      setLinkXUsername("");
-                    } catch (error: any) {
-                      setLinkXError(error?.message || "Failed to link X account. Please try again.");
-                    } finally {
-                      setLinkXLoading(false);
-                    }
-                  }}
-                >
-                  <div>
-                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-2">
-                      X Username
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-neutral-400 text-lg">
-                        @
-                      </span>
-                      <input
-                        type="text"
-                        value={linkXUsername}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/^@/, "");
-                          setLinkXUsername(value);
-                          setLinkXError(null);
-                        }}
-                        placeholder="yourusername"
-                        required
-                        disabled={linkXLoading}
-                        className="w-full rounded-2xl border border-neutral-700/60 bg-neutral-900/70 px-5 py-4 pl-10 text-white placeholder:text-neutral-500 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
-                        maxLength={15}
-                        pattern="[A-Za-z0-9_]{1,15}"
-                      />
-                    </div>
-                    {linkXError && (
-                      <p className="mt-2 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                        {linkXError}
-                      </p>
-                    )}
-                    <p className="mt-2 text-xs text-neutral-500">
-                      Enter your X username without the @ symbol
-                    </p>
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <InterstateButton
-                      type="button"
-                      fullWidth
-                      onClick={() => {
-                        setShowLinkXModal(false);
-                        setLinkXError(null);
-                        setLinkXUsername("");
-                      }}
-                      className="h-12 text-base uppercase tracking-[0.4em] bg-neutral-800 text-white hover:bg-neutral-700"
-                      disabled={linkXLoading}
-                    >
-                      Cancel
-                    </InterstateButton>
-                    <InterstateButton
-                      type="submit"
-                      fullWidth
-                      loading={linkXLoading}
-                      className="h-12 text-base uppercase tracking-[0.4em] bg-purple-600 text-white hover:bg-purple-700"
-                    >
-                      Link Account
-                    </InterstateButton>
-                  </div>
-                </form>
               </div>
             </div>
           </div>
@@ -1494,4 +1253,3 @@ export function ReferralAccessGate({
     </ReferralAccessContext.Provider>
   );
 }
-
