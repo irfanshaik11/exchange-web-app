@@ -11,6 +11,7 @@ import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiStar } from "react-icons/fi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
+import UpdatesModal from "./UpdatesModal";
 import type { Timeframe } from "../pages/index";
 
 /* ---- style palette ---- */
@@ -25,6 +26,34 @@ const AX = {
   mintHover: "#12a877",
   sell: "#FF4D7F",
 };
+
+// Platform updates data
+const PLATFORM_UPDATES = [
+  {
+    id: 'update-1',
+    title: 'Enhanced Real-Time Data',
+    description: 'Experience lightning-fast updates with our improved WebSocket infrastructure for live token tracking.',
+    badge: 'New Feature',
+    badgeColor: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+    image: '/interstate-logo.png',
+  },
+  {
+    id: 'update-2',
+    title: 'Multi-Chain Support',
+    description: 'Track tokens across Solana, BNB Chain, and more. Switch between chains seamlessly with our updated interface.',
+    badge: 'Coming Soon',
+    badgeColor: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+  },
+  {
+    id: 'update-3',
+    title: 'Advanced Filtering',
+    description: 'Find the perfect opportunities with our new advanced filtering options. Sort by liquidity, volume, and more.',
+    badge: 'Improved',
+    badgeColor: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
+    actionText: 'Learn more about filtering',
+    actionLink: 'https://discord.gg/sACYQmCsTJ',
+  },
+];
 
     const navLinks = [
       { name: "Trenches", href: "/pulse" },
@@ -69,18 +98,18 @@ export default function Header({
   const { user, loading: userLoading, solBalance } = useUser();
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
-  const [depositInitialTab, setDepositInitialTab] = useState<'convert' | 'deposit' | 'buy'>('deposit');
+  const [depositInitialTab, setDepositInitialTab] = useState<'convert' | 'deposit' | 'buy' | 'withdraw'>('deposit');
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+  const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
-  const walletDropdownRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
 
   // State for clipboard token detection
@@ -334,7 +363,7 @@ export default function Header({
   }, [showSearch, searchModalOpen]);
 
   // Handles opening the deposit modal
-  const handleDepositClick = (tab: 'convert' | 'deposit' | 'buy' = 'deposit') => {
+  const handleDepositClick = (tab: 'convert' | 'deposit' | 'buy' | 'withdraw' = 'deposit') => {
     const token = Cookies.get("token");
     if (token && !user && !userLoading) {
       // Optionally, refresh user here if needed
@@ -353,13 +382,13 @@ export default function Header({
     handleDepositClick('buy');
   };
 
-  // Handles opening the withdraw modal
+  // Handles opening the withdraw modal (now opens deposit modal with withdraw tab)
   const handleWithdrawClick = () => {
     const token = Cookies.get("token");
     if (token && !user && !userLoading) {
       // Optionally, refresh user here if needed
     }
-    setWithdrawOpen(true);
+    handleDepositClick('withdraw');
   };
 
   // Check if navigation arrows should be shown
@@ -428,26 +457,6 @@ export default function Header({
     };
   }, [profileMenuOpen]);
 
-  // Close wallet dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        walletDropdownRef.current &&
-        !walletDropdownRef.current.contains(event.target as Node)
-      ) {
-        setWalletDropdownOpen(false);
-      }
-    };
-
-    if (walletDropdownOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [walletDropdownOpen]);
-
   // Close notifications panel when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -467,6 +476,27 @@ export default function Header({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [notificationsOpen]);
+
+  // Show Feature Updates modal only on first login
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user || userLoading) {
+      return;
+    }
+
+    const storageKey = `feature-updates-first-login-${user.id}`;
+    const hasSeenModal = localStorage.getItem(storageKey);
+
+    if (!hasSeenModal) {
+      // Delay to ensure page has loaded
+      setTimeout(() => {
+        setIsFirstLogin(true);
+        setShowUpdatesModal(true);
+      }, 1500);
+      
+      // Mark as seen
+      localStorage.setItem(storageKey, 'true');
+    }
+  }, [user, userLoading]);
 
   return (
     <>
@@ -592,14 +622,12 @@ export default function Header({
             </div>
           </div>
           <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 flex-shrink-0">
-            {/* Blockchain Switcher */}
-            <BlockchainSwitcher />
             {showSearch && (
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
                 {/* Pill-style search trigger with keycap hint (desktop) */}
                 <button
                   onClick={() => setSearchModalOpen(true)}
-                  className="hidden xl:flex items-center gap-2 h-8 rounded-full border px-3 pr-2 transition-all duration-300 ease-out"
+                  className="hidden xl:flex items-center gap-2 h-8 rounded-full border px-3 pr-2 transition-all duration-300 ease-out min-w-[280px]"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -622,7 +650,7 @@ export default function Header({
                 >
                   <FaSearch size={14} />
                   <span className="text-xs text-neutral-400 whitespace-nowrap">
-                    Search tokens…
+                    Search token by name, ticker, or CA...
                   </span>
                   <span className="ml-auto rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">
                     Tab
@@ -632,7 +660,7 @@ export default function Header({
                 {/* Medium search button (for tablets) - shows icon + text without Tab keycap */}
                 <button
                   onClick={() => setSearchModalOpen(true)}
-                  className="hidden lg:flex xl:hidden items-center gap-1.5 h-8 rounded-full border px-2.5 transition-all duration-300 ease-out"
+                  className="hidden lg:flex xl:hidden items-center gap-1.5 h-8 rounded-full border px-2.5 transition-all duration-300 ease-out min-w-[180px]"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -796,235 +824,26 @@ export default function Header({
                 )}
               </div>
             )}
-            {/* SOL Balance Pill with Dropdown - hidden on mobile (will be in mobile menu) */}
-            {user && (
-              <div ref={walletDropdownRef} className="hidden md:block relative">
-                <button
-                  onClick={() => setWalletDropdownOpen(!walletDropdownOpen)}
-                  className="flex items-center gap-1 lg:gap-1.5 h-8 rounded-full border px-2 lg:px-3 transition-all duration-300 ease-out cursor-pointer"
-                  style={{
-                    backgroundColor: AX.surface,
-                    borderColor: AX.border,
-                    color: AX.text,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(24, 196, 140, 0.08)";
-                    e.currentTarget.style.borderColor = AX.mint;
-                    e.currentTarget.style.boxShadow =
-                      "0 0 8px rgba(24, 196, 140, 0.2)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = AX.surface;
-                    e.currentTarget.style.borderColor = AX.border;
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
-                >
-                  <FaWallet size={11} style={{ color: AX.muted }} />
-                  <span className="text-[11px] lg:text-xs font-medium">
-                    {solBalance.toFixed(2)}
-                  </span>
-                  <img
-                    src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                    alt="SOL"
-                    className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full"
-                  />
-                </button>
-
-                {/* Wallet Dropdown */}
-                {walletDropdownOpen && (
-                  <div
-                    className="absolute top-10 right-0 z-50 rounded-xl border shadow-2xl"
-                    style={{
-                      backgroundColor: "#0a0b10",
-                      borderColor: "#20232b",
-                      width: "240px",
-                    }}
-                  >
-                    <div className="p-4">
-                      {/* Wallet Header */}
-                      <div className="flex items-center gap-2 mb-3 pb-2 border-b" style={{ borderColor: "#20232b" }}>
-                        <FaWallet size={16} style={{ color: AX.mint }} />
-                        <span className="text-sm font-semibold text-white">Wallet</span>
-                      </div>
-                      
-                      {/* Total Value */}
-                      <div className="mb-3">
-                        <div className="text-xs text-neutral-400 mb-1">Total Value</div>
-                        <div className="text-2xl font-bold text-white">${(solBalance * 100).toFixed(2)}</div>
-                      </div>
-
-                      {/* Balance Display */}
-                      <div className="flex items-center justify-between mb-4 p-2 rounded-lg" style={{ backgroundColor: "#17191e" }}>
-                        <div className="flex items-center gap-2">
-                          <img
-                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                            alt="SOL"
-                            className="w-4 h-4 rounded-full"
-                          />
-                          <span className="text-sm text-white">≈ {solBalance.toFixed(2)}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                          </svg>
-                          <img
-                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                            alt="SOL"
-                            className="w-4 h-4 rounded-full"
-                          />
-                          <span className="text-sm text-white">0</span>
-                        </div>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="space-y-2">
-                        {/* Deposit/Withdraw Buttons */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setWalletDropdownOpen(false);
-                              handleDepositClick();
-                            }}
-                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
-                            style={{
-                              backgroundColor: AX.mint,
-                              color: "#000000",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = AX.mintHover;
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = AX.mint;
-                            }}
-                          >
-                            Deposit
-                          </button>
-                          <button
-                            onClick={() => {
-                              setWalletDropdownOpen(false);
-                              handleWithdrawClick();
-                            }}
-                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#1A1B1F";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#0f1012";
-                            }}
-                          >
-                            Withdraw
-                          </button>
-                        </div>
-
-                        {/* Convert/Buy Buttons */}
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => {
-                              setWalletDropdownOpen(false);
-                              handleConvertClick();
-                            }}
-                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#1A1B1F";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#0f1012";
-                            }}
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                            </svg>
-                            Convert
-                          </button>
-                          <button
-                            onClick={() => {
-                              setWalletDropdownOpen(false);
-                              handleBuyClick();
-                            }}
-                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = "#1A1B1F";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = "#0f1012";
-                            }}
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                            </svg>
-                            Buy
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
             
-            {/* Deposit Button - visible when user is logged in */}
-            {user && (
-              <button
-                onClick={() => handleDepositClick()}
-                className="hidden md:flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out flex-shrink-0"
-                style={{
-                  backgroundColor: AX.mint,
-                  borderColor: AX.mint,
-                  color: "#000000",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = AX.mintHover;
-                  e.currentTarget.style.borderColor = AX.mintHover;
-                  e.currentTarget.style.boxShadow = "0 0 8px rgba(24, 196, 140, 0.3)";
-                  e.currentTarget.style.transform = "scale(1.02)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = AX.mint;
-                  e.currentTarget.style.borderColor = AX.mint;
-                  e.currentTarget.style.boxShadow = "none";
-                  e.currentTarget.style.transform = "scale(1)";
-                }}
-                title="Deposit"
-              >
-                <span className="text-xs font-semibold">Deposit</span>
-              </button>
-            )}
+            {/* Blockchain Switcher */}
+            <BlockchainSwitcher />
             
             <button
               onClick={() => setWatchlistOpen(true)}
-              className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out flex-shrink-0"
+              className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
               style={{
-                backgroundColor: AX.surface,
-                borderColor: AX.border,
+                backgroundColor: '#000000',
                 color: AX.muted,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor =
                   "rgba(24, 196, 140, 0.08)";
-                e.currentTarget.style.borderColor = AX.mint;
                 e.currentTarget.style.color = AX.mint;
                 e.currentTarget.style.boxShadow = "none";
                 e.currentTarget.style.transform = "scale(1.02)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = AX.surface;
-                e.currentTarget.style.borderColor = AX.border;
+                e.currentTarget.style.backgroundColor = '#000000';
                 e.currentTarget.style.color = AX.muted;
                 e.currentTarget.style.boxShadow = "none";
                 e.currentTarget.style.transform = "scale(1)";
@@ -1038,23 +857,20 @@ export default function Header({
             <div ref={notificationsRef} className="relative">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out flex-shrink-0"
+                className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
                 style={{
-                  backgroundColor: AX.surface,
-                  borderColor: AX.border,
+                  backgroundColor: '#000000',
                   color: AX.muted,
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor =
                     "rgba(24, 196, 140, 0.08)";
-                  e.currentTarget.style.borderColor = AX.mint;
                   e.currentTarget.style.color = AX.mint;
                   e.currentTarget.style.boxShadow = "none";
                   e.currentTarget.style.transform = "scale(1.02)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = AX.surface;
-                  e.currentTarget.style.borderColor = AX.border;
+                  e.currentTarget.style.backgroundColor = '#000000';
                   e.currentTarget.style.color = AX.muted;
                   e.currentTarget.style.boxShadow = "none";
                   e.currentTarget.style.transform = "scale(1)";
@@ -1071,8 +887,9 @@ export default function Header({
                   style={{
                     backgroundColor: "#1a1b20",
                     borderColor: "#2A2B33",
-                    width: "380px",
-                    maxWidth: "calc(100vw - 32px)",
+                    width: "280px",
+                    minWidth: "280px",
+                    maxWidth: "280px",
                     maxHeight: "70vh",
                   }}
                 >
@@ -1116,59 +933,300 @@ export default function Header({
             
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
-              <div
-                ref={profileMenuRef}
-                className="flex group relative cursor-pointer items-center gap-1.5 lg:gap-2"
-              >
-                {/* Circular profile picture (placeholder) */}
-                <div
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold text-white select-none flex-shrink-0"
-                  style={{ backgroundColor: AX.mint }}
+              <div ref={profileMenuRef} className="relative">
+                {/* Combined Balance + Username Button */}
+                <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                >
-                  {user.name ? user.name.charAt(0).toUpperCase() : "U"}
-                </div>
-                <span
-                  className="hidden lg:block max-w-[70px] xl:max-w-[90px] truncate text-xs xl:text-sm"
-                  style={{ color: AX.text }}
-                >
-                  {user.name}
-                </span>
-                {/* Dropdown for logout */}
-                <div
-                  className={`absolute top-8 right-0 z-50 min-w-[100px] rounded border px-3 py-1.5 shadow-lg transition-opacity ${
-                    profileMenuOpen
-                      ? "opacity-100"
-                      : "opacity-0 md:group-hover:opacity-100"
-                  }`}
+                  className="flex items-center gap-1.5 lg:gap-2 h-8 rounded-full border px-2 lg:px-3 transition-all duration-300 ease-out cursor-pointer"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
+                    color: AX.text,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(24, 196, 140, 0.08)";
+                    e.currentTarget.style.borderColor = AX.mint;
+                    e.currentTarget.style.boxShadow =
+                      "0 0 8px rgba(24, 196, 140, 0.2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.boxShadow = "none";
                   }}
                 >
-                  <InterstateButton
-                    variant="danger"
-                    size="sm"
-                    className="h-auto w-full border-none bg-transparent px-0 py-0 text-left text-xs font-semibold shadow-none hover:underline"
-                    onClick={() => {
-                      setProfileMenuOpen(false);
-                      if (typeof window !== "undefined") {
-                        document.cookie = "token=; Max-Age=0; path=/;";
-                      }
-                      if (
-                        typeof window !== "undefined" &&
-                        window.localStorage
-                      ) {
-                        window.localStorage.removeItem("token");
-                      }
-                      if (typeof window !== "undefined") {
-                        window.location.reload();
-                      }
+                  {/* Balance */}
+                  <FaWallet size={11} style={{ color: AX.muted }} />
+                  <span className="text-[11px] lg:text-xs font-medium">
+                    {solBalance.toFixed(2)}
+                  </span>
+                  <img
+                    src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                    alt="SOL"
+                    className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full"
+                  />
+                  {/* Divider */}
+                  <div className="h-4 w-px bg-neutral-700 hidden sm:block"></div>
+                  {/* User Avatar */}
+                  <div
+                    className="hidden sm:flex h-5 w-5 lg:h-6 lg:w-6 items-center justify-center rounded-full text-xs font-bold text-white select-none"
+                    style={{ backgroundColor: AX.mint }}
+                  >
+                    {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                  </div>
+                  {/* Username (hidden on smaller screens) */}
+                  <span
+                    className="hidden lg:block max-w-[60px] xl:max-w-[80px] truncate text-xs"
+                    style={{ color: AX.text }}
+                  >
+                    {user.name}
+                  </span>
+                </button>
+
+                {/* Combined Dropdown */}
+                {profileMenuOpen && (
+                  <div
+                    className="absolute top-10 right-0 z-50 rounded-xl border shadow-2xl"
+                    style={{
+                      backgroundColor: "#0a0b10",
+                      borderColor: "#20232b",
+                      width: "280px",
+                      minWidth: "280px",
+                      maxWidth: "280px",
                     }}
                   >
-                    Logout
-                  </InterstateButton>
-                </div>
+                    <div className="p-4">
+                      {/* User Info Header */}
+                      <div className="flex items-center gap-2 mb-3 pb-3 border-b" style={{ borderColor: "#20232b" }}>
+                        <div
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white select-none"
+                          style={{ backgroundColor: AX.mint }}
+                        >
+                          {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-white truncate">{user.name}</div>
+                          <div className="text-xs text-neutral-400">Account</div>
+                        </div>
+                      </div>
+                      
+                      {/* Total Value */}
+                      <div className="mb-3">
+                        <div className="text-xs text-neutral-400 mb-1">Total Value</div>
+                        <div className="text-2xl font-bold text-white">${(solBalance * 100).toFixed(2)}</div>
+                      </div>
+
+                      {/* Balance Display */}
+                      <div className="flex items-center justify-between mb-4 p-2 rounded-lg" style={{ backgroundColor: "#17191e" }}>
+                        <div className="flex items-center gap-2">
+                          <img
+                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                            alt="SOL"
+                            className="w-4 h-4 rounded-full"
+                          />
+                          <span className="text-sm text-white">≈ {solBalance.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                          </svg>
+                          <img
+                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                            alt="SOL"
+                            className="w-4 h-4 rounded-full"
+                          />
+                          <span className="text-sm text-white">0</span>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="space-y-2">
+                        {/* Deposit/Withdraw Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              handleDepositClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+                            style={{
+                              backgroundColor: AX.mint,
+                              color: "#000000",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = AX.mintHover;
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = AX.mint;
+                            }}
+                          >
+                            Deposit
+                          </button>
+                          <button
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              handleWithdrawClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+                            style={{
+                              backgroundColor: "#0f1012",
+                              color: "#ffffff",
+                              border: "1px solid #2A2B33",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1A1B1F";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#0f1012";
+                            }}
+                          >
+                            Withdraw
+                          </button>
+                        </div>
+
+                        {/* Convert/Buy Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              handleConvertClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5"
+                            style={{
+                              backgroundColor: "#0f1012",
+                              color: "#ffffff",
+                              border: "1px solid #2A2B33",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1A1B1F";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#0f1012";
+                            }}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            Convert
+                          </button>
+                          <button
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              handleBuyClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5"
+                            style={{
+                              backgroundColor: "#0f1012",
+                              color: "#ffffff",
+                              border: "1px solid #2A2B33",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1A1B1F";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#0f1012";
+                            }}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            Buy
+                          </button>
+                        </div>
+
+                        {/* Referral Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            router.push('/rewards');
+                          }}
+                          className="w-full px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 mt-2 border-t pt-3 flex items-center gap-2"
+                          style={{
+                            backgroundColor: "transparent",
+                            color: AX.text,
+                            borderColor: "#20232b",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.1)";
+                            e.currentTarget.style.color = AX.mint;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                            e.currentTarget.style.color = AX.text;
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          Referral
+                        </button>
+
+                        {/* Feature Updates Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            setIsFirstLogin(false);
+                            setShowUpdatesModal(true);
+                          }}
+                          className="w-full px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                          style={{
+                            backgroundColor: "transparent",
+                            color: AX.text,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.1)";
+                            e.currentTarget.style.color = AX.mint;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                            e.currentTarget.style.color = AX.text;
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          Feature Updates
+                        </button>
+
+                        {/* Logout Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            if (typeof window !== "undefined") {
+                              document.cookie = "token=; Max-Age=0; path=/;";
+                            }
+                            if (
+                              typeof window !== "undefined" &&
+                              window.localStorage
+                            ) {
+                              window.localStorage.removeItem("token");
+                            }
+                            if (typeof window !== "undefined") {
+                              window.location.reload();
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                          style={{
+                            backgroundColor: "transparent",
+                            color: "#ef4444",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                          </svg>
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               !userLoading && (
@@ -1391,6 +1449,17 @@ export default function Header({
           if (setSearch) setSearch(trimmed);
         }}
       />
+      {/* Updates Modal */}
+      {showUpdatesModal && (
+        <UpdatesModal
+          onClose={() => {
+            setShowUpdatesModal(false);
+            setIsFirstLogin(false);
+          }}
+          updates={PLATFORM_UPDATES}
+          storageKey={isFirstLogin ? "" : "header-updates-viewed"}
+        />
+      )}
     </>
   );
 }

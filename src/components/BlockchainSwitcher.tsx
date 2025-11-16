@@ -116,22 +116,19 @@ export default function BlockchainSwitcher() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 h-8 rounded-full border px-3 transition-all duration-300 ease-out"
+        className="flex items-center gap-2 h-8 rounded-full px-3 transition-all duration-300 ease-out"
         style={{
-          backgroundColor: AX.surface,
-          borderColor: isOpen ? AX.mint : AX.border,
+          backgroundColor: '#000000',
           color: AX.text,
         }}
         onMouseEnter={(e) => {
           if (!isOpen) {
             e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
-            e.currentTarget.style.borderColor = AX.mint;
           }
         }}
         onMouseLeave={(e) => {
           if (!isOpen) {
-            e.currentTarget.style.backgroundColor = AX.surface;
-            e.currentTarget.style.borderColor = AX.border;
+            e.currentTarget.style.backgroundColor = '#000000';
           }
         }}
       >

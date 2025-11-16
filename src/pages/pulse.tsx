@@ -8,6 +8,7 @@ import PulseControlBar from '../components/PulseControlBar';
 import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import UpdatesModal from '../components/UpdatesModal';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 import { usePulseWebSocket } from '../hooks/usePulseWebSocket';
@@ -44,9 +45,42 @@ interface LaunchpadData {
 }
 
 // FEATURE FLAG: To re-enable the 5 bubble metrics, change showBubbleMetrics={false} to showBubbleMetrics={true} in all PulseTable components below
+
+// Sample updates data - customize as needed
+const PLATFORM_UPDATES = [
+  {
+    id: 'update-1',
+    title: 'Enhanced Real-Time Data',
+    description: 'Experience lightning-fast updates with our improved WebSocket infrastructure for live token tracking.',
+    badge: 'New Feature',
+    badgeColor: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+    image: '/interstate-logo.png',
+  },
+  {
+    id: 'update-2',
+    title: 'Multi-Chain Support',
+    description: 'Track tokens across Solana, BNB Chain, and more. Switch between chains seamlessly with our updated interface.',
+    badge: 'Coming Soon',
+    badgeColor: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+  },
+  {
+    id: 'update-3',
+    title: 'Advanced Filtering',
+    description: 'Find the perfect opportunities with our new advanced filtering options. Sort by liquidity, volume, and more.',
+    badge: 'Improved',
+    badgeColor: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
+    actionText: 'Learn more about filtering',
+    actionLink: 'https://discord.gg/sACYQmCsTJ',
+  },
+];
+
 export default function PulsePage() {
   // Tab navigation state
   const [activeTab, setActiveTab] = useState<'new' | 'final-stretch' | 'migrated'>('new');
+  
+  // Updates modal state
+  const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+  
   const router = useRouter();
   const chain = router.query.chain as string | undefined;
   const isBnbRoute = chain === 'bnb';
@@ -88,6 +122,23 @@ export default function PulsePage() {
       router.replace('/pulse?chain=sol', undefined, { shallow: true });
     }
   }, [router.isReady, chain, router]);
+
+  // Check if updates modal should be shown on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const storageKey = 'trenches-updates-viewed';
+      const lastViewed = localStorage.getItem(storageKey);
+      const updateVersion = '2025-11-16'; // Update this date when you have new updates
+      
+      // Show modal if never viewed or if version is newer
+      if (!lastViewed || lastViewed < updateVersion) {
+        // Delay to ensure page has loaded
+        setTimeout(() => {
+          setShowUpdatesModal(true);
+        }, 1000);
+      }
+    }
+  }, []);
 
   // Keyboard navigation for tabs (mobile only)
   useEffect(() => {
@@ -762,9 +813,9 @@ export default function PulsePage() {
         <title>Trenches | Interstate Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
-      <div className="min-h-screen text-neutral-100" style={{ backgroundColor: '#06070b' }}>
+      <div className="flex min-h-screen flex-col text-neutral-100" style={{ backgroundColor: '#06070b' }}>
         <Header />
-        <div className="w-full px-5 pt-2 pb-6">
+        <div className="flex-1 w-full px-5 pt-2 pb-6">
           <div className="mb-2">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
@@ -1065,6 +1116,15 @@ export default function PulsePage() {
         </div>
         <Footer />
       </div>
+      
+      {/* Updates Modal */}
+      {showUpdatesModal && (
+        <UpdatesModal
+          updates={PLATFORM_UPDATES}
+          onClose={() => setShowUpdatesModal(false)}
+          storageKey="trenches-updates-viewed"
+        />
+      )}
     </>
   );
 }

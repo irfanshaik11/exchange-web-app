@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { FaCopy, FaTimes, FaQuestionCircle } from "react-icons/fa";
+import { FaCopy, FaTimes, FaQuestionCircle, FaHistory, FaExternalLinkAlt, FaCheckCircle, FaClock, FaExclamationCircle } from "react-icons/fa";
 import Cookies from "js-cookie";
 import QRCode from "qrcode";
 import { useUser } from "./UserContext";
 import toast from "react-hot-toast";
+import { withdrawSOL, getWithdrawalHistory, getWithdrawalFee } from "~/utils/api";
 
 // Extend Window interface to include MoonPay and Jupiter
 declare global {
@@ -40,7 +41,18 @@ interface DepositModalProps {
   initialTab?: TabType;
 }
 
-type TabType = 'convert' | 'deposit' | 'buy';
+type TabType = 'convert' | 'deposit' | 'buy' | 'withdraw';
+
+interface WithdrawalTransaction {
+  id: number;
+  amount: number | string;
+  destinationAddress?: string;
+  txSignature?: string;
+  status: 'pending' | 'completed' | 'failed';
+  fee: number | string;
+  createdAt: string;
+  completedAt?: string;
+}
 
 const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab = 'deposit' }) => {
   const { user, loading: userLoading, refreshUser, refreshBalance, solBalance } = useUser();
@@ -50,6 +62,21 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [moonPayLoaded, setMoonPayLoaded] = useState(false);
   const [jupiterLoaded, setJupiterLoaded] = useState(false);
+  
+  // Withdraw tab states
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [destinationAddress, setDestinationAddress] = useState("");
+  const [isWithdrawLoading, setIsWithdrawLoading] = useState(false);
+  const [withdrawMessage, setWithdrawMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [txSignature, setTxSignature] = useState<string | null>(null);
+  const [withdrawalFee, setWithdrawalFee] = useState<number>(0.0005);
+  const [withdrawView, setWithdrawView] = useState<'form' | 'history'>('form');
+  const [history, setHistory] = useState<WithdrawalTransaction[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  
+  const MIN_WITHDRAWAL = 0.001;
+  const MAX_WITHDRAWAL = 100;
+  const minimumReserve = 0.00139;
 
   // Update active tab when initialTab changes
   useEffect(() => {
@@ -220,6 +247,179 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     }
   }, [activeTab, jupiterLoaded, open, refreshBalance]);
 
+  // Fetch withdrawal fee when withdraw tab is active
+  useEffect(() => {
+    if (activeTab === 'withdraw' && open) {
+      fetchWithdrawalFee();
+    }
+  }, [activeTab, open]);
+
+  // Reset withdraw form when modal closes or tab changes
+  useEffect(() => {
+    if (!open || activeTab !== 'withdraw') {
+      setWithdrawAmount("");
+      setDestinationAddress("");
+      setWithdrawMessage(null);
+      setTxSignature(null);
+      setWithdrawView('form');
+    }
+  }, [open, activeTab]);
+
+  // Fetch history when switching to history view
+  useEffect(() => {
+    if (withdrawView === 'history' && user?.bearerToken && activeTab === 'withdraw') {
+      fetchHistory();
+    }
+  }, [withdrawView, user?.bearerToken, activeTab]);
+
+  const fetchWithdrawalFee = async () => {
+    try {
+      const feeData = await getWithdrawalFee();
+      const fee = typeof feeData === 'number' ? feeData : (feeData as any).fee || 0.0005;
+      setWithdrawalFee(fee);
+    } catch (error) {
+      console.error('Failed to fetch withdrawal fee:', error);
+    }
+  };
+
+  const fetchHistory = async () => {
+    if (!user?.bearerToken) return;
+    
+    setHistoryLoading(true);
+    try {
+      const data = await getWithdrawalHistory(user.bearerToken);
+      const transactions = (data as any).transactions || data || [];
+      setHistory(Array.isArray(transactions) ? transactions : []);
+    } catch (error) {
+      console.error('Failed to fetch withdrawal history:', error);
+      toast.error("Failed to load withdrawal history", {
+        duration: 2000,
+        style: {
+          background: '#1E1F26',
+          color: '#E6E7EA',
+          border: '1px solid #ff6b6b',
+        }
+      });
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleMaxClick = () => {
+    const maxAmount = Math.max(0, solBalance - minimumReserve);
+    setWithdrawAmount(maxAmount.toFixed(4));
+  };
+
+  const handleWithdraw = async () => {
+    if (!user?.bearerToken) {
+      setWithdrawMessage({ type: "error", text: "User not logged in." });
+      return;
+    }
+
+    const amount = Number(withdrawAmount);
+    if (!amount || amount <= 0) {
+      setWithdrawMessage({ type: "error", text: "Enter a valid withdrawal amount." });
+      return;
+    }
+
+    if (amount < MIN_WITHDRAWAL) {
+      setWithdrawMessage({ type: "error", text: `Minimum withdrawal is ${MIN_WITHDRAWAL} SOL.` });
+      return;
+    }
+
+    if (amount > MAX_WITHDRAWAL) {
+      setWithdrawMessage({ type: "error", text: `Maximum withdrawal is ${MAX_WITHDRAWAL} SOL per transaction.` });
+      return;
+    }
+
+    const totalRequired = amount + withdrawalFee;
+    if (totalRequired > solBalance) {
+      setWithdrawMessage({ type: "error", text: `Insufficient balance. You need ${totalRequired.toFixed(4)} SOL (including ${withdrawalFee.toFixed(4)} SOL fee).` });
+      return;
+    }
+
+    if (!destinationAddress.trim()) {
+      setWithdrawMessage({ type: "error", text: "Enter a destination address." });
+      return;
+    }
+
+    // Basic Solana address validation
+    if (destinationAddress.length < 32 || destinationAddress.length > 44) {
+      setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
+      return;
+    }
+
+    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
+    if (!base58Regex.test(destinationAddress)) {
+      setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
+      return;
+    }
+
+    setIsWithdrawLoading(true);
+    setWithdrawMessage(null);
+    setTxSignature(null);
+
+    try {
+      const result = await withdrawSOL({
+        amount,
+        destinationAddress
+      }, user.bearerToken);
+      
+      if (result && result.txSignature) {
+        setWithdrawMessage({ 
+          type: "success", 
+          text: `Withdrawal successful! ${amount} SOL sent to ${destinationAddress.slice(0, 6)}...${destinationAddress.slice(-4)}`
+        });
+        setTxSignature(result.txSignature || null);
+        setWithdrawAmount("");
+        setDestinationAddress("");
+        
+        toast.success("Withdrawal successful!", {
+          duration: 3000,
+          style: {
+            background: '#1E1F26',
+            color: '#E6E7EA',
+            border: '1px solid #18c48c',
+          }
+        });
+
+        // Refresh balance
+        if (refreshBalance) {
+          setTimeout(() => refreshBalance(), 2000);
+        }
+      } else {
+        setWithdrawMessage({ 
+          type: "error", 
+          text: result?.message || "Withdrawal failed. Please try again."
+        });
+        
+        toast.error(result?.message || "Withdrawal failed", {
+          duration: 3000,
+          style: {
+            background: '#1E1F26',
+            color: '#E6E7EA',
+            border: '1px solid #ff6b6b',
+          }
+        });
+      }
+    } catch (error: any) {
+      console.error("Withdrawal error:", error);
+      const errorMessage = error?.message || "An error occurred during withdrawal.";
+      setWithdrawMessage({ type: "error", text: errorMessage });
+      
+      toast.error(errorMessage, {
+        duration: 3000,
+        style: {
+          background: '#1E1F26',
+          color: '#E6E7EA',
+          border: '1px solid #ff6b6b',
+        }
+      });
+    } finally {
+      setIsWithdrawLoading(false);
+    }
+  };
+
   // Function to show MoonPay widget
   const showMoonPay = async () => {
     if (!moonPayLoaded || !window.MoonPayWebSdk) {
@@ -286,7 +486,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "#2A2B33" }}>
             <h2 className="text-2xl font-bold text-white">
-              {activeTab === 'convert' ? 'Convert' : activeTab === 'deposit' ? 'Deposit' : 'Buy'}
+              {activeTab === 'convert' ? 'Convert' : activeTab === 'deposit' ? 'Deposit' : activeTab === 'buy' ? 'Buy' : 'Withdraw'}
             </h2>
             <button
               onClick={onClose}
@@ -341,6 +541,19 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
               >
                 Buy
               </button>
+              <button
+                onClick={() => setActiveTab('withdraw')}
+                className={`flex-1 py-3 px-4 rounded-xl text-base font-medium transition-all duration-200 ${
+                  activeTab === 'withdraw' 
+                    ? 'text-white' 
+                    : 'text-neutral-400 hover:text-neutral-300'
+                }`}
+                style={{
+                  backgroundColor: activeTab === 'withdraw' ? '#2A2D35' : 'transparent'
+                }}
+              >
+                Withdraw
+              </button>
             </div>
           </div>
 
@@ -349,6 +562,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
             {activeTab === 'convert' && 'Convert your crypto to SOL'}
             {activeTab === 'deposit' && 'Deposit SOL to your Narrative wallet'}
             {activeTab === 'buy' && 'Buy SOL with fiat currency'}
+            {activeTab === 'withdraw' && 'Withdraw SOL to an external wallet'}
           </div>
 
           {/* Content */}
@@ -404,12 +618,12 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                     <div className="text-neutral-400">Loading wallet data...</div>
                   </div>
                 ) : !user ? (
-                  <div className="rounded-3xl border border-red-500/30 bg-red-900/20 p-6 text-center">
-                    <div className="text-sm text-red-400">Please login first to view your deposit address</div>
+                  <div className="rounded-3xl border border-orange-500/30 bg-orange-900/20 p-6 text-center">
+                    <div className="text-sm text-orange-400">Please login first to view your deposit address</div>
                     {Cookies.get("token") && (
                       <button
                         onClick={refreshUser}
-                        className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-3xl transition-colors"
+                        className="mt-4 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-3xl transition-colors"
                       >
                         Refresh User Data
                       </button>
@@ -579,6 +793,259 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                     <FaQuestionCircle size={14} />
                   </a>
                 </div>
+              </div>
+            )}
+
+            {/* Withdraw Tab */}
+            {activeTab === 'withdraw' && (
+              <div className="space-y-6">
+                {withdrawView === 'form' ? (
+                  <>
+                    {/* Wallet Info Box */}
+                    <div className="rounded-3xl border p-4" style={{ backgroundColor: "#0a0b0f", borderColor: "#2A2B33" }}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs text-neutral-400 mb-1">Available Balance</div>
+                          <div className="text-2xl font-bold text-white flex items-center gap-2">
+                            <img
+                              src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                              alt="SOL"
+                              className="w-5 h-5 rounded-full"
+                            />
+                            {solBalance.toFixed(4)} SOL
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setWithdrawView('history')}
+                          className="px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                          style={{
+                            backgroundColor: "#0f1012",
+                            color: "#ffffff",
+                            border: "1px solid #2A2B33",
+                          }}
+                        >
+                          <FaHistory size={14} />
+                          History
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Withdraw Form */}
+                    <div className="space-y-4">
+                      {/* Amount Input */}
+                      <div>
+                        <label className="block text-sm font-medium text-neutral-300 mb-2">
+                          Amount (SOL)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={withdrawAmount}
+                            onChange={(e) => setWithdrawAmount(e.target.value)}
+                            placeholder="0.0000"
+                            step="0.0001"
+                            min="0"
+                            className="w-full px-4 py-3 rounded-xl text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-[#18c48c]"
+                            style={{
+                              backgroundColor: "#0a0b0f",
+                              border: "1px solid #2A2B33",
+                            }}
+                          />
+                          <button
+                            onClick={handleMaxClick}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1 text-xs font-semibold rounded-lg transition-all"
+                            style={{
+                              backgroundColor: "#18c48c",
+                              color: "#000000",
+                            }}
+                          >
+                            MAX
+                          </button>
+                        </div>
+                        <div className="mt-1 text-xs text-neutral-400">
+                          Fee: {withdrawalFee.toFixed(4)} SOL • Min: {MIN_WITHDRAWAL} SOL • Max: {MAX_WITHDRAWAL} SOL
+                        </div>
+                      </div>
+
+                      {/* Destination Address */}
+                      <div>
+                        <label className="block text-sm font-medium text-neutral-300 mb-2">
+                          Destination Address
+                        </label>
+                        <input
+                          type="text"
+                          value={destinationAddress}
+                          onChange={(e) => setDestinationAddress(e.target.value)}
+                          placeholder="Enter Solana wallet address"
+                          className="w-full px-4 py-3 rounded-xl text-white placeholder-neutral-500 focus:outline-none focus:ring-2 font-mono text-sm"
+                          style={{
+                            backgroundColor: "#0a0b0f",
+                            border: "1px solid #2A2B33",
+                          }}
+                        />
+                      </div>
+
+                      {/* Summary */}
+                      {withdrawAmount && Number(withdrawAmount) > 0 && (
+                        <div className="rounded-2xl p-4" style={{ backgroundColor: "#0a0b0f", border: "1px solid #2A2B33" }}>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-neutral-400">Amount</span>
+                              <span className="text-white">{Number(withdrawAmount).toFixed(4)} SOL</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-neutral-400">Network Fee</span>
+                              <span className="text-white">{withdrawalFee.toFixed(4)} SOL</span>
+                            </div>
+                            <div className="border-t pt-2" style={{ borderColor: "#2A2B33" }}>
+                              <div className="flex justify-between font-semibold">
+                                <span className="text-neutral-300">Total Deducted</span>
+                                <span className="text-white">{(Number(withdrawAmount) + withdrawalFee).toFixed(4)} SOL</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Messages */}
+                      {withdrawMessage && (
+                        <div 
+                          className="rounded-3xl p-4"
+                          style={{
+                            backgroundColor: withdrawMessage.type === 'success' ? 'rgba(24, 196, 140, 0.1)' : 'rgba(251, 146, 60, 0.1)',
+                            border: `1px solid ${withdrawMessage.type === 'success' ? '#18c48c' : '#fb923c'}`
+                          }}
+                        >
+                          <div className="flex gap-3">
+                            <div className="flex-shrink-0">
+                              {withdrawMessage.type === 'success' ? (
+                                <FaCheckCircle className="text-[#18c48c]" size={20} />
+                              ) : (
+                                <FaExclamationCircle className="text-orange-400" size={20} />
+                              )}
+                            </div>
+                            <div className="text-sm" style={{ color: withdrawMessage.type === 'success' ? '#18c48c' : '#fb923c' }}>
+                              {withdrawMessage.text}
+                            </div>
+                          </div>
+                          {txSignature && (
+                            <a
+                              href={`https://solscan.io/tx/${txSignature}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-2 flex items-center gap-1 text-xs hover:opacity-80 transition-opacity"
+                              style={{ color: '#18c48c' }}
+                            >
+                              View on Solscan <FaExternalLinkAlt size={10} />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Withdraw Button */}
+                      <button
+                        onClick={handleWithdraw}
+                        disabled={isWithdrawLoading || !withdrawAmount || !destinationAddress}
+                        className="w-full py-4 rounded-3xl font-semibold text-base transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: "#E8E9EB", color: "#000000" }}
+                      >
+                        {isWithdrawLoading ? 'Processing...' : 'Withdraw SOL'}
+                      </button>
+
+                      {/* Warning */}
+                      <div className="flex gap-3 p-4 rounded-3xl" style={{ backgroundColor: "rgba(217, 119, 6, 0.1)", borderColor: "#d97706", border: "1px solid" }}>
+                        <div className="flex-shrink-0 mt-0.5">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#d97706" }}>
+                            <circle cx="12" cy="12" r="10" fill="currentColor" />
+                            <path d="M12 8v4m0 4h.01" stroke="#1a1b20" strokeWidth="2" strokeLinecap="round" />
+                          </svg>
+                        </div>
+                        <div className="text-sm leading-relaxed" style={{ color: "#fbbf24" }}>
+                          <span className="font-semibold">Important: </span>
+                          Double-check the destination address. Transactions cannot be reversed.
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* History View */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold text-white">Withdrawal History</h3>
+                        <button
+                          onClick={() => setWithdrawView('form')}
+                          className="px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                          style={{
+                            backgroundColor: "#0f1012",
+                            color: "#ffffff",
+                            border: "1px solid #2A2B33",
+                          }}
+                        >
+                          ← Back
+                        </button>
+                      </div>
+
+                      {historyLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                          <div className="text-neutral-400">Loading history...</div>
+                        </div>
+                      ) : history.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12">
+                          <FaHistory className="text-neutral-600 mb-4" size={48} />
+                          <p className="text-neutral-400">No withdrawal history yet</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {history.map((tx) => (
+                            <div
+                              key={tx.id}
+                              className="rounded-2xl p-4" 
+                              style={{ backgroundColor: "#0a0b0f", border: "1px solid #2A2B33" }}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  {tx.status === 'completed' && <FaCheckCircle className="text-[#18c48c]" size={16} />}
+                                  {tx.status === 'pending' && <FaClock className="text-yellow-400" size={16} />}
+                                  {tx.status === 'failed' && <FaExclamationCircle className="text-orange-400" size={16} />}
+                                  <span className="text-white font-semibold">
+                                    {typeof tx.amount === 'string' ? parseFloat(tx.amount).toFixed(4) : tx.amount.toFixed(4)} SOL
+                                  </span>
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded-full ${
+                                  tx.status === 'completed' ? 'bg-[#18c48c]/20 text-[#18c48c]' :
+                                  tx.status === 'pending' ? 'bg-yellow-400/20 text-yellow-400' :
+                                  'bg-orange-400/20 text-orange-400'
+                                }`}>
+                                  {tx.status.charAt(0).toUpperCase() + tx.status.slice(1)}
+                                </span>
+                              </div>
+                              {tx.destinationAddress && (
+                                <div className="text-xs text-neutral-400 font-mono mb-1">
+                                  To: {tx.destinationAddress.slice(0, 6)}...{tx.destinationAddress.slice(-4)}
+                                </div>
+                              )}
+                              <div className="text-xs text-neutral-500">
+                                {new Date(tx.createdAt).toLocaleString()}
+                              </div>
+                              {tx.txSignature && (
+                                <a
+                                  href={`https://solscan.io/tx/${tx.txSignature}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="mt-2 flex items-center gap-1 text-xs hover:opacity-80 transition-opacity"
+                                  style={{ color: '#18c48c' }}
+                                >
+                                  View Transaction <FaExternalLinkAlt size={10} />
+                                </a>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
