@@ -13,9 +13,10 @@ import { env } from "../env";
 import { useUser } from "./UserContext";
 import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import { useMetaMaskWallet } from "../hooks/useMetaMaskWallet";
-import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin } from "../utils/api";
+import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, getWaitlistStatus, redeemAccessCode, completeAllQuests } from "../utils/api";
 import Cookies from "js-cookie";
 import { FaDiscord } from "react-icons/fa";
+import { shouldShowWaitlistModal } from "../utils/waitlist";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -40,9 +41,10 @@ export function useReferralAccess() {
   return ctx;
 }
 
-const ADMIN_OVERRIDE_CODE = "NARRATIVE-ADMIN-247";
-const STORAGE_FLAG_KEY = "referralAccess.granted";
-const STORAGE_META_KEY = "referralAccess.meta";
+// All codes (including admin codes) must be validated server-side via redeemAccessCode
+const STORAGE_FLAG_KEY = "referralAccess.granted"; // legacy (session)
+const STORAGE_META_KEY = "referralAccess.meta"; // legacy (session)
+const LS_KEY_PREFIX = "referralAccess.granted.user:"; // persistent per-user
 
 type StoredAccessMeta = {
   grantedAt: number;
@@ -81,8 +83,13 @@ function persistAccess(userId?: string | null) {
     userId: userId ?? null,
   };
   try {
+    // Legacy session storage (kept for compatibility)
     window.sessionStorage.setItem(STORAGE_FLAG_KEY, "true");
     window.sessionStorage.setItem(STORAGE_META_KEY, JSON.stringify(meta));
+    // Persistent per-user flag
+    if (userId) {
+      window.localStorage.setItem(`${LS_KEY_PREFIX}${userId}`, "true");
+    }
   } catch (error) {
     console.warn("Failed to persist referral access state", error);
   }
@@ -93,6 +100,7 @@ function clearPersistedAccess() {
   try {
     window.sessionStorage.removeItem(STORAGE_FLAG_KEY);
     window.sessionStorage.removeItem(STORAGE_META_KEY);
+    // Do not clear per-user localStorage here; it should persist across sessions
   } catch (error) {
     console.warn("Failed to clear referral access state", error);
   }
@@ -101,8 +109,10 @@ function clearPersistedAccess() {
 function hasStoredAccess(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY);
-    return session === "true";
+    // Prefer per-user localStorage when user is known
+    // Fallback to legacy session flag
+    const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
+    return session;
   } catch {
     return false;
   }
@@ -257,19 +267,27 @@ export function ReferralAccessGate({
       return;
     }
 
-    if (!hasStoredAccess()) {
-      setStatus("prompt");
-      return;
+    // Check persistent per-user localStorage first
+    if (typeof window !== "undefined" && user?.id) {
+      const lsGranted = window.localStorage.getItem(`${LS_KEY_PREFIX}${user.id}`) === "true";
+      if (lsGranted) {
+        setStatus("granted");
+        setInfo("Welcome back.");
+        return;
+      }
     }
 
-    const meta = getStoredAccessMeta();
-    if (!user || !meta || !meta.userId || meta.userId !== user.id) {
-      revokeAccess();
-      return;
+    // Fallback to legacy session check
+    if (hasStoredAccess()) {
+      const meta = getStoredAccessMeta();
+      if (user && meta && meta.userId && meta.userId === user.id) {
+        setStatus("granted");
+        setInfo("Welcome back.");
+        return;
+      }
     }
 
-    setStatus("granted");
-    setInfo("Welcome back.");
+    setStatus("prompt");
   }, [requireReferralAccess, userLoading, user, revokeAccess]);
 
   useEffect(() => {
@@ -286,6 +304,32 @@ export function ReferralAccessGate({
     if (userLoading) return;
     evaluateStoredAccess();
   }, [requireReferralAccess, evaluateStoredAccess, userLoading, user]);
+
+  // On login/user change, check server waitlist state; auto-grant if off waitlist
+  useEffect(() => {
+    if (!requireReferralAccess) return;
+    if (userLoading || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const q = user?.id ? { userId: Number(user.id) } : undefined;
+        if (!q) return;
+        const resp = await getWaitlistStatus(q).catch(() => null);
+        const wl = resp?.waitlist;
+        if (cancelled) return;
+        if (wl && !shouldShowWaitlistModal({ status: wl.status, waitlistNumber: wl.waitlistNumber })) {
+          persistAccess(user.id);
+          setStatus("granted");
+          setInfo("Access restored.");
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [requireReferralAccess, userLoading, user]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -337,13 +381,40 @@ export function ReferralAccessGate({
       setError(null);
       setInfo(null);
 
-      if (normalized === ADMIN_OVERRIDE_CODE) {
-        grantAccess();
-        return;
-      }
-
-      setStatus("prompt");
-      setError("That code is not recognized. Please double-check with your inviter.");
+      // Validate with backend and mark waitlist as activated (number -> 0) on success.
+      // If the user has no waitlist row yet, create it and retry once.
+      (async () => {
+        try {
+          if (!user) {
+            setStatus("prompt");
+            setError("Please login first.");
+            return;
+          }
+          try {
+            await redeemAccessCode({
+              userId: Number(user.id),
+              accessCode: normalized,
+            });
+          } catch (err: any) {
+            // If no waitlist row, create it, then retry redeem once
+            const statusCode = err?.status || err?.response?.status;
+            if (statusCode === 404) {
+              await completeAllQuests({ userId: Number(user.id) });
+              await redeemAccessCode({
+                userId: Number(user.id),
+                accessCode: normalized,
+              });
+            } else {
+              throw err;
+            }
+          }
+          persistAccess(user.id);
+          grantAccess();
+        } catch (e: any) {
+          setStatus("prompt");
+          setError("That code is not recognized. Please double-check with your inviter.");
+        }
+      })();
     },
     [requireReferralAccess, codeInput, grantAccess],
   );

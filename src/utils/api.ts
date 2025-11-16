@@ -476,6 +476,16 @@ export const grantWaitlistAccess = (params: { userId?: number; walletId?: string
     body: params,
   });
 
+export const redeemAccessCode = (params: { userId?: number; walletId?: string; accessCode: string }) =>
+  apiFetch<{ waitlist: {
+    id: number;
+    waitlistNumber: string;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+  } }>("/api/waitlist/redeem-access", {
+    method: "POST",
+    body: params,
+  });
+
 /* -------------------------------------------------------------------------- */
 /*                               Trade endpoints                              */
 /* -------------------------------------------------------------------------- */
