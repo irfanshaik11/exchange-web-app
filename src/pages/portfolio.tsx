@@ -702,7 +702,7 @@ export default function PortfolioPage() {
               >
                 Spot
               </button>
-              {/* <button
+              <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "wallet"
                     ? "text-white"
@@ -711,7 +711,7 @@ export default function PortfolioPage() {
                 onClick={() => setActiveSection("wallet")}
               >
                 Wallets
-              </button> */}
+              </button>
               {/* <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "perpetuals"
