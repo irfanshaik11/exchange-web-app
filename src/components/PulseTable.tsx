@@ -22,7 +22,7 @@ import {
   FaGem
 } from "react-icons/fa";
 import { FaDice } from "react-icons/fa6";
-import { BsPersonGear, BsCoin, BsMoon, BsCloud, BsCup, BsArrowUp } from "react-icons/bs";
+import { BsPersonGear, BsCoin, BsMoon, BsCloud, BsCup, BsArrowUp, BsSliders2 } from "react-icons/bs";
 import { LuChefHat } from "react-icons/lu";
 import { RiGhostLine, RiFlaskLine } from "react-icons/ri";
 import { BiCandles, BiRefresh } from "react-icons/bi";
@@ -2839,15 +2839,7 @@ function PulseTable({
             }}
             onClick={() => setShowFilters(!showFilters)}
           >
-            {/* Custom Filter Icon - Three horizontal lines with circles */}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="4" y1="6" x2="20" y2="6"/>
-              <circle cx="8" cy="6" r="2"/>
-              <line x1="4" y1="12" x2="20" y2="12"/>
-              <circle cx="16" cy="12" r="2"/>
-              <line x1="4" y1="18" x2="20" y2="18"/>
-              <circle cx="8" cy="18" r="2"/>
-            </svg>
+            <BsSliders2 size={14} />
             
             {/* Protocol Filter Count Indicator (exclude 'All') */}
             {filters.protocols.filter((p: string) => p !== 'All').length > 0 && (
