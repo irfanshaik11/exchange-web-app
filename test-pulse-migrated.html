@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Pulse Migrated Tokens</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Pulse Migrated Tokens</h1>
+    
+    <div class="test-section info">
+        <h3>📡 Testing API Endpoints</h3>
+        <div id="api-results">Loading...</div>
+    </div>
+    
+    <div class="test-section info">
+        <h3>🔌 Testing WebSocket Connection</h3>
+        <div id="websocket-results">Loading...</div>
+    </div>
+    
+    <div class="test-section info">
+        <h3>🌐 Testing Frontend Page</h3>
+        <div id="frontend-results">Loading...</div>
+    </div>
+
+    <script>
+        // Test API endpoints
+        async function testAPI() {
+            const results = document.getElementById('api-results');
+            try {
+                const response = await fetch('/api/token-service/pulse-migrated?limit=5');
+                if (response.ok) {
+                    const data = await response.json();
+                    results.innerHTML = `
+                        <div class="success">✅ API Working - Found ${data.length} migrated tokens</div>
+                        <pre>${JSON.stringify(data.slice(0, 3), null, 2)}</pre>
+                    `;
+                } else {
+                    results.innerHTML = `<div class="error">❌ API Error: ${response.status}</div>`;
+                }
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ API Error: ${error.message}</div>`;
+            }
+        }
+
+        // Test WebSocket
+        function testWebSocket() {
+            const results = document.getElementById('websocket-results');
+            try {
+                const ws = new WebSocket('ws://localhost:8080/v1/stream');
+                let messageCount = 0;
+                let migratedCount = 0;
+                
+                ws.onopen = () => {
+                    results.innerHTML = '<div class="success">✅ WebSocket Connected</div>';
+                };
+                
+                ws.onmessage = (event) => {
+                    messageCount++;
+                    const message = JSON.parse(event.data);
+                    if (message.type === 'migrated_token') {
+                        migratedCount++;
+                    }
+                    
+                    if (messageCount >= 5) {
+                        ws.close();
+                        results.innerHTML = `
+                            <div class="success">✅ WebSocket Test Complete</div>
+                            <div>📨 Messages received: ${messageCount}</div>
+                            <div>🔄 Migrated tokens: ${migratedCount}</div>
+                        `;
+                    }
+                };
+                
+                ws.onerror = (error) => {
+                    results.innerHTML = `<div class="error">❌ WebSocket Error: ${error}</div>`;
+                };
+                
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.close();
+                        results.innerHTML = `
+                            <div class="info">⏰ WebSocket Timeout</div>
+                            <div>📨 Messages received: ${messageCount}</div>
+                            <div>🔄 Migrated tokens: ${migratedCount}</div>
+                        `;
+                    }
+                }, 10000);
+                
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ WebSocket Error: ${error.message}</div>`;
+            }
+        }
+
+        // Test Frontend Page
+        async function testFrontend() {
+            const results = document.getElementById('frontend-results');
+            try {
+                const response = await fetch('/pulse');
+                if (response.ok) {
+                    const html = await response.text();
+                    if (html.includes('Migrated') && html.includes('PulseTable')) {
+                        results.innerHTML = `
+                            <div class="success">✅ Frontend Page Loaded</div>
+                            <div>📄 Page contains "Migrated" section</div>
+                            <div>📄 Page contains PulseTable components</div>
+                        `;
+                    } else {
+                        results.innerHTML = `<div class="error">❌ Frontend missing migrated section</div>`;
+                    }
+                } else {
+                    results.innerHTML = `<div class="error">❌ Frontend Error: ${response.status}</div>`;
+                }
+            } catch (error) {
+                results.innerHTML = `<div class="error">❌ Frontend Error: ${error.message}</div>`;
+            }
+        }
+
+        // Run all tests
+        testAPI();
+        testWebSocket();
+        testFrontend();
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

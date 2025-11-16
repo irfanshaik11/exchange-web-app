@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -13,7 +13,8 @@ import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 import { usePulseWebSocket } from '../hooks/usePulseWebSocket';
 // import { PriorityImageSearcher } from '../utils/imageSearch'; // DISABLED - no external image searches
 import { useImagePreloader } from '../hooks/useImagePreloader';
-import { useQueryNewPairs, useQueryLaunchpadData, useQueryFinalStretch, useQueryMigrated } from '../hooks/useQueryTokens';
+import { useQueryNewPairs, useQueryLaunchpadData, useQueryFinalStretch, useQueryMigrated, tokenKeys } from '../hooks/useQueryTokens';
+import { useQueryClient } from '@tanstack/react-query';
 import { env } from '~/env';
 import { rollingTradeCache } from '../utils/rollingTradeCache';
 import { SiBinance, SiSolana } from 'react-icons/si';
@@ -115,32 +116,70 @@ export default function PulsePage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
   
+  // React Query client for manual cache updates from WebSocket
+  const queryClient = useQueryClient();
+
   // React Query hooks - instant cache
-  const { 
-    data: tokens = [], 
-    isLoading: tokensLoading, 
-    error: tokensError, 
+  const {
+    data: tokens = [],
+    isLoading: tokensLoading,
+    error: tokensError,
     isStale: tokensStale,
     refetch: refreshTokens,
     dataUpdatedAt,
     isFetching
   } = useQueryNewPairs();
-  
-  const { 
-    data: launchpadData = { new: [], completing: [], completed: [] }, 
-    isLoading: launchpadLoading, 
-    error: launchpadError, 
+
+  const {
+    data: launchpadData = { new: [], completing: [], completed: [] },
+    isLoading: launchpadLoading,
+    error: launchpadError,
     isStale: launchpadStale,
-    refetch: refreshLaunchpadData 
+    refetch: refreshLaunchpadData
   } = useQueryLaunchpadData();
-  
-  const { 
-    data: finalStretchTokensQuery = [], 
+
+  const {
+    data: finalStretchTokensQuery = [],
   } = useQueryFinalStretch();
-  
-  const { 
-    data: migratedTokensQuery = [], 
+
+  const {
+    data: migratedTokensQuery = [],
   } = useQueryMigrated();
+
+  // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
+  const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
+    enabled: true, // Enable WebSocket for instant updates
+    onNewToken: useCallback((token) => {
+      console.log('[Pulse] 🔥 WebSocket: New token received, adding to cache!', token.mint);
+
+      // Directly update cache without triggering refetch
+      queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
+        if (!oldData) return [token];
+
+        // Deduplicate by mint and prepend new token
+        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+        return [token, ...filtered].slice(0, 200); // Keep max 200 tokens
+      });
+    }, [queryClient]),
+    onFinalStretchToken: useCallback((token) => {
+      console.log('[Pulse] 🎯 WebSocket: Final stretch token received, adding to cache!', token.mint);
+
+      queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
+        if (!oldData) return [token];
+        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+        return [token, ...filtered].slice(0, 50);
+      });
+    }, [queryClient]),
+    onMigratedToken: useCallback((token) => {
+      console.log('[Pulse] ✅ WebSocket: Migrated token received, adding to cache!', token.mint);
+
+      queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
+        if (!oldData) return [token];
+        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+        return [token, ...filtered].slice(0, 50);
+      });
+    }, [queryClient]),
+  });
 
   // State for HTTP polling data - no localStorage caching for fresh data always
   const [httpNew, setHttpNew] = useState<any[]>([]);
@@ -422,7 +461,8 @@ export default function PulsePage() {
     
     const uniq = new Map<string, any>();
     for (const t of source as any[]) {
-      const key = (t?.pair_address || t?.mint) as string | undefined;
+      // Try multiple field names for mint/pair address
+      const key = (t?.pair_address || t?.mint || t?.mint_address) as string | undefined;
       if (!key || uniq.has(key)) continue;
       uniq.set(key, t);
     }
@@ -523,7 +563,7 @@ export default function PulsePage() {
   };
 
   // Use the processed data from build functions (single definitions)
-  const newPairsToShow = useMemo(() => buildNewPairs(), [combinedNewPairs, wsNewEnriched]);
+  const newPairsToShow = useMemo(() => buildNewPairs(), [combinedNewPairs, wsNewEnriched, tokens, dataUpdatedAt]);
   const migratedToShow = useMemo(() => buildMigrated(), [migratedTokensQuery]);
   const finalStretchToShow = useMemo(() => buildFinalStretch(), [finalStretchTokensQuery]);
 

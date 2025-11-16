@@ -15,9 +15,15 @@ export const tokenKeys = {
 };
 
 async function fetchNewPairs(): Promise<Token[]> {
-  const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-  const url = `${baseUrl}/v1/pulse/new?limit=200`;
-  const response = await fetch(url);
+  // Use Next.js API proxy to ensure proper field mapping (mint_address, etc.)
+  const apiUrl = `/api/token-service/pulse-new?limit=200&fresh=1&t=${Date.now()}`;
+  const response = await fetch(apiUrl, {
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    }
+  });
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
   return Array.isArray(data) ? data : (data.result || []);
@@ -61,11 +67,12 @@ export function useQueryNewPairs(): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.newPairs(),
     queryFn: fetchNewPairs,
-    staleTime: 0,                  // Always stale - always refetch (matches original behavior)
+    staleTime: 30 * 1000,          // Consider fresh for 30 seconds (WebSocket provides real-time updates)
     gcTime: 10 * 60 * 1000,        // Keep in cache for 10 min for instant display
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: true,
-    refetchOnMount: true,          // Refetch on navigation (shows cache first, then updates)
+    refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
+    refetchOnReconnect: true,      // Refetch on reconnect to catch missed updates
+    refetchOnMount: true,          // Load once on mount
+    // ✅ NO POLLING - WebSocket provides instant updates via query invalidation
     retry: 1,
   });
 }
@@ -74,11 +81,12 @@ export function useQueryFinalStretch(): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.finalStretch(),
     queryFn: fetchFinalStretch,
-    staleTime: 0,                  // Always stale - always refetch
+    staleTime: 30 * 1000,          // Consider fresh for 30 seconds (WebSocket provides real-time updates)
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
     refetchOnReconnect: true,
     refetchOnMount: true,
+    // ✅ NO POLLING - WebSocket provides instant updates via query invalidation
     retry: 1,
   });
 }
@@ -87,11 +95,12 @@ export function useQueryMigrated(): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.migrated(),
     queryFn: fetchMigrated,
-    staleTime: 0,                  // Always stale - always refetch
+    staleTime: 30 * 1000,          // Consider fresh for 30 seconds (WebSocket provides real-time updates)
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
     refetchOnReconnect: true,
     refetchOnMount: true,
+    // ✅ NO POLLING - WebSocket provides instant updates via query invalidation
     retry: 1,
   });
 }
