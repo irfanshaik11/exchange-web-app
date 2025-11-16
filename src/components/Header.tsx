@@ -74,8 +74,10 @@ export default function Header({
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const walletDropdownRef = useRef<HTMLDivElement>(null);
 
   // State for clipboard token detection
   const [clipboardToken, setClipboardToken] = useState<{
@@ -411,6 +413,26 @@ export default function Header({
     };
   }, [profileMenuOpen]);
 
+  // Close wallet dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        walletDropdownRef.current &&
+        !walletDropdownRef.current.contains(event.target as Node)
+      ) {
+        setWalletDropdownOpen(false);
+      }
+    };
+
+    if (walletDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [walletDropdownOpen]);
+
   return (
     <>
       <header
@@ -675,84 +697,165 @@ export default function Header({
                 )}
               </div>
             )}
-            {/* SOL Balance Pill - hidden on mobile (will be in mobile menu) */}
+            {/* Wallet Icon and SOL Balance - hidden on mobile (will be in mobile menu) */}
             {user && (
-              <div
-                className="hidden md:flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out cursor-default"
-                style={{
-                  backgroundColor: AX.surface,
-                  borderColor: AX.border,
-                  color: AX.text,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(24, 196, 140, 0.08)";
-                  e.currentTarget.style.borderColor = AX.mint;
-                  e.currentTarget.style.boxShadow =
-                    "0 0 8px rgba(24, 196, 140, 0.2)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = AX.surface;
-                  e.currentTarget.style.borderColor = AX.border;
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                <FaWallet size={12} style={{ color: AX.muted }} />
-                <span className="text-xs font-medium">
-                  {solBalance.toFixed(4)}
-                </span>
-                <img
-                  src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                  alt="SOL"
-                  className="w-3 h-3 rounded-full"
-                />
+              <div ref={walletDropdownRef} className="hidden md:flex items-center gap-2 relative">
+                {/* Wallet Icon Button */}
+                <button
+                  onClick={() => setWalletDropdownOpen(!walletDropdownOpen)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: AX.border,
+                    color: AX.muted,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(24, 196, 140, 0.08)";
+                    e.currentTarget.style.borderColor = AX.mint;
+                    e.currentTarget.style.color = AX.mint;
+                    e.currentTarget.style.boxShadow =
+                      "0 0 8px rgba(24, 196, 140, 0.2)";
+                    e.currentTarget.style.transform = "scale(1.02)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.color = AX.muted;
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.transform = "scale(1)";
+                  }}
+                  title="Wallet"
+                >
+                  <FaWallet size={14} />
+                </button>
+
+                {/* SOL Balance Pill */}
+                <button
+                  onClick={() => setWalletDropdownOpen(!walletDropdownOpen)}
+                  className="flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out cursor-pointer"
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: AX.border,
+                    color: AX.text,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(24, 196, 140, 0.08)";
+                    e.currentTarget.style.borderColor = AX.mint;
+                    e.currentTarget.style.boxShadow =
+                      "0 0 8px rgba(24, 196, 140, 0.2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                >
+                  <FaWallet size={12} style={{ color: AX.muted }} />
+                  <span className="text-xs font-medium">
+                    {solBalance.toFixed(4)}
+                  </span>
+                  <img
+                    src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                    alt="SOL"
+                    className="w-3 h-3 rounded-full"
+                  />
+                </button>
+
+                {/* Wallet Dropdown */}
+                {walletDropdownOpen && (
+                  <div
+                    className="absolute top-10 right-0 z-50 rounded-xl border shadow-2xl"
+                    style={{
+                      backgroundColor: "#0a0b10",
+                      borderColor: "#20232b",
+                      width: "240px",
+                    }}
+                  >
+                    <div className="p-4">
+                      {/* Wallet Header */}
+                      <div className="flex items-center gap-2 mb-3 pb-2 border-b" style={{ borderColor: "#20232b" }}>
+                        <FaWallet size={16} style={{ color: AX.mint }} />
+                        <span className="text-sm font-semibold text-white">Wallet</span>
+                      </div>
+                      
+                      {/* Total Value */}
+                      <div className="mb-3">
+                        <div className="text-xs text-neutral-400 mb-1">Total Value</div>
+                        <div className="text-2xl font-bold text-white">${(solBalance * 100).toFixed(2)}</div>
+                      </div>
+
+                      {/* Balance Display */}
+                      <div className="flex items-center justify-between mb-4 p-2 rounded-lg" style={{ backgroundColor: "#17191e" }}>
+                        <div className="flex items-center gap-2">
+                          <img
+                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                            alt="SOL"
+                            className="w-4 h-4 rounded-full"
+                          />
+                          <span className="text-sm text-white">≈ {solBalance.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                          </svg>
+                          <img
+                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                            alt="SOL"
+                            className="w-4 h-4 rounded-full"
+                          />
+                          <span className="text-sm text-white">0</span>
+                        </div>
+                      </div>
+
+                      {/* Deposit/Withdraw Buttons */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setWalletDropdownOpen(false);
+                            handleDepositClick();
+                          }}
+                          className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+                          style={{
+                            backgroundColor: AX.mint,
+                            color: "#000000",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = AX.mintHover;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = AX.mint;
+                          }}
+                        >
+                          Deposit
+                        </button>
+                        <button
+                          onClick={() => {
+                            setWalletDropdownOpen(false);
+                            handleWithdrawClick();
+                          }}
+                          className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+                          style={{
+                            backgroundColor: "#0f1012",
+                            color: "#ffffff",
+                            border: "1px solid #2A2B33",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "#1A1B1F";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "#0f1012";
+                          }}
+                        >
+                          Withdraw
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-            {/* Deposit/Withdraw buttons - hidden on mobile (will be in mobile menu) */}
-            <button
-              onClick={handleDepositClick}
-              className="hidden md:block ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
-              style={{
-                backgroundColor: AX.mint,
-                color: "#000000",
-                border: "none",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = AX.mintHover;
-                e.currentTarget.style.boxShadow =
-                  "0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)";
-                e.currentTarget.style.transform = "scale(1.02)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = AX.mint;
-                e.currentTarget.style.boxShadow = "none";
-                e.currentTarget.style.transform = "scale(1)";
-              }}
-            >
-              Deposit
-            </button>
-
-            {/* UPDATED WITHDRAW BUTTON (desktop) */}
-            <button
-              onClick={handleWithdrawClick}
-              className="hidden md:block ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
-              style={{
-                backgroundColor: "#0f1012", // dark pill
-                color: "#FFFFFF", // white text
-                border: `1px solid ${AX.border}`, // subtle border
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#1A1B1F";
-                e.currentTarget.style.borderColor = AX.mint;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "#0f1012";
-                e.currentTarget.style.borderColor = AX.border;
-              }}
-            >
-              Withdraw
-            </button>
-
             <button
               onClick={() => setWatchlistOpen(true)}
               className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
