@@ -697,40 +697,9 @@ export default function Header({
                 )}
               </div>
             )}
-            {/* Wallet Icon and SOL Balance - hidden on mobile (will be in mobile menu) */}
+            {/* SOL Balance Pill with Dropdown - hidden on mobile (will be in mobile menu) */}
             {user && (
-              <div ref={walletDropdownRef} className="hidden md:flex items-center gap-2 relative">
-                {/* Wallet Icon Button */}
-                <button
-                  onClick={() => setWalletDropdownOpen(!walletDropdownOpen)}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
-                  style={{
-                    backgroundColor: AX.surface,
-                    borderColor: AX.border,
-                    color: AX.muted,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(24, 196, 140, 0.08)";
-                    e.currentTarget.style.borderColor = AX.mint;
-                    e.currentTarget.style.color = AX.mint;
-                    e.currentTarget.style.boxShadow =
-                      "0 0 8px rgba(24, 196, 140, 0.2)";
-                    e.currentTarget.style.transform = "scale(1.02)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = AX.surface;
-                    e.currentTarget.style.borderColor = AX.border;
-                    e.currentTarget.style.color = AX.muted;
-                    e.currentTarget.style.boxShadow = "none";
-                    e.currentTarget.style.transform = "scale(1)";
-                  }}
-                  title="Wallet"
-                >
-                  <FaWallet size={14} />
-                </button>
-
-                {/* SOL Balance Pill */}
+              <div ref={walletDropdownRef} className="hidden md:block relative">
                 <button
                   onClick={() => setWalletDropdownOpen(!walletDropdownOpen)}
                   className="flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out cursor-pointer"
