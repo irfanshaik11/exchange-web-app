@@ -810,7 +810,7 @@ export default function PulsePage() {
   return (
     <>
       <Head>
-        <title>Trenches | Interstate Memeboard</title>
+        <title>Trenches | Narrative Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
       <div className="flex min-h-screen flex-col text-neutral-100" style={{ backgroundColor: '#06070b' }}>

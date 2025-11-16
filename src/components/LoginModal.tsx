@@ -189,7 +189,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       }
 
       // Create message and sign it
-      const message = `Login to Interstate with nonce: ${Date.now()}`;
+      const message = `Login to Narrative with nonce: ${Date.now()}`;
       const signResult = await phantomWallet.signMessage(message);
       
       // Check if signing failed
@@ -260,7 +260,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       }
 
       // Create message and sign it
-      const message = `Login to Interstate with nonce: ${Date.now()}`;
+      const message = `Login to Narrative with nonce: ${Date.now()}`;
       const signResult = await metaMaskWallet.signMessage(message);
       
       // Check if signing failed
@@ -414,7 +414,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
               <button className="text-emerald-400 hover:underline bg-transparent border-none shadow-none px-0 py-0 h-auto" onClick={() => setMode('login')}>Login</button>
             </div>
             <div className="text-xs text-neutral-500 mt-4 text-center">
-              By creating an account, you agree to Interstate's{' '}
+              By creating an account, you agree to Narrative's{' '}
               <a href="#" className="underline">Privacy Policy</a> and{' '}
               <a href="#" className="underline">Terms of Service</a>.
             </div>

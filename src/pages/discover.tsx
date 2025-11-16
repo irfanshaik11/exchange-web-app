@@ -30,7 +30,7 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
 export default function DiscoverPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'dex' | 'live'>('newPairs');
+  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>('newPairs');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1285,17 +1285,29 @@ export default function DiscoverPage() {
             >
               New Pairs
             </button>
+            <button
+              className={`text-lg font-light transition-colors ${activeTab === "xStocks" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              onClick={() => setActiveTab("xStocks")}
+            >
+              xStocks
+            </button>
+            <button
+              className={`text-lg font-light transition-colors ${activeTab === "surge" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              onClick={() => setActiveTab("surge")}
+            >
+              Surge
+            </button>
+            <button
+              className={`text-lg font-light transition-colors ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              onClick={() => setActiveTab("live")}
+            >
+              Pump Live
+            </button>
             {/* <button
               className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("dex")}
             >
               DEX Screener
-            </button> */}
-            {/* <button
-              className={`text-lg font-light transition-colors ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
-              onClick={() => setActiveTab("live")}
-            >
-              Pump Live
             </button> */}
           </div>
 
@@ -1309,8 +1321,8 @@ export default function DiscoverPage() {
               </span>
             </div> */}
 
-            {/* Timeframes - hide when on live tab */}
-            {activeTab !== 'live' && activeTab !== 'newPairs' && (
+            {/* Timeframes - hide when on live tab, new pairs, xStocks, or surge */}
+            {activeTab !== 'live' && activeTab !== 'newPairs' && activeTab !== 'xStocks' && activeTab !== 'surge' && (
               <div className="flex max-w-7xl items-center gap-3 text-sm font-medium">
                 {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
                   <button
@@ -1557,7 +1569,7 @@ export default function DiscoverPage() {
           ) : activeTab === 'newPairs' ? (
             <section aria-label="New Pairs">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">New Pairs</h2>
+                {/* <h2 className="text-xl font-semibold text-white">New Pairs</h2> */}
                 {newPairsLoading && (
                   <span className="text-xs font-medium text-[#9CA3AF]">
                     Updating…
@@ -1590,6 +1602,52 @@ export default function DiscoverPage() {
                   No new pairs available right now. Check back shortly.
                 </div>
               )}
+            </section>
+          ) : activeTab === 'xStocks' ? (
+            <section aria-label="xStocks">
+              {/* <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-white">xStocks</h2>
+              </div> */}
+              
+              {/* Placeholder for xStocks data - replace with actual data source */}
+              <div className="py-10 text-center text-[#9CA3AF]">
+                xStocks data coming soon. Connect your data source here.
+              </div>
+              
+              {/* When you have xStocks data, use InterstateTable like this:
+              <InterstateTable
+                rows={xStocksRows}
+                onQuickBuy={handleQuickBuy}
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                setSort={handleSort}
+                selectedTimeframe={selectedTimeframe}
+                quickBuyAmount={Number(quickBuyAmount) || 0}
+              />
+              */}
+            </section>
+          ) : activeTab === 'surge' ? (
+            <section aria-label="Surge">
+              {/* <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-white">Surge</h2>
+              </div> */}
+              
+              {/* Placeholder for Surge data - replace with actual data source */}
+              <div className="py-10 text-center text-[#9CA3AF]">
+                Surge data coming soon. Connect your data source here.
+              </div>
+              
+              {/* When you have Surge data, use InterstateTable like this:
+              <InterstateTable
+                rows={surgeRows}
+                onQuickBuy={handleQuickBuy}
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                setSort={handleSort}
+                selectedTimeframe={selectedTimeframe}
+                quickBuyAmount={Number(quickBuyAmount) || 0}
+              />
+              */}
             </section>
           ) : (
             renderPrimaryTable()

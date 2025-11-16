@@ -1463,7 +1463,7 @@ export default function PortfolioPage() {
                             <div className="w-3 h-3 rounded bg-[#FF6B35] flex-shrink-0"></div>
                             <div className="min-w-0 flex-1">
                               <div className="font-medium text-white text-sm truncate">
-                                Interstate Main
+                                Narrative Main
                               </div>
                               <div className="text-xs text-[#9CA3AF] font-mono truncate">
                                 {user.publicKey.slice(0, 4)}...
