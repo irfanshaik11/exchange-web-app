@@ -38,6 +38,10 @@ import TwitterAccountRow from "../components/TwitterAccountRow";
 import { FiSettings, FiBell, FiShare2, FiRss } from "react-icons/fi";
 import { SiSolana } from "react-icons/si";
 import { RiExchangeDollarLine } from "react-icons/ri";
+import { useQuickBuy } from "~/components/QuickBuyContext";
+import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
+import { showEnhancedToast } from "~/utils/enhancedToast";
+import type { Token } from "~/utils/db";
 
 const TABS = ["Wallet Manager", "Live Trades"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
@@ -158,7 +162,7 @@ const getRandomEmoji = () =>
   EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 
 export default function TrackersPage() {
-  const { user } = useUser();
+  const { user, solBalance } = useUser();
   const {
     wsConnected,
     latestTrades,
@@ -209,6 +213,25 @@ export default function TrackersPage() {
   const [cachedLiveTrades, setCachedLiveTrades] = useState<TradeEvent[]>([]);
   const fetchedMintsRef = useRef<Set<string>>(new Set());
   const [showUSD, setShowUSD] = useState(false); // Toggle between USD and SOL display
+
+  // Quick Buy functionality
+  const { presets, activePreset } = useQuickBuy();
+  
+  // Load quickBuyAmount from localStorage with fallback
+  const getInitialQuickBuyAmount = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('quickBuyAmount');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+    }
+    return 0.0001;
+  };
+  
+  const [quickBuyAmount, setQuickBuyAmount] = useState(getInitialQuickBuyAmount().toString());
 
   const ensureNotificationsEnabled = async (walletsToEnable: { address: string }[]) => {
     if (!walletsToEnable.length) return;
@@ -873,6 +896,77 @@ export default function TrackersPage() {
     }
   };
 
+  // QUICK BUY handler – using enhanced trade flow (same as discover page)
+  const handleQuickBuy = async (trade: TradeEvent) => {
+    console.log("🎯 Quick Buy called for token:", trade.symbol || trade.mint);
+    
+    if (!user?.bearerToken || !user?.id) {
+      console.log("❌ User not logged in");
+      showEnhancedToast('warning', 'Please connect your wallet to trade', {
+        title: 'Authentication Required',
+      });
+      return;
+    }
+
+    const buyAmount = parseFloat(quickBuyAmount);
+    if (isNaN(buyAmount) || buyAmount <= 0) {
+      console.log("❌ Invalid buy amount:", quickBuyAmount);
+      showEnhancedToast('warning', 'Please enter a valid SOL amount (minimum 0.001 SOL)', {
+        title: 'Invalid Amount',
+      });
+      return;
+    }
+
+    const preset = presets[activePreset];
+    if (!preset) {
+      console.log("❌ Quick buy preset missing");
+      showEnhancedToast('error', 'Quick buy preset not configured', {
+        title: 'Configuration Error',
+        suggestions: ['Update your presets in settings'],
+      });
+      return;
+    }
+
+    const settings = preset.quickBuySettings;
+    
+    // Get token metadata from the tokenMetadata map
+    const metadata = tokenMetadata.get(trade.mint);
+    
+    // Construct a Token object from the TradeEvent
+    const token = {
+      mint: trade.mint,
+      pair_address: trade.pair_address || trade.mint,
+      symbol: trade.symbol || metadata?.symbol || 'UNKNOWN',
+      name: trade.name || metadata?.name || 'Unknown Token',
+      image: metadata?.image || null,
+      launchpad_protocol: metadata?.launchpad_protocol || null,
+      market_cap_usd: metadata?.market_cap_usd || null,
+      // Add other required Token fields with sensible defaults
+    } as unknown as Token;
+
+    // Execute enhanced trade with all features
+    const result = await executeEnhancedTrade({
+      token,
+      amount: buyAmount,
+      side: 'buy',
+      settings,
+      user: { bearerToken: user.bearerToken, id: user.id },
+      solBalance: Number(solBalance || 0),
+      solPriceUsd: 150, // TODO: Get real SOL price
+      onSuccess: (txHash, stats) => {
+        console.log('✅ Quick Buy successful:', { txHash, stats });
+      },
+      onError: (error) => {
+        console.error('❌ Quick Buy failed:', error);
+      },
+      onWarning: (warnings) => {
+        console.warn('⚠️ Pre-transaction warnings:', warnings);
+      },
+    });
+
+    return result;
+  };
+
   // Helper to format date
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -1384,6 +1478,9 @@ export default function TrackersPage() {
                                       <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
                                         MC
                                       </th>
+                                      <th className="w-28 px-2 py-2 text-center text-sm text-neutral-400">
+                                        Action
+                                      </th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -1676,6 +1773,17 @@ export default function TrackersPage() {
                                               if (!marketCap || marketCap === 0) return <span className="text-neutral-500">-</span>;
                                               return `$${formatMarketCap(marketCap)}`;
                                             })()}
+                                          </td>
+                                          <td className="w-28 px-2 py-2 text-center">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleQuickBuy(trade);
+                                              }}
+                                              className="bg-emerald-500 hover:bg-emerald-600 text-black font-medium py-1.5 px-3 rounded-lg text-xs transition-colors whitespace-nowrap"
+                                            >
+                                              Buy {quickBuyAmount} SOL
+                                            </button>
                                           </td>
                                         </tr>
                                       );
