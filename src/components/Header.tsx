@@ -10,6 +10,7 @@ import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiStar } from "react-icons/fi";
 import SearchModal from "./SearchModal";
+import BlockchainSwitcher from "./BlockchainSwitcher";
 import type { Timeframe } from "../pages/index";
 
 /* ---- style palette ---- */
@@ -484,12 +485,10 @@ export default function Header({
                         window.location.href = link.href;
                       });
                     }}
-                    className={`px-1.5 py-0.5 text-sm font-medium transition-all duration-300 ease-out rounded ${
-                      isActive ? "border-current" : ""
-                    }`}
+                    className={`px-1.5 py-0.5 text-sm font-medium transition-all duration-300 ease-out rounded`}
                     style={{
                       color: isActive ? AX.mint : AX.text,
-                      borderColor: isActive ? AX.mint : "transparent",
+                      borderColor: "transparent",
                       position: "relative",
                       zIndex: 1001,
                       pointerEvents: "auto",
@@ -516,6 +515,8 @@ export default function Header({
             </nav>
           </div>
           <div className="flex min-w-0 items-center gap-2">
+            {/* Blockchain Switcher */}
+            <BlockchainSwitcher />
             {showSearch && (
               <div className="flex items-center gap-2">
                 {/* Pill-style search trigger with keycap hint (desktop) */}
