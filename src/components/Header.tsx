@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { FaSearch, FaStar, FaWallet, FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import { FaSearch, FaStar, FaWallet, FaChevronLeft, FaChevronRight, FaBell } from "react-icons/fa";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
@@ -74,11 +74,13 @@ export default function Header({
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [walletDropdownOpen, setWalletDropdownOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const walletDropdownRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
 
   // State for clipboard token detection
   const [clipboardToken, setClipboardToken] = useState<{
@@ -434,6 +436,26 @@ export default function Header({
     };
   }, [walletDropdownOpen]);
 
+  // Close notifications panel when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(event.target as Node)
+      ) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    if (notificationsOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [notificationsOpen]);
+
   return (
     <>
       <header
@@ -557,11 +579,11 @@ export default function Header({
               )}
             </div>
           </div>
-          <div className="flex min-w-0 items-center gap-3 md:gap-4 flex-shrink-0">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 flex-shrink-0">
             {/* Blockchain Switcher */}
             <BlockchainSwitcher />
             {showSearch && (
-              <div className="flex items-center gap-1 md:gap-2">
+              <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
                 {/* Pill-style search trigger with keycap hint (desktop) */}
                 <button
                   onClick={() => setSearchModalOpen(true)}
@@ -921,7 +943,7 @@ export default function Header({
             
             <button
               onClick={() => setWatchlistOpen(true)}
-              className="ml-1 md:ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out flex-shrink-0"
+              className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out flex-shrink-0"
               style={{
                 backgroundColor: AX.surface,
                 borderColor: AX.border,
@@ -946,6 +968,87 @@ export default function Header({
             >
               <FaStar size={13} />
             </button>
+            
+            {/* Notifications Button */}
+            <div ref={notificationsRef} className="relative">
+              <button
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out flex-shrink-0"
+                style={{
+                  backgroundColor: AX.surface,
+                  borderColor: AX.border,
+                  color: AX.muted,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(24, 196, 140, 0.08)";
+                  e.currentTarget.style.borderColor = AX.mint;
+                  e.currentTarget.style.color = AX.mint;
+                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.transform = "scale(1.02)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = AX.surface;
+                  e.currentTarget.style.borderColor = AX.border;
+                  e.currentTarget.style.color = AX.muted;
+                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.transform = "scale(1)";
+                }}
+                title="Notifications"
+              >
+                <FaBell size={13} />
+              </button>
+
+              {/* Notifications Panel */}
+              {notificationsOpen && (
+                <div
+                  className="fixed top-16 right-4 z-50 rounded-xl border shadow-2xl"
+                  style={{
+                    backgroundColor: "#1a1b20",
+                    borderColor: "#2A2B33",
+                    width: "380px",
+                    maxWidth: "calc(100vw - 32px)",
+                    maxHeight: "70vh",
+                  }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: "#2A2B33" }}>
+                    <h3 className="text-lg font-semibold text-white">Notifications</h3>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          // Clear all notifications logic here
+                          toast.success("All notifications cleared");
+                        }}
+                        className="text-sm text-neutral-400 hover:text-white transition-colors"
+                      >
+                        Clear All
+                      </button>
+                      <button
+                        onClick={() => setNotificationsOpen(false)}
+                        className="text-neutral-400 hover:text-white transition-colors"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-8 flex flex-col items-center justify-center" style={{ minHeight: "300px" }}>
+                    <div className="mb-4 opacity-50">
+                      <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                    </div>
+                    <p className="text-neutral-400 text-base">No Data</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
               <div
@@ -1005,7 +1108,7 @@ export default function Header({
             ) : (
               !userLoading && (
                 <button
-                  className="ml-1 md:ml-2 px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-medium rounded-full transition-all duration-300 ease-out flex-shrink-0"
+                  className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-medium rounded-full transition-all duration-300 ease-out flex-shrink-0"
                   style={{
                     backgroundColor: AX.mint,
                     color: "#000000",
@@ -1083,6 +1186,66 @@ export default function Header({
               }}
             >
               Active Positions
+              {/* Tooltip arrow pointing left */}
+              <div
+                className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent"
+                style={{ borderRightColor: AX.surface }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Alert Icon */}
+          <div className="group relative">
+            <button
+              className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out relative"
+              style={{ color: AX.muted }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor =
+                  "rgba(239, 68, 68, 0.08)";
+                e.currentTarget.style.color = "#ef4444";
+                e.currentTarget.style.boxShadow =
+                  "0 0 6px rgba(239, 68, 68, 0.25), 0 0 12px rgba(239, 68, 68, 0.12)";
+                e.currentTarget.style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.color = AX.muted;
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.transform = "scale(1)";
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              {/* Small notification dot */}
+              <span
+                className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: "#ef4444" }}
+              ></span>
+            </button>
+            {/* Custom tooltip for Alerts */}
+            <div
+              className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
+              style={{
+                backgroundColor: AX.surface,
+                color: AX.text,
+                border: `1px solid ${AX.border}`,
+                boxShadow:
+                  "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+              }}
+            >
+              Alerts
               {/* Tooltip arrow pointing left */}
               <div
                 className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent"

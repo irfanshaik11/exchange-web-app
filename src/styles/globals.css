@@ -1,4 +1,4 @@
-q@import "tailwindcss";
+@import "tailwindcss";
 @import './interstate.css';
 
 /* Prevent black screen flash */
