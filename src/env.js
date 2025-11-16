@@ -9,9 +9,9 @@ export const env = createEnv({
   server: {
     NODE_ENV: z.enum(["development", "test", "production"]),
     NEON_DB_API_KEY: z.string(),
-    X_API_KEY: z.string().optional(),
-    X_API_KEY_SECRET: z.string().optional(),
-    X_BEARER_TOKEN: z.string().optional(),
+    X_API_KEY: z.string(),
+    X_API_KEY_SECRET: z.string(),
+    X_BEARER_TOKEN: z.string(),
   },
 
   /**
@@ -77,4 +77,3 @@ export const env = createEnv({
    */
   emptyStringAsUndefined: true,
 });
-
