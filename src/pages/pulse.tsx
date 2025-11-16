@@ -803,7 +803,7 @@ export default function PulsePage() {
                     <img
                       src="https://avatars.githubusercontent.com/u/138558126?s=280&v=4"
                       alt="MegaETH"
-                      className="h-7 w-7 rounded-full object-cover bg-black/60 p-0.5"
+                      className="h-7 w-7 rounded-full object-cover"
                     />
                     <span className="absolute -bottom-1 -right-4 rounded-full border border-purple-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-purple-300 shadow-lg shadow-purple-500/30" style={{ backgroundColor: '#06070b' }}>
                       Soon
@@ -817,7 +817,7 @@ export default function PulsePage() {
                     <img
                       src="https://avatars.githubusercontent.com/u/108554348?s=280&v=4"
                       alt="Base"
-                      className="h-7 w-7 rounded-full object-cover bg-black/60 p-0.5"
+                      className="h-7 w-7 rounded-full object-cover"
                     />
                     <span className="absolute -bottom-1 -right-4 rounded-full border border-sky-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-sky-300 shadow-lg shadow-sky-500/30" style={{ backgroundColor: '#06070b' }}>
                       Soon
@@ -831,7 +831,7 @@ export default function PulsePage() {
                     <img
                       src="https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png"
                       alt="Ethereum"
-                      className="h-7 w-7 rounded-full object-cover bg-black/60 p-0.5"
+                      className="h-7 w-7 rounded-full object-cover"
                     />
                     <span className="absolute -bottom-1 -right-4 rounded-full border border-emerald-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-emerald-300 shadow-lg shadow-emerald-500/30" style={{ backgroundColor: '#06070b' }}>
                       Soon

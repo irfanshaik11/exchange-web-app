@@ -560,7 +560,11 @@ export function ReferralAccessGate({
   }, [router.isReady, router.query.number]);
 
   // Handle Twitter linking
-  const handleLinkTwitter = useCallback(() => {
+  const handleLinkTwitter = useCallback((e?: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent any default behavior and stop propagation
+    e?.preventDefault();
+    e?.stopPropagation();
+    
     // Mark as completed immediately when button is clicked
     setTwitterLinked(true);
     const currentPath = router.asPath.split('?')[0];
