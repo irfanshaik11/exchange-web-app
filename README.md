@@ -1,3 +1,3 @@
-memecoin ui
+memecoin UI
 
 
