@@ -387,9 +387,11 @@ export default function PortfolioPage() {
       // Filter positions (Active Positions and Top 100 tabs)
       const filteredPos = positions.filter((pos) => {
         const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
+        const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
+        const pairAddr = pos.pairAddress?.toLowerCase() || "";
         return (
-          pos.tokenAddress.toLowerCase().includes(query) ||
-          pos.pairAddress?.toLowerCase().includes(query) ||
+          tokenAddr.includes(query) ||
+          pairAddr.includes(query) ||
           tokenName.includes(query)
         );
       });
@@ -398,9 +400,11 @@ export default function PortfolioPage() {
       // Filter top 100 positions
       const filteredTop100 = top100Positions.filter((pos) => {
         const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
+        const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
+        const pairAddr = pos.pairAddress?.toLowerCase() || "";
         return (
-          pos.tokenAddress.toLowerCase().includes(query) ||
-          pos.pairAddress?.toLowerCase().includes(query) ||
+          tokenAddr.includes(query) ||
+          pairAddr.includes(query) ||
           tokenName.includes(query)
         );
       });
@@ -409,9 +413,11 @@ export default function PortfolioPage() {
       // Filter trade history
       const filteredHistory = tradeHistory.filter((trade) => {
         const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
+        const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
+        const txHash = trade.transactionHash?.toLowerCase() || "";
         return (
-          trade.tokenAddress.toLowerCase().includes(query) ||
-          trade.transactionHash.toLowerCase().includes(query) ||
+          tokenAddr.includes(query) ||
+          txHash.includes(query) ||
           tokenName.includes(query)
         );
       });
@@ -420,9 +426,11 @@ export default function PortfolioPage() {
       // Filter trade activity
       const filteredActivity = tradeActivity.filter((trade) => {
         const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
+        const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
+        const txHash = trade.transactionHash?.toLowerCase() || "";
         return (
-          trade.tokenAddress.toLowerCase().includes(query) ||
-          trade.transactionHash.toLowerCase().includes(query) ||
+          tokenAddr.includes(query) ||
+          txHash.includes(query) ||
           tokenName.includes(query)
         );
       });

@@ -1,6 +1,41 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 // import { ImageSearchService } from '~/utils/imageSearch'; // REMOVED - not used
 
+// In-memory cache for new pairs
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  expiresAt: number;
+}
+
+const cache = new Map<string, CacheEntry>();
+const CACHE_TTL = 30 * 1000; // 30 seconds
+const MAX_CACHE_SIZE = 10; // Keep last 10 requests
+
+// Cleanup function - called on each request
+function cleanupCache() {
+  const now = Date.now();
+  for (const [key, entry] of cache.entries()) {
+    if (now > entry.expiresAt) {
+      cache.delete(key);
+    }
+  }
+  // Limit cache size
+  if (cache.size > MAX_CACHE_SIZE) {
+    const entries = Array.from(cache.entries());
+    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const toDelete = entries.slice(0, cache.size - MAX_CACHE_SIZE);
+    toDelete.forEach(([key]) => cache.delete(key));
+  }
+}
+
+function getCacheKey(params: URLSearchParams): string {
+  // Create cache key from limit and protocols
+  const limit = params.get('limit') || '30';
+  const protocols = params.get('protocols') || '';
+  return `pulse-new:${limit}:${protocols}`;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set appropriate cache headers for better performance
   const isFresh = req.query.fresh === '1';
@@ -27,12 +62,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (Array.isArray(v)) v.forEach((x) => params.append(k, x));
     else if (v !== undefined) params.append(k, String(v));
   }
-  // Always request fresh cache-bypass
-  params.set('fresh', '1');
   // Only set default limit if no limit is provided
   if (!params.get('limit')) params.set('limit', '30');
 
   const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+
+  // Cleanup expired cache entries
+  cleanupCache();
 
   const fetchWithTimeout = async (url: string, timeoutMs = 2500) => {
     const ctrl = new AbortController();
@@ -49,10 +85,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   };
 
-  try {
-    const upstream = await fetchWithTimeout(`${goBase}/v1/pulse/new?${params.toString()}`);
+  // Helper function to fetch and cache data - defined before use
+  const fetchFreshData = async (params: URLSearchParams, cacheKey?: string): Promise<any> => {
+    const fetchParams = new URLSearchParams(params);
+    fetchParams.set('fresh', '1'); // Always request fresh from upstream
+    
+    const upstream = await fetchWithTimeout(`${goBase}/v1/pulse/new?${fetchParams.toString()}`);
     const text = await upstream.text();
-    res.status(upstream.status);
+    
+    if (!upstream.ok) {
+      throw new Error(`Upstream error: ${upstream.status}`);
+    }
+    
     try {
       const raw = JSON.parse(text);
       if (Array.isArray(raw)) {
@@ -136,14 +180,69 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             links: r.links || null,
           };
         });
-        return res.json(mapped);
+        
+        // Cache the result
+        if (cacheKey) {
+          const now = Date.now();
+          cache.set(cacheKey, {
+            data: mapped,
+            timestamp: now,
+            expiresAt: now + CACHE_TTL,
+          });
+          console.log(`[pulse-new] Cached data for key: ${cacheKey}`);
+        }
+        
+        return mapped;
       }
-      return res.json(raw);
-    } catch {
-      res.setHeader('Content-Type', upstream.headers.get('content-type') || 'text/plain');
-      res.send(text);
+      
+      // Cache non-array responses too
+      if (cacheKey) {
+        const now = Date.now();
+        cache.set(cacheKey, {
+          data: raw,
+          timestamp: now,
+          expiresAt: now + CACHE_TTL,
+        });
+      }
+      
+      return raw;
+    } catch (parseError: any) {
+      throw new Error(`Failed to parse response: ${parseError?.message || String(parseError)}`);
     }
+  };
+
+  // Check in-memory cache first (unless fresh=1 is requested)
+  if (!isFresh) {
+    const cacheKey = getCacheKey(params);
+    const cached = cache.get(cacheKey);
+    const now = Date.now();
+    
+    if (cached && now < cached.expiresAt) {
+      // Cache hit - return cached data immediately
+      console.log(`[pulse-new] Cache hit for key: ${cacheKey}`);
+      res.setHeader('X-Cache', 'HIT');
+      return res.json(cached.data);
+    } else if (cached && now < cached.expiresAt + 60000) {
+      // Stale but usable - return it and refresh in background
+      console.log(`[pulse-new] Stale cache hit for key: ${cacheKey}, refreshing in background`);
+      res.setHeader('X-Cache', 'STALE');
+      // Trigger background refresh (don't await)
+      fetchFreshData(params, cacheKey).catch(err => {
+        console.error('[pulse-new] Background refresh failed:', err);
+      });
+      return res.json(cached.data);
+    }
+  }
+
+  // Cache miss or fresh request - fetch new data
+  console.log(`[pulse-new] Cache miss, fetching fresh data`);
+  res.setHeader('X-Cache', 'MISS');
+
+  try {
+    const data = await fetchFreshData(params, getCacheKey(params));
+    return res.json(data);
   } catch (err: any) {
+    console.error('[pulse-new] Error fetching data:', err);
     res.status(502).json({ error: 'Bad gateway to token service' });
   }
 }

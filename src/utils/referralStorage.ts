@@ -2,6 +2,7 @@ import Cookies from 'js-cookie';
 
 const TOKEN_KEY = 'referralAccessToken';
 const META_KEY = 'referralAccessMeta';
+const CODE_HINT_KEY = 'referralCodeHint';
 
 export type ReferralAccessMeta = {
   code: string;
@@ -9,6 +10,12 @@ export type ReferralAccessMeta = {
   isDefault: boolean;
   storedAt: number;
 };
+
+function normalizeCode(code: string | null | undefined) {
+  if (!code) return null;
+  const trimmed = code.trim().toUpperCase();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 function safeReadStorage<T extends 'localStorage' | 'sessionStorage'>(
   storage: T,
@@ -93,6 +100,39 @@ export function getStoredReferralMeta(): ReferralAccessMeta | null {
   }
 }
 
+function writeCodeHint(code: string) {
+  safeWriteStorage('localStorage', CODE_HINT_KEY, code);
+  safeWriteStorage('sessionStorage', CODE_HINT_KEY, code);
+  try {
+    Cookies.set(CODE_HINT_KEY, code, { path: '/', expires: 7 });
+  } catch (error) {
+    console.warn('Failed to persist referral code hint to cookies', error);
+  }
+}
+
+function removeCodeHint() {
+  safeRemoveStorage('localStorage', CODE_HINT_KEY);
+  safeRemoveStorage('sessionStorage', CODE_HINT_KEY);
+  try {
+    Cookies.remove(CODE_HINT_KEY, { path: '/' });
+  } catch (error) {
+    console.warn('Failed to clear referral code hint cookie', error);
+  }
+}
+
+function readCodeHint(): string | null {
+  const local = normalizeCode(safeReadStorage('localStorage', CODE_HINT_KEY));
+  if (local) return local;
+  const session = normalizeCode(safeReadStorage('sessionStorage', CODE_HINT_KEY));
+  if (session) return session;
+  try {
+    return normalizeCode(Cookies.get(CODE_HINT_KEY));
+  } catch (error) {
+    console.warn('Failed to read referral code hint cookie', error);
+    return null;
+  }
+}
+
 export function storeReferralAccess(
   token: string,
   meta: Omit<ReferralAccessMeta, 'storedAt'> & { storedAt?: number },
@@ -127,5 +167,19 @@ export function clearStoredReferralAccess() {
   } catch (error) {
     console.warn('Failed to clear referral cookies', error);
   }
+}
+
+export function storeReferralCodeHint(code: string) {
+  const normalized = normalizeCode(code);
+  if (!normalized) return;
+  writeCodeHint(normalized);
+}
+
+export function getStoredReferralCodeHint(): string | null {
+  return readCodeHint();
+}
+
+export function clearStoredReferralCodeHint() {
+  removeCodeHint();
 }
 

@@ -1,0 +1,898 @@
+"use client";
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { FaTimes, FaRunning, FaGasPump, FaEye, FaBan } from 'react-icons/fa';
+import { LuPencil, LuCheck } from 'react-icons/lu';
+import { useUser } from '~/components/UserContext';
+import { useQuickBuy } from '~/components/QuickBuyContext';
+import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
+import { getTradeActivityByUser } from '~/utils/functions';
+import { formatSmartNumber } from '~/utils/db';
+import HighSlippageWarningDialog from '../HighSlippageWarningDialog';
+import LowLiquidityWarningDialog from '../LowLiquidityWarningDialog';
+import type { Token } from '~/utils/db';
+
+interface InstantTradeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  token: Token | null;
+}
+
+const LOW_LIQUIDITY_WARNING_THRESHOLD = 1_000; // USD
+const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
+
+const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, token }) => {
+  const { user, solBalance } = useUser();
+  const { presets, activePreset, setActivePreset } = useQuickBuy();
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [tokenBalance, setTokenBalance] = useState<number>(0);
+  const [hoverSellPercentage, setHoverSellPercentage] = useState<number | null>(null);
+  const [activeSellPercentage, setActiveSellPercentage] = useState<number | null>(null);
+  const [editingPresets, setEditingPresets] = useState(false);
+  const [presetDrafts, setPresetDrafts] = useState<string[]>([]);
+  const [showSlippageWarning, setShowSlippageWarning] = useState(false);
+  const [showLiquidityWarning, setShowLiquidityWarning] = useState(false);
+  const [pendingTradeOptions, setPendingTradeOptions] = useState<{ skipLiquidity?: boolean; skipSlippage?: boolean; amount: number; side: 'buy' | 'sell' } | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  const activePointerIdRef = useRef<number | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const positionRef = useRef(position);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
+  // Buy presets (SOL amounts) - editable
+  const [buyPresets, setBuyPresets] = useState<number[]>([0.01, 0.1, 1, 10]);
+  // Sell presets (percentages) - editable
+  const [sellPresets, setSellPresets] = useState<number[]>([10, 25, 50, 100]);
+
+  // Load presets from localStorage or use defaults
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Check shared localStorage key first (preferred)
+      const savedBuyPresets = localStorage.getItem('tradeActionPanelBuyPresets') || 
+                              localStorage.getItem('instantTradeBuyPresets');
+      const savedSellPresets = localStorage.getItem('tradeActionPanelSellPresets') ||
+                              localStorage.getItem('instantTradeSellPresets');
+      if (savedBuyPresets) {
+        try {
+          const parsed = JSON.parse(savedBuyPresets);
+          if (Array.isArray(parsed) && parsed.length === 4) {
+            setBuyPresets(parsed);
+          }
+        } catch (e) {
+          // Use defaults
+        }
+      }
+      if (savedSellPresets) {
+        try {
+          const parsed = JSON.parse(savedSellPresets);
+          if (Array.isArray(parsed) && parsed.length === 4) {
+            setSellPresets(parsed);
+          }
+        } catch (e) {
+          // Use defaults
+        }
+      }
+
+      // Listen for preset updates from other components
+      const handlePresetUpdate = (e: CustomEvent) => {
+        if (e.detail?.type === 'buy' && Array.isArray(e.detail.presets)) {
+          setBuyPresets(e.detail.presets);
+          setPresetDrafts(e.detail.presets.map(String));
+        } else if (e.detail?.type === 'sell' && Array.isArray(e.detail.presets)) {
+          setSellPresets(e.detail.presets);
+        }
+      };
+
+      window.addEventListener('tradePresetsUpdated', handlePresetUpdate as EventListener);
+      return () => {
+        window.removeEventListener('tradePresetsUpdated', handlePresetUpdate as EventListener);
+      };
+    }
+  }, []);
+
+  // Initialize preset drafts
+  useEffect(() => {
+    setPresetDrafts(buyPresets.map(String));
+  }, [buyPresets]);
+
+  // Fetch token balance from trade activity
+  useEffect(() => {
+    const fetchTokenBalance = async () => {
+      if (!user || !token) {
+        setTokenBalance(0);
+        return;
+      }
+
+      try {
+        const trades = await getTradeActivityByUser(user.id.toString());
+        const tokenTrades = trades.filter(
+          (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+        );
+
+        if (tokenTrades.length > 0) {
+          let bought = 0;
+          let sold = 0;
+
+          tokenTrades.forEach((trade: any) => {
+            if (trade.type === "Buy") {
+              bought += Number(trade.tokenAmount) || 0;
+            } else if (trade.type === "Sell") {
+              sold += Number(trade.tokenAmount) || 0;
+            }
+          });
+
+          const remaining = bought - sold;
+          setTokenBalance(Math.max(0, remaining));
+        } else {
+          setTokenBalance(0);
+        }
+      } catch (error) {
+        console.error('Error fetching token balance:', error);
+        setTokenBalance(0);
+      }
+    };
+
+    if (isOpen && user && token) {
+      fetchTokenBalance();
+    }
+  }, [isOpen, user, token]);
+
+  const commitPresetDrafts = () => {
+    const next = presetDrafts.map((s, idx) => {
+      if (!s || s.trim() === "" || s.trim() === ".") {
+        return 0;
+      }
+      const n = parseFloat(s);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    });
+    setBuyPresets(next);
+    setEditingPresets(false);
+    setPresetDrafts(next.map(String));
+    
+    // Save to localStorage with shared key
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tradeActionPanelBuyPresets', JSON.stringify(next));
+      localStorage.setItem('instantTradeBuyPresets', JSON.stringify(next));
+      
+      // Dispatch custom event to notify other components
+      window.dispatchEvent(new CustomEvent('tradePresetsUpdated', {
+        detail: { type: 'buy', presets: next }
+      }));
+    }
+  };
+
+  const allowDecimal = (v: string) => /^\d*([.]\d{0,9})?$/.test(v);
+
+  // Initialize position in center of screen
+  useEffect(() => {
+    if (isOpen) {
+      setPosition({
+        x: window.innerWidth / 2 - 200, // Approximate center (modal width ~400px)
+        y: window.innerHeight / 2 - 250, // Approximate center
+      });
+    }
+  }, [isOpen]);
+
+  // Handle drag functionality - use callbacks and refs to avoid dependency issues
+  const handlePointerMove = useCallback((e: PointerEvent) => {
+    if (!isDraggingRef.current || e.pointerId !== activePointerIdRef.current) return;
+
+    e.preventDefault();
+
+    const nextPosition = {
+      x: e.clientX - dragStartRef.current.x,
+      y: e.clientY - dragStartRef.current.y,
+    };
+
+    positionRef.current = nextPosition;
+
+    if (animationFrameRef.current === null) {
+      animationFrameRef.current = window.requestAnimationFrame(() => {
+        setPosition(positionRef.current);
+        animationFrameRef.current = null;
+      });
+    }
+  }, []);
+
+  const handlePointerUp = useCallback((e?: PointerEvent) => {
+    if (!isDraggingRef.current) return;
+    if (e && activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
+      return;
+    }
+
+    isDraggingRef.current = false;
+    setIsDragging(false);
+    activePointerIdRef.current = null;
+
+    if (headerRef.current && e && headerRef.current.hasPointerCapture(e.pointerId)) {
+      headerRef.current.releasePointerCapture(e.pointerId);
+    }
+
+    // Ensure final position is committed
+    if (animationFrameRef.current !== null) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    setPosition(positionRef.current);
+  }, []);
+
+  // Set up global mouse event listeners once (industry-standard behavior)
+  useEffect(() => {
+    window.addEventListener('pointermove', handlePointerMove, true);
+    window.addEventListener('pointerup', handlePointerUp, true);
+    window.addEventListener('pointercancel', handlePointerUp, true);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove, true);
+      window.removeEventListener('pointerup', handlePointerUp, true);
+      window.removeEventListener('pointercancel', handlePointerUp, true);
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [handlePointerMove, handlePointerUp]);
+
+  // Manage body styles while dragging to prevent text selection/cursor glitches
+  useEffect(() => {
+    if (isDragging) {
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'grabbing';
+    } else {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    }
+
+    return () => {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+  }, [isDragging]);
+
+  // Handle drag start
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return; // Only respond to primary button
+
+    const target = e.target as Node;
+    if (headerRef.current?.contains(target)) {
+      if ((target as HTMLElement).closest('button, input')) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      isDraggingRef.current = true;
+      activePointerIdRef.current = e.pointerId;
+      setIsDragging(true);
+      dragStartRef.current = {
+        x: e.clientX - positionRef.current.x,
+        y: e.clientY - positionRef.current.y,
+      };
+
+      if (headerRef.current) {
+        try {
+          headerRef.current.setPointerCapture(e.pointerId);
+        } catch {
+          // Ignore if pointer capture not supported
+        }
+      }
+    }
+  }, []);
+
+  // Get liquidity for warning checks
+  const liquidityUsd = token?.total_liquidity_usd || (token as any)?.liquidityUsd || (token as any)?.total_liquidityUsd || 0;
+
+  // Get settings based on buy/sell
+  const settings = presets[activePreset].quickBuySettings;
+
+  // Handle quick buy - using same logic as TradeActionPanel
+  const handleQuickBuy = async (amount: number) => {
+    if (!user || !token) {
+      return;
+    }
+
+    // Validation - same as TradeActionPanel
+    const requested = Number(amount || 0);
+    if (!requested || requested <= 0) {
+      return;
+    }
+
+    const liquidityValue = Number(liquidityUsd) || 0;
+    const isLowLiquidity = liquidityValue <= 0 || liquidityValue < LOW_LIQUIDITY_WARNING_THRESHOLD;
+    
+    // Check liquidity warning (same as TradeActionPanel)
+    if (isLowLiquidity) {
+      setPendingTradeOptions({ skipLiquidity: false, skipSlippage: false, amount, side: 'buy' });
+      setShowLiquidityWarning(true);
+      return;
+    }
+
+    // Check slippage warning (same as TradeActionPanel)
+    const slippagePercent = (settings.maxSlippage || 0.2) * 100;
+    if (slippagePercent >= HIGH_SLIPPAGE_WARNING_THRESHOLD) {
+      setPendingTradeOptions({ skipLiquidity: true, skipSlippage: false, amount, side: 'buy' });
+      setShowSlippageWarning(true);
+      return;
+    }
+
+    // Execute trade with enhanced handler - same as TradeActionPanel
+    setIsLoading(true);
+    
+    const result = await executeEnhancedTrade({
+      token,
+      amount: requested,
+      side: 'buy',
+      settings,
+      user: { bearerToken: user.bearerToken, id: user.id },
+      solBalance: Number(solBalance),
+      solPriceUsd: 150,
+      onSuccess: async (txHash, stats) => {
+        console.log("✅ Enhanced Trade successful:", { txHash, stats });
+        // Refresh token balance after trade
+        setTimeout(async () => {
+          try {
+            const trades = await getTradeActivityByUser(user.id.toString());
+            const tokenTrades = trades.filter(
+              (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+            );
+
+            if (tokenTrades.length > 0) {
+              let bought = 0;
+              let sold = 0;
+
+              tokenTrades.forEach((trade: any) => {
+                if (trade.type === "Buy") {
+                  bought += Number(trade.tokenAmount) || 0;
+                } else if (trade.type === "Sell") {
+                  sold += Number(trade.tokenAmount) || 0;
+                }
+              });
+
+              const remaining = bought - sold;
+              setTokenBalance(Math.max(0, remaining));
+            } else {
+              setTokenBalance(0);
+            }
+          } catch (error) {
+            console.error('Error refreshing token balance:', error);
+          }
+        }, 2000);
+      },
+      onError: (error) => {
+        console.error("❌ Enhanced Trade failed:", error);
+      },
+      onWarning: (warnings) => {
+        console.warn("⚠️ Pre-transaction warnings:", warnings);
+      },
+    });
+
+    setIsLoading(false);
+    return result;
+  };
+
+  // Handle quick sell - using same logic as TradeActionPanel
+  const handleQuickSell = async (percentage: number) => {
+    if (!user || !token) {
+      return;
+    }
+
+    // Validation - same as TradeActionPanel
+    if (!percentage || percentage <= 0) {
+      return;
+    }
+    if (percentage > 100) {
+      return;
+    }
+
+    const sellSettings = presets[activePreset].quickSellSettings;
+
+    // Check slippage warning (same as TradeActionPanel)
+    const slippagePercent = (sellSettings.maxSlippage || 0.2) * 100;
+    if (slippagePercent >= HIGH_SLIPPAGE_WARNING_THRESHOLD) {
+      setPendingTradeOptions({ skipLiquidity: true, skipSlippage: false, amount: percentage, side: 'sell' });
+      setShowSlippageWarning(true);
+      return;
+    }
+
+    // Execute trade with enhanced handler - same as TradeActionPanel
+    setIsLoading(true);
+    
+    const result = await executeEnhancedTrade({
+      token,
+      amount: percentage,
+      side: 'sell',
+      settings: sellSettings,
+      user: { bearerToken: user.bearerToken, id: user.id },
+      solBalance: Number(solBalance),
+      solPriceUsd: 150,
+      onSuccess: async (txHash, stats) => {
+        console.log("✅ Enhanced Trade successful:", { txHash, stats });
+        // Refresh token balance after trade
+        setTimeout(async () => {
+          try {
+            const trades = await getTradeActivityByUser(user.id.toString());
+            const tokenTrades = trades.filter(
+              (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+            );
+
+            if (tokenTrades.length > 0) {
+              let bought = 0;
+              let sold = 0;
+
+              tokenTrades.forEach((trade: any) => {
+                if (trade.type === "Buy") {
+                  bought += Number(trade.tokenAmount) || 0;
+                } else if (trade.type === "Sell") {
+                  sold += Number(trade.tokenAmount) || 0;
+                }
+              });
+
+              const remaining = bought - sold;
+              setTokenBalance(Math.max(0, remaining));
+            } else {
+              setTokenBalance(0);
+            }
+          } catch (error) {
+            console.error('Error refreshing token balance:', error);
+          }
+        }, 2000);
+      },
+      onError: (error) => {
+        console.error("❌ Enhanced Trade failed:", error);
+      },
+      onWarning: (warnings) => {
+        console.warn("⚠️ Pre-transaction warnings:", warnings);
+      },
+    });
+
+    setIsLoading(false);
+    return result;
+  };
+
+  // Warning dialog handlers - same as TradeActionPanel
+  const handleSlippageWarningContinue = useCallback(() => {
+    setShowSlippageWarning(false);
+    if (!pendingTradeOptions || !token) return;
+    
+    setIsLoading(true);
+    const { amount, side } = pendingTradeOptions;
+    
+    const currentSettings = side === 'buy' 
+      ? presets[activePreset].quickBuySettings 
+      : presets[activePreset].quickSellSettings;
+    
+    executeEnhancedTrade({
+      token,
+      amount: amount,
+      side: side,
+      settings: currentSettings,
+      user: { bearerToken: user!.bearerToken, id: user!.id },
+      solBalance: Number(solBalance),
+      solPriceUsd: 150,
+      onSuccess: async (txHash, stats) => {
+        console.log("✅ Enhanced Trade successful:", { txHash, stats });
+        // Refresh token balance after trade
+        setTimeout(async () => {
+          try {
+            const trades = await getTradeActivityByUser(user!.id.toString());
+            const tokenTrades = trades.filter(
+              (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+            );
+
+            if (tokenTrades.length > 0) {
+              let bought = 0;
+              let sold = 0;
+
+              tokenTrades.forEach((trade: any) => {
+                if (trade.type === "Buy") {
+                  bought += Number(trade.tokenAmount) || 0;
+                } else if (trade.type === "Sell") {
+                  sold += Number(trade.tokenAmount) || 0;
+                }
+              });
+
+              const remaining = bought - sold;
+              setTokenBalance(Math.max(0, remaining));
+            } else {
+              setTokenBalance(0);
+            }
+          } catch (error) {
+            console.error('Error refreshing token balance:', error);
+          }
+        }, 2000);
+      },
+      onError: (error) => {
+        console.error("❌ Enhanced Trade failed:", error);
+      },
+      onWarning: (warnings) => {
+        console.warn("⚠️ Pre-transaction warnings:", warnings);
+      },
+    }).finally(() => {
+      setIsLoading(false);
+      setPendingTradeOptions(null);
+    });
+  }, [pendingTradeOptions, token, user, solBalance, presets, activePreset]);
+
+  const handleSlippageWarningCancel = useCallback(() => {
+    setShowSlippageWarning(false);
+    setPendingTradeOptions(null);
+    setIsLoading(false);
+  }, []);
+
+  const handleLiquidityWarningContinue = useCallback(() => {
+    setShowLiquidityWarning(false);
+    if (!pendingTradeOptions || !token) return;
+    
+    setIsLoading(true);
+    const { amount } = pendingTradeOptions;
+    
+    const currentSettings = presets[activePreset].quickBuySettings;
+    
+    // Check slippage warning (same as TradeActionPanel)
+    const slippagePercent = (currentSettings.maxSlippage || 0.2) * 100;
+    if (slippagePercent >= HIGH_SLIPPAGE_WARNING_THRESHOLD) {
+      setPendingTradeOptions({ ...pendingTradeOptions, skipLiquidity: true, skipSlippage: false });
+      setShowSlippageWarning(true);
+      setIsLoading(false);
+      return;
+    }
+    
+    executeEnhancedTrade({
+      token,
+      amount: amount,
+      side: 'buy',
+      settings: currentSettings,
+      user: { bearerToken: user!.bearerToken, id: user!.id },
+      solBalance: Number(solBalance),
+      solPriceUsd: 150,
+      onSuccess: async (txHash, stats) => {
+        console.log("✅ Enhanced Trade successful:", { txHash, stats });
+        // Refresh token balance after trade
+        setTimeout(async () => {
+          try {
+            const trades = await getTradeActivityByUser(user!.id.toString());
+            const tokenTrades = trades.filter(
+              (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+            );
+
+            if (tokenTrades.length > 0) {
+              let bought = 0;
+              let sold = 0;
+
+              tokenTrades.forEach((trade: any) => {
+                if (trade.type === "Buy") {
+                  bought += Number(trade.tokenAmount) || 0;
+                } else if (trade.type === "Sell") {
+                  sold += Number(trade.tokenAmount) || 0;
+                }
+              });
+
+              const remaining = bought - sold;
+              setTokenBalance(Math.max(0, remaining));
+            } else {
+              setTokenBalance(0);
+            }
+          } catch (error) {
+            console.error('Error refreshing token balance:', error);
+          }
+        }, 2000);
+      },
+      onError: (error) => {
+        console.error("❌ Enhanced Trade failed:", error);
+      },
+      onWarning: (warnings) => {
+        console.warn("⚠️ Pre-transaction warnings:", warnings);
+      },
+    }).finally(() => {
+      setIsLoading(false);
+      setPendingTradeOptions(null);
+    });
+  }, [pendingTradeOptions, token, user, solBalance, presets, activePreset]);
+
+  const handleLiquidityWarningCancel = useCallback(() => {
+    setShowLiquidityWarning(false);
+    setPendingTradeOptions(null);
+    setIsLoading(false);
+  }, []);
+
+  if (!isOpen) return null;
+
+  const displaySellPercentage = hoverSellPercentage ?? activeSellPercentage ?? 0;
+  const tokensToSell =
+    tokenBalance > 0 && displaySellPercentage > 0
+      ? (tokenBalance * displaySellPercentage) / 100
+      : 0;
+
+  const tokenPriceUsd = token?.usd_price || 0;
+  const solPrice = typeof token?.sol_price === 'number' ? token.sol_price : 0;
+  const tokenValueUsd = tokensToSell * tokenPriceUsd;
+  const solValue = tokensToSell * solPrice;
+  const SOL_LOGO_URL = "https://axiom.trade/images/sol-fill.svg";
+
+  // Render warning dialogs using React Portal at body level to ensure they're above everything
+  const warningDialogsPortal = typeof document !== 'undefined' && document.body ? (
+    <>
+      {showSlippageWarning &&
+        createPortal(
+          <HighSlippageWarningDialog
+            isOpen={showSlippageWarning}
+            slippagePercent={
+              pendingTradeOptions?.side === 'sell'
+                ? (presets[activePreset].quickSellSettings.maxSlippage || 0.2) * 100
+                : (presets[activePreset].quickBuySettings.maxSlippage || 0.2) * 100
+            }
+            onContinue={handleSlippageWarningContinue}
+            onCancel={handleSlippageWarningCancel}
+          />,
+          document.body
+        )}
+      {showLiquidityWarning &&
+        createPortal(
+          <LowLiquidityWarningDialog
+            isOpen={showLiquidityWarning}
+            liquidityUsd={Number(liquidityUsd) || 0}
+            thresholdUsd={LOW_LIQUIDITY_WARNING_THRESHOLD}
+            onContinue={handleLiquidityWarningContinue}
+            onCancel={handleLiquidityWarningCancel}
+          />,
+          document.body
+        )}
+    </>
+  ) : null;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 pointer-events-none">
+      {/* Modal - no backdrop blocking */}
+      <div
+        ref={modalRef}
+        className="fixed border border-[#2A2B33] rounded-lg shadow-2xl pointer-events-auto z-10 transition-opacity duration-150"
+        style={{
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+          minWidth: '400px',
+          maxWidth: '500px',
+          backgroundColor: isDragging ? 'rgba(16, 17, 20, 0.85)' : '#101114',
+          cursor: isDragging ? 'grabbing' : 'default',
+        }}
+      >
+        {/* Header - Draggable */}
+        <div
+          ref={headerRef}
+          className="flex items-center justify-between px-4 py-3 border-b border-[#2A2B33] select-none"
+          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+          onPointerDown={handlePointerDown}
+        >
+          <div className="flex items-center gap-2">
+            {/* Grid icon */}
+            <div className="w-4 h-4 grid grid-cols-3 gap-0.5">
+              {[...Array(9)].map((_, i) => (
+                <div key={i} className="w-0.5 h-0.5 bg-[#9CA3AF] rounded" />
+              ))}
+            </div>
+
+            {/* Preset buttons */}
+            <div className="flex items-center gap-1 ml-2">
+              {['P1', 'P2', 'P3'].map((preset, idx) => (
+                <button
+                  key={preset}
+                  className={`px-2 py-0.5 text-xs font-semibold rounded ${
+                    activePreset === idx ? 'text-white bg-[#2A2B33]' : 'text-[#9CA3AF] hover:text-white'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActivePreset(idx);
+                  }}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+
+            {/* Edit button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (editingPresets) {
+                  commitPresetDrafts();
+                } else {
+                  setEditingPresets(true);
+                  setPresetDrafts(buyPresets.map(String));
+                }
+              }}
+              className="ml-2 p-1 text-[#9CA3AF] hover:text-white"
+            >
+              {editingPresets ? <LuCheck className="w-3 h-3" /> : <LuPencil className="w-3 h-3" />}
+            </button>
+          </div>
+
+          {/* Right side header buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="p-1 text-[#9CA3AF] hover:text-white"
+            >
+              <FaTimes className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Buy Section */}
+        <div className="px-4 py-4 border-b border-[#2A2B33]">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-white">Buy</span>
+              <img
+                src={SOL_LOGO_URL}
+                alt="Solana"
+                className="w-4 h-4 opacity-90"
+              />
+              {token && (
+                <span className="text-xs text-[#9CA3AF]">
+                  {token.usd_price ? `$${token.usd_price.toFixed(6)}` : 'N/A'}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Buy preset buttons */}
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            {buyPresets.map((preset, idx) => {
+              if (editingPresets) {
+                return (
+                  <input
+                    key={idx}
+                    type="text"
+                    inputMode="decimal"
+                    className="h-9 bg-[#101114] border border-[#70E0B0] text-[#70E0B0] text-sm font-semibold rounded-lg px-2 text-center focus:outline-none focus:ring-1 focus:ring-[#70E0B0]"
+                    value={presetDrafts[idx] ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/,/g, ".");
+                      if (allowDecimal(v)) {
+                        setPresetDrafts((d) => d.map((x, i) => (i === idx ? v : x)));
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitPresetDrafts();
+                      }
+                    }}
+                  />
+                );
+              }
+              return (
+                <button
+                  key={idx}
+                  onClick={() => !isLoading && handleQuickBuy(preset)}
+                  disabled={isLoading}
+                  className="px-3 py-2 bg-[#101114] border border-[#70E0B0] text-[#70E0B0] hover:bg-[#1E1F26] text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {preset}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Buy section info */}
+          <div className="flex items-center gap-4 text-xs text-[#9CA3AF]">
+            <div className="flex items-center gap-1">
+              <FaRunning className="w-3 h-3" />
+              <span>20%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <FaGasPump className="w-3 h-3" />
+              <span>0.001</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-3 h-3 flex items-center justify-center">⚠</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <FaEye className="w-3 h-3" />
+              <span>0.01</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <FaBan className="w-3 h-3" />
+              <span>Off</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Sell Section */}
+        <div className="px-4 py-4 border-b border-[#2A2B33]">
+          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-white">Sell %</span>
+            {token && (
+              <div className="flex items-center gap-2 text-xs text-[#9CA3AF]">
+                <span className="font-semibold text-white">{token.symbol || token.name}</span>
+                <span className="text-[#E6E7EA]">
+                  {formatSmartNumber(tokensToSell)} {token.symbol || ''}
+                </span>
+                <span className="flex items-center gap-1">
+                  <img
+                    src={SOL_LOGO_URL}
+                    alt="Solana"
+                    className="w-3.5 h-3.5 opacity-90"
+                  />
+                  <span className="text-[#E6E7EA]">{formatSmartNumber(solValue)}</span>
+                </span>
+              </div>
+            )}
+            </div>
+          </div>
+
+          {/* Sell preset buttons */}
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            {sellPresets.map((preset) => (
+              <button
+                key={preset}
+                onMouseEnter={() => setHoverSellPercentage(preset)}
+                onMouseLeave={() => setHoverSellPercentage(null)}
+                onClick={() => {
+                  setActiveSellPercentage(preset);
+                  setHoverSellPercentage(null);
+                  if (!isLoading) {
+                    void handleQuickSell(preset);
+                  }
+                }}
+                disabled={isLoading}
+                className="px-3 py-2 bg-[#101114] border border-[#FF4D7F] text-[#FF4D7F] hover:bg-[#1E1F26] text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {preset}%
+              </button>
+            ))}
+          </div>
+
+          {/* Show token amount to sell */}
+          {displaySellPercentage > 0 && tokenBalance > 0 && tokensToSell > 0 && (
+            <div className="mb-2 text-xs text-[#9CA3AF]">
+              Selling: {formatSmartNumber(tokensToSell)} {token?.symbol || ''} 
+              {tokenValueUsd > 0 && ` (~$${tokenValueUsd.toFixed(2)})`}
+            </div>
+          )}
+
+          {/* Sell section info */}
+          <div className="flex items-center gap-4 text-xs text-[#9CA3AF]">
+            <div className="flex items-center gap-1">
+              <FaRunning className="w-3 h-3" />
+              <span>40%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <FaGasPump className="w-3 h-3" />
+              <span>0.001</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-3 h-3 flex items-center justify-center">⚠</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <FaEye className="w-3 h-3" />
+              <span>0.01</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <FaBan className="w-3 h-3" />
+              <span>Off</span>
+            </div>
+            {/* <button className="ml-auto px-3 py-1 bg-[#FF4D7F] hover:bg-[#E63950] text-white text-xs font-semibold rounded transition-colors">
+              Sell Init.
+            </button> */}
+          </div>
+        </div>
+      </div>
+      </div>
+      {warningDialogsPortal}
+    </>
+  );
+};
+
+export default InstantTradeModal;

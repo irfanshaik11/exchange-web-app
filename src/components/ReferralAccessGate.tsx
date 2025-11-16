@@ -11,6 +11,12 @@ import { useRouter } from "next/router";
 import InterstateButton from "./InterstateButton";
 import { env } from "../env";
 import { useUser } from "./UserContext";
+import { usePhantomWallet } from "../hooks/usePhantomWallet";
+import { useMetaMaskWallet } from "../hooks/useMetaMaskWallet";
+import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, getWaitlistStatus, redeemAccessCode, completeAllQuests } from "../utils/api";
+import Cookies from "js-cookie";
+import { FaDiscord } from "react-icons/fa";
+import { shouldShowWaitlistModal } from "../utils/waitlist";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -35,9 +41,10 @@ export function useReferralAccess() {
   return ctx;
 }
 
-const ADMIN_OVERRIDE_CODE = "NARRATIVE-ADMIN-247";
-const STORAGE_FLAG_KEY = "referralAccess.granted";
-const STORAGE_META_KEY = "referralAccess.meta";
+// All codes (including admin codes) must be validated server-side via redeemAccessCode
+const STORAGE_FLAG_KEY = "referralAccess.granted"; // legacy (session)
+const STORAGE_META_KEY = "referralAccess.meta"; // legacy (session)
+const LS_KEY_PREFIX = "referralAccess.granted.user:"; // persistent per-user
 
 type StoredAccessMeta = {
   grantedAt: number;
@@ -76,8 +83,13 @@ function persistAccess(userId?: string | null) {
     userId: userId ?? null,
   };
   try {
+    // Legacy session storage (kept for compatibility)
     window.sessionStorage.setItem(STORAGE_FLAG_KEY, "true");
     window.sessionStorage.setItem(STORAGE_META_KEY, JSON.stringify(meta));
+    // Persistent per-user flag
+    if (userId) {
+      window.localStorage.setItem(`${LS_KEY_PREFIX}${userId}`, "true");
+    }
   } catch (error) {
     console.warn("Failed to persist referral access state", error);
   }
@@ -88,6 +100,7 @@ function clearPersistedAccess() {
   try {
     window.sessionStorage.removeItem(STORAGE_FLAG_KEY);
     window.sessionStorage.removeItem(STORAGE_META_KEY);
+    // Do not clear per-user localStorage here; it should persist across sessions
   } catch (error) {
     console.warn("Failed to clear referral access state", error);
   }
@@ -96,8 +109,10 @@ function clearPersistedAccess() {
 function hasStoredAccess(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY);
-    return session === "true";
+    // Prefer per-user localStorage when user is known
+    // Fallback to legacy session flag
+    const session = window.sessionStorage.getItem(STORAGE_FLAG_KEY) === "true";
+    return session;
   } catch {
     return false;
   }
@@ -124,7 +139,7 @@ export function ReferralAccessGate({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { user, loading: userLoading } = useUser();
+  const { user, loading: userLoading, refreshUser } = useUser();
   const hasMountedRef = useRef(false);
   const prefillAttemptedRef = useRef(false);
 
@@ -144,6 +159,88 @@ export function ReferralAccessGate({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [autoSubmitCode, setAutoSubmitCode] = useState<string | null>(null);
+  const [showWalletOptions, setShowWalletOptions] = useState(false);
+  const [phantomLoading, setPhantomLoading] = useState(false);
+  const [metamaskLoading, setMetamaskLoading] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [showQuests, setShowQuests] = useState(false);
+  const [showWaitlist, setShowWaitlist] = useState(false);
+  const [waitlistForm, setWaitlistForm] = useState({});
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false);
+  const [questProgress, setQuestProgress] = useState({
+    xp: 0,
+    rank: "Unranked",
+    nextRankXp: 200,
+    completedQuests: [] as string[],
+  });
+  const [twitterLinked, setTwitterLinked] = useState(false);
+  const [twitterUsername, setTwitterUsername] = useState<string | null>(null);
+  const [checkingTwitter, setCheckingTwitter] = useState(false);
+  const [telegramUsername, setTelegramUsername] = useState("");
+  const [narrativeFollowed, setNarrativeFollowed] = useState(false);
+  const [postLiked, setPostLiked] = useState(false);
+  const [postReposted, setPostReposted] = useState(false);
+  const [postReplied, setPostReplied] = useState(false);
+  const [discordJoined, setDiscordJoined] = useState(false);
+  const [showCongratsModal, setShowCongratsModal] = useState(false);
+  const [waitlistNumber, setWaitlistNumber] = useState<number | null>(null);
+
+  // Calculate quest progress
+  const questProgressData = useMemo(() => {
+    const quests = [
+      { id: 'twitter', completed: twitterLinked },
+      { id: 'follow', completed: narrativeFollowed },
+      { id: 'like', completed: postLiked },
+      { id: 'repost', completed: postReposted },
+      { id: 'reply', completed: postReplied },
+      { id: 'discord', completed: discordJoined },
+    ];
+    
+    const completedCount = quests.filter(q => q.completed).length;
+    const totalQuests = quests.length;
+    const xpPerQuest = 25;
+    const totalXp = completedCount * xpPerQuest;
+    const maxXp = totalQuests * xpPerQuest;
+    const progressPercentage = (completedCount / totalQuests) * 100;
+    
+    // Determine rank based on XP
+    let rank = "Unranked";
+    let nextRankXp = 200;
+    if (totalXp >= 150) {
+      rank = "Master";
+      nextRankXp = 0;
+    } else if (totalXp >= 125) {
+      rank = "Expert";
+      nextRankXp = 150;
+    } else if (totalXp >= 100) {
+      rank = "Advanced";
+      nextRankXp = 125;
+    } else if (totalXp >= 75) {
+      rank = "Intermediate";
+      nextRankXp = 100;
+    } else if (totalXp >= 50) {
+      rank = "Beginner";
+      nextRankXp = 75;
+    } else if (totalXp >= 25) {
+      rank = "Novice";
+      nextRankXp = 50;
+    }
+    
+    return {
+      completedCount,
+      totalQuests,
+      totalXp,
+      maxXp,
+      progressPercentage,
+      rank,
+      nextRankXp,
+      xpNeeded: nextRankXp > 0 ? nextRankXp - totalXp : 0,
+    };
+  }, [twitterLinked, narrativeFollowed, postLiked, postReposted, postReplied, discordJoined]);
+
+  // Wallet hooks
+  const phantomWallet = usePhantomWallet();
+  const metaMaskWallet = useMetaMaskWallet();
 
   const grantAccess = useCallback(() => {
     persistAccess(user?.id ?? null);
@@ -171,19 +268,27 @@ export function ReferralAccessGate({
       return;
     }
 
-    if (!hasStoredAccess()) {
-      setStatus("prompt");
-      return;
+    // Check persistent per-user localStorage first
+    if (typeof window !== "undefined" && user?.id) {
+      const lsGranted = window.localStorage.getItem(`${LS_KEY_PREFIX}${user.id}`) === "true";
+      if (lsGranted) {
+        setStatus("granted");
+        setInfo("Welcome back.");
+        return;
+      }
     }
 
-    const meta = getStoredAccessMeta();
-    if (!user || !meta || !meta.userId || meta.userId !== user.id) {
-      revokeAccess();
-      return;
+    // Fallback to legacy session check
+    if (hasStoredAccess()) {
+      const meta = getStoredAccessMeta();
+      if (user && meta && meta.userId && meta.userId === user.id) {
+        setStatus("granted");
+        setInfo("Welcome back.");
+        return;
+      }
     }
 
-    setStatus("granted");
-    setInfo("Welcome back.");
+    setStatus("prompt");
   }, [requireReferralAccess, userLoading, user, revokeAccess]);
 
   useEffect(() => {
@@ -200,6 +305,32 @@ export function ReferralAccessGate({
     if (userLoading) return;
     evaluateStoredAccess();
   }, [requireReferralAccess, evaluateStoredAccess, userLoading, user]);
+
+  // On login/user change, check server waitlist state; auto-grant if off waitlist
+  useEffect(() => {
+    if (!requireReferralAccess) return;
+    if (userLoading || !user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const q = user?.id ? { userId: Number(user.id) } : undefined;
+        if (!q) return;
+        const resp = await getWaitlistStatus(q).catch(() => null);
+        const wl = resp?.waitlist;
+        if (cancelled) return;
+        if (wl && !shouldShowWaitlistModal({ status: wl.status, waitlistNumber: wl.waitlistNumber })) {
+          persistAccess(user.id);
+          setStatus("granted");
+          setInfo("Access restored.");
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [requireReferralAccess, userLoading, user]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -251,13 +382,40 @@ export function ReferralAccessGate({
       setError(null);
       setInfo(null);
 
-      if (normalized === ADMIN_OVERRIDE_CODE) {
-        grantAccess();
-        return;
-      }
-
-      setStatus("prompt");
-      setError("That code is not recognized. Please double-check with your inviter.");
+      // Validate with backend and mark waitlist as activated (number -> 0) on success.
+      // If the user has no waitlist row yet, create it and retry once.
+      (async () => {
+        try {
+          if (!user) {
+            setStatus("prompt");
+            setError("Please login first.");
+            return;
+          }
+          try {
+            await redeemAccessCode({
+              userId: Number(user.id),
+              accessCode: normalized,
+            });
+          } catch (err: any) {
+            // If no waitlist row, create it, then retry redeem once
+            const statusCode = err?.status || err?.response?.status;
+            if (statusCode === 404) {
+              await completeAllQuests({ userId: Number(user.id) });
+              await redeemAccessCode({
+                userId: Number(user.id),
+                accessCode: normalized,
+              });
+            } else {
+              throw err;
+            }
+          }
+          persistAccess(user.id);
+          grantAccess();
+        } catch (e: any) {
+          setStatus("prompt");
+          setError("That code is not recognized. Please double-check with your inviter.");
+        }
+      })();
     },
     [requireReferralAccess, codeInput, grantAccess],
   );
@@ -305,6 +463,249 @@ export function ReferralAccessGate({
     );
   }, [router.isReady, router.asPath, router]);
 
+  // Refresh wallet connection state when wallet options are shown
+  useEffect(() => {
+    if (showWalletOptions) {
+      phantomWallet.refreshConnection();
+      metaMaskWallet.refreshConnection();
+    }
+  }, [showWalletOptions, phantomWallet, metaMaskWallet]);
+
+  // Check Twitter authentication status
+  const checkTwitterAuth = useCallback(async () => {
+    setCheckingTwitter(true);
+    try {
+      const response = await fetch('/api/twitter/verify-auth');
+      const data = await response.json();
+      if (data.authenticated && data.user) {
+        setTwitterLinked(true);
+        setTwitterUsername(data.user.username);
+      } else {
+        setTwitterLinked(false);
+        setTwitterUsername(null);
+      }
+    } catch (error) {
+      console.error('Error checking Twitter auth:', error);
+      setTwitterLinked(false);
+      setTwitterUsername(null);
+    } finally {
+      setCheckingTwitter(false);
+    }
+  }, []);
+
+  // Check Twitter status when waitlist modal opens or URL changes (after OAuth callback)
+  useEffect(() => {
+    if (showWaitlist) {
+      checkTwitterAuth();
+    }
+  }, [showWaitlist, checkTwitterAuth]);
+
+  // Check for Twitter OAuth callback in URL
+  useEffect(() => {
+    if (!router.isReady) return;
+    const { twitter_error, twitter_success } = router.query;
+    
+    if (twitter_success === 'true') {
+      checkTwitterAuth();
+      // Clean up URL
+      const [pathPart, searchPart] = router.asPath.split('?');
+      if (searchPart) {
+        const params = new URLSearchParams(searchPart);
+        params.delete('twitter_success');
+        const cleaned = params.toString();
+        router.replace(
+          cleaned ? `${pathPart}?${cleaned}` : pathPart,
+          undefined,
+          { shallow: true }
+        );
+      }
+    } else if (twitter_error) {
+      setError(`Twitter linking failed: ${twitter_error}`);
+      // Clean up URL
+      const [pathPart, searchPart] = router.asPath.split('?');
+      if (searchPart) {
+        const params = new URLSearchParams(searchPart);
+        params.delete('twitter_error');
+        const cleaned = params.toString();
+        router.replace(
+          cleaned ? `${pathPart}?${cleaned}` : pathPart,
+          undefined,
+          { shallow: true }
+        );
+      }
+    }
+  }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth]);
+
+  // Retrieve waitlist number from URL query parameter or sessionStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (router.isReady) {
+        const numberFromQuery = router.query.number;
+        if (numberFromQuery && typeof numberFromQuery === "string") {
+          const number = parseInt(numberFromQuery, 10);
+          if (!isNaN(number)) {
+            setWaitlistNumber(number);
+            sessionStorage.setItem("waitlistNumber", number.toString());
+            return;
+          }
+        }
+      }
+      
+      // Fallback to sessionStorage
+      const stored = sessionStorage.getItem("waitlistNumber");
+      if (stored) {
+        setWaitlistNumber(parseInt(stored, 10));
+      }
+    }
+  }, [router.isReady, router.query.number]);
+
+  // Handle Twitter linking
+  const handleLinkTwitter = useCallback(() => {
+    // Mark as completed immediately when button is clicked
+    setTwitterLinked(true);
+    const currentPath = router.asPath.split('?')[0];
+    const returnUrl = `${currentPath}?twitter_success=true`;
+    window.open(`/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`, '_blank');
+  }, [router.asPath]);
+
+  // Phantom Wallet Login handler
+  const handlePhantomLogin = useCallback(async () => {
+    setPhantomLoading(true);
+    setError(null);
+    setWalletError(null);
+    setInfo(null);
+    
+    try {
+      // Check if Phantom is installed
+      if (!phantomWallet.isInstalled) {
+        setWalletError("Phantom wallet not found. Please install Phantom wallet.");
+        return;
+      }
+
+      // Connect to Phantom wallet
+      let connected;
+      try {
+        connected = await phantomWallet.connect();
+      } catch (connectError: any) {
+        console.error("Phantom connect error:", connectError);
+        setWalletError("User rejected the connection request");
+        return;
+      }
+      
+      if (!connected) {
+        setWalletError(phantomWallet.error || "Failed to connect to Phantom wallet");
+        return;
+      }
+
+      // Create message and sign it
+      const message = `Login to Interstate with nonce: ${Date.now()}`;
+      const signResult = await phantomWallet.signMessage(message);
+      
+      // Check if signing failed
+      if ("error" in signResult) {
+        setWalletError((signResult as { error: string }).error);
+        return;
+      }
+      
+      // Send to backend for verification
+      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message);
+      
+      if (token) {
+        Cookies.set("token", token, { expires: 7, path: "/" });
+        await refreshUser();
+        setInfo("Phantom login successful!");
+        // Show waitlist modal after successful wallet login
+        setShowWalletOptions(false);
+        setShowWaitlist(true);
+      } else {
+        setError("Phantom login failed - no token received");
+      }
+    } catch (error: any) {
+      console.error("Phantom login error:", error);
+      
+      if (error.message?.includes("Internal server error")) {
+        setWalletError("Backend server error. Please try again later.");
+      } else if (error.message?.includes("Signature verification failed")) {
+        setWalletError("Signature verification failed. Please try again.");
+      } else if (error.message?.includes("Missing required fields")) {
+        setWalletError("Missing required data. Please try again.");
+      } else {
+        setWalletError(error?.message || "Phantom login failed");
+      }
+    } finally {
+      setPhantomLoading(false);
+    }
+  }, [phantomWallet, refreshUser, grantAccess]);
+
+  // MetaMask Wallet Login handler
+  const handleMetamaskLogin = useCallback(async () => {
+    setMetamaskLoading(true);
+    setError(null);
+    setWalletError(null);
+    setInfo(null);
+
+    try {
+      // Check if MetaMask is installed
+      if (!metaMaskWallet.isInstalled) {
+        setWalletError("MetaMask wallet not found. Please install MetaMask extension.");
+        return;
+      }
+
+      // Connect to MetaMask wallet
+      let connected = await metaMaskWallet.connect();
+
+      // If connection failed due to pending request, wait and retry once
+      if (!connected && metaMaskWallet.error?.includes("already")) {
+        setWalletError("MetaMask is busy. Retrying in 2 seconds...");
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        connected = await metaMaskWallet.connect();
+      }
+
+      if (!connected) {
+        setWalletError(metaMaskWallet.error || "Failed to connect to MetaMask wallet");
+        return;
+      }
+
+      // Create message and sign it
+      const message = `Login to Interstate with nonce: ${Date.now()}`;
+      const signResult = await metaMaskWallet.signMessage(message);
+      
+      // Check if signing failed
+      if ("error" in signResult) {
+        setWalletError((signResult as { error: string }).error);
+        return;
+      }
+      
+      // Send to backend for verification
+      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message);
+      
+      if (token) {
+        Cookies.set("token", token, { expires: 7, path: "/" });
+        await refreshUser();
+        setInfo("MetaMask login successful!");
+        // Show waitlist modal after successful wallet login
+        setShowWalletOptions(false);
+        setShowWaitlist(true);
+      } else {
+        setError("MetaMask login failed - no token received");
+      }
+    } catch (error: any) {
+      console.error("MetaMask login error:", error);
+
+      if (error.message?.includes("Internal server error")) {
+        setWalletError("Backend server error. Please try again later.");
+      } else if (error.message?.includes("Signature verification failed")) {
+        setWalletError("Signature verification failed. Please try again.");
+      } else if (error.message?.includes("Missing required fields")) {
+        setWalletError("Missing required data. Please try again.");
+      } else {
+        setWalletError(error?.message || "MetaMask login failed");
+      }
+    } finally {
+      setMetamaskLoading(false);
+    }
+  }, [metaMaskWallet, refreshUser, grantAccess]);
+
   const contextValue = useMemo<ReferralAccessContextValue>(() => {
     return {
       status,
@@ -322,7 +723,7 @@ export function ReferralAccessGate({
     );
   }
 
-  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating");
+  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist;
 
   return (
     <ReferralAccessContext.Provider value={contextValue}>
@@ -408,7 +809,7 @@ export function ReferralAccessGate({
                     type="submit"
                     fullWidth
                     loading={status === "validating"}
-                    className="h-14 text-base uppercase tracking-[0.4em]"
+                    className="h-14 text-base uppercase tracking-[0.4em] !bg-black text-white hover:!bg-neutral-900 border-[0.5px] border-white"
                   >
                     Unlock Access
                   </InterstateButton>
@@ -417,9 +818,715 @@ export function ReferralAccessGate({
                 <div className="mt-8 space-y-4 text-xs text-neutral-500 md:text-sm">
                   <p>
                     Lost your code? Reach out to the team on Discord to request
-                    a new invitation. Referral access ties directly to your
-                    account activity.
+                    a new invitation.
                   </p>
+                  <p>
+                    No Code? Click here for access
+                  </p>
+                  <InterstateButton
+                    type="button"
+                    fullWidth
+                    onClick={() => {
+                      setShowWaitlist(true);
+                    }}
+                    className="h-14 text-base uppercase tracking-[0.4em] bg-black text-white hover:bg-neutral-900"
+                  >
+                    Join Waitlist
+                  </InterstateButton>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Waitlist Modal */}
+      {showWaitlist && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl overflow-y-auto">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-24 left-16 h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" />
+            <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />
+            <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-blue-400/10 blur-3xl" />
+          </div>
+
+          <div className="relative z-[9999] w-full max-w-md px-4 md:px-0 py-2">
+            <div className="rounded-xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(59,130,246,0.12)]">
+              <div className="rounded-[calc(1rem-1px)] bg-neutral-950/95 p-4 md:p-5">
+                {/* Progress Bar */}
+                <div className="mb-4 bg-neutral-800/50 rounded-lg p-3 border border-neutral-700/50">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-purple-600/20 border border-purple-500/30 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-white">{questProgressData.rank}</div>
+                      <div className="mt-1">
+                        <div className="w-full h-1.5 bg-neutral-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-purple-600 transition-all duration-300"
+                            style={{ width: `${Math.min(questProgressData.progressPercentage, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-1 text-xs text-neutral-400">
+                        {questProgressData.nextRankXp > 0 
+                          ? `Next rank: ${questProgressData.xpNeeded} XP left`
+                          : "Max rank achieved!"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <p className="text-xs uppercase tracking-[0.35em] text-blue-400/80">
+                    Join Waitlist
+                  </p>
+                  <h2 className="mt-1 text-lg font-semibold text-white md:text-xl">
+                    Get Early Access
+                  </h2>
+                </div>
+                
+                <p className="text-xs text-neutral-300/90 mb-3">
+                  Help us get to know you better. Fill out the form below to join our waitlist and be among the first to access Narrative.
+                </p>
+
+                <form
+                  className="space-y-3"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setWaitlistSubmitting(true);
+                    
+                    // Generate a random waitlist number if not already set
+                    if (!waitlistNumber) {
+                      const randomNumber = Math.floor(Math.random() * 10000) + 1;
+                      setWaitlistNumber(randomNumber);
+                      if (typeof window !== "undefined") {
+                        sessionStorage.setItem("waitlistNumber", randomNumber.toString());
+                      }
+                    }
+                    
+                    // TODO: Submit waitlist data to backend
+                    // For now, just log the data and grant access
+                    const submissionData = {
+                      ...waitlistForm,
+                      telegram: telegramUsername,
+                    };
+                    console.log("Waitlist submission:", submissionData);
+                    
+                    // Simulate API call
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    setWaitlistSubmitting(false);
+                    setShowWaitlist(false);
+                    grantAccess();
+                  }}
+                >
+                  {/* Link Twitter */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Link Your Twitter
+                    </label>
+                    {twitterLinked ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                          </svg>
+                          <div>
+                            {twitterUsername ? (
+                              <p className="text-white font-medium">@{twitterUsername}</p>
+                            ) : (
+                              <p className="text-white font-medium">Twitter Linked</p>
+                            )}
+                            <p className="text-xs text-blue-300/80">Twitter account linked</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={handleLinkTwitter}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Re-link
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={handleLinkTwitter}
+                        loading={checkingTwitter}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                        Link Your Twitter
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Follow narrative_hq */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Follow @narrative_hq
+                    </label>
+                    {narrativeFollowed ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                          </svg>
+                          <div>
+                            <p className="text-white font-medium">@narrative_hq</p>
+                            <p className="text-xs text-blue-300/80">Following</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://twitter.com/narrative_hq", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Open Twitter
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          setNarrativeFollowed(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                        Follow @narrative_hq
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Like a post */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Like a post by @narrative_hq (Earn 25 xp)
+                    </label>
+                    {postLiked ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/>
+                          </svg>
+                          <div>
+                            <p className="text-white font-medium">Post liked</p>
+                            <p className="text-xs text-blue-300/80">Thank you for the like!</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://twitter.com/narrative_hq", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          View Posts
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          setPostLiked(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/>
+                        </svg>
+                        Like a Post
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Repost a post */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Repost a post by @narrative_hq
+                    </label>
+                    {postReposted ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M4.75 3.79l4.603 4.3-1.706 1.82L6 8.38v7.24c0 .97.784 1.75 1.75 1.75H13V20H7.75c-2.347 0-4.25-1.9-4.25-4.25V8.38L1.853 9.91.147 8.09l4.603-4.3zm11.5 2.71H11V4h5.25c2.347 0 4.25 1.9 4.25 4.25v7.24l1.647-1.53 1.706 1.82-4.603 4.3-4.603-4.3 1.706-1.82L18 15.62V8.38c0-.97-.784-1.75-1.75-1.75z"/>
+                          </svg>
+                          <div>
+                            <p className="text-white font-medium">Post reposted</p>
+                            <p className="text-xs text-blue-300/80">Thank you for sharing!</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://twitter.com/narrative_hq", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          View Posts
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          setPostReposted(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M4.75 3.79l4.603 4.3-1.706 1.82L6 8.38v7.24c0 .97.784 1.75 1.75 1.75H13V20H7.75c-2.347 0-4.25-1.9-4.25-4.25V8.38L1.853 9.91.147 8.09l4.603-4.3zm11.5 2.71H11V4h5.25c2.347 0 4.25 1.9 4.25 4.25v7.24l1.647-1.53 1.706 1.82-4.603 4.3-4.603-4.3 1.706-1.82L18 15.62V8.38c0-.97-.784-1.75-1.75-1.75z"/>
+                        </svg>
+                        Repost a Post
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Reply to a post */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Reply to a post by @narrative_hq
+                    </label>
+                    {postReplied ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.09 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/>
+                          </svg>
+                          <div>
+                            <p className="text-white font-medium">Post replied</p>
+                            <p className="text-xs text-blue-300/80">Thank you for engaging!</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://twitter.com/narrative_hq", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          View Posts
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://twitter.com/narrative_hq", "_blank");
+                          setPostReplied(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.09 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/>
+                        </svg>
+                        Reply to a Post
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Join Discord */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Join Discord
+                    </label>
+                    {discordJoined ? (
+                      <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FaDiscord className="w-5 h-5 text-blue-400" />
+                          <div>
+                            <p className="text-white font-medium">Discord Joined</p>
+                            <p className="text-xs text-blue-300/80">You've joined our Discord</p>
+                          </div>
+                        </div>
+                        <InterstateButton
+                          type="button"
+                          onClick={() => {
+                            window.open("https://discord.gg/QZGmpmvCNE", "_blank");
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Open Discord
+                        </InterstateButton>
+                      </div>
+                    ) : (
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://discord.gg/QZGmpmvCNE", "_blank");
+                          setDiscordJoined(true);
+                        }}
+                        fullWidth
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                      >
+                        <FaDiscord className="w-5 h-5" />
+                        Join Discord
+                      </InterstateButton>
+                    )}
+                  </div>
+
+                  {/* Telegram Username Input */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Telegram Username
+                    </label>
+                    <input
+                      type="text"
+                      value={telegramUsername}
+                      onChange={(e) => {
+                        setTelegramUsername(e.target.value);
+                        setWaitlistForm({ ...waitlistForm, telegram: e.target.value });
+                      }}
+                      placeholder="@username"
+                      className="w-full rounded-lg border border-neutral-700/60 bg-neutral-900/70 px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                      disabled={waitlistSubmitting}
+                    />
+                  </div>
+
+                </form>
+
+                {/* Complete all quests button */}
+                <div className="mt-4 pt-3 border-t border-neutral-700/60">
+                  <InterstateButton
+                    type="button"
+                    onClick={() => {
+                      // Generate a random waitlist number if not already set
+                      if (!waitlistNumber) {
+                        const randomNumber = Math.floor(Math.random() * 10000) + 1;
+                        setWaitlistNumber(randomNumber);
+                        if (typeof window !== "undefined") {
+                          sessionStorage.setItem("waitlistNumber", randomNumber.toString());
+                        }
+                      }
+                      setShowCongratsModal(true);
+                    }}
+                    fullWidth
+                    disabled={questProgressData.completedCount < questProgressData.totalQuests || !telegramUsername.trim()}
+                    className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-purple-600"
+                  >
+                    Complete All Quests
+                  </InterstateButton>
+                  <p className="mt-2 text-xs text-center text-neutral-400">
+                    {questProgressData.completedCount < questProgressData.totalQuests
+                      ? `Complete all quests above to continue (${questProgressData.completedCount}/${questProgressData.totalQuests})`
+                      : !telegramUsername.trim()
+                      ? "Please enter your Telegram username to continue"
+                      : "Click to join the waitlist and get early access"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Waitlist Confirmation Modal */}
+      {showCongratsModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl p-4">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-24 left-16 h-64 w-64 rounded-full bg-emerald-500/20 blur-3xl" />
+            <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
+            <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-amber-400/10 blur-3xl" />
+          </div>
+
+          <div className="relative z-[10001] w-full max-w-md">
+            <div className="rounded-2xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(16,185,129,0.12)]">
+              <div className="rounded-[calc(1rem-1px)] bg-neutral-950/95 p-8 md:p-10">
+                <div className="text-center">
+                  <div className="mb-6 flex justify-center">
+                    <div className="h-16 w-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                      <svg
+                        className="w-8 h-8 text-emerald-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">
+                    You are on the waitlist!
+                  </h1>
+
+                  {waitlistNumber ? (
+                    <div className="mb-6">
+                      <p className="text-sm text-neutral-400 mb-2">Your waitlist number</p>
+                      <div className="inline-block px-6 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+                        <span className="text-3xl md:text-4xl font-bold text-emerald-400">
+                          #{waitlistNumber}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mb-6">
+                      <div className="inline-block px-6 py-3 rounded-xl bg-neutral-800/50">
+                        <div className="h-8 w-20 bg-neutral-700/50 rounded animate-pulse" />
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-sm text-neutral-300/90 mb-8 max-w-sm mx-auto">
+                    Thank you for completing all quests! We'll notify you when your spot is ready.
+                  </p>
+
+                  <InterstateButton
+                    type="button"
+                    onClick={() => {
+                      window.location.href = "https://www.narrative.trade";
+                    }}
+                    fullWidth
+                    className="h-12 text-base uppercase tracking-[0.4em] bg-emerald-600 text-white hover:bg-emerald-700"
+                  >
+                    Return Home
+                  </InterstateButton>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quest System Overlay */}
+      {showQuests && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-neutral-950/80 backdrop-blur-xl overflow-y-auto">
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-24 left-16 h-64 w-64 rounded-full bg-purple-500/20 blur-3xl" />
+            <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-purple-500/10 blur-3xl" />
+            <div className="absolute top-1/3 right-1/4 h-40 w-40 rounded-full bg-purple-400/10 blur-3xl" />
+          </div>
+
+          <div className="relative z-[9999] w-full max-w-2xl px-6 md:px-0 py-8">
+            <div className="rounded-3xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(147,51,234,0.12)]">
+              <div className="rounded-[calc(1.5rem-1px)] bg-neutral-950/95 p-8 md:p-10">
+                {/* Rank Section */}
+                <div className="mb-8">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-purple-500/20 to-purple-600/20 border border-purple-500/30 flex items-center justify-center">
+                      <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-lg font-bold text-white">{questProgress.rank}</div>
+                      <div className="mt-2">
+                        <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-purple-600 transition-all duration-300"
+                            style={{ width: `${Math.min((questProgress.xp / questProgress.nextRankXp) * 100, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-neutral-400">
+                        Next rank: {Math.max(0, questProgress.nextRankXp - questProgress.xp)} XP left
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Complete Quests Section */}
+                <div className="mb-8">
+                  <h2 className="text-2xl font-bold text-white mb-2">Complete Quests</h2>
+                  <p className="text-sm text-neutral-400 mb-4">Earn XP to rank up and earn future rewards.</p>
+                  
+                  <div className="space-y-3">
+                    {/* Link your X */}
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Link your X</div>
+                        <div className="text-xs text-neutral-400">Earn 25 XP</div>
+                      </div>
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          // TODO: Implement X linking
+                          window.open("https://twitter.com/intent/tweet?text=Check%20out%20Narrative!", "_blank");
+                        }}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        disabled={questProgress.completedQuests.includes("link-x")}
+                      >
+                        {questProgress.completedQuests.includes("link-x") ? "Completed" : "Link X"}
+                      </InterstateButton>
+                    </div>
+
+                    {/* Follow @TradeBoba */}
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Follow @TradeBoba</div>
+                        <div className="text-xs text-neutral-400">Earn 25 XP</div>
+                      </div>
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          if (!questProgress.completedQuests.includes("link-x")) {
+                            alert("Please link your X account first");
+                            return;
+                          }
+                          // TODO: Implement follow action
+                          window.open("https://twitter.com/TradeBoba", "_blank");
+                        }}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        disabled={questProgress.completedQuests.includes("follow-tradeboba")}
+                      >
+                        {questProgress.completedQuests.includes("follow-tradeboba") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Follow" : "Link X First"}
+                      </InterstateButton>
+                    </div>
+
+                    {/* Like a post */}
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Like a post</div>
+                        <div className="text-xs text-neutral-400">Earn 25 XP</div>
+                      </div>
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          if (!questProgress.completedQuests.includes("link-x")) {
+                            alert("Please link your X account first");
+                            return;
+                          }
+                          // TODO: Implement like action
+                        }}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        disabled={questProgress.completedQuests.includes("like-post")}
+                      >
+                        {questProgress.completedQuests.includes("like-post") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Like" : "Link X First"}
+                      </InterstateButton>
+                    </div>
+
+                    {/* Repost a post */}
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Repost a post</div>
+                        <div className="text-xs text-neutral-400">Earn 25 XP</div>
+                      </div>
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          if (!questProgress.completedQuests.includes("link-x")) {
+                            alert("Please link your X account first");
+                            return;
+                          }
+                          // TODO: Implement repost action
+                        }}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        disabled={questProgress.completedQuests.includes("repost-post")}
+                      >
+                        {questProgress.completedQuests.includes("repost-post") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Repost" : "Link X First"}
+                      </InterstateButton>
+                    </div>
+
+                    {/* Reply to a post */}
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Reply to a post</div>
+                        <div className="text-xs text-neutral-400">Earn 25 XP</div>
+                      </div>
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          if (!questProgress.completedQuests.includes("link-x")) {
+                            alert("Please link your X account first");
+                            return;
+                          }
+                          // TODO: Implement reply action
+                        }}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        disabled={questProgress.completedQuests.includes("reply-post")}
+                      >
+                        {questProgress.completedQuests.includes("reply-post") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Reply" : "Link X First"}
+                      </InterstateButton>
+                    </div>
+
+                    {/* Join Discord */}
+                    <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="text-white font-medium mb-1">Join Discord</div>
+                        <div className="text-xs text-neutral-400">Earn 25 XP</div>
+                      </div>
+                      <InterstateButton
+                        type="button"
+                        onClick={() => {
+                          window.open("https://discord.gg/QZGmpmvCNE", "_blank");
+                          // TODO: Implement Discord join verification
+                        }}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        disabled={questProgress.completedQuests.includes("join-discord")}
+                      >
+                        {questProgress.completedQuests.includes("join-discord") ? "Completed" : "Join"}
+                      </InterstateButton>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bonus Quest */}
+                <div className="mb-6">
+                  <div className="text-center text-sm text-neutral-400 mb-4">Bonus Quest</div>
+                  <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="text-white font-medium mb-1">Complete all quests</div>
+                      <div className="text-xs text-neutral-400">Earn 50 XP</div>
+                    </div>
+                    <div className="text-sm text-neutral-400">
+                      {questProgress.completedQuests.length}/6 steps
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <InterstateButton
+                    type="button"
+                    fullWidth
+                    onClick={() => {
+                      setShowQuests(false);
+                      grantAccess();
+                    }}
+                    className="h-12 text-base uppercase tracking-[0.4em] bg-purple-600 text-white hover:bg-purple-700"
+                  >
+                    Skip for Now
+                  </InterstateButton>
+                  <InterstateButton
+                    type="button"
+                    fullWidth
+                    onClick={() => {
+                      // TODO: Check if all quests completed, then grant access
+                      if (questProgress.completedQuests.length >= 6) {
+                        grantAccess();
+                        setShowQuests(false);
+                      } else {
+                        alert("Complete more quests to unlock access!");
+                      }
+                    }}
+                    className="h-12 text-base uppercase tracking-[0.4em] bg-black text-white hover:bg-neutral-900"
+                    disabled={questProgress.completedQuests.length < 6}
+                  >
+                    Continue
+                  </InterstateButton>
                 </div>
               </div>
             </div>
@@ -429,4 +1536,3 @@ export function ReferralAccessGate({
     </ReferralAccessContext.Provider>
   );
 }
-

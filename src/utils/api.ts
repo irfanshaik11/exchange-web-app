@@ -243,7 +243,10 @@ export interface CreateLimitOrderParams {
   amount: number;
   type: "Buy" | "Sell";
   direction: "Above" | "Below";
-  targetMC: number;
+  targetMC?: number | string; // Made optional for bonding triggers
+  triggerType?: "marketCap" | "bonding" | "devSell"; // New field
+  bondingTarget?: number; // New field
+  devWallet?: string; // New field
   // Optional context data from frontend (for better logging and validation)
   currentPrice?: number | string;
   currentMarketCap?: number | string;
@@ -264,15 +267,18 @@ export interface CreateLimitOrderParams {
   rpc?: string;
 }
 
+type LimitOrderStatus = "Active" | "Cancelled" | "Completed" | "Failed";
+
 interface LimitOrder {
   id: string;
   tokenAddress: string;
+  pairAddress?: string | null;
   type: "Buy" | "Sell";
   direction: "Above" | "Below";
-  targetMC: number;
-  solAmount: number;
-  tokenAmount: number;
-  status: "Active" | "Cancelled" | "Completed";
+  targetMC: number | string;
+  solAmount: number | string;
+  tokenAmount: number | string;
+  status: LimitOrderStatus;
   createdAt?: string; // Only present in my_orders response
   transactionHash?: string | null;
   poolType?: string | null;
@@ -286,6 +292,10 @@ interface LimitOrder {
   maxFee?: number | string;
   mevProtection?: boolean;
   rpc?: string | null;
+  triggerType?: "marketCap" | "bonding" | "devSell"; // New field
+  bondingTarget?: number; // New field
+  initialBondingPct?: number; // New field
+  devWallet?: string | null; // New field
 }
 
 interface UpdateLimitOrderParams {
@@ -357,6 +367,11 @@ export const getWithdrawalHistory = (authToken: string) =>
     authToken,
   });
 
+export const getWithdrawalFee = () =>
+  apiFetch<{ fee: number; rentExemptMinimum: number; fallbackFee: number; minimumReserve: number }>("/api/users/withdrawal-fee", {
+    method: "GET",
+  });
+
 export const updateLimitOrder = (
   params: UpdateLimitOrderParams,
   authToken: string,
@@ -386,16 +401,102 @@ export const updateRpcEndpoint = (
   });
 
 /* -------------------------------------------------------------------------- */
+/*                               Waitlist endpoints                           */
+/* -------------------------------------------------------------------------- */
+
+export const joinWaitlist = (params: {
+  userId?: number;
+  walletId?: string;
+  telegramId?: string;
+}) =>
+  apiFetch<{ waitlist: {
+    id: number;
+    userId?: number | null;
+    walletId?: string | null;
+    waitlistNumber: string; // bigint as string
+    telegramId?: string | null;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+    joinedAt: string;
+    invitedAt?: string | null;
+    activatedAt?: string | null;
+    updatedAt: string;
+  } }>("/api/waitlist/join", {
+    method: "POST",
+    body: params,
+  });
+
+export const getWaitlistStatus = (params: { userId?: number; walletId?: string }) => {
+  const qs = new URLSearchParams();
+  if (params.userId) qs.set('userId', String(params.userId));
+  if (params.walletId) qs.set('walletId', String(params.walletId));
+  return apiFetch<{ waitlist: {
+    id: number;
+    userId?: number | null;
+    walletId?: string | null;
+    waitlistNumber: string;
+    telegramId?: string | null;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+    joinedAt: string;
+    invitedAt?: string | null;
+    activatedAt?: string | null;
+    updatedAt: string;
+  } }>(`/api/waitlist/status?${qs.toString()}`, {
+    method: "GET",
+  });
+};
+
+export const completeAllQuests = (params: {
+  userId?: number;
+  walletId?: string;
+  telegramId?: string;
+}) =>
+  apiFetch<{ waitlist: {
+    id: number;
+    userId?: number | null;
+    walletId?: string | null;
+    waitlistNumber: string; // bigint as string
+    telegramId?: string | null;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+    joinedAt: string;
+    invitedAt?: string | null;
+    activatedAt?: string | null;
+    updatedAt: string;
+  } }>("/api/waitlist/complete", {
+    method: "POST",
+    body: params,
+  });
+
+export const grantWaitlistAccess = (params: { userId?: number; walletId?: string }) =>
+  apiFetch<{ waitlist: {
+    id: number;
+    waitlistNumber: string;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+  } }>("/api/waitlist/grant-access", {
+    method: "POST",
+    body: params,
+  });
+
+export const redeemAccessCode = (params: { userId?: number; walletId?: string; accessCode: string }) =>
+  apiFetch<{ waitlist: {
+    id: number;
+    waitlistNumber: string;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+  } }>("/api/waitlist/redeem-access", {
+    method: "POST",
+    body: params,
+  });
+
+/* -------------------------------------------------------------------------- */
 /*                               Trade endpoints                              */
 /* -------------------------------------------------------------------------- */
 
 export type BuyParams = {
-  poolAddress: string;
+  poolAddress?: string; // Optional - backend will discover if missing
   baseMint: string;
   quoteMint: string;
   amount: number;
   mevProtection?: 0 | 1;
-  poolType: "PumpAmm" | "Raydium CPMM" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "bags" | "MoonShoot" | "";
+  poolType?: "PumpAmm" | "Raydium CPMM" | "Raydium Launchpad" | "Pumpfun" | "launchLab" | "bonk" | "meteora dbc" | "meteora amm v1" | "meteora amm v2" | "Meteora" | "bags" | "MoonShoot" | "Orca" | ""; // Optional - backend will detect if missing
   originalPairAddress?: string; // Original pair address from token-service for trade history
   // Preset trading parameters
   slippage?: number; // Percentage value (0.01-100), e.g., 20 for 20%
@@ -435,7 +536,7 @@ export const tradeBuy = (params: BuyParams, authToken: string) => {
 export type SellPercentageParams = {
   tokenAddress: string;
   percentageToSell: number;
-  poolAddress: string; // required by backend
+  poolAddress?: string; // Optional - backend will discover if missing
   baseMint: string;
   quoteMint: string;
   poolType?: string;

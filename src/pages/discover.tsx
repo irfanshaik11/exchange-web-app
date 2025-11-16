@@ -12,10 +12,8 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
-import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
-import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
-import { showCenteredErrorToast, showTransactionPendingToast, startTransactionToastTimeout, updateTransactionToast } from "~/utils/toast";
-import { executeEnhancedTrade, type EnhancedTradeParams } from "~/utils/enhancedTradeHandler";
+import { SOL_MINT_ADDRESS } from "~/utils/api";
+import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
@@ -32,7 +30,7 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
 export default function DiscoverPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'dex' | 'live'>('trending');
+  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'dex' | 'live'>('newPairs');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -64,7 +62,24 @@ export default function DiscoverPage() {
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [newPairsRaw, setNewPairsRaw] = useState<TokenWithDexPaid[]>([]);
+  const [newPairsRaw, setNewPairsRaw] = useState<TokenWithDexPaid[]>(() => {
+    // Initialize with cached data if available (no loading state)
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('discover_new_pairs_cache');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - parsed.timestamp;
+          if (age < 60 * 1000 && parsed.data && parsed.data.length > 0) {
+            return parsed.data;
+          }
+        }
+      } catch {
+        // Ignore cache errors on init
+      }
+    }
+    return [];
+  });
   const [newPairsLoading, setNewPairsLoading] = useState(false);
   const [newPairsError, setNewPairsError] = useState<string | null>(null);
 
@@ -261,7 +276,8 @@ export default function DiscoverPage() {
   } = usePaginatedTokensWithFallback({
     // Always use trending endpoint
     filter: 'trending',
-    timeframe: selectedTimeframe
+    timeframe: selectedTimeframe,
+    limit: 200 // Fetch 200 tokens for trending tab
   });
 
   // PumpPortal WebSocket for live pump section
@@ -277,16 +293,142 @@ export default function DiscoverPage() {
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    const fetchNewPairs = async () => {
+    const CACHE_KEY = 'discover_new_pairs_cache';
+    const CACHE_TTL = 30 * 1000; // 30 seconds
+    const STALE_THRESHOLD = 60 * 1000; // 60 seconds - use stale cache if available
+
+    // Check if we already have valid cached data in state - if so, skip fetching
+    // This prevents re-fetching when navigating back to the page
+    if (newPairsRaw.length > 0) {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - parsed.timestamp;
+          // If we have data in state and cache is still valid, skip fetching
+          if (age < STALE_THRESHOLD && parsed.data && parsed.data.length > 0) {
+            console.log('[Discover] Already have cached data in state, skipping re-fetch on navigation');
+            // Just set up the refresh interval for stale cache updates
+            intervalId = setInterval(() => {
+              if (cancelled) return;
+              const cachedData = localStorage.getItem(CACHE_KEY);
+              if (cachedData) {
+                const parsed = JSON.parse(cachedData);
+                const age = Date.now() - parsed.timestamp;
+                // Only refresh if cache is stale (will be handled by fetchNewPairs below)
+                if (age > CACHE_TTL) {
+                  // Trigger a silent background refresh
+                  fetch(`/api/token-service/pulse-new?limit=200`, {
+                    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+                  })
+                    .then(res => res.json())
+                    .then(data => {
+                      if (!cancelled && Array.isArray(data) && data.length > 0) {
+                        // Process and save to cache (simplified - just update cache)
+                        localStorage.setItem(CACHE_KEY, JSON.stringify({
+                          data,
+                          timestamp: Date.now(),
+                        }));
+                      }
+                    })
+                    .catch(err => console.error('[Discover] Background refresh failed:', err));
+                }
+              }
+            }, 60_000);
+            
+            return () => {
+              cancelled = true;
+              if (intervalId) {
+                clearInterval(intervalId);
+              }
+            };
+          }
+        }
+      } catch {
+        // Continue with normal flow if check fails
+      }
+    }
+
+    // Load from cache on mount
+    const loadFromCache = (): TokenWithDexPaid[] | null => {
+      try {
+        if (typeof window === 'undefined') return null;
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - parsed.timestamp;
+          if (age < STALE_THRESHOLD) {
+            console.log(`[Discover] Loaded ${parsed.data.length} new pairs from cache (age: ${Math.round(age / 1000)}s)`);
+            return parsed.data;
+          } else {
+            // Cache expired, remove it
+            localStorage.removeItem(CACHE_KEY);
+          }
+        }
+      } catch (err) {
+        console.warn('[Discover] Failed to load cache:', err);
+        localStorage.removeItem(CACHE_KEY);
+      }
+      return null;
+    };
+
+    // Save to cache
+    const saveToCache = (data: TokenWithDexPaid[]) => {
+      try {
+        if (typeof window === 'undefined') return;
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          data,
+          timestamp: Date.now(),
+        }));
+        console.log(`[Discover] Cached ${data.length} new pairs`);
+      } catch (err) {
+        console.warn('[Discover] Failed to save cache:', err);
+      }
+    };
+
+    const fetchNewPairs = async (useCache = true, showLoading = false) => {
       if (cancelled) {
         return;
       }
 
-      setNewPairsLoading(true);
+      // Try to load from cache first
+      if (useCache) {
+        const cached = loadFromCache();
+        if (cached && cached.length > 0) {
+          // Update data silently (no loading state)
+          setNewPairsRaw(cached);
+          setNewPairsError(null);
+          setNewPairsLoading(false);
+          
+          // Check if cache is stale and refresh in background
+          try {
+            const cachedData = localStorage.getItem(CACHE_KEY);
+            if (cachedData) {
+              const parsed = JSON.parse(cachedData);
+              const age = Date.now() - parsed.timestamp;
+              if (age > CACHE_TTL) {
+                // Cache is stale, refresh in background (silently)
+                console.log('[Discover] Cache is stale, refreshing in background');
+                fetchNewPairs(false, false).catch(err => {
+                  console.error('[Discover] Background refresh failed:', err);
+                });
+              }
+            }
+          } catch {
+            // Ignore cache read errors
+          }
+          return;
+        }
+      }
+
+      // Only show loading if explicitly requested (first load with no cache)
+      if (showLoading) {
+        setNewPairsLoading(true);
+      }
 
       try {
-        const response = await fetch(`/api/token-service/getAllTokens?filter=new&limit=50&t=${Date.now()}`, {
-          cache: 'no-store',
+        // Use Next.js API proxy - remove timestamp to allow server-side caching
+        const response = await fetch(`/api/token-service/pulse-new?limit=200`, {
           headers: {
             'Cache-Control': 'no-cache',
             Pragma: 'no-cache',
@@ -318,6 +460,16 @@ export default function DiscoverPage() {
             };
 
             const sumVolumes = (buy: any, sell: any): number => toNumber(buy) + toNumber(sell);
+
+            // Helper to get first non-empty string from multiple candidates
+            const getFirstString = (...candidates: any[]): string | undefined => {
+              for (const candidate of candidates) {
+                if (typeof candidate === 'string' && candidate.trim() !== '') {
+                  return candidate.trim();
+                }
+              }
+              return undefined;
+            };
 
             const normalized: Record<string, any> = {
               ...token,
@@ -367,6 +519,84 @@ export default function DiscoverPage() {
               normalized.created_at = token.launch_time;
             }
 
+            // CRITICAL: Preserve launchpad_protocol for pool type detection
+            // This is essential for Meteora and other tokens to determine the correct pool type
+            if (token.launchpad_protocol) {
+              normalized.launchpad_protocol = token.launchpad_protocol;
+            } else if (token.launchpadProtocol) {
+              normalized.launchpad_protocol = token.launchpadProtocol;
+            } else if (token.protocol) {
+              normalized.launchpad_protocol = token.protocol;
+            }
+
+            // CRITICAL: Extract and normalize pool address fields
+            // This ensures Meteora and other tokens have proper pair_address for trading
+            // Check for migrated pool address first (for graduated tokens)
+            const migratedPoolAddress = getFirstString(
+              token.migrated_pool_address,
+              token.migratedPoolAddress,
+              token.migrated_poolAddress,
+              token.migrated_pool?.address,
+              token.migratedPool?.address,
+              token.target_pool_address,
+              token.targetPoolAddress,
+            );
+
+            // Check for original pair address
+            const originalPairAddress = getFirstString(
+              token.pair_address,
+              token.pairAddress,
+              token.bonding_curve?.address,
+              token.bondingCurveKey,
+            );
+
+            // Check for fallback pool address fields
+            const fallbackPoolAddress = getFirstString(
+              token.poolAddress,
+              token.pool_address,
+              token.amm_id,
+              token.ammId,
+              typeof token.pool === 'string' && token.pool.length >= 32 ? token.pool : undefined,
+            );
+
+            // Set migrated_pool_address if found
+            if (migratedPoolAddress) {
+              normalized.migrated_pool_address = migratedPoolAddress;
+            }
+
+            // Set pair_address - prioritize original, then migrated, then fallback
+            // This is critical for trading - enhancedTradeHandler needs either pair_address or migrated_pool_address
+            const effectivePairAddress = originalPairAddress || migratedPoolAddress || fallbackPoolAddress;
+            
+            // Special handling for pump.fun tokens only:
+            // Pump.fun can use mint as pool address - backend will resolve it to bonding curve
+            // Meteora tokens require the actual DBC pool address, not the mint
+            const protocol = normalized.launchpad_protocol?.toLowerCase() || '';
+            const isPumpFun = protocol.includes('pump.fun') || protocol.includes('pumpfun') || protocol === 'pump';
+            
+            if (effectivePairAddress && effectivePairAddress !== token.mint) {
+              // Valid pool address that's different from mint
+              normalized.pair_address = effectivePairAddress;
+            } else if (isPumpFun && token.mint) {
+              // For pump.fun tokens only, use mint as pair_address if no other pool address is available
+              // Backend has special handling to resolve mint to bonding curve address for pump.fun
+              normalized.pair_address = token.mint;
+              console.log(`[Discover] Pump.fun token ${token.symbol || token.mint} using mint as pair_address (backend will resolve to bonding curve)`, {
+                launchpad_protocol: normalized.launchpad_protocol,
+                mint: token.mint,
+                pair_address: normalized.pair_address
+              });
+            } else if (effectivePairAddress === token.mint && !isPumpFun) {
+              // If pair_address equals mint for non-pump.fun tokens (like Meteora), it's invalid
+              // Meteora requires the actual DBC pool address, not the mint
+              console.warn(`[Discover] Token ${token.symbol || token.mint} has pair_address equal to mint (invalid for ${protocol || 'this protocol'}), not setting pair_address`);
+              // Don't set pair_address - this will trigger the proper error in enhancedTradeHandler
+            } else if (!effectivePairAddress && !isPumpFun) {
+              // No valid pool address found for non-pump.fun tokens
+              // Meteora and other protocols need the actual pool address from the API
+              console.warn(`[Discover] Token ${token.symbol || token.mint} (${protocol || 'unknown protocol'}) has no valid pool address - trading will be blocked`);
+            }
+
             return normalized as TokenWithDexPaid;
           };
 
@@ -375,6 +605,11 @@ export default function DiscoverPage() {
               return false;
             }
             if (!token || !token.mint || isWrappedSol(token)) {
+              return false;
+            }
+            // Filter out Meteora tokens from new pairs
+            const protocol = (token.launchpad_protocol || token.launchpadProtocol || token.protocol || '').toLowerCase();
+            if (protocol.includes('meteora')) {
               return false;
             }
             return true;
@@ -392,8 +627,12 @@ export default function DiscoverPage() {
             deduped.push(normalizePulseToken(token));
           }
 
+          // Update data silently (no loading animation)
           setNewPairsRaw(deduped);
           setNewPairsError(null);
+          
+          // Save to cache
+          saveToCache(deduped);
         }
       } catch (err) {
         if (cancelled) {
@@ -402,15 +641,40 @@ export default function DiscoverPage() {
         const message = err instanceof Error ? err.message : 'Failed to fetch new pairs';
         setNewPairsError(message);
         console.error('[Discover] Failed to fetch new pairs:', err);
+        
+        // If fetch failed and we have cached data, use it (silently)
+        if (useCache) {
+          const cached = loadFromCache();
+          if (cached && cached.length > 0) {
+            console.log('[Discover] Using cached data after fetch failure');
+            setNewPairsRaw(cached);
+            setNewPairsError(null);
+          }
+        }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && showLoading) {
           setNewPairsLoading(false);
         }
       }
     };
 
-    fetchNewPairs();
-    intervalId = setInterval(() => fetchNewPairs(), 60_000);
+    // Check if we already have data from initial state (cached)
+    const hasInitialData = newPairsRaw.length > 0;
+    
+    if (hasInitialData) {
+      // We have cached data from initial state, don't show loading, just refresh in background silently
+      // Ensure loading is false since we have cached data
+      setNewPairsLoading(false);
+      fetchNewPairs(false, false).catch(err => {
+        console.error('[Discover] Background fetch failed:', err);
+      });
+    } else {
+      // No cache, fetch with loading state only on first load
+      fetchNewPairs(true, true);
+    }
+    
+    // Refresh every 60 seconds (silently, no loading state)
+    intervalId = setInterval(() => fetchNewPairs(true, false), 60_000);
 
     return () => {
       cancelled = true;
@@ -418,243 +682,69 @@ export default function DiscoverPage() {
         clearInterval(intervalId);
       }
     };
-  }, [isZeroLiquidityToken, isWrappedSol]);
+  }, []); // Empty deps - only run once on mount, cache prevents re-fetching
 
   // Debug log to track timeframe changes
   // useEffect(() => {
   //   console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
   // }, [selectedTimeframe]);
 
-  // QUICK BUY handler – with detailed logging (same as PulseTable)
+  // QUICK BUY handler – using enhanced trade flow (same as PulseTable)
   const handleQuickBuy = async (token: Token) => {
-    console.log("🎯 handleQuickBuy called for token:", token.symbol);
-    console.log("\n" + "=".repeat(80));
-    console.log("📋 QUICK BUY DATA VERIFICATION - DISCOVER PAGE");
-    console.log("=".repeat(80));
-
-    console.log("\n📊 [TRENDING] FULL TOKEN OBJECT:");
-    console.log(JSON.stringify(token, null, 2));
-
-    if (!user) {
-      console.log("❌ No user found");
-      showCenteredErrorToast("⚠️ Please connect your wallet to trade");
+    console.log("🎯 Enhanced Quick Buy called for token:", token.symbol);
+    
+    if (!user?.bearerToken || !user?.id) {
+      console.log("❌ User not logged in");
+      showEnhancedToast('warning', 'Please connect your wallet to trade', {
+        title: 'Authentication Required',
+      });
       return;
     }
 
-    if (!user.bearerToken) {
-      console.log("❌ Missing bearer token for user");
-      showCenteredErrorToast("⚠️ Authentication required to trade.");
-      return;
-    }
-
-    const buyAmount = Number(quickBuyAmount);
-    if (!Number.isFinite(buyAmount) || buyAmount <= 0) {
+    const buyAmount = parseFloat(quickBuyAmount);
+    if (isNaN(buyAmount) || buyAmount <= 0) {
       console.log("❌ Invalid buy amount:", quickBuyAmount);
-      showCenteredErrorToast("⚠️ Please enter a valid SOL amount (minimum 0.0001 SOL)");
+      showEnhancedToast('warning', 'Please enter a valid SOL amount (minimum 0.001 SOL)', {
+        title: 'Invalid Amount',
+      });
       return;
     }
 
-    let pendingToastId: string | null = null;
-    let clearToastTimeout = () => undefined;
-    try {
-      const poolType = getPoolTypeFromToken(token);
-      const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
-      if (!effectivePoolAddress) {
-        console.log("❌ Missing pool address for token", token.symbol);
-        showCenteredErrorToast("⚠️ Trading pool not available for this token yet. Please try later.");
-        return;
-      }
-
-      const preset = presets[activePreset];
-      if (!preset) {
-        console.log("❌ Quick buy preset missing for index", activePreset);
-        showCenteredErrorToast("⚠️ Quick buy preset not configured. Please update your presets and retry.");
-        return;
-      }
-
-      const settings = preset.quickBuySettings;
-      const minimums: Record<string, number> = {
-        "meteora amm v2": 0.0001,
-        "meteora amm v1": 0.0001,
-        "Raydium CPMM": 0.00001,
-        "PumpAmm": 0.000001,
-        "Pumpfun": 0.000001,
-        "meteora dbc": 0.000001,
-      };
-      const poolMinimum = minimums[poolType];
-      const minAmount = Math.max(0.0001, poolMinimum ?? 0);
-      if (buyAmount < minAmount) {
-        const protocolName = token.launchpad_protocol || token.protocol || poolType || "this pool";
-        console.log("❌ Quick Buy amount below minimum", { buyAmount, minAmount, protocolName });
-        showCenteredErrorToast(
-          `Minimum trade amount: ${minAmount} SOL for ${protocolName}. Please increase your amount.`,
-          { duration: 6000 }
-        );
-        return;
-      }
-
-      const safetyBuffer = 0.003;
-      const priorityFee = settings.priority || 0;
-      const bribeFee = settings.bribe || 0;
-      const totalFees = safetyBuffer + priorityFee + bribeFee;
-      const totalRequired = buyAmount + totalFees;
-
-      if (!Number.isFinite(solBalance) || solBalance <= 0) {
-        console.log("❌ SOL balance unavailable or zero", solBalance);
-        showCenteredErrorToast("⚠️ Insufficient SOL balance. Please fund your wallet before trading.");
-        return;
-      }
-
-      if (totalRequired > solBalance) {
-        const missing = Math.max(totalRequired - solBalance, 0);
-        console.log("❌ Not enough SOL for quick buy", { totalRequired, solBalance, missing });
-        showCenteredErrorToast(
-          `Insufficient balance! Need ${totalRequired.toFixed(4)} SOL (missing ${missing.toFixed(4)} SOL). Please fund your wallet.`,
-          { duration: 6000 }
-        );
-        return;
-      }
-
-      console.log("\n⚙️ PRESET SETTINGS:");
-      console.log(`  Active Preset: P${activePreset + 1} (from selectedPill: ${selectedPill})`);
-      console.log(`  Slippage: ${(settings.maxSlippage || 0.4) * 100}% (${settings.maxSlippage || 0.4} decimal)`);
-      console.log(`  Priority Fee: ${settings.priority || 0.0001} SOL`);
-      console.log(`  Bribe: ${settings.bribe || 0} SOL`);
-      console.log(`  MEV Mode: ${settings.mevMode}`);
-      console.log(`  MEV Protection: ${settings.mevMode === "off" ? 0 : 1}`);
-      console.log(`  Auto Fee: ${settings.autoFee || false}`);
-      console.log(`  Max Fee: ${settings.maxFee || 0} SOL`);
-      console.log(`  RPC: ${settings.rpc || "(default)"}`);
-
-      const payload: any = {
-        poolAddress: effectivePoolAddress,
-        baseMint: token.mint,
-        quoteMint: SOL_MINT_ADDRESS,
-        amount: buyAmount,
-        mevProtection: (settings.mevMode === "off" ? 0 : 1) as 0 | 1,
-        poolType,
-        originalPairAddress: token.pair_address,
-        slippage: (settings.maxSlippage || 0.4) * 100,
-        priorityFee: settings.priority || 0.0001,
-        bribe: settings.bribe || 0,
-        mevMode: settings.mevMode,
-        autoFee: settings.autoFee || false,
-        maxFee: settings.maxFee || 0,
-        tokenName: token.name,
-        tokenSymbol: token.symbol,
-      };
-      if (settings.rpc) {
-        payload.rpc = settings.rpc;
-      }
-      
-      console.log("\n📤 COMPLETE PAYLOAD BEING SENT TO API:");
-      console.log(JSON.stringify(payload, null, 2));
-      console.log("\n📤 PAYLOAD SUMMARY:");
-      console.log("  poolAddress:", payload.poolAddress);
-      console.log("  baseMint:", payload.baseMint);
-      console.log("  quoteMint:", payload.quoteMint);
-      console.log("  amount:", payload.amount, "SOL");
-      console.log("  poolType:", payload.poolType);
-      console.log("  slippage:", payload.slippage, "%");
-      console.log("  priorityFee:", payload.priorityFee, "SOL");
-      console.log("  bribe:", payload.bribe, "SOL");
-      console.log("  mevProtection:", payload.mevProtection);
-      console.log("  mevMode:", payload.mevMode);
-      console.log("  originalPairAddress:", payload.originalPairAddress);
-      console.log("=".repeat(80) + "\n");
-      
-      pendingToastId = showTransactionPendingToast("Attempting transaction...");
-      clearToastTimeout = startTransactionToastTimeout(pendingToastId);
-      const data = await tradeBuy(payload, user.bearerToken);
-       
-      console.log("\n📥 API RESPONSE RECEIVED:");
-      console.log(JSON.stringify(data, null, 2));
-       
-      const txHash = data?.hash || data?.txid;
-      const tokenAmount = data?.amount || data?.tokenAmount;
- 
-      if (data && txHash) {
-        console.log("\n✅ QUICK BUY SUCCESS:");
-        console.log("  Transaction Hash:", txHash);
-        console.log("  Token Amount:", tokenAmount || 'N/A');
-        console.log("  Token Symbol:", token.symbol);
-        console.log("  Full Response:", JSON.stringify(data, null, 2));
-
-        try {
-          console.log("\n🔄 Backfilling token after Quick Buy...");
-          const backfillResponse = await fetch('/api/token-service/backfill-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mint: token.mint,
-              name: token.name,
-              symbol: token.symbol,
-              uri: token.uri,
-              market_cap_usd: token.fully_diluted_value,
-              liquidity_usd: token.total_liquidity_usd,
-              pair_address: token.pair_address || token.migrated_pool_address
-            })
-          });
-
-          if (backfillResponse.ok) {
-            console.log('✅ Token backfilled successfully to token-service');
-          } else {
-            console.warn('⚠️ Token backfill failed (token may already exist or service unavailable)');
-          }
-        } catch (backfillError) {
-          console.error('❌ Error backfilling token:', backfillError);
-        }
-        updateTransactionToast(
-          pendingToastId,
-          "success",
-          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
-        );
-        clearToastTimeout();
-      } else {
-        console.log("\n❌ QUICK BUY FAILED:");
-        console.log("  Response:", JSON.stringify(data, null, 2));
-        console.log("  Missing transaction hash");
-        clearToastTimeout();
-        updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
-      }
-    } catch (e: any) {
-      const logFn = (e as any)?.expected ? console.warn : console.error;
-
-      console.log("\n❌ QUICK BUY ERROR:");
-      console.log("  Error Type:", e?.constructor?.name || typeof e);
-      console.log("  Error Message:", e?.message || String(e));
-      console.log("  Error Code:", e?.code || 'N/A');
-      console.log("  Error Details:", e?.details || 'N/A');
-      console.log("  Full Error Object:", e);
-      console.log("  Full Error JSON:", JSON.stringify(e, Object.getOwnPropertyNames(e), 2));
-
-      logFn('Quick Buy error:', e);
-
-      // Always clear timeout and update pending toast on error
-      clearToastTimeout();
-      
-      if (e instanceof ApiError) {
-        if (e.code === 'NO_ACTIVE_POOL') {
-          updateTransactionToast(pendingToastId, "error", `⚠️ Pool unavailable for ${token.symbol}`);
-        } else if (e.code === 'INSUFFICIENT_BALANCE') {
-          updateTransactionToast(pendingToastId, "error", `⚠️ Insufficient balance`);
-        } else if (e.code === 'TX_FAILED') {
-          updateTransactionToast(pendingToastId, "error", `❌ Trade failed. Try adjusting slippage or amount.`);
-        } else if (e.code === 'NO_HOLDINGS') {
-          updateTransactionToast(pendingToastId, "error", `❌ No ${token.symbol} to sell`);
-        } else if (e.code === 'AMOUNT_TOO_SMALL') {
-          updateTransactionToast(pendingToastId, "error", `❌ Amount too small (min 0.001 SOL)`);
-        } else if (e.code === 'POOL_UNAVAILABLE') {
-          updateTransactionToast(pendingToastId, "error", `⚠️ Pool has insufficient liquidity`);
-        } else {
-          const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
-          updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
-        }
-      } else {
-        // Unexpected error - show generic message
-        updateTransactionToast(pendingToastId, "error", "❌ Trade failed. Please try again.");
-      }
+    // Get preset based on selected pill (local state) or activePreset (global)
+    const presetIndex = parseInt(selectedPill.replace('P', '')) - 1;
+    const preset = presets[presetIndex];
+    if (!preset) {
+      console.log("❌ Quick buy preset missing for index", presetIndex);
+      showEnhancedToast('error', 'Quick buy preset not configured', {
+        title: 'Configuration Error',
+        suggestions: ['Update your presets in settings'],
+      });
+      return;
     }
+
+    const settings = preset.quickBuySettings;
+
+    // Execute enhanced trade with all features
+    const result = await executeEnhancedTrade({
+      token,
+      amount: buyAmount,
+      side: 'buy',
+      settings,
+      user: { bearerToken: user.bearerToken, id: user.id },
+      solBalance: Number(solBalance || 0),
+      solPriceUsd: 150, // TODO: Get real SOL price
+      onSuccess: (txHash, stats) => {
+        console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });
+      },
+      onError: (error) => {
+        console.error('❌ Enhanced Quick Buy failed:', error);
+      },
+      onWarning: (warnings) => {
+        console.warn('⚠️ Pre-transaction warnings:', warnings);
+      },
+    });
+
+    return result;
   };
 
   const handleTimeframeClick = (tf: string) => {
@@ -912,7 +1002,17 @@ export default function DiscoverPage() {
       return [] as TokenWithDexPaid[];
     }
 
-    const base = newPairsRaw.filter((token) => token && token.mint && !isWrappedSol(token));
+    const base = newPairsRaw.filter((token) => {
+      if (!token || !token.mint || isWrappedSol(token)) {
+        return false;
+      }
+      // Filter out Meteora tokens from new pairs
+      const protocol = ((token as any).launchpad_protocol || (token as any).launchpadProtocol || (token as any).protocol || '').toLowerCase();
+      if (protocol.includes('meteora')) {
+        return false;
+      }
+      return true;
+    });
     const filtered = applyFilters(base);
     const sortedTokens = filtered.map((token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid);
 
@@ -1173,7 +1273,7 @@ export default function DiscoverPage() {
         {/* Tab Navigation */}
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-8 max-w-[98%]">
           <div className="flex max-w-7xl items-center gap-6">
-            <button
+             <button
               className={`text-lg font-light transition-colors ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
@@ -1465,7 +1565,7 @@ export default function DiscoverPage() {
                 )}
               </div>
 
-              {newPairsLoading && processedNewPairs.length === 0 ? (
+              {newPairsLoading && processedNewPairs.length === 0 && newPairsRaw.length === 0 ? (
                 <div className="space-y-4">
                   {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />

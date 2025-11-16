@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { FaSearch, FaStar, FaWallet, FaBars, FaTimes } from "react-icons/fa";
+import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
+import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiStar } from "react-icons/fi";
@@ -73,6 +75,211 @@ export default function Header({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+
+  // State for clipboard token detection
+  const [clipboardToken, setClipboardToken] = useState<{
+    address: string;
+    imageUrl: string;
+    name: string;
+    isPumpToken: boolean;
+  } | null>(null);
+  const lastCheckedClipboard = useRef<string>("");
+
+  const processClipboardValue = useCallback(
+    async (rawValue: string) => {
+      const trimmed = (rawValue || "").trim();
+      if (!trimmed) return;
+
+      if (clipboardToken?.address === trimmed) return;
+      if (lastCheckedClipboard.current === trimmed) return;
+
+      const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
+      if (!isSolanaAddress) {
+        setClipboardToken(null);
+        lastCheckedClipboard.current = trimmed;
+        return;
+      }
+
+      lastCheckedClipboard.current = trimmed;
+
+      try {
+        const response = await fetch(`/api/token-service/trade-view?mint_address=${trimmed}`);
+        if (!response.ok) {
+          setClipboardToken(null);
+          lastCheckedClipboard.current = "";
+          return;
+        }
+
+        const data = await response.json();
+        const token = data?.token;
+
+        if (!token) {
+          setClipboardToken(null);
+          lastCheckedClipboard.current = "";
+          return;
+        }
+
+        const imageUrl = token.imageUrl || token.image || token.thumbnail || token.uri || null;
+        if (!imageUrl) {
+          setClipboardToken(null);
+          lastCheckedClipboard.current = "";
+          return;
+        }
+
+        const launchpadProtocol = (token.launchpad_protocol || token.launchpadProtocol || token.protocol || "").toLowerCase();
+        const isPumpToken =
+          launchpadProtocol.includes("pump.fun") ||
+          launchpadProtocol.includes("pumpfun") ||
+          launchpadProtocol === "pump";
+
+        const tokenName =
+          (typeof token.name === "string" && token.name.trim()) ||
+          (typeof token.metadata?.name === "string" && token.metadata.name.trim()) ||
+          (typeof token.symbol === "string" && token.symbol.trim()) ||
+          (typeof token.metadata?.symbol === "string" && token.metadata.symbol.trim()) ||
+          (typeof token.ticker === "string" && token.ticker.trim()) ||
+          null;
+
+        setClipboardToken({
+          address: trimmed,
+          imageUrl,
+          name: tokenName || "Unknown Token",
+          isPumpToken,
+        });
+      } catch (error) {
+        console.error("Error fetching token data:", error);
+        setClipboardToken(null);
+        lastCheckedClipboard.current = "";
+      }
+    },
+    [clipboardToken?.address],
+  );
+
+  // Check clipboard for valid token address
+  const checkClipboard = useCallback(async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.readText) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      await processClipboardValue(text);
+    } catch (error) {
+      // Clipboard access denied or error - silently fail
+    }
+  }, [processClipboardValue]);
+
+  const CLIPBOARD_POLL_INTERVAL = 800; // ms
+
+  // Periodically check clipboard
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkClipboard();
+    }, CLIPBOARD_POLL_INTERVAL);
+
+    // Also check on mount
+    checkClipboard();
+
+    return () => clearInterval(interval);
+  }, [checkClipboard]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const handleCopy = (event: ClipboardEvent) => {
+      const text = event.clipboardData?.getData("text/plain");
+      if (text) {
+        processClipboardValue(text);
+      }
+    };
+
+    document.addEventListener("copy", handleCopy);
+    return () => document.removeEventListener("copy", handleCopy);
+  }, [processClipboardValue]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") return;
+
+    const handleFocus = () => {
+      checkClipboard();
+    };
+
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        checkClipboard();
+      }
+    };
+
+    const handlePointer = () => {
+      checkClipboard();
+    };
+
+    const handleKey = () => {
+      checkClipboard();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("pointerdown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener("pointerdown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [checkClipboard]);
+
+  // Handler for Paste CA button - navigate to token
+  const handlePasteCA = async () => {
+    if (clipboardToken) {
+      router.push(`/trade/${clipboardToken.address}`);
+      toast.success("Navigating to token...", {
+        duration: 2000,
+        style: {
+          background: '#1E1F26',
+          color: '#E6E7EA',
+          border: '1px solid #70E0B0',
+        }
+      });
+    } else {
+      // Fallback: try to read clipboard if no token detected
+      try {
+        const text = await navigator.clipboard.readText();
+        const trimmed = text.trim();
+        const isSolanaAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed);
+
+        if (isSolanaAddress) {
+          router.push(`/trade/${trimmed}`);
+          toast.success("Navigating to token...", {
+            duration: 2000,
+            style: {
+              background: '#1E1F26',
+              color: '#E6E7EA',
+              border: '1px solid #70E0B0',
+            }
+          });
+        } else {
+          toast.error("Invalid token address in clipboard", {
+            duration: 3000,
+            style: {
+              background: '#1E1F26',
+              color: '#E6E7EA',
+              border: '1px solid #ff6b6b',
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Clipboard read error:', error);
+        toast.error("Failed to read clipboard. Please grant permission.", {
+          duration: 3000,
+          style: {
+            background: '#1E1F26',
+            color: '#E6E7EA',
+            border: '1px solid #ff6b6b',
+          }
+        });
+      }
+    }
+  };
 
   // Toggle Search modal with Tab and '/' (outside of inputs)
   useEffect(() => {
@@ -356,6 +563,115 @@ export default function Header({
                 >
                   <FaSearch size={14} />
                 </button>
+
+                {/* Clipboard token button - desktop */}
+                {clipboardToken && clipboardToken.imageUrl && (
+                  <button
+                    onClick={handlePasteCA}
+                    className="hidden md:flex items-center gap-2 h-8 rounded-full border pl-2 pr-2.5 transition-all duration-300 ease-out relative"
+                    style={{
+                      backgroundColor: AX.surface,
+                      borderColor: AX.border,
+                      color: AX.muted,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor =
+                        "rgba(24, 196, 140, 0.08)";
+                      e.currentTarget.style.borderColor = "#18c48c";
+                      e.currentTarget.style.boxShadow =
+                        "0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)";
+                      e.currentTarget.style.transform = "scale(1.01)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = AX.surface;
+                      e.currentTarget.style.borderColor = AX.border;
+                      e.currentTarget.style.boxShadow = "none";
+                      e.currentTarget.style.transform = "scale(1)";
+                    }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <img
+                        src={clipboardToken.imageUrl}
+                        alt="Token"
+                        className="h-7 w-7 rounded-md object-cover flex-shrink-0"
+                        onError={() => setClipboardToken(null)}
+                      />
+                      <span className="text-xs font-medium text-white truncate max-w-[90px]">
+                        {clipboardToken.name}
+                      </span>
+                    </div>
+                    <div className="relative group/shield ml-1">
+                      <IoShieldCheckmarkOutline
+                        size={14}
+                        style={{
+                          color: clipboardToken.isPumpToken ? "#22c55e" : "#eab308",
+                        }}
+                      />
+                      {/* Tooltip */}
+                      <div className="absolute left-1/2 bottom-full mb-2 transform -translate-x-1/2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover/shield:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
+                        style={{
+                          backgroundColor: AX.surface,
+                          color: AX.text,
+                          border: `1px solid ${AX.border}`,
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                        }}
+                      >
+                        audit
+                        {/* Tooltip arrow */}
+                        <div
+                          className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent"
+                          style={{ borderTopColor: AX.surface }}
+                        ></div>
+                      </div>
+                    </div>
+                  </button>
+                )}
+
+                {/* Clipboard token button - mobile */}
+                {clipboardToken && clipboardToken.imageUrl && (
+                  <button
+                    onClick={handlePasteCA}
+                    className="md:hidden flex items-center gap-2 h-8 rounded-full border pl-2 pr-2.5 transition-all duration-300 ease-out relative"
+                    style={{
+                      backgroundColor: AX.surface,
+                      borderColor: AX.border,
+                    }}
+                  >
+                    <img
+                      src={clipboardToken.imageUrl}
+                      alt="Token"
+                      className="h-6 w-6 rounded-md object-cover flex-shrink-0"
+                      onError={() => setClipboardToken(null)}
+                    />
+                    <span className="text-[11px] font-medium text-white truncate max-w-[80px]">
+                      {clipboardToken.name}
+                    </span>
+                    <div className="absolute top-0.5 right-0.5 group/shield bg-black/60 rounded-full p-0.5">
+                      <IoShieldCheckmarkOutline
+                        size={11}
+                        style={{
+                          color: clipboardToken.isPumpToken ? "#22c55e" : "#eab308",
+                        }}
+                      />
+                      {/* Tooltip */}
+                      <div className="absolute left-1/2 bottom-full mb-1.5 transform -translate-x-1/2 px-2 py-1 rounded text-[10px] font-medium opacity-0 group-hover/shield:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
+                        style={{
+                          backgroundColor: AX.surface,
+                          color: AX.text,
+                          border: `1px solid ${AX.border}`,
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                        }}
+                      >
+                        audit
+                        {/* Tooltip arrow */}
+                        <div
+                          className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent"
+                          style={{ borderTopColor: AX.surface }}
+                        ></div>
+                      </div>
+                    </div>
+                  </button>
+                )}
               </div>
             )}
             {/* SOL Balance Pill - hidden on mobile (will be in mobile menu) */}

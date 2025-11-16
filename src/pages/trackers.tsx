@@ -4,16 +4,20 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { getActivePositionsByUser } from "~/utils/functions";
 import type { PositionRow, Wallet } from "~/utils/functions";
+import { formatMarketCap } from "~/utils/db";
 import AddWalletModal from "../components/AddWalletModal";
 import WalletRow from "../components/WalletRow";
 import ImportExportWalletModal from "../components/ImportExportWalletModal";
 import WalletScanPanel from "../components/WalletScanPanel";
 import {
   addTrackedWallet,
+  addTrackedWalletsBulk,
   removeTrackedWallet,
   getTrackedWallets,
   getWalletHistory,
   getWalletSolBalance,
+  getWalletsLastActive,
+  toggleWalletNotifications,
   type WatchWallet,
   type WalletEvent,
   type TradeEvent,
@@ -29,13 +33,55 @@ import {
 } from "~/utils/twitterTracking";
 import { useUser } from "../components/UserContext";
 import { useWalletTracker } from "../components/WalletTrackerContext";
-import { batchFetchTokenMetadata } from "~/utils/tokenMetadata";
 import AddTwitterHandleModal from "../components/AddTwitterHandleModal";
 import TwitterAccountRow from "../components/TwitterAccountRow";
 import { FiSettings, FiBell, FiShare2, FiRss } from "react-icons/fi";
+import { SiSolana } from "react-icons/si";
+import { RiExchangeDollarLine } from "react-icons/ri";
 
-const TABS = ["Wallet Manager", "Live Trades", "Monitor"];
+const TABS = ["Wallet Manager", "Live Trades"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
+const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
+const getLiveTradesCacheKey = (userId?: string) =>
+  userId
+    ? `${LIVE_TRADES_CACHE_PREFIX}:user:${userId}`
+    : `${LIVE_TRADES_CACHE_PREFIX}:global`;
+
+// Normalize asset URLs (IPFS, Arweave, etc.)
+function normalizeAssetUrl(raw?: string | null): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (s.startsWith("data:")) return s;
+  if (s.startsWith("ipfs://")) {
+    const cid = s.replace("ipfs://", "").replace(/^ipfs\//, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+  }
+  if (/^ipfs[/:]/i.test(s)) {
+    const cid = s.replace(/^ipfs[/:]/i, "");
+    return `https://cloudflare-ipfs.com/ipfs/${cid}`;
+  }
+  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s)) return `https://arweave.net/${s}`;
+  if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
+  if (s.startsWith("https://")) return s;
+  return null;
+}
+
+// Calculate token age in human-readable format (e.g., "19m", "2h", "5d")
+function getTokenAge(createdAt: string | number | null | undefined): string {
+  if (!createdAt && createdAt !== 0) return "";
+  let timestamp = createdAt as any;
+  if (typeof timestamp === "number" && timestamp < 10000000000) timestamp *= 1000;
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return "";
+  const ms = Date.now() - d.getTime();
+  const mins = Math.floor(ms / 60000);
+  const hours = Math.floor(ms / 3600000);
+  const days = Math.floor(ms / 86400000);
+  if (days > 0) return `${days}d`;
+  if (hours > 0) return `${hours}h`;
+  return `${mins}m`;
+}
+
 const EMOJIS = [
   "💰",
   "🚀",
@@ -108,6 +154,9 @@ const EMOJIS = [
 const MAX_WALLETS = 500;
 const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
 
+const getRandomEmoji = () =>
+  EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+
 export default function TrackersPage() {
   const { user } = useUser();
   const {
@@ -126,6 +175,7 @@ export default function TrackersPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [toast, setToast] = useState("");
   const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
+  const [isTogglingAllNotifications, setIsTogglingAllNotifications] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(384); // 384px = w-96
   const [isResizing, setIsResizing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -139,10 +189,46 @@ export default function TrackersPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>(
     {},
   );
+  const [lastActiveMap, setLastActiveMap] = useState<
+    Record<string, number | null | undefined>
+  >({});
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
-    Map<string, { symbol: string | null; name: string | null }>
+    Map<
+      string,
+      {
+        symbol: string | null;
+        name: string | null;
+        image: string | null;
+        launchpad_protocol?: string | null;
+        market_cap_usd?: number | null;
+        createdAt?: string | null;
+      }
+    >
   >(new Map());
+  const [cachedLiveTrades, setCachedLiveTrades] = useState<TradeEvent[]>([]);
+  const fetchedMintsRef = useRef<Set<string>>(new Set());
+  const [showUSD, setShowUSD] = useState(false); // Toggle between USD and SOL display
+
+  const ensureNotificationsEnabled = async (walletsToEnable: { address: string }[]) => {
+    if (!walletsToEnable.length) return;
+    try {
+      const results = await Promise.allSettled(
+        walletsToEnable.map((wallet) =>
+          toggleWalletNotifications(wallet.address, true, user?.id),
+        ),
+      );
+      const failures = results.filter((result) => result.status === "rejected");
+      if (failures.length > 0) {
+        console.warn(
+          `[Trackers] Failed to enable notifications for ${failures.length} wallet(s)`,
+          failures,
+        );
+      }
+    } catch (error) {
+      console.warn("[Trackers] Failed to enable notifications after bulk add:", error);
+    }
+  };
 
   const normalizeAddress = (address: string | null | undefined) =>
     (address ?? "").trim().toLowerCase();
@@ -152,6 +238,78 @@ export default function TrackersPage() {
     return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
   };
 
+  const composeImportSummary = ({
+    successCount,
+    duplicateExisting,
+    duplicateWithinImport,
+    invalidWallets,
+    skippedByLimit,
+    failedCount,
+  }: {
+    successCount: number;
+    duplicateExisting: string[];
+    duplicateWithinImport: string[];
+    invalidWallets: string[];
+    skippedByLimit?: string[];
+    failedCount?: number;
+  }) => {
+    const messageParts: string[] = [];
+
+    if (successCount > 0) {
+      messageParts.push(
+        `Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`,
+      );
+    }
+    if (duplicateExisting.length > 0) {
+      messageParts.push(
+        `${duplicateExisting.length} already tracked (${duplicateExisting
+          .slice(0, 3)
+          .map(shortenAddress)
+          .join(", ")}${
+          duplicateExisting.length > 3
+            ? ` +${duplicateExisting.length - 3}`
+            : ""
+        })`,
+      );
+    }
+    if (duplicateWithinImport.length > 0) {
+      messageParts.push(
+        `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} in import (${duplicateWithinImport
+          .slice(0, 3)
+          .map(shortenAddress)
+          .join(", ")}${
+          duplicateWithinImport.length > 3
+            ? ` +${duplicateWithinImport.length - 3}`
+            : ""
+        })`,
+      );
+    }
+    if (invalidWallets.length > 0) {
+      messageParts.push(
+        `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
+      );
+    }
+    if (skippedByLimit && skippedByLimit.length > 0) {
+      messageParts.push(
+        `Skipped ${skippedByLimit.length} due to wallet limit (${skippedByLimit
+          .slice(0, 3)
+          .map(shortenAddress)
+          .join(", ")}${
+          skippedByLimit.length > 3
+            ? ` +${skippedByLimit.length - 3}`
+            : ""
+        })`,
+      );
+    }
+    if (failedCount && failedCount > 0) {
+      messageParts.push(`${failedCount} failed`);
+    }
+
+    return messageParts.length > 0
+      ? messageParts.join(". ")
+      : "No new wallets were imported.";
+  };
+
   const showToastMessage = (message: string, duration = 3000) => {
     setToast(message);
     setTimeout(() => setToast(""), duration);
@@ -159,6 +317,68 @@ export default function TrackersPage() {
 
   const showWalletLimitToast = () => {
     showToastMessage(WALLET_LIMIT_MESSAGE);
+  };
+
+  const formatTokenAge = (input: unknown): string | null => {
+    if (input === null || input === undefined) return null;
+
+    let timestampMs: number | null = null;
+
+    if (typeof input === "number") {
+      timestampMs = input < 1_000_000_000_000 ? input * 1000 : input;
+    } else if (typeof input === "string") {
+      const numeric = Number(input);
+      if (!Number.isNaN(numeric) && numeric > 0) {
+        timestampMs = numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
+      } else {
+        const parsed = Date.parse(input);
+        if (!Number.isNaN(parsed)) {
+          timestampMs = parsed;
+        }
+      }
+    } else if (input instanceof Date && !Number.isNaN(input.getTime())) {
+      timestampMs = input.getTime();
+    }
+
+    if (timestampMs === null || Number.isNaN(timestampMs)) {
+      return null;
+    }
+
+    const diff = Date.now() - timestampMs;
+    if (!Number.isFinite(diff) || diff < 0) {
+      return "Just now";
+    }
+
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    const week = 7 * day;
+    const month = 30 * day;
+    const year = 365 * day;
+
+    if (diff < minute) return "Just now";
+    if (diff < hour) {
+      const mins = Math.floor(diff / minute);
+      return `${mins} min${mins === 1 ? "" : "s"} ago`;
+    }
+    if (diff < day) {
+      const hours = Math.floor(diff / hour);
+      return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+    }
+    if (diff < week) {
+      const days = Math.floor(diff / day);
+      return `${days} day${days === 1 ? "" : "s"} ago`;
+    }
+    if (diff < month) {
+      const weeks = Math.floor(diff / week);
+      return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+    }
+    if (diff < year) {
+      const months = Math.floor(diff / month);
+      return `${months} month${months === 1 ? "" : "s"} ago`;
+    }
+    const years = Math.floor(diff / year);
+    return `${years} year${years === 1 ? "" : "s"} ago`;
   };
 
   // Twitter state
@@ -173,6 +393,21 @@ export default function TrackersPage() {
   const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = !isMobile || mobileMainTab === "twitter";
+  
+  // Calculate if all notifications are enabled
+  const allNotificationsEnabled = watchedWallets.length > 0 && watchedWallets.every(w => w.notificationsEnabled);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 Notification Status:', {
+      totalWallets: watchedWallets.length,
+      allNotificationsEnabled,
+      walletStates: watchedWallets.map(w => ({
+        address: w.address.slice(0, 8),
+        enabled: w.notificationsEnabled
+      }))
+    });
+  }, [watchedWallets, allNotificationsEnabled]);
 
   // Keep walletsRef in sync with wallets state
   useEffect(() => {
@@ -193,7 +428,30 @@ export default function TrackersPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Load wallets when user changes or page loads
+  // Hydrate wallets from localStorage cache on mount
+  useEffect(() => {
+    if (typeof window === "undefined" || !user?.id) return;
+    
+    const cacheKey = `walletTracker:wallets:${user.id}`;
+    const cached = localStorage.getItem(cacheKey);
+    
+    if (cached) {
+      try {
+        const parsedCache = JSON.parse(cached);
+        if (parsedCache.wallets && parsedCache.watchedWallets) {
+          setWallets(parsedCache.wallets);
+          setWatchedWallets(parsedCache.watchedWallets);
+          if (parsedCache.balances) {
+            setWalletBalances(parsedCache.balances);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to hydrate wallets from cache:", error);
+      }
+    }
+  }, [user?.id]);
+
+  // Load wallets when user changes or page loads (fetches fresh data in background)
   useEffect(() => {
     loadWalletsFromBackend();
   }, [user?.id]);
@@ -210,12 +468,51 @@ export default function TrackersPage() {
     }
   }, [twitterTab, twitterAccounts]);
 
+  // Hydrate cached live trades so the Live Trades tab renders instantly on reload
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const userKey = user?.id ? getLiveTradesCacheKey(user.id) : null;
+      const raw =
+        (userKey ? window.localStorage.getItem(userKey) : null) ??
+        window.localStorage.getItem(getLiveTradesCacheKey());
+
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setCachedLiveTrades(parsed as TradeEvent[]);
+      }
+    } catch (error) {
+      console.error("Failed to hydrate live trades cache:", error);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (latestTrades.length > 0) {
+      setCachedLiveTrades(latestTrades);
+    }
+  }, [latestTrades]);
+
   const loadWalletsFromBackend = async () => {
     try {
       if (!user?.id) {
         setWatchedWallets([]);
         setWallets([]);
         setWalletBalances({});
+        // Clear cache
+        if (typeof window !== "undefined") {
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('walletTracker:wallets:')) {
+              localStorage.removeItem(key);
+            }
+          });
+        }
         return;
       }
 
@@ -226,6 +523,14 @@ export default function TrackersPage() {
       await refreshWatchedWallets();
 
       const allWallets = tracked;
+      
+      // Only update state and cache if we actually got wallets
+      // This prevents empty arrays from overwriting cache on errors
+      if (allWallets.length === 0) {
+        console.log('No wallets returned from backend - keeping cached data');
+        return;
+      }
+      
       setWatchedWallets(allWallets);
 
       // Convert backend wallets to frontend format
@@ -233,20 +538,56 @@ export default function TrackersPage() {
         address: w.address,
         name: w.walletName || w.address.slice(0, 8),
         createdAt: new Date(w.createdAt).getTime(),
-        emoji: w.emoji || EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+        emoji: w.emoji || getRandomEmoji(),
       }));
 
       setWallets(frontendWallets);
+
+      // Cache wallets to localStorage
+      if (typeof window !== "undefined") {
+        const cacheKey = `walletTracker:wallets:${user.id}`;
+        const cacheData = {
+          wallets: frontendWallets,
+          watchedWallets: allWallets,
+          balances: {},
+          timestamp: Date.now(),
+        };
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+        } catch (error) {
+          console.error("Failed to cache wallets:", error);
+        }
+      }
 
       // Fetch real balances for tracked wallets
       allWallets.forEach(async (wallet) => {
         const balance = await getWalletSolBalance(wallet.address);
         if (balance !== null) {
-          setWalletBalances((prev) => ({ ...prev, [wallet.address]: balance }));
+          setWalletBalances((prev) => {
+            const updated = { ...prev, [wallet.address]: balance };
+            
+            // Update balance in cache
+            if (typeof window !== "undefined") {
+              const cacheKey = `walletTracker:wallets:${user.id}`;
+              const cached = localStorage.getItem(cacheKey);
+              if (cached) {
+                try {
+                  const cacheData = JSON.parse(cached);
+                  cacheData.balances = updated;
+                  localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+                } catch (error) {
+                  // Silent fail
+                }
+              }
+            }
+            
+            return updated;
+          });
         }
       });
     } catch (error) {
       console.error("Failed to load wallets:", error);
+      // Don't clear state on error - keep showing cached data
     }
   };
 
@@ -266,41 +607,118 @@ export default function TrackersPage() {
   useEffect(() => {
     setWatchedWallets(globalWatchedWallets);
   }, [globalWatchedWallets]);
-
-  // Fetch token metadata for live trades
   useEffect(() => {
-    if (latestTrades.length === 0) return;
+    const addresses = watchedWallets
+      .map((wallet) => wallet.address)
+      .filter((address): address is string => typeof address === "string" && address.length > 0);
 
-    // Extract unique mints that don't have symbol
-    const mintsToFetch = latestTrades
-      .filter((trade) => trade.mint && !trade.symbol)
-      .map((trade) => trade.mint)
-      .filter((mint, idx, arr) => arr.indexOf(mint) === idx); // unique
-
-    if (mintsToFetch.length === 0) {
-      console.log("[Live Trades] No mints to fetch, all trades have symbols");
+    if (addresses.length === 0) {
+      setLastActiveMap({});
       return;
     }
 
-    console.log("[Live Trades] Fetching metadata for tokens:", mintsToFetch);
+    let cancelled = false;
 
-    batchFetchTokenMetadata(mintsToFetch)
-      .then((metadata) => {
-        console.log(
-          "[Live Trades] Successfully fetched metadata:",
-          Object.fromEntries(metadata),
-        );
-        setTokenMetadata((prev) => {
-          const updated = new Map(prev);
-          metadata.forEach((value, key) => {
-            updated.set(key, value);
-          });
-          return updated;
+    const fetchLastActive = async () => {
+      try {
+        const results = await getWalletsLastActive(addresses);
+        if (cancelled) return;
+
+        const map: Record<string, number | null> = {};
+        results.forEach((item) => {
+          map[item.wallet] =
+            typeof item.lastActive === "number" ? item.lastActive : null;
         });
+
+        // Ensure we have entries for every requested address
+        addresses.forEach((address) => {
+          if (!(address in map)) {
+            map[address] = null;
+          }
+        });
+
+        setLastActiveMap(map);
+      } catch (error) {
+        console.error("Failed to fetch last active timestamps:", error);
+        if (!cancelled) {
+          setLastActiveMap((prev) => ({ ...prev }));
+        }
+      }
+    };
+
+    fetchLastActive();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [watchedWallets]);
+
+  // Fetch token metadata for live trades using API routes (like trade page does)
+  // This provides the most complete data: image, protocol, market cap
+  useEffect(() => {
+    if (latestTrades.length === 0) return;
+
+    // Extract unique trades that we haven't fetched yet
+    const tradesToFetch = latestTrades.filter(
+      (trade) => !fetchedMintsRef.current.has(trade.mint)
+    );
+
+    if (tradesToFetch.length === 0) {
+      return;
+    }
+    
+    // Mark these mints as being fetched to prevent duplicate requests
+    tradesToFetch.forEach(trade => fetchedMintsRef.current.add(trade.mint));
+
+    // Fetch all tokens in parallel using Promise.allSettled for maximum speed
+    Promise.allSettled(
+      tradesToFetch.map(async (trade) => {
+        try {
+          // Try to use pair_address if available, otherwise use mint_address
+          const params = new URLSearchParams();
+          if (trade.pair_address) {
+            params.set('pair_address', trade.pair_address);
+          } else {
+            params.set('mint_address', trade.mint);
+          }
+          
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const response = await fetch(`/api/token-service/trade-view?${params.toString()}`, {
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          
+          const data = await response.json();
+          const token = data?.token;
+          
+          if (token) {
+            const metadata = {
+              symbol: token.symbol || trade.symbol || null,
+              name: token.name || trade.name || null,
+              image: token.uri || token.image || token.logo || null,
+              launchpad_protocol: token.launchpad_protocol || token.protocol || null,
+              market_cap_usd: token.market_cap_usd || token.marketCapUsd || token.fully_diluted_value || null,
+              createdAt: token.created_at || token.createdAt || token.CreatedAt || null,
+            };
+            
+            // Update state immediately for this token (progressive rendering)
+            setTokenMetadata((prev) => {
+              const updated = new Map(prev);
+              updated.set(trade.mint, metadata);
+              return updated;
+            });
+          }
+        } catch (error) {
+          // Silent fail - will use fallback UI
+        }
       })
-      .catch((err) => {
-        console.error("[Live Trades] Error fetching token metadata:", err);
-      });
+    );
   }, [latestTrades]);
 
   // Handle sidebar resizing
@@ -342,8 +760,13 @@ export default function TrackersPage() {
     }
 
     try {
-      // Add to backend
-      await addTrackedWallet(address, name, user?.id, emoji);
+      // Add to backend with notifications enabled by default
+      await addTrackedWallet(address, name, user?.id, emoji, true);
+      
+      // Save notification preference to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`wallet_notifications_${address}`, JSON.stringify(true));
+      }
 
       // Reload from backend (this will also refresh global watched wallets)
       await loadWalletsFromBackend();
@@ -372,19 +795,81 @@ export default function TrackersPage() {
         await Promise.all(
           wallets.map((w) => removeTrackedWallet(w.address, user?.id)),
         );
+        
+        // Clear all state
+        setWatchedWallets([]);
+        setWallets([]);
+        setWalletBalances({});
+        
+        // Clear cache
+        if (typeof window !== "undefined" && user?.id) {
+          const cacheKey = `walletTracker:wallets:${user.id}`;
+          localStorage.removeItem(cacheKey);
+        }
+        
+        // Refresh global watched wallets
+        await refreshWatchedWallets();
       } else {
         // Remove single wallet
         await removeTrackedWallet(addressToRemove, user?.id);
+        
+        // Reload from backend (this will also refresh global watched wallets)
+        await loadWalletsFromBackend();
       }
-
-      // Reload from backend (this will also refresh global watched wallets)
-      await loadWalletsFromBackend();
 
       setToast("Wallet removed");
       setTimeout(() => setToast(""), 3000);
     } catch (error: any) {
       setToast(error.message || "Failed to remove wallet");
       setTimeout(() => setToast(""), 3000);
+    }
+  };
+
+  // Toggle all wallet notifications
+  const handleToggleAllNotifications = async () => {
+    if (watchedWallets.length === 0) {
+      console.log('No wallets to toggle');
+      return;
+    }
+    
+    if (isTogglingAllNotifications) {
+      console.log('⏳ Already toggling, please wait...');
+      return;
+    }
+    
+    setIsTogglingAllNotifications(true);
+    
+    try {
+      // Determine new state: if all are enabled, disable all. Otherwise, enable all.
+      const newState = !allNotificationsEnabled;
+      console.log(`🔔 Toggle all notifications: ${allNotificationsEnabled} → ${newState}`);
+      console.log(`📊 Toggling ${watchedWallets.length} wallets`);
+      
+      // Toggle each wallet's notifications
+      const togglePromises = watchedWallets.map(wallet => {
+        console.log(`  - ${wallet.address.slice(0, 8)}... from ${wallet.notificationsEnabled} to ${newState}`);
+        return toggleWalletNotifications(wallet.address, newState, wallet.ownerId || undefined);
+      });
+      
+      const results = await Promise.all(togglePromises);
+      console.log('✅ All API calls completed:', results);
+      
+      // Update localStorage for each wallet
+      watchedWallets.forEach(wallet => {
+        const storageKey = `wallet_notifications_${wallet.address}`;
+        localStorage.setItem(storageKey, JSON.stringify(newState));
+        console.log(`💾 Saved to localStorage: ${wallet.address.slice(0, 8)}... = ${newState}`);
+      });
+      
+      // Reload from backend to refresh state
+      console.log('🔄 Reloading wallets from backend...');
+      await loadWalletsFromBackend();
+      await refreshWatchedWallets();
+      console.log('✅ State refreshed - Ready for next toggle');
+    } catch (error) {
+      console.error('❌ Failed to toggle all notifications:', error);
+    } finally {
+      setIsTogglingAllNotifications(false);
     }
   };
 
@@ -400,12 +885,14 @@ export default function TrackersPage() {
       wallet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wallet.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+  const liveTradesToRender =
+    latestTrades.length > 0 ? latestTrades : cachedLiveTrades;
 
   // Twitter functions
   const loadTwitterAccounts = async () => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.id);
-      setTwitterAccounts(accounts);
+    const accounts = await getTrackedTwitterAccounts(user?.id);
+    setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
       setTwitterAccounts([]);
@@ -500,11 +987,13 @@ export default function TrackersPage() {
               return {
                 address: wallet.trackedWalletAddress,
                 name: wallet.name || "Imported Wallet",
+                emoji: wallet.emoji || getRandomEmoji(),
               };
             }
             return {
               address: wallet?.address,
               name: wallet?.name || "Imported Wallet",
+              emoji: wallet?.emoji || getRandomEmoji(),
             };
           });
 
@@ -517,7 +1006,7 @@ export default function TrackersPage() {
           const duplicateExisting: string[] = [];
           const duplicateWithinImport: string[] = [];
           const invalidWallets: string[] = [];
-          const walletsToAdd: { address: string; name: string }[] = [];
+          const walletsToAdd: { address: string; name: string; emoji?: string }[] = [];
 
           transformedWallets.forEach(
             (wallet: { address: string; name: string }) => {
@@ -541,7 +1030,7 @@ export default function TrackersPage() {
 
           const availableSlots = MAX_WALLETS - watchedWallets.length;
           if (walletsToAdd.length > availableSlots) {
-            alert(
+            showToastMessage(
               availableSlots > 0
                 ? `You can only add ${availableSlots} more wallet${availableSlots === 1 ? "" : "s"}. Remove some before importing.`
                 : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`,
@@ -549,74 +1038,41 @@ export default function TrackersPage() {
             return;
           }
 
-          let successCount = 0;
+          const bulkPayload = walletsToAdd.map((wallet) => ({
+            wallet: wallet.address,
+            walletName: wallet.name,
+            emoji: wallet.emoji || getRandomEmoji(),
+          }));
+
+          await addTrackedWalletsBulk(bulkPayload, user?.id);
+          await ensureNotificationsEnabled(walletsToAdd);
+
+          let successCount = walletsToAdd.length;
           let errorCount = 0;
 
-          for (const wallet of walletsToAdd) {
-            try {
-              await addTrackedWallet(wallet.address, wallet.name, user?.id);
-              successCount++;
-            } catch (error: any) {
-              if (error.message?.includes("already exists")) {
-                duplicateExisting.push(wallet.address);
-              } else {
-                console.error(`Failed to import ${wallet.address}:`, error);
-                errorCount++;
-              }
-            }
+          if (typeof window !== 'undefined') {
+            walletsToAdd.forEach((wallet) => {
+              localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+            });
           }
 
           await loadWalletsFromBackend();
 
-          const messageParts: string[] = [];
-          if (successCount > 0) {
-            messageParts.push(
-              `Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`,
-            );
-          }
-          if (duplicateExisting.length > 0) {
-            messageParts.push(
-              `${duplicateExisting.length} already tracked (${duplicateExisting
-                .slice(0, 3)
-                .map(shortenAddress)
-                .join(", ")}${
-                duplicateExisting.length > 3
-                  ? ` +${duplicateExisting.length - 3}`
-                  : ""
-              })`,
-            );
-          }
-          if (duplicateWithinImport.length > 0) {
-            messageParts.push(
-              `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} in import (${duplicateWithinImport
-                .slice(0, 3)
-                .map(shortenAddress)
-                .join(", ")}${
-                duplicateWithinImport.length > 3
-                  ? ` +${duplicateWithinImport.length - 3}`
-                  : ""
-              })`,
-            );
-          }
-          if (invalidWallets.length > 0) {
-            messageParts.push(
-              `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
-            );
-          }
-          if (errorCount > 0) {
-            messageParts.push(`${errorCount} failed`);
-          }
-
-          alert(
-            messageParts.length > 0
-              ? messageParts.join(". ")
-              : "No new wallets were imported.",
+          showToastMessage(
+            composeImportSummary({
+              successCount,
+              duplicateExisting,
+              duplicateWithinImport,
+              invalidWallets,
+              skippedByLimit: [],
+              failedCount: errorCount,
+            }),
           );
         } else {
-          alert("Invalid wallet file format.");
+          showToastMessage("Invalid wallet file format.");
         }
       } catch {
-        alert("Failed to import wallets.");
+        showToastMessage("Failed to import wallets.");
       }
     };
     reader.readAsText(file);
@@ -663,7 +1119,7 @@ export default function TrackersPage() {
               {/* LEFT: WALLET SECTION */}
               {showWalletSection && (
                 <div
-                  className="mt-4 flex h-full min-h-[530px] w-full flex-1 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-4"
+                  className="mt-4 flex h-full min-h-[530px] flex-1 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-4 min-w-0"
                   style={{
                     maxHeight: "calc(100vh - 160px)",
                   }}
@@ -689,9 +1145,9 @@ export default function TrackersPage() {
                   ) : (
                     <>
                       {/* HEADER BAR – three zones like reference screenshot */}
-                      <div className="flex items-center gap-4 border-b border-neutral-800/60 py-2">
+                      <div className="flex flex-wrap items-center gap-4 border-b border-neutral-800/60 py-2">
                         {/* Left: tabs + wallet count */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2">
                           {TABS.map((tab, i) => (
                             <button
                               key={tab}
@@ -703,7 +1159,7 @@ export default function TrackersPage() {
                               onClick={() => setActiveTab(i)}
                             >
                               {tab}
-                              {(tab === "Live Trades" || tab === "Monitor") && (
+                              {tab === "Live Trades" && (
                                 <span className="ml-1 animate-pulse text-sm text-pink-400">
                                   •
                                 </span>
@@ -734,7 +1190,7 @@ export default function TrackersPage() {
                         </div>
 
                         {/* Right: actions (Import / Export / icons / Add Wallet) */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2">
                           {activeTab === 0 && (
                             <>
                               <button
@@ -758,10 +1214,13 @@ export default function TrackersPage() {
                                 <FiSettings className="h-4 w-4" />
                               </button>
                               <button
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                className={`flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] transition-all duration-300 hover:bg-[#181818] ${isTogglingAllNotifications ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
                                 type="button"
+                                onClick={handleToggleAllNotifications}
+                                disabled={isTogglingAllNotifications}
+                                title={isTogglingAllNotifications ? "Toggling..." : allNotificationsEnabled ? "Disable all notifications" : "Enable all notifications"}
                               >
-                                <FiBell className="h-4 w-4" />
+                                <FiBell className={`h-4 w-4 ${allNotificationsEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
                               </button>
                               <button
                                 className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
@@ -811,18 +1270,18 @@ export default function TrackersPage() {
                           <>
                             <div className="flex items-center border-b border-neutral-800/60 p-2">
                               <div className="flex w-full items-center gap-4 text-xs font-medium text-neutral-400">
-                                <span className="w-28">Created</span>
+                                <span className="w-28 flex justify-center">Created</span>
                                 <span className="min-w-0 flex-1">Name</span>
                                 <span className="w-36">Balance</span>
-                                <span className="w-40">Actions</span>
-                                <span className="w-24 text-right">
+                                <span className="w-28">Last Active</span>
+                                <div className="flex-1 flex items-center justify-end">
                                   <button
                                     className="whitespace-nowrap text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
                                     onClick={() => handleRemoveWallet("all")}
                                   >
                                     Remove All
                                   </button>
-                                </span>
+                                </div>
                               </div>
                             </div>
                             {wallets.length === 0 ? (
@@ -851,6 +1310,7 @@ export default function TrackersPage() {
                                           watchedWallet={watched}
                                           events={events}
                                           balance={balance}
+                                          lastActive={lastActiveMap[wallet.address]}
                                           onRemove={handleRemoveWallet}
                                           onClick={setScannedWallet}
                                           onNotificationToggle={async (
@@ -868,22 +1328,32 @@ export default function TrackersPage() {
                               </div>
                             )}
                           </>
-                        ) : activeTab === 1 ? (
+                        ) : (
                           <>
-                            {latestTrades.length === 0 ? (
+                            {liveTradesToRender.length === 0 ? (
                               <div className="flex h-64 flex-col items-center justify-center">
                                 <span className="text-neutral-400">
-                                  No live trades yet. Add wallets to start
-                                  tracking!
+                                  {wsConnected 
+                                    ? "Listening for trades from tracked wallets..."
+                                    : "No live trades yet. Add wallets to start tracking!"}
                                 </span>
                                 <span className="mt-2 text-xs text-neutral-500">
                                   {wsConnected
-                                    ? "🟢 Connected"
-                                    : "🔴 Disconnected"}
+                                    ? "✅ Connected and ready"
+                                    : "🔴 Disconnected - Check console for details"}
                                 </span>
                               </div>
                             ) : (
                               <div className="overflow-x-auto overflow-y-auto">
+                                {/* SVG gradient for Solana icon */}
+                                <svg className="absolute w-0 h-0 pointer-events-none">
+                                  <defs>
+                                    <linearGradient id="solana-gradient-tracker" x1="0%" y1="0%" x2="100%" y2="100%">
+                                      <stop offset="0%" style={{ stopColor: '#00FFA3', stopOpacity: 1 }} />
+                                      <stop offset="100%" style={{ stopColor: '#DC1FFF', stopOpacity: 1 }} />
+                                    </linearGradient>
+                                  </defs>
+                                </svg>
                                 <table className="mt-2 w-full min-w-[720px] text-xs">
                                   <thead>
                                     <tr className="border-b border-neutral-800/60">
@@ -896,22 +1366,28 @@ export default function TrackersPage() {
                                       <th className="w-12 px-2 py-2 text-left text-sm text-neutral-400">
                                         Side
                                       </th>
-                                      <th className="w-32 px-2 py-2 text-left text-sm text-neutral-400">
+                                      <th className="w-48 px-2 py-2 text-left text-sm text-neutral-400">
                                         Token
                                       </th>
                                       <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
-                                        Amount
+                                        <div className="flex items-center gap-1">
+                                          <span>Amount</span>
+                                          <button
+                                            onClick={() => setShowUSD(!showUSD)}
+                                            className={`transition-colors ${showUSD ? 'text-green-400' : 'text-neutral-400 hover:text-neutral-300'}`}
+                                            title={showUSD ? 'Switch to SOL' : 'Switch to USD'}
+                                          >
+                                            <RiExchangeDollarLine className="h-4 w-4" />
+                                          </button>
+                                        </div>
                                       </th>
                                       <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
-                                        Price
-                                      </th>
-                                      <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">
-                                        Venue
+                                        MC
                                       </th>
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {latestTrades.map((trade, idx) => {
+                                    {liveTradesToRender.map((trade, idx) => {
                                       const wallet = wallets.find(
                                         (w) => w.address === trade.wallet,
                                       );
@@ -919,16 +1395,84 @@ export default function TrackersPage() {
                                         trade.at,
                                       ).toLocaleTimeString();
 
-                                      // Use fetched metadata as fallback
+                                      // Prioritize websocket data (symbol/name) over metadata
                                       const metadata = tokenMetadata.get(
                                         trade.mint,
                                       );
+                                      
+                                      // Priority: websocket symbol > metadata symbol > websocket name > metadata name > fallback
                                       const displaySymbol =
                                         trade.symbol ||
                                         metadata?.symbol ||
+                                        trade.name ||
+                                        metadata?.name ||
                                         trade.mint.slice(0, 8) + "...";
-                                      const displayName =
-                                        trade.name || metadata?.name;
+                                      const displayName = trade.name || metadata?.name;
+                                      
+                                      // Debug: Log what we're displaying
+                                      if (displaySymbol === trade.mint.slice(0, 8) + "...") {
+                                        console.log('[Live Trades] Showing fallback address for', trade.mint.slice(0, 8), {
+                                          trade_symbol: trade.symbol,
+                                          trade_name: trade.name,
+                                          metadata_symbol: metadata?.symbol,
+                                          metadata_name: metadata?.name,
+                                          has_metadata: !!metadata,
+                                        });
+                                      }
+                                      
+                                      // Get token image URL - prioritize metadata image and normalize it
+                                      const rawImg = metadata?.image;
+                                      const tokenImageUrl = normalizeAssetUrl(rawImg);
+                                      const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                                        displaySymbol || "T"
+                                      )}&background=0f1012&color=E6E7EA&size=28`;
+                                      const launchpadProtocol = metadata?.launchpad_protocol?.toLowerCase() || '';
+                                      
+                                      // Get protocol icon (exact logic from PulseTable)
+                                      const getProtocolIcon = (protocol: string): string => {
+                                        if (!protocol) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                                        if (protocol.includes('pump')) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                                        if (protocol.includes('meteora')) return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
+                                        if (protocol.includes('raydium')) return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                                        if (protocol.includes('boop')) return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
+                                        if (protocol.includes('moonit') || protocol.includes('moonshot') || protocol.includes('moonshoot')) return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
+                                        if (protocol.includes('bonk')) return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
+                                        if (protocol.includes('bags')) return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
+                                        if (protocol.includes('launch')) return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
+                                        return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                                      };
+                                      
+                                      // Get protocol color (exact logic from PulseTable)
+                                      const getProtocolColor = (protocol: string): string => {
+                                        if (!protocol) return '#22c55e';
+                                        if (protocol.includes('pump')) return '#22c55e';
+                                        if (protocol.includes('meteora')) return '#ff4662';
+                                        if (protocol.includes('raydium')) return '#5c51f7';
+                                        if (protocol.includes('moonit') || protocol.includes('moonshot') || protocol.includes('moonshoot')) return '#eab308';
+                                        if (protocol.includes('boop')) return '#134577';
+                                        if (protocol.includes('bonk')) return '#ff6b35';
+                                        if (protocol.includes('bags')) return '#22c55e';
+                                        if (protocol.includes('launch')) return '#3b82f6';
+                                        if (protocol.includes('orca')) return '#0ea5e9';
+                                        if (protocol.includes('jupiter')) return '#8b5cf6';
+                                        return '#22c55e';
+                                      };
+                                      
+                                      const protocolIcon = getProtocolIcon(launchpadProtocol);
+                                      const protocolColor = getProtocolColor(launchpadProtocol);
+                                      
+                                      // Check if token should have full circle image (no white space)
+                                      const isMeteora = launchpadProtocol.includes('meteora');
+                                      const isBonk = launchpadProtocol.includes('bonk');
+                                      const isBags = launchpadProtocol.includes('bags');
+                                      const isMoonit = launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot');
+                                      const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
+
+                                      const tokenAgeLabel = formatTokenAge(
+                                        (trade as any).created_at ??
+                                          (trade as any).createdAt ??
+                                          null,
+                                      );
 
                                       return (
                                         <tr
@@ -960,24 +1504,178 @@ export default function TrackersPage() {
                                               {trade.side.toUpperCase()}
                                             </span>
                                           </td>
-                                          <td
-                                            className="w-32 px-2 py-2 font-mono text-emerald-300"
+                                          <td className="w-48 px-2 py-2">
+                                            <button
+                                              onClick={async () => {
+                                                // Use liquidity pool / trading pair address (pair_address) for navigation
+                                                // This should be pre-resolved by WalletTrackerContext, but we have a fallback
+                                                let tokenAddress = trade.pair_address;
+                                                
+                                                // Fallback: if pair_address is not available, resolve it now
+                                                if (!tokenAddress && trade.mint) {
+                                                  console.log('[Trackers] pair_address not found, resolving from mint:', trade.mint);
+                                                  
+                                                  try {
+                                                    // First try to get it from token search (most reliable)
+                                                    const searchResponse = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`);
+                                                    
+                                                    if (searchResponse.ok) {
+                                                      const searchData = await searchResponse.json();
+                                                      if (searchData.tokens && searchData.tokens.length > 0) {
+                                                        const token = searchData.tokens[0];
+                                                        tokenAddress = token.pair_address || token.poolId;
+                                                        console.log('[Trackers] Resolved pair_address from search:', tokenAddress);
+                                                      }
+                                                    }
+                                                    
+                                                    // Fallback to hydrate-pair if search didn't work
+                                                    if (!tokenAddress) {
+                                                      const hydrateResponse = await fetch('/api/token-service/hydrate-pair', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ mint: trade.mint }),
+                                                      });
+                                                      
+                                                      if (hydrateResponse.ok) {
+                                                        const hydrateData = await hydrateResponse.json();
+                                                        tokenAddress = hydrateData.pair_address || hydrateData.poolId;
+                                                        console.log('[Trackers] Resolved pair_address from hydrate:', tokenAddress);
+                                                      }
+                                                    }
+                                                  } catch (error) {
+                                                    console.warn('[Trackers] Failed to resolve pair_address:', error);
+                                                  }
+                                                }
+                                                
+                                                // Final fallback to mint if resolution failed
+                                                if (!tokenAddress) {
+                                                  tokenAddress = trade.mint;
+                                                  console.warn('[Trackers] Using mint as fallback:', tokenAddress);
+                                                }
+
+                                                console.log('[Trackers] Navigating with address:', tokenAddress, 'for token:', displaySymbol);
+                                                window.location.href = `/trade/${tokenAddress}`;
+                                              }}
+                                              className="flex items-center gap-2 font-mono text-emerald-300 hover:text-emerald-200 transition-colors cursor-pointer"
                                             title={displayName || undefined}
                                           >
-                                            {displaySymbol}
+                                              {/* Token icon with protocol badge (smaller version of PulseTable) */}
+                                              <div className="relative flex items-center justify-center flex-shrink-0"
+                                                   style={{ width: 28, height: 28 }}>
+                                                {/* Main token image with border */}
+                                                <div 
+                                                  className="relative rounded-sm"
+                                                  style={{
+                                                    border: `1px solid ${protocolColor}B3`,
+                                                    padding: '2px',
+                                                    backgroundColor: '#06070b'
+                                                  }}
+                                                >
+                                                  <div className="relative rounded-sm overflow-hidden"
+                                                       style={{ width: 22, height: 22 }}>
+                                                    <img
+                                                      src={tokenImageUrl || fallbackAvatar}
+                                                      alt={displayName || displaySymbol}
+                                                      className="w-full h-full object-cover"
+                                                      onError={(e) => {
+                                                        e.currentTarget.src = fallbackAvatar;
+                                                      }}
+                                                    />
+                                                  </div>
+                                                </div>
+                                                
+                                                {/* Protocol badge icon (bottom-right corner) */}
+                                                <div 
+                                                  className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/4 translate-y-1/4"
+                                                  style={{ 
+                                                    width: 10, 
+                                                    height: 10,
+                                                    border: `1px solid ${protocolColor}`,
+                                                    boxShadow: `0 0 2px ${protocolColor}60`
+                                                  }}
+                                                >
+                                                  <img
+                                                    src={protocolIcon}
+                                                    alt="Protocol"
+                                                    className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+                                                    style={{
+                                                      filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
+                                                    }}
+                                                  />
+                                                </div>
+                                              </div>
+                                              <div className="flex items-center gap-1.5 min-w-0 leading-tight text-left">
+                                                <span className="font-medium text-base text-neutral-100 truncate">
+                                                  {displaySymbol}
+                                                </span>
+                                                {(() => {
+                                                  const age = getTokenAge(metadata?.createdAt);
+                                                  if (age) {
+                                                    return (
+                                                      <>
+                                                        <span className="text-neutral-500">•</span>
+                                                        <span className="text-sm text-green-400 font-medium whitespace-nowrap">
+                                                          {age}
+                                                        </span>
+                                                      </>
+                                                    );
+                                                  }
+                                                  return null;
+                                                })()}
+                                              </div>
+                                            </button>
                                           </td>
                                           <td className="w-24 px-2 py-2 text-neutral-200">
-                                            {trade.amount.toFixed(2)}
+                                            <div className="flex items-center gap-1">
+                                              {showUSD ? (
+                                                <span className="text-green-400 font-semibold">$</span>
+                                              ) : (
+                                                <SiSolana
+                                                  className="h-3 w-3 inline-block flex-shrink-0"
+                                                  aria-hidden="true"
+                                                  style={{
+                                                    color: 'unset',
+                                                    fill: 'url(#solana-gradient-tracker)',
+                                                    filter: 'none',
+                                                  }}
+                                                />
+                                              )}
+                                              <span>
+                                                {(() => {
+                                                  if (showUSD) {
+                                                    // Display USD price from websocket
+                                                    if (trade.price_usd !== null && trade.price_usd !== undefined) {
+                                                      // Format USD with commas and 2 decimal places
+                                                      return new Intl.NumberFormat('en-US', {
+                                                        minimumFractionDigits: 2,
+                                                        maximumFractionDigits: 2
+                                                      }).format(trade.price_usd);
+                                                    }
+                                                    return '-';
+                                                  } else {
+                                                    // Display SOL amount with 4 decimal places
+                                                    if (trade.sol_spent !== null && trade.sol_spent !== undefined) {
+                                                      // Check if value is in lamports (very large numbers) and convert to SOL
+                                                      let solAmount = Math.abs(trade.sol_spent);
+                                                      if (solAmount > 1000) {
+                                                        // Likely in lamports, convert to SOL (1 SOL = 1e9 lamports)
+                                                        solAmount = solAmount / 1e9;
+                                                      }
+                                                      return solAmount.toFixed(4);
+                                                    }
+                                                    // Fallback to token amount if sol_spent is not available
+                                                    return `${trade.amount.toFixed(4)} tokens`;
+                                                  }
+                                                })()}
+                                              </span>
+                                            </div>
                                           </td>
                                           <td className="w-24 px-2 py-2 text-neutral-300">
-                                            {trade.price_usd
-                                              ? `$${trade.price_usd.toFixed(
-                                                  6,
-                                                )}`
-                                              : "-"}
-                                          </td>
-                                          <td className="w-20 px-2 py-2 text-neutral-400">
-                                            {trade.venue || "Unknown"}
+                                            {(() => {
+                                              const marketCap = metadata?.market_cap_usd;
+                                              if (!marketCap || marketCap === 0) return <span className="text-neutral-500">-</span>;
+                                              return `$${formatMarketCap(marketCap)}`;
+                                            })()}
                                           </td>
                                         </tr>
                                       );
@@ -987,13 +1685,6 @@ export default function TrackersPage() {
                               </div>
                             )}
                           </>
-                        ) : (
-                          // Monitor tab
-                          <div className="flex h-64 flex-col items-center justify-center">
-                            <span className="text-neutral-400 text-sm">
-                              No token activity yet
-                            </span>
-                          </div>
                         )}
                       </div>
                     </>
@@ -1014,7 +1705,7 @@ export default function TrackersPage() {
               {/* RIGHT: TWITTER SECTION */}
               {showTwitterSection && (
                 <div
-                  className="mt-4 flex h-full min-h-[530px] w-full flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2"
+                  className="mt-4 flex h-full min-h-[530px] flex-shrink-0 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2"
                   style={
                     isMobile
                       ? {
@@ -1272,9 +1963,7 @@ export default function TrackersPage() {
                   return {
                     address: wallet.trackedWalletAddress,
                     name: wallet.name || "Imported Wallet",
-                    emoji:
-                      wallet.emoji ||
-                      EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+                    emoji: wallet.emoji || getRandomEmoji(),
                     createdAt: Date.now(),
                   };
                 }
@@ -1282,9 +1971,7 @@ export default function TrackersPage() {
                 return {
                   address: wallet.address,
                   name: wallet.name || "Imported Wallet",
-                  emoji:
-                    wallet.emoji ||
-                    EMOJIS[Math.floor(Math.random() * EMOJIS.length)],
+                  emoji: wallet.emoji || getRandomEmoji(),
                   createdAt: wallet.createdAt || Date.now(),
                 };
               });
@@ -1325,92 +2012,63 @@ export default function TrackersPage() {
                 throw new Error(message);
               }
 
-              // Add each wallet to backend
+              const total = walletsToAdd.length;
               let successCount = 0;
               let errorCount = 0;
-              const total = walletsToAdd.length;
-              let processed = 0;
+
               if (total === 0) {
                 onProgress?.(0, 0);
-              } else {
-                onProgress?.(0, total);
+                showToastMessage(
+                  composeImportSummary({
+                    successCount: 0,
+                    duplicateExisting,
+                    duplicateWithinImport,
+                    invalidWallets,
+                    skippedByLimit: [],
+                    failedCount: 0,
+                  }),
+                );
+                return;
               }
 
-              for (const wallet of walletsToAdd) {
-                try {
-                  await addTrackedWallet(
-                    wallet.address,
-                    wallet.name,
-                    user?.id,
-                    wallet.emoji,
-                  );
-                  successCount++;
-                } catch (error: any) {
-                  if (error.message?.includes("already exists")) {
-                    duplicateExisting.push(wallet.address);
-                  } else {
-                    errorCount++;
-                  }
-                }
-                processed += 1;
-                if (total > 0) {
-                  onProgress?.(processed, total);
-                }
+              onProgress?.(0, total);
+
+              let processed = 0;
+              const bulkPayload = walletsToAdd.map((wallet) => ({
+                wallet: wallet.address,
+                walletName: wallet.name,
+                emoji: wallet.emoji || getRandomEmoji(),
+              }));
+
+              await addTrackedWalletsBulk(bulkPayload, user?.id);
+              await ensureNotificationsEnabled(walletsToAdd);
+              successCount = walletsToAdd.length;
+              processed = walletsToAdd.length;
+              onProgress?.(processed, total);
+
+              if (typeof window !== 'undefined') {
+                walletsToAdd.forEach((wallet) => {
+                  localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+                });
               }
 
-              // Reload from backend
               await loadWalletsFromBackend();
 
-              const messageParts: string[] = [];
-              if (successCount > 0) {
-                messageParts.push(
-                  `Imported ${successCount} wallet${successCount === 1 ? "" : "s"}`,
-                );
-              }
-              if (duplicateExisting.length > 0) {
-                messageParts.push(
-                  `${duplicateExisting.length} already tracked (${duplicateExisting
-                    .slice(0, 3)
-                    .map(shortenAddress)
-                    .join(", ")}${
-                    duplicateExisting.length > 3
-                      ? ` +${duplicateExisting.length - 3}`
-                      : ""
-                  })`,
-                );
-              }
-              if (duplicateWithinImport.length > 0) {
-                messageParts.push(
-                  `${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} in import (${duplicateWithinImport
-                    .slice(0, 3)
-                    .map(shortenAddress)
-                    .join(", ")}${
-                    duplicateWithinImport.length > 3
-                      ? ` +${duplicateWithinImport.length - 3}`
-                      : ""
-                  })`,
-                );
-              }
-              if (invalidWallets.length > 0) {
-                messageParts.push(
-                  `${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`,
-                );
-              }
-              if (errorCount > 0) {
-                messageParts.push(`${errorCount} failed`);
-              }
-
-              const toastMessage =
-                messageParts.length > 0
-                  ? messageParts.join(". ")
-                  : "No new wallets were imported.";
-
-              setToast(toastMessage);
-              setTimeout(() => setToast(""), 3000);
+              showToastMessage(
+                composeImportSummary({
+                  successCount,
+                  duplicateExisting,
+                  duplicateWithinImport,
+                  invalidWallets,
+                  skippedByLimit: [],
+                  failedCount: errorCount,
+                }),
+              );
             } catch (error) {
               console.error("Import error:", error);
-              setToast((error as Error)?.message || "Failed to import wallets");
-              setTimeout(() => setToast(""), 3000);
+              showToastMessage(
+                (error as Error)?.message || "Failed to import wallets",
+              );
               throw error; // Re-throw so modal can handle it
             }
           }}
@@ -1438,3 +2096,4 @@ export default function TrackersPage() {
     </>
   );
 }
+

@@ -17,6 +17,63 @@ import {
 import { enhanceError, type EnhancedError } from './enhancedErrors';
 import type { QuickBuySettings } from '~/components/QuickBuyContext';
 import { getPoolTypeFromToken } from './poolTypeDetection';
+import { Connection, PublicKey } from '@solana/web3.js';
+
+// Helper function to get first valid string from multiple candidates
+function getFirstString(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return undefined;
+}
+
+// Comprehensive pool address detection - checks all possible fields
+function getEffectivePoolAddress(token: Token): string | undefined {
+  // Get migrated pool address if available (highest priority)
+  const migratedPoolAddress = getFirstString(
+    (token as any).migrated_pool_address,
+    (token as any).migratedPoolAddress,
+    (token as any).migrated_poolAddress,
+    (token as any).migrated_pool?.address,
+    (token as any).migratedPool?.address,
+    (token as any).target_pool_address,
+    (token as any).targetPoolAddress,
+  );
+
+  // Get original pair address
+  const originalPairAddress = getFirstString(
+    token.pair_address,
+    (token as any).pairAddress,
+    (token as any).bondingCurveKey,
+    (token as any).bonding_curve_key,
+    (token as any).bonding_curve_address,
+    (token as any).bondingCurve?.address,
+    (token as any).bonding_curve?.address,
+  );
+
+  // Get fallback pool address
+  const fallbackPoolAddress = getFirstString(
+    (token as any).poolAddress,
+    (token as any).pool_address,
+    (token as any).amm_id,
+    (token as any).ammId,
+    typeof (token as any).pool === 'string' && (token as any).pool.length >= 32 ? (token as any).pool : undefined,
+  );
+
+  // Effective pool address (prioritize migrated, then original, then fallback)
+  const effectivePoolAddress = getFirstString(
+    migratedPoolAddress,
+    originalPairAddress,
+    fallbackPoolAddress,
+  );
+
+  return effectivePoolAddress;
+}
 
 export interface EnhancedTradeParams {
   token: Token;
@@ -71,26 +128,59 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
   let progressTracker: TransactionProgressTracker | null = null;
 
   try {
-    // Step 1: Pre-transaction validation
-    const poolType = getPoolTypeFromToken(token);
-    const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
+    // Step 1: Show toast IMMEDIATELY when user clicks (before validation)
+    // This gives instant feedback that the action was registered
+    toastId = showEnhancedToast('loading', 'Preparing transaction...', {
+      title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
+      description: 'Validating parameters...',
+    });
 
+    // Step 2: Pre-transaction validation
+    const poolType = getPoolTypeFromToken(token);
+    // Use comprehensive pool address detection
+    let effectivePoolAddress = getEffectivePoolAddress(token);
+
+    // CRITICAL FIX: If poolAddress equals token mint, it's not a valid pool address
+    // This happens when frontend sends token mint as pool address
+    if (effectivePoolAddress && effectivePoolAddress === token.mint) {
+      console.warn('[EnhancedTrade] Pool address equals token mint - treating as missing. Backend will discover pool.', {
+        tokenMint: token.mint,
+        tokenSymbol: token.symbol,
+        invalidPoolAddress: effectivePoolAddress,
+      });
+      effectivePoolAddress = undefined; // Trigger backend pool discovery
+    }
+
+    // If no pool address found, still allow the request to go through
+    // The backend can discover pools using the token mint
     if (!effectivePoolAddress) {
-      const error: EnhancedError = {
-        title: 'Pool Address Missing',
-        description: 'Trading pool not available for this token yet',
-        suggestions: ['Try refreshing the page', 'Token may not have launched yet'],
-        canRetry: false,
-      };
-      if (onError) onError(error);
-      
-      showEnhancedToast('error', error.description, {
-        title: error.title,
-        suggestions: error.suggestions,
-        // Duration handled by priority system (5s for errors)
+      console.warn('[EnhancedTrade] No pool address found in token data, backend will attempt pool discovery', {
+        tokenMint: token.mint,
+        tokenSymbol: token.symbol,
+        launchpad_protocol: (token as any).launchpad_protocol,
+        availableFields: {
+          migrated_pool_address: (token as any).migrated_pool_address,
+          pair_address: token.pair_address,
+          poolAddress: (token as any).poolAddress,
+          pool_address: (token as any).pool_address,
+        }
       });
       
-      return { success: false, error };
+      // Update toast to indicate we're discovering the pool
+      if (toastId) {
+        updateEnhancedToast(toastId, 'loading', 'Discovering trading pool...', {
+          title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
+          description: 'Finding available trading pool...',
+        });
+      }
+    }
+
+    // Update toast to show we're checking
+    if (toastId) {
+      updateEnhancedToast(toastId, 'loading', 'Checking balance and parameters...', {
+        title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
+        description: 'Checking balance and parameters...',
+      });
     }
 
     // Perform pre-transaction checks
@@ -114,11 +204,17 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       if (criticalWarnings.length > 0) {
         // Show critical warnings and stop
         criticalWarnings.forEach(warning => {
-        showEnhancedToast('error', warning.message, {
-          title: warning.title,
-          suggestions: warning.suggestion ? [warning.suggestion] : [],
-          // Duration handled by priority system (5s for errors)
-        });
+          if (toastId) {
+            updateEnhancedToast(toastId, 'error', warning.message, {
+              title: warning.title,
+              suggestions: warning.suggestion ? [warning.suggestion] : [],
+            });
+          } else {
+            showEnhancedToast('error', warning.message, {
+              title: warning.title,
+              suggestions: warning.suggestion ? [warning.suggestion] : [],
+            });
+          }
         });
         
         return { 
@@ -138,21 +234,29 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         
         // Show first warning as toast
         const firstWarning = otherWarnings[0];
-        showEnhancedToast('warning', firstWarning.message, {
-          title: firstWarning.title,
-          suggestions: firstWarning.suggestion ? [firstWarning.suggestion] : [],
-          // Duration handled by priority system (4s for warnings)
-        });
+        if (toastId) {
+          updateEnhancedToast(toastId, 'warning', firstWarning.message, {
+            title: firstWarning.title,
+            suggestions: firstWarning.suggestion ? [firstWarning.suggestion] : [],
+          });
+        } else {
+          showEnhancedToast('warning', firstWarning.message, {
+            title: firstWarning.title,
+            suggestions: firstWarning.suggestion ? [firstWarning.suggestion] : [],
+          });
+        }
       }
     }
 
-    // Step 2: Show progress toast and start transaction
-    toastId = showEnhancedToast('loading', 'Preparing transaction...', {
-      title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
-      description: 'Validating parameters...',
-    });
+    // Step 3: Update toast to show we're submitting
+    if (toastId) {
+      updateEnhancedToast(toastId, 'loading', 'Submitting transaction to blockchain...', {
+        title: `${side === 'buy' ? 'Buying' : 'Selling'} ${token.symbol}`,
+        description: 'Submitting transaction to blockchain...',
+      });
+    }
 
-    // Create progress tracker
+    // Create progress tracker (but don't use artificial delays - update based on actual progress)
     progressTracker = new TransactionProgressTracker((stage) => {
       if (toastId) {
         updateEnhancedToast(toastId, 'loading', stage.message, {
@@ -162,24 +266,20 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       }
     });
 
-    // Auto-progress through stages (in background)
-    const progressPromise = progressTracker.autoProgress([
-      'validating',
-      'checking_pool',
-      'preparing',
-      'submitting',
-    ]);
+    // Update to submitting stage immediately (no artificial delays)
+    progressTracker.setStage('submitting');
 
-    // Step 3: Execute trade - NO RETRIES, NO PARAMETER ADJUSTMENTS
+    // Step 4: Execute trade - NO RETRIES, NO PARAMETER ADJUSTMENTS
     // Users control their own settings, we just execute once
+    // Note: If effectivePoolAddress is missing, backend will use pool discovery
     const tradeParams: any = {
-      poolAddress: effectivePoolAddress,
+      poolAddress: effectivePoolAddress || undefined, // Allow undefined - backend will discover
       baseMint: token.mint,
       quoteMint: SOL_MINT_ADDRESS,
       amount,
       mevProtection: (settings.mevMode === "off" ? 0 : 1) as 0 | 1,
-      poolType,
-      originalPairAddress: token.pair_address,
+      poolType: poolType || undefined, // Always send poolType if detected (helps backend with discovery)
+      originalPairAddress: token.pair_address || undefined,
       slippage: (settings.maxSlippage || 0.4) * 100,
       priorityFee: settings.priority || 0.0001,
       bribe: settings.bribe || 0,
@@ -191,9 +291,11 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       tokenSymbol: token.symbol,
     };
 
-    const result = side === 'buy'
-      ? await tradeBuy(tradeParams, user.bearerToken)
-      : await tradeSellPercentage(
+    // Execute trade with timeout protection
+    // Backend should return immediately (~300ms), but add timeout as safety
+    const tradePromise = side === 'buy'
+      ? tradeBuy(tradeParams, user.bearerToken)
+      : tradeSellPercentage(
           {
             ...tradeParams,
             tokenAddress: token.mint,
@@ -202,19 +304,102 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
           user.bearerToken
         );
 
-    // Stop progress tracker
-    if (progressTracker) progressTracker.complete();
+    // Add timeout check (30 seconds max - should never happen with new backend)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Request timeout - backend took too long to respond')), 30000);
+    });
+
+    const result = await Promise.race([tradePromise, timeoutPromise]);
+
+    // Stop progress tracker immediately when we get the response
+    if (progressTracker) {
+      progressTracker.complete();
+    }
 
     // Step 4: Handle success
     const resultAny = result as any; // Type assertion for runtime properties
-    const txHash = result?.hash || resultAny?.txid;
+    const txHash = resultAny?.hash || resultAny?.txid;
     
-    // For BUY: tokenAmount is returned
+    // Check for errors even if txHash exists (transaction might be confirmed but failed on-chain)
+    const errorMessage = resultAny?.error;
+    if (errorMessage && errorMessage !== 'none' && errorMessage.trim().length > 0) {
+      // Transaction was confirmed but failed on-chain (program error)
+      console.error('[EnhancedTrade] Transaction confirmed but failed:', errorMessage);
+      
+      // Check for specific on-chain errors
+      let enhancedError: EnhancedError;
+      if (errorMessage.includes('6023') || errorMessage.includes('Not enough tokens to sell') || errorMessage.includes('not enough tokens')) {
+        enhancedError = {
+          title: 'Insufficient Token Balance',
+          description: 'You don\'t have enough tokens to sell',
+          suggestions: [
+            'Check your token balance',
+            'You may need to buy tokens before selling',
+            'Try selling a smaller percentage',
+          ],
+          canRetry: false,
+          actions: [],
+        };
+      } else if (errorMessage.includes('NotAuthorized') || errorMessage.includes('6000')) {
+        enhancedError = {
+          title: 'Transaction Authorization Failed',
+          description: 'The transaction was not authorized. This may be a temporary issue.',
+          suggestions: [
+            'Try again in a few seconds',
+            'Check if you have sufficient balance',
+            'Verify your wallet connection',
+          ],
+          canRetry: true,
+        };
+      } else {
+        // Generic on-chain error
+        enhancedError = enhanceError(new ApiError(errorMessage, 'TX_FAILED'), {
+          token,
+          amount,
+          slippage: (settings.maxSlippage || 0.4) * 100,
+          priorityFee: settings.priority || 0.0001,
+          poolType: getPoolTypeFromToken(token),
+          mevMode: settings.mevMode,
+          rpcUrl: settings.rpc,
+        });
+      }
+
+      // Stop progress tracker
+      if (progressTracker) progressTracker.fail();
+
+      // Show error toast
+      if (toastId) {
+        const errorActions: ToastAction[] = enhancedError.canRetry ? [{ 
+          label: 'Retry', 
+          onClick: () => {
+            dismissToast(toastId);
+            // Re-execute trade with same parameters
+            executeEnhancedTrade(params);
+          }
+        }] : [];
+        
+        updateEnhancedToast(toastId, 'error', enhancedError.description, {
+          title: enhancedError.title,
+          suggestions: enhancedError.suggestions,
+          actions: errorActions,
+          showExplorerLink: txHash ? true : false, // Show explorer link if txHash exists
+          txHash: txHash || undefined,
+          duration: 6000,
+        });
+      }
+
+      if (onError) onError(enhancedError);
+      
+      return { success: false, error: enhancedError };
+    }
+    
+    // For BUY: tokenAmount is returned (may be 0 if pending)
     // For SELL: we sold a percentage, display the percentage not token amount
     const tokenAmount = resultAny?.amount || resultAny?.tokenAmount;
     const percentageSold = side === 'sell' ? amount : undefined;
+    const isPending = resultAny?.pending === true; // Backend returned immediately, metadata still processing
 
-    if (result && txHash) {
+    if (result && txHash && (!errorMessage || errorMessage === 'none')) {
       const networkFee = 0.00001; // Reduced from 0.001
       const stats: TradeStats = {
         txHash,
@@ -233,18 +418,20 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
 
       // Show success toast with stats
       if (toastId) {
+        // Show success message - same for pending or confirmed
         const title = side === 'buy' 
-          ? `Bought ${tokenAmount || 'tokens'} ${token.symbol}!`
-          : `Sold ${percentageSold}% of ${token.symbol}!`;
+          ? `Bought ${token.symbol}!`
+          : `Sold ${token.symbol}!`;
         
         // Safely format price - ensure it's a number
         const priceStr = token.usd_price && typeof token.usd_price === 'number' 
           ? `$${token.usd_price.toFixed(6)}`
           : '$0';
           
+        // Show transaction hash and amount spent
         const description = side === 'buy'
-          ? `Spent: ${formatSol(amount)} SOL • Price: ${priceStr} • Fees: ${formatSol(stats.fees.total)} SOL`
-          : `Tx Hash: ${txHash.slice(0, 8)}... • Fees: ${formatSol(stats.fees.total)} SOL`;
+          ? `Spent: ${formatSol(amount)} SOL • Tx: ${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 8)}`
+          : `Tx: ${txHash.slice(0, 8)}...${txHash.substring(txHash.length - 8)}`;
         
         updateEnhancedToast(toastId, 'success', '', {
           title,
@@ -256,6 +443,19 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
       }
 
       if (onSuccess) onSuccess(txHash, stats);
+      
+      if (isPending && txHash) {
+        void monitorPendingConfirmation({
+          txHash,
+          token,
+          amount,
+          side,
+          settings,
+          toastId,
+          params,
+          onError,
+        });
+      }
       
       return { success: true, txHash, stats };
     } else {
@@ -296,10 +496,13 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         });
       }
 
+      // On error: No transaction hash = no Solscan link
+      // Only show explorer link for successful transactions
       updateEnhancedToast(toastId, 'error', enhancedError.description, {
         title: enhancedError.title,
         suggestions: enhancedError.suggestions,
         actions,
+        showExplorerLink: false, // Explicitly don't show Solscan link for errors
         duration: 6000, // 6s for errors with actions/suggestions (needs time to read)
       });
     }
@@ -309,6 +512,121 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     return { success: false, error: enhancedError };
   } finally {
     if (progressTracker) progressTracker.clear();
+  }
+}
+
+async function monitorPendingConfirmation({
+  txHash,
+  token,
+  amount,
+  side,
+  settings,
+  toastId,
+  params,
+  onError,
+}: {
+  txHash: string;
+  token: Token;
+  amount: number;
+  side: 'buy' | 'sell';
+  settings: QuickBuySettings;
+  toastId: string | null;
+  params: EnhancedTradeParams;
+  onError?: (error: EnhancedError) => void;
+}) {
+  try {
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC || 'https://api.mainnet-beta.solana.com';
+    const connection = new Connection(rpcUrl, 'confirmed');
+
+    await Promise.race([
+      connection.confirmTransaction(txHash, 'confirmed'),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Transaction confirmation timeout')), 30000);
+      }),
+    ]);
+
+    const txStatus = await connection.getTransaction(txHash, {
+      commitment: 'confirmed',
+      maxSupportedTransactionVersion: 0,
+    });
+
+    if (txStatus?.meta?.err) {
+      const txError = txStatus.meta.err;
+      const errorStr = typeof txError === 'object' ? JSON.stringify(txError) : String(txError);
+
+      console.error('[EnhancedTrade] Transaction confirmed but failed:', errorStr);
+
+      let enhancedError: EnhancedError;
+      if (errorStr.includes('6023') || errorStr.includes('Not enough tokens to sell') || errorStr.includes('not enough tokens')) {
+        enhancedError = {
+          title: 'Insufficient Token Balance',
+          description: 'You don\'t have enough tokens to sell',
+          suggestions: [
+            'Check your token balance',
+            'You may need to buy tokens before selling',
+            'Try selling a smaller percentage',
+          ],
+          canRetry: false,
+          actions: [],
+        };
+      } else if (errorStr.includes('NotAuthorized') || errorStr.includes('6000')) {
+        enhancedError = {
+          title: 'Transaction Authorization Failed',
+          description: 'The transaction was not authorized. This may be a temporary issue.',
+          suggestions: [
+            'Try again in a few seconds',
+            'Check if you have sufficient balance',
+            'Verify your wallet connection',
+          ],
+          canRetry: true,
+        };
+      } else {
+        enhancedError = enhanceError(new ApiError(`Transaction failed: ${errorStr}`, 'TX_FAILED'), {
+          token,
+          amount,
+          slippage: (settings.maxSlippage || 0.4) * 100,
+          priorityFee: settings.priority || 0.0001,
+          poolType: getPoolTypeFromToken(token),
+          mevMode: settings.mevMode,
+          rpcUrl: settings.rpc,
+        });
+      }
+
+      if (toastId) {
+        updateEnhancedToast(toastId, 'error', enhancedError.description, {
+          title: enhancedError.title,
+          suggestions: enhancedError.suggestions,
+          actions: enhancedError.canRetry ? [{
+            label: 'Retry',
+            onClick: () => {
+              if (toastId) {
+                dismissToast(toastId);
+              }
+              executeEnhancedTrade(params);
+            }
+          }] : [],
+          showExplorerLink: true,
+          txHash,
+          duration: 6000,
+        });
+      }
+
+      if (onError) onError(enhancedError);
+      return;
+    }
+
+    if (toastId) {
+      updateEnhancedToast(toastId, 'success', '', {
+        title: `${side === 'buy' ? 'Bought' : 'Sold'} ${token.symbol}!`,
+        description: `Confirmed: Tx ${txHash.substring(0, 8)}...${txHash.substring(txHash.length - 8)}`,
+        showExplorerLink: true,
+        txHash,
+        duration: 6000,
+      });
+    }
+  } catch (confirmationError) {
+    console.warn('[EnhancedTrade] Could not confirm transaction status:', confirmationError);
+    // Leave existing toast message as-is; backend background job will update history when ready.
   }
 }
 

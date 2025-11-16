@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import type { Wallet } from '~/utils/functions';
 import type { WatchWallet, WalletEvent } from '~/utils/walletTracking';
 import { toggleWalletNotifications } from '~/utils/walletTracking';
-import { FaBell, FaBellSlash, FaChartBar, FaTrash } from 'react-icons/fa';
+import { SolanaIcon } from './Footer';
+import { FiBell, FiBarChart2, FiTrash2 } from 'react-icons/fi';
+import { TbChartBubble } from 'react-icons/tb';
+import { IoLogoRss } from 'react-icons/io5';
 
 interface WalletRowProps {
   wallet: Wallet;
   watchedWallet?: WatchWallet;
   events?: WalletEvent[];
   balance?: number;
+  lastActive?: number | null;
   onRemove: (address: string) => void;
   onClick?: (wallet: Wallet) => void;
   onNotificationToggle?: (address: string, enabled: boolean) => void;
@@ -16,30 +20,63 @@ interface WalletRowProps {
 
 function Tooltip({ children, label }: { children: React.ReactNode; label: string }) {
   const [show, setShow] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const triggerRef = React.useRef<HTMLSpanElement>(null);
+
+  const handleMouseEnter = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+      });
+    }
+    setShow(true);
+  };
+
   return (
     <span className="relative flex flex-col items-center">
       <span
-        onMouseEnter={() => setShow(true)}
+        ref={triggerRef}
+        onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setShow(false)}
-        onFocus={() => setShow(true)}
+        onFocus={handleMouseEnter}
         onBlur={() => setShow(false)}
         tabIndex={0}
         className="focus:outline-none"
       >
         {children}
       </span>
-      <span
-        className={`absolute -top-7 left-1/2 -translate-x-1/2 z-50 px-2 py-1 rounded-md bg-neutral-900 text-white text-sm font-normal shadow border border-neutral-700 whitespace-nowrap transition-all duration-200 ${show ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-1 pointer-events-none'}`}
-      >
-        {label}
-      </span>
+      {show && (
+        <span
+          className="fixed px-2 py-1 rounded-md bg-neutral-900 text-white text-[11px] font-normal shadow-lg border border-neutral-700 whitespace-nowrap -translate-x-1/2 -translate-y-full"
+          style={{ 
+            zIndex: 99999,
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+          }}
+        >
+          {label}
+        </span>
+      )}
     </span>
   );
 }
 
-export default function WalletRow({ wallet, watchedWallet, events = [], balance, onRemove, onClick, onNotificationToggle }: WalletRowProps) {
+export default function WalletRow({
+  wallet,
+  watchedWallet,
+  events = [],
+  balance,
+  lastActive,
+  onRemove,
+  onClick,
+  onNotificationToggle,
+}: WalletRowProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [analyticsEnabled, setAnalyticsEnabled] = React.useState(false);
+  const [feedEnabled, setFeedEnabled] = React.useState(false);
   
   // Ref to track if we've loaded from localStorage (prevents backend from overriding)
   const hasLoadedFromStorageRef = React.useRef(false);
@@ -230,12 +267,58 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
         return `${mins} min`;
       } else {
         const hours = Math.floor(diff / hour);
-        return `${hours} hour${hours > 1 ? 's' : ''}`;
+        return `${hours}h`;
       }
     } else {
       const date = new Date(timestamp);
       return isNaN(date.getTime()) ? today : date.toLocaleDateString();
     }
+  };
+
+  const formatLastActive = (timestamp: number | null | undefined) => {
+    if (timestamp === undefined) {
+      return "Loading...";
+    }
+    if (timestamp === null) {
+      return "No activity yet";
+    }
+
+    const now = Date.now();
+    const diff = now - timestamp;
+    if (!Number.isFinite(diff) || diff < 0) {
+      return "Just now";
+    }
+
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    const week = 7 * day;
+    const month = 30 * day;
+    const year = 365 * day;
+
+    if (diff < minute) return "Just now";
+    if (diff < hour) {
+      const mins = Math.floor(diff / minute);
+      return `${mins} min${mins === 1 ? "" : "s"} ago`;
+    }
+    if (diff < day) {
+      const hours = Math.floor(diff / hour);
+      return `${hours}h ago`;
+    }
+    if (diff < week) {
+      const days = Math.floor(diff / day);
+      return `${days} day${days === 1 ? "" : "s"} ago`;
+    }
+    if (diff < month) {
+      const weeks = Math.floor(diff / week);
+      return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
+    }
+    if (diff < year) {
+      const months = Math.floor(diff / month);
+      return `${months} month${months === 1 ? "" : "s"} ago`;
+    }
+    const years = Math.floor(diff / year);
+    return `${years} yr${years === 1 ? "" : "s"} ago`;
   };
 
   return (
@@ -245,7 +328,19 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
     >
       <td className="py-3 px-2">
         <div className="flex w-full items-center gap-4">
-          <span className="w-28 text-xs text-neutral-400">{formatCreated(wallet.createdAt)}</span>
+          <button
+            type="button"
+            className="w-28 flex justify-center text-xs text-neutral-400 hover:text-white transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (wallet.address) {
+                window.open(`https://solscan.io/account/${wallet.address}`, "_blank");
+              }
+            }}
+            title="View wallet on Solscan"
+          >
+            {formatCreated(wallet.createdAt)}
+          </button>
           <div className="flex flex-1 min-w-0 items-start gap-2">
             <span className="text-lg">{wallet.emoji || '💼'}</span>
             <div className="flex flex-col min-w-0">
@@ -262,60 +357,98 @@ export default function WalletRow({ wallet, watchedWallet, events = [], balance,
             </div>
           </div>
           <span className="w-36 text-xs text-neutral-300">
-            {balance !== undefined 
-              ? <span className="text-green-400 font-mono">{balance.toFixed(4)} SOL</span>
-              : watchedWallet 
-                ? <span className="text-yellow-400">Loading...</span>
-                : <span className="text-neutral-500">-</span>}
+            {balance !== undefined ? (
+              <span className="flex items-center gap-1 text-green-400 font-mono">
+                <SolanaIcon size={12} />
+                <span>{balance.toFixed(4)}</span>
+              </span>
+            ) : watchedWallet ? (
+              <span className="text-yellow-400">Loading...</span>
+            ) : (
+              <span className="text-neutral-500">-</span>
+            )}
           </span>
-          <div className="w-40 flex items-center gap-2">
+          <span className="w-28 text-xs text-neutral-300">
+            {formatLastActive(lastActive)}
+          </span>
+          <div className="flex-1 flex items-center justify-end gap-1.5">
+						{/* Bell - Notification Toggle */}
 						<Tooltip label={notificationsEnabled ? "Notifications ON" : "Notifications OFF"}>
 							<button 
-								className={`p-1.5 rounded-md hover:bg-neutral-800 transition-all duration-200 ${isTogglingNotification ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
-								title={notificationsEnabled ? "Click to disable notifications" : "Click to enable notifications"}
+								className={`p-2 rounded-md transition-all duration-200 ${isTogglingNotification ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:bg-neutral-800/50'}`}
 								onClick={handleToggleNotifications}
 								disabled={isTogglingNotification}
 							>
-								{notificationsEnabled ? (
-									<FaBell className="text-sm text-emerald-400" />
-								) : (
-									<FaBellSlash className="text-sm text-neutral-500" />
-								)}
+								<FiBell className={`text-base ${notificationsEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
 							</button>
 						</Tooltip>
-            <Tooltip label="Scan Address">
-              <button className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors cursor-pointer" title="Scan" onClick={() => onClick && onClick(wallet)}>
-                <FaChartBar className="text-sm text-blue-300" />
-              </button>
-            </Tooltip>
-            {showDeleteConfirm ? (
-              <div className="flex gap-1">
-                <button 
-                  className="px-2 py-1 rounded-md bg-red-500 hover:bg-red-600 transition-colors text-white text-xs font-medium cursor-pointer" 
-                  title="Confirm Delete"
-                  onClick={handleConfirmDelete}
-                >
-                  ✓
-                </button>
-                <button 
-                  className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 transition-colors text-white text-xs font-medium cursor-pointer" 
-                  title="Cancel"
-                  onClick={handleCancelDelete}
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <button 
-                className="p-1.5 rounded-md hover:bg-neutral-800 transition-colors cursor-pointer"
-                title="Delete" 
-                onClick={handleDeleteClick}
-              >
-                <FaTrash className="text-sm text-red-400" />
-              </button>
-            )}
+
+						{/* Chart Bubble Icon - Toggle Button */}
+						<Tooltip label={analyticsEnabled ? "Analytics ON" : "Analytics OFF"}>
+							<button 
+								className="p-2 rounded-md hover:bg-neutral-800/50 transition-all duration-200 cursor-pointer"
+								onClick={(e) => {
+									e.stopPropagation();
+									setAnalyticsEnabled(!analyticsEnabled);
+								}}
+							>
+								<TbChartBubble className={`text-base ${analyticsEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
+							</button>
+						</Tooltip>
+
+						{/* RSS Icon - Toggle Button */}
+						<Tooltip label={feedEnabled ? "Feed ON" : "Feed OFF"}>
+							<button 
+								className="p-2 rounded-md hover:bg-neutral-800/50 transition-all duration-200 cursor-pointer"
+								onClick={(e) => {
+									e.stopPropagation();
+									setFeedEnabled(!feedEnabled);
+								}}
+							>
+								<IoLogoRss className={`text-base ${feedEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
+							</button>
+						</Tooltip>
+
+						{/* Chart - Scan Address */}
+						<Tooltip label="Scan Wallet">
+							<button 
+								className="p-2 rounded-md hover:bg-neutral-800/50 transition-all duration-200 cursor-pointer" 
+								onClick={(e) => {
+									e.stopPropagation();
+									onClick && onClick(wallet);
+								}}
+							>
+								<FiBarChart2 className="text-base text-neutral-400 hover:text-pink-500 transition-colors" />
+							</button>
+						</Tooltip>
+
+						{/* Delete */}
+						{showDeleteConfirm ? (
+							<div className="flex gap-1">
+								<button 
+									className="px-2 py-1 rounded-md bg-pink-500 hover:bg-pink-600 transition-colors text-white text-xs font-medium cursor-pointer" 
+									onClick={handleConfirmDelete}
+								>
+									✓
+								</button>
+								<button 
+									className="px-2 py-1 rounded-md bg-neutral-700 hover:bg-neutral-600 transition-colors text-white text-xs font-medium cursor-pointer" 
+									onClick={handleCancelDelete}
+								>
+									✕
+								</button>
+							</div>
+						) : (
+							<Tooltip label="Delete Wallet">
+								<button 
+									className="p-2 rounded-md hover:bg-neutral-800/50 transition-all duration-200 cursor-pointer"
+									onClick={handleDeleteClick}
+								>
+									<FiTrash2 className="text-base text-neutral-400 hover:text-pink-500 transition-colors" />
+								</button>
+							</Tooltip>
+						)}
           </div>
-          <span className="w-24"></span>
         </div>
       </td>
     </tr>

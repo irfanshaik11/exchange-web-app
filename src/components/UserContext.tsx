@@ -6,8 +6,9 @@ import { getUserById, ApiError } from '../utils/api';
 import { showEnhancedToast } from '~/utils/enhancedToast';
 const USER_CACHE_KEY = 'codex_user_info_cache';
 import { getSolBalance } from '~/utils/functions';
-import { clearStoredReferralAccess } from '../utils/referralStorage';
+import { clearStoredReferralAccess, getStoredReferralCodeHint, clearStoredReferralCodeHint } from '../utils/referralStorage';
 import toast from 'react-hot-toast';
+import { recordReferralUsage } from '~/utils/referrals';
 
 
 export interface UserInfo {
@@ -132,6 +133,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const { user: fetchedUser } = await getUserById(token);
       if (fetchedUser) {
         setUser({ bearerToken: token, ...fetchedUser });
+        const referralCode = getStoredReferralCodeHint();
+        if (referralCode && fetchedUser?.id) {
+          try {
+            await recordReferralUsage(String(fetchedUser.id), referralCode);
+            clearStoredReferralCodeHint();
+          } catch (error) {
+            console.warn('Failed to record referral usage', error);
+          }
+        }
       } else {
         Cookies.remove('token');
         setUser(null);

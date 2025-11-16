@@ -29,7 +29,7 @@ const XIcon = ({ size = 14 }: { size?: number }) => (
 );
 
 // Official Solana logo component
-const SolanaIcon = ({ size = 16 }: { size?: number }) => (
+export const SolanaIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 397.7 311.7" fill="currentColor">
     <defs>
       <linearGradient id="solanaGradient" x1="360.8791" y1="351.4553" x2="141.213" y2="-69.2936" gradientUnits="userSpaceOnUse">
@@ -160,7 +160,7 @@ export default function Footer() {
               >
                 <FaWallet size={9} className="sm:w-3 sm:h-3" />
                 <SolanaIcon size={12} />
-                <span className="text-[11px] sm:text-xs font-medium leading-none">{Number.isFinite(solBalance) ? solBalance.toFixed(2) : '0.00'}</span>
+                <span className="text-[11px] sm:text-xs font-medium leading-none">{Number.isFinite(solBalance) ? solBalance.toFixed(4) : '0.0000'}</span>
               </button>
           </div>
         </div>
@@ -329,18 +329,6 @@ export default function Footer() {
             })}
           </div>
         </div>
-      </div>
-      <div
-        className="w-full text-center px-4 py-1 text-xs sm:text-sm"
-        role="alert"
-        style={{
-          backgroundColor: "#ddc13d",
-          color: "#0b0c0e",
-          borderTop: "1px solid #c7ae32",
-        }}
-      >
-        [ This terminal is still under development and not ready for production,&nbsp;
-        <b>use at your own risk!</b> ]
       </div>
       
       {/* Preset Settings Modal */}

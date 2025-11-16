@@ -104,40 +104,110 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return 0;
           };
 
-          // Backend returns timeframe-specific data
-          const volumeForTimeframe = parseFloat(r.volume || '0');
-          const priceChange = parseFloat(r.change || '0') * 100; // Convert to percentage
-          const totalBuys = parseInt(r.buyCount || '0') || 0;
-          const totalSells = parseInt(r.sellCount || '0') || 0;
+          // Detect format: Codex format has 'volume', 'change', 'buyCount', 'sellCount'
+          // Legacy format has 'volume24h', 'priceChange24h', 'score', 'rank'
+          const isCodexFormat = 'volume' in r || 'change' in r || 'buyCount' in r;
+          const isLegacyFormat = 'volume24h' in r || 'priceChange24h' in r || 'score' in r;
           
+          // Handle Codex format (new format)
+          if (isCodexFormat) {
+            const volumeForTimeframe = parseFloat(r.volume || '0');
+            const priceChange = parseFloat(r.change || '0') * 100; // Convert to percentage
+            const totalBuys = parseInt(r.buyCount || '0') || 0;
+            const totalSells = parseInt(r.sellCount || '0') || 0;
+            
+            return {
+              mint: r.mint || null,
+              pair_address: r.pairAddress || r.pair_address || null,
+              name: r.name || '',
+              symbol: r.symbol || '',
+              launchpad_protocol: r.launchpad_protocol || r.launchpadProtocol || r.launchpadName || null,
+              usd_price: parseFloat(r.priceUSD || r.price_usd || '0'),
+              fully_diluted_value: parseFloat(r.marketCap || r.market_cap_usd || '0'),
+              volume_5m: timeframe === '5m' ? volumeForTimeframe : 0,
+              volume_1h: timeframe === '1h' ? volumeForTimeframe : 0,
+              volume_6h: timeframe === '6h' ? volumeForTimeframe : 0,
+              volume_24h: timeframe === '24h' ? volumeForTimeframe : 0,
+              volume_1m: 0,
+              volume_30m: 0,
+              total_liquidity_usd: parseFloat(r.liquidity || r.total_liquidity_usd || '0'),
+              created_at: r.createdAt ? new Date(r.createdAt * 1000).toISOString() : null,
+              logo: r.imageUrl || r.logo || null,
+              image: r.imageUrl || r.image || null,
+              total_buys_5m: timeframe === '5m' ? totalBuys : 0,
+              total_buys_1h: timeframe === '1h' ? totalBuys : 0,
+              total_buys_6h: timeframe === '6h' ? totalBuys : 0,
+              total_buys_24h: timeframe === '24h' ? totalBuys : 0,
+              total_sells_5m: timeframe === '5m' ? totalSells : 0,
+              total_sells_1h: timeframe === '1h' ? totalSells : 0,
+              total_sells_6h: timeframe === '6h' ? totalSells : 0,
+              total_sells_24h: timeframe === '24h' ? totalSells : 0,
+              links: r.links || null,
+            };
+          }
+          
+          // Handle legacy format (fallback when Codex is unavailable)
+          if (isLegacyFormat) {
+            const volume24h = parseFloat(r.volume24h || '0');
+            const priceChange = parseFloat(r.priceChange24h || '0');
+            
+            return {
+              mint: r.mint || null,
+              pair_address: null, // Legacy format doesn't have pair_address
+              name: r.name || '',
+              symbol: r.symbol || '',
+              launchpad_protocol: null,
+              usd_price: parseFloat(r.priceUsd || r.price_usd || '0'),
+              fully_diluted_value: parseFloat(r.marketCapUsd || r.market_cap_usd || '0'),
+              volume_5m: 0,
+              volume_1h: 0,
+              volume_6h: 0,
+              volume_24h: volume24h,
+              volume_1m: 0,
+              volume_30m: 0,
+              total_liquidity_usd: 0, // Legacy format doesn't have liquidity
+              created_at: null,
+              logo: null,
+              image: null,
+              total_buys_5m: 0,
+              total_buys_1h: 0,
+              total_buys_6h: 0,
+              total_buys_24h: 0,
+              total_sells_5m: 0,
+              total_sells_1h: 0,
+              total_sells_6h: 0,
+              total_sells_24h: 0,
+              links: null,
+            };
+          }
+          
+          // Fallback for unknown format
           return {
             mint: r.mint || null,
             pair_address: r.pairAddress || r.pair_address || null,
             name: r.name || '',
             symbol: r.symbol || '',
-            usd_price: parseFloat(r.priceUSD || r.price_usd || '0'),
-            fully_diluted_value: parseFloat(r.marketCap || r.market_cap_usd || '0'),
-            volume_5m: timeframe === '5m' ? volumeForTimeframe : 0,
-            volume_1h: timeframe === '1h' ? volumeForTimeframe : 0,
-            volume_6h: timeframe === '6h' ? volumeForTimeframe : 0,
-            volume_24h: timeframe === '24h' ? volumeForTimeframe : 0,
+            launchpad_protocol: r.launchpad_protocol || r.launchpadProtocol || r.launchpadName || null,
+            usd_price: parseFloat(r.priceUSD || r.priceUsd || r.price_usd || '0'),
+            fully_diluted_value: parseFloat(r.marketCap || r.marketCapUsd || r.market_cap_usd || '0'),
+            volume_5m: 0,
+            volume_1h: 0,
+            volume_6h: 0,
+            volume_24h: parseFloat(r.volume24h || r.volume || '0'),
             volume_1m: 0,
             volume_30m: 0,
             total_liquidity_usd: parseFloat(r.liquidity || r.total_liquidity_usd || '0'),
-            // Media and metadata
             created_at: r.createdAt ? new Date(r.createdAt * 1000).toISOString() : null,
             logo: r.imageUrl || r.logo || null,
             image: r.imageUrl || r.image || null,
-            // Transaction counts - backend returns timeframe-specific counts
-            total_buys_5m: timeframe === '5m' ? totalBuys : 0,
-            total_buys_1h: timeframe === '1h' ? totalBuys : 0,
-            total_buys_6h: timeframe === '6h' ? totalBuys : 0,
-            total_buys_24h: timeframe === '24h' ? totalBuys : 0,
-            total_sells_5m: timeframe === '5m' ? totalSells : 0,
-            total_sells_1h: timeframe === '1h' ? totalSells : 0,
-            total_sells_6h: timeframe === '6h' ? totalSells : 0,
-            total_sells_24h: timeframe === '24h' ? totalSells : 0,
-            // Social links
+            total_buys_5m: 0,
+            total_buys_1h: 0,
+            total_buys_6h: 0,
+            total_buys_24h: 0,
+            total_sells_5m: 0,
+            total_sells_1h: 0,
+            total_sells_6h: 0,
+            total_sells_24h: 0,
             links: r.links || null,
           };
         });

@@ -1008,8 +1008,11 @@ const TableRow: React.FC<{
 
   return (
     <tr 
-      className="cursor-pointer transition-colors border-b" 
-      style={{ borderColor: AX.border }}
+      className="cursor-pointer border-b" 
+      style={{ 
+        borderColor: AX.border,
+        transition: 'none' // Disable all transitions for instant rendering
+      }}
       onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = AX.surface2; }}
       onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
       onClick={onClick}
@@ -1193,6 +1196,14 @@ export default function InterstateTable({
         }
         table {
           table-layout: fixed;
+        }
+        tbody tr {
+          transition: none !important;
+          animation: none !important;
+        }
+        tbody tr td {
+          transition: none !important;
+          animation: none !important;
         }
       `}</style>
       

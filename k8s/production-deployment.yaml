@@ -22,7 +22,7 @@ spec:
             - name: NODE_ENV
               value: "production"
             - name: NEXT_PUBLIC_BACKEND_URL
-              value: "https://backend-service.narrative.trade"
+              value: "https://backend.narrative.trade"
             - name: NEXT_PUBLIC_WEBSOCKET_URL
               value: "https://token-service.narrative.trade"
             - name: NEXT_PUBLIC_IS_BACKEND_DEPLOYED

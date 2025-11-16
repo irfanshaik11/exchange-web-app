@@ -28,7 +28,7 @@ const LowLiquidityWarningDialog: React.FC<LowLiquidityWarningDialogProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-auto">
       <div className="relative w-full max-w-md mx-4 bg-[#1E1F26] rounded-lg border border-[#F97316] shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-[#2A2B33]">
           <div className="flex items-center gap-2">
