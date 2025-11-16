@@ -1,4 +1,4 @@
-memecoin ui
+memecoin UI
 
 
  

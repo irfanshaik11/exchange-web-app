@@ -445,6 +445,37 @@ export const getWaitlistStatus = (params: { userId?: number; walletId?: string }
   });
 };
 
+export const completeAllQuests = (params: {
+  userId?: number;
+  walletId?: string;
+  telegramId?: string;
+}) =>
+  apiFetch<{ waitlist: {
+    id: number;
+    userId?: number | null;
+    walletId?: string | null;
+    waitlistNumber: string; // bigint as string
+    telegramId?: string | null;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+    joinedAt: string;
+    invitedAt?: string | null;
+    activatedAt?: string | null;
+    updatedAt: string;
+  } }>("/api/waitlist/complete", {
+    method: "POST",
+    body: params,
+  });
+
+export const grantWaitlistAccess = (params: { userId?: number; walletId?: string }) =>
+  apiFetch<{ waitlist: {
+    id: number;
+    waitlistNumber: string;
+    status: 'waiting' | 'invited' | 'activated' | 'removed';
+  } }>("/api/waitlist/grant-access", {
+    method: "POST",
+    body: params,
+  });
+
 /* -------------------------------------------------------------------------- */
 /*                               Trade endpoints                              */
 /* -------------------------------------------------------------------------- */
