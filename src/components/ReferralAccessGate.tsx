@@ -171,6 +171,59 @@ export function ReferralAccessGate({
   const [postReplied, setPostReplied] = useState(false);
   const [telegramConnected, setTelegramConnected] = useState(false);
 
+  // Calculate quest progress
+  const questProgressData = useMemo(() => {
+    const quests = [
+      { id: 'twitter', completed: twitterLinked },
+      { id: 'follow', completed: narrativeFollowed },
+      { id: 'like', completed: postLiked },
+      { id: 'repost', completed: postReposted },
+      { id: 'reply', completed: postReplied },
+      { id: 'telegram', completed: telegramConnected },
+    ];
+    
+    const completedCount = quests.filter(q => q.completed).length;
+    const totalQuests = quests.length;
+    const xpPerQuest = 25;
+    const totalXp = completedCount * xpPerQuest;
+    const maxXp = totalQuests * xpPerQuest;
+    const progressPercentage = (completedCount / totalQuests) * 100;
+    
+    // Determine rank based on XP
+    let rank = "Unranked";
+    let nextRankXp = 200;
+    if (totalXp >= 150) {
+      rank = "Master";
+      nextRankXp = 0;
+    } else if (totalXp >= 125) {
+      rank = "Expert";
+      nextRankXp = 150;
+    } else if (totalXp >= 100) {
+      rank = "Advanced";
+      nextRankXp = 125;
+    } else if (totalXp >= 75) {
+      rank = "Intermediate";
+      nextRankXp = 100;
+    } else if (totalXp >= 50) {
+      rank = "Beginner";
+      nextRankXp = 75;
+    } else if (totalXp >= 25) {
+      rank = "Novice";
+      nextRankXp = 50;
+    }
+    
+    return {
+      completedCount,
+      totalQuests,
+      totalXp,
+      maxXp,
+      progressPercentage,
+      rank,
+      nextRankXp,
+      xpNeeded: nextRankXp > 0 ? nextRankXp - totalXp : 0,
+    };
+  }, [twitterLinked, narrativeFollowed, postLiked, postReposted, postReplied, telegramConnected]);
+
   // Wallet hooks
   const phantomWallet = usePhantomWallet();
   const metaMaskWallet = useMetaMaskWallet();
@@ -699,6 +752,33 @@ export function ReferralAccessGate({
           <div className="relative z-[9999] w-full max-w-md px-4 md:px-0 py-2">
             <div className="rounded-xl bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950/90 p-[1px] shadow-[0_40px_120px_rgba(59,130,246,0.12)]">
               <div className="rounded-[calc(1rem-1px)] bg-neutral-950/95 p-4 md:p-5">
+                {/* Progress Bar */}
+                <div className="mb-4 bg-neutral-800/50 rounded-lg p-3 border border-neutral-700/50">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-purple-600/20 border border-purple-500/30 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-white">{questProgressData.rank}</div>
+                      <div className="mt-1">
+                        <div className="w-full h-1.5 bg-neutral-700 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-purple-600 transition-all duration-300"
+                            style={{ width: `${Math.min(questProgressData.progressPercentage, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-1 text-xs text-neutral-400">
+                        {questProgressData.nextRankXp > 0 
+                          ? `Next rank: ${questProgressData.xpNeeded} XP left`
+                          : "Max rank achieved!"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="mb-3">
                   <p className="text-xs uppercase tracking-[0.35em] text-blue-400/80">
                     Join Waitlist
