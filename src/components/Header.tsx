@@ -830,7 +830,7 @@ export default function Header({
             
             <button
               onClick={() => setWatchlistOpen(true)}
-              className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
+              className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
               style={{
                 backgroundColor: '#000000',
                 color: AX.muted,
@@ -857,7 +857,7 @@ export default function Header({
             <div ref={notificationsRef} className="relative">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
+                className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
                 style={{
                   backgroundColor: '#000000',
                   color: AX.muted,
@@ -940,7 +940,7 @@ export default function Header({
                   className="flex items-center gap-1.5 lg:gap-2 h-8 rounded-full border px-2 lg:px-3 transition-all duration-300 ease-out cursor-pointer"
                   style={{
                     backgroundColor: AX.surface,
-                    borderColor: AX.border,
+                    borderColor: '#000000',
                     color: AX.text,
                   }}
                   onMouseEnter={(e) => {
@@ -952,7 +952,7 @@ export default function Header({
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = AX.surface;
-                    e.currentTarget.style.borderColor = AX.border;
+                    e.currentTarget.style.borderColor = '#000000';
                     e.currentTarget.style.boxShadow = "none";
                   }}
                 >
@@ -1317,17 +1317,17 @@ export default function Header({
             </div>
           </div>
 
-          {/* Alert Icon */}
+          {/* Watchlist Icon */}
           <div className="group relative">
             <button
               className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out relative"
               style={{ color: AX.muted }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor =
-                  "rgba(239, 68, 68, 0.08)";
-                e.currentTarget.style.color = "#ef4444";
+                  "rgba(24, 196, 140, 0.08)";
+                e.currentTarget.style.color = AX.mint;
                 e.currentTarget.style.boxShadow =
-                  "0 0 6px rgba(239, 68, 68, 0.25), 0 0 12px rgba(239, 68, 68, 0.12)";
+                  "0 0 6px rgba(24, 196, 140, 0.25), 0 0 12px rgba(24, 196, 140, 0.12)";
                 e.currentTarget.style.transform = "scale(1.05)";
               }}
               onMouseLeave={(e) => {
@@ -1347,17 +1347,10 @@ export default function Header({
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
-              {/* Small notification dot */}
-              <span
-                className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: "#ef4444" }}
-              ></span>
             </button>
-            {/* Custom tooltip for Alerts */}
+            {/* Custom tooltip for Watchlist */}
             <div
               className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
               style={{
@@ -1368,7 +1361,7 @@ export default function Header({
                   "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
               }}
             >
-              Alerts
+              Watchlist
               {/* Tooltip arrow pointing left */}
               <div
                 className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent"
