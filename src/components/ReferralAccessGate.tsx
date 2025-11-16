@@ -15,6 +15,7 @@ import { usePhantomWallet } from "../hooks/usePhantomWallet";
 import { useMetaMaskWallet } from "../hooks/useMetaMaskWallet";
 import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin } from "../utils/api";
 import Cookies from "js-cookie";
+import { FaDiscord } from "react-icons/fa";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -169,7 +170,7 @@ export function ReferralAccessGate({
   const [postLiked, setPostLiked] = useState(false);
   const [postReposted, setPostReposted] = useState(false);
   const [postReplied, setPostReplied] = useState(false);
-  const [telegramConnected, setTelegramConnected] = useState(false);
+  const [discordJoined, setDiscordJoined] = useState(false);
 
   // Calculate quest progress
   const questProgressData = useMemo(() => {
@@ -179,7 +180,7 @@ export function ReferralAccessGate({
       { id: 'like', completed: postLiked },
       { id: 'repost', completed: postReposted },
       { id: 'reply', completed: postReplied },
-      { id: 'telegram', completed: telegramConnected },
+      { id: 'discord', completed: discordJoined },
     ];
     
     const completedCount = quests.filter(q => q.completed).length;
@@ -222,7 +223,7 @@ export function ReferralAccessGate({
       nextRankXp,
       xpNeeded: nextRankXp > 0 ? nextRankXp - totalXp : 0,
     };
-  }, [twitterLinked, narrativeFollowed, postLiked, postReposted, postReplied, telegramConnected]);
+  }, [twitterLinked, narrativeFollowed, postLiked, postReposted, postReplied, discordJoined]);
 
   // Wallet hooks
   const phantomWallet = usePhantomWallet();
@@ -465,7 +466,7 @@ export function ReferralAccessGate({
   const handleLinkTwitter = useCallback(() => {
     const currentPath = router.asPath.split('?')[0];
     const returnUrl = `${currentPath}?twitter_success=true`;
-    window.location.href = `/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`;
+    window.open(`/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`, '_blank');
   }, [router.asPath]);
 
   // Phantom Wallet Login handler
@@ -1027,46 +1028,42 @@ export function ReferralAccessGate({
                     )}
                   </div>
 
-                  {/* Connect Telegram */}
+                  {/* Join Discord */}
                   <div>
                     <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
-                      Connect Telegram
+                      Join Discord
                     </label>
-                    {telegramConnected ? (
+                    {discordJoined ? (
                       <div className="w-full rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <svg className="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.17 1.858-.896 6.654-.896 6.654s-.05.39-.224.468c-.175.078-.437-.039-.437-.039l-1.9-1.336-1.006-.84-1.4.98s-.21.13-.39.078c-.18-.052-.31-.21-.31-.21l-.84-2.11-1.4-4.72s-.09-.22.04-.34c.13-.12.3-.08.3-.08l5.3 3.2 2.1 1.24s.23.13.31.04c.08-.09.05-.27.05-.27l-1-4.94s-.07-.28.12-.35c.19-.07.44.05.44.05l1.5.9 1.4.84s.16.1.26.03c.1-.07.08-.24.08-.24z"/>
-                          </svg>
+                          <FaDiscord className="w-5 h-5 text-blue-400" />
                           <div>
-                            <p className="text-white font-medium">Telegram Connected</p>
-                            <p className="text-xs text-blue-300/80">You're connected to our Telegram</p>
+                            <p className="text-white font-medium">Discord Joined</p>
+                            <p className="text-xs text-blue-300/80">You've joined our Discord</p>
                           </div>
                         </div>
                         <InterstateButton
                           type="button"
                           onClick={() => {
-                            window.open("https://t.me/narrative_hq", "_blank");
+                            window.open("https://discord.gg/QZGmpmvCNE", "_blank");
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
                         >
-                          Open Telegram
+                          Open Discord
                         </InterstateButton>
                       </div>
                     ) : (
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          window.open("https://t.me/narrative_hq", "_blank");
-                          setTelegramConnected(true);
+                          window.open("https://discord.gg/QZGmpmvCNE", "_blank");
+                          setDiscordJoined(true);
                         }}
                         fullWidth
                         className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
                       >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.17 1.858-.896 6.654-.896 6.654s-.05.39-.224.468c-.175.078-.437-.039-.437-.039l-1.9-1.336-1.006-.84-1.4.98s-.21.13-.39.078c-.18-.052-.31-.21-.31-.21l-.84-2.11-1.4-4.72s-.09-.22.04-.34c.13-.12.3-.08.3-.08l5.3 3.2 2.1 1.24s.23.13.31.04c.08-.09.05-.27.05-.27l-1-4.94s-.07-.28.12-.35c.19-.07.44.05.44.05l1.5.9 1.4.84s.16.1.26.03c.1-.07.08-.24.08-.24z"/>
-                        </svg>
-                        Connect Telegram
+                        <FaDiscord className="w-5 h-5" />
+                        Join Discord
                       </InterstateButton>
                     )}
                   </div>
@@ -1076,31 +1073,14 @@ export function ReferralAccessGate({
                 <div className="mt-4 pt-3 border-t border-neutral-700/60">
                   <InterstateButton
                     type="button"
-                    onClick={() => {
-                      const allQuestsCompleted = 
-                        twitterLinked && 
-                        narrativeFollowed && 
-                        postLiked && 
-                        postReposted && 
-                        postReplied && 
-                        telegramConnected;
-                      
-                      if (allQuestsCompleted) {
-                        setShowWaitlist(false);
-                        grantAccess();
-                      } else {
-                        setError("Please complete all quests to continue");
-                      }
-                    }}
+                    onClick={() => {}}
                     fullWidth
                     className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700"
                   >
                     Complete All Quests
                   </InterstateButton>
                   <p className="mt-2 text-xs text-center text-neutral-400">
-                    {twitterLinked && narrativeFollowed && postLiked && postReposted && postReplied && telegramConnected
-                      ? "All quests completed! Click to continue."
-                      : "Complete all quests above to unlock access"}
+                    Click to join the waitlist and get early access
                   </p>
                 </div>
               </div>
@@ -1260,21 +1240,22 @@ export function ReferralAccessGate({
                       </InterstateButton>
                     </div>
 
-                    {/* Connect Telegram */}
+                    {/* Join Discord */}
                     <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="text-white font-medium mb-1">Connect Telegram</div>
+                        <div className="text-white font-medium mb-1">Join Discord</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
                         type="button"
                         onClick={() => {
-                          // TODO: Implement Telegram connection
+                          window.open("https://discord.gg/QZGmpmvCNE", "_blank");
+                          // TODO: Implement Discord join verification
                         }}
                         className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
-                        disabled={questProgress.completedQuests.includes("connect-telegram")}
+                        disabled={questProgress.completedQuests.includes("join-discord")}
                       >
-                        {questProgress.completedQuests.includes("connect-telegram") ? "Completed" : "Connect"}
+                        {questProgress.completedQuests.includes("join-discord") ? "Completed" : "Join"}
                       </InterstateButton>
                     </div>
                   </div>
