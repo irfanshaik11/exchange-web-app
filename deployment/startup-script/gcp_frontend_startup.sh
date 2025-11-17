@@ -84,7 +84,6 @@ npm run typecheck || echo "⚠️ Type checking warnings (non-blocking)"
 # Build Next.js App
 ########################################
 echo "🔨 Building frontend..."
-#npm run build || { echo "⚠️ Build failed, continuing..."; DEPLOY_STATUS="failure"; }
 npm run build
 
 # Verify build directory
@@ -135,7 +134,6 @@ if [ -n "$SLACK_WEBHOOK_URL" ]; then
           \"fields\": [
             { \"title\": \"Project\", \"value\": \"$APP_NAME\", \"short\": true },
             { \"title\": \"Branch\", \"value\": \"$BRANCH\", \"short\": true },
-            { \"title\": \"Event\", \"value\": \"VM Startup Deployment\", \"short\": true },
             { \"title\": \"Log File\", \"value\": \"$LOG_FILE\", \"short\": false }
           ]
         }
