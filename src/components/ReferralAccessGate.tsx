@@ -508,7 +508,11 @@ export function ReferralAccessGate({
     const { twitter_error, twitter_success } = router.query;
     
     if (twitter_success === 'true') {
-      checkTwitterAuth();
+      // Check Twitter auth and show waitlist modal
+      checkTwitterAuth().then(() => {
+        // Show the waitlist (quest) popup after successful Twitter linking
+        setShowWaitlist(true);
+      });
       // Clean up URL
       const [pathPart, searchPart] = router.asPath.split('?');
       if (searchPart) {
