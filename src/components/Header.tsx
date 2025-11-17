@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { FaSearch, FaStar, FaWallet, FaBars, FaTimes } from "react-icons/fa";
+import { FaSearch, FaStar, FaWallet, FaChevronLeft, FaChevronRight, FaBell } from "react-icons/fa";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
@@ -10,6 +10,8 @@ import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiStar } from "react-icons/fi";
 import SearchModal from "./SearchModal";
+import BlockchainSwitcher from "./BlockchainSwitcher";
+import UpdatesModal from "./UpdatesModal";
 import type { Timeframe } from "../pages/index";
 
 /* ---- style palette ---- */
@@ -24,6 +26,34 @@ const AX = {
   mintHover: "#12a877",
   sell: "#FF4D7F",
 };
+
+// Platform updates data
+const PLATFORM_UPDATES = [
+  {
+    id: 'update-1',
+    title: 'Enhanced Real-Time Data',
+    description: 'Experience lightning-fast updates with our improved WebSocket infrastructure for live token tracking.',
+    badge: 'New Feature',
+    badgeColor: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+    image: '/interstate-logo.png',
+  },
+  {
+    id: 'update-2',
+    title: 'Multi-Chain Support',
+    description: 'Track tokens across Solana, BNB Chain, and more. Switch between chains seamlessly with our updated interface.',
+    badge: 'Coming Soon',
+    badgeColor: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+  },
+  {
+    id: 'update-3',
+    title: 'Advanced Filtering',
+    description: 'Find the perfect opportunities with our new advanced filtering options. Sort by liquidity, volume, and more.',
+    badge: 'Improved',
+    badgeColor: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
+    actionText: 'Learn more about filtering',
+    actionLink: 'https://discord.gg/sACYQmCsTJ',
+  },
+];
 
     const navLinks = [
       { name: "Trenches", href: "/pulse" },
@@ -68,13 +98,19 @@ export default function Header({
   const { user, loading: userLoading, solBalance } = useUser();
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [depositInitialTab, setDepositInitialTab] = useState<'convert' | 'deposit' | 'buy' | 'withdraw'>('deposit');
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+  const [isFirstLogin, setIsFirstLogin] = useState(false);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+  const navScrollRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
 
   // State for clipboard token detection
   const [clipboardToken, setClipboardToken] = useState<{
@@ -327,68 +363,79 @@ export default function Header({
   }, [showSearch, searchModalOpen]);
 
   // Handles opening the deposit modal
-  const handleDepositClick = () => {
+  const handleDepositClick = (tab: 'convert' | 'deposit' | 'buy' | 'withdraw' = 'deposit') => {
     const token = Cookies.get("token");
     if (token && !user && !userLoading) {
       // Optionally, refresh user here if needed
     }
+    setDepositInitialTab(tab);
     setDepositOpen(true);
   };
 
-  // Handles opening the withdraw modal
+  // Handles opening the convert tab
+  const handleConvertClick = () => {
+    handleDepositClick('convert');
+  };
+
+  // Handles opening the buy tab
+  const handleBuyClick = () => {
+    handleDepositClick('buy');
+  };
+
+  // Handles opening the withdraw modal (now opens deposit modal with withdraw tab)
   const handleWithdrawClick = () => {
     const token = Cookies.get("token");
     if (token && !user && !userLoading) {
       // Optionally, refresh user here if needed
     }
-    setWithdrawOpen(true);
+    handleDepositClick('withdraw');
   };
 
-  // Close mobile menu when clicking outside or on backdrop
-  useEffect(() => {
-    if (!mobileMenuOpen) {
-      document.body.style.overflow = "";
-      return;
+  // Check if navigation arrows should be shown
+  const checkScrollArrows = useCallback(() => {
+    const nav = navScrollRef.current;
+    if (!nav) return;
+
+    const hasOverflow = nav.scrollWidth > nav.clientWidth;
+    const isAtStart = nav.scrollLeft <= 0;
+    const isAtEnd = nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 1;
+
+    setShowLeftArrow(hasOverflow && !isAtStart);
+    setShowRightArrow(hasOverflow && !isAtEnd);
+  }, []);
+
+  // Scroll navigation left
+  const scrollLeft = () => {
+    if (navScrollRef.current) {
+      navScrollRef.current.scrollBy({ left: -200, behavior: 'smooth' });
     }
+  };
 
-    // Prevent body scroll when menu is open
-    document.body.style.overflow = "hidden";
+  // Scroll navigation right
+  const scrollRight = () => {
+    if (navScrollRef.current) {
+      navScrollRef.current.scrollBy({ left: 200, behavior: 'smooth' });
+    }
+  };
 
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as HTMLElement;
-
-      // Don't close if clicking on the hamburger button itself
-      if (target.closest("[data-mobile-menu-toggle]")) {
-        return;
-      }
-
-      // Don't close if clicking inside the menu
-      if (mobileMenuRef.current && mobileMenuRef.current.contains(target)) {
-        return;
-      }
-
-      // Close if clicking outside (backdrop or elsewhere)
-      setMobileMenuOpen(false);
-    };
-
-    // Add a small delay to avoid immediate closing when opening
-    const timeoutId = setTimeout(() => {
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("touchstart", handleClickOutside);
-    }, 50);
+  // Update arrow visibility on scroll or resize
+  useEffect(() => {
+    checkScrollArrows();
+    
+    const nav = navScrollRef.current;
+    if (nav) {
+      nav.addEventListener('scroll', checkScrollArrows);
+    }
+    
+    window.addEventListener('resize', checkScrollArrows);
 
     return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("touchstart", handleClickOutside);
-      document.body.style.overflow = "";
+      if (nav) {
+        nav.removeEventListener('scroll', checkScrollArrows);
+      }
+      window.removeEventListener('resize', checkScrollArrows);
     };
-  }, [mobileMenuOpen]);
-
-  // Close mobile menu when route changes
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [router.pathname]);
+  }, [checkScrollArrows]);
 
   // Close profile menu when clicking outside
   useEffect(() => {
@@ -410,6 +457,47 @@ export default function Header({
     };
   }, [profileMenuOpen]);
 
+  // Close notifications panel when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        notificationsRef.current &&
+        !notificationsRef.current.contains(event.target as Node)
+      ) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    if (notificationsOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [notificationsOpen]);
+
+  // Show Feature Updates modal only on first login
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user || userLoading) {
+      return;
+    }
+
+    const storageKey = `feature-updates-first-login-${user.id}`;
+    const hasSeenModal = localStorage.getItem(storageKey);
+
+    if (!hasSeenModal) {
+      // Delay to ensure page has loaded
+      setTimeout(() => {
+        setIsFirstLogin(true);
+        setShowUpdatesModal(true);
+      }, 1500);
+      
+      // Mark as seen
+      localStorage.setItem(storageKey, 'true');
+    }
+  }, [user, userLoading]);
+
   return (
     <>
       <header
@@ -417,111 +505,129 @@ export default function Header({
         style={{ backgroundColor: "#0f1012", borderColor: AX.border }}
       >
         <div
-          className="flex max-w-full items-center justify-between border-b px-4 py-2.5"
+          className="flex max-w-full items-center justify-between border-b px-2 md:px-4 py-2.5"
           style={{ backgroundColor: "#06070b", borderColor: AX.border }}
         >
-          <div className="flex min-w-0 items-center gap-3">
-            {/* Mobile hamburger menu button */}
-            <button
-              data-mobile-menu-toggle
-              onClick={(e) => {
-                e.stopPropagation();
-                setMobileMenuOpen(!mobileMenuOpen);
-              }}
-              className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out z-50 relative"
-              style={{
-                backgroundColor: AX.surface,
-                borderColor: AX.border,
-                color: AX.text,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor =
-                  "rgba(24, 196, 140, 0.08)";
-                e.currentTarget.style.borderColor = AX.mint;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = AX.surface;
-                e.currentTarget.style.borderColor = AX.border;
-              }}
-            >
-              {mobileMenuOpen ? <FaTimes size={14} /> : <FaBars size={14} />}
-            </button>
-
+          <div className="flex min-w-0 items-center gap-2 md:gap-3 flex-1 overflow-hidden">
             <Link
               href="/pulse"
-              className="flex items-center text-xl tracking-tight select-none"
+              className="flex items-center text-xl tracking-tight select-none flex-shrink-0"
               style={{ color: AX.text }}
               title="Go to Trenches"
             >
               <img
                 src="/interstate-logo.png"
                 alt="Interstate logo"
-                className="h-auto w-30 scale-90"
+                className="h-auto w-20 sm:w-24 md:w-30 scale-75 md:scale-90"
               />
             </Link>
-            {/* Desktop navigation - hidden on mobile */}
-            <nav
-              className="hidden md:flex ml-6 items-center gap-5"
-              style={{ position: "relative", zIndex: 1000 }}
-            >
-              {navLinks.map((link) => {
-                const isActive =
-                  router.pathname === link.href ||
-                  (link.name === "Trenches" &&
-                    router.pathname.startsWith("/trade/"));
-                return (
-                  <Link
-                    key={link.name}
-                    href={link.href}
-                    onClick={(e) => {
-                      // Use router.push for client-side navigation with fallback
-                      router.push(link.href).catch((err: any) => {
-                        // Fallback to full page navigation if router.push fails
-                        console.error(
-                          "Router.push failed, using fallback:",
-                          err,
-                        );
-                        window.location.href = link.href;
-                      });
-                    }}
-                    className={`px-1.5 py-0.5 text-sm font-medium transition-all duration-300 ease-out rounded ${
-                      isActive ? "border-current" : ""
-                    }`}
-                    style={{
-                      color: isActive ? AX.mint : AX.text,
-                      borderColor: isActive ? AX.mint : "transparent",
-                      position: "relative",
-                      zIndex: 1001,
-                      pointerEvents: "auto",
-                      cursor: "pointer",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.color = AX.mint;
-                        e.currentTarget.style.backgroundColor =
-                          "rgba(112, 224, 176, 0.1)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.color = AX.text;
-                        e.currentTarget.style.backgroundColor = "transparent";
-                      }
-                    }}
-                  >
-                    {link.name}
-                  </Link>
-                );
-              })}
-            </nav>
+            
+            {/* Navigation container with arrows */}
+            <div className="flex items-center gap-1 flex-1 overflow-hidden relative">
+              {/* Left arrow */}
+              {showLeftArrow && (
+                <button
+                  onClick={scrollLeft}
+                  className="flex-shrink-0 h-8 w-8 flex items-center justify-center transition-all duration-300 ease-out z-10"
+                  style={{
+                    color: AX.text,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = AX.mint;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = AX.text;
+                  }}
+                  aria-label="Scroll left"
+                >
+                  <FaChevronLeft size={14} />
+                </button>
+              )}
+
+              {/* Navigation tabs - always visible with horizontal scroll */}
+              <nav
+                ref={navScrollRef}
+                className="flex items-center gap-1 sm:gap-2 xl:gap-3 overflow-x-auto scrollbar-hide flex-1"
+                style={{ position: "relative", zIndex: 1000 }}
+              >
+                {navLinks.map((link) => {
+                  const isActive =
+                    router.pathname === link.href ||
+                    (link.name === "Trenches" &&
+                      router.pathname.startsWith("/trade/"));
+                  return (
+                    <Link
+                      key={link.name}
+                      href={link.href}
+                      onClick={(e) => {
+                        // Use router.push for client-side navigation with fallback
+                        router.push(link.href).catch((err: any) => {
+                          // Fallback to full page navigation if router.push fails
+                          console.error(
+                            "Router.push failed, using fallback:",
+                            err,
+                          );
+                          window.location.href = link.href;
+                        });
+                      }}
+                      className={`px-2 sm:px-3 xl:px-4 py-1.5 text-xs sm:text-sm font-medium transition-all duration-300 ease-out rounded whitespace-nowrap flex-shrink-0`}
+                      style={{
+                        color: isActive ? AX.mint : AX.text,
+                        backgroundColor: isActive ? "rgba(24, 196, 140, 0.1)" : "transparent",
+                        borderColor: "transparent",
+                        position: "relative",
+                        zIndex: 1001,
+                        pointerEvents: "auto",
+                        cursor: "pointer",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isActive) {
+                          e.currentTarget.style.color = AX.mint;
+                          e.currentTarget.style.backgroundColor =
+                            "rgba(112, 224, 176, 0.1)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActive) {
+                          e.currentTarget.style.color = AX.text;
+                          e.currentTarget.style.backgroundColor = "transparent";
+                        }
+                      }}
+                    >
+                      {link.name}
+                    </Link>
+                  );
+                })}
+              </nav>
+
+              {/* Right arrow */}
+              {showRightArrow && (
+                <button
+                  onClick={scrollRight}
+                  className="flex-shrink-0 h-8 w-8 flex items-center justify-center transition-all duration-300 ease-out z-10"
+                  style={{
+                    color: AX.text,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.color = AX.mint;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.color = AX.text;
+                  }}
+                  aria-label="Scroll right"
+                >
+                  <FaChevronRight size={14} />
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 flex-shrink-0">
             {showSearch && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
                 {/* Pill-style search trigger with keycap hint (desktop) */}
                 <button
                   onClick={() => setSearchModalOpen(true)}
-                  className="hidden md:flex items-center gap-2 h-8 rounded-full border px-3 pr-2 transition-all duration-300 ease-out"
+                  className="hidden xl:flex items-center gap-2 h-8 rounded-full border px-3 pr-2 transition-all duration-300 ease-out min-w-[280px]"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -544,17 +650,42 @@ export default function Header({
                 >
                   <FaSearch size={14} />
                   <span className="text-xs text-neutral-400 whitespace-nowrap">
-                    Search tokens…
+                    Search token by name, ticker, or CA...
                   </span>
                   <span className="ml-auto rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">
                     Tab
                   </span>
                 </button>
 
+                {/* Medium search button (for tablets) - shows icon + text without Tab keycap */}
+                <button
+                  onClick={() => setSearchModalOpen(true)}
+                  className="hidden lg:flex xl:hidden items-center gap-1.5 h-8 rounded-full border px-2.5 transition-all duration-300 ease-out min-w-[180px]"
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: AX.border,
+                    color: AX.muted,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(24, 196, 140, 0.08)";
+                    e.currentTarget.style.borderColor = "#18c48c";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.border;
+                  }}
+                >
+                  <FaSearch size={12} />
+                  <span className="text-[11px] text-neutral-400 whitespace-nowrap">
+                    Search
+                  </span>
+                </button>
+
                 {/* Compact icon-only trigger on small screens */}
                 <button
                   onClick={() => setSearchModalOpen(true)}
-                  className="md:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
+                  className="lg:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out flex-shrink-0"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -564,11 +695,11 @@ export default function Header({
                   <FaSearch size={14} />
                 </button>
 
-                {/* Clipboard token button - desktop */}
+                {/* Clipboard token button - large desktop */}
                 {clipboardToken && clipboardToken.imageUrl && (
                   <button
                     onClick={handlePasteCA}
-                    className="hidden md:flex items-center gap-2 h-8 rounded-full border pl-2 pr-2.5 transition-all duration-300 ease-out relative"
+                    className="hidden xl:flex items-center gap-2 h-8 rounded-full border pl-2 pr-2.5 transition-all duration-300 ease-out relative"
                     style={{
                       backgroundColor: AX.surface,
                       borderColor: AX.border,
@@ -627,11 +758,48 @@ export default function Header({
                   </button>
                 )}
 
+                {/* Clipboard token button - medium/tablet - compact version */}
+                {clipboardToken && clipboardToken.imageUrl && (
+                  <button
+                    onClick={handlePasteCA}
+                    className="hidden lg:flex xl:hidden items-center gap-1.5 h-8 rounded-full border pl-1.5 pr-2 transition-all duration-300 ease-out relative"
+                    style={{
+                      backgroundColor: AX.surface,
+                      borderColor: AX.border,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor =
+                        "rgba(24, 196, 140, 0.08)";
+                      e.currentTarget.style.borderColor = "#18c48c";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = AX.surface;
+                      e.currentTarget.style.borderColor = AX.border;
+                    }}
+                  >
+                    <img
+                      src={clipboardToken.imageUrl}
+                      alt="Token"
+                      className="h-6 w-6 rounded-md object-cover flex-shrink-0"
+                      onError={() => setClipboardToken(null)}
+                    />
+                    <span className="text-[11px] font-medium text-white truncate max-w-[60px]">
+                      {clipboardToken.name}
+                    </span>
+                    <IoShieldCheckmarkOutline
+                      size={12}
+                      style={{
+                        color: clipboardToken.isPumpToken ? "#22c55e" : "#eab308",
+                      }}
+                    />
+                  </button>
+                )}
+
                 {/* Clipboard token button - mobile */}
                 {clipboardToken && clipboardToken.imageUrl && (
                   <button
                     onClick={handlePasteCA}
-                    className="md:hidden flex items-center gap-2 h-8 rounded-full border pl-2 pr-2.5 transition-all duration-300 ease-out relative"
+                    className="lg:hidden flex items-center gap-1.5 h-8 rounded-full border pl-1.5 pr-2 transition-all duration-300 ease-out relative flex-shrink-0"
                     style={{
                       backgroundColor: AX.surface,
                       borderColor: AX.border,
@@ -643,202 +811,427 @@ export default function Header({
                       className="h-6 w-6 rounded-md object-cover flex-shrink-0"
                       onError={() => setClipboardToken(null)}
                     />
-                    <span className="text-[11px] font-medium text-white truncate max-w-[80px]">
+                    <span className="text-[11px] font-medium text-white truncate max-w-[50px]">
                       {clipboardToken.name}
                     </span>
-                    <div className="absolute top-0.5 right-0.5 group/shield bg-black/60 rounded-full p-0.5">
-                      <IoShieldCheckmarkOutline
-                        size={11}
-                        style={{
-                          color: clipboardToken.isPumpToken ? "#22c55e" : "#eab308",
-                        }}
-                      />
-                      {/* Tooltip */}
-                      <div className="absolute left-1/2 bottom-full mb-1.5 transform -translate-x-1/2 px-2 py-1 rounded text-[10px] font-medium opacity-0 group-hover/shield:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
-                        style={{
-                          backgroundColor: AX.surface,
-                          color: AX.text,
-                          border: `1px solid ${AX.border}`,
-                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
-                        }}
-                      >
-                        audit
-                        {/* Tooltip arrow */}
-                        <div
-                          className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent"
-                          style={{ borderTopColor: AX.surface }}
-                        ></div>
-                      </div>
-                    </div>
+                    <IoShieldCheckmarkOutline
+                      size={11}
+                      style={{
+                        color: clipboardToken.isPumpToken ? "#22c55e" : "#eab308",
+                      }}
+                    />
                   </button>
                 )}
               </div>
             )}
-            {/* SOL Balance Pill - hidden on mobile (will be in mobile menu) */}
-            {user && (
-              <div
-                className="hidden md:flex items-center gap-1.5 h-8 rounded-full border px-3 transition-all duration-300 ease-out cursor-default"
-                style={{
-                  backgroundColor: AX.surface,
-                  borderColor: AX.border,
-                  color: AX.text,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor =
-                    "rgba(24, 196, 140, 0.08)";
-                  e.currentTarget.style.borderColor = AX.mint;
-                  e.currentTarget.style.boxShadow =
-                    "0 0 8px rgba(24, 196, 140, 0.2)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = AX.surface;
-                  e.currentTarget.style.borderColor = AX.border;
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                <FaWallet size={12} style={{ color: AX.muted }} />
-                <span className="text-xs font-medium">
-                  {solBalance.toFixed(4)}
-                </span>
-                <img
-                  src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                  alt="SOL"
-                  className="w-3 h-3 rounded-full"
-                />
-              </div>
-            )}
-            {/* Deposit/Withdraw buttons - hidden on mobile (will be in mobile menu) */}
-            <button
-              onClick={handleDepositClick}
-              className="hidden md:block ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
-              style={{
-                backgroundColor: AX.mint,
-                color: "#000000",
-                border: "none",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = AX.mintHover;
-                e.currentTarget.style.boxShadow =
-                  "0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)";
-                e.currentTarget.style.transform = "scale(1.02)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = AX.mint;
-                e.currentTarget.style.boxShadow = "none";
-                e.currentTarget.style.transform = "scale(1)";
-              }}
-            >
-              Deposit
-            </button>
-
-            {/* UPDATED WITHDRAW BUTTON (desktop) */}
-            <button
-              onClick={handleWithdrawClick}
-              className="hidden md:block ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
-              style={{
-                backgroundColor: "#0f1012", // dark pill
-                color: "#FFFFFF", // white text
-                border: `1px solid ${AX.border}`, // subtle border
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#1A1B1F";
-                e.currentTarget.style.borderColor = AX.mint;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "#0f1012";
-                e.currentTarget.style.borderColor = AX.border;
-              }}
-            >
-              Withdraw
-            </button>
-
+            
+            {/* Blockchain Switcher */}
+            <BlockchainSwitcher />
+            
             <button
               onClick={() => setWatchlistOpen(true)}
-              className="ml-2 flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
+              className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
               style={{
-                backgroundColor: AX.surface,
-                borderColor: AX.border,
+                backgroundColor: '#000000',
                 color: AX.muted,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor =
                   "rgba(24, 196, 140, 0.08)";
-                e.currentTarget.style.borderColor = AX.mint;
                 e.currentTarget.style.color = AX.mint;
                 e.currentTarget.style.boxShadow = "none";
                 e.currentTarget.style.transform = "scale(1.02)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = AX.surface;
-                e.currentTarget.style.borderColor = AX.border;
+                e.currentTarget.style.backgroundColor = '#000000';
                 e.currentTarget.style.color = AX.muted;
                 e.currentTarget.style.boxShadow = "none";
                 e.currentTarget.style.transform = "scale(1)";
               }}
               title="Watchlist"
             >
-              <FaStar size={14} />
+              <FaStar size={13} />
             </button>
-            {/* User profile/login - visible on all screens */}
-            {user && !userLoading ? (
-              <div
-                ref={profileMenuRef}
-                className="flex group relative cursor-pointer items-center gap-2"
+            
+            {/* Notifications Button */}
+            <div ref={notificationsRef} className="relative">
+              <button
+                onClick={() => setNotificationsOpen(!notificationsOpen)}
+                className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
+                style={{
+                  backgroundColor: '#000000',
+                  color: AX.muted,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor =
+                    "rgba(24, 196, 140, 0.08)";
+                  e.currentTarget.style.color = AX.mint;
+                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.transform = "scale(1.02)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#000000';
+                  e.currentTarget.style.color = AX.muted;
+                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.transform = "scale(1)";
+                }}
+                title="Notifications"
               >
-                {/* Circular profile picture (placeholder) */}
+                <FaBell size={13} />
+              </button>
+
+              {/* Notifications Panel */}
+              {notificationsOpen && (
                 <div
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold text-white select-none"
-                  style={{ backgroundColor: AX.mint }}
-                  onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                >
-                  {user.name ? user.name.charAt(0).toUpperCase() : "U"}
-                </div>
-                <span
-                  className="hidden md:block max-w-[90px] truncate text-sm"
-                  style={{ color: AX.text }}
-                >
-                  {user.name}
-                </span>
-                {/* Dropdown for logout */}
-                <div
-                  className={`absolute top-8 right-0 z-50 min-w-[100px] rounded border px-3 py-1.5 shadow-lg transition-opacity ${
-                    profileMenuOpen
-                      ? "opacity-100"
-                      : "opacity-0 md:group-hover:opacity-100"
-                  }`}
+                  className="fixed top-16 right-4 z-50 rounded-xl border shadow-2xl"
                   style={{
-                    backgroundColor: AX.surface,
-                    borderColor: AX.border,
+                    backgroundColor: "#1a1b20",
+                    borderColor: "#2A2B33",
+                    width: "280px",
+                    minWidth: "280px",
+                    maxWidth: "280px",
+                    maxHeight: "70vh",
                   }}
                 >
-                  <InterstateButton
-                    variant="danger"
-                    size="sm"
-                    className="h-auto w-full border-none bg-transparent px-0 py-0 text-left text-xs font-semibold shadow-none hover:underline"
-                    onClick={() => {
-                      setProfileMenuOpen(false);
-                      if (typeof window !== "undefined") {
-                        document.cookie = "token=; Max-Age=0; path=/;";
-                      }
-                      if (
-                        typeof window !== "undefined" &&
-                        window.localStorage
-                      ) {
-                        window.localStorage.removeItem("token");
-                      }
-                      if (typeof window !== "undefined") {
-                        window.location.reload();
-                      }
+                  {/* Header */}
+                  <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: "#2A2B33" }}>
+                    <h3 className="text-lg font-semibold text-white">Notifications</h3>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          // Clear all notifications logic here
+                          toast.success("All notifications cleared");
+                        }}
+                        className="text-sm text-neutral-400 hover:text-white transition-colors"
+                      >
+                        Clear All
+                      </button>
+                      <button
+                        onClick={() => setNotificationsOpen(false)}
+                        className="text-neutral-400 hover:text-white transition-colors"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-8 flex flex-col items-center justify-center" style={{ minHeight: "300px" }}>
+                    <div className="mb-4 opacity-50">
+                      <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                    </div>
+                    <p className="text-neutral-400 text-base">No Data</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* User profile/login - visible on all screens */}
+            {user && !userLoading ? (
+              <div ref={profileMenuRef} className="relative">
+                {/* Combined Balance + Username Button */}
+                <button
+                  onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+                  className="flex items-center gap-1.5 lg:gap-2 h-8 rounded-full border px-2 lg:px-3 transition-all duration-300 ease-out cursor-pointer"
+                  style={{
+                    backgroundColor: AX.surface,
+                    borderColor: '#000000',
+                    color: AX.text,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor =
+                      "rgba(24, 196, 140, 0.08)";
+                    e.currentTarget.style.borderColor = AX.mint;
+                    e.currentTarget.style.boxShadow =
+                      "0 0 8px rgba(24, 196, 140, 0.2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = '#000000';
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                >
+                  {/* Balance */}
+                  <FaWallet size={11} style={{ color: AX.muted }} />
+                  <span className="text-[11px] lg:text-xs font-medium">
+                    {solBalance.toFixed(2)}
+                  </span>
+                  <img
+                    src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                    alt="SOL"
+                    className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full"
+                  />
+                  {/* Divider */}
+                  <div className="h-4 w-px bg-neutral-700 hidden sm:block"></div>
+                  {/* User Avatar */}
+                  <div
+                    className="hidden sm:flex h-5 w-5 lg:h-6 lg:w-6 items-center justify-center rounded-full text-xs font-bold text-white select-none"
+                    style={{ backgroundColor: AX.mint }}
+                  >
+                    {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                  </div>
+                  {/* Username (hidden on smaller screens) */}
+                  <span
+                    className="hidden lg:block max-w-[60px] xl:max-w-[80px] truncate text-xs"
+                    style={{ color: AX.text }}
+                  >
+                    {user.name}
+                  </span>
+                </button>
+
+                {/* Combined Dropdown */}
+                {profileMenuOpen && (
+                  <div
+                    className="absolute top-10 right-0 z-50 rounded-xl border shadow-2xl"
+                    style={{
+                      backgroundColor: "#0a0b10",
+                      borderColor: "#20232b",
+                      width: "280px",
+                      minWidth: "280px",
+                      maxWidth: "280px",
                     }}
                   >
-                    Logout
-                  </InterstateButton>
-                </div>
+                    <div className="p-4">
+                      {/* User Info Header */}
+                      <div className="flex items-center gap-2 mb-3 pb-3 border-b" style={{ borderColor: "#20232b" }}>
+                        <div
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white select-none"
+                          style={{ backgroundColor: AX.mint }}
+                        >
+                          {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-white truncate">{user.name}</div>
+                          <div className="text-xs text-neutral-400">Account</div>
+                        </div>
+                      </div>
+                      
+                      {/* Total Value */}
+                      <div className="mb-3">
+                        <div className="text-xs text-neutral-400 mb-1">Total Value</div>
+                        <div className="text-2xl font-bold text-white">${(solBalance * 100).toFixed(2)}</div>
+                      </div>
+
+                      {/* Balance Display */}
+                      <div className="flex items-center justify-between mb-4 p-2 rounded-lg" style={{ backgroundColor: "#17191e" }}>
+                        <div className="flex items-center gap-2">
+                          <img
+                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                            alt="SOL"
+                            className="w-4 h-4 rounded-full"
+                          />
+                          <span className="text-sm text-white">≈ {solBalance.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                          </svg>
+                          <img
+                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
+                            alt="SOL"
+                            className="w-4 h-4 rounded-full"
+                          />
+                          <span className="text-sm text-white">0</span>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="space-y-2">
+                        {/* Deposit/Withdraw Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              handleDepositClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+                            style={{
+                              backgroundColor: AX.mint,
+                              color: "#000000",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = AX.mintHover;
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = AX.mint;
+                            }}
+                          >
+                            Deposit
+                          </button>
+                          <button
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              handleWithdrawClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200"
+                            style={{
+                              backgroundColor: "#0f1012",
+                              color: "#ffffff",
+                              border: "1px solid #2A2B33",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1A1B1F";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#0f1012";
+                            }}
+                          >
+                            Withdraw
+                          </button>
+                        </div>
+
+                        {/* Convert/Buy Buttons */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              handleConvertClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5"
+                            style={{
+                              backgroundColor: "#0f1012",
+                              color: "#ffffff",
+                              border: "1px solid #2A2B33",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1A1B1F";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#0f1012";
+                            }}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            Convert
+                          </button>
+                          <button
+                            onClick={() => {
+                              setProfileMenuOpen(false);
+                              handleBuyClick();
+                            }}
+                            className="flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5"
+                            style={{
+                              backgroundColor: "#0f1012",
+                              color: "#ffffff",
+                              border: "1px solid #2A2B33",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#1A1B1F";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#0f1012";
+                            }}
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            Buy
+                          </button>
+                        </div>
+
+                        {/* Referral Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            router.push('/rewards');
+                          }}
+                          className="w-full px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 mt-2 border-t pt-3 flex items-center gap-2"
+                          style={{
+                            backgroundColor: "transparent",
+                            color: AX.text,
+                            borderColor: "#20232b",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.1)";
+                            e.currentTarget.style.color = AX.mint;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                            e.currentTarget.style.color = AX.text;
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                          Referral
+                        </button>
+
+                        {/* Feature Updates Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            setIsFirstLogin(false);
+                            setShowUpdatesModal(true);
+                          }}
+                          className="w-full px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                          style={{
+                            backgroundColor: "transparent",
+                            color: AX.text,
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.1)";
+                            e.currentTarget.style.color = AX.mint;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                            e.currentTarget.style.color = AX.text;
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          Feature Updates
+                        </button>
+
+                        {/* Logout Button */}
+                        <button
+                          onClick={() => {
+                            setProfileMenuOpen(false);
+                            if (typeof window !== "undefined") {
+                              document.cookie = "token=; Max-Age=0; path=/;";
+                            }
+                            if (
+                              typeof window !== "undefined" &&
+                              window.localStorage
+                            ) {
+                              window.localStorage.removeItem("token");
+                            }
+                            if (typeof window !== "undefined") {
+                              window.location.reload();
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center gap-2"
+                          style={{
+                            backgroundColor: "transparent",
+                            color: "#ef4444",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "transparent";
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                          </svg>
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               !userLoading && (
                 <button
-                  className="ml-2 px-3 py-1.5 text-sm font-medium rounded-full transition-all duration-300 ease-out"
+                  className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-medium rounded-full transition-all duration-300 ease-out flex-shrink-0"
                   style={{
                     backgroundColor: AX.mint,
                     color: "#000000",
@@ -924,169 +1317,65 @@ export default function Header({
             </div>
           </div>
 
+          {/* Watchlist Icon */}
+          <div className="group relative">
+            <button
+              className="cursor-pointer rounded p-0.5 transition-all duration-300 ease-out relative"
+              style={{ color: AX.muted }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor =
+                  "rgba(24, 196, 140, 0.08)";
+                e.currentTarget.style.color = AX.mint;
+                e.currentTarget.style.boxShadow =
+                  "0 0 6px rgba(24, 196, 140, 0.25), 0 0 12px rgba(24, 196, 140, 0.12)";
+                e.currentTarget.style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "transparent";
+                e.currentTarget.style.color = AX.muted;
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.transform = "scale(1)";
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+            </button>
+            {/* Custom tooltip for Watchlist */}
+            <div
+              className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
+              style={{
+                backgroundColor: AX.surface,
+                color: AX.text,
+                border: `1px solid ${AX.border}`,
+                boxShadow:
+                  "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+              }}
+            >
+              Watchlist
+              {/* Tooltip arrow pointing left */}
+              <div
+                className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent"
+                style={{ borderRightColor: AX.surface }}
+              ></div>
+            </div>
+          </div>
+
           <div className="h-4 border-r" style={{ borderColor: AX.border }}>
             {" "}
           </div>
         </div>
-
-        {/* Mobile Menu - slides from left to right */}
-        <div
-          ref={mobileMenuRef}
-          className={`md:hidden fixed top-0 left-0 bottom-0 z-50 transition-all duration-300 ease-out overflow-y-auto ${
-            mobileMenuOpen
-              ? "opacity-100 translate-x-0"
-              : "opacity-0 -translate-x-full pointer-events-none"
-          }`}
-          style={{
-            backgroundColor: AX.bg,
-            borderRight: `1px solid ${AX.border}`,
-            width: "80%",
-            maxWidth: "320px",
-            height: "100vh",
-          }}
-        >
-          {/* Close button at top */}
-          <div
-            className="flex justify-end items-center px-4 py-3 border-b"
-            style={{ borderColor: AX.border }}
-          >
-            <button
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out"
-              style={{
-                backgroundColor: AX.surface,
-                borderColor: AX.border,
-                color: AX.text,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor =
-                  "rgba(24, 196, 140, 0.08)";
-                e.currentTarget.style.borderColor = AX.mint;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = AX.surface;
-                e.currentTarget.style.borderColor = AX.border;
-              }}
-            >
-              <FaTimes size={14} />
-            </button>
-          </div>
-
-          <div className="px-4 pb-4">
-            {/* Navigation Links */}
-            <nav className="flex flex-col gap-1 mb-4">
-              {navLinks.map((link) => {
-                const isActive =
-                  router.pathname === link.href ||
-                  (link.name === "Trenches" &&
-                    router.pathname.startsWith("/trade/"));
-                return (
-                  <Link
-                    key={link.name}
-                    href={link.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="px-4 py-3 text-base font-medium transition-all duration-200 rounded-lg"
-                    style={{
-                      color: isActive ? AX.mint : AX.text,
-                      backgroundColor: isActive
-                        ? "rgba(24, 196, 140, 0.1)"
-                        : "transparent",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.backgroundColor =
-                          "rgba(112, 224, 176, 0.08)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.backgroundColor = "transparent";
-                      }
-                    }}
-                  >
-                    {link.name}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            <div
-              className="border-t pt-4 mb-4"
-              style={{ borderColor: AX.border }}
-            >
-              {/* SOL Balance */}
-              {user && (
-                <div
-                  className="flex items-center gap-2 px-4 py-3 rounded-lg mb-2"
-                  style={{
-                    backgroundColor: AX.surface,
-                    color: AX.text,
-                  }}
-                >
-                  <FaWallet size={14} style={{ color: AX.muted }} />
-                  <span className="text-sm font-medium">
-                    {solBalance.toFixed(4)} SOL
-                  </span>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-2 px-4">
-                <button
-                  onClick={() => {
-                    handleDepositClick();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200"
-                  style={{
-                    backgroundColor: AX.mint,
-                    color: "#000000",
-                  }}
-                >
-                  Deposit
-                </button>
-                {/* UPDATED WITHDRAW BUTTON (mobile) */}
-                <button
-                  onClick={() => {
-                    handleWithdrawClick();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200"
-                  style={{
-                    backgroundColor: "#0f1012",
-                    color: "#FFFFFF",
-                    border: `1px solid ${AX.border}`,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = "#1A1B1F";
-                    e.currentTarget.style.borderColor = AX.mint;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "#0f1012";
-                    e.currentTarget.style.borderColor = AX.border;
-                  }}
-                >
-                  Withdraw
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Backdrop overlay when mobile menu is open */}
-        <div
-          className={`md:hidden fixed inset-0 z-40 transition-opacity duration-300 ${
-            mobileMenuOpen
-              ? "opacity-100 pointer-events-auto"
-              : "opacity-0 pointer-events-none"
-          }`}
-          style={{
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-          }}
-          onClick={() => setMobileMenuOpen(false)}
-        />
       </header>
-      <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} />
+      <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} initialTab={depositInitialTab} />
       <WithdrawModal
         isOpen={withdrawOpen}
         onClose={() => setWithdrawOpen(false)}
@@ -1153,6 +1442,17 @@ export default function Header({
           if (setSearch) setSearch(trimmed);
         }}
       />
+      {/* Updates Modal */}
+      {showUpdatesModal && (
+        <UpdatesModal
+          onClose={() => {
+            setShowUpdatesModal(false);
+            setIsFirstLogin(false);
+          }}
+          updates={PLATFORM_UPDATES}
+          storageKey={isFirstLogin ? "" : "header-updates-viewed"}
+        />
+      )}
     </>
   );
 }

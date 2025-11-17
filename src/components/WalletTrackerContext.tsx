@@ -11,7 +11,8 @@ import {
 import { useUser } from './UserContext';
 
 const HISTORY_LIMIT = 50;
-const HISTORY_WINDOW_MS = 60 * 60 * 1000;
+// Use 7 days window to ensure backfilled transactions are included
+const HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 const LIVE_TRADES_CACHE_PREFIX = 'walletTracker:liveTrades';
 const LIVE_TRADES_CACHE_MAX_ITEMS = HISTORY_LIMIT;

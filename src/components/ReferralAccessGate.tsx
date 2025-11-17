@@ -176,6 +176,7 @@ export function ReferralAccessGate({
   const [twitterLinked, setTwitterLinked] = useState(false);
   const [twitterUsername, setTwitterUsername] = useState<string | null>(null);
   const [checkingTwitter, setCheckingTwitter] = useState(false);
+  const [telegramUsername, setTelegramUsername] = useState("");
   const [narrativeFollowed, setNarrativeFollowed] = useState(false);
   const [postLiked, setPostLiked] = useState(false);
   const [postReposted, setPostReposted] = useState(false);
@@ -559,7 +560,11 @@ export function ReferralAccessGate({
   }, [router.isReady, router.query.number]);
 
   // Handle Twitter linking
-  const handleLinkTwitter = useCallback(() => {
+  const handleLinkTwitter = useCallback((e?: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent any default behavior and stop propagation
+    e?.preventDefault();
+    e?.stopPropagation();
+    
     // Mark as completed immediately when button is clicked
     setTwitterLinked(true);
     const currentPath = router.asPath.split('?')[0];
@@ -908,7 +913,11 @@ export function ReferralAccessGate({
                     
                     // TODO: Submit waitlist data to backend
                     // For now, just log the data and grant access
-                    console.log("Waitlist submission:", waitlistForm);
+                    const submissionData = {
+                      ...waitlistForm,
+                      telegram: telegramUsername,
+                    };
+                    console.log("Waitlist submission:", submissionData);
                     
                     // Simulate API call
                     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -1177,6 +1186,25 @@ export function ReferralAccessGate({
                       </InterstateButton>
                     )}
                   </div>
+
+                  {/* Telegram Username Input */}
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.24em] text-neutral-500 mb-1">
+                      Telegram Username
+                    </label>
+                    <input
+                      type="text"
+                      value={telegramUsername}
+                      onChange={(e) => {
+                        setTelegramUsername(e.target.value);
+                        setWaitlistForm({ ...waitlistForm, telegram: e.target.value });
+                      }}
+                      placeholder="@username"
+                      className="w-full rounded-lg border border-neutral-700/60 bg-neutral-900/70 px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                      disabled={waitlistSubmitting}
+                    />
+                  </div>
+
                 </form>
 
                 {/* Complete all quests button */}
@@ -1195,7 +1223,7 @@ export function ReferralAccessGate({
                       setShowCongratsModal(true);
                     }}
                     fullWidth
-                    disabled={questProgressData.completedCount < questProgressData.totalQuests}
+                    disabled={questProgressData.completedCount < questProgressData.totalQuests || !telegramUsername.trim()}
                     className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-purple-600"
                   >
                     Complete All Quests
@@ -1203,6 +1231,8 @@ export function ReferralAccessGate({
                   <p className="mt-2 text-xs text-center text-neutral-400">
                     {questProgressData.completedCount < questProgressData.totalQuests
                       ? `Complete all quests above to continue (${questProgressData.completedCount}/${questProgressData.totalQuests})`
+                      : !telegramUsername.trim()
+                      ? "Please enter your Telegram username to continue"
                       : "Click to join the waitlist and get early access"}
                   </p>
                 </div>
@@ -1510,4 +1540,3 @@ export function ReferralAccessGate({
     </ReferralAccessContext.Provider>
   );
 }
-

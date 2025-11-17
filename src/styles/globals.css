@@ -28,6 +28,16 @@ html, body {
   display: none;
 }
 
+/* Utility class to hide scrollbar while maintaining scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
 /* TradingView Widget Styling - Official Look */
 .tradingview-widget-container {
   background-color: #131722 !important;
@@ -170,4 +180,26 @@ body {
 /* Optional: Hide scrollbar buttons/arrows for a cleaner look */
 .custom-scrollbar::-webkit-scrollbar-button {
   display: none;
+}
+
+/* Jupiter Terminal Styling */
+#jupiter-swap-container {
+  --jup-bg-primary: #0a0b0f;
+  --jup-bg-secondary: #1a1b20;
+  --jup-bg-tertiary: #2A2B33;
+  --jup-text-primary: #E6E7EA;
+  --jup-text-secondary: #9CA3AF;
+  --jup-accent: #18c48c;
+  --jup-border-color: #2A2B33;
+}
+
+#jupiter-swap-container * {
+  transition: none !important;
+}
+
+/* Ensure Jupiter widget fits properly in the modal */
+#jupiter-swap-container iframe {
+  border: none !important;
+  border-radius: 1.5rem !important;
+  background-color: #0a0b0f !important;
 }

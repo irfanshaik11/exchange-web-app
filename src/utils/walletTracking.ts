@@ -273,11 +273,18 @@ export async function removeTrackedWallet(address: string, userId?: string): Pro
       method: 'DELETE',
     });
     
+    const body = await response.json().catch(() => ({}));
+    
     if (!response.ok) {
-      const ct = response.headers.get('content-type') || '';
-      const body = ct.includes('application/json') ? await response.json().catch(() => ({})) : await response.text().catch(() => '');
-      const msg = typeof body === 'object' && body && (body as any).error ? (body as any).error : (typeof body === 'string' && body.trim().startsWith('<') ? `HTTP ${response.status} ${response.statusText}` : (typeof body === 'string' ? body : 'Failed to remove wallet'));
+      const msg = typeof body === 'object' && body && (body as any).error 
+        ? (body as any).error 
+        : `HTTP ${response.status} ${response.statusText}`;
       throw new Error(msg || 'Failed to remove wallet');
+    }
+    
+    // Verify that a wallet was actually deleted
+    if (body.deleted === 0 || (body.ok && body.deleted === 0)) {
+      throw new Error('Wallet not found in watchlist');
     }
   } catch (error) {
     console.error('Error removing wallet:', error);

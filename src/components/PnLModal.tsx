@@ -51,6 +51,11 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
     losingTrades: 0,
   });
   const [chartData, setChartData] = useState<{ x: number; y: number }[]>([]);
+  
+  // Draggable state
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   // Fetch SOL price using Pyth Network
   useEffect(() => {
@@ -81,6 +86,40 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
     };
     fetchSolPrice();
   }, []);
+
+  // Drag handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        setPosition({
+          x: e.clientX - dragStart.x,
+          y: e.clientY - dragStart.y,
+        });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragStart]);
 
   // Fetch positions and calculate metrics (same as portfolio page)
   useEffect(() => {
@@ -144,12 +183,15 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
 
   const modalContent = (
     <div 
-      className="fixed top-0 left-0 z-[9999] w-96"
+      className="fixed z-[9999] w-96"
       style={{
         background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0f0f0f 100%)',
         border: '1px solid #2a2a2a',
-        borderRadius: '0 0 12px 0',
+        borderRadius: '12px',
         boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        userSelect: isDragging ? 'none' : 'auto',
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -157,14 +199,19 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
       {/* Close button - only visible on hover */}
       {isHovered && (
         <button
-          onClick={onClose}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
           className="absolute top-2 right-2 text-gray-400 hover:text-white transition-colors z-10"
+          style={{ cursor: 'pointer' }}
         >
           <FaTimes size={12} />
         </button>
       )}
 
-      {/* Top Section with Neon Glow Background */}
+      {/* Top Section with Neon Glow Background - Drag Handle */}
       <div 
         className="relative h-40"
         style={{
@@ -176,8 +223,11 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
             radial-gradient(circle at 60% 70%, rgba(0, 150, 60, 0.4) 0%, transparent 40%)
           `,
           backgroundSize: '100% 100%, 300px 300px, 250px 250px, 200px 200px, 150px 150px',
-          backgroundPosition: 'center, 20% 80%, 80% 20%, 40% 40%, 60% 70%'
+          backgroundPosition: 'center, 20% 80%, 80% 20%, 40% 40%, 60% 70%',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          borderRadius: '12px 12px 0 0',
         }}
+        onMouseDown={handleMouseDown}
       >
         {/* Minimal overlay for text readability */}
         <div className="absolute inset-0 bg-black bg-opacity-10"></div>
