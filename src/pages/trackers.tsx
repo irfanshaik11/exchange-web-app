@@ -1330,7 +1330,7 @@ export default function TrackersPage() {
                         <div className="flex-1 flex justify-center">
                           <input
                             type="text"
-                            placeholder="Search by address..."
+                            placeholder="Search by address"
                             className="w-full max-w-md rounded-full border border-neutral-800 bg-[#050608] px-4 py-1 text-xs text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none"
                             disabled={activeTab === 1}
                             value={searchTerm}
@@ -1685,7 +1685,7 @@ export default function TrackersPage() {
                                         MC
                                       </th>
                                       <th className="w-28 px-2 py-2 text-center text-sm text-neutral-400">
-                                        Action
+                                        Quick Buy
                                       </th>
                                     </tr>
                                   </thead>
@@ -1780,7 +1780,22 @@ export default function TrackersPage() {
                                       return (
                                         <tr
                                           key={`${trade.tx}-${idx}`}
-                                          className="border-b border-neutral-800/50 transition-colors duration-300 hover:bg-neutral-900/40"
+                                          className="group border-b border-neutral-800/50 transition-all duration-300 relative"
+                                          style={{
+                                            backgroundColor: trade.side === "buy" 
+                                              ? "rgba(34, 197, 94, 0.08)" 
+                                              : "rgba(239, 68, 68, 0.08)",
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = trade.side === "buy"
+                                              ? "rgba(34, 197, 94, 0.15)"
+                                              : "rgba(239, 68, 68, 0.15)";
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = trade.side === "buy"
+                                              ? "rgba(34, 197, 94, 0.08)"
+                                              : "rgba(239, 68, 68, 0.08)";
+                                          }}
                                         >
                                           <td className="w-20 px-2 py-2 text-neutral-400">
                                             {timeAgo}
@@ -1980,16 +1995,34 @@ export default function TrackersPage() {
                                               return `$${formatMarketCap(marketCap)}`;
                                             })()}
                                           </td>
-                                      <td className="w-28 px-2 py-2 text-center">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleQuickBuy(trade);
-                                          }}
-                                          className="bg-emerald-500 hover:bg-emerald-600 text-black font-medium py-1.5 px-3 rounded-lg text-xs transition-colors whitespace-nowrap"
-                                        >
-                                          Buy {quickBuyAmount} SOL
-                                        </button>
+                                      <td className="w-28 px-2 py-2">
+                                        <div className="flex items-center justify-center">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleQuickBuy(trade);
+                                            }}
+                                            className="flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold transition-all duration-200 ease-out opacity-0 group-hover:opacity-100 z-50 shadow-sm whitespace-nowrap"
+                                            style={{ 
+                                              backgroundColor: '#18c48c',
+                                              color: '#000000',
+                                              border: '1px solid rgba(0,0,0,0.15)'
+                                            }}
+                                            onMouseEnter={(e) => {
+                                              e.currentTarget.style.backgroundColor = '#12a877';
+                                              e.currentTarget.style.transform = 'translateY(-1px)';
+                                              e.currentTarget.style.boxShadow = '0 4px 14px rgba(112, 224, 176, 0.25)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.currentTarget.style.backgroundColor = '#18c48c';
+                                              e.currentTarget.style.transform = 'translateY(0)';
+                                              e.currentTarget.style.boxShadow = 'none';
+                                            }}
+                                          >
+                                            <HiLightningBolt className="text-black" size={14} />
+                                            <span>{quickBuyAmount} SOL</span>
+                                          </button>
+                                        </div>
                                       </td>
                                         </tr>
                                       );
