@@ -565,11 +565,37 @@ export function ReferralAccessGate({
     e?.preventDefault();
     e?.stopPropagation();
     
-    // Mark as completed immediately when button is clicked
-    setTwitterLinked(true);
+    // Calculate popup position (centered on screen)
+    const width = 600;
+    const height = 700;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    
+    // Popup window features
+    const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes,status=no`;
+    
+    // Prepare auth URL
     const currentPath = router.asPath.split('?')[0];
     const returnUrl = `${currentPath}?twitter_success=true`;
-    window.open(`/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`, '_blank');
+    const authUrl = `/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`;
+    
+    // Open popup window
+    const popup = window.open(authUrl, 'TwitterAuth', features);
+    
+    // Focus the popup window
+    if (popup) {
+      popup.focus();
+      
+      // Poll to detect when popup closes
+      const pollTimer = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(pollTimer);
+          // Check if authentication was successful by looking at URL params
+          // The success will be handled by the useEffect that watches for twitter_success param
+          console.log('Twitter auth popup closed');
+        }
+      }, 500);
+    }
   }, [router.asPath]);
 
   // Phantom Wallet Login handler
