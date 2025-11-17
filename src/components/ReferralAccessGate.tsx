@@ -184,6 +184,8 @@ export function ReferralAccessGate({
   const [discordJoined, setDiscordJoined] = useState(false);
   const [showCongratsModal, setShowCongratsModal] = useState(false);
   const [waitlistNumber, setWaitlistNumber] = useState<number | null>(null);
+  const [showValidatingPopup, setShowValidatingPopup] = useState(false);
+  const [wasWindowBlurred, setWasWindowBlurred] = useState(false);
 
   // Calculate quest progress
   const questProgressData = useMemo(() => {
@@ -535,6 +537,75 @@ export function ReferralAccessGate({
       }
     }
   }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth]);
+
+  // Reset blur state when waitlist modal closes
+  useEffect(() => {
+    if (!showWaitlist) {
+      setWasWindowBlurred(false);
+      setShowValidatingPopup(false);
+    }
+  }, [showWaitlist]);
+
+  // Detect when user returns to the page after opening quest links
+  useEffect(() => {
+    if (!showWaitlist) return;
+
+    const handleBlur = () => {
+      setWasWindowBlurred(true);
+    };
+
+    const handleFocus = async () => {
+      if (wasWindowBlurred && showWaitlist) {
+        // Show validating popup
+        setShowValidatingPopup(true);
+        
+        // Verify quest status
+        await checkTwitterAuth();
+        
+        // Check follow, like, repost, reply status via API
+        try {
+          const [followRes, likeRes, repostRes, replyRes] = await Promise.all([
+            fetch('/api/twitter/check-follow').catch(() => null),
+            fetch('/api/twitter/check-like').catch(() => null),
+            fetch('/api/twitter/check-retweet').catch(() => null),
+            fetch('/api/twitter/check-reply').catch(() => null),
+          ]);
+
+          if (followRes?.ok) {
+            const data = await followRes.json();
+            if (data.following) setNarrativeFollowed(true);
+          }
+          if (likeRes?.ok) {
+            const data = await likeRes.json();
+            if (data.liked) setPostLiked(true);
+          }
+          if (repostRes?.ok) {
+            const data = await repostRes.json();
+            if (data.retweeted) setPostReposted(true);
+          }
+          if (replyRes?.ok) {
+            const data = await replyRes.json();
+            if (data.replied) setPostReplied(true);
+          }
+        } catch (error) {
+          console.error('Error checking quest status:', error);
+        }
+
+        // Hide validating popup after a delay
+        setTimeout(() => {
+          setShowValidatingPopup(false);
+        }, 2000);
+      }
+    };
+
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [showWaitlist, wasWindowBlurred, checkTwitterAuth]);
 
   // Retrieve waitlist number from URL query parameter or sessionStorage
   useEffect(() => {
@@ -1334,6 +1405,27 @@ export function ReferralAccessGate({
                     Return Home
                   </InterstateButton>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Validating Popup */}
+      {showValidatingPopup && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-neutral-950/50 backdrop-blur-sm">
+          <div className="relative bg-neutral-900/95 border border-neutral-700/50 rounded-2xl p-8 shadow-2xl min-w-[280px]">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              {/* X Logo */}
+              <div className="w-16 h-16 flex items-center justify-center">
+                <svg className="w-full h-full text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </div>
+              {/* Loading Text */}
+              <div className="flex flex-col items-center space-y-2">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                <p className="text-base font-medium text-white">Validating</p>
               </div>
             </div>
           </div>
