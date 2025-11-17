@@ -629,7 +629,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
           onChange={(e) => handleQueryChange(e.target.value)}
           onKeyDown={handleInputKeyDown}
           placeholder="Search by name, ticker, or CA… (type to search)"
-          className="w-full bg-black text-[20px] outline-none placeholder:text-neutral-500"
+          className="w-full bg-transparent text-[20px] outline-none placeholder:text-neutral-500"
         />
         <div className="absolute top-1/2 right-4 -translate-y-1/2 flex items-center gap-1">
           <span className="rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">Tab</span>

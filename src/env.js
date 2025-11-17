@@ -12,6 +12,9 @@ export const env = createEnv({
     X_API_KEY: z.string(),
     X_API_KEY_SECRET: z.string(),
     X_BEARER_TOKEN: z.string(),
+    X_CLIENT_ID: z.string(),
+    X_CLIENT_SECRET: z.string(),
+    X_REDIRECT_URI: z.string().url(),
   },
 
   /**
@@ -51,6 +54,9 @@ export const env = createEnv({
     X_API_KEY: process.env.X_API_KEY,
     X_API_KEY_SECRET: process.env.X_API_KEY_SECRET,
     X_BEARER_TOKEN: process.env.X_BEARER_TOKEN,
+    X_CLIENT_ID: process.env.X_CLIENT_ID,
+    X_CLIENT_SECRET: process.env.X_CLIENT_SECRET,
+    X_REDIRECT_URI: process.env.X_REDIRECT_URI,
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
     NEXT_PUBLIC_GO_SERVICE_URL: process.env.NEXT_PUBLIC_GO_SERVICE_URL,
     NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL,
