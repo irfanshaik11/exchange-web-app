@@ -565,38 +565,37 @@ export function ReferralAccessGate({
     e?.preventDefault();
     e?.stopPropagation();
     
-    // Calculate popup position (centered on screen)
-    const width = 600;
-    const height = 700;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
-    
-    // Popup window features
-    const features = `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes,status=no`;
-    
     // Prepare auth URL
     const currentPath = router.asPath.split('?')[0];
     const returnUrl = `${currentPath}?twitter_success=true`;
     const authUrl = `/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`;
     
-    // Open popup window
-    const popup = window.open(authUrl, 'TwitterAuth', features);
-    
-    // Focus the popup window
-    if (popup) {
-      popup.focus();
-      
-      // Poll to detect when popup closes
-      const pollTimer = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(pollTimer);
-          // Check if authentication was successful by looking at URL params
-          // The success will be handled by the useEffect that watches for twitter_success param
-          console.log('Twitter auth popup closed');
-        }
-      }, 500);
-    }
+    // Redirect in the same window/tab
+    window.location.href = authUrl;
   }, [router.asPath]);
+
+  // Handle Twitter disconnecting
+  const handleDisconnectTwitter = useCallback(async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent any default behavior and stop propagation
+    e?.preventDefault();
+    e?.stopPropagation();
+    
+    try {
+      const response = await fetch('/api/twitter/disconnect', {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        // Update local state
+        setTwitterLinked(false);
+        setTwitterUsername(null);
+      } else {
+        console.error('Failed to disconnect Twitter account');
+      }
+    } catch (error) {
+      console.error('Error disconnecting Twitter account:', error);
+    }
+  }, []);
 
   // Phantom Wallet Login handler
   const handlePhantomLogin = useCallback(async () => {
@@ -975,10 +974,10 @@ export function ReferralAccessGate({
                         </div>
                         <InterstateButton
                           type="button"
-                          onClick={handleLinkTwitter}
-                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                          onClick={handleDisconnectTwitter}
+                          className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white"
                         >
-                          Re-link
+                          Disconnect
                         </InterstateButton>
                       </div>
                     ) : (

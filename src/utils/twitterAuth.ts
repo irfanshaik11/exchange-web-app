@@ -144,8 +144,3 @@ export async function refreshAccessToken(
 
   return await response.json();
 }
-
-
-
-
-
