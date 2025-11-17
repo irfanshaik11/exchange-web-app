@@ -835,17 +835,55 @@ export default function TrackersPage() {
         setWallets([]);
         setWalletBalances({});
         
-        // Clear cache
+        // Clear wallet cache
         if (typeof window !== "undefined" && user?.id) {
           const cacheKey = `walletTracker:wallets:${user.id}`;
           localStorage.removeItem(cacheKey);
         }
+        
+        // Clear live trades cache
+        if (typeof window !== "undefined") {
+          const userKey = user?.id ? getLiveTradesCacheKey(user.id) : null;
+          const globalKey = getLiveTradesCacheKey();
+          if (userKey) localStorage.removeItem(userKey);
+          localStorage.removeItem(globalKey);
+        }
+        
+        // Clear cached live trades state
+        setCachedLiveTrades([]);
         
         // Refresh global watched wallets
         await refreshWatchedWallets();
       } else {
         // Remove single wallet
         await removeTrackedWallet(addressToRemove, user?.id);
+        
+        // Filter out trades from deleted wallet
+        setCachedLiveTrades((prev) => 
+          prev.filter((trade) => trade.wallet !== addressToRemove)
+        );
+        
+        // Clear trades from localStorage for this wallet
+        if (typeof window !== "undefined") {
+          const userKey = user?.id ? getLiveTradesCacheKey(user.id) : null;
+          const globalKey = getLiveTradesCacheKey();
+          
+          // Get current cached trades and filter
+          const cacheKey = userKey || globalKey;
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed)) {
+                const filtered = parsed.filter((trade: TradeEvent) => trade.wallet !== addressToRemove);
+                localStorage.setItem(cacheKey, JSON.stringify(filtered));
+              }
+            } catch (e) {
+              // If parsing fails, just remove the cache
+              localStorage.removeItem(cacheKey);
+            }
+          }
+        }
         
         // Reload from backend (this will also refresh global watched wallets)
         await loadWalletsFromBackend();
@@ -991,8 +1029,13 @@ export default function TrackersPage() {
       wallet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wallet.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+  // Filter live trades to only show trades from currently watched wallets
+  const watchedWalletAddresses = new Set(watchedWallets.map(w => w.address));
+  const filteredLatestTrades = latestTrades.filter(trade => watchedWalletAddresses.has(trade.wallet));
+  const filteredCachedTrades = cachedLiveTrades.filter(trade => watchedWalletAddresses.has(trade.wallet));
+  
   const liveTradesToRender =
-    latestTrades.length > 0 ? latestTrades : cachedLiveTrades;
+    filteredLatestTrades.length > 0 ? filteredLatestTrades : filteredCachedTrades;
 
   // Twitter functions
   const loadTwitterAccounts = async () => {
@@ -1287,7 +1330,7 @@ export default function TrackersPage() {
                         <div className="flex-1 flex justify-center">
                           <input
                             type="text"
-                            placeholder="Search by name or addr..."
+                            placeholder="Search by address..."
                             className="w-full max-w-md rounded-full border border-neutral-800 bg-[#050608] px-4 py-1 text-xs text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none"
                             disabled={activeTab === 1}
                             value={searchTerm}
