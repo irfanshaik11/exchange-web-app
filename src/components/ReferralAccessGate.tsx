@@ -565,12 +565,37 @@ export function ReferralAccessGate({
     e?.preventDefault();
     e?.stopPropagation();
     
-    // Mark as completed immediately when button is clicked
-    setTwitterLinked(true);
+    // Prepare auth URL
     const currentPath = router.asPath.split('?')[0];
     const returnUrl = `${currentPath}?twitter_success=true`;
-    window.open(`/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`, '_blank');
+    const authUrl = `/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`;
+    
+    // Redirect in the same window/tab
+    window.location.href = authUrl;
   }, [router.asPath]);
+
+  // Handle Twitter disconnecting
+  const handleDisconnectTwitter = useCallback(async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent any default behavior and stop propagation
+    e?.preventDefault();
+    e?.stopPropagation();
+    
+    try {
+      const response = await fetch('/api/twitter/disconnect', {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        // Update local state
+        setTwitterLinked(false);
+        setTwitterUsername(null);
+      } else {
+        console.error('Failed to disconnect Twitter account');
+      }
+    } catch (error) {
+      console.error('Error disconnecting Twitter account:', error);
+    }
+  }, []);
 
   // Phantom Wallet Login handler
   const handlePhantomLogin = useCallback(async () => {
@@ -949,10 +974,10 @@ export function ReferralAccessGate({
                         </div>
                         <InterstateButton
                           type="button"
-                          onClick={handleLinkTwitter}
-                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                          onClick={handleDisconnectTwitter}
+                          className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white"
                         >
-                          Re-link
+                          Disconnect
                         </InterstateButton>
                       </div>
                     ) : (
