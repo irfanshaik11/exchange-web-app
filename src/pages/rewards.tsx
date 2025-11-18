@@ -136,7 +136,7 @@ export default function RewardsPage() {
                 <p className="text-xs tracking-[0.35em] text-neutral-500 uppercase">
                   Referrals
                 </p>
-                <h1 className="text-4xl font-semibold text-white sm:text-5xl">
+                <h1 className="text-4xl font-semibold text-[#f0f5f5] sm:text-5xl">
                   Share Narrative. Earn more.
                 </h1>
                 <p className="max-w-xl text-sm text-neutral-400 sm:text-base">
@@ -157,27 +157,27 @@ export default function RewardsPage() {
               <div className="rounded-3xl border border-neutral-800 bg-neutral-950/50 p-6 shadow-xl shadow-black/20">
                 <div className="flex items-center justify-between">
                   <div className="rounded-2xl bg-gradient-to-br from-fuchsia-600/80 via-purple-600/60 to-indigo-700/60 p-3">
-                    <Users className="h-5 w-5 text-white" />
+                    <Users className="h-5 w-5 text-[#f0f5f5]" />
                   </div>
                   <span className="text-xs tracking-[0.3em] text-neutral-600 uppercase">
                     Total Referrals
                   </span>
                 </div>
-                <p className="mt-6 text-5xl font-semibold text-white">0</p>
+                <p className="mt-6 text-5xl font-semibold text-[#f0f5f5]">0</p>
                 <div className="mt-5 grid gap-2 text-sm text-neutral-400">
                   <div className="flex items-center justify-between rounded-2xl border border-neutral-800/80 bg-neutral-900/70 px-4 py-2">
                     <span className="flex items-center gap-2 text-neutral-300">
                       <Users className="h-4 w-4 text-fuchsia-400" />
                       Direct
                     </span>
-                    <span className="font-medium text-white">0</span>
+                    <span className="font-medium text-[#f0f5f5]">0</span>
                   </div>
                   <div className="flex items-center justify-between rounded-2xl border border-neutral-800/80 bg-neutral-900/70 px-4 py-2">
                     <span className="flex items-center gap-2 text-neutral-300">
                       <Users className="h-4 w-4 text-violet-400" />
                       Indirect
                     </span>
-                    <span className="font-medium text-white">0</span>
+                    <span className="font-medium text-[#f0f5f5]">0</span>
                   </div>
                 </div>
               </div>
@@ -185,7 +185,7 @@ export default function RewardsPage() {
               <div className="rounded-3xl border border-neutral-800 bg-neutral-950/50 p-6 shadow-xl shadow-black/20">
                 <div className="flex items-center justify-between">
                   <div className="rounded-2xl bg-gradient-to-br from-fuchsia-600/80 via-purple-600/60 to-pink-600/60 p-3">
-                    <Wallet className="h-5 w-5 text-white" />
+                    <Wallet className="h-5 w-5 text-[#f0f5f5]" />
                   </div>
                   <span className="text-xs tracking-[0.3em] text-neutral-600 uppercase">
                     Total Earned
@@ -193,13 +193,13 @@ export default function RewardsPage() {
                 </div>
                 <div className="mt-6 space-y-4">
                   <div>
-                    <p className="text-4xl font-semibold text-white">
+                    <p className="text-4xl font-semibold text-[#f0f5f5]">
                       0 <span className="text-xl text-neutral-500">SOL</span>
                     </p>
                     <p className="text-sm text-neutral-500">$0.00</p>
                   </div>
                   <div>
-                    <p className="text-4xl font-semibold text-white">
+                    <p className="text-4xl font-semibold text-[#f0f5f5]">
                       0 <span className="text-xl text-neutral-500">XCC</span>
                     </p>
                     <p className="text-sm text-neutral-500">Protocol rewards</p>
@@ -211,7 +211,7 @@ export default function RewardsPage() {
                 <div>
                   <div className="flex items-center justify-between">
                     <div className="rounded-2xl bg-gradient-to-br from-fuchsia-600/80 via-purple-600/60 to-pink-600/60 p-3">
-                      <Gift className="h-5 w-5 text-white" />
+                      <Gift className="h-5 w-5 text-[#f0f5f5]" />
                     </div>
                     <span className="text-xs tracking-[0.3em] text-neutral-600 uppercase">
                       Available to Claim
@@ -219,7 +219,7 @@ export default function RewardsPage() {
                   </div>
                   <div className="mt-6 space-y-3">
                     <div>
-                      <p className="text-3xl font-semibold text-white">
+                      <p className="text-3xl font-semibold text-[#f0f5f5]">
                         0{" "}
                         <span className="text-base text-neutral-500">SOL</span>
                       </p>
@@ -228,7 +228,7 @@ export default function RewardsPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-3xl font-semibold text-white">
+                      <p className="text-3xl font-semibold text-[#f0f5f5]">
                         0{" "}
                         <span className="text-base text-neutral-500">XCC</span>
                       </p>
@@ -250,7 +250,7 @@ export default function RewardsPage() {
 
             <div className="space-y-6">
               <div className="flex items-center gap-4">
-                <button className="rounded-full border border-neutral-800 bg-neutral-900/70 px-5 py-2 text-xs font-semibold tracking-[0.25em] text-neutral-200 uppercase transition hover:border-neutral-700 hover:text-white">
+                <button className="rounded-full border border-neutral-800 bg-neutral-900/70 px-5 py-2 text-xs font-semibold tracking-[0.25em] text-neutral-200 uppercase transition hover:border-neutral-700 hover:text-[#f0f5f5]">
                   My Referrals
                 </button>
                 <button className="rounded-full border border-neutral-900/60 bg-neutral-950/40 px-5 py-2 text-xs font-semibold tracking-[0.25em] text-neutral-600 uppercase transition hover:border-neutral-800 hover:text-neutral-300">
@@ -277,7 +277,7 @@ export default function RewardsPage() {
                         className="border-t border-neutral-900/80 text-neutral-200"
                       >
                         <td className="px-6 py-5 align-top">
-                          <div className="text-base font-semibold text-white">
+                          <div className="text-base font-semibold text-[#f0f5f5]">
                             {row.level}
                           </div>
                           <p className="mt-2 max-w-md text-xs text-neutral-500">
@@ -303,7 +303,7 @@ export default function RewardsPage() {
 
             <div className="flex flex-col justify-between rounded-3xl border border-neutral-800 bg-gradient-to-br from-neutral-950/90 via-neutral-900/80 to-neutral-950/90 px-8 py-10 shadow-2xl shadow-purple-900/20">
               <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-white">
+                <h2 className="text-2xl font-semibold text-[#f0f5f5]">
                   Share &amp; earn with your link
                 </h2>
                 <p className="mt-3 max-w-xl text-sm text-neutral-400">
@@ -327,7 +327,7 @@ export default function RewardsPage() {
                   <p className="text-xs tracking-[0.3em] text-neutral-500 uppercase">
                     Referral code
                   </p>
-                  <p className="mt-3 text-3xl font-semibold text-white">
+                  <p className="mt-3 text-3xl font-semibold text-[#f0f5f5]">
                     {loadingReferral
                       ? "Loading..."
                       : referralCode ?? "------"}

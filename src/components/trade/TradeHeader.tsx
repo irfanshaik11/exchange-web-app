@@ -18,7 +18,7 @@ const AX = {
   surface: "#1A1A1A",
   surface2: "#17191E",
   border: "#2A2B33",
-  text: "#E6E7EA",
+  text: "#f0f5f5",
   muted: "#9CA3AF",
   green: "#3DDC84",
   blue: "#8EC5FF",

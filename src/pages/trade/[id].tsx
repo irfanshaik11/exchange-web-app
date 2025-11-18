@@ -37,7 +37,7 @@ const AX = {
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
-  text: "#E6E7EA",
+  text: "#f0f5f5",
   muted: "#9CA3AF",
   mint: "#70E0B0",
   mintHover: "#58B890",
@@ -505,7 +505,7 @@ export default function TradePage() {
         style={{ 
           backgroundColor: "#0f1012", 
           color: AX.text, 
-          fontFamily: "Inter, ui-sans-serif, system-ui",
+          fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
         }}
       >
         {/* Top global header */}
