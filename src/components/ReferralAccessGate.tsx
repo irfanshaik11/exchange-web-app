@@ -1379,10 +1379,10 @@ export function ReferralAccessGate({
 
                   {waitlistNumber ? (
                     <div className="mb-6">
-                      <p className="text-sm text-neutral-400 mb-2">Your waitlist number</p>
+                      <p className="text-sm text-neutral-400 mb-2">Your waitlist group</p>
                       <div className="inline-block px-6 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
                         <span className="text-3xl md:text-4xl font-bold text-emerald-400">
-                          #{waitlistNumber}
+                          Group A
                         </span>
                       </div>
                     </div>
@@ -1395,7 +1395,7 @@ export function ReferralAccessGate({
                   )}
 
                   <p className="text-sm text-neutral-300/90 mb-8 max-w-sm mx-auto">
-                    Thank you for completing all quests! We'll notify you when your spot is ready.
+                    Thank you for completing all quests! You will get access in less than 2-3 weeks!
                   </p>
 
                   <InterstateButton
