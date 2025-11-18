@@ -39,7 +39,7 @@ const AX = {
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
-  text: "#E6E7EA",
+  text: "#f0f5f5",
   muted: "#9CA3AF",
   mint: "#70E0B0",
   mintHover: "#58B890",
@@ -2028,7 +2028,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   return (
     <div
       className="flex flex-col text-[12px] leading-tight"
-      style={{ backgroundColor: '#0f1012', fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial', paddingBottom: '100px' }}
+      style={{ backgroundColor: '#0f1012', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
     >
       {/* ===== A. Time buttons ===== */}
       <div className="px-3 pt-2 pb-2 border-b border-[#2A2B33]">

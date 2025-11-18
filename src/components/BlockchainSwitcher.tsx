@@ -17,9 +17,15 @@ const blockchains: Blockchain[] = [
     color: '#14F195' 
   },
   { 
+    id: 'monad', 
+    name: 'Monad', 
+    logo: 'https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1',
+    color: '#9B59B6' 
+  },
+  { 
     id: 'eth', 
     name: 'Ethereum', 
-    logo: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+    logo: 'https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png',
     color: '#627EEA' 
   },
   { 
@@ -31,14 +37,8 @@ const blockchains: Blockchain[] = [
   { 
     id: 'base', 
     name: 'Base', 
-    logo: 'https://assets.coingecko.com/coins/images/27545/small/Base_Icon.png',
+    logo: 'https://avatars.githubusercontent.com/u/108554348?s=280&v=4',
     color: '#0052FF' 
-  },
-  { 
-    id: 'monad', 
-    name: 'Monad', 
-    logo: 'https://pbs.twimg.com/profile_images/1751947427452035072/1W9PxY4-_400x400.jpg',
-    color: '#9B59B6' 
   },
 ];
 
@@ -47,7 +47,7 @@ const AX = {
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
-  text: "#E6E7EA",
+  text: "#f0f5f5",
   muted: "#9CA3AF",
   mint: "#18c48c",
 };
@@ -56,10 +56,15 @@ const AX = {
 function BlockchainLogo({ logo, color, alt }: { logo: string; color: string; alt: string }) {
   const [imageError, setImageError] = useState(false);
 
+  // Reset error state when logo changes
+  useEffect(() => {
+    setImageError(false);
+  }, [logo]);
+
   if (imageError) {
     return (
       <div
-        className="w-4 h-4 rounded-full flex-shrink-0"
+        className="w-5 h-5 rounded-md flex-shrink-0"
         style={{ backgroundColor: color }}
       />
     );
@@ -69,8 +74,10 @@ function BlockchainLogo({ logo, color, alt }: { logo: string; color: string; alt
     <img
       src={logo}
       alt={alt}
-      className="w-4 h-4 rounded-full object-cover flex-shrink-0"
+      className="w-5 h-5 rounded-md object-cover flex-shrink-0"
       onError={() => setImageError(true)}
+      onLoad={() => setImageError(false)}
+      loading="eager"
     />
   );
 }
@@ -116,7 +123,7 @@ export default function BlockchainSwitcher() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 h-8 rounded-full px-3 transition-all duration-300 ease-out"
+        className="flex items-center gap-2 h-8 rounded-md px-3 transition-all duration-300 ease-out"
         style={{
           backgroundColor: '#000000',
           color: AX.text,
@@ -137,7 +144,7 @@ export default function BlockchainSwitcher() {
           color={selectedBlockchain.color}
           alt={selectedBlockchain.name}
         />
-        <span className="text-xs font-medium">{selectedBlockchain.name}</span>
+        <span className="text-sm font-medium">{selectedBlockchain.name}</span>
         <FaChevronDown
           size={10}
           className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}

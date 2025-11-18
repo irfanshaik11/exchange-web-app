@@ -63,7 +63,7 @@ const AX = {
   mint: "#70E0B0",
   mintHover: "#58B890",
   sell: "#FF4D7F",
-  green: "#22c55e",
+  green: "#31e3ac",
   red: "#ef4444",
   purple: "#8b5cf6",
   teal: "#14b8a6",

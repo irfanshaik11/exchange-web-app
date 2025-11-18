@@ -1274,37 +1274,37 @@ export default function DiscoverPage() {
         <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-8 max-w-[98%]">
           <div className="flex max-w-7xl items-center gap-6">
              <button
-              className={`text-lg font-light transition-colors ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
             <button
-              className={`text-lg font-light transition-colors ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "newPairs" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("newPairs")}
             >
               New Pairs
             </button>
             <button
-              className={`text-lg font-light transition-colors ${activeTab === "xStocks" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("xStocks")}
             >
               xStocks
             </button>
             <button
-              className={`text-lg font-light transition-colors ${activeTab === "surge" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("surge")}
             >
               Surge
             </button>
             <button
-              className={`text-lg font-light transition-colors ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "live" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("live")}
             >
               Pump Live
             </button>
             {/* <button
-              className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("dex")}
             >
               DEX Screener
@@ -1327,7 +1327,7 @@ export default function DiscoverPage() {
                 {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
                   <button
                     key={tf}
-                    className={(selectedTimeframe === tf ? "text-white " : "text-[#9CA3AF] hover:text-white ") + "cursor-pointer transition-colors"}
+                    className={(selectedTimeframe === tf ? "text-[#f0f5f5] " : "text-[#9CA3AF] hover:text-[#f0f5f5] ") + "cursor-pointer transition-colors"}
                     onClick={() => handleTimeframeClick(tf)}
                   >
                     {tf}
@@ -1429,7 +1429,7 @@ export default function DiscoverPage() {
                     <div key={pill} className="relative flex items-center justify-center">
                       <button
                         className={`px-1.5 py-0.5 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center ${
-                          selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-white'
+                          selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-[#f0f5f5]'
                         }`}
                         onClick={() => {
                           setSelectedPill(pill);
@@ -1569,7 +1569,7 @@ export default function DiscoverPage() {
           ) : activeTab === 'newPairs' ? (
             <section aria-label="New Pairs">
               <div className="mb-4 flex items-center justify-between">
-                {/* <h2 className="text-xl font-semibold text-white">New Pairs</h2> */}
+                {/* <h2 className="text-xl font-semibold text-[#f0f5f5]">New Pairs</h2> */}
                 {newPairsLoading && (
                   <span className="text-xs font-medium text-[#9CA3AF]">
                     Updating…
@@ -1606,7 +1606,7 @@ export default function DiscoverPage() {
           ) : activeTab === 'xStocks' ? (
             <section aria-label="xStocks">
               {/* <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">xStocks</h2>
+                <h2 className="text-xl font-semibold text-[#f0f5f5]">xStocks</h2>
               </div> */}
               
               {/* Placeholder for xStocks data - replace with actual data source */}
@@ -1629,7 +1629,7 @@ export default function DiscoverPage() {
           ) : activeTab === 'surge' ? (
             <section aria-label="Surge">
               {/* <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">Surge</h2>
+                <h2 className="text-xl font-semibold text-[#f0f5f5]">Surge</h2>
               </div> */}
               
               {/* Placeholder for Surge data - replace with actual data source */}
