@@ -39,6 +39,10 @@ const ALLOWED = [
   'coingecko.com',
   'solscan.io',
   'raydium.io',
+  'tokens.debridge.finance',
+  'debridge.finance',
+  'launchonsoar.com',
+  'media.launchonsoar.com',
 ];
 
 function isAllowedHost(host: string) {

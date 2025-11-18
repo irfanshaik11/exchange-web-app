@@ -21,6 +21,7 @@ import { env } from '~/env';
 import { rollingTradeCache } from '../utils/rollingTradeCache';
 import { SiBinance, SiSolana } from 'react-icons/si';
 import { FaDiscord } from 'react-icons/fa';
+import { extractTokenImage } from '../utils/images';
 
 interface LaunchpadToken {
   mint: string;
@@ -313,6 +314,7 @@ export default function PulsePage() {
     standard: 'SPL',
     name: launchpadToken.name || 'Unknown',
     symbol: launchpadToken.symbol || 'UNK',
+    // Preserve all image fields so extractTokenImage can find them
     logo: launchpadToken.image || '',
     decimals: 6,
     metaplex: null,
@@ -365,9 +367,10 @@ export default function PulsePage() {
     created_at: launchpadToken.createdAt,
     updated_at: launchpadToken.createdAt,
     bonding_curve_progress: launchpadToken.graduationPercent, // Already in percentage format
-    uri: null,
+    // Preserve image in multiple fields so extractTokenImage can find it
+    uri: launchpadToken.image || null,
     // extra field used by PulseTable TokenImage for DB logos
-    image: launchpadToken.image,
+    image: launchpadToken.image || null,
   } as any), []);
 
   // Segregate regular tokens (stable refs)
@@ -430,13 +433,18 @@ export default function PulsePage() {
     return wsNewRaw.map((t) => {
       const a = (t as any)?.pair_address || (t as any)?.mint;
       const src = a ? byAddr.get(a) : undefined;
+      // Extract image from token or source, checking multiple possible field names
+      // Preserve original fields if extraction fails
+      const extractedImage = extractTokenImage(t as any) || extractTokenImage(src);
       return {
         ...t,
         // Prefer existing created fields on WS object, else borrow from source maps
         created_at: (t as any).created_at || (t as any).createdAt || src?.created_at || src?.createdAt || (t as any).timestamp || undefined,
         launch_time: (t as any).launch_time || (t as any).launchTime || src?.launch_time || src?.launchTime || undefined,
-        image: (t as any).image || (t as any).logo || src?.image || src?.logo || undefined,
-        logo: (t as any).logo || src?.logo || undefined,
+        // Only override image/logo if extraction found something, otherwise preserve original
+        image: extractedImage || (t as any).image || src?.image || undefined,
+        logo: extractedImage || (t as any).logo || src?.logo || undefined,
+        uri: extractedImage || (t as any).uri || src?.uri || undefined,
       };
     });
   }, [wsNewRaw, tokens, launchpadNewPairs, launchpadFinalStretch, launchpadMigrated]);
@@ -614,7 +622,7 @@ export default function PulsePage() {
     if (newPairsToShow && newPairsToShow.length > 0) {
       const imageSources = newPairsToShow
         .slice(0, 20)
-        .map((token: any) => token.uri || token.image || token.logo)
+        .map((token: any) => extractTokenImage(token))
         .filter(Boolean);
 
       if (imageSources.length > 0) {
