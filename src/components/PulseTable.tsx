@@ -34,6 +34,8 @@ import {
   HiLightningBolt,
   HiSparkles
 } from "react-icons/hi";
+import { GoPeople } from "react-icons/go";
+import { IoPersonOutline } from "react-icons/io5";
 import {
   MdTrendingUp,
   MdEmojiEvents,
@@ -341,7 +343,17 @@ function TokenMetrics({ token, rank, totalTokens }: { token: Token; rank?: numbe
     <div className="flex items-center gap-1 relative z-10">
       {/* Users Icon - Multiple People */}
       <div className="flex items-center gap-1">
-        <FaUsers size={12} style={{ color: AX.muted }} />
+        <div 
+          className="flex items-center justify-center rounded"
+          style={{
+            backgroundColor: '#111214',
+            padding: '2px',
+            width: '18px',
+            height: '18px'
+          }}
+        >
+          <GoPeople size={12} style={{ color: '#36d8ff', strokeWidth: '3' }} />
+        </div>
         <span className="text-xs" style={{ color: AX.text }}>{metrics.users}</span>
       </div>
       
@@ -420,6 +432,8 @@ function TokenImage({
   columnType?: 'new' | 'final-stretch' | 'migrated';
 }) {
   const [showPreview, setShowPreview] = useState(false);
+  const [previewPosition, setPreviewPosition] = useState({ top: 0, left: 0 });
+  const imageContainerRef = useRef<HTMLDivElement>(null);
   
   // Use uri field from deployed service, fallback to image field, then token.logo
   const imageUrl = (token as any).uri || (token as any).image || token.logo;
@@ -686,9 +700,18 @@ function TokenImage({
     console.log('Mouse enter - showing preview for:', token.symbol);
     setShowPreview(true);
     const target = e.currentTarget as HTMLDivElement;
-    // Don't change border color since we're using SVG border now
-    target.style.boxShadow = `0 0 12px ${AX.glowCyan}, 0 0 24px ${AX.glowCyan}`;
+    // Minimal hover effect - no glow
+    target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
     target.style.transform = 'scale(1.08)';
+    
+    // Calculate preview window position
+    if (imageContainerRef.current) {
+      const rect = imageContainerRef.current.getBoundingClientRect();
+      setPreviewPosition({
+        top: rect.top,
+        left: rect.right + 20
+      });
+    }
   };
 
   const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -707,7 +730,7 @@ function TokenImage({
   const isHighBondingMeteora = isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
   return (
     <>
-      <div className="relative flex items-center justify-center" style={{ width: '81px', height: '81px', minWidth: '81px', minHeight: '81px', maxWidth: '81px', maxHeight: '81px' }}>
+      <div ref={imageContainerRef} className="relative flex items-center justify-center" style={{ width: '81px', height: '81px', minWidth: '81px', minHeight: '81px', maxWidth: '81px', maxHeight: '81px', overflow: 'visible' }}>
         {/* Outer border container */}
         <div 
           className="relative rounded-sm transition-all duration-300 ease-out"
@@ -798,7 +821,7 @@ function TokenImage({
         )}
         
         {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
-        <div className="absolute bottom-0 right-0 rounded-full flex items-center justify-center transform translate-x-1/5 translate-y-1/4 z-10"
+        <div className="absolute bottom-0 right-0 rounded-full flex items-center justify-center transform translate-x-1/5 translate-y-1/4 z-10 pointer-events-none"
              style={{ 
                width: 16, 
                height: 16,
@@ -815,78 +838,51 @@ function TokenImage({
             }}
           />
         </div>
-        {/* Camera icon overlay with AI-inspired styling - only shows on image hover */}
+        {/* Camera icon overlay - minimal grey - only shows on image hover */}
         <div className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300 pointer-events-none"
              style={{ opacity: showPreview ? 1 : 0 }}>
           <div className="flex items-center justify-center rounded-full p-2"
                style={{ 
-                 backgroundColor: AX.aiCyan,
-                 boxShadow: `0 0 8px ${AX.glowCyan}`
+                 backgroundColor: 'rgba(107, 114, 128, 0.3)',
+                 boxShadow: 'none'
                }}>
             <FaCamera 
               size={16} 
-              style={{ color: '#000000' }}
-              className="drop-shadow-lg"
+              style={{ color: '#9ca3af' }}
             />
           </div>
         </div>
         
-        {/* Futuristic AI border with shine effect */}
+        {/* Minimal border - only shows on image hover */}
         <div className="absolute inset-0 pointer-events-none opacity-0 transition-all duration-300"
              style={{ opacity: showPreview ? 1 : 0 }}>
-          {/* Main border glow */}
           <div className="absolute inset-0 rounded-lg"
                style={{
-                 border: `1px solid ${AX.aiBlue}`,
-                 boxShadow: `0 0 20px ${AX.glowBlue}, 0 0 40px ${AX.glowBlue}, inset 0 0 20px ${AX.glowBlue}`,
-                 background: `linear-gradient(45deg, transparent 30%, ${AX.aiBlue}20 50%, transparent 70%)`
-               }}></div>
-          
-          {/* Animated shine effect */}
-          <div className="absolute inset-0 rounded-lg overflow-hidden">
-            <div className="absolute inset-0"
-                 style={{
-                   background: `linear-gradient(45deg, transparent 30%, ${AX.aiCyan}40 50%, transparent 70%)`,
-                   animation: 'shine 2s ease-in-out infinite'
-                 }}></div>
-          </div>
-          
-          {/* Corner accents */}
-          <div className="absolute top-0 left-0 h-3 w-3"
-               style={{ 
-                 background: `linear-gradient(45deg, ${AX.aiCyan}, ${AX.aiGreen})`,
-                 clipPath: 'polygon(0 0, 100% 0, 0 100%)',
-                 filter: 'drop-shadow(0 0 4px rgba(49, 227, 172, 0.8))'
-               }}></div>
-          <div className="absolute bottom-0 right-0 h-3 w-3"
-               style={{ 
-                 background: `linear-gradient(45deg, ${AX.aiBlue}, ${AX.aiCyan})`,
-                 clipPath: 'polygon(100% 0, 100% 100%, 0 100%)',
-                 filter: 'drop-shadow(0 0 4px rgba(59, 130, 246, 0.8))'
+                 border: '1px solid rgba(107, 114, 128, 0.3)',
+                 boxShadow: 'none'
                }}></div>
         </div>
       </div>
       {/* Image Preview Window */}
       {showPreview && (
         <div 
-          className="absolute z-[9999] pointer-events-none"
+          className="fixed z-[9999] pointer-events-none"
           style={{
-            left: '100%',
-            top: '0%',
-            transform: 'translate(20px, 0px)'
+            top: `${previewPosition.top}px`,
+            left: `${previewPosition.left}px`
           }}
         >
           <div className="relative">
             {/* Main preview container */}
             <div 
-              className="relative overflow-hidden rounded-xl border shadow-2xl"
+              className="relative overflow-hidden rounded-xl border"
               style={{
                 width: '225px',
                 height: '225px',
                 backgroundColor: AX.surface,
-                borderColor: AX.aiCyan,
+                borderColor: 'rgba(107, 114, 128, 0.3)',
                 borderWidth: '1px',
-                boxShadow: `0 0 20px ${AX.glowCyan}, 0 0 40px ${AX.glowCyan}, 0 8px 32px rgba(0, 0, 0, 0.3)`
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
               }}
             >
               <FastImage
@@ -900,54 +896,6 @@ function TokenImage({
                 priority={priority}
               />
               
-              {/* border effects */}
-              <div className="absolute inset-0 pointer-events-none">
-                {/* Animated border lines */}
-                <div 
-                  className="absolute top-0 left-0 w-full h-0.5 opacity-80"
-                  style={{
-                    background: `linear-gradient(90deg, transparent, ${AX.aiCyan}, transparent)`,
-                    animation: 'borderFlow 2s linear infinite'
-                  }}
-                ></div>
-                <div 
-                  className="absolute bottom-0 left-0 w-full h-0.5 opacity-80"
-                  style={{
-                    background: `linear-gradient(90deg, transparent, ${AX.aiGreen}, transparent)`,
-                    animation: 'borderFlow 2s linear infinite reverse'
-                  }}
-                ></div>
-                <div 
-                  className="absolute top-0 left-0 w-0.5 h-full opacity-80"
-                  style={{
-                    background: `linear-gradient(180deg, transparent, ${AX.aiBlue}, transparent)`,
-                    animation: 'borderFlow 2s linear infinite'
-                  }}
-                ></div>
-                <div 
-                  className="absolute top-0 right-0 w-0.5 h-full opacity-80"
-                  style={{
-                    background: `linear-gradient(180deg, transparent, ${AX.aiCyan}, transparent)`,
-                    animation: 'borderFlow 2s linear infinite reverse'
-                  }}
-                ></div>
-              </div>
-
-              {/* Corner accents */}
-              <div 
-                className="absolute top-1 left-1 w-3 h-3 opacity-90"
-                style={{
-                  background: `linear-gradient(45deg, ${AX.aiCyan}, ${AX.aiGreen})`,
-                  clipPath: 'polygon(0 0, 100% 0, 0 100%)'
-                }}
-              ></div>
-              <div 
-                className="absolute bottom-1 right-1 w-3 h-3 opacity-90"
-                style={{
-                  background: `linear-gradient(45deg, ${AX.aiBlue}, ${AX.aiCyan})`,
-                  clipPath: 'polygon(100% 0, 100% 100%, 0 100%)'
-                }}
-              ></div>
             </div>
             {/* Migration progress tooltip - only for New Pairs */}
             {isNewPairs && (
@@ -973,7 +921,7 @@ function TokenImage({
                 backgroundColor: AX.surface,
                 color: AX.text,
                 border: `1px solid ${AX.border}`,
-                boxShadow: `0 4px 12px rgba(0, 0, 0, 0.3), 0 0 8px ${AX.glowCyan}`
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
               }}
             >
               {token.symbol} - {token.name}
@@ -1011,6 +959,12 @@ function TokenImage({
       }} />
       {/* CSS for animations */}
       <style jsx>{`
+        .number-font {
+          font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+        }
+        
         @keyframes shine {
           0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
           50% { transform: translateX(100%) translateY(100%) rotate(45deg); }
@@ -2770,9 +2724,7 @@ function PulseTable({
             {['P1', 'P2', 'P3'].map((pill) => (
               <div key={pill} className="relative flex items-center justify-center">
                 <button
-                  className={`px-1 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded ${
-                    selectedPill === pill ? 'text-gray-400' : 'text-gray-400'
-                  }`}
+                  className="px-1 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded"
                   style={{
                     paddingTop: '2px',
                     paddingBottom: '2px',
@@ -2819,27 +2771,27 @@ function PulseTable({
                       <div className="p-2 space-y-1.5">
                         {/* Slippage - Running person icon */}
                         <div className="flex items-center gap-1.5">
-                          <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
+                          <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '2' }} />
                           <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
                         </div>
                         
                         {/* Priority Fee - Gas pump icon with yellow styling */}
                         <div className="flex items-center gap-1.5">
-                          <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                          <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '2' }} />
                           <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
                           <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
                         </div>
                         
                         {/* Bribe - Coins icon with yellow styling */}
                         <div className="flex items-center gap-1.5">
-                          <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
+                          <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '2' }} />
                           <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
                           <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
                         </div>
                         
                         {/* MEV Protection - Ban icon */}
                         <div className="flex items-center gap-1.5">
-                          <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
+                          <FaBan size={10} className="opacity-90" style={{ strokeWidth: '2' }} />
                           <span className="text-gray-300 text-xs font-light">
                             {settings.mevMode === 'off' ? 'Off' : 
                              settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
@@ -4837,19 +4789,19 @@ function PulseTable({
                             target="_blank"
                             href={`https://pump.fun/coin/${token.mint}`}
                               className="transition-colors duration-200"
-                              style={{ color: AX.muted }}
+                              style={{ color: '#ec397a' }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.color = AX.aiCyan;
+                                e.currentTarget.style.color = '#ec397a';
                                 const tooltip = e.currentTarget.nextElementSibling as HTMLElement;
                                 if (tooltip) tooltip.style.opacity = '1';
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.color = AX.muted;
+                                e.currentTarget.style.color = '#ec397a';
                                 const tooltip = e.currentTarget.nextElementSibling as HTMLElement;
                                 if (tooltip) tooltip.style.opacity = '0';
                               }}
                             >
-                              <LuPill size={10} className="lg:w-3 lg:h-3" />
+                              <LuPill size={10} className="lg:w-3 lg:h-3" style={{ strokeWidth: '3' }} />
                           </Link>
                           )}
                           
@@ -4880,15 +4832,21 @@ function PulseTable({
                               window.open(twitterUrl, '_blank');
                             }}
                           >
-                            <FaSearch size={10} className="lg:w-3 lg:h-3" />
+                            <FaSearch size={10} className="lg:w-3 lg:h-3" style={{ strokeWidth: '3' }} />
                           </button>
                           {/* X Profile Preview Button */}
                           <div className="relative">
                             <button
-                              className="transition-colors duration-200"
-                              style={{ color: AX.muted }}
+                              className="transition-colors duration-200 flex items-center justify-center rounded"
+                              style={{ 
+                                backgroundColor: '#111214',
+                                padding: '2px',
+                                width: '18px',
+                                height: '18px',
+                                color: '#36d8ff'
+                              }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.color = AX.aiBlue;
+                                e.currentTarget.style.color = '#36d8ff';
                                 const tooltip = document.getElementById(`profile-tooltip-${idx}`) as HTMLElement;
                                 if (tooltip) {
                                   const rect = e.currentTarget.getBoundingClientRect();
@@ -4906,7 +4864,7 @@ function PulseTable({
                                 });
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.color = AX.muted;
+                                e.currentTarget.style.color = '#36d8ff';
                                 const tooltip = document.getElementById(`profile-tooltip-${idx}`) as HTMLElement;
                                 if (tooltip) tooltip.style.opacity = '0';
                               }}
@@ -4918,7 +4876,7 @@ function PulseTable({
                                 window.open(profileUrl, '_blank');
                               }}
                             >
-                              <FaUser size={12} />
+                              <IoPersonOutline size={12} style={{ strokeWidth: '2' }} />
                             </button>
                             
                             {/* Small X Profile Preview - positioned near token */}
@@ -5104,12 +5062,21 @@ function PulseTable({
 
                           {/* People Icon - Total Holders */}
                           <div className="relative flex items-center gap-1">
-                            <FaUsers 
-                              size={12} 
-                              style={{ color: AX.muted }} 
-                              className="cursor-help"
+                            <div 
+                              className="flex items-center justify-center rounded cursor-help"
+                              style={{
+                                backgroundColor: '#111214',
+                                padding: '2px',
+                                width: '18px',
+                                height: '18px'
+                              }}
                               title="Holders"
-                            />
+                            >
+                              <GoPeople 
+                                size={12} 
+                                style={{ color: '#36d8ff', strokeWidth: '3' }} 
+                              />
+                            </div>
                             <span className="text-xs" style={{ color: AX.text }}>
                               {(() => {
                                 const holders = token.total_holders || token.unique_wallets_24h || 0;
@@ -5153,13 +5120,13 @@ function PulseTable({
                              const mcVal = (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
                              if (hasGreenWave) {
                                return (
-                                 <span className="text-sm lg:text-base font-medium" style={{ color: '#526ffe' }}>
+                                 <span className="text-sm lg:text-base font-medium number-font" style={{ color: '#526ffe' }}>
                                    <SmoothNumber value={mcVal} formatter={(val) => `$${formatMarketCap(val)}`} duration={300} />
                                  </span>
                                );
                              }
                              return (
-                               <SmartColor token={token} metricType="marketCap" className="text-sm lg:text-base font-medium">
+                               <SmartColor token={token} metricType="marketCap" className="text-sm lg:text-base font-medium number-font">
                                  <SmoothNumber value={mcVal} formatter={(val) => `$${formatMarketCap(val)}`} duration={300} />
                                </SmartColor>
                              );
@@ -5168,10 +5135,9 @@ function PulseTable({
                         <span style={{ color: AX.muted }}>
                           <span className="text-xs">V</span>{" "}
                           <span 
-                            className="text-xs lg:text-sm font-medium"
+                            className="text-xs lg:text-sm font-medium number-font"
                             style={{ 
-                              color: '#ffffff',
-                              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
+                              color: '#ffffff'
                             }}
                           >
                             <SmoothNumber
@@ -5193,10 +5159,9 @@ function PulseTable({
                         <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
                           <span className="text-xs">TX</span>{" "}
                           <span 
-                            className="text-xs font-medium"
+                            className="text-xs font-medium number-font"
                             style={{ 
-                              color: '#ffffff',
-                              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
+                              color: '#ffffff'
                             }}
                           >
                             <SmoothNumber
@@ -5298,8 +5263,8 @@ function PulseTable({
                           if (isMigratedColumn) {
                             return (
                               <>
-                                <HiLightningBolt className="text-black" size={14} /> {thunderAmount || '0'}
-                                SOL
+                                <HiLightningBolt className="text-black" size={14} /> <span className="number-font">{thunderAmount || '0'}</span>
+                                <span className="number-font"> SOL</span>
                               </>
                             );
                           }
@@ -5323,7 +5288,7 @@ function PulseTable({
                                   <line x1="17" y1="12" x2="21" y2="12" />
                                   <circle cx="12" cy="12" r="2.2" />
                                 </svg>
-                                <span style={{ color: isFinal ? AX.aiGreen : undefined }}>
+                                <span className="number-font" style={{ color: isFinal ? AX.aiGreen : undefined }}>
                                   {thunderAmount || '0'} SOL
                                 </span>
                               </>
@@ -5333,7 +5298,7 @@ function PulseTable({
                             return (
                               <>
                                 <HiLightningBolt className={"text-black"} style={{ color: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? AX.aiGreen : '#000000' }} size={14} />
-                                <span style={{ color: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? AX.aiGreen : undefined }}>
+                                <span className="number-font" style={{ color: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? AX.aiGreen : undefined }}>
                                   {thunderAmount || '0'} SOL
                                 </span>
                               </>
@@ -5347,15 +5312,15 @@ function PulseTable({
                 {/* Bottom Row */}
                 <div className="absolute left-24 bottom-2 flex flex-row items-center gap-1">
                   {/* Buyers percentage - Green */}
-                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200 number-font"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
-                          fontWeight: '500',
+                          fontWeight: '600',
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <BsPersonGear size={13} /> {Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%
+                    <BsPersonGear size={13} /> <span className="number-font">{Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%</span>
                   </span>
                   
                   {/* DS indicator - Blue with time */}
