@@ -106,10 +106,40 @@ export default async function handler(
 
     res.setHeader('Set-Cookie', [...authCookies, ...clearCookies]);
 
+    // Try to save Twitter info to database if user is logged in
+    // We'll also save it from the frontend, but this ensures it's saved even if frontend fails
+    const tokenCookie = cookies.token;
+    if (tokenCookie && process.env.NEXT_PUBLIC_BACKEND_URL) {
+      try {
+        // Save Twitter info to waitlist directly (frontend will also save it with user context)
+        // This is a best-effort attempt - frontend save is more reliable
+        await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/waitlist/complete`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${tokenCookie}`,
+          },
+          body: JSON.stringify({
+            twitterId: user.id,
+            twitterUsername: user.username,
+          }),
+        }).catch(err => {
+          // Silently fail - frontend will handle saving with proper user context
+          console.log('[Twitter OAuth] Could not save Twitter info from callback (frontend will handle):', err.message);
+        });
+      } catch (error) {
+        // Silently fail - frontend will handle saving with proper user context
+        console.log('[Twitter OAuth] Could not save Twitter info from callback (frontend will handle)');
+      }
+    }
+
     // Redirect back to the return URL with success parameter
-    res.redirect(
-      `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}twitter_success=true`
-    );
+    // Ensure we redirect to show the quest page (waitlist modal) instead of referral access page
+    const redirectUrl = returnUrl.includes('?') 
+      ? `${returnUrl}&twitter_success=true&show_quests=true`
+      : `${returnUrl}?twitter_success=true&show_quests=true`;
+    
+    res.redirect(redirectUrl);
   } catch (error) {
     console.error('Error in Twitter OAuth callback:', error);
     const returnUrl = req.cookies.twitter_oauth_return_url || '/';
