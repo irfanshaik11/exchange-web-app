@@ -834,11 +834,12 @@ export default function PulsePage() {
       </Head>
       <div className="flex h-screen flex-col text-neutral-100 overflow-hidden" style={{ backgroundColor: '#06070b' }}>
         <Header />
-        <div className="w-full px-2 pt-2 flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="w-full px-6 pt-2 flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="mb-2">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 px-2 mb-2">
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">Trenches</h1>
+                <h1 className="text-xl font-bold">Trenches</h1>
                 <div className="flex items-center gap-3">
                   <Link
                     href="/pulse?chain=sol"
