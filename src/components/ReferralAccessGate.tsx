@@ -502,12 +502,15 @@ export function ReferralAccessGate({
     }
   }, [showWaitlist, checkTwitterAuth]);
 
-  // Check for Twitter OAuth callback in URL
+  // Check for Twitter OAuth callback in URL - PRIORITY: Show waitlist immediately
   useEffect(() => {
     if (!router.isReady) return;
     const { twitter_error, twitter_success, show_quests } = router.query;
     
     if (twitter_success === 'true') {
+      // IMMEDIATELY show waitlist modal to prevent referral overlay from showing
+      setShowWaitlist(true);
+      
       // Check Twitter auth and save Twitter info to database
       checkTwitterAuth().then(async () => {
         // Save Twitter info to database
@@ -529,10 +532,8 @@ export function ReferralAccessGate({
             console.error('Error saving Twitter info:', error);
           }
         }
-        
-        // Show the waitlist (quest) popup after successful Twitter linking
-        setShowWaitlist(true);
       });
+      
       // Clean up URL
       const [pathPart, searchPart] = router.asPath.split('?');
       if (searchPart) {
@@ -848,7 +849,9 @@ export function ReferralAccessGate({
     );
   }
 
-  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist;
+  // Don't show referral overlay if Twitter OAuth just completed (twitter_success in URL)
+  const hasTwitterSuccess = router.isReady && router.query.twitter_success === 'true';
+  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist && !hasTwitterSuccess;
 
   return (
     <ReferralAccessContext.Provider value={contextValue}>
