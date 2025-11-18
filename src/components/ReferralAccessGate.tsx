@@ -384,6 +384,9 @@ export function ReferralAccessGate({
       setError(null);
       setInfo(null);
 
+      // Special handling for admin code - always grant access
+      const isAdminCode = normalized === 'NARRATIVE-ADMIN-247';
+      
       // Validate with backend and mark waitlist as activated (number -> 0) on success.
       // If the user has no waitlist row yet, create it and retry once.
       (async () => {
@@ -393,6 +396,23 @@ export function ReferralAccessGate({
             setError("Please login first.");
             return;
           }
+          
+          // For admin code, grant access immediately as fallback
+          if (isAdminCode) {
+            try {
+              await redeemAccessCode({
+                userId: Number(user.id),
+                accessCode: normalized,
+              });
+            } catch (adminErr: any) {
+              // Even if backend fails, grant access for admin code
+              console.warn('Admin code backend validation failed, granting access anyway:', adminErr);
+            }
+            persistAccess(user.id);
+            grantAccess();
+            return;
+          }
+          
           try {
             await redeemAccessCode({
               userId: Number(user.id),
@@ -419,7 +439,7 @@ export function ReferralAccessGate({
         }
       })();
     },
-    [requireReferralAccess, codeInput, grantAccess],
+    [requireReferralAccess, codeInput, grantAccess, user],
   );
 
   useEffect(() => {
