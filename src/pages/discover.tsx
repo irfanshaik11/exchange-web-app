@@ -1271,7 +1271,7 @@ export default function DiscoverPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="mx-auto my-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-6 px-4 sm:px-6 lg:px-8 max-w-[98%]">
+        <div className="my-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-6 px-4 sm:px-6 lg:px-8">
           {/* Tabs Section - Scrollable on mobile */}
           <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 overflow-x-auto scrollbar-hide pb-2 lg:pb-0 -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
             <button
@@ -1501,7 +1501,7 @@ export default function DiscoverPage() {
         )}
 
         {/* Main Content */}
-        <main className="mx-auto px-2 sm:px-6 md:px-4 lg:px-8 pb-10 max-w-[98%]">
+        <main className="mx-auto px-2 max-w-[98%]">
           {activeTab === 'live' ? (
             pumpPortalTokens.length > 0 ? (
               <PumpLive
@@ -1569,14 +1569,13 @@ export default function DiscoverPage() {
             )
           ) : activeTab === 'newPairs' ? (
             <section aria-label="New Pairs">
-              <div className="mb-4 flex items-center justify-between">
-                {/* <h2 className="text-xl font-semibold text-[#f0f5f5]">New Pairs</h2> */}
+              {/* <div className="mb-4 flex items-center justify-between">
                 {newPairsLoading && (
                   <span className="text-xs font-medium text-[#9CA3AF]">
                     Updating…
                   </span>
                 )}
-              </div>
+              </div> */}
 
               {newPairsLoading && processedNewPairs.length === 0 && newPairsRaw.length === 0 ? (
                 <div className="space-y-4">

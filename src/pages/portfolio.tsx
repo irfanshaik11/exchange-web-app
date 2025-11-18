@@ -688,9 +688,10 @@ export default function PortfolioPage() {
       </Head>
       <div className="min-h-screen bg-[#050608] text-[#E6E7EA]">
         <Header />
-        <div className="px-6 pt-6">
+        <div className="px-6 pt-5">
+
           {/* Section Tabs */}
-          <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4 px-2">
             <div className="flex gap-8">
               <button
                 className={`text-lg font-light transition cursor-pointer ${
