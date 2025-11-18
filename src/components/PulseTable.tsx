@@ -84,12 +84,12 @@ const AX = {
   sell: "#ed3a7a",
   aiBlue: "#526fff",
   aiBlueHover: "#3f56d9",
-  aiGreen: "#18c48c",
-  aiGreenHover: "#12a877",
+  aiGreen: "#31e3ac",
+  aiGreenHover: "#28c896",
   aiCyan: "#06B6D4",
   aiCyanHover: "#0891B2",
   glowBlue: "rgba(82, 111, 255, 0.3)",
-  glowGreen: "rgba(24, 196, 140, 0.3)",
+  glowGreen: "rgba(49, 227, 172, 0.3)",
   glowCyan: "rgba(6, 182, 212, 0.3)",
 };
 
@@ -199,7 +199,7 @@ const SmartColor: React.FC<SmartColorProps> = ({ children, className = "", token
     if (symbol.includes('defi') || symbol.includes('swap') || symbol.includes('dex') || 
         symbol.includes('farm') || symbol.includes('yield') || symbol.includes('liquidity') ||
         name.includes('finance') || name.includes('exchange') || name.includes('protocol')) {
-      return '#10b981'; // Green
+      return '#31e3ac'; // Green
     }
     
     // High volume tokens - map to allowed palette (use blue)
@@ -457,12 +457,12 @@ function TokenImage({
 
   // Get border color based on migration progress (loading bar style)
   const getProgressBorderColor = (progress: number): string => {
-    if (!isNewPairs) return '#22c55e'; // Default green for non-New Pairs
+    if (!isNewPairs) return '#31e3ac'; // Default green for non-New Pairs
     
     // Loading bar style: green = good progress, red = bad/slow progress
     if (progress >= 0.7) {
       // Good progress - bright green
-      return '#22c55e'; // green-500
+      return '#31e3ac'; // green-500
     } else if (progress >= 0.4) {
       // Medium progress - yellow
       return '#eab308'; // yellow-500
@@ -471,16 +471,16 @@ function TokenImage({
       return '#f97316'; // orange-500
     } else {
       // Very slow/bad progress - red
-      return '#ef4444'; // red-500
+      return '#d11f3a'; // red-500
     }
   };
 
   // Protocol color mapping - matches the filter section colors (subtle versions)
   const protocolColorMap: Record<string, string> = {
-    'pump': '#22c55e',        // Green for pump.fun
-    'pump.fun': '#22c55e',    // Green for pump.fun
+    'pump': '#31e3ac',        // Green for pump.fun
+    'pump.fun': '#31e3ac',    // Green for pump.fun
     'bonk': '#ff6b35',        // Orange for bonk
-    'bags': '#22c55e',        // Green for bags
+    'bags': '#31e3ac',        // Green for bags
     'moonshot': '#eab308',    // Yellow for moonshot
     'moonshoot': '#eab308',   // Yellow for moonshoot
     'moonit': '#eab308',      // Yellow for moonit
@@ -488,7 +488,7 @@ function TokenImage({
     'daos.fun': '#06b6d4',
     'candle': '#f59e0b',
     'sugar': '#ec4899',
-    'believe': '#10b981',
+    'believe': '#31e3ac',
     'jupiter': '#8b5cf6',
     'boop': '#134577',        // Dark blue for boopfun
     'boopfun': '#134577',     // Dark blue for boopfun
@@ -496,8 +496,8 @@ function TokenImage({
     'dynamic': '#526fff',
     'raydium': '#5c51f7',     // Purple for raydium
     'raydiumlaunchpad': '#5c51f7',  // Purple for raydiumlaunchpad
-    'meteora': '#ff4662',     // Pink-red for meteora
-    'meteora_v2': '#ff4662',  // Pink-red for meteora
+    'meteora': '#d11f3a',     // Pink-red for meteora
+    'meteora_v2': '#d11f3a',  // Pink-red for meteora
     'pump_amm': '#e9ba14',    // Gold for meteora amm
     'orca': '#0ea5e9'
   };
@@ -507,7 +507,7 @@ function TokenImage({
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
     
     if (!launchpadProtocol) {
-      return '#22c55e'; // Default green
+      return '#31e3ac'; // Default green
     }
     
     // Special handling for Meteora - use column type since Meteora doesn't have bonding scores
@@ -516,7 +516,7 @@ function TokenImage({
       if (columnType === 'migrated') {
         return '#eab308'; // Yellow for migrated
       } else {
-        return '#ff4662'; // Red for new pairs and final stretch
+        return '#d11f3a'; // Red for new pairs and final stretch
       }
     }
     
@@ -526,7 +526,7 @@ function TokenImage({
       if (columnType === 'migrated') {
         return '#eab308'; // Yellow for migrated
       } else {
-        return '#22c55e'; // Green for new pairs and final stretch
+        return '#31e3ac'; // Green for new pairs and final stretch
       }
     }
     
@@ -561,7 +561,7 @@ function TokenImage({
     }
     
     if (launchpadProtocol.includes('bags')) {
-      return '#22c55e'; // Green for bags
+      return '#31e3ac'; // Green for bags
     }
     
     if (launchpadProtocol.includes('orca')) {
@@ -573,7 +573,7 @@ function TokenImage({
     }
     
     // Default to green if no match found
-    return '#22c55e';
+    return '#31e3ac';
   };
   // Get icon based on token data - dynamically maps launchpad_protocol to icon
   const getTokenIcon = (token: Token): string => {
@@ -581,12 +581,12 @@ function TokenImage({
     
     if (!launchpadProtocol) {
       // Default to pump.fun icon if no protocol info
-      return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+      return 'https://pump.fun/pump-logomark.svg';
     }
     
     // Map launchpad_protocol to external logo URLs
     if (launchpadProtocol.includes('pump')) {
-      return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+      return 'https://pump.fun/pump-logomark.svg';
     }
     
     if (launchpadProtocol.includes('meteora')) {
@@ -619,7 +619,7 @@ function TokenImage({
     }
     
     // Default to pump.fun icon for unknown protocols
-    return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+    return 'https://pump.fun/pump-logomark.svg';
   };
 
   const tokenIcon = getTokenIcon(token);
@@ -707,7 +707,7 @@ function TokenImage({
   const isHighBondingMeteora = isFinalStretch && !isMigratedColumn && isMeteora && bondingPct > 98.6;
   return (
     <>
-      <div className="relative h-20 w-20 flex items-center justify-center">
+      <div className="relative flex items-center justify-center" style={{ width: '81px', height: '81px', minWidth: '81px', minHeight: '81px', maxWidth: '81px', maxHeight: '81px' }}>
         {/* Outer border container */}
         <div 
           className="relative rounded-sm transition-all duration-300 ease-out"
@@ -715,14 +715,20 @@ function TokenImage({
           onMouseLeave={handleMouseLeave}
           style={{
             border: 'none',
-            padding: '0'
+            padding: '0',
+            width: '79px',
+            height: '79px',
+            minWidth: '79px',
+            minHeight: '79px',
+            maxWidth: '79px',
+            maxHeight: '79px'
           }}
         >
           {/* Single colored border container (moved inward) */}
           <div 
             className="relative rounded-sm"
             style={{
-              border: `1px solid ${(() => {
+              border: `0.5px solid ${(() => {
                 const isNewColumn = columnType === 'new';
                 if (isNewColumn && typeof protocolColor === 'string' && protocolColor.startsWith('#') && (protocolColor.length === 7 || protocolColor.length === 4)) {
                   // Slightly more transparent (~70%) for New Pairs color border
@@ -730,19 +736,25 @@ function TokenImage({
                 }
                 return protocolColor;
               })()}`,
-              padding: '3px',
-              backgroundColor: '#06070b'
+              padding: '2px',
+              backgroundColor: '#06070b',
+              width: '79px',
+              height: '79px',
+              minWidth: '79px',
+              minHeight: '79px',
+              maxWidth: '79px',
+              maxHeight: '79px'
             }}
           >
             {/* Image container */}
-            <div className="relative rounded-sm overflow-hidden">
+            <div className="relative rounded-sm overflow-hidden" style={{ width: '75px', height: '75px', minWidth: '75px', minHeight: '75px', maxWidth: '75px', maxHeight: '75px' }}>
               <FastImage
                 src={imageUrl}
                 alt={token.name || token.symbol || ""}
                 symbol={token.symbol}
                 name={token.name}
-                width={70}
-                height={70}
+                width={75}
+                height={75}
                 className="w-full h-full object-cover transition-all duration-300"
                 priority={priority}
                 showBubble={false}
@@ -753,32 +765,32 @@ function TokenImage({
         {/* Thin loading border - solid green, clockwise from bottom-right (only for New Pairs) */}
         {isNewPairs && (
           <div className="absolute inset-0 pointer-events-none">
-            <svg className="w-full h-full" viewBox="0 0 80 80">
+            <svg className="w-full h-full" viewBox="0 0 81 81">
               {/* Background border - outer grey border */}
               
               
               {/* Inner grey border */}
               <rect
-                x="3"
-                y="3"
-                width="74"
-                height="74"
+                x="2"
+                y="2"
+                width="77"
+                height="77"
                 fill="none"
                 stroke="none"
                 strokeWidth="0"
-                rx="6"
+                rx="4"
               />
               
               {/* Progress border - clockwise rounded path starting from bottom-right */}
               <path
-                d="M 78 78 L 10 78 Q 2 78 2 70 L 2 10 Q 2 2 10 2 L 70 2 Q 78 2 78 10 L 78 70 Q 78 78 70 78"
+                d="M 79 79 L 8 79 Q 2 79 2 73 L 2 8 Q 2 2 8 2 L 73 2 Q 79 2 79 8 L 79 73 Q 79 79 73 79"
                 fill="none"
                 stroke={protocolColor}
-                strokeWidth="2"
+                strokeWidth="1"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeDasharray={`${4 * 76}`} // Total perimeter
-                strokeDashoffset={`${4 * 76 * (1 - scaledProgress)}`}
+                strokeDasharray={`${4 * 77}`} // Total perimeter
+                strokeDashoffset={`${4 * 77 * (1 - scaledProgress)}`}
                 className="transition-all duration-700 ease-out"
               />
             </svg>
@@ -786,11 +798,12 @@ function TokenImage({
         )}
         
         {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
-        <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/5 translate-y-1/4 z-10"
+        <div className="absolute bottom-0 right-0 rounded-full flex items-center justify-center transform translate-x-1/5 translate-y-1/4 z-10"
              style={{ 
-               width: 20, 
-               height: 20,
-               border: `2px solid ${protocolColor}`,
+               width: 16, 
+               height: 16,
+               backgroundColor: '#000000',
+               border: `1px solid ${protocolColor}`,
                boxShadow: `0 0 4px ${protocolColor}60`
              }}>
           <img
@@ -824,7 +837,7 @@ function TokenImage({
           {/* Main border glow */}
           <div className="absolute inset-0 rounded-lg"
                style={{
-                 border: `2px solid ${AX.aiBlue}`,
+                 border: `1px solid ${AX.aiBlue}`,
                  boxShadow: `0 0 20px ${AX.glowBlue}, 0 0 40px ${AX.glowBlue}, inset 0 0 20px ${AX.glowBlue}`,
                  background: `linear-gradient(45deg, transparent 30%, ${AX.aiBlue}20 50%, transparent 70%)`
                }}></div>
@@ -843,7 +856,7 @@ function TokenImage({
                style={{ 
                  background: `linear-gradient(45deg, ${AX.aiCyan}, ${AX.aiGreen})`,
                  clipPath: 'polygon(0 0, 100% 0, 0 100%)',
-                 filter: 'drop-shadow(0 0 4px rgba(34, 197, 94, 0.8))'
+                 filter: 'drop-shadow(0 0 4px rgba(49, 227, 172, 0.8))'
                }}></div>
           <div className="absolute bottom-0 right-0 h-3 w-3"
                style={{ 
@@ -866,12 +879,13 @@ function TokenImage({
           <div className="relative">
             {/* Main preview container */}
             <div 
-              className="relative overflow-hidden rounded-xl border-2 shadow-2xl"
+              className="relative overflow-hidden rounded-xl border shadow-2xl"
               style={{
-                width: '200px',
-                height: '200px',
+                width: '225px',
+                height: '225px',
                 backgroundColor: AX.surface,
                 borderColor: AX.aiCyan,
+                borderWidth: '1px',
                 boxShadow: `0 0 20px ${AX.glowCyan}, 0 0 40px ${AX.glowCyan}, 0 8px 32px rgba(0, 0, 0, 0.3)`
               }}
             >
@@ -880,8 +894,8 @@ function TokenImage({
                 alt={token.name || token.symbol || ""}
                 symbol={token.symbol}
                 name={token.name}
-                width={200}
-                height={200}
+                width={225}
+                height={225}
                 className="h-full w-full object-cover"
                 priority={priority}
               />
@@ -941,8 +955,8 @@ function TokenImage({
                 className="absolute -top-10 left-1/2 transform -translate-x-1/2 px-2 py-1 rounded text-xs font-medium whitespace-nowrap z-50"
                 style={{
                   backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                  color: '#22c55e',
-                  border: '1px solid #22c55e20',
+                  color: '#31e3ac',
+                  border: '1px solid #31e3ac20',
                   backdropFilter: 'blur(4px)',
                   opacity: showPreview ? 1 : 0,
                   transition: 'opacity 0.2s ease-out'
@@ -1075,24 +1089,24 @@ function TokenImage({
         
         @keyframes greenGlowPulse {
           0% { 
-            box-shadow: 0 0 0px rgba(34, 197, 94, 0), 0 0 0px rgba(34, 197, 94, 0), inset 0 0 0px rgba(34, 197, 94, 0);
-            background: rgba(34, 197, 94, 0);
+            box-shadow: 0 0 0px rgba(49, 227, 172, 0), 0 0 0px rgba(49, 227, 172, 0), inset 0 0 0px rgba(49, 227, 172, 0);
+            background: rgba(49, 227, 172, 0);
           }
           25% { 
-            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4), 0 0 30px rgba(34, 197, 94, 0.2), inset 0 0 15px rgba(34, 197, 94, 0.1);
-            background: rgba(34, 197, 94, 0.05);
+            box-shadow: 0 0 15px rgba(49, 227, 172, 0.4), 0 0 30px rgba(49, 227, 172, 0.2), inset 0 0 15px rgba(49, 227, 172, 0.1);
+            background: rgba(49, 227, 172, 0.05);
           }
           50% { 
-            box-shadow: 0 0 25px rgba(34, 197, 94, 0.6), 0 0 50px rgba(34, 197, 94, 0.3), inset 0 0 25px rgba(34, 197, 94, 0.15);
-            background: rgba(34, 197, 94, 0.08);
+            box-shadow: 0 0 25px rgba(49, 227, 172, 0.6), 0 0 50px rgba(49, 227, 172, 0.3), inset 0 0 25px rgba(49, 227, 172, 0.15);
+            background: rgba(49, 227, 172, 0.08);
           }
           75% { 
-            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4), 0 0 30px rgba(34, 197, 94, 0.2), inset 0 0 15px rgba(34, 197, 94, 0.1);
-            background: rgba(34, 197, 94, 0.05);
+            box-shadow: 0 0 15px rgba(49, 227, 172, 0.4), 0 0 30px rgba(49, 227, 172, 0.2), inset 0 0 15px rgba(49, 227, 172, 0.1);
+            background: rgba(49, 227, 172, 0.05);
           }
           100% { 
-            box-shadow: 0 0 0px rgba(34, 197, 94, 0), 0 0 0px rgba(34, 197, 94, 0), inset 0 0 0px rgba(34, 197, 94, 0);
-            background: rgba(34, 197, 94, 0);
+            box-shadow: 0 0 0px rgba(49, 227, 172, 0), 0 0 0px rgba(49, 227, 172, 0), inset 0 0 0px rgba(49, 227, 172, 0);
+            background: rgba(49, 227, 172, 0);
           }
         }
         
@@ -1911,7 +1925,7 @@ function PulseTable({
   ];
 
   const quoteTokens = [
-    { name: 'SOL', icon: <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-xs font-bold" style={{ color: '#f0f5f5' }}>S</div>, color: '#00ff88' },
+    { name: 'SOL', icon: <div className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold" style={{ backgroundColor: '#31e3ac', color: '#f0f5f5' }}>S</div>, color: '#00ff88' },
     { name: 'USDC', icon: <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-xs font-bold" style={{ color: '#f0f5f5' }}>U</div>, color: '#06b6d4' },
     { name: 'USD1', icon: <span className="w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center text-xs font-bold text-black">1</span>, color: '#fbbf24' }
   ];
@@ -2673,7 +2687,7 @@ function PulseTable({
         "border-r border-t"
       }`}
       style={{ 
-        backgroundColor: '#101114',
+        backgroundColor: '#111214',
         borderColor: AX.border,
         borderStyle: 'solid',
         borderWidth: '1px',
@@ -2757,7 +2771,7 @@ function PulseTable({
               <div key={pill} className="relative flex items-center justify-center">
                 <button
                   className={`px-1 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded ${
-                    selectedPill === pill ? 'text-green-400' : 'text-gray-400'
+                    selectedPill === pill ? 'text-gray-400' : 'text-gray-400'
                   }`}
                   style={{
                     paddingTop: '2px',
@@ -2813,14 +2827,14 @@ function PulseTable({
                         <div className="flex items-center gap-1.5">
                           <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
                           <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
-                          <span className="text-red-500 text-xs font-light">⚠</span>
+                          <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
                         </div>
                         
                         {/* Bribe - Coins icon with yellow styling */}
                         <div className="flex items-center gap-1.5">
                           <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
                           <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
-                          <span className="text-red-500 text-xs font-light">⚠</span>
+                          <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
                         </div>
                         
                         {/* MEV Protection - Ban icon */}
@@ -4601,7 +4615,7 @@ function PulseTable({
                     <div 
                       className="absolute top-0 left-0 h-full w-full"
                       style={{
-                        background: 'linear-gradient(90deg, transparent, rgba(34, 197, 94, 0.2), rgba(34, 197, 94, 0.4), rgba(34, 197, 94, 0.2), transparent)',
+                        background: 'linear-gradient(90deg, transparent, rgba(49, 227, 172, 0.2), rgba(49, 227, 172, 0.4), rgba(49, 227, 172, 0.2), transparent)',
                         animation: 'subtleWaveFlow 3s ease-in-out infinite',
                         filter: 'blur(0.5px)'
                       }}
@@ -4708,7 +4722,7 @@ function PulseTable({
                   );
                 })()}
                 {/* Profile Picture & Address */}
-                <div className="flex flex-col items-center relative pt-1 flex-shrink-0">
+                <div className="flex flex-col items-center relative pt-1 flex-shrink-0" style={{ width: '81px', minWidth: '81px', maxWidth: '81px' }}>
                     <TokenImage
                       token={token}
                       priority={title === "New Pairs"}
@@ -4956,7 +4970,7 @@ function PulseTable({
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1">
-                                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#31e3ac' }}></div>
                                       <span className="text-xs text-gray-400">
                                         Live
                                       </span>
@@ -5206,8 +5220,9 @@ function PulseTable({
                           </span>
                           <div className="w-8 h-0.5 bg-gray-700 rounded-full overflow-hidden ml-1 flex">
                             <div 
-                              className="h-full bg-green-400"
+                              className="h-full"
                               style={{
+                                backgroundColor: '#31e3ac',
                                 width: `${(() => {
                                   const buys = token.total_buys_24h ?? 0;
                                   const sells = token.total_sells_24h ?? 0;
@@ -5218,8 +5233,9 @@ function PulseTable({
                               }}
                             ></div>
                             <div 
-                              className="h-full bg-red-400"
+                              className="h-full"
                               style={{
+                                backgroundColor: '#d11f3a',
                                 width: `${(() => {
                                   const buys = token.total_buys_24h ?? 0;
                                   const sells = token.total_sells_24h ?? 0;
@@ -5357,7 +5373,7 @@ function PulseTable({
                   {/* Snipe percentage - Red */}
                   {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
-                          color: '#EF4444',
+                          color: '#d11f3a',
                           fontSize: '11px',
                           fontWeight: '500',
                           borderColor: 'rgba(107, 114, 128, 0.1)',
@@ -5438,7 +5454,7 @@ function PulseTable({
                         <div 
                           className="w-4 h-4 rounded-full overflow-hidden flex items-center justify-center relative" 
                           style={{ 
-                            border: '0.5px solid #ff4662',
+                            border: '0.5px solid #d11f3a',
                             backgroundColor: 'transparent'
                           }}
                         >
@@ -5465,7 +5481,7 @@ function PulseTable({
                           >
                             <path
                               d="M0.5 0.5L2.5 2L0.5 3.5"
-                              stroke="#22c55e"
+                              stroke="#31e3ac"
                               strokeWidth="1"
                               strokeLinecap="round"
                               strokeLinejoin="round"

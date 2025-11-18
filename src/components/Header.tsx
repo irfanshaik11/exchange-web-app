@@ -730,7 +730,7 @@ export default function Header({
                       <IoShieldCheckmarkOutline
                         size={14}
                         style={{
-                          color: clipboardToken.isPumpToken ? "#22c55e" : "#eab308",
+                          color: clipboardToken.isPumpToken ? "#31e3ac" : "#eab308",
                         }}
                       />
                       {/* Tooltip */}
@@ -784,7 +784,7 @@ export default function Header({
                     <IoShieldCheckmarkOutline
                       size={12}
                       style={{
-                        color: clipboardToken.isPumpToken ? "#22c55e" : "#eab308",
+                        color: clipboardToken.isPumpToken ? "#31e3ac" : "#eab308",
                       }}
                     />
                   </button>
@@ -812,7 +812,7 @@ export default function Header({
                     <IoShieldCheckmarkOutline
                       size={11}
                       style={{
-                        color: clipboardToken.isPumpToken ? "#22c55e" : "#eab308",
+                        color: clipboardToken.isPumpToken ? "#31e3ac" : "#eab308",
                       }}
                     />
                   </button>
@@ -1264,10 +1264,10 @@ export default function Header({
               style={{ color: AX.muted }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor =
-                  "rgba(34, 197, 94, 0.08)";
-                e.currentTarget.style.color = "#22c55e";
+                  "rgba(49, 227, 172, 0.08)";
+                e.currentTarget.style.color = "#31e3ac";
                 e.currentTarget.style.boxShadow =
-                  "0 0 6px rgba(34, 197, 94, 0.25), 0 0 12px rgba(34, 197, 94, 0.12)";
+                  "0 0 6px rgba(49, 227, 172, 0.25), 0 0 12px rgba(49, 227, 172, 0.12)";
                 e.currentTarget.style.transform = "scale(1.05)";
               }}
               onMouseLeave={(e) => {

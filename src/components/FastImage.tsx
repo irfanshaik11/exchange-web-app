@@ -95,6 +95,7 @@ export default function FastImage({
         width={width}
         height={height}
         className={`transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         onLoad={handleLoad}
         onError={handleError}
         loading={priority ? 'eager' : 'lazy'} // Eager loading for priority images
