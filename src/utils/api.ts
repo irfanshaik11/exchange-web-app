@@ -449,6 +449,8 @@ export const completeAllQuests = (params: {
   userId?: number;
   walletId?: string;
   telegramId?: string;
+  twitterId?: string;
+  twitterUsername?: string;
 }) =>
   apiFetch<{ waitlist: {
     id: number;
@@ -456,6 +458,8 @@ export const completeAllQuests = (params: {
     walletId?: string | null;
     waitlistNumber: string; // bigint as string
     telegramId?: string | null;
+    twitterId?: string | null;
+    twitterUsername?: string | null;
     status: 'waiting' | 'invited' | 'activated' | 'removed';
     joinedAt: string;
     invitedAt?: string | null;

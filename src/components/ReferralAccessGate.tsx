@@ -505,11 +505,31 @@ export function ReferralAccessGate({
   // Check for Twitter OAuth callback in URL
   useEffect(() => {
     if (!router.isReady) return;
-    const { twitter_error, twitter_success } = router.query;
+    const { twitter_error, twitter_success, show_quests } = router.query;
     
     if (twitter_success === 'true') {
-      // Check Twitter auth and show waitlist modal
-      checkTwitterAuth().then(() => {
+      // Check Twitter auth and save Twitter info to database
+      checkTwitterAuth().then(async () => {
+        // Save Twitter info to database
+        if (user?.id) {
+          try {
+            const response = await fetch('/api/twitter/verify-auth');
+            const data = await response.json();
+            if (data.authenticated && data.user) {
+              // Save Twitter info to waitlist
+              await completeAllQuests({
+                userId: Number(user.id),
+                twitterId: data.user.id,
+                twitterUsername: data.user.username,
+              }).catch(err => {
+                console.error('Failed to save Twitter info to waitlist:', err);
+              });
+            }
+          } catch (error) {
+            console.error('Error saving Twitter info:', error);
+          }
+        }
+        
         // Show the waitlist (quest) popup after successful Twitter linking
         setShowWaitlist(true);
       });
@@ -518,6 +538,7 @@ export function ReferralAccessGate({
       if (searchPart) {
         const params = new URLSearchParams(searchPart);
         params.delete('twitter_success');
+        params.delete('show_quests');
         const cleaned = params.toString();
         router.replace(
           cleaned ? `${pathPart}?${cleaned}` : pathPart,
@@ -540,7 +561,7 @@ export function ReferralAccessGate({
         );
       }
     }
-  }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth]);
+  }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth, user]);
 
   // Reset blur state when waitlist modal closes
   useEffect(() => {
