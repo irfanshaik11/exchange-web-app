@@ -77,7 +77,7 @@ const AX = {
   surface: "#16171C",
   surface2: "#121317",
   border: "#24252C",
-  text: "#E6E7EA",
+  text: "#f0f5f5",
   muted: "#9CA3AF",
   mint: "#18c48c",
   mintHover: "#12a877",
@@ -1890,7 +1890,7 @@ function PulseTable({
   const protocols = [
     { name: 'All', icon: <span className="text-sm">🌐</span>, color: '#9333ea' },
     { name: 'Pump', icon: <Image src="/pump.svg" alt="Pump" width={16} height={16} className="rounded-full" />, color: '#00ff88' },
-    { name: 'Bonk', icon: <div className="w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-white text-xs font-bold">B</div>, color: '#ff6b35' },
+    { name: 'Bonk', icon: <div className="w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-xs font-bold" style={{ color: '#f0f5f5' }}>B</div>, color: '#ff6b35' },
     { name: 'Bags', icon: <Image src="https://bags.fm/assets/images/bags-icon.png" alt="Bags" width={16} height={16} className="rounded-full" />, color: '#00d4aa' },
     // { name: 'Moonshot', icon: <Image src="https://play-lh.googleusercontent.com/bmv_OqsfmlR2Tfd7-4I2HS1twZdiJmmyX0warik6UxhUdSfegPMegeIRxxj9LGUBAQM" alt="Moonshot" width={16} height={16} className="rounded-full" />, color: '#a855f7' },
     // { name: 'Heaven', icon: <Image src="data:image/png;base64,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" alt="Heaven" width={16} height={16} className="rounded-full" />, color: '#8b5cf6' },
@@ -1903,7 +1903,7 @@ function PulseTable({
     { name: 'Boop', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/36393.png" alt="Boop" width={16} height={16} className="rounded-full" />, color: '#3b82f6' },
     { name: 'LaunchLab', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png" alt="LaunchLab" width={16} height={16} className="rounded-full" style={{ filter: 'hue-rotate(180deg) saturate(2) brightness(1.1)' }} />, color: '#3b82f6' },
     // { name: 'Dynamic BC', icon: <Image src="https://cdn.prod.website-files.com/626692727bba3f384e008e8a/67a5dca8b3ee5d0703f70040_icon-primary.webp" alt="Dynamic BC" width={16} height={16} className="rounded-full" />, color: '#f97316' },
-    { name: 'Raydium', icon: <div className="w-4 h-4 bg-gray-500 rounded-full flex items-center justify-center text-white text-xs font-bold">R</div>, color: '#6b7280' },
+    { name: 'Raydium', icon: <div className="w-4 h-4 bg-gray-500 rounded-full flex items-center justify-center text-xs font-bold" style={{ color: '#f0f5f5' }}>R</div>, color: '#6b7280' },
     { name: 'Meteora AMM', icon: <Image src="/meteora.svg" alt="Meteora" width={16} height={16} className="rounded-full" />, color: '#92400e' },
     { name: 'Meteora AMM V2', icon: <Image src="/meteora.svg" alt="Meteora V2" width={16} height={16} className="rounded-full" />, color: '#a16207' },
     // { name: 'Pump AMM', icon: <Image src="/pump.svg" alt="Pump AMM" width={16} height={16} className="rounded-full" />, color: '#64748b' },
@@ -1911,8 +1911,8 @@ function PulseTable({
   ];
 
   const quoteTokens = [
-    { name: 'SOL', icon: <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-white text-xs font-bold">S</div>, color: '#00ff88' },
-    { name: 'USDC', icon: <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold">U</div>, color: '#06b6d4' },
+    { name: 'SOL', icon: <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-xs font-bold" style={{ color: '#f0f5f5' }}>S</div>, color: '#00ff88' },
+    { name: 'USDC', icon: <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center text-xs font-bold" style={{ color: '#f0f5f5' }}>U</div>, color: '#06b6d4' },
     { name: 'USD1', icon: <span className="w-4 h-4 bg-yellow-500 rounded-full flex items-center justify-center text-xs font-bold text-black">1</span>, color: '#fbbf24' }
   ];
 
@@ -2757,7 +2757,7 @@ function PulseTable({
               <div key={pill} className="relative flex items-center justify-center">
                 <button
                   className={`px-1 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded ${
-                    selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-white'
+                    selectedPill === pill ? 'text-green-400' : 'text-gray-400'
                   }`}
                   style={{
                     paddingTop: '2px',
@@ -2771,8 +2771,18 @@ function PulseTable({
                     setSelectedPill(pill);
                     console.log(`Selected ${pill} in ${title} column`);
                   }}
-                  onMouseEnter={() => setShowPillTooltip(pill)}
-                  onMouseLeave={() => setShowPillTooltip(null)}
+                  onMouseEnter={(e) => {
+                    if (selectedPill !== pill) {
+                      e.currentTarget.style.color = '#f0f5f5';
+                    }
+                    setShowPillTooltip(pill);
+                  }}
+                  onMouseLeave={(e) => {
+                    if (selectedPill !== pill) {
+                      e.currentTarget.style.color = '';
+                    }
+                    setShowPillTooltip(null);
+                  }}
                 >
                   {pill}
                 </button>
@@ -2854,8 +2864,8 @@ function PulseTable({
             {/* Protocol Filter Count Indicator (exclude 'All') */}
             {filters.protocols.filter((p: string) => p !== 'All').length > 0 && (
               <span 
-                className="absolute -top-1 -right-1 bg-emerald-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
-                style={{ fontSize: '10px' }}
+                className="absolute -top-1 -right-1 bg-emerald-500 text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
+                style={{ color: '#f0f5f5', fontSize: '10px' }}
               >
                 {filters.protocols.filter((p: string) => p !== 'All').length}
               </span>
@@ -4932,12 +4942,12 @@ function PulseTable({
                                         className="w-7 h-7 rounded-full flex items-center justify-center"
                                         style={{ backgroundColor: '#1d9bf0' }}
                                       >
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#ffffff' }}>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#f0f5f5' }}>
                                           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                                         </svg>
                                       </div>
                                       <div>
-                                        <div className="text-sm font-bold text-white">
+                                        <div className="text-sm font-bold" style={{ color: '#f0f5f5' }}>
                                           X Profile
                                         </div>
                                         <div className="text-xs text-gray-400">
@@ -4979,7 +4989,7 @@ function PulseTable({
                                           className="w-full h-full flex items-center justify-center font-bold text-xl"
                                           style={{ 
                                             backgroundColor: '#1a1a1a',
-                                            color: '#ffffff',
+                                            color: '#f0f5f5',
                                             display: 'none'
                                           }}
                                         >
@@ -4991,7 +5001,7 @@ function PulseTable({
                                     {/* Profile Info */}
                                     <div className="text-center mb-4">
                                       <div className="flex items-center justify-center gap-2 mb-1">
-                                        <h3 className="text-xl font-bold text-white">
+                                        <h3 className="text-xl font-bold" style={{ color: '#f0f5f5' }}>
                                           {token.symbol || 'Unknown'}
                                         </h3>
                                         {/* Verified Badge */}
@@ -4999,7 +5009,7 @@ function PulseTable({
                                           className="w-6 h-6 rounded-full flex items-center justify-center"
                                           style={{ backgroundColor: '#1d9bf0' }}
                                         >
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f0f5f5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M9 12l2 2 4-4"/>
                                             <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
                                           </svg>
@@ -5008,7 +5018,7 @@ function PulseTable({
                                       <p className="text-sm text-gray-400 mb-3">
                                         @{token.symbol?.toLowerCase() || 'unknown'}
                                       </p>
-                                      <p className="text-sm text-white leading-relaxed px-2">
+                                      <p className="text-sm leading-relaxed px-2" style={{ color: '#f0f5f5' }}>
                                         {token.description || `Official ${token.symbol || 'token'} community. Join the conversation!`}
                                       </p>
                                     </div>
@@ -5018,14 +5028,14 @@ function PulseTable({
                                       <button
                                         className="px-6 py-2 rounded-full text-sm font-semibold transition-all duration-200"
                                         style={{
-                                          backgroundColor: '#ffffff',
+                                          backgroundColor: '#f0f5f5',
                                           color: '#000000'
                                         }}
                                         onMouseEnter={(e) => {
                                           e.currentTarget.style.backgroundColor = '#e7e9ea';
                                         }}
                                         onMouseLeave={(e) => {
-                                          e.currentTarget.style.backgroundColor = '#ffffff';
+                                          e.currentTarget.style.backgroundColor = '#f0f5f5';
                                         }}
                                       >
                                         Follow
@@ -5341,7 +5351,7 @@ function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <LuChefHat size={13} /> DS <span style={{ color: '#ffffff' }}><TokenAge createdAt={(token as any).created_at || (token as any).launch_time} /></span>
+                    <LuChefHat size={13} /> DS <span style={{ color: '#f0f5f5' }}><TokenAge createdAt={(token as any).created_at || (token as any).launch_time} /></span>
                   </span>
                   
                   {/* Snipe percentage - Red */}
@@ -5562,7 +5572,14 @@ function PulseTable({
             Snipe on Migration
             <button
               onClick={() => setShowSnipeModal(false)}
-              className="text-2xl text-neutral-400 hover:text-white"
+              className="text-2xl text-neutral-400"
+              style={{ color: '#9CA3AF' }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = '#f0f5f5';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = '#9CA3AF';
+              }}
             >
               ×
             </button>
@@ -5598,12 +5615,13 @@ function PulseTable({
                 <button
                   key={amount}
                   onClick={() => setThunderAmount(amount)}
-                  className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded text-white text-sm hover:bg-neutral-700 transition-colors"
+                  className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded text-sm hover:bg-neutral-700 transition-colors"
+                  style={{ color: '#f0f5f5' }}
                 >
                   {amount}
                 </button>
               ))}
-              <button className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded text-white text-sm hover:bg-neutral-700 transition-colors">
+              <button className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded text-sm hover:bg-neutral-700 transition-colors" style={{ color: '#f0f5f5' }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 20h9"></path>
                   <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
@@ -5676,7 +5694,8 @@ function PulseTable({
             <input
               type="text"
               value="https://api.mainnet-beta.solana.com"
-              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              style={{ color: '#f0f5f5' }}
               readOnly
             />
           </div>
