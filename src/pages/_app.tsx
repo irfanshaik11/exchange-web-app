@@ -1,5 +1,5 @@
 import { type AppType } from "next/app";
-import { Geist } from "next/font/google";
+import { Inter } from "next/font/google";
 import "~/styles/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
 import { getDefaultConfig, RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
@@ -99,8 +99,10 @@ const config = getDefaultConfig({
   ssr: true,
 });
 
-const geist = Geist({
-  subsets: ["latin"],
+const inter = Inter({
+  weight: ['400', '500'],
+  subsets: ['latin'],
+  variable: '--font-inter',
 });
 
 function TokenHandler() {
@@ -235,24 +237,46 @@ const MyApp: AppType = ({ Component, pageProps }) => {
             color: white !important;
             margin: 0;
             padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif !important;
+            font-weight: 400 !important;
           }
           #__next {
             background-color: #101114;
             min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif !important;
           }
           * {
             transition: none !important;
+            font-family: inherit;
+          }
+          h1, h2, h3, h4, h5, h6 {
+            font-weight: 500 !important;
           }
         `}</style>
         <style dangerouslySetInnerHTML={{
           __html: `
-            html, body { background-color: #101114 !important; color: white !important; }
-            #__next { background-color: #101114; min-height: 100vh; }
-            * { transition: none !important; }
+            html, body { 
+              background-color: #101114 !important; 
+              color: white !important; 
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif !important;
+              font-weight: 400 !important;
+            }
+            #__next { 
+              background-color: #101114; 
+              min-height: 100vh; 
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif !important;
+            }
+            * { 
+              transition: none !important; 
+              font-family: inherit;
+            }
+            h1, h2, h3, h4, h5, h6 {
+              font-weight: 500 !important;
+            }
           `
         }} />
       </Head>
-      <div className={geist.className}>
+      <div className={inter.className}>
         <MobileBlocker>
           <WagmiProvider config={config}>
             <QueryClientProvider client={queryClient}>

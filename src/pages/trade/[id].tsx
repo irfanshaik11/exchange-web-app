@@ -505,7 +505,7 @@ export default function TradePage() {
         style={{ 
           backgroundColor: "#0f1012", 
           color: AX.text, 
-          fontFamily: "Inter, ui-sans-serif, system-ui",
+          fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
         }}
       >
         {/* Top global header */}
