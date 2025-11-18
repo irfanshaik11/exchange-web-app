@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState, useRef, useCallback } from "react";
-import { FaSearch, FaStar, FaWallet, FaChevronLeft, FaChevronRight, FaBell } from "react-icons/fa";
+import { FaSearch, FaStar, FaWallet, FaChevronLeft, FaChevronRight, FaBell, FaChevronDown } from "react-icons/fa";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { useUser } from "./UserContext";
 import Cookies from "js-cookie";
@@ -20,7 +20,7 @@ const AX = {
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
-  text: "#E6E7EA",
+  text: "#f0f5f5",
   muted: "#9CA3AF",
   mint: "#18c48c",
   mintHover: "#12a877",
@@ -96,6 +96,7 @@ export default function Header({
   const router = useRouter();
   const isDiscover = router.pathname === "/";
   const { user, loading: userLoading, solBalance } = useUser();
+  const currentChain = (router.query.chain as string) || 'sol';
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositInitialTab, setDepositInitialTab] = useState<'convert' | 'deposit' | 'buy' | 'withdraw'>('deposit');
@@ -505,7 +506,7 @@ export default function Header({
         style={{ backgroundColor: "#0f1012", borderColor: AX.border }}
       >
         <div
-          className="flex max-w-full items-center justify-between border-b px-2 md:px-4 py-2.5"
+          className="flex max-w-full items-center justify-between border-b px-2 md:px-4 pt-4 pb-2.5"
           style={{ backgroundColor: "#06070b", borderColor: AX.border }}
         >
           <div className="flex min-w-0 items-center gap-2 md:gap-3 flex-1 overflow-hidden">
@@ -570,7 +571,7 @@ export default function Header({
                           window.location.href = link.href;
                         });
                       }}
-                      className={`px-2 sm:px-3 xl:px-4 py-1.5 text-xs sm:text-sm font-medium transition-all duration-300 ease-out rounded whitespace-nowrap flex-shrink-0`}
+                      className={`px-2 sm:px-3 xl:px-4 py-1.5 text-sm font-medium transition-all duration-300 ease-out rounded whitespace-nowrap flex-shrink-0`}
                       style={{
                         color: isActive ? AX.mint : AX.text,
                         backgroundColor: isActive ? "rgba(24, 196, 140, 0.1)" : "transparent",
@@ -624,43 +625,37 @@ export default function Header({
           <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 md:gap-3 lg:gap-4 flex-shrink-0">
             {showSearch && (
               <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
-                {/* Pill-style search trigger with keycap hint (desktop) */}
+                {/* Smaller search button (desktop) */}
                 <button
                   onClick={() => setSearchModalOpen(true)}
-                  className="hidden xl:flex items-center gap-2 h-8 rounded-full border px-3 pr-2 transition-all duration-300 ease-out min-w-[280px]"
+                  className="hidden xl:flex items-center gap-1.5 h-7 rounded-md border px-2 transition-all duration-300 ease-out"
                   style={{
-                    backgroundColor: AX.surface,
+                    backgroundColor: AX.bg,
                     borderColor: AX.border,
                     color: AX.muted,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor =
-                      "rgba(24, 196, 140, 0.08)";
-                    e.currentTarget.style.borderColor = "#18c48c";
-                    e.currentTarget.style.boxShadow =
-                      "0 0 8px rgba(24, 196, 140, 0.3), 0 0 16px rgba(24, 196, 140, 0.15)";
-                    e.currentTarget.style.transform = "scale(1.01)";
-                  }}
-                  onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = AX.surface;
                     e.currentTarget.style.borderColor = AX.border;
-                    e.currentTarget.style.boxShadow = "none";
-                    e.currentTarget.style.transform = "scale(1)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = AX.bg;
+                    e.currentTarget.style.borderColor = AX.border;
                   }}
                 >
-                  <FaSearch size={14} />
+                  <FaSearch size={12} />
                   <span className="text-xs text-neutral-400 whitespace-nowrap">
-                    Search token by name, ticker, or CA...
+                    Search tokens
                   </span>
-                  <span className="ml-auto rounded-md border border-neutral-700/70 bg-neutral-800/80 px-1.5 py-0.5 text-[10px] leading-none text-neutral-200">
-                    Tab
+                  <span className="ml-auto rounded border border-neutral-700/70 bg-neutral-800/80 px-1 py-0.5 text-[10px] leading-none text-neutral-200">
+                    /
                   </span>
                 </button>
 
                 {/* Medium search button (for tablets) - shows icon + text without Tab keycap */}
                 <button
                   onClick={() => setSearchModalOpen(true)}
-                  className="hidden lg:flex xl:hidden items-center gap-1.5 h-8 rounded-full border px-2.5 transition-all duration-300 ease-out min-w-[180px]"
+                  className="hidden lg:flex xl:hidden items-center gap-1.5 h-8 rounded-md border px-2.5 transition-all duration-300 ease-out min-w-[180px]"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -685,7 +680,7 @@ export default function Header({
                 {/* Compact icon-only trigger on small screens */}
                 <button
                   onClick={() => setSearchModalOpen(true)}
-                  className="lg:hidden flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300 ease-out flex-shrink-0"
+                  className="lg:hidden flex h-8 w-8 items-center justify-center rounded-md border transition-all duration-300 ease-out flex-shrink-0"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -699,7 +694,7 @@ export default function Header({
                 {clipboardToken && clipboardToken.imageUrl && (
                   <button
                     onClick={handlePasteCA}
-                    className="hidden xl:flex items-center gap-2 h-8 rounded-full border pl-2 pr-2.5 transition-all duration-300 ease-out relative"
+                    className="hidden xl:flex items-center gap-2 h-8 rounded-md border pl-2 pr-2.5 transition-all duration-300 ease-out relative"
                     style={{
                       backgroundColor: AX.surface,
                       borderColor: AX.border,
@@ -727,7 +722,7 @@ export default function Header({
                         className="h-7 w-7 rounded-md object-cover flex-shrink-0"
                         onError={() => setClipboardToken(null)}
                       />
-                      <span className="text-xs font-medium text-white truncate max-w-[90px]">
+                      <span className="text-sm font-medium text-[#f0f5f5] truncate max-w-[90px]">
                         {clipboardToken.name}
                       </span>
                     </div>
@@ -762,7 +757,7 @@ export default function Header({
                 {clipboardToken && clipboardToken.imageUrl && (
                   <button
                     onClick={handlePasteCA}
-                    className="hidden lg:flex xl:hidden items-center gap-1.5 h-8 rounded-full border pl-1.5 pr-2 transition-all duration-300 ease-out relative"
+                    className="hidden lg:flex xl:hidden items-center gap-1.5 h-8 rounded-md border pl-1.5 pr-2 transition-all duration-300 ease-out relative"
                     style={{
                       backgroundColor: AX.surface,
                       borderColor: AX.border,
@@ -799,7 +794,7 @@ export default function Header({
                 {clipboardToken && clipboardToken.imageUrl && (
                   <button
                     onClick={handlePasteCA}
-                    className="lg:hidden flex items-center gap-1.5 h-8 rounded-full border pl-1.5 pr-2 transition-all duration-300 ease-out relative flex-shrink-0"
+                    className="lg:hidden flex items-center gap-1.5 h-8 rounded-md border pl-1.5 pr-2 transition-all duration-300 ease-out relative flex-shrink-0"
                     style={{
                       backgroundColor: AX.surface,
                       borderColor: AX.border,
@@ -822,15 +817,16 @@ export default function Header({
                     />
                   </button>
                 )}
+                
+                {/* Blockchain Switcher - Right of search bar */}
+                <BlockchainSwitcher />
               </div>
             )}
             
-            {/* Blockchain Switcher */}
-            <BlockchainSwitcher />
             
             <button
               onClick={() => setWatchlistOpen(true)}
-              className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
+              className="flex h-8 w-8 items-center justify-center rounded-md transition-all duration-300 ease-out flex-shrink-0"
               style={{
                 backgroundColor: '#000000',
                 color: AX.muted,
@@ -857,7 +853,7 @@ export default function Header({
             <div ref={notificationsRef} className="relative">
               <button
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out flex-shrink-0"
+                className="flex h-8 w-8 items-center justify-center rounded-md transition-all duration-300 ease-out flex-shrink-0"
                 style={{
                   backgroundColor: '#000000',
                   color: AX.muted,
@@ -895,14 +891,14 @@ export default function Header({
                 >
                   {/* Header */}
                   <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: "#2A2B33" }}>
-                    <h3 className="text-lg font-semibold text-white">Notifications</h3>
+                    <h3 className="text-sm font-semibold text-[#f0f5f5]">Notifications</h3>
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => {
                           // Clear all notifications logic here
                           toast.success("All notifications cleared");
                         }}
-                        className="text-sm text-neutral-400 hover:text-white transition-colors"
+                        className="text-sm text-neutral-400 hover:text-[#f0f5f5] transition-colors"
                       >
                         Clear All
                       </button>
@@ -937,47 +933,45 @@ export default function Header({
                 {/* Combined Balance + Username Button */}
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="flex items-center gap-1.5 lg:gap-2 h-8 rounded-full border px-2 lg:px-3 transition-all duration-300 ease-out cursor-pointer"
+                  className="flex items-center gap-1.5 lg:gap-2 h-8 rounded-md border px-2 lg:px-3 transition-all duration-300 ease-out cursor-pointer group/account"
                   style={{
-                    backgroundColor: AX.surface,
-                    borderColor: '#000000',
+                    backgroundColor: AX.surface2,
+                    borderColor: AX.border,
                     color: AX.text,
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor =
-                      "rgba(24, 196, 140, 0.08)";
+                      "rgba(24, 196, 140, 0.12)";
                     e.currentTarget.style.borderColor = AX.mint;
                     e.currentTarget.style.boxShadow =
-                      "0 0 8px rgba(24, 196, 140, 0.2)";
+                      "0 0 12px rgba(24, 196, 140, 0.3)";
+                    e.currentTarget.style.transform = "scale(1.02)";
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = AX.surface;
-                    e.currentTarget.style.borderColor = '#000000';
+                    e.currentTarget.style.backgroundColor = AX.surface2;
+                    e.currentTarget.style.borderColor = AX.border;
                     e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.transform = "scale(1)";
                   }}
+                  title="Click to view account & wallet"
                 >
                   {/* Balance */}
                   <FaWallet size={11} style={{ color: AX.muted }} />
-                  <span className="text-[11px] lg:text-xs font-medium">
-                    {solBalance.toFixed(2)}
+                  <span className="text-sm font-medium">
+                    {solBalance.toFixed(3)}
                   </span>
-                  <img
-                    src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                    alt="SOL"
-                    className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-full"
-                  />
                   {/* Divider */}
                   <div className="h-4 w-px bg-neutral-700 hidden sm:block"></div>
                   {/* User Avatar */}
                   <div
-                    className="hidden sm:flex h-5 w-5 lg:h-6 lg:w-6 items-center justify-center rounded-full text-xs font-bold text-white select-none"
+                    className="hidden sm:flex h-4 w-4 lg:h-5 lg:w-5 items-center justify-center rounded-md text-xs font-bold text-[#f0f5f5] select-none"
                     style={{ backgroundColor: AX.mint }}
                   >
                     {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                   </div>
                   {/* Username (hidden on smaller screens) */}
                   <span
-                    className="hidden lg:block max-w-[60px] xl:max-w-[80px] truncate text-xs"
+                    className="hidden lg:block max-w-[60px] xl:max-w-[80px] truncate text-sm"
                     style={{ color: AX.text }}
                   >
                     {user.name}
@@ -1000,13 +994,13 @@ export default function Header({
                       {/* User Info Header */}
                       <div className="flex items-center gap-2 mb-3 pb-3 border-b" style={{ borderColor: "#20232b" }}>
                         <div
-                          className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white select-none"
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold text-[#f0f5f5] select-none"
                           style={{ backgroundColor: AX.mint }}
                         >
                           {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-semibold text-white truncate">{user.name}</div>
+                          <div className="text-sm font-semibold text-[#f0f5f5] truncate">{user.name}</div>
                           <div className="text-xs text-neutral-400">Account</div>
                         </div>
                       </div>
@@ -1023,9 +1017,9 @@ export default function Header({
                           <img
                             src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
                             alt="SOL"
-                            className="w-4 h-4 rounded-full"
+                            className="w-4 h-4 rounded-md"
                           />
-                          <span className="text-sm text-white">≈ {solBalance.toFixed(2)}</span>
+                          <span className="text-sm text-[#f0f5f5]">≈ {solBalance.toFixed(3)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <svg className="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1034,9 +1028,9 @@ export default function Header({
                           <img
                             src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
                             alt="SOL"
-                            className="w-4 h-4 rounded-full"
+                            className="w-4 h-4 rounded-md"
                           />
-                          <span className="text-sm text-white">0</span>
+                          <span className="text-sm text-[#f0f5f5]">0</span>
                         </div>
                       </div>
 
@@ -1231,7 +1225,7 @@ export default function Header({
             ) : (
               !userLoading && (
                 <button
-                  className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-medium rounded-full transition-all duration-300 ease-out flex-shrink-0"
+                  className="ml-0.5 sm:ml-1 md:ml-1.5 lg:ml-2 px-2.5 md:px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-300 ease-out flex-shrink-0"
                   style={{
                     backgroundColor: AX.mint,
                     color: "#000000",
@@ -1299,7 +1293,7 @@ export default function Header({
             </button>
             {/* Custom tooltip for Active Positions */}
             <div
-              className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
+              className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
               style={{
                 backgroundColor: AX.surface,
                 color: AX.text,
@@ -1352,7 +1346,7 @@ export default function Header({
             </button>
             {/* Custom tooltip for Watchlist */}
             <div
-              className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
+              className="absolute left-full top-1/2 transform -translate-y-1/2 ml-2 px-2 py-1 rounded text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50"
               style={{
                 backgroundColor: AX.surface,
                 color: AX.text,

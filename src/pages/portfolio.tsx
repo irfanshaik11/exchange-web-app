@@ -39,7 +39,7 @@ const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
           />
         ))}
       </div>
-      <span className="text-sm text-white">{count}</span>
+      <span className="text-sm text-[#f0f5f5]">{count}</span>
     </div>
   </InterstateTooltip>
 );
@@ -695,8 +695,8 @@ export default function PortfolioPage() {
               <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "spot"
-                    ? "text-white"
-                    : "text-[#6B7280] hover:text-white"
+                    ? "text-[#f0f5f5]"
+                    : "text-[#6B7280] hover:text-[#f0f5f5]"
                 }`}
                 onClick={() => setActiveSection("spot")}
               >
@@ -705,8 +705,8 @@ export default function PortfolioPage() {
               <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "wallet"
-                    ? "text-white"
-                    : "text-[#6B7280] hover:text-white"
+                    ? "text-[#f0f5f5]"
+                    : "text-[#6B7280] hover:text-[#f0f5f5]"
                 }`}
                 onClick={() => setActiveSection("wallet")}
               >
@@ -715,8 +715,8 @@ export default function PortfolioPage() {
               {/* <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "perpetuals"
-                    ? "text-white"
-                    : "text-[#6B7280] hover:text-white"
+                    ? "text-[#f0f5f5]"
+                    : "text-[#6B7280] hover:text-[#f0f5f5]"
                 }`}
                 onClick={() => setActiveSection("perpetuals")}
               >
@@ -781,8 +781,8 @@ export default function PortfolioPage() {
                     onClick={() => setSelectedTimeframe("1d")}
                     className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "1d"
-                        ? "text-white"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                   >
                     1d
@@ -791,8 +791,8 @@ export default function PortfolioPage() {
                     onClick={() => setSelectedTimeframe("7d")}
                     className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "7d"
-                        ? "text-white"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                   >
                     7d
@@ -801,8 +801,8 @@ export default function PortfolioPage() {
                     onClick={() => setSelectedTimeframe("30d")}
                     className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "30d"
-                        ? "text-white"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                   >
                     30d
@@ -811,8 +811,8 @@ export default function PortfolioPage() {
                     onClick={() => setSelectedTimeframe("Max")}
                     className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "Max"
-                        ? "text-white"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                   >
                     Max
@@ -829,7 +829,7 @@ export default function PortfolioPage() {
               <div className="grid grid-cols-3 gap-6">
                 {/* Balance */}
                 <div className="bg-[#101114] rounded-lg p-6">
-                  <div className="mb-4 text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                  <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                     Balance
                   </div>
                   <div className="space-y-4">
@@ -837,7 +837,7 @@ export default function PortfolioPage() {
                       <div className="text-[#6B7280] text-sm font-light">
                         Total Value
                       </div>
-                      <div className="text-2xl font-light text-white">
+                      <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -852,7 +852,7 @@ export default function PortfolioPage() {
                       <div className="text-[#6B7280] text-sm font-light">
                         Unrealized PNL
                       </div>
-                      <div className="text-2xl font-light text-white">
+                      <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -867,7 +867,7 @@ export default function PortfolioPage() {
                       <div className="text-[#6B7280] text-sm font-light">
                         Available Balance
                       </div>
-                      <div className="text-2xl font-light text-white">
+                      <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -884,7 +884,7 @@ export default function PortfolioPage() {
                 {/* Realized PNL */}
                 <div className="bg-[#101114] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
-                    <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                    <div className="text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                       Realized PNL
                     </div>
                     {/* Calendar icon commented out */}
@@ -1055,13 +1055,13 @@ export default function PortfolioPage() {
                 {/* Performance */}
                 <div className="bg-[#101114] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
-                    <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                    <div className="text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                       Performance
                     </div>
                     <InterstateTooltip label="Export">
                       <button
                         onClick={exportPerformanceData}
-                        className="text-[#9CA3AF] text-sm cursor-pointer hover:text-white transition-colors"
+                        className="text-[#9CA3AF] text-sm cursor-pointer hover:text-[#f0f5f5] transition-colors"
                       >
                         <FaUpload />
                       </button>
@@ -1072,7 +1072,7 @@ export default function PortfolioPage() {
                       <span className="text-[#6B7280] font-light">
                         {selectedTimeframe} Unrealized PNL
                       </span>
-                      <span className="text-white font-light">
+                      <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -1089,7 +1089,7 @@ export default function PortfolioPage() {
                       <span className="text-[#6B7280] font-light">
                         {selectedTimeframe} Realized PNL
                       </span>
-                      <span className="text-white font-light">
+                      <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -1110,7 +1110,7 @@ export default function PortfolioPage() {
                       <span className="text-[#6B7280] font-light">
                         {selectedTimeframe} Total TXNS
                       </span>
-                      <span className="text-white font-light">
+                      <span className="text-[#f0f5f5] font-light">
                         {timeframeMetrics.winningTrades}/
                         {timeframeMetrics.losingTrades}
                       </span>
@@ -1125,7 +1125,7 @@ export default function PortfolioPage() {
                             &gt;500%
                           </span>
                         </div>
-                        <span className="text-white font-light">
+                        <span className="text-[#f0f5f5] font-light">
                           {performanceBreakdown.above500}
                         </span>
                       </div>
@@ -1136,7 +1136,7 @@ export default function PortfolioPage() {
                             200% ~ 500%
                           </span>
                         </div>
-                        <span className="text-white font-light">
+                        <span className="text-[#f0f5f5] font-light">
                           {performanceBreakdown.between200And500}
                         </span>
                       </div>
@@ -1158,7 +1158,7 @@ export default function PortfolioPage() {
                             0% ~ -50%
                           </span>
                         </div>
-                        <span className="text-white font-light">
+                        <span className="text-[#f0f5f5] font-light">
                           {performanceBreakdown.between0AndMinus50}
                         </span>
                       </div>
@@ -1169,7 +1169,7 @@ export default function PortfolioPage() {
                             &lt; -50%
                           </span>
                         </div>
-                        <span className="text-white font-light">
+                        <span className="text-[#f0f5f5] font-light">
                           {performanceBreakdown.belowMinus50}
                         </span>
                       </div>
@@ -1191,8 +1191,8 @@ export default function PortfolioPage() {
                         key={tab}
                         className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                           activeSpotTab === i
-                            ? "text-white border-b-2 border-[#70E0B0]"
-                            : "text-[#9CA3AF] hover:text-white"
+                            ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
+                            : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                         }`}
                         onClick={() => setActiveSpotTab(i)}
                       >
@@ -1214,7 +1214,7 @@ export default function PortfolioPage() {
                       {searchQuery.trim() && (
                         <button
                           onClick={() => setSearchQuery("")}
-                          className="text-[#9CA3AF] hover:text-white transition-colors"
+                          className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
                         >
                           <FaTimes className="text-xs" />
                         </button>
@@ -1240,7 +1240,7 @@ export default function PortfolioPage() {
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs ${
                         !showHidden
                           ? "bg-[#2A2B33] text-[#70E0B0]"
-                          : "bg-transparent hover:bg-[#2A2B33] text-[#9CA3AF] hover:text-white"
+                          : "bg-transparent hover:bg-[#2A2B33] text-[#9CA3AF] hover:text-[#f0f5f5]"
                       }`}
                     >
                       <svg
@@ -1266,7 +1266,7 @@ export default function PortfolioPage() {
                     </button>
                     <button
                       onClick={() => setSortByUSD(!sortByUSD)}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer bg-transparent text-[#9CA3AF] hover:text-white text-xs"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer bg-transparent text-[#9CA3AF] hover:text-[#f0f5f5] text-xs"
                     >
                       <span className="text-xs">↑↓</span>
                       {sortByUSD ? "USD" : "SOL"}
@@ -1389,7 +1389,7 @@ export default function PortfolioPage() {
                       className={`flex items-center gap-1 px-1 ml-10 py-1 rounded-full transition-colors duration-200 cursor-pointer text-xs whitespace-nowrap ${
                         !showHidden
                           ? "text-[#70E0B0]"
-                          : "text-[#9CA3AF] hover:text-white"
+                          : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                       }`}
                     >
                       <svg
@@ -1416,7 +1416,7 @@ export default function PortfolioPage() {
                       <span className="hidden sm:inline">Show Archived</span>
                       <span className="sm:hidden">Archived</span>
                     </button>
-                    <button className="px-3  py-1 rounded-full bg-[#374151] text-xs text-white hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap">
+                    <button className="px-3  py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap">
                       Import
                     </button>
                     <button className="px-2 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:bg-[#58B890] transition-colors cursor-pointer whitespace-nowrap">
@@ -1427,7 +1427,7 @@ export default function PortfolioPage() {
 
                 {/* Right Panel Header */}
                 <div className="px-2 py-4 border-l border-[#2A2B33]">
-                  <h3 className="text-white font-medium text-sm">Source wallets</h3>
+                  <h3 className="text-[#f0f5f5] font-medium text-sm">Source wallets</h3>
                 </div>
               </div>
 
@@ -1462,7 +1462,7 @@ export default function PortfolioPage() {
                           <div className="flex items-center gap-2 min-w-0">
                             <div className="w-3 h-3 rounded bg-[#FF6B35] flex-shrink-0"></div>
                             <div className="min-w-0 flex-1">
-                              <div className="font-medium text-white text-sm truncate">
+                              <div className="font-medium text-[#f0f5f5] text-sm truncate">
                                 Narrative Main
                               </div>
                               <div className="text-xs text-[#9CA3AF] font-mono truncate">
@@ -1470,7 +1470,7 @@ export default function PortfolioPage() {
                                 {user.publicKey.slice(-4)}
                               </div>
                             </div>
-                            <button className="text-[#9CA3AF] hover:text-white flex-shrink-0">
+                            <button className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0">
                               <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
                                 <rect
                                   x="9"
@@ -1555,7 +1555,7 @@ export default function PortfolioPage() {
 
                   {/* Destination Section */}
                   <div className="px-4 py-2 border-t border-[#2A2B33] flex items-center justify-between">
-                    <h3 className="text-white font-medium text-sm">Destination</h3>
+                    <h3 className="text-[#f0f5f5] font-medium text-sm">Destination</h3>
                     <button className="px-3 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:bg-[#58B890] transition-colors cursor-pointer">
                       Start Transfer
                     </button>
@@ -1582,7 +1582,7 @@ export default function PortfolioPage() {
             <div className="space-y-6">
               {/* Header with Time Range */}
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-light text-white">Your holdings</h2>
+                <h2 className="text-2xl font-light text-[#f0f5f5]">Your holdings</h2>
                 <div className="flex items-center gap-2">
                   {["1d", "7d", "30d", "Max"].map((period, index) => (
                     <button
@@ -1590,7 +1590,7 @@ export default function PortfolioPage() {
                       className={`px-3 py-1 text-sm transition-colors cursor-pointer ${
                         period === "Max"
                           ? "text-[#70E0B0] bg-[#70E0B0]/10 rounded"
-                          : "text-[#9CA3AF] hover:text-white"
+                          : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                       }`}
                     >
                       {period}
@@ -1603,19 +1603,19 @@ export default function PortfolioPage() {
               <div className="grid grid-cols-2 gap-6">
                 {/* Left Panel - Performance Metrics */}
                 <div className="bg-[#101114] rounded-lg p-6">
-                  <h3 className="text-white font-medium text-lg mb-4">Performance</h3>
+                  <h3 className="text-[#f0f5f5] font-medium text-lg mb-4">Performance</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         All Time Volume
                       </div>
-                      <div className="text-2xl font-light text-white">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
                     </div>
                     <div>
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         All Time PNL
                       </div>
-                      <div className="text-2xl font-light text-white">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
                       <div className="text-xs text-[#9CA3AF] mt-1">
                         Number of Trades: 0
                       </div>
@@ -1624,14 +1624,14 @@ export default function PortfolioPage() {
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         Account Value
                       </div>
-                      <div className="text-2xl font-light text-white">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Right Panel - PNL Chart */}
                 <div className="bg-[#101114] rounded-lg p-6">
-                  <h3 className="text-white font-medium text-lg mb-4">PNL</h3>
+                  <h3 className="text-[#f0f5f5] font-medium text-lg mb-4">PNL</h3>
                   <div className="h-48 flex items-center justify-center relative">
                     {/* Simple chart representation */}
                     <div className="w-full h-24 border-b border-[#2A2B33] relative">
@@ -1641,7 +1641,7 @@ export default function PortfolioPage() {
                     </div>
                     {/* Chart icon in bottom right */}
                     <div className="absolute bottom-2 right-2 w-6 h-6 border border-white rounded flex items-center justify-center">
-                      <span className="text-xs text-white">T</span>
+                      <span className="text-xs text-[#f0f5f5]">T</span>
                     </div>
                   </div>
                 </div>
@@ -1654,8 +1654,8 @@ export default function PortfolioPage() {
                   <button
                     className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                       activePerpetualsTab === 0
-                        ? "text-white border-b-2 border-[#70E0B0]"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                     onClick={() => setActivePerpetualsTab(0)}
                   >
@@ -1664,8 +1664,8 @@ export default function PortfolioPage() {
                   <button
                     className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                       activePerpetualsTab === 1
-                        ? "text-white border-b-2 border-[#70E0B0]"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                     onClick={() => setActivePerpetualsTab(1)}
                   >
