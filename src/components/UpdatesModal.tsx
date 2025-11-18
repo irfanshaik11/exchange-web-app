@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiX, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import Cookies from 'js-cookie';
 
 interface Update {
   id: string;
@@ -28,11 +29,14 @@ export default function UpdatesModal({ updates, onClose, storageKey = 'trenches-
   }, []);
 
   const handleClose = () => {
+    // Set cookie immediately when closing to prevent modal from showing again
+    if (storageKey) {
+      // Use cookies instead of localStorage for better persistence across hard refreshes
+      // Set cookie to expire in 1 year - this ensures it persists across all refreshes
+      Cookies.set(storageKey, 'viewed', { expires: 365, path: '/' });
+    }
     setIsVisible(false);
     setTimeout(() => {
-      if (storageKey) {
-        localStorage.setItem(storageKey, Date.now().toString());
-      }
       onClose();
     }, 300);
   };
