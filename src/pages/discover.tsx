@@ -1264,41 +1264,42 @@ export default function DiscoverPage() {
         <link rel="preload" as="image" href="/placeholder/fallback-avatar.jpg" />
       </Head>
 
-      <div className="min-h-screen text-[#E6E7EA] relative" style={{ backgroundColor: '#06070b' }}>
+      <div className="min-h-screen text-[#E6E7EA] relative bg-[#06070b]">
         {/* Header */}
-        <div style={{ position: 'relative', zIndex: 100 }}>
+        <div className='relative' style={{ zIndex: 100 }}>
           <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
         </div>
 
         {/* Tab Navigation */}
-        <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-8 max-w-[98%]">
-          <div className="flex max-w-7xl items-center gap-6">
-             <button
-              className={`text-lg font-light transition-colors ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+        <div className="mx-auto my-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-6 px-4 sm:px-6 lg:px-8 max-w-[98%]">
+          {/* Tabs Section - Scrollable on mobile */}
+          <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 overflow-x-auto scrollbar-hide pb-2 lg:pb-0 -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+            <button
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
             <button
-              className={`text-lg font-light transition-colors ${activeTab === "newPairs" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "newPairs" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("newPairs")}
             >
               New Pairs
             </button>
             <button
-              className={`text-lg font-light transition-colors ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("xStocks")}
             >
               xStocks
             </button>
             <button
-              className={`text-lg font-light transition-colors ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("surge")}
             >
               Surge
             </button>
             <button
-              className={`text-lg font-light transition-colors ${activeTab === "live" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "live" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("live")}
             >
               Pump Live
@@ -1311,8 +1312,8 @@ export default function DiscoverPage() {
             </button> */}
           </div>
 
-          {/* Right controls (unchanged) */}
-          <div className="flex flex-row items-center gap-4">
+          {/* Right controls - Stack on mobile, row on desktop */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
             {/* Connection status - commented out per user request */}
             {/* <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
@@ -1323,11 +1324,11 @@ export default function DiscoverPage() {
 
             {/* Timeframes - hide when on live tab, new pairs, xStocks, or surge */}
             {activeTab !== 'live' && activeTab !== 'newPairs' && activeTab !== 'xStocks' && activeTab !== 'surge' && (
-              <div className="flex max-w-7xl items-center gap-3 text-sm font-medium">
+              <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm font-medium">
                 {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
                   <button
                     key={tf}
-                    className={(selectedTimeframe === tf ? "text-[#f0f5f5] " : "text-[#9CA3AF] hover:text-[#f0f5f5] ") + "cursor-pointer transition-colors"}
+                    className={(selectedTimeframe === tf ? "text-[#f0f5f5] " : "text-[#9CA3AF] hover:text-[#f0f5f5] ") + "cursor-pointer transition-colors whitespace-nowrap"}
                     onClick={() => handleTimeframeClick(tf)}
                   >
                     {tf}
@@ -1340,29 +1341,29 @@ export default function DiscoverPage() {
             {activeTab !== 'live' && (
               <div className="relative">
                 <button
-                  className="flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative mr-2 bg-[#17191E] border border-[#2A2B33] text-[#9CA3AF] hover:text-[#E6E7EA]"
+                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative bg-[#17191E] border border-[#2A2B33] text-[#9CA3AF] hover:text-[#E6E7EA]"
                   onClick={() => setIsFilterPopoutOpen(true)}
                 >
                   {/* filter glyph */}
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="12" height="12" className="sm:w-[13px] sm:h-[13px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="4" y1="6" x2="20" y2="6"/><circle cx="8" cy="6" r="2"/>
                     <line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2"/>
                     <line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="18" r="2"/>
                   </svg>
-                  <span className="font-medium text-sm">Filter</span>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <span className="font-medium text-xs sm:text-sm hidden sm:inline">Filter</span>
+                  <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 hidden sm:block" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
               </div>
             )}
 
-            {/* Quick Buy - Same as PulseTable */}
-            <div className="flex items-center justify-center rounded-full px-3 py-1.5 gap-2 border bg-[#17191E]"
+            {/* Quick Buy - Responsive sizing */}
+            <div className="flex items-center justify-center rounded-full px-2 sm:px-3 py-1.5 gap-1.5 sm:gap-2 border bg-[#17191E]"
                  style={{ borderColor: '#2A2B33' }}>
               {/* Amount - Editable */}
-              <div className="flex items-center justify-center gap-1">
-                <HiLightningBolt size={12} style={{ color: '#22C55E' }} />
+              <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+                <HiLightningBolt size={10} className="sm:w-3 sm:h-3" style={{ color: '#22C55E' }} />
                 <input
                   type="text"
                   value={quickBuyAmount}
@@ -1387,14 +1388,14 @@ export default function DiscoverPage() {
                       e.preventDefault();
                     }
                   }}
-                  className="bg-transparent border-none outline-none text-xs font-medium w-10 text-center"
+                  className="bg-transparent border-none outline-none text-xs font-medium w-8 sm:w-10 text-center"
                   style={{ color: '#E6E7EA' }}
                 />
               </div>
               
               {/* Solana Symbol */}
               <div className="flex items-center justify-center">
-                <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
+                <svg width="10" height="10" className="sm:w-3 sm:h-3" viewBox="0 0 397.7 311.7" fill="none">
                   <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana_discover)"/>
                   <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana_discover)"/>
                   <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana_discover)"/>
@@ -1416,10 +1417,10 @@ export default function DiscoverPage() {
               </div>
               
               {/* Separator */}
-              <div className="w-px h-4 bg-gray-600"></div>
+              <div className="w-px h-3 sm:h-4 bg-gray-600"></div>
               
               {/* P1 P2 P3 Pill - Simple Toggle */}
-              <div className="flex items-center justify-center gap-1 relative">
+              <div className="flex items-center justify-center gap-0.5 sm:gap-1 relative">
                 {['P1', 'P2', 'P3'].map((pill) => {
                   const presetIndex = parseInt(pill.replace('P', '')) - 1;
                   const preset = presets[presetIndex];
@@ -1428,7 +1429,7 @@ export default function DiscoverPage() {
                   return (
                     <div key={pill} className="relative flex items-center justify-center">
                       <button
-                        className={`px-1.5 py-0.5 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center ${
+                        className={`px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center ${
                           selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-[#f0f5f5]'
                         }`}
                         onClick={() => {
@@ -1500,7 +1501,7 @@ export default function DiscoverPage() {
         )}
 
         {/* Main Content */}
-        <main className="mx-auto px-8 pb-10 max-w-[98%]">
+        <main className="mx-auto px-2 sm:px-6 md:px-4 lg:px-8 pb-10 max-w-[98%]">
           {activeTab === 'live' ? (
             pumpPortalTokens.length > 0 ? (
               <PumpLive
