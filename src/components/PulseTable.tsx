@@ -2666,7 +2666,7 @@ function PulseTable({
   };
   return (
     <div
-      className={`num flex w-full lg:min-w-[340px] flex-1 flex-col shadow-lg mb-10 ${
+      className={`num flex w-full lg:min-w-[340px] flex-1 flex-col shadow-lg mb-2 ${
         isFirstOrLast === "first" ? "border-r border-l border-t rounded-tl-md lg:rounded-tl-md" : 
         isFirstOrLast === "last" ? "border-r border-t rounded-tr-md lg:rounded-tr-md" : 
         isFirstOrLast === "only" ? "border border-t border-l border-r rounded-md" : 
@@ -2690,42 +2690,40 @@ function PulseTable({
         onMouseEnter={() => setIsHeaderHovered(true)}
         onMouseLeave={() => setIsHeaderHovered(false)}
       >
-        {/* Left side container for pause button and title */}
+        {/* Left side container for title */}
         <div className="flex items-center gap-2">
-          {/* Pause/Play button - appears on hover */}
-          <button
-            onClick={() => setIsPaused(!isPaused)}
-            className={`transition-all duration-200 hover:scale-110 ${
-              isHeaderHovered ? 'opacity-100' : 'opacity-0'
-            }`}
-            style={{ 
-              color: isPaused ? AX.aiBlue : AX.aiGreen,
-              cursor: 'pointer',
-              background: 'transparent',
-              border: 'none',
-              padding: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title={isPaused ? 'Resume' : 'Pause'}
-          >
-            {isPaused ? <FaPlay size={14} /> : <FaPause size={14} />}
-          </button>
-          
           <span className="text-sm lg:text-base" style={{ 
-            fontWeight: '300',
+            fontWeight: '600',
             letterSpacing: '0.5px'
-          }}>{title}</span>
+          }}>{
+            title.includes('New Pairs') ? 'New' : 
+            title.includes('Final Stretch') ? 'Soon' : 
+            title.includes('Migrated') ? 'Migrated' : 
+            title
+          }</span>
         </div>
         
         {/* Right side container for pill and filter */}
         <div className="flex items-center gap-2">
-          {/* P1 P2 P3 Pill with Thunder and Solana - Slick Border Only */}
-          <div className="hidden sm:flex items-center justify-center rounded-full px-3 py-1.5 gap-2 border"
-               style={{ borderColor: AX.border }}>
-          {/* Amount - Editable */}
-          <div className="flex items-center justify-center gap-1">
+          {/* Keyword Search Box */}
+          <div className="hidden sm:flex items-center rounded-md px-1.5 gap-1 border overflow-hidden"
+               style={{ borderColor: AX.border, backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '120px', width: '120px', height: '24px' }}>
+            <LuSearch size={12} style={{ color: AX.muted, flexShrink: 0 }} />
+            <input
+              type="text"
+              value={filters.searchKeywords}
+              onChange={(e) => {
+                setFilters(prev => ({ ...prev, searchKeywords: e.target.value }));
+              }}
+              placeholder="keyword1, keyword2"
+              className="bg-transparent border-none outline-none text-xs font-medium flex-1 text-left placeholder-gray-500 min-w-0"
+              style={{ color: AX.text, width: '100%', maxWidth: '100%' }}
+            />
+          </div>
+          
+          {/* Thunder Icon and Amount Entry - Separate Thin Box */}
+          <div className="hidden sm:flex items-center justify-center rounded-md px-1.5 gap-1 border"
+               style={{ borderColor: AX.border, backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '70px', width: '70px', height: '24px' }}>
             <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
             <input
               type="text"
@@ -2752,40 +2750,22 @@ function PulseTable({
             />
           </div>
           
-          {/* Solana Symbol */}
-          <div className="flex items-center justify-center">
-            <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
-              <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana)"/>
-              <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana)"/>
-              <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana)"/>
-              <defs>
-                <linearGradient id="paint0_linear_solana" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                  <stop offset="0" stopColor="#00FFA3"/>
-                  <stop offset="1" stopColor="#DC1FFF"/>
-                </linearGradient>
-                <linearGradient id="paint1_linear_solana" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                  <stop offset="0" stopColor="#00FFA3"/>
-                  <stop offset="1" stopColor="#DC1FFF"/>
-                </linearGradient>
-                <linearGradient id="paint2_linear_solana" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                  <stop offset="0" stopColor="#00FFA3"/>
-                  <stop offset="1" stopColor="#DC1FFF"/>
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
-          
-          {/* Separator */}
-          <div className="w-px h-4 bg-gray-600"></div>
-          
-          {/* P1 P2 P3 Pill - Simple Toggle */}
-          <div className="flex items-center justify-center gap-1 relative">
+          {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
+          <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border relative"
+               style={{ borderColor: AX.border, backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '80px', width: '80px', height: '24px' }}>
             {['P1', 'P2', 'P3'].map((pill) => (
               <div key={pill} className="relative flex items-center justify-center">
                 <button
-                  className={`px-1.5 py-0.5 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center ${
+                  className={`px-1 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded ${
                     selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-white'
                   }`}
+                  style={{
+                    paddingTop: '2px',
+                    paddingBottom: '2px',
+                    backgroundColor: selectedPill === pill 
+                      ? 'rgba(24, 196, 140, 0.15)' 
+                      : 'rgba(22, 23, 28, 0.6)'
+                  }}
                   onClick={() => {
                     // Update local preset selection for this column only
                     setSelectedPill(pill);
@@ -2848,9 +2828,9 @@ function PulseTable({
               </div>
             ))}
           </div>
-        </div>
-        {/* Filter Controls */}
-        <div className="relative filter-dropdown">
+          
+          {/* Filter Controls */}
+          <div className="relative filter-dropdown">
           <button
             className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 ease-out cursor-pointer relative"
             style={{
@@ -4465,7 +4445,7 @@ function PulseTable({
             </div>
             </>
           )}
-        </div>
+          </div>
         </div>
       </div>
       <div className="custom-scrollbar max-h-[70vh] overflow-y-scroll ">
