@@ -645,8 +645,8 @@ export function ReferralAccessGate({
     const returnUrl = `${currentPath}?twitter_success=true`;
     const authUrl = `/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`;
     
-    // Redirect in the same window/tab
-    window.location.href = authUrl;
+    // Open in a new tab
+    window.open(authUrl, '_blank');
   }, [router.asPath]);
 
   // Handle Twitter disconnecting
