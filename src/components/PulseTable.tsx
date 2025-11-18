@@ -47,6 +47,7 @@ import Image from 'next/image';
 import InterstatePopout from './InterstatePopout';
 import VerticalInput from './VerticalInput';
 import { usePulseWebSocket } from '~/hooks/usePulseWebSocket';
+import { flushSync } from 'react-dom';
 
 import { useRouter } from "next/router";
 import { fetchTokenMetadata } from "~/utils/functions";
@@ -58,6 +59,7 @@ import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
 import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
+import { extractTokenImage } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
 import { tradeBuy, createLimitOrder, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
@@ -158,6 +160,124 @@ const hasZeroLiquidity = (token: any): boolean => {
 
 const filterNonZeroLiquidity = <T extends Record<string, unknown>>(tokens: T[]): T[] =>
   tokens.filter((token) => !hasZeroLiquidity(token));
+
+const BASE_TIMESTAMP_FIELDS: readonly string[] = [
+  'launch_time',
+  'launchTime',
+  'created_at',
+  'createdAt',
+  'firstSeen',
+  'first_seen',
+  'pair_created_at',
+  'pairCreatedAt',
+  'timestamp',
+  'ts',
+];
+
+const NEW_PAIRS_TIMESTAMP_FIELDS: readonly string[] = [
+  'created_at',
+  'createdAt',
+  'launch_time',
+  'launchTime',
+  'firstSeen',
+  'first_seen',
+  'pair_created_at',
+  'pairCreatedAt',
+  'timestamp',
+  'ts',
+];
+
+const MIGRATED_TIMESTAMP_FIELDS: readonly string[] = [
+  // For migrated column, sort by token's original age (launch/creation time)
+  // NOT by when it migrated (migrated_time)
+  'created_at',
+  'createdAt',
+  'launch_time',
+  'launchTime',
+  'firstSeen',
+  'first_seen',
+  'pair_created_at',
+  'pairCreatedAt',
+  'timestamp',
+  'ts',
+];
+
+const normalizeEpochNumber = (value: number): number => {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  if (value > 1e12) return value;
+  if (value > 1e9) return value * 1000;
+  return 0;
+};
+
+const normalizeTimestampValue = (value: unknown): number => {
+  if (!value) return 0;
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === 'number') {
+    return normalizeEpochNumber(value);
+  }
+
+  if (typeof value === 'string') {
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric)) {
+      const normalized = normalizeEpochNumber(numeric);
+      if (normalized) return normalized;
+    }
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+
+    if ('Time' in record) {
+      const nested = normalizeTimestampValue(record['Time']);
+      if (nested) return nested;
+    }
+    if ('time' in record) {
+      const nested = normalizeTimestampValue(record['time']);
+      if (nested) return nested;
+    }
+
+    const secondsKeys: readonly string[] = ['seconds', 'Seconds', 'unix', 'Unix'];
+    for (const key of secondsKeys) {
+      if (record[key] !== undefined) {
+        const seconds = Number(record[key]);
+        if (!Number.isNaN(seconds) && seconds > 0) {
+          const normalized = seconds > 1e12 ? seconds : seconds * 1000;
+          if (normalized) return normalized;
+        }
+      }
+    }
+
+    const millisKeys: readonly string[] = ['millis', 'milliseconds', 'unixMillis', 'UnixMillis', 'ms'];
+    for (const key of millisKeys) {
+      if (record[key] !== undefined) {
+        const millis = Number(record[key]);
+        if (!Number.isNaN(millis) && millis > 0) {
+          return millis;
+        }
+      }
+    }
+  }
+
+  return 0;
+};
+
+const getTokenTimestamp = (token: any, fields: readonly string[]): number => {
+  if (!token) return 0;
+
+  for (const field of fields) {
+    const candidate = (token as any)?.[field];
+    const timestamp = normalizeTimestampValue(candidate);
+    if (timestamp) return timestamp;
+  }
+
+  return 0;
+};
 
 // Smart color system based on token properties
 interface SmartColorProps {
@@ -435,8 +555,24 @@ function TokenImage({
   const [previewPosition, setPreviewPosition] = useState({ top: 0, left: 0 });
   const imageContainerRef = useRef<HTMLDivElement>(null);
   
-  // Use uri field from deployed service, fallback to image field, then token.logo
-  const imageUrl = (token as any).uri || (token as any).image || token.logo;
+  // Extract image URL from token data, checking multiple possible field names
+  // Priority: image, uri, logo, imageUrl, logoUrl, image_url, logo_url, icon, thumbnail
+  const imageUrl = extractTokenImage(token as any) || null;
+  
+  // Debug logging to help diagnose image loading issues
+  useEffect(() => {
+    if (imageUrl) {
+      console.log(`[TokenImage] ${token.symbol || 'Unknown'}: imageUrl extracted:`, imageUrl);
+    } else {
+      console.warn(`[TokenImage] ${token.symbol || 'Unknown'}: No image URL found. Token data:`, {
+        image: (token as any).image,
+        uri: (token as any).uri,
+        logo: token.logo,
+        imageUrl: (token as any).imageUrl,
+        logoUrl: (token as any).logoUrl,
+      });
+    }
+  }, [imageUrl, token.symbol, token]);
 
   // Calculate migration progress for border color (only for New Pairs, NOT for migrated)
   const getMigrationProgress = (token: Token): number => {
@@ -1537,48 +1673,58 @@ function PulseTable({
     protocols: filters.protocols.length > 0 ? filters.protocols.flatMap(mapProtocolToBackend) : undefined,
     onNewToken: useCallback((token: any) => {
       if (channel === 'new') {
-        if (hasZeroLiquidity(token)) {
-          console.log('[PulseTable] ⛔ Skipping WebSocket new token with zero liquidity:', token?.name, token?.mint);
-          return;
-        }
-        setWsTokens(prev => {
-          const withoutCurrent = prev.filter(t => t.mint !== token.mint);
-          const sanitizedPrev = filterNonZeroLiquidity(withoutCurrent);
-          const next = [token as Token, ...sanitizedPrev];
-          return next.slice(0, 50);
+        // FAST PATH: New pairs bypass zero liquidity check for maximum speed
+        // Zero liquidity tokens will be filtered during merge, but new pairs get instant priority
+        // Use flushSync to force immediate update, bypassing React 18's automatic batching
+        // Optimized with Map-based deduplication (O(1) instead of O(n))
+        // Skip filtering existing tokens - just prepend new token instantly
+        flushSync(() => {
+          setWsTokens(prev => {
+            // Fast path: Just prepend new token, remove if duplicate
+            // Don't filter existing tokens here - let them through for speed
+            const filtered = prev.filter(t => t.mint !== token.mint);
+            return [token as Token, ...filtered].slice(0, 50);
+          });
         });
       }
     }, [channel]),
     onFinalStretchToken: useCallback((token: any) => {
-      if (channel === 'final_stretch') {
-        if (hasZeroLiquidity(token)) {
-          console.log('[PulseTable] ⛔ Skipping WebSocket final stretch token with zero liquidity:', token?.name, token?.mint);
-          return;
-        }
-        setWsTokens(prev => {
-          const withoutCurrent = prev.filter(t => t.mint !== token.mint);
-          const sanitizedPrev = filterNonZeroLiquidity(withoutCurrent);
-          const next = [token as Token, ...sanitizedPrev];
-          return next.slice(0, 50);
+      if (channel === 'final_stretch' && !hasZeroLiquidity(token)) {
+        // Use flushSync to force immediate update, bypassing React 18's automatic batching
+        // Optimized with Map-based deduplication (O(1) instead of O(n))
+        flushSync(() => {
+          setWsTokens(prev => {
+            const map = new Map<string, Token>();
+            map.set(token.mint, token as Token);
+            for (const t of prev) {
+              if (t.mint !== token.mint && !hasZeroLiquidity(t) && map.size < 50) {
+                map.set(t.mint, t);
+              }
+            }
+            return Array.from(map.values());
+          });
         });
       }
     }, [channel]),
     onMigratedToken: useCallback((token: any) => {
-      if (channel === 'migrated') {
-        if (hasZeroLiquidity(token)) {
-          console.log('[PulseTable] ⛔ Skipping WebSocket migrated token with zero liquidity:', token?.name, token?.mint);
-          return;
-        }
-        setWsTokens(prev => {
-          const withoutCurrent = prev.filter(t => t.mint !== token.mint);
-          const sanitizedPrev = filterNonZeroLiquidity(withoutCurrent);
-          const next = [token as Token, ...sanitizedPrev];
-          return next.slice(0, 50);
+      if (channel === 'migrated' && !hasZeroLiquidity(token)) {
+        // Use flushSync to force immediate update, bypassing React 18's automatic batching
+        // Optimized with Map-based deduplication (O(1) instead of O(n))
+        flushSync(() => {
+          setWsTokens(prev => {
+            const map = new Map<string, Token>();
+            map.set(token.mint, token as Token);
+            for (const t of prev) {
+              if (t.mint !== token.mint && !hasZeroLiquidity(t) && map.size < 50) {
+                map.set(t.mint, t);
+              }
+            }
+            return Array.from(map.values());
+          });
         });
       }
     }, [channel]),
     onPriceUpdate: useCallback((updates: any[]) => {
-      console.log('[PulseTable] 📊 Price update received, merging', updates.length, 'updates');
 
       // Merge price updates into filteredTokens (base HTTP data)
       setFilteredTokens(prev => {
@@ -1955,9 +2101,18 @@ function PulseTable({
     baseTokens.forEach(token => mergedMap.set(token.mint, token));
 
     // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
+    // For new pairs, prioritize speed - filter after merge, not during
     wsTokens.forEach(token => mergedMap.set(token.mint, token));
 
-    filtered = filterNonZeroLiquidity(Array.from(mergedMap.values()) as Token[]);
+    // Filter zero liquidity tokens - but do it fast for new pairs
+    const isNewPairs = title.toLowerCase().includes('new');
+    if (isNewPairs) {
+      // Fast path for new pairs: filter in-place to avoid extra array creation
+      const allTokens = Array.from(mergedMap.values()) as Token[];
+      filtered = allTokens.filter(token => !hasZeroLiquidity(token));
+    } else {
+      filtered = filterNonZeroLiquidity(Array.from(mergedMap.values()) as Token[]);
+    }
 
     if (hasSpecificProtocols) {
       console.log(`[PulseTable ${title}] 🔀 Merged filtered tokens: ${filteredTokens.length} HTTP + ${wsTokens.length} WS = ${filtered.length} total`);
@@ -2257,6 +2412,52 @@ function PulseTable({
 
     // Sort tokens
     filtered.sort((a, b) => {
+      // Special sorting for New Pairs: always sort by newest first (fastest path - no filtering delays)
+      const isNewPairs = title.toLowerCase().includes("new") && !title.toLowerCase().includes("migrated");
+      if (isNewPairs) {
+        const aTimestamp = getTokenTimestamp(a, NEW_PAIRS_TIMESTAMP_FIELDS);
+        const bTimestamp = getTokenTimestamp(b, NEW_PAIRS_TIMESTAMP_FIELDS);
+        return bTimestamp - aTimestamp;
+      }
+      
+      // Special sorting for Migrated: sort by token's original age (youngest tokens first)
+      // Use created_at/launch_time, NOT migrated_time
+      const isMigrated = title.toLowerCase().includes("migrated");
+      if (isMigrated) {
+        const aTimestamp = getTokenTimestamp(a, MIGRATED_TIMESTAMP_FIELDS);
+        const bTimestamp = getTokenTimestamp(b, MIGRATED_TIMESTAMP_FIELDS);
+        
+        // Debug logging for first 3 tokens to verify token age (not migration time) is being used
+        if (typeof window !== 'undefined' && filtered.length > 0) {
+          const aIdx = filtered.indexOf(a);
+          const bIdx = filtered.indexOf(b);
+          if (aIdx < 3 || bIdx < 3) {
+            console.log(`[PulseTable ${title}] Migrated sorting by token age:`, {
+              tokenA: { 
+                name: a.name, 
+                symbol: a.symbol, 
+                ts: aTimestamp,
+                created_at: (a as any).created_at,
+                launch_time: (a as any).launch_time,
+                migrated_time: (a as any).migrated_time,
+              },
+              tokenB: { 
+                name: b.name, 
+                symbol: b.symbol, 
+                ts: bTimestamp,
+                created_at: (b as any).created_at,
+                launch_time: (b as any).launch_time,
+                migrated_time: (b as any).migrated_time,
+              },
+              diff: bTimestamp - aTimestamp,
+              result: bTimestamp > aTimestamp ? 'B first (younger)' : 'A first (younger)'
+            });
+          }
+        }
+        
+        return bTimestamp - aTimestamp;
+      }
+      
       // Special sorting for Final Stretch: prioritize high bonding Meteora tokens by newest + highest bonding
       if (title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch")) {
         const aLaunchpadProtocol = (a as any).launchpad_protocol?.toLowerCase() || '';
@@ -2274,29 +2475,9 @@ function PulseTable({
         
         // If both are high bonding Meteora, sort by timestamp (newest first), then bonding percentage
         if (aIsHighBondingMeteora && bIsHighBondingMeteora) {
-          // Get timestamps
-          const getTimestamp = (token: any): number => {
-            const ts = token?.launch_time ?? token?.launchTime ?? 
-                      token?.created_at ?? token?.createdAt ?? 
-                      token?.firstSeen ?? token?.first_seen ?? 
-                      token?.pair_created_at ?? token?.pairCreatedAt ?? 
-                      token?.timestamp ?? token?.ts ?? null;
-            
-            if (!ts) return 0;
-            if (typeof ts === 'number') return ts > 1e12 ? ts : ts > 1e9 ? ts * 1000 : 0;
-            if (typeof ts === 'string') {
-              const n = Number(ts);
-              if (!Number.isNaN(n) && n > 0) return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
-              const d = Date.parse(ts);
-              return Number.isNaN(d) ? 0 : d;
-            }
-            return 0;
-          };
+          const aTimestamp = getTokenTimestamp(a, BASE_TIMESTAMP_FIELDS);
+          const bTimestamp = getTokenTimestamp(b, BASE_TIMESTAMP_FIELDS);
           
-          const aTimestamp = getTimestamp(a);
-          const bTimestamp = getTimestamp(b);
-          
-          // Sort by newest first (higher timestamp = newer)
           const timestampDiff = bTimestamp - aTimestamp;
           if (Math.abs(timestampDiff) > 60000) { // If timestamps differ by more than 1 minute
             return timestampDiff;
@@ -2324,29 +2505,14 @@ function PulseTable({
           bValue = b.symbol?.toLowerCase() ?? '';
           break;
         case 'timestamp':
-        case 'time':
-          // Sort by timestamp (newest first for desc, oldest first for asc)
-          const getTimestamp = (token: any): number => {
-            // For migrated tokens, prioritize migrated_time over launch_time
-            const ts = token?.migrated_time ?? token?.migratedTime ??
-                      token?.launch_time ?? token?.launchTime ?? 
-                      token?.created_at ?? token?.createdAt ?? 
-                      token?.firstSeen ?? token?.first_seen ?? 
-                      token?.pair_created_at ?? token?.pairCreatedAt ?? 
-                      token?.timestamp ?? token?.ts ?? null;
-            
-            if (!ts) return 0;
-            if (typeof ts === 'number') return ts > 1e12 ? ts : ts > 1e9 ? ts * 1000 : 0;
-            if (typeof ts === 'string') {
-              const n = Number(ts);
-              if (!Number.isNaN(n) && n > 0) return n > 1e12 ? n : n > 1e9 ? n * 1000 : 0;
-              const d = Date.parse(ts);
-              return Number.isNaN(d) ? 0 : d;
-            }
-            return 0;
-          };
-          aValue = getTimestamp(a);
-          bValue = getTimestamp(b);
+        case 'time': {
+          const timestampFields = isMigrated
+            ? MIGRATED_TIMESTAMP_FIELDS
+            : isNewPairs
+              ? NEW_PAIRS_TIMESTAMP_FIELDS
+              : BASE_TIMESTAMP_FIELDS;
+          aValue = getTokenTimestamp(a, timestampFields);
+          bValue = getTokenTimestamp(b, timestampFields);
           
           // Debug logging for timestamp sorting
           if (typeof window !== 'undefined' && title.toLowerCase().includes('migrated') && filtered.length > 0) { 
@@ -2373,6 +2539,7 @@ function PulseTable({
             }
           }
           break;
+        }
         default:
           aValue = (a as any).fully_diluted_value ?? (a as any).market_cap_usd ?? 0;
           bValue = (b as any).fully_diluted_value ?? (b as any).market_cap_usd ?? 0;
@@ -4501,7 +4668,7 @@ function PulseTable({
                 _symbol: (token as any)?.symbol || '',
                 _price: String((token as any)?.price_usd || (token as any)?.priceUsd || ''),
                 _mcap: String((token as any)?.market_cap_usd || (token as any)?.marketCapUSD || ''),
-                _image: (token as any)?.logo || (token as any)?.image || (token as any)?.uri || '',
+                _image: extractTokenImage(token as any) || '',
                 _mint: (token as any)?.mint || '', // CRITICAL: Required for cache lookup
               }).toString();
 
@@ -4527,7 +4694,7 @@ function PulseTable({
                       symbol: (token as any)?.symbol || '',
                       price_usd: (token as any)?.price_usd || (token as any)?.priceUsd || 0,
                       market_cap_usd: (token as any)?.market_cap_usd || (token as any)?.marketCapUSD || 0,
-                      image: (token as any)?.logo || (token as any)?.image || (token as any)?.uri || '',
+                      image: extractTokenImage(token as any) || '',
                       mint: (token as any)?.mint || '',
                       pair_address: pairAddress,
                       timestamp: Date.now(),
@@ -5332,7 +5499,12 @@ function PulseTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <LuChefHat size={13} /> DS <span style={{ color: '#f0f5f5' }}><TokenAge createdAt={(token as any).created_at || (token as any).launch_time} /></span>
+                    <LuChefHat size={13} /> DS{" "}
+                    <span style={{ color: '#f0f5f5' }}>
+                      <TokenAge
+                        createdAt={(token as any).created_at || (token as any).launch_time}
+                      />
+                    </span>
                   </span>
                   
                   {/* Snipe percentage - Red */}

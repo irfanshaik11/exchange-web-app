@@ -81,3 +81,110 @@ export function extractMetaImage(meta: any): string | null {
   }
   return null;
 }
+
+/**
+ * Check if a URL appears to be an image URL (not JSON, HTML, etc.)
+ */
+function isValidImageUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  
+  try {
+    // Reject JSON files
+    if (url.endsWith('.json') || url.includes('.json?')) {
+      return false;
+    }
+    
+    // Reject invalid IP addresses (they should use proper domains)
+    if (/^https?:\/\/(\d{1,3}\.){3}\d{1,3}/.test(url)) {
+      // Allow localhost for development, but reject other IPs
+      if (!url.includes('localhost') && !url.includes('127.0.0.1')) {
+        return false;
+      }
+    }
+    
+    // Reject non-HTTP/HTTPS protocols
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('ipfs://')) {
+      return false;
+    }
+    
+    // Accept IPFS URLs
+    if (url.startsWith('ipfs://') || url.includes('/ipfs/')) {
+      return true;
+    }
+    
+    // Check for common image extensions
+    const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp'];
+    const hasImageExtension = imageExtensions.some(ext => 
+      url.toLowerCase().includes(ext) || url.toLowerCase().includes(ext + '?')
+    );
+    
+    // If it has an image extension, it's valid
+    if (hasImageExtension) {
+      return true;
+    }
+    
+    // For URLs without extensions, check if they're from known image hosts
+    // This allows URLs like https://cloudflare-ipfs.com/ipfs/Qm... without extension
+    const knownImageHosts = [
+      'ipfs.io', 'cloudflare-ipfs.com', 'gateway.pinata.cloud',
+      'token-media.defined.fi', 'images.pump.fun', 'pump.fun',
+      'pbs.twimg.com', 'twimg.com', 'cdn.pump.fun'
+    ];
+    
+    if (knownImageHosts.some(host => url.includes(host))) {
+      return true;
+    }
+    
+    // If no extension and not from known image host, reject it
+    // This prevents JSON/metadata files from being treated as images
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Extract image URL from token data, checking multiple possible field names
+ * This ensures we catch image fields from stream data, HTTP data, and various API formats
+ * Priority order: image, uri, logo, imageUrl, logoUrl, image_url, logo_url
+ */
+export function extractTokenImage(token: any): string | null {
+  if (!token || typeof token !== 'object') return null;
+  
+  // Check all possible image field names in priority order
+  const imageFields = [
+    token.image,
+    token.uri,
+    token.logo,
+    token.imageUrl,
+    token.logoUrl,
+    token.image_url,
+    token.logo_url,
+    token.icon,
+    token.thumbnail,
+  ];
+  
+  // Return first non-empty string value that appears to be a valid image URL
+  for (const value of imageFields) {
+    if (typeof value === 'string' && value.trim()) {
+      const trimmed = value.trim();
+      
+      // Validate that it looks like an image URL (not JSON, etc.)
+      if (!isValidImageUrl(trimmed)) {
+        continue; // Skip this field, try next one
+      }
+      
+      const normalized = normalizeImageUrl(trimmed);
+      // Only return if normalization succeeded (not null or empty)
+      if (normalized && isValidImageUrl(normalized)) {
+        return normalized;
+      }
+      // If normalization returned null/empty but original was valid, return original
+      if (isValidImageUrl(trimmed)) {
+        return trimmed;
+      }
+    }
+  }
+  
+  return null;
+}

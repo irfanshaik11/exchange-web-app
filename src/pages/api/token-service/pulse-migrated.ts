@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { extractTokenImage } from '~/utils/images';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Disable server-side caching/etag for this proxy to prevent 304s
@@ -54,7 +55,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             token.graduation_percent = parseFloat(token.graduation_percent ?? 0); // graduation_percent for hover display (snake_case)
             token.graduationPercent = parseFloat(token.graduation_percent ?? 0); // graduation_percent for hover display (camelCase for compatibility)
             token.bonding_pct = parseFloat(token.bonding_pct ?? 0); // Also include raw bonding_pct for fallback
-            token.image = token.uri || token.image || null;
+            // Extract image from multiple possible field names
+            token.image = extractTokenImage(token) || null;
+            token.logo = extractTokenImage(token) || null;
             token.migrated_time = token.migrated_time || null; // Pass through migration timestamp
             token.created_at = token.launch_time || token.created_at || null; // Ensure created_at is set
             token.launchpad_protocol = token.launchpad_protocol || null; // Pass through protocol for filtering and colors

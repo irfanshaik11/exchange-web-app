@@ -11,8 +11,18 @@ export function useImagePreloader() {
   const preloadImage = async (src: string | null, options: PreloadImageOptions = {}): Promise<boolean> => {
     if (!src) return false;
 
-    // Use proxy for defined.fi URLs to avoid CORS issues
-    const imageUrl = src.includes('token-media.defined.fi') 
+    // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
+    const needsProxy = src.includes('token-media.defined.fi') ||
+      src.includes('ipfs.io') ||
+      src.includes('cloudflare-ipfs.com') ||
+      src.includes('gateway.pinata.cloud') ||
+      src.includes('ipfs/') ||
+      src.startsWith('ipfs://') ||
+      src.includes('tokens.debridge.finance') ||
+      src.includes('debridge.finance') ||
+      src.includes('launchonsoar.com');
+
+    const imageUrl = needsProxy 
       ? `/api/image?url=${encodeURIComponent(src)}`
       : src;
 

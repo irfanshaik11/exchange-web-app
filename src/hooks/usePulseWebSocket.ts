@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { env } from '~/env';
 
 interface PulseToken {
@@ -157,99 +158,82 @@ export function usePulseWebSocket(
         if (!mountedRef.current) return;
 
         try {
-          // DEBUG: Log all incoming messages
-          console.log('[usePulseWebSocket] Raw message received:', event.data);
-
           // Backend may batch multiple JSON messages separated by newlines
           const messages = event.data.split('\n').filter((msg: string) => msg.trim());
-          console.log(`[usePulseWebSocket] Parsed ${messages.length} message(s) from batch`);
 
           for (const msgStr of messages) {
             try {
               const message: WebSocketMessage = JSON.parse(msgStr);
-              console.log('[usePulseWebSocket] Parsed message:', { type: message.type, data: message.data });
 
               if (message.type === 'new_token' && message.data && !Array.isArray(message.data)) {
-                console.log('[usePulseWebSocket] ✅ New token received:', message.data);
                 const token = message.data as PulseToken;
 
-                // Call callback immediately for instant updates
-                if (onNewTokenRef.current) {
-                  console.log('[usePulseWebSocket] Calling onNewToken callback');
-                  onNewTokenRef.current(token);
-                } else {
-                  console.warn('[usePulseWebSocket] onNewToken callback not provided');
-                }
-
-                // Prepend new token to the list
-                setNewTokens((prev) => {
-                  // Deduplicate by mint address
-                  const filtered = prev.filter(t => t.mint !== token.mint);
-                  const updated = [token, ...filtered].slice(0, 50); // Keep only latest 50
-                  console.log('[usePulseWebSocket] Updated newTokens, count:', updated.length);
-                  return updated;
+                // Use flushSync to combine callback + state update in one synchronous render
+                // This ensures tokens appear instantly without any delay
+                flushSync(() => {
+                  // Call callback immediately for instant updates
+                  onNewTokenRef.current?.(token);
+                  
+                  // Update state immediately with O(1) Map-based deduplication
+                  setNewTokens((prev) => {
+                    const map = new Map<string, PulseToken>();
+                    map.set(token.mint, token); // New token first
+                    // Add existing tokens, skipping duplicates
+                    for (const t of prev) {
+                      if (t.mint !== token.mint && map.size < 50) {
+                        map.set(t.mint, t);
+                      }
+                    }
+                    return Array.from(map.values()); // Keep only latest 50
+                  });
                 });
               } else if (message.type === 'final_stretch_token' && message.data && !Array.isArray(message.data)) {
-                console.log('[usePulseWebSocket] ✅ Final stretch token received:', message.data);
                 const token = message.data as PulseToken;
 
-                // Call callback immediately for instant updates
-                if (onFinalStretchTokenRef.current) {
-                  console.log('[usePulseWebSocket] Calling onFinalStretchToken callback');
-                  onFinalStretchTokenRef.current(token);
-                }
-
-                // Prepend final stretch token to the list
-                setFinalStretchTokens((prev) => {
-                  // Deduplicate by mint address
-                  const filtered = prev.filter(t => t.mint !== token.mint);
-                  return [token, ...filtered].slice(0, 50); // Keep only latest 50
+                flushSync(() => {
+                  onFinalStretchTokenRef.current?.(token);
+                  
+                  setFinalStretchTokens((prev) => {
+                    const map = new Map<string, PulseToken>();
+                    map.set(token.mint, token);
+                    for (const t of prev) {
+                      if (t.mint !== token.mint && map.size < 50) {
+                        map.set(t.mint, t);
+                      }
+                    }
+                    return Array.from(map.values());
+                  });
                 });
               } else if (message.type === 'migrated_token' && message.data && !Array.isArray(message.data)) {
-                console.log('[usePulseWebSocket] ✅ Migrated token received:', message.data);
                 const token = message.data as PulseToken;
 
-                // Call callback immediately for instant updates
-                if (onMigratedTokenRef.current) {
-                  console.log('[usePulseWebSocket] Calling onMigratedToken callback');
-                  console.log('[usePulseWebSocket] Callback function:', typeof onMigratedTokenRef.current);
-                  onMigratedTokenRef.current(token);
-                  console.log('[usePulseWebSocket] onMigratedToken callback completed');
-                } else {
-                  console.warn('[usePulseWebSocket] onMigratedTokenRef.current is null or undefined');
-                }
-
-                // Prepend migrated token to the list
-                setMigratedTokens((prev) => {
-                  // Deduplicate by mint address
-                  const filtered = prev.filter(t => t.mint !== token.mint);
-                  return [token, ...filtered].slice(0, 50); // Keep only latest 50
+                flushSync(() => {
+                  onMigratedTokenRef.current?.(token);
+                  
+                  setMigratedTokens((prev) => {
+                    const map = new Map<string, PulseToken>();
+                    map.set(token.mint, token);
+                    for (const t of prev) {
+                      if (t.mint !== token.mint && map.size < 50) {
+                        map.set(t.mint, t);
+                      }
+                    }
+                    return Array.from(map.values());
+                  });
                 });
               } else if (message.type === 'price_update' && message.data) {
-                console.log('[usePulseWebSocket] 📊 Price update received:', {
-                  count: Array.isArray(message.data) ? message.data.length : 0,
-                  channel: message.channel,
-                  protocol: message.protocol
-                });
-
-                // Call callback for price updates
+                // Price updates can be batched, so don't use flushSync (less critical)
                 if (onPriceUpdateRef.current) {
                   const updates = Array.isArray(message.data) ? message.data : [message.data];
-                  console.log('[usePulseWebSocket] Calling onPriceUpdate callback with', updates.length, 'updates');
                   onPriceUpdateRef.current(updates);
-                } else {
-                  console.warn('[usePulseWebSocket] onPriceUpdate callback not provided');
                 }
-              } else {
-                console.warn('[usePulseWebSocket] Unknown message type or missing data:', { type: message.type, hasData: !!message.data });
               }
             } catch (parseErr) {
-              console.error('[usePulseWebSocket] Failed to parse individual message:', msgStr, parseErr);
+              // Silently skip parse errors to avoid blocking other messages
             }
           }
         } catch (err) {
-          console.error('[usePulseWebSocket] Failed to process message:', err);
-          console.error('[usePulseWebSocket] Raw data was:', event.data);
+          // Silently handle errors to avoid blocking future messages
         }
       };
 
