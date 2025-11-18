@@ -9,6 +9,8 @@ import type { Token } from '~/utils/db';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import UpdatesModal from '../components/UpdatesModal';
+import { useUser } from '../components/UserContext';
+import Cookies from 'js-cookie';
 import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
 import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
 import { usePulseWebSocket } from '../hooks/usePulseWebSocket';
@@ -81,6 +83,7 @@ export default function PulsePage() {
   // Updates modal state
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   
+  const { user } = useUser();
   const router = useRouter();
   const chain = router.query.chain as string | undefined;
   const isBnbRoute = chain === 'bnb';
@@ -123,22 +126,30 @@ export default function PulsePage() {
     }
   }, [router.isReady, chain, router]);
 
-  // Check if updates modal should be shown on mount
+  // Check if updates modal should be shown - only once after login
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storageKey = 'trenches-updates-viewed';
-      const lastViewed = localStorage.getItem(storageKey);
-      const updateVersion = '2025-11-16'; // Update this date when you have new updates
+    if (typeof window !== 'undefined' && user) {
+      // Use user-specific cookie key so it only shows once per user
+      // Cookies persist across hard refreshes better than localStorage
+      const cookieKey = `trenches-updates-viewed-${user.id}`;
+      const hasViewed = Cookies.get(cookieKey);
       
-      // Show modal if never viewed or if version is newer
-      if (!lastViewed || lastViewed < updateVersion) {
+      // Only show modal if user is logged in AND hasn't viewed it before
+      // Simple check: if cookie doesn't exist, show modal
+      if (!hasViewed) {
         // Delay to ensure page has loaded
         setTimeout(() => {
           setShowUpdatesModal(true);
         }, 1000);
+      } else {
+        // Explicitly set showUpdatesModal to false if cookie exists
+        setShowUpdatesModal(false);
       }
+    } else {
+      // If user is not logged in, don't show modal
+      setShowUpdatesModal(false);
     }
-  }, []);
+  }, [user]); // Re-run when user changes (login/logout)
 
   // Keyboard navigation for tabs (mobile only)
   useEffect(() => {
@@ -813,9 +824,9 @@ export default function PulsePage() {
         <title>Trenches | Narrative Memeboard</title>
         <meta name="description" content="Token tracking dashboard" />
       </Head>
-      <div className="flex min-h-screen flex-col text-neutral-100" style={{ backgroundColor: '#06070b' }}>
+      <div className="flex h-screen flex-col text-neutral-100 overflow-hidden" style={{ backgroundColor: '#06070b' }}>
         <Header />
-        <div className="flex-1 w-full px-5 pt-2 pb-6">
+        <div className="w-full px-2 pt-2 flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="mb-2">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
@@ -837,6 +848,20 @@ export default function PulsePage() {
                     />
                   </Link>
                   <Link
+                    href="/pulse?chain=monad"
+                    aria-label="View Monad tokens (coming soon)"
+                    className={monadButtonClasses}
+                  >
+                    <img
+                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                      alt="Monad"
+                      className="h-7 w-7 rounded-full object-cover"
+                    />
+                    <span className="absolute -bottom-1 -right-4 rounded-full border border-purple-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-purple-300 shadow-lg shadow-purple-500/30" style={{ backgroundColor: '#06070b' }}>
+                      Soon
+                    </span>
+                  </Link>
+                  <Link
                     href="/pulse?chain=bnb"
                     aria-label="View BNB tokens (beta)"
                     className={bnbButtonClasses}
@@ -844,20 +869,6 @@ export default function PulsePage() {
                     <SiBinance className="h-4 w-4 text-[#F3BA2F]" />
                     <span className="absolute -bottom-1 -right-3 rounded-full border border-blue-500 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-blue-500 shadow-lg shadow-blue-500/30" style={{ backgroundColor: '#06070b' }}>
                       Beta
-                    </span>
-                  </Link>
-                  <Link
-                    href="/pulse?chain=monad"
-                    aria-label="View MegaETH tokens (coming soon)"
-                    className={monadButtonClasses}
-                  >
-                    <img
-                      src="https://avatars.githubusercontent.com/u/138558126?s=280&v=4"
-                      alt="MegaETH"
-                      className="h-7 w-7 rounded-full object-cover"
-                    />
-                    <span className="absolute -bottom-1 -right-4 rounded-full border border-purple-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-purple-300 shadow-lg shadow-purple-500/30" style={{ backgroundColor: '#06070b' }}>
-                      Soon
                     </span>
                   </Link>
                   <Link
@@ -995,14 +1006,14 @@ export default function PulsePage() {
               <img
                 src={
                   isMonadRoute
-                    ? "https://avatars.githubusercontent.com/u/138558126?s=280&v=4"
+                    ? "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
                     : isBaseRoute
                       ? "https://avatars.githubusercontent.com/u/108554348?s=280&v=4"
                       : "https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png"
                 }
                 alt={
                   isMonadRoute
-                    ? "MegaETH"
+                    ? "Monad"
                     : isBaseRoute
                       ? "Base"
                       : "Ethereum"
@@ -1012,14 +1023,14 @@ export default function PulsePage() {
               <div className="space-y-2">
                 <h2 className="text-xl font-semibold text-neutral-100">
                   {isMonadRoute
-                    ? 'MegaETH support is on the way'
+                    ? 'Monad support is on the way'
                     : isBaseRoute
                       ? 'Base support is on the way'
                       : 'Ethereum support is on the way'}
                 </h2>
                 <p className="max-w-md text-sm text-neutral-400">
                   {isMonadRoute
-                    ? 'We\'re building out dedicated flows for MegaETH tokens. Check back soon for real-time liquidity and launch data.'
+                    ? 'We\'re building out dedicated flows for Monad tokens. Check back soon for real-time liquidity and launch data.'
                     : isBaseRoute
                       ? 'We\'re building out dedicated flows for Base tokens. Check back soon for real-time liquidity and launch data.'
                       : 'We\'re building out dedicated flows for Ethereum tokens. Check back soon for real-time liquidity and launch data.'}
@@ -1068,10 +1079,10 @@ export default function PulsePage() {
               <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition-colors">Retry</button>
             </div>
           ) : (
-            <div className="w-full">
+            <div className="w-full flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Mobile: Single table based on active tab */}
-              <div className="lg:hidden">
-                <div className="transition-all duration-300 ease-in-out">
+              <div className="lg:hidden flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="transition-all duration-300 ease-in-out flex-1 flex flex-col min-h-0 overflow-hidden">
                   {activeTab === 'new' && (
                     <PulseTable 
                       title="New Pairs" 
@@ -1100,7 +1111,7 @@ export default function PulsePage() {
                 </div>
               </div>
               {/* Desktop: All tables horizontally */}
-              <div className="hidden lg:flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+              <div className="hidden lg:flex flex-row w-full flex-1 min-h-0 overflow-hidden">
                 <PulseTable 
                   title="New Pairs" 
                   tokens={enrichedNewPairsToShow as any} 
@@ -1118,11 +1129,11 @@ export default function PulsePage() {
       </div>
       
       {/* Updates Modal */}
-      {showUpdatesModal && (
+      {showUpdatesModal && user && (
         <UpdatesModal
           updates={PLATFORM_UPDATES}
           onClose={() => setShowUpdatesModal(false)}
-          storageKey="trenches-updates-viewed"
+          storageKey={user ? `trenches-updates-viewed-${user.id}` : 'trenches-updates-viewed'}
         />
       )}
     </>

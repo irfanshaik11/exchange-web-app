@@ -2634,7 +2634,7 @@ function PulseTable({
   };
   return (
     <div
-      className={`num flex w-full lg:min-w-[340px] flex-1 flex-col shadow-lg mb-2 ${
+      className={`num flex w-full lg:min-w-[340px] flex-1 flex-col shadow-lg min-h-0 overflow-hidden ${
         isFirstOrLast === "first" ? "border-r border-l border-t rounded-tl-md lg:rounded-tl-md" : 
         isFirstOrLast === "last" ? "border-r border-t rounded-tr-md lg:rounded-tr-md" : 
         isFirstOrLast === "only" ? "border border-t border-l border-r rounded-md" : 
@@ -4424,7 +4424,7 @@ function PulseTable({
           </div>
         </div>
       </div>
-      <div className="custom-scrollbar max-h-[70vh] overflow-y-scroll ">
+      <div className="custom-scrollbar flex-1 overflow-y-scroll ">
         {loading && tokens.length === 0 ? (
           Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
