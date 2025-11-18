@@ -103,6 +103,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (Array.isArray(raw)) {
         // Normalize into the minimal Token-like shape the UI expects
         const mapped = raw.map((r: any) => {
+          // Helper function to convert string/number to number
+          const toNumber = (value: any): number => {
+            if (typeof value === 'number') {
+              return Number.isFinite(value) ? value : 0;
+            }
+            if (typeof value === 'string') {
+              const cleaned = value.trim();
+              if (!cleaned) return 0;
+              const parsed = Number(cleaned);
+              return Number.isFinite(parsed) ? parsed : 0;
+            }
+            return 0;
+          };
+
           // Helper function to estimate shorter timeframe data from 24h data for older tokens
           const estimateFrom24h = (value24h: number, timeframe: '5m' | '1h' | '6h') => {
             if (value24h > 0) {
@@ -116,24 +130,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return 0;
           };
 
-          // Get base values
-          const totalBuys24h = r.total_buys_24h ?? 0;
-          const totalSells24h = r.total_sells_24h ?? 0;
-          const totalBuyVolume24h = r.total_buy_volume_24h ?? 0;
-          const totalSellVolume24h = r.total_sell_volume_24h ?? 0;
-          const totalBuyers24h = r.total_buyers_24h ?? 0;
-          const totalSellers24h = r.total_sellers_24h ?? 0;
-          const uniqueWallets24h = r.unique_wallets_24h ?? 0;
+          // Get base values - convert to numbers
+          const totalBuys24h = toNumber(r.total_buys_24h);
+          const totalSells24h = toNumber(r.total_sells_24h);
+          const totalBuyVolume24h = toNumber(r.total_buy_volume_24h);
+          const totalSellVolume24h = toNumber(r.total_sell_volume_24h);
+          const totalBuyers24h = toNumber(r.total_buyers_24h);
+          const totalSellers24h = toNumber(r.total_sellers_24h);
+          const uniqueWallets24h = toNumber(r.unique_wallets_24h);
+
+          // Calculate volume for different timeframes from buy/sell volumes
+          // Prefer buy/sell volume sum as it's more accurate, fallback to direct volume field
+          const sum24h = totalBuyVolume24h + totalSellVolume24h;
+          const volume24h = sum24h > 0 ? sum24h : toNumber(r.volume_24h);
+          
+          // For other timeframes, sum buy/sell volumes (API provides these fields)
+          // This ensures we always have volume data even if the direct volume field is 0
+          const sum1h = toNumber(r.total_buy_volume_1h) + toNumber(r.total_sell_volume_1h);
+          const volume1h = sum1h > 0 ? sum1h : toNumber(r.volume_1h);
+          
+          const sum6h = toNumber(r.total_buy_volume_6h) + toNumber(r.total_sell_volume_6h);
+          const volume6h = sum6h > 0 ? sum6h : toNumber(r.volume_6h);
+          
+          const sum5m = toNumber(r.total_buy_volume_5m) + toNumber(r.total_sell_volume_5m);
+          const volume5m = sum5m > 0 ? sum5m : toNumber(r.volume_5m);
 
           return {
             mint: r.mint || r.mint_address || r.Mint || null,
             pair_address: r.pair_address || null,
             name: r.name || r.token_name || '',
             symbol: r.symbol || r.token_symbol || '',
-            usd_price: r.price_usd ?? 0,
-            fully_diluted_value: r.market_cap_usd ?? 0,
-            volume_24h: r.volume_24h ?? 0,
-            price_percent_change_1h: r.price_change_1h ?? 0,
+            usd_price: toNumber(r.price_usd),
+            fully_diluted_value: toNumber(r.market_cap_usd),
+            volume_24h: volume24h,
+            volume_1h: volume1h,
+            volume_6h: volume6h,
+            volume_5m: volume5m,
+            total_liquidity_usd: toNumber(r.liquidity_usd),
+            price_percent_change_1h: toNumber(r.price_change_1h),
             bonding_curve_progress: parseFloat(r.bonding_pct ?? 0), // bonding_pct is already a percentage
             graduation_percent: parseFloat(r.graduation_percent ?? 0), // graduation_percent for hover display (snake_case)
             graduationPercent: parseFloat(r.graduation_percent ?? 0), // graduation_percent for hover display (camelCase for compatibility)
@@ -146,37 +180,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             image: extractTokenImage(r) || null,
             uri: r.uri || null,
             // TX data fields from Codex API with fallback logic for older tokens
-            total_buy_volume_5m: (r.total_buy_volume_5m ?? 0) || estimateFrom24h(totalBuyVolume24h, '5m'),
-            total_buy_volume_1h: (r.total_buy_volume_1h ?? 0) || estimateFrom24h(totalBuyVolume24h, '1h'),
-            total_buy_volume_6h: (r.total_buy_volume_6h ?? 0) || estimateFrom24h(totalBuyVolume24h, '6h'),
+            total_buy_volume_5m: toNumber(r.total_buy_volume_5m) || estimateFrom24h(totalBuyVolume24h, '5m'),
+            total_buy_volume_1h: toNumber(r.total_buy_volume_1h) || estimateFrom24h(totalBuyVolume24h, '1h'),
+            total_buy_volume_6h: toNumber(r.total_buy_volume_6h) || estimateFrom24h(totalBuyVolume24h, '6h'),
             total_buy_volume_24h: totalBuyVolume24h,
-            total_sell_volume_5m: (r.total_sell_volume_5m ?? 0) || estimateFrom24h(totalSellVolume24h, '5m'),
-            total_sell_volume_1h: (r.total_sell_volume_1h ?? 0) || estimateFrom24h(totalSellVolume24h, '1h'),
-            total_sell_volume_6h: (r.total_sell_volume_6h ?? 0) || estimateFrom24h(totalSellVolume24h, '6h'),
+            total_sell_volume_5m: toNumber(r.total_sell_volume_5m) || estimateFrom24h(totalSellVolume24h, '5m'),
+            total_sell_volume_1h: toNumber(r.total_sell_volume_1h) || estimateFrom24h(totalSellVolume24h, '1h'),
+            total_sell_volume_6h: toNumber(r.total_sell_volume_6h) || estimateFrom24h(totalSellVolume24h, '6h'),
             total_sell_volume_24h: totalSellVolume24h,
-            total_buyers_5m: (r.total_buyers_5m ?? 0) || Math.max(1, Math.floor(totalBuyers24h / 288)),
-            total_buyers_1h: (r.total_buyers_1h ?? 0) || Math.max(1, Math.floor(totalBuyers24h / 24)),
-            total_buyers_6h: (r.total_buyers_6h ?? 0) || Math.max(1, Math.floor(totalBuyers24h / 4)),
+            total_buyers_5m: toNumber(r.total_buyers_5m) || Math.max(1, Math.floor(totalBuyers24h / 288)),
+            total_buyers_1h: toNumber(r.total_buyers_1h) || Math.max(1, Math.floor(totalBuyers24h / 24)),
+            total_buyers_6h: toNumber(r.total_buyers_6h) || Math.max(1, Math.floor(totalBuyers24h / 4)),
             total_buyers_24h: totalBuyers24h,
-            total_sellers_5m: (r.total_sellers_5m ?? 0) || Math.max(1, Math.floor(totalSellers24h / 288)),
-            total_sellers_1h: (r.total_sellers_1h ?? 0) || Math.max(1, Math.floor(totalSellers24h / 24)),
-            total_sellers_6h: (r.total_sellers_6h ?? 0) || Math.max(1, Math.floor(totalSellers24h / 4)),
+            total_sellers_5m: toNumber(r.total_sellers_5m) || Math.max(1, Math.floor(totalSellers24h / 288)),
+            total_sellers_1h: toNumber(r.total_sellers_1h) || Math.max(1, Math.floor(totalSellers24h / 24)),
+            total_sellers_6h: toNumber(r.total_sellers_6h) || Math.max(1, Math.floor(totalSellers24h / 4)),
             total_sellers_24h: totalSellers24h,
-            total_buys_5m: (r.total_buys_5m ?? 0) || Math.max(1, Math.floor(totalBuys24h / 288)),
-            total_buys_1h: (r.total_buys_1h ?? 0) || Math.max(1, Math.floor(totalBuys24h / 24)),
-            total_buys_6h: (r.total_buys_6h ?? 0) || Math.max(1, Math.floor(totalBuys24h / 4)),
+            total_buys_5m: toNumber(r.total_buys_5m) || Math.max(1, Math.floor(totalBuys24h / 288)),
+            total_buys_1h: toNumber(r.total_buys_1h) || Math.max(1, Math.floor(totalBuys24h / 24)),
+            total_buys_6h: toNumber(r.total_buys_6h) || Math.max(1, Math.floor(totalBuys24h / 4)),
             total_buys_24h: totalBuys24h,
-            total_sells_5m: (r.total_sells_5m ?? 0) || Math.max(1, Math.floor(totalSells24h / 288)),
-            total_sells_1h: (r.total_sells_1h ?? 0) || Math.max(1, Math.floor(totalSells24h / 24)),
-            total_sells_6h: (r.total_sells_6h ?? 0) || Math.max(1, Math.floor(totalSells24h / 4)),
+            total_sells_5m: toNumber(r.total_sells_5m) || Math.max(1, Math.floor(totalSells24h / 288)),
+            total_sells_1h: toNumber(r.total_sells_1h) || Math.max(1, Math.floor(totalSells24h / 24)),
+            total_sells_6h: toNumber(r.total_sells_6h) || Math.max(1, Math.floor(totalSells24h / 4)),
             total_sells_24h: totalSells24h,
-            unique_wallets_5m: (r.unique_wallets_5m ?? 0) || Math.max(1, Math.floor(uniqueWallets24h / 288)),
-            unique_wallets_1h: (r.unique_wallets_1h ?? 0) || Math.max(1, Math.floor(uniqueWallets24h / 24)),
-            unique_wallets_6h: (r.unique_wallets_6h ?? 0) || Math.max(1, Math.floor(uniqueWallets24h / 4)),
+            unique_wallets_5m: toNumber(r.unique_wallets_5m) || Math.max(1, Math.floor(uniqueWallets24h / 288)),
+            unique_wallets_1h: toNumber(r.unique_wallets_1h) || Math.max(1, Math.floor(uniqueWallets24h / 24)),
+            unique_wallets_6h: toNumber(r.unique_wallets_6h) || Math.max(1, Math.floor(uniqueWallets24h / 4)),
             unique_wallets_24h: uniqueWallets24h,
-            price_percent_change_5m: r.price_percent_change_5m ?? 0,
-            price_percent_change_6h: r.price_percent_change_6h ?? 0,
-            price_percent_change_24h: r.price_percent_change_24h ?? 0,
+            price_percent_change_5m: toNumber(r.price_percent_change_5m),
+            price_percent_change_6h: toNumber(r.price_percent_change_6h),
+            price_percent_change_24h: toNumber(r.price_percent_change_24h),
             // Social links
             links: r.links || null,
           };
