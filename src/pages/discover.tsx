@@ -484,18 +484,23 @@ export default function DiscoverPage() {
             normalized.liquidity_usd = liquidity;
             normalized.total_liquidity_usd = liquidity;
 
-            normalized.volume_24h =
-              toNumber(token.volume_24h ?? token.volume24h) ||
-              sumVolumes(token.total_buy_volume_24h, token.total_sell_volume_24h);
-            normalized.volume_6h =
-              toNumber(token.volume_6h ?? token.volume6h) ||
-              sumVolumes(token.total_buy_volume_6h, token.total_sell_volume_6h);
-            normalized.volume_1h =
-              toNumber(token.volume_1h ?? token.volume1h) ||
-              sumVolumes(token.total_buy_volume_1h, token.total_sell_volume_1h);
-            normalized.volume_5m =
-              toNumber(token.volume_5m ?? token.volume5m) ||
-              sumVolumes(token.total_buy_volume_5m, token.total_sell_volume_5m);
+            // Volume fields - prefer buy/sell volume sum if available, otherwise use provided value
+            // This ensures we get accurate volume even if the direct volume field is 0 or missing
+            const sum24h = sumVolumes(token.total_buy_volume_24h, token.total_sell_volume_24h);
+            const vol24h = token.volume_24h ?? token.volume24h;
+            normalized.volume_24h = sum24h > 0 ? sum24h : (vol24h !== undefined && vol24h !== null ? toNumber(vol24h) : 0);
+            
+            const sum6h = sumVolumes(token.total_buy_volume_6h, token.total_sell_volume_6h);
+            const vol6h = token.volume_6h ?? token.volume6h;
+            normalized.volume_6h = sum6h > 0 ? sum6h : (vol6h !== undefined && vol6h !== null ? toNumber(vol6h) : 0);
+            
+            const sum1h = sumVolumes(token.total_buy_volume_1h, token.total_sell_volume_1h);
+            const vol1h = token.volume_1h ?? token.volume1h;
+            normalized.volume_1h = sum1h > 0 ? sum1h : (vol1h !== undefined && vol1h !== null ? toNumber(vol1h) : 0);
+            
+            const sum5m = sumVolumes(token.total_buy_volume_5m, token.total_sell_volume_5m);
+            const vol5m = token.volume_5m ?? token.volume5m;
+            normalized.volume_5m = sum5m > 0 ? sum5m : (vol5m !== undefined && vol5m !== null ? toNumber(vol5m) : 0);
 
             const normalizePercent = (value: any) => {
               const num = toNumber(value);
@@ -755,14 +760,24 @@ export default function DiscoverPage() {
   };
 
   // Helper to compute volume by timeframe for sorting in trending view
+  // Checks direct volume field first, then calculates from buy/sell volumes
   const getVolumeForTimeframe = useCallback((t: any, tf: Timeframe) => {
-    const v = t?.[`volume_${tf}`];
-    if (typeof v === 'number') return v;
-    if (typeof v === 'string' && v.trim() !== '') {
-      const n = parseFloat(v);
-      return isNaN(n) ? 0 : n;
+    // Try direct volume field first
+    let vol = t?.[`volume_${tf}`];
+    if (typeof vol === 'number' && vol > 0) return vol;
+    if (typeof vol === 'string' && vol.trim() !== '') {
+      const n = parseFloat(vol);
+      if (!isNaN(n) && n > 0) return n;
     }
-    return 0;
+    
+    // If volume is 0 or missing, try calculating from buy/sell volumes
+    const buyVol = t?.[`total_buy_volume_${tf}`];
+    const sellVol = t?.[`total_sell_volume_${tf}`];
+    const buyNum = typeof buyVol === 'number' ? buyVol : (typeof buyVol === 'string' ? parseFloat(buyVol) || 0 : 0);
+    const sellNum = typeof sellVol === 'number' ? sellVol : (typeof sellVol === 'string' ? parseFloat(sellVol) || 0 : 0);
+    const sum = buyNum + sellNum;
+    
+    return sum > 0 ? sum : 0;
   }, []);
 
   // Map AMM IDs to protocol patterns (same logic as PulseTable)
@@ -1009,6 +1024,19 @@ export default function DiscoverPage() {
       // Filter out Meteora tokens from new pairs
       const protocol = ((token as any).launchpad_protocol || (token as any).launchpadProtocol || (token as any).protocol || '').toLowerCase();
       if (protocol.includes('meteora')) {
+        return false;
+      }
+      // Filter out tokens with 0 liquidity
+      const liquidity = Number((token as any).total_liquidity_usd || (token as any).liquidity_usd || 0);
+      if (liquidity <= 0) {
+        return false;
+      }
+      // Filter out tokens with 0 volume - check all timeframes
+      const hasVolume = ['1h', '6h', '24h', '5m'].some(tf => {
+        const vol = getVolumeForTimeframe(token, tf as Timeframe);
+        return vol > 0;
+      });
+      if (!hasVolume) {
         return false;
       }
       return true;

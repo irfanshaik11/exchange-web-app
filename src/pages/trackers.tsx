@@ -1239,7 +1239,7 @@ export default function TrackersPage() {
           <Header isSticky={false} />
           <div className="w-full flex-grow">
             {/* Main Content Area: Two Columns */}
-            <div className="flex h-full flex-col gap-4 px-2 sm:px-4 lg:flex-row">
+            <div className="flex flex-col gap-4 px-2 sm:px-4 lg:flex-row mt-16 sm:mt-20">
               {isMobile && (
                 <div className="mt-2 sm:mt-4 flex w-full rounded-full bg-[#111111] p-0.5 sm:p-1 text-[10px] sm:text-xs font-medium text-neutral-400">
                   <button

@@ -118,17 +118,48 @@ const getNumber = (obj: any, key: string): number => {
 };
 
 const getVolume = (token: Token, timeframe: string): number => {
-  // Use the volume fields that backend provides: volume_5m, volume_1h, volume_6h, volume_24h
-  let volume = getNumber(token as any, `volume_${timeframe}`);
+  // Helper to get volume from a specific timeframe, including buy/sell calculation
+  const getVolumeForTimeframe = (tf: string): number => {
+    // First try direct volume field
+    let vol = getNumber(token as any, `volume_${tf}`);
+    
+    // If 0, try calculating from buy/sell volumes
+    if (vol === 0) {
+      const buyVol = getNumber(token as any, `total_buy_volume_${tf}`);
+      const sellVol = getNumber(token as any, `total_sell_volume_${tf}`);
+      vol = buyVol + sellVol;
+    }
+    
+    return vol;
+  };
   
-  // Fallback for missing timeframes - use available data
+  // Try the requested timeframe first
+  let volume = getVolumeForTimeframe(timeframe);
+  
+  // If still 0, try all other timeframes in order of preference
   if (volume === 0) {
-    if (timeframe === '6h' || timeframe === '24h') {
-      // For 6h and 24h, fallback to 1h data if available
-      volume = getNumber(token as any, 'volume_1h');
-    } else if (timeframe === '1h') {
-      // For 1h, fallback to 5m data if available
-      volume = getNumber(token as any, 'volume_5m');
+    const timeframes = ['1h', '6h', '24h', '5m'];
+    for (const tf of timeframes) {
+      if (tf !== timeframe) {
+        volume = getVolumeForTimeframe(tf);
+        if (volume > 0) {
+          // Found volume in another timeframe, use it
+          break;
+        }
+      }
+    }
+  }
+  
+  // Last resort: if we have 24h volume, estimate for the requested timeframe
+  if (volume === 0) {
+    const vol24h = getVolumeForTimeframe('24h');
+    if (vol24h > 0) {
+      switch (timeframe) {
+        case '5m': volume = vol24h / 288; break;
+        case '1h': volume = vol24h / 24; break;
+        case '6h': volume = vol24h / 4; break;
+        case '24h': volume = vol24h; break;
+      }
     }
   }
   

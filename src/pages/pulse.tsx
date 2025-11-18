@@ -834,10 +834,10 @@ export default function PulsePage() {
       </Head>
       <div className="flex h-screen flex-col text-neutral-100 overflow-hidden" style={{ backgroundColor: '#06070b' }}>
         <Header />
-        <div className="w-full px-6 pt-2 flex-1 flex flex-col min-h-0 overflow-hidden">
-          <div className="mb-2">
+        <div className="w-full px-6 pt-4 flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="mb-1">
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-4 px-2 mb-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 px-2 mb-1">
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-bold">Trenches</h1>
                 <div className="flex items-center gap-3">
@@ -914,7 +914,7 @@ export default function PulsePage() {
             </div>
             
             {/* Tab Navigation - Mobile Only */}
-            <div className="mt-4 mb-6 lg:hidden">
+            <div className="mt-4 mb-8 lg:hidden">
               <div className="flex space-x-1 bg-neutral-800/30 backdrop-blur-sm p-1.5 rounded-xl border border-neutral-700/50 shadow-lg">
                 <button
                   onClick={() => setActiveTab('new')}
