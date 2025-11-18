@@ -502,22 +502,44 @@ export function ReferralAccessGate({
     }
   }, [showWaitlist, checkTwitterAuth]);
 
-  // Check for Twitter OAuth callback in URL
+  // Check for Twitter OAuth callback in URL - PRIORITY: Show waitlist immediately
   useEffect(() => {
     if (!router.isReady) return;
-    const { twitter_error, twitter_success } = router.query;
+    const { twitter_error, twitter_success, show_quests } = router.query;
     
     if (twitter_success === 'true') {
-      // Check Twitter auth and show waitlist modal
-      checkTwitterAuth().then(() => {
-        // Show the waitlist (quest) popup after successful Twitter linking
-        setShowWaitlist(true);
+      // IMMEDIATELY show waitlist modal to prevent referral overlay from showing
+      setShowWaitlist(true);
+      
+      // Check Twitter auth and save Twitter info to database
+      checkTwitterAuth().then(async () => {
+        // Save Twitter info to database
+        if (user?.id) {
+          try {
+            const response = await fetch('/api/twitter/verify-auth');
+            const data = await response.json();
+            if (data.authenticated && data.user) {
+              // Save Twitter info to waitlist
+              await completeAllQuests({
+                userId: Number(user.id),
+                twitterId: data.user.id,
+                twitterUsername: data.user.username,
+              }).catch(err => {
+                console.error('Failed to save Twitter info to waitlist:', err);
+              });
+            }
+          } catch (error) {
+            console.error('Error saving Twitter info:', error);
+          }
+        }
       });
+      
       // Clean up URL
       const [pathPart, searchPart] = router.asPath.split('?');
       if (searchPart) {
         const params = new URLSearchParams(searchPart);
         params.delete('twitter_success');
+        params.delete('show_quests');
         const cleaned = params.toString();
         router.replace(
           cleaned ? `${pathPart}?${cleaned}` : pathPart,
@@ -540,7 +562,7 @@ export function ReferralAccessGate({
         );
       }
     }
-  }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth]);
+  }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth, user]);
 
   // Reset blur state when waitlist modal closes
   useEffect(() => {
@@ -827,7 +849,9 @@ export function ReferralAccessGate({
     );
   }
 
-  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist;
+  // Don't show referral overlay if Twitter OAuth just completed (twitter_success in URL)
+  const hasTwitterSuccess = router.isReady && router.query.twitter_success === 'true';
+  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist && !hasTwitterSuccess;
 
   return (
     <ReferralAccessContext.Provider value={contextValue}>
@@ -1379,10 +1403,10 @@ export function ReferralAccessGate({
 
                   {waitlistNumber ? (
                     <div className="mb-6">
-                      <p className="text-sm text-neutral-400 mb-2">Your waitlist number</p>
+                      <p className="text-sm text-neutral-400 mb-2">Your waitlist group</p>
                       <div className="inline-block px-6 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
                         <span className="text-3xl md:text-4xl font-bold text-emerald-400">
-                          #{waitlistNumber}
+                          Group A
                         </span>
                       </div>
                     </div>
@@ -1395,7 +1419,7 @@ export function ReferralAccessGate({
                   )}
 
                   <p className="text-sm text-neutral-300/90 mb-8 max-w-sm mx-auto">
-                    Thank you for completing all quests! We'll notify you when your spot is ready.
+                    Thank you for completing all quests! You will get access in less than 2-3 weeks!
                   </p>
 
                   <InterstateButton
