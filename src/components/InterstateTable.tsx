@@ -3,6 +3,7 @@ import {
   FaQuestionCircle,
 } from "react-icons/fa";
 import { User, Globe, Search, Copy } from "lucide-react";
+import { HiLightningBolt } from "react-icons/hi";
 import InterstateButton from "./InterstateButton";
 import Image from 'next/image';
 import InterstateTooltip from './InterstateTooltip';
@@ -264,13 +265,14 @@ const TableHeader: React.FC<{
   sortKey?: string;
   sortDirection?: 'asc' | 'desc';
   onSort?: (key: string) => void;
-}> = ({ sortKey, sortDirection, onSort }) => (
+  isDiscoverPage?: boolean;
+}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false }) => (
   <thead>
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
       {TABLE_HEADERS.map((header, idx) => (
         <th
           key={idx}
-          className={`${header.width} px-4 py-4 text-${header.align} text-xs font-medium tracking-wide uppercase ${
+          className={`${header.width} px-4 ${isDiscoverPage ? 'py-2' : 'py-4'} text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
             header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
           }`}
           style={{ color: '#787a8d', fontWeight: '300' }}
@@ -435,8 +437,9 @@ const TokenAvatar: React.FC<{
 const TokenInfo: React.FC<{ 
   token: Token; 
   i: number; 
-  sortedRows: InterstateTableRow[] 
-}> = ({ token, i, sortedRows }) => {
+  sortedRows: InterstateTableRow[];
+  isDiscoverPage?: boolean;
+}> = ({ token, i, sortedRows, isDiscoverPage = false }) => {
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
@@ -464,7 +467,7 @@ const TokenInfo: React.FC<{
         <div className="text-sm font-medium mb-2" style={{ color: AX.muted }}>({token.symbol})</div>
         <p className="text-base font-semibold" style={{ color: AX.text }}>
           $<SubscriptNumber value={token.usd_price} />{' '}
-          <span className={`text-sm ${token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <span className={`text-sm ${isDiscoverPage ? '' : (token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400')}`} style={isDiscoverPage ? { color: token.price_percent_change_1h >= 0 ? '#85d99f' : '#f26681' } : {}}>
             {formatPercentChange(token.price_percent_change_1h)}%
           </span>
         </p>
@@ -534,7 +537,7 @@ const TokenInfo: React.FC<{
         </div>
         
         <div className="flex items-center gap-2">
-          <span className="text-xs text-emerald-400" style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace', fontWeight: 400 }}>
+          <span className={`text-xs ${isDiscoverPage ? '' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? '#85d99f' : undefined, fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace', fontWeight: 400 }}>
             {timeLabel}
           </span>
           <div className="flex items-center gap-1.5 text-sky-400">
@@ -607,10 +610,10 @@ const TokenInfo: React.FC<{
 
             {/* Search icon - Twitter search */}
             <button
-              className="transition-colors duration-200 cursor-pointer hover:text-emerald-400"
+              className={`transition-colors duration-200 cursor-pointer ${isDiscoverPage ? '' : 'hover:text-emerald-400'}`}
               style={{ color: AX.muted }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = AX.aiCyan;
+                e.currentTarget.style.color = isDiscoverPage ? '#85d99f' : AX.aiCyan;
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.color = AX.muted;
@@ -698,7 +701,7 @@ const TokenInfo: React.FC<{
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                <div className={`w-2 h-2 rounded-full ${isDiscoverPage ? '' : 'bg-green-500'}`} style={isDiscoverPage ? { backgroundColor: '#85d99f' } : {}}></div>
                 <span className="text-xs text-gray-400">Live</span>
               </div>
             </div>
@@ -885,7 +888,8 @@ const MarketCapCell: React.FC<{
   token: Token;
   selectedTimeframe: string;
   animationState: Record<string, 'up' | 'down' | null>;
-}> = ({ token, selectedTimeframe, animationState }) => {
+  isDiscoverPage?: boolean;
+}> = ({ token, selectedTimeframe, animationState, isDiscoverPage = false }) => {
   const percentChange = getTokenStat(token, 'price_percent_change', selectedTimeframe);
   const percentFieldKey = `${token.pair_address}-price_percent_change_${selectedTimeframe}`;
   const isPositive = percentChange >= 0;
@@ -902,10 +906,12 @@ const MarketCapCell: React.FC<{
 
   return (
     <div className="text-right">
-      <div className="text-sm font-semibold" style={{ 
+      <div className={`text-sm font-semibold ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
         color: AX.text,
-        fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-        fontWeight: '400'
+        ...(isDiscoverPage ? {} : {
+          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+          fontWeight: '400'
+        })
       }}>
         {(() => {
           // console.log('MarketCapCell formatSmartNumber call with:', token.fully_diluted_value);
@@ -931,26 +937,29 @@ const MarketCapCell: React.FC<{
 const TxnsCell: React.FC<{
   token: Token;
   selectedTimeframe: string;
-}> = ({ token, selectedTimeframe }) => {
+  isDiscoverPage?: boolean;
+}> = ({ token, selectedTimeframe, isDiscoverPage = false }) => {
   const { total, buys, sells } = getTxns(token, selectedTimeframe);
 
   const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
   
   return (
     <div className="text-right">
-      <div className="text-sm font-medium mb-1" style={{ 
+      <div className={`text-sm font-medium mb-1 ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
         color: AX.text,
-        fontFamily: monospaceFont,
-        fontWeight: '400'
+        ...(isDiscoverPage ? {} : {
+          fontFamily: monospaceFont,
+          fontWeight: '400'
+        })
       }}>
         {total === 0 ? '-' : formatSmartNumber(total)}
       </div>
       <div className="text-xs font-medium">
-        <span className="text-emerald-400" style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+        <span className={`${isDiscoverPage ? '' : 'text-emerald-400'} ${isDiscoverPage ? 'number-font' : ''}`} style={isDiscoverPage ? { color: '#85d99f', fontFamily: monospaceFont, fontWeight: '400' } : { fontFamily: monospaceFont, fontWeight: '400' }}>
           {buys === 0 ? '-' : formatSmartNumber(buys)}
         </span>
         <span className="mx-1" style={{ color: AX.muted }}>/</span>
-        <span className="text-red-400" style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+        <span className={`${isDiscoverPage ? '' : 'text-red-400'} ${isDiscoverPage ? 'number-font' : ''}`} style={isDiscoverPage ? { color: '#f26681', fontFamily: monospaceFont, fontWeight: '400' } : { fontFamily: monospaceFont, fontWeight: '400' }}>
           {sells === 0 ? '-' : formatSmartNumber(sells)}
         </span>
       </div>
@@ -962,7 +971,8 @@ const TxnsCell: React.FC<{
 const AuditLogCell: React.FC<{
   token: Token;
   selectedTimeframe: string;
-}> = ({ token, selectedTimeframe }) => {
+  isDiscoverPage?: boolean;
+}> = ({ token, selectedTimeframe, isDiscoverPage = false }) => {
   const percentChange = getTokenStat(token, 'price_percent_change', selectedTimeframe);
 
   const buyCount = (token as any)[`total_buys_${selectedTimeframe}`] || 0;
@@ -973,20 +983,22 @@ const AuditLogCell: React.FC<{
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="flex items-center gap-1">
-        <span className={`w-2 h-2 rounded-full ${percentChange >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
-        <span className="text-xs font-medium" style={{ 
+        <span className={`w-2 h-2 rounded-full ${isDiscoverPage ? '' : (percentChange >= 0 ? 'bg-emerald-400' : 'bg-red-400')}`} style={isDiscoverPage ? { backgroundColor: percentChange >= 0 ? '#85d99f' : '#f26681' } : {}}></span>
+        <span className={`text-xs font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
           color: AX.text,
-          fontFamily: monospaceFont,
-          fontWeight: '400'
+          ...(isDiscoverPage ? {} : {
+            fontFamily: monospaceFont,
+            fontWeight: '400'
+          })
         }}>
           {Math.abs(percentChange).toFixed(2)}%
         </span>
       </div>
       <div className="flex gap-2 text-xs" style={{ color: AX.muted }}>
-        <span style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+        <span className={isDiscoverPage ? 'number-font' : ''} style={isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' }}>
           B: {formatSmartNumber(buyCount)}
         </span>
-        <span style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+        <span className={isDiscoverPage ? 'number-font' : ''} style={isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' }}>
           S: {formatSmartNumber(sellCount)}
         </span>
       </div>
@@ -1004,6 +1016,7 @@ const TableRow: React.FC<{
   animationState: Record<string, 'up' | 'down' | null>;
   sortedRows: InterstateTableRow[];
   onClick: () => void;
+  isDiscoverPage?: boolean;
 }> = React.memo(({ 
   token, 
   i, 
@@ -1012,7 +1025,8 @@ const TableRow: React.FC<{
   quickBuyAmount, 
   animationState, 
   sortedRows, 
-  onClick 
+  onClick,
+  isDiscoverPage = false
 }) => {
   const handleQuickBuy = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1049,14 +1063,15 @@ const TableRow: React.FC<{
       onClick={onClick}
     >
       <td className="w-80 px-4 py-4 align-middle">
-        <TokenInfo token={token} i={i} sortedRows={sortedRows} />
+        <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} />
       </td>
       
       <td className="w-32 px-4 py-4 align-middle">
         <MarketCapCell 
           token={token} 
           selectedTimeframe={selectedTimeframe} 
-          animationState={animationState} 
+          animationState={animationState}
+          isDiscoverPage={isDiscoverPage}
         />
       </td>
       
@@ -1069,20 +1084,24 @@ const TableRow: React.FC<{
           });
           return null;
         })()} */}
-        <div className="text-sm font-medium" style={{ 
+        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
           color: AX.text,
-          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-          fontWeight: '400'
+          ...(isDiscoverPage ? {} : {
+            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+            fontWeight: '400'
+          })
         }}>
           ${formatSmartNumber(token.total_liquidity_usd)}
         </div>
       </td>
       
       <td className="w-28 px-4 py-4 align-middle text-right">
-        <div className="text-sm font-medium" style={{ 
+        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
           color: AX.text,
-          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-          fontWeight: '400'
+          ...(isDiscoverPage ? {} : {
+            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+            fontWeight: '400'
+          })
         }}>
           {/* Show "-" when volume data is not available instead of $0.00 */}
           {volume === 0 ? "-" : `$${formatSmartNumber(volume)}`}
@@ -1090,7 +1109,7 @@ const TableRow: React.FC<{
       </td>
       
       <td className="w-24 px-4 py-4 align-middle">
-        <TxnsCell token={token} selectedTimeframe={selectedTimeframe} />
+        <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
       </td>
       
       {/* Token Info column - commented out per user request */}
@@ -1099,14 +1118,39 @@ const TableRow: React.FC<{
       </td> */}
       
       <td className="w-32 px-4 py-4 align-middle text-center">
-        <InterstateButton
-          variant="primary"
-          size="sm"
-          className="!px-3 !py-2 text-xs font-medium w-full"
-          onClick={handleQuickBuy}
-        >
-          Buy {quickBuyAmount} SOL
-        </InterstateButton>
+        {isDiscoverPage ? (
+          <button
+            onClick={handleQuickBuy}
+            className="flex items-center justify-center gap-1.5 text-xs font-medium transition-all duration-200 cursor-pointer"
+            style={{
+              backgroundColor: '#272a2e',
+              color: '#85d99f',
+              padding: '8px 12px',
+              borderRadius: '4px',
+              minHeight: '32px',
+              width: 'auto',
+              maxWidth: '120px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#2f3238';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#272a2e';
+            }}
+          >
+            <HiLightningBolt size={14} style={{ color: '#85d99f' }} />
+            <span style={{ color: '#85d99f' }}>{quickBuyAmount} SOL</span>
+          </button>
+        ) : (
+          <InterstateButton
+            variant="primary"
+            size="sm"
+            className="!px-3 !py-2 text-xs font-medium w-full"
+            onClick={handleQuickBuy}
+          >
+            Buy {quickBuyAmount} SOL
+          </InterstateButton>
+        )}
       </td>
     </tr>
   );
@@ -1203,26 +1247,39 @@ export default function InterstateTable({
   const isDiscoverPage = router.pathname === '/discover';
   
   return (
-    <div className="overflow-x-auto shadow-lg rounded-lg" style={{ 
-      backgroundColor: isDiscoverPage ? '#101114' : 'rgba(30, 31, 38, 0.3)', 
-      border: `1px solid ${AX.border}`,
-      borderColor: AX.border 
+    <div className="overflow-x-auto shadow-lg" style={{ 
+      backgroundColor: isDiscoverPage ? '#111214' : 'rgba(30, 31, 38, 0.3)', 
+      ...(isDiscoverPage ? {
+        borderTop: `1px solid ${AX.border}`,
+        borderLeft: 'none',
+        borderRight: 'none',
+        borderBottom: 'none',
+        borderRadius: '0'
+      } : {
+        border: `1px solid ${AX.border}`,
+        borderRadius: '0.5rem'
+      })
     }}>
       <style jsx>{`
+        .number-font {
+          font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+        }
         .price-animate-up {
-          background: rgba(52, 211, 153, 0.2);
+          background: ${isDiscoverPage ? 'rgba(133, 217, 159, 0.2)' : 'rgba(52, 211, 153, 0.2)'};
           animation: pulse-green 0.6s ease-out;
         }
         .price-animate-down {
-          background: rgba(248, 113, 113, 0.2);
+          background: ${isDiscoverPage ? 'rgba(242, 102, 129, 0.2)' : 'rgba(248, 113, 113, 0.2)'};
           animation: pulse-red 0.6s ease-out;
         }
         @keyframes pulse-green {
-          0% { background: rgba(52, 211, 153, 0.4); }
+          0% { background: ${isDiscoverPage ? 'rgba(133, 217, 159, 0.4)' : 'rgba(52, 211, 153, 0.4)'}; }
           100% { background: transparent; }
         }
         @keyframes pulse-red {
-          0% { background: rgba(248, 113, 113, 0.4); }
+          0% { background: ${isDiscoverPage ? 'rgba(242, 102, 129, 0.4)' : 'rgba(248, 113, 113, 0.4)'}; }
           100% { background: transparent; }
         }
         table {
@@ -1242,7 +1299,8 @@ export default function InterstateTable({
         <TableHeader 
           sortKey={sortKey} 
           sortDirection={sortDirection} 
-          onSort={setSort} 
+          onSort={setSort}
+          isDiscoverPage={isDiscoverPage}
         />
         
         <tbody>
@@ -1301,6 +1359,7 @@ export default function InterstateTable({
                   animationState={animationState}
                   sortedRows={sortedRows}
                   onClick={handleTokenClick}
+                  isDiscoverPage={isDiscoverPage}
                 />
               );
             })
