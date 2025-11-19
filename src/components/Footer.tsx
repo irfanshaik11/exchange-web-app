@@ -22,6 +22,8 @@ import QuickBuySettingsModal from './QuickBuySettingsModal';
 import PnLModal from './PnLModal';
 import WalletSwitcher from './WalletSwitcher';
 import WalletTrackerPopup from './WalletTrackerPopup';
+import TwitterTrackerPopup from './TwitterTrackerPopup';
+import DiscoverPopup from './DiscoverPopup';
 import { useQuickBuy } from './QuickBuyContext';
 import { useSolPrice } from './SolPriceContext';
 import { useUser } from './UserContext';
@@ -77,6 +79,8 @@ const AX = {
 export default function Footer() {
   const router = useRouter();
   const [showWalletDropdown, setShowWalletDropdown] = useState(false);
+  const [showTwitterDropdown, setShowTwitterDropdown] = useState(false);
+  const [showDiscoverDropdown, setShowDiscoverDropdown] = useState(false);
   const [showGlobalDropdown, setShowGlobalDropdown] = useState(false);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [showPnLModal, setShowPnLModal] = useState(false);
@@ -287,7 +291,7 @@ export default function Footer() {
         <div className="flex items-center gap-1 flex-shrink-0">
           {navLinks.map((link, index) => {
             const IconComponent = link.icon;
-            const isActive = link.name === 'Wallet' ? showWalletDropdown : router.pathname === link.href;
+            const isActive = link.name === 'Wallet' ? showWalletDropdown : link.name === 'Twitter' ? showTwitterDropdown : link.name === 'Discover' ? showDiscoverDropdown : router.pathname === link.href;
             
             return (
               <React.Fragment key={link.name}>
@@ -300,6 +304,54 @@ export default function Footer() {
                 {link.name === 'Wallet' ? (
                   <button
                     onClick={() => setShowWalletDropdown(!showWalletDropdown)}
+                    className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
+                    style={{
+                      color: isActive ? AX.mint : AX.muted,
+                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.mint;
+                        e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.muted;
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    <IconComponent size={11} className="sm:w-3 sm:h-3" />
+                    <span className="text-[11px] sm:text-xs hidden sm:inline leading-none">{link.name}</span>
+                  </button>
+                ) : link.name === 'Twitter' ? (
+                  <button
+                    onClick={() => setShowTwitterDropdown(!showTwitterDropdown)}
+                    className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
+                    style={{
+                      color: isActive ? AX.mint : AX.muted,
+                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.mint;
+                        e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.muted;
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    <IconComponent size={11} className="sm:w-3 sm:h-3" />
+                    <span className="text-[11px] sm:text-xs hidden sm:inline leading-none">{link.name}</span>
+                  </button>
+                ) : link.name === 'Discover' ? (
+                  <button
+                    onClick={() => setShowDiscoverDropdown(!showDiscoverDropdown)}
                     className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
@@ -596,6 +648,18 @@ export default function Footer() {
       <WalletTrackerPopup
         isOpen={showWalletDropdown}
         onClose={() => setShowWalletDropdown(false)}
+      />
+      
+      {/* Twitter Tracker Popup */}
+      <TwitterTrackerPopup
+        isOpen={showTwitterDropdown}
+        onClose={() => setShowTwitterDropdown(false)}
+      />
+      
+      {/* Discover Popup */}
+      <DiscoverPopup
+        isOpen={showDiscoverDropdown}
+        onClose={() => setShowDiscoverDropdown(false)}
       />
     </footer>
   );
