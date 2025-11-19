@@ -62,6 +62,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [moonPayLoaded, setMoonPayLoaded] = useState(false);
   const [jupiterLoaded, setJupiterLoaded] = useState(false);
+  const [primaryWalletAddress, setPrimaryWalletAddress] = useState<string | null>(null);
+  const [primaryWalletLabel, setPrimaryWalletLabel] = useState<string | null>(null);
+  const [primaryWalletLoading, setPrimaryWalletLoading] = useState(false);
+  const [walletsRefreshKey, setWalletsRefreshKey] = useState(0);
   
   // Withdraw tab states
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -100,9 +104,11 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     }
   }, [open, refreshBalance]);
 
+  const depositAddress = primaryWalletAddress || user?.publicKey || "";
+
   useEffect(() => {
-    if (user?.publicKey) {
-      QRCode.toDataURL(user.publicKey, {
+    if (depositAddress) {
+      QRCode.toDataURL(depositAddress, {
         width: 280,
         margin: 2,
         color: {
@@ -119,7 +125,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     } else {
       setQrCodeDataUrl("");
     }
-  }, [user?.publicKey]);
+  }, [depositAddress]);
 
   const copyToClipboard = (text: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -282,6 +288,71 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     }
   };
 
+  // Trigger wallet refresh whenever other parts of the app dispatch the event
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleWalletsUpdated = () => {
+      setWalletsRefreshKey((key) => key + 1);
+    };
+    window.addEventListener("wallets-updated", handleWalletsUpdated);
+    return () => {
+      window.removeEventListener("wallets-updated", handleWalletsUpdated);
+    };
+  }, []);
+
+  // Fetch the user's primary wallet so deposits go to the right address
+  useEffect(() => {
+    if (!user?.id || !user?.bearerToken) {
+      setPrimaryWalletAddress(null);
+      setPrimaryWalletLabel(null);
+      return;
+    }
+
+    let aborted = false;
+    const fetchPrimaryWallet = async () => {
+      setPrimaryWalletLoading(true);
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${user.bearerToken}`,
+            },
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error(`Failed to load wallets: ${res.status}`);
+        }
+
+        const data = await res.json();
+        const wallets: Array<{ address: string; label?: string | null; isPrimary?: boolean }> =
+          Array.isArray(data?.wallets) ? data.wallets : [];
+        const primary = wallets.find((w) => w.isPrimary) ?? wallets[0];
+
+        if (!aborted) {
+          setPrimaryWalletAddress(primary?.address ?? null);
+          setPrimaryWalletLabel(primary?.label ?? null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch primary wallet:", error);
+        if (!aborted) {
+          setPrimaryWalletAddress((prev) => prev ?? user.publicKey ?? null);
+        }
+      } finally {
+        if (!aborted) {
+          setPrimaryWalletLoading(false);
+        }
+      }
+    };
+
+    fetchPrimaryWallet();
+    return () => {
+      aborted = true;
+    };
+  }, [user?.id, user?.bearerToken, user?.publicKey, walletsRefreshKey]);
+
   const fetchHistory = async () => {
     if (!user?.bearerToken) return;
     
@@ -422,6 +493,18 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
 
   // Function to show MoonPay widget
   const showMoonPay = async () => {
+    if (!depositAddress) {
+      toast.error("Add a primary wallet before buying SOL.", {
+        duration: 2000,
+        style: {
+          background: '#1E1F26',
+          color: '#E6E7EA',
+          border: '1px solid #ff6b6b',
+        }
+      });
+      return;
+    }
+
     if (!moonPayLoaded || !window.MoonPayWebSdk) {
       toast.error("MoonPay is loading, please try again in a moment", {
         duration: 2000,
@@ -445,7 +528,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
           baseCurrencyCode: 'usd',
           baseCurrencyAmount: '100',
           defaultCurrencyCode: 'sol',
-          walletAddress: user?.publicKey || '',
+          walletAddress: depositAddress,
         }
       });
 
@@ -613,7 +696,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
             {/* Deposit Tab */}
             {activeTab === 'deposit' && (
               <>
-                {userLoading ? (
+                {userLoading || primaryWalletLoading ? (
                   <div className="flex items-center justify-center h-64">
                     <div className="text-neutral-400">Loading wallet data...</div>
                   </div>
@@ -629,15 +712,15 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                       </button>
                     )}
                   </div>
-                ) : user.publicKey ? (
+                ) : depositAddress ? (
               <div className="space-y-6">
                 {/* Wallet Info Box */}
                 <div className="rounded-3xl border p-4" style={{ backgroundColor: "#0a0b0f", borderColor: "#2A2B33" }}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs text-neutral-400 mb-1">Narrative Wallet</div>
+                      <div className="text-xs text-neutral-400 mb-1">{primaryWalletLabel || "Narrative Wallet"}</div>
                       <div className="text-sm text-neutral-300 font-mono">
-                        {user.publicKey.slice(0, 4)}...{user.publicKey.slice(-4)}
+                        {depositAddress.slice(0, 4)}...{depositAddress.slice(-4)}
                       </div>
                     </div>
                     <div className="text-right">
@@ -679,7 +762,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                     className="w-full p-4 rounded-3xl text-center break-all font-mono text-sm"
                     style={{ backgroundColor: "#0a0b0f", color: "#E6E7EA" }}
                   >
-                    {user.publicKey}
+                    {depositAddress}
                   </div>
 
                   {/* Caution Message */}
@@ -698,7 +781,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
 
                   {/* Copy Button */}
                   <button
-                    onClick={() => copyToClipboard(user.publicKey)}
+                    onClick={() => copyToClipboard(depositAddress)}
                     className="w-full py-4 rounded-3xl font-semibold text-base transition-all duration-200 hover:opacity-90"
                     style={{ backgroundColor: "#E8E9EB", color: "#000000" }}
                   >
@@ -734,12 +817,12 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                     </p>
                   </div>
 
-                  {user?.publicKey ? (
+                  {depositAddress ? (
                     <div className="space-y-4">
                       <div className="rounded-2xl p-4" style={{ backgroundColor: "#1a1b20", borderColor: "#2A2B33", border: "1px solid" }}>
                         <div className="text-xs text-neutral-400 mb-1">Delivery Address</div>
                         <div className="text-sm text-neutral-300 font-mono break-all">
-                          {user.publicKey}
+                          {depositAddress}
                         </div>
                       </div>
 

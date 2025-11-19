@@ -16,6 +16,9 @@ import { formatSmartNumber } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
 import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
+import toast from "react-hot-toast";
+import { FiEdit2, FiCheck, FiX } from "react-icons/fi";
+
 
 // Stacked Token Boxes Component
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
@@ -68,6 +71,16 @@ interface TokenMetadataCache {
   timestamp: number; // When it was cached
 }
 
+interface UserWallet {
+  id: string;          // DB id of the wallet
+  label: string;       // "Narrative Main", "Wallet 2", etc.
+  address: string;     // public key
+  balance: number;     // SOL balance in SOL
+  holdingsCount: number;
+  isArchived?: boolean;
+  isPrimary?: boolean;
+}
+
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const CACHE_KEY = "tokenMetadataCache";
 
@@ -95,6 +108,19 @@ export default function PortfolioPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
   const [solPrice, setSolPrice] = useState(0);
+  const [wallets, setWallets] = useState<UserWallet[]>([]);
+  const [loadingWallets, setLoadingWallets] = useState(false);
+  const [creatingWallet, setCreatingWallet] = useState(false);
+  const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
+  const [walletRenameValue, setWalletRenameValue] = useState("");
+  const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
+
+  const notifyWalletsUpdated = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("wallets-updated"));
+    }
+  };
+
 
   // Shared token metadata cache across all tabs
   const [tokenMetadataCache, setTokenMetadataCache] =
@@ -680,6 +706,258 @@ export default function PortfolioPage() {
     link.click();
     document.body.removeChild(link);
   };
+
+    useEffect(() => {
+    const fetchWallets = async () => {
+      if (!user?.id) {
+        setWallets([]);
+        return;
+      }
+
+      setLoadingWallets(true);
+      try {
+        // Adjust this URL to your backend / API route
+        const res = await fetch(
+  `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+  {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${user.bearerToken}`,
+    },
+  }
+);
+
+        if (!res.ok) {
+          throw new Error(`Failed to fetch wallets: ${res.status}`);
+        }
+
+        // Expecting something like: { wallets: UserWallet[] }
+        const data = await res.json();
+
+        // Map backend fields → frontend shape if needed
+        const mappedWallets: UserWallet[] = data.wallets.map((w: any, index: number) => ({
+          id: w.id,
+          label: w.label ?? (index === 0 ? "Narrative Main" : `Wallet ${index + 1}`),
+          address: w.address,                 // Turnkey wallet public key
+          balance: w.balance ?? 0,            // SOL balance (backend calculated)
+          holdingsCount: w.holdingsCount ?? 0,
+          isArchived: w.isArchived ?? false,
+          isPrimary: w.isPrimary ?? index === 0,
+        }));
+
+        setWallets(mappedWallets);
+        notifyWalletsUpdated();
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to load wallets");
+      } finally {
+        setLoadingWallets(false);
+      }
+    };
+
+    fetchWallets();
+  }, [user?.id, user?.bearerToken]);
+
+    const handleCreateWallet = async () => {
+    if (!user?.id) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    setCreatingWallet(true);
+    try {
+      // POST to your backend which does:
+      // - create Turnkey sub-org / wallet for this user
+      // - persist wallet to DB
+      // - return the new wallet with balance = 0 (or computed)
+      const res = await fetch(
+  `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${user.bearerToken}`,
+    },
+    body: JSON.stringify({
+      userId: user.id,
+      // you can optionally send: label, chain, etc.
+    }),
+  }
+);
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        throw new Error(`Failed to create wallet: ${res.status} ${errorText}`);
+      }
+
+      const created: UserWallet = await res.json();
+
+      // Append new wallet to list
+      setWallets((prev) => [...prev, created]);
+      notifyWalletsUpdated();
+
+      toast.success("New wallet created");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not create wallet");
+    } finally {
+      setCreatingWallet(false);
+    }
+  };
+
+  const handleBeginRenameWallet = (wallet: UserWallet) => {
+    setEditingWalletId(wallet.id);
+    setWalletRenameValue(wallet.label || "");
+  };
+
+  const handleCancelRenameWallet = () => {
+    setEditingWalletId(null);
+    setWalletRenameValue("");
+    setRenamingWalletId(null);
+  };
+
+  const handleRenameWallet = async () => {
+    if (!editingWalletId || !user?.bearerToken) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    const trimmed = walletRenameValue.trim();
+    if (!trimmed) {
+      toast.error("Wallet name cannot be empty");
+      return;
+    }
+
+    const currentLabel =
+      wallets.find((wallet) => wallet.id === editingWalletId)?.label ?? "";
+    if (trimmed === currentLabel.trim()) {
+      handleCancelRenameWallet();
+      return;
+    }
+
+    try {
+      setRenamingWalletId(editingWalletId);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet/${editingWalletId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+          body: JSON.stringify({
+            label: trimmed,
+            userId: user.id,
+            walletId: editingWalletId,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        throw new Error(
+          errorText || `Failed to rename wallet (${res.status})`
+        );
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.wallets)) {
+        const mapped: UserWallet[] = data.wallets.map((w: any, index: number) => ({
+          id: w.id,
+          label: w.label ?? (index === 0 ? "Narrative Main" : `Wallet ${index + 1}`),
+          address: w.address,
+          balance: w.balance ?? 0,
+          holdingsCount: w.holdingsCount ?? 0,
+          isArchived: w.isArchived ?? false,
+          isPrimary: w.isPrimary ?? index === 0,
+        }));
+        setWallets(mapped);
+      } else {
+        const updatedLabel =
+          (data?.wallet?.label as string | undefined) ?? trimmed;
+        setWallets((prev) =>
+          prev.map((wallet) =>
+            wallet.id === editingWalletId
+              ? {
+                  ...wallet,
+                  label: updatedLabel,
+                }
+              : wallet
+          )
+        );
+      }
+      notifyWalletsUpdated();
+
+      toast.success("Wallet name updated");
+      setEditingWalletId(null);
+      setWalletRenameValue("");
+    } catch (err) {
+      console.error("Failed to rename wallet:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to rename wallet"
+      );
+    } finally {
+      setRenamingWalletId(null);
+    }
+  };
+
+    const handleSetPrimaryWallet = async (walletId: string) => {
+    if (!user?.id) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet/${walletId}/primary`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        console.error("Failed to set primary wallet:", res.status, errorText);
+        toast.error("Failed to set primary wallet");
+        return;
+      }
+
+      const data = await res.json();
+
+      // backend setPrimaryWallet returns: { success, message, wallets }
+      if (!data.wallets) {
+        toast.success("Primary wallet updated");
+        return;
+      }
+
+      const mappedWallets: UserWallet[] = data.wallets.map(
+        (w: any, index: number) => ({
+          id: w.id,
+          label:
+            w.label ?? (index === 0 ? "Narrative Main" : `Wallet ${index + 1}`),
+          address: w.address,
+          balance: w.balance ?? 0,
+          holdingsCount: w.holdingsCount ?? 0,
+          isArchived: w.isArchived ?? false,
+          isPrimary: w.isPrimary ?? index === 0,
+        })
+      );
+
+      setWallets(mappedWallets);
+      notifyWalletsUpdated();
+      toast.success("Primary wallet updated");
+    } catch (err) {
+      console.error("Error setting primary wallet:", err);
+      toast.error("Failed to set primary wallet");
+    }
+  };
+
+
+
 
   return (
     <>
@@ -1420,9 +1698,17 @@ export default function PortfolioPage() {
                     <button className="px-3  py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap">
                       Import
                     </button>
-                    <button className="px-2 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:bg-[#58B890] transition-colors cursor-pointer whitespace-nowrap">
-                      Create Wallet
-                    </button>
+                    <button
+                    onClick={handleCreateWallet}
+                    disabled={creatingWallet || !user}
+                    className={`px-2 py-1 rounded-full text-xs whitespace-nowrap transition-colors cursor-pointer
+                      ${creatingWallet || !user
+                        ? "bg-[#374151] text-[#9CA3AF] cursor-not-allowed" : "bg-[#70E0B0] text-[#1A1A1A] hover:bg-[#58B890]"
+}`}
+          >
+                  {creatingWallet ? "Creating..." : "Create Wallet"}
+                </button>
+
                   </div>
                 </div>
 
@@ -1457,81 +1743,153 @@ export default function PortfolioPage() {
                 {/* Left Panel Content */}
                 <div className="px-4 py-3 ">
                   <div className="min-h-[300px]">
-                    {user ? (
-                      <div className="border-b border-[#2A2B33] hover:bg-[#17191E] transition">
-                        <div className="grid grid-cols-4 gap-2 items-center py-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-3 h-3 rounded bg-[#FF6B35] flex-shrink-0"></div>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium text-[#f0f5f5] text-sm truncate">
-                                Narrative Main
-                              </div>
-                              <div className="text-xs text-[#9CA3AF] font-mono truncate">
-                                {user.publicKey.slice(0, 4)}...
-                                {user.publicKey.slice(-4)}
-                              </div>
-                            </div>
-                            <button className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0">
-                              <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
-                                <rect
-                                  x="9"
-                                  y="9"
-                                  width="13"
-                                  height="13"
-                                  rx="2"
-                                  ry="2"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                />
-                                <path
-                                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                />
-                              </svg>
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-1 justify-center">
-                            <SiSolana
-                              className="h-3 w-3 flex-shrink-0"
-                              aria-hidden="true"
-                              style={{
-                                color: "unset",
-                                fill: "url(#solana-gradient-wallets)",
-                                filter: "none",
-                              }}
-                            />
-                            <svg className="absolute w-0 h-0">
-                              <defs>
-                                <linearGradient
-                                  id="solana-gradient-wallets"
-                                  x1="0%"
-                                  y1="0%"
-                                  x2="100%"
-                                  y2="0%"
-                                >
-                                  <stop offset="0%" stopColor="#9945FF" />
-                                  <stop offset="100%" stopColor="#14F195" />
-                                </linearGradient>
-                              </defs>
-                            </svg>
-                            <span className="text-xs text:white">0</span>
-                          </div>
-                          <div className="flex items-center gap-1 justify-center">
-                            <div className="w-5 h-2.5 bg-[#374151] rounded-sm relative">
-                              <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-[#70E0B0] rounded-sm"></div>
-                            </div>
-                            <span className="text-xs text-[#9CA3AF]">0</span>
-                          </div>
-                          <div className="text-center">
-                            <span className="text-xs text-[#9CA3AF]">-</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
+                    {!user ? (
                       <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
                         Please log in to view your wallets.
                       </div>
+                    ) : loadingWallets ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        Loading wallets...
+                      </div>
+                    ) : wallets.length === 0 ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        No wallets yet. Click &quot;Create Wallet&quot; to get started.
+                      </div>
+                    ) : (
+                      wallets
+                        .filter((w) => (showHidden ? true : !w.isArchived))
+                        .map((wallet) => (
+                          <div
+                            key={wallet.id}
+                            className="border-b border-[#2A2B33] hover:bg-[#17191E] transition"
+                          >
+                            <div className="grid grid-cols-4 gap-2 items-center py-3">
+                              {/* Wallet + address */}
+                              <div className="flex items-center gap-2 min-w-0">
+                                <button
+                                  className={`w-3 h-3 rounded flex-shrink-0 transition ${
+                                    wallet.isPrimary ? "bg-[#FF6B35]" : "bg-[#374151]"
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetPrimaryWallet(wallet.id);
+                                  }}
+                                  title={
+                                    wallet.isPrimary ? "Primary wallet" : "Set as primary wallet"
+                                  }
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium text-[#f0f5f5] text-sm flex items-center gap-2">
+                                    {editingWalletId === wallet.id ? (
+                                      <>
+                                        <input
+                                          className="bg-[#0f1014] border border-[#2A2B33] rounded px-2 py-1 text-xs text-[#f0f5f5] focus:outline-none focus:ring-1 focus:ring-[#70E0B0]"
+                                          value={walletRenameValue}
+                                          onChange={(e) => setWalletRenameValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              handleRenameWallet();
+                                            } else if (e.key === "Escape") {
+                                              handleCancelRenameWallet();
+                                            }
+                                          }}
+                                          autoFocus
+                                        />
+                                        <button
+                                          type="button"
+                                          className="text-[#70E0B0] hover:text-[#58B890]"
+                                          onClick={handleRenameWallet}
+                                          disabled={renamingWalletId === wallet.id}
+                                        >
+                                          <FiCheck size={14} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="text-[#9CA3AF] hover:text-[#f0f5f5]"
+                                          onClick={handleCancelRenameWallet}
+                                          disabled={renamingWalletId === wallet.id}
+                                        >
+                                          <FiX size={14} />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>{wallet.label}</span>
+                                        <button
+                                          type="button"
+                                          className="text-[#9CA3AF] hover:text-[#f0f5f5]"
+                                          onClick={() => handleBeginRenameWallet(wallet)}
+                                          title="Rename wallet"
+                                        >
+                                          <FiEdit2 size={14} />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-[#9CA3AF] font-mono truncate">
+                                    {wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}
+                                  </div>
+                                </div>
+                                <button
+                                  className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(wallet.address).catch(() => {});
+                                    toast.success("Address copied");
+                                  }}
+                                >
+                                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                    <rect
+                                      x="9"
+                                      y="9"
+                                      width="13"
+                                      height="13"
+                                      rx="2"
+                                      ry="2"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    />
+                                    <path
+                                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+
+                              {/* Balance */}
+                              <div className="flex items-center gap-1 justify-center">
+                                <SiSolana
+                                  className="h-3 w-3 flex-shrink-0"
+                                  aria-hidden="true"
+                                  style={{
+                                    color: "unset",
+                                    fill: "url(#solana-gradient-wallets)",
+                                    filter: "none",
+                                  }}
+                                />
+                                <span className="text-xs text-white">
+                                  {formatSmartNumber(wallet.balance)}
+                                </span>
+                              </div>
+
+                              {/* Holdings */}
+                              <div className="flex items-center gap-1 justify-center">
+                                <div className="w-5 h-2.5 bg-[#374151] rounded-sm relative">
+                                  <div className="absolute top-0 left-0 w-2 h-2 bg-[#70E0B0] rounded-sm"></div>
+                                </div>
+                                <span className="text-xs text-[#9CA3AF]">
+                                  {wallet.holdingsCount}
+                                </span>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="text-center">
+                                <span className="text-xs text-[#9CA3AF]">-</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
                     )}
                   </div>
                 </div>
