@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   FaQuestionCircle,
+  FaRegStar,
+  FaStar,
 } from "react-icons/fa";
 import { User, Globe, Search, Copy } from "lucide-react";
 import { HiLightningBolt } from "react-icons/hi";
@@ -9,6 +11,9 @@ import Image from 'next/image';
 import InterstateTooltip from './InterstateTooltip';
 import CustomCheckbox from './CustomCheckbox';
 import { useRouter } from "next/router";
+import { useWatchlist } from "./WatchlistContext";
+import { showEnhancedToast } from "~/utils/enhancedToast";
+import { SolanaIcon } from './Footer';
 import type { Token as BaseToken } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
@@ -358,76 +363,42 @@ const TokenAvatar: React.FC<{
     return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
   };
 
-  const protocolColor = getProtocolColor(token);
-  const tokenIcon = getTokenIcon(token);
   const imageUrl = (token as any).uri || (token as any).image || token.logo;
-  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
-  const isFullCircleImage = launchpadProtocol.includes('meteora') || 
-                           launchpadProtocol.includes('bonk') || 
-                           launchpadProtocol.includes('bags') || 
-                           launchpadProtocol.includes('moonit') || 
-                           launchpadProtocol.includes('moonshot');
 
   return (
-    <div className="relative h-16 w-16 flex items-center justify-center">
-      {/* Outer border container */}
-      <div 
-        className="relative rounded-lg transition-all duration-300"
-        style={{
-          border: `1px solid ${protocolColor}`,
-          padding: '2px'
-        }}
-      >
-        {/* Inner silver border container */}
-        <div 
-          className="relative rounded-lg"
-          style={{
-            border: `1px solid rgba(192, 192, 192, 0.5)`,
-            padding: '2px'
-          }}
-        >
-          {/* Image container */}
-          <div className="relative rounded-lg overflow-hidden" style={{ width: '56px', height: '56px' }}>
-            {loading && !showInitial ? (
-              <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
-                <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
-              </div>
-            ) : meta || imageUrl ? (
-              <img
-                src={extractMetaImage(meta) || imageUrl || token.logo || ''}
-                alt={token.name || token.symbol || ''}
-                width={56}
-                height={56}
-                className="h-full w-full object-cover transition-all duration-300"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center rounded-lg" style={{ backgroundColor: AX.surface2, width: '56px', height: '56px' }}>
-                <span className="text-lg font-bold" style={{ color: AX.text }}>{initial}</span>
-              </div>
-            )}
+    <div className="relative h-12 w-12 flex items-center justify-center">
+      {/* Image container - circular */}
+      <div className="relative rounded-full overflow-hidden" style={{ width: '48px', height: '48px' }}>
+        {loading && !showInitial ? (
+          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2 }}>
+            <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
           </div>
-        </div>
+        ) : meta || imageUrl ? (
+          <img
+            src={extractMetaImage(meta) || imageUrl || token.logo || ''}
+            alt={token.name || token.symbol || ''}
+            width={48}
+            height={48}
+            className="h-full w-full object-cover rounded-full transition-all duration-300"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2, width: '48px', height: '48px' }}>
+            <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
+          </div>
+        )}
       </div>
       
-      {/* Protocol icon bubble - positioned outside the image container */}
+      {/* Solana logo bubble - positioned at bottom right */}
       <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
            style={{ 
-             width: 20, 
-             height: 20,
-             border: `2px solid ${protocolColor}`,
-             boxShadow: `0 0 4px ${protocolColor}60`
+             width: 14, 
+             height: 14,
+             padding: '1px'
            }}>
-        <img
-          src={tokenIcon}
-          alt={`${(token as any).launchpad_protocol || 'Protocol'} logo`}
-          className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
-          style={{
-            filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
-          }}
-        />
+        <SolanaIcon size={12} />
       </div>
     </div>
   );
@@ -444,6 +415,90 @@ const TokenInfo: React.FC<{
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
+  
+  // Watchlist functionality
+  const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
+  const tokenAddress = token.pair_address || token.mint || '';
+  const isWatched = isInWatchlist(tokenAddress);
+  
+  const handleWatchlistClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isWatched) {
+      removeFromWatchlist(tokenAddress);
+      showEnhancedToast('info', 'Removed from watchlist');
+    } else {
+      addToWatchlist(token);
+      showEnhancedToast('success', 'Added to watchlist');
+    }
+  }, [isWatched, tokenAddress, token, addToWatchlist, removeFromWatchlist]);
+  
+  // Calculate actual token age for discover page
+  const getTokenAge = useCallback(() => {
+    if (!isDiscoverPage) return timeLabel;
+    
+    try {
+      const createdAt = (token as any).created_at || (token as any).launch_time;
+      if (!createdAt) return '-';
+      
+      let timestamp: number | null = null;
+      if (typeof createdAt === 'string') {
+        const parsed = Date.parse(createdAt);
+        if (!isNaN(parsed)) timestamp = parsed;
+      } else if (typeof createdAt === 'number') {
+        // Heuristic: treat 13-digit as ms, 10-digit as seconds
+        if (createdAt > 1e12) timestamp = createdAt;
+        else if (createdAt > 1e9) timestamp = createdAt * 1000;
+      }
+      
+      if (!timestamp) return '-';
+      
+      const ageMs = Date.now() - timestamp;
+      const ageHours = ageMs / (1000 * 60 * 60);
+      
+      if (ageHours < 1) {
+        const ageMins = Math.floor(ageMs / (1000 * 60));
+        return ageMins < 1 ? '<1m' : `${ageMins}m`;
+      } else if (ageHours < 24) {
+        return `${Math.floor(ageHours)}h`;
+      } else {
+        return `${Math.floor(ageHours / 24)}d`;
+      }
+    } catch {
+      return '-';
+    }
+  }, [token, isDiscoverPage, timeLabel]);
+  
+  const tokenAge = getTokenAge();
+  
+  // Calculate age color for discover page
+  const getAgeColor = useCallback(() => {
+    if (!isDiscoverPage) return '#85d99f';
+    
+    try {
+      const createdAt = (token as any).created_at || (token as any).launch_time;
+      if (!createdAt) return '#85d99f';
+      
+      let timestamp: number | null = null;
+      if (typeof createdAt === 'string') {
+        const parsed = Date.parse(createdAt);
+        if (!isNaN(parsed)) timestamp = parsed;
+      } else if (typeof createdAt === 'number') {
+        if (createdAt > 1e12) timestamp = createdAt;
+        else if (createdAt > 1e9) timestamp = createdAt * 1000;
+      }
+      
+      if (!timestamp) return '#85d99f';
+      
+      const ageMs = Date.now() - timestamp;
+      const ageHours = ageMs / (1000 * 60 * 60);
+      
+      return ageHours < 1 ? '#f2c367' : '#f26681';
+    } catch {
+      return '#85d99f';
+    }
+  }, [token, isDiscoverPage]);
+  
+  const ageColor = getAgeColor();
 
   // const similarTokens = useMemo(() => 
   //   sortedRows
@@ -496,7 +551,23 @@ const TokenInfo: React.FC<{
   );
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
+      {/* Watchlist button */}
+      <button
+        onClick={handleWatchlistClick}
+        className="flex items-center justify-center transition-colors duration-200 cursor-pointer hover:opacity-80"
+        style={{ color: isWatched ? '#f2c367' : AX.muted }}
+        title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = isWatched ? '#f2c367' : '#73c5ff';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = isWatched ? '#f2c367' : AX.muted;
+        }}
+      >
+        {isWatched ? <FaStar className="w-5 h-5" /> : <FaRegStar className="w-5 h-5" />}
+      </button>
+      
       <InterstateTooltip
         width={undefined}
         height={undefined}
@@ -537,16 +608,16 @@ const TokenInfo: React.FC<{
         </div>
         
         <div className="flex items-center gap-2">
-          <span className={`text-xs ${isDiscoverPage ? '' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? '#85d99f' : undefined, fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace', fontWeight: 400 }}>
-            {timeLabel}
+          <span className={`text-xs ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
+            {tokenAge}
           </span>
           <div className="flex items-center gap-1.5 text-sky-400">
             {/* User icon - Twitter profile */}
             <button
               className="transition-colors duration-200 cursor-pointer hover:text-blue-400"
-              style={{ color: AX.muted }}
+              style={{ color: isDiscoverPage ? '#73c5ff' : AX.muted }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = AX.aiBlue;
+                e.currentTarget.style.color = isDiscoverPage ? '#73c5ff' : AX.aiBlue;
                 // Show X profile preview
                 setShowXPreview(true);
                 // Store button position for popup positioning
@@ -574,7 +645,7 @@ const TokenInfo: React.FC<{
                 setButtonPosition({ left, top });
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = AX.muted;
+                e.currentTarget.style.color = isDiscoverPage ? '#73c5ff' : AX.muted;
                 setShowXPreview(false);
               }}
               onClick={(e) => {
@@ -584,7 +655,7 @@ const TokenInfo: React.FC<{
               }}
               title="View Twitter profile"
             >
-              <User className="w-3 h-3" />
+              <User className="w-3 h-3" strokeWidth={2.5} />
             </button>
 
             {/* Globe icon - Block explorer / Website */}
@@ -894,6 +965,19 @@ const MarketCapCell: React.FC<{
   const percentFieldKey = `${token.pair_address}-price_percent_change_${selectedTimeframe}`;
   const isPositive = percentChange >= 0;
 
+  // Calculate market cap color for discover page
+  const marketCap = token.fully_diluted_value || 0;
+  let marketCapColor = AX.text;
+  if (isDiscoverPage) {
+    if (marketCap > 100000) {
+      marketCapColor = '#f2c367';
+    } else if (marketCap > 40000) {
+      marketCapColor = '#73c5ff';
+    } else {
+      marketCapColor = '#85d99f';
+    }
+  }
+
   // Debug logging for MarketCapCell
   // console.log('MarketCapCell Debug:', {
   //   tokenName: token.name,
@@ -907,7 +991,7 @@ const MarketCapCell: React.FC<{
   return (
     <div className="text-right">
       <div className={`text-sm font-semibold ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
-        color: AX.text,
+        color: isDiscoverPage ? marketCapColor : AX.text,
         ...(isDiscoverPage ? {} : {
           fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
           fontWeight: '400'
@@ -1051,15 +1135,29 @@ const TableRow: React.FC<{
   //   fallbackAggregated: (token as any)[`volume_${selectedTimeframe}`],
   // });
 
+  // Calculate alternating row background color for discover page
+  const rowBgColor = isDiscoverPage 
+    ? (i % 2 === 0 ? '#111214' : '#15161a')
+    : 'transparent';
+  
   return (
     <tr 
-      className="cursor-pointer border-b" 
+      className={`cursor-pointer ${isDiscoverPage ? '' : 'border-b'}`} 
       style={{ 
-        borderColor: AX.border,
+        ...(isDiscoverPage ? {} : { borderColor: AX.border }),
+        backgroundColor: rowBgColor,
         transition: 'none' // Disable all transitions for instant rendering
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = AX.surface2; }}
-      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+      onMouseEnter={(e) => { 
+        if (isDiscoverPage) {
+          e.currentTarget.style.backgroundColor = i % 2 === 0 ? '#1a1b1f' : '#1c1d22';
+        } else {
+          e.currentTarget.style.backgroundColor = AX.surface2;
+        }
+      }}
+      onMouseLeave={(e) => { 
+        e.currentTarget.style.backgroundColor = rowBgColor;
+      }}
       onClick={onClick}
     >
       <td className="w-80 px-4 py-4 align-middle">
@@ -1084,15 +1182,26 @@ const TableRow: React.FC<{
           });
           return null;
         })()} */}
-        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
-          color: AX.text,
-          ...(isDiscoverPage ? {} : {
-            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-            fontWeight: '400'
-          })
-        }}>
-          ${formatSmartNumber(token.total_liquidity_usd)}
-        </div>
+        {(() => {
+          // Calculate liquidity color for discover page
+          const liquidity = token.total_liquidity_usd || 0;
+          let liquidityColor = AX.text;
+          if (isDiscoverPage && liquidity < 1000) {
+            liquidityColor = '#f26681';
+          }
+          
+          return (
+            <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
+              color: isDiscoverPage ? liquidityColor : AX.text,
+              ...(isDiscoverPage ? {} : {
+                fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                fontWeight: '400'
+              })
+            }}>
+              ${formatSmartNumber(token.total_liquidity_usd)}
+            </div>
+          );
+        })()}
       </td>
       
       <td className="w-28 px-4 py-4 align-middle text-right">
