@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { 
@@ -13,14 +14,18 @@ import {
   FaChevronDown,
   FaCog,
   FaBars,
-  FaTelegram
+  FaTelegram,
+  FaTimes
 } from 'react-icons/fa';
+import { GoServer } from 'react-icons/go';
 import QuickBuySettingsModal from './QuickBuySettingsModal';
 import PnLModal from './PnLModal';
 import WalletSwitcher from './WalletSwitcher';
+import WalletTrackerPopup from './WalletTrackerPopup';
 import { useQuickBuy } from './QuickBuyContext';
 import { useSolPrice } from './SolPriceContext';
 import { useUser } from './UserContext';
+import { env } from '../env';
 
 // Custom X (Twitter) icon component
 const XIcon = ({ size = 14 }: { size?: number }) => (
@@ -75,9 +80,93 @@ export default function Footer() {
   const [showGlobalDropdown, setShowGlobalDropdown] = useState(false);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [showPnLModal, setShowPnLModal] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [latency, setLatency] = useState<number | null>(null);
+  const [modalPosition, setModalPosition] = useState({ bottom: 0, right: 0 });
+  const [selectedRegion, setSelectedRegion] = useState('Europe');
+  const globalButtonRef = React.useRef<HTMLButtonElement>(null);
   const { activePreset } = useQuickBuy();
   const { solPrice } = useSolPrice(); // Use shared SOL price from context
   const { solBalance } = useUser();
+
+  // Check backend health and measure latency
+  useEffect(() => {
+    const checkHealth = async () => {
+      // Use the Go service health endpoint which is more reliable
+      const healthUrl = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/healthz`;
+      
+      try {
+        const startTime = performance.now();
+        const response = await fetch(healthUrl, {
+          method: 'GET',
+          headers: {
+            'accept': 'application/json',
+          },
+          signal: AbortSignal.timeout(5000)
+        });
+        const endTime = performance.now();
+        const ping = Math.round(endTime - startTime);
+        
+        if (response.ok) {
+          // Try to parse JSON to confirm it's a valid health response
+          try {
+            const data = await response.json();
+            setIsConnected(true);
+            setLatency(ping);
+          } catch {
+            // If JSON parse fails but status is OK, still consider connected
+            setIsConnected(true);
+            setLatency(ping);
+          }
+        } else {
+          setIsConnected(false);
+          setLatency(null);
+        }
+      } catch (error) {
+        // Network error, timeout, or CORS issue - server is likely down
+        setIsConnected(false);
+        setLatency(null);
+      }
+    };
+
+    // Check immediately
+    checkHealth();
+    
+    // Then check every 10 seconds
+    const interval = setInterval(checkHealth, 10000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update modal position when dropdown opens
+  useEffect(() => {
+    if (showGlobalDropdown && globalButtonRef.current) {
+      const rect = globalButtonRef.current.getBoundingClientRect();
+      setModalPosition({
+        bottom: window.innerHeight - rect.top + 8,
+        right: window.innerWidth - rect.right
+      });
+    }
+  }, [showGlobalDropdown]);
+
+  // Close global dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showGlobalDropdown) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.global-dropdown-container') && !target.closest('.regions-modal')) {
+          setShowGlobalDropdown(false);
+        }
+      }
+    };
+
+    if (showGlobalDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showGlobalDropdown]);
 
   const navLinks = [
     { name: "Wallet", href: "/trackers", icon: FaWallet },
@@ -142,7 +231,8 @@ export default function Footer() {
 
           {/* Wallet Display */}
           <div className="relative">
-              <button
+              {/* Commented out: Original wallet button that navigates to trackers page */}
+              {/* <button
                 onClick={() => router.push('/trackers')}
                 className="flex items-center gap-1 sm:gap-2 px-2 sm:px-2 py-0.5 rounded-full border transition-all duration-300 ease-out"
                 style={{
@@ -157,6 +247,33 @@ export default function Footer() {
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';
                   e.currentTarget.style.borderColor = AX.border;
+                }}
+              >
+                <FaWallet size={9} className="sm:w-3 sm:h-3" />
+                <SolanaIcon size={12} />
+                <span className="text-[11px] sm:text-xs font-medium leading-none">{Number.isFinite(solBalance) ? solBalance.toFixed(4) : '0.0000'}</span>
+              </button> */}
+              
+              {/* New: Wallet button that opens popup */}
+              <button
+                onClick={() => setShowWalletDropdown(!showWalletDropdown)}
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-2 py-0.5 rounded-full border transition-all duration-300 ease-out"
+                style={{
+                  backgroundColor: showWalletDropdown ? `${AX.mint}20` : 'transparent',
+                  borderColor: showWalletDropdown ? AX.mint : AX.border,
+                  color: showWalletDropdown ? AX.mint : AX.text
+                }}
+                onMouseEnter={(e) => {
+                  if (!showWalletDropdown) {
+                    e.currentTarget.style.backgroundColor = AX.surface;
+                    e.currentTarget.style.borderColor = AX.mint;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!showWalletDropdown) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.borderColor = AX.border;
+                  }
                 }}
               >
                 <FaWallet size={9} className="sm:w-3 sm:h-3" />
@@ -283,9 +400,24 @@ export default function Footer() {
 
           <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
 
+          {/* Connection Status Indicator */}
+          <div className="hidden sm:flex items-center gap-2 px-2 py-1 border" style={{ 
+            backgroundColor: '#0e2823', 
+            borderColor: '#0e2823',
+            borderRadius: '0px'
+          }}>
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#13af7f' }} />
+            <span className="text-xs font-medium leading-none" style={{ color: '#13af7f' }}>
+              {isConnected ? 'CONNECTION STABLE' : 'CONNECTION UNSTABLE'}
+            </span>
+          </div>
+
+          <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
+
           {/* Global Dropdown */}
-          <div className="relative hidden sm:block">
+          <div className="relative hidden sm:block global-dropdown-container">
             <button
+              ref={globalButtonRef}
               onClick={() => setShowGlobalDropdown(!showGlobalDropdown)}
               className="flex items-center gap-1 px-2 py-0.5 rounded transition-all duration-300 ease-out"
               style={{ color: AX.text }}
@@ -296,10 +428,90 @@ export default function Footer() {
                 e.currentTarget.style.backgroundColor = 'transparent';
               }}
             >
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: AX.red }} />
-              <span className="text-xs font-medium leading-none">GLOBAL</span>
+              <span className="text-xs font-medium leading-none">{selectedRegion.substring(0, 2).toUpperCase()}</span>
               <FaChevronDown size={8} />
             </button>
+
+            {/* Regions Modal */}
+            {showGlobalDropdown && typeof window !== 'undefined' && createPortal(
+              <div 
+                className="fixed regions-modal"
+                style={{
+                  bottom: `${modalPosition.bottom}px`,
+                  right: `${modalPosition.right}px`,
+                  width: '256px',
+                  zIndex: 9999,
+                  pointerEvents: 'auto'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="rounded-lg border shadow-xl"
+                  style={{ 
+                    backgroundColor: AX.surface2, 
+                    borderColor: AX.border 
+                  }}
+                >
+                  <div className="p-4">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold" style={{ color: AX.text }}>
+                        Regions
+                      </h3>
+                      <button
+                        onClick={() => setShowGlobalDropdown(false)}
+                        className="p-1 rounded transition-colors"
+                        style={{ color: AX.muted }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = AX.text;
+                          e.currentTarget.style.backgroundColor = AX.surface;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = AX.muted;
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        <FaTimes size={12} />
+                      </button>
+                    </div>
+
+                    {/* Europe Region */}
+                    <div className="p-3 rounded border" style={{ borderColor: AX.border, backgroundColor: AX.surface }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <GoServer size={16} style={{ color: AX.mint }} />
+                          <span className="text-sm font-medium" style={{ color: AX.text }}>
+                            Europe
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isConnected ? (
+                            <>
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: AX.green }} />
+                              <span className="text-xs" style={{ color: AX.green }}>Connected</span>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: AX.red }} />
+                              <span className="text-xs" style={{ color: AX.red }}>Disconnected</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {latency !== null ? (
+                        <div className="text-xs" style={{ color: AX.muted }}>
+                          Latency: {latency}ms
+                        </div>
+                      ) : (
+                        <div className="text-xs" style={{ color: AX.muted }}>
+                          Latency: --ms
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>,
+              document.body
+            )}
           </div>
 
           <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
@@ -374,10 +586,16 @@ export default function Footer() {
         onClose={() => setShowPnLModal(false)} 
       />
       
-      {/* Wallet Switcher Modal */}
-      <WalletSwitcher 
+      {/* Wallet Switcher Modal - Commented out */}
+      {/* <WalletSwitcher 
         isOpen={showWalletDropdown} 
         onClose={() => setShowWalletDropdown(false)} 
+      /> */}
+      
+      {/* Wallet Tracker Popup */}
+      <WalletTrackerPopup
+        isOpen={showWalletDropdown}
+        onClose={() => setShowWalletDropdown(false)}
       />
     </footer>
   );
