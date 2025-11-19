@@ -19,6 +19,7 @@ import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
+import { BsSliders2 } from "react-icons/bs";
 import { prefetchTradeData } from "~/utils/tokenCache";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
@@ -427,8 +428,8 @@ export default function DiscoverPage() {
       }
 
       try {
-        // Use Next.js API proxy - remove timestamp to allow server-side caching
-        const response = await fetch(`/api/token-service/pulse-new?limit=200`, {
+        // Use Next.js API proxy with fresh=1 to bypass cache and get latest data with correct image mapping
+        const response = await fetch(`/api/token-service/pulse-new?limit=200&fresh=1`, {
           headers: {
             'Cache-Control': 'no-cache',
             Pragma: 'no-cache',
@@ -522,6 +523,21 @@ export default function DiscoverPage() {
 
             if (!normalized.created_at && token.launch_time) {
               normalized.created_at = token.launch_time;
+            }
+
+            // CRITICAL: Preserve image fields from API response
+            // The pulse-new endpoint already maps these using extractTokenImage
+            if (token.logo) {
+              normalized.logo = token.logo;
+            }
+            if (token.image) {
+              normalized.image = token.image;
+            }
+            if (token.uri) {
+              normalized.uri = token.uri;
+            }
+            if (token.imageUrl) {
+              normalized.imageUrl = token.imageUrl;
             }
 
             // CRITICAL: Preserve launchpad_protocol for pool type detection
@@ -879,6 +895,19 @@ export default function DiscoverPage() {
     return filtered;
   }, [localFilters, selectedTimeframe, getVolumeForTimeframe, mapAmmToProtocolPatterns]);
 
+  // Count active filters for badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (localFilters.amms && localFilters.amms.length > 0) count += localFilters.amms.length;
+    if (localFilters.searchKeywords?.trim()) count++;
+    if (localFilters.excludeKeywords?.trim()) count++;
+    if (localFilters.dexPaid) count++;
+    if (localFilters.marketCapMin || localFilters.marketCapMax) count++;
+    if (localFilters.volumeMin || localFilters.volumeMax) count++;
+    if (localFilters.liquidityMin || localFilters.liquidityMax) count++;
+    return count;
+  }, [localFilters]);
+
   // Sorting handler
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) {
@@ -976,13 +1005,19 @@ export default function DiscoverPage() {
       // Final filter before setting displayed - also deduplicate by mint/address
       const finalSafe = sortedTokens.filter(t => t && t.mint && !isWrappedSol(t));
       
+      // Filter out tokens with no image on trending tab
+      const withImages = finalSafe.filter((t: any) => {
+        const hasImage = t?.uri || t?.logo || t?.image || t?.imageUrl;
+        return hasImage && hasImage !== '' && hasImage !== 'null' && hasImage !== null;
+      });
+      
       // CRITICAL: Deduplicate using Set to track seen mints AND addresses
       // This prevents duplicate wrapped SOL with different pair_addresses
       const seenAddresses = new Set<string>();
       const seenMints = new Set<string>();
       const uniqueSafe: TokenWithDexPaid[] = [];
       
-      for (const token of finalSafe) {
+      for (const token of withImages) {
         const mint = token.mint;
         const address = token.pair_address;
         
@@ -1037,6 +1072,11 @@ export default function DiscoverPage() {
         return vol > 0;
       });
       if (!hasVolume) {
+        return false;
+      }
+      // Filter out tokens with no image
+      const hasImage = (token as any)?.uri || (token as any)?.logo || (token as any)?.image || (token as any)?.imageUrl;
+      if (!hasImage || hasImage === '' || hasImage === 'null' || hasImage === null) {
         return false;
       }
       return true;
@@ -1147,7 +1187,7 @@ export default function DiscoverPage() {
     }
 
     if (tokenError) {
-      return <div className="py-10 text-center text-red-400">{tokenError}</div>;
+      return <div className="py-10 text-center" style={{ color: '#f26681' }}>{tokenError}</div>;
     }
 
     return <div className="py-10 text-center text-[#9CA3AF]">No tokens found.</div>;
@@ -1292,7 +1332,7 @@ export default function DiscoverPage() {
         <link rel="preload" as="image" href="/placeholder/fallback-avatar.jpg" />
       </Head>
 
-      <div className="min-h-screen text-[#E6E7EA] relative bg-[#06070b]">
+      <div className="min-h-screen text-[#E6E7EA] relative" style={{ backgroundColor: '#111214' }}>
         {/* Header */}
         <div className='relative' style={{ zIndex: 100 }}>
           <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
@@ -1352,168 +1392,200 @@ export default function DiscoverPage() {
 
             {/* Timeframes - hide when on live tab, new pairs, xStocks, or surge */}
             {activeTab !== 'live' && activeTab !== 'newPairs' && activeTab !== 'xStocks' && activeTab !== 'surge' && (
-              <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm font-medium">
+              <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border relative"
+                   style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '130px', width: '130px', height: '28px' }}>
                 {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
-                  <button
-                    key={tf}
-                    className={(selectedTimeframe === tf ? "text-[#f0f5f5] " : "text-[#9CA3AF] hover:text-[#f0f5f5] ") + "cursor-pointer transition-colors whitespace-nowrap"}
-                    onClick={() => handleTimeframeClick(tf)}
-                  >
-                    {tf}
-                  </button>
+                  <div key={tf} className="relative flex items-center justify-center">
+                    <button
+                      className="px-1 text-sm font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded whitespace-nowrap"
+                      style={{
+                        paddingTop: '2px',
+                        paddingBottom: '2px',
+                        backgroundColor: selectedTimeframe === tf 
+                          ? 'rgba(24, 196, 140, 0.15)' 
+                          : 'rgba(22, 23, 28, 0.6)',
+                        color: selectedTimeframe === tf ? '#f0f5f5' : ''
+                      }}
+                      onClick={() => handleTimeframeClick(tf)}
+                      onMouseEnter={(e) => {
+                        if (selectedTimeframe !== tf) {
+                          e.currentTarget.style.color = '#f0f5f5';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedTimeframe !== tf) {
+                          e.currentTarget.style.color = '';
+                        }
+                      }}
+                    >
+                      {tf}
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
 
             {/* Filter button - hidden when in Live Pump tab */}
             {activeTab !== 'live' && (
-              <div className="relative">
+              <div className="hidden sm:flex items-center justify-center rounded-md px-1.5 gap-1 border relative"
+                   style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '85px', width: '85px', height: '28px' }}>
                 <button
-                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative bg-[#17191E] border border-[#2A2B33] text-[#9CA3AF] hover:text-[#E6E7EA]"
+                  className="flex items-center justify-between w-full h-full transition-all duration-200 cursor-pointer relative"
                   onClick={() => setIsFilterPopoutOpen(true)}
+                  onMouseEnter={(e) => {
+                    const text = e.currentTarget.querySelector('span');
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (text) text.style.color = '#f0f5f5';
+                    if (icon) icon.style.color = '#f0f5f5';
+                  }}
+                  onMouseLeave={(e) => {
+                    const text = e.currentTarget.querySelector('span');
+                    const icon = e.currentTarget.querySelector('svg');
+                    const activeColor = isFilterPopoutOpen ? '#526fff' : '#9CA3AF';
+                    if (text) text.style.color = activeColor;
+                    if (icon) icon.style.color = activeColor;
+                  }}
                 >
-                  {/* filter glyph */}
-                  <svg width="12" height="12" className="sm:w-[13px] sm:h-[13px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="4" y1="6" x2="20" y2="6"/><circle cx="8" cy="6" r="2"/>
-                    <line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2"/>
-                    <line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="18" r="2"/>
-                  </svg>
-                  <span className="font-medium text-xs sm:text-sm hidden sm:inline">Filter</span>
-                  <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 hidden sm:block" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <span 
+                    className="text-sm font-medium"
+                    style={{ color: isFilterPopoutOpen ? '#526fff' : '#9CA3AF' }}
+                  >
+                    Filter
+                  </span>
+                  <BsSliders2 
+                    size={14} 
+                    style={{ color: isFilterPopoutOpen ? '#526fff' : '#9CA3AF' }}
+                  />
+                  
+                  {/* Active Filter Count Badge */}
+                  {activeFilterCount > 0 && (
+                    <span 
+                      className="absolute -top-1 -right-1 text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
+                      style={{ backgroundColor: '#85d99f', color: '#f0f5f5', fontSize: '10px' }}
+                    >
+                      {activeFilterCount}
+                    </span>
+                  )}
                 </button>
               </div>
             )}
 
-            {/* Quick Buy - Responsive sizing */}
-            <div className="flex items-center justify-center rounded-full px-2 sm:px-3 py-1.5 gap-1.5 sm:gap-2 border bg-[#17191E]"
-                 style={{ borderColor: '#2A2B33' }}>
-              {/* Amount - Editable */}
-              <div className="flex items-center justify-center gap-0.5 sm:gap-1">
-                <HiLightningBolt size={10} className="sm:w-3 sm:h-3" style={{ color: '#22C55E' }} />
-                <input
-                  type="text"
-                  value={quickBuyAmount}
-                  inputMode="decimal"
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Allow only digits and at most one decimal point
-                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                      setQuickBuyAmount(value);
-                      const numValue = Number(value) || 0;
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('quickBuyAmount', numValue.toString());
-                      }
+            {/* Thunder Icon and Amount Entry - Separate Thin Box */}
+            <div className="hidden sm:flex items-center justify-center rounded-md px-1.5 gap-1 border"
+                 style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '85px', width: '85px', height: '28px' }}>
+              <HiLightningBolt size={14} style={{ color: '#31e3ac' }} />
+              <input
+                type="text"
+                value={quickBuyAmount}
+                inputMode="decimal"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Allow only digits and at most one decimal point
+                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                    setQuickBuyAmount(value);
+                    const numValue = Number(value) || 0;
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem('quickBuyAmount', numValue.toString());
                     }
-                  }}
-                  onKeyDown={(e) => {
-                    // Block non-numeric keys except control/navigation keys and '.'
-                    const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
-                    if (allowedKeys.includes(e.key)) return;
-                    if (e.key === '.') return;
-                    if (!/^[0-9]$/.test(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  className="bg-transparent border-none outline-none text-xs font-medium w-8 sm:w-10 text-center"
-                  style={{ color: '#E6E7EA' }}
-                />
-              </div>
-              
-              {/* Solana Symbol */}
-              <div className="flex items-center justify-center">
-                <svg width="10" height="10" className="sm:w-3 sm:h-3" viewBox="0 0 397.7 311.7" fill="none">
-                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana_discover)"/>
-                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana_discover)"/>
-                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana_discover)"/>
-                  <defs>
-                    <linearGradient id="paint0_linear_solana_discover" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                    <linearGradient id="paint1_linear_solana_discover" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                    <linearGradient id="paint2_linear_solana_discover" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-              
-              {/* Separator */}
-              <div className="w-px h-3 sm:h-4 bg-gray-600"></div>
-              
-              {/* P1 P2 P3 Pill - Simple Toggle */}
-              <div className="flex items-center justify-center gap-0.5 sm:gap-1 relative">
-                {['P1', 'P2', 'P3'].map((pill) => {
-                  const presetIndex = parseInt(pill.replace('P', '')) - 1;
-                  const preset = presets[presetIndex];
-                  const settings = preset?.quickBuySettings;
-                  
-                  return (
-                    <div key={pill} className="relative flex items-center justify-center">
-                      <button
-                        className={`px-1 sm:px-1.5 py-0.5 text-[10px] sm:text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center ${
-                          selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-[#f0f5f5]'
-                        }`}
-                        onClick={() => {
-                          setSelectedPill(pill);
-                          setActivePreset(presetIndex); // Also update global preset for consistency
-                          console.log(`Selected ${pill} in discover page`);
-                        }}
-                        onMouseEnter={() => setShowPillTooltip(pill)}
-                        onMouseLeave={() => setShowPillTooltip(null)}
-                      >
-                        {pill}
-                      </button>
-                      
-                      {/* Tooltip for each pill */}
-                      {showPillTooltip === pill && settings && (
-                        <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
-                             style={{ 
-                               backgroundColor: 'rgba(15, 16, 18, 0.95)',
-                               borderColor: '#2A2B33' 
-                             }}>
-                          <div className="p-2 space-y-1.5">
-                            {/* Slippage - Running person icon */}
-                            <div className="flex items-center gap-1.5">
-                              <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
-                              <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
-                            </div>
-                            
-                            {/* Priority Fee - Gas pump icon with yellow styling */}
-                            <div className="flex items-center gap-1.5">
-                              <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                              <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
-                              <span className="text-red-500 text-xs font-light">⚠</span>
-                            </div>
-                            
-                            {/* Bribe - Coins icon with yellow styling */}
-                            <div className="flex items-center gap-1.5">
-                              <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                              <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
-                              <span className="text-red-500 text-xs font-light">⚠</span>
-                            </div>
-                            
-                            {/* MEV Protection - Ban icon */}
-                            <div className="flex items-center gap-1.5">
-                              <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
-                              <span className="text-gray-300 text-xs font-light">
-                                {settings.mevMode === 'off' ? 'Off' : 
-                                 settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
-                              </span>
-                            </div>
+                  }
+                }}
+                onKeyDown={(e) => {
+                  // Block non-numeric keys except control/navigation keys and '.'
+                  const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
+                  if (allowedKeys.includes(e.key)) return;
+                  if (e.key === '.') return;
+                  if (!/^[0-9]$/.test(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
+                className="bg-transparent border-none outline-none text-sm font-medium w-12 text-center"
+                style={{ color: '#f0f5f5' }}
+              />
+            </div>
+            
+            {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
+            <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border relative"
+                 style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '100px', width: '100px', height: '28px' }}>
+              {['P1', 'P2', 'P3'].map((pill) => {
+                const presetIndex = parseInt(pill.replace('P', '')) - 1;
+                const preset = presets[presetIndex];
+                const settings = preset?.quickBuySettings;
+                
+                return (
+                  <div key={pill} className="relative flex items-center justify-center">
+                    <button
+                      className="px-1 text-sm font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded"
+                      style={{
+                        paddingTop: '2px',
+                        paddingBottom: '2px',
+                        backgroundColor: selectedPill === pill 
+                          ? 'rgba(24, 196, 140, 0.15)' 
+                          : 'rgba(22, 23, 28, 0.6)',
+                        color: selectedPill === pill ? '#f0f5f5' : ''
+                      }}
+                      onClick={() => {
+                        setSelectedPill(pill);
+                        setActivePreset(presetIndex); // Also update global preset for consistency
+                        console.log(`Selected ${pill} in discover page`);
+                      }}
+                      onMouseEnter={(e) => {
+                        if (selectedPill !== pill) {
+                          e.currentTarget.style.color = '#f0f5f5';
+                        }
+                        setShowPillTooltip(pill);
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedPill !== pill) {
+                          e.currentTarget.style.color = '';
+                        }
+                        setShowPillTooltip(null);
+                      }}
+                    >
+                      {pill}
+                    </button>
+                    
+                    {/* Tooltip for each pill */}
+                    {showPillTooltip === pill && settings && (
+                      <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
+                           style={{ 
+                             backgroundColor: 'rgba(15, 16, 18, 0.95)',
+                             borderColor: '#24252C' 
+                           }}>
+                        <div className="p-2 space-y-1.5">
+                          {/* Slippage - Running person icon */}
+                          <div className="flex items-center gap-1.5">
+                            <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '2' }} />
+                            <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
+                          </div>
+                          
+                          {/* Priority Fee - Gas pump icon with yellow styling */}
+                          <div className="flex items-center gap-1.5">
+                            <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '2' }} />
+                            <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
+                            <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
+                          </div>
+                          
+                          {/* Bribe - Coins icon with yellow styling */}
+                          <div className="flex items-center gap-1.5">
+                            <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '2' }} />
+                            <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
+                            <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
+                          </div>
+                          
+                          {/* MEV Protection - Ban icon */}
+                          <div className="flex items-center gap-1.5">
+                            <FaBan size={10} className="opacity-90" style={{ strokeWidth: '2' }} />
+                            <span className="text-gray-300 text-xs font-light">
+                              {settings.mevMode === 'off' ? 'Off' : 
+                               settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
+                            </span>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1529,7 +1601,7 @@ export default function DiscoverPage() {
         )}
 
         {/* Main Content */}
-        <main className="mx-auto px-2 max-w-[98%]">
+        <main className="w-full">
           {activeTab === 'live' ? (
             pumpPortalTokens.length > 0 ? (
               <PumpLive
@@ -1585,7 +1657,7 @@ export default function DiscoverPage() {
                 Waiting for live tokens...
               </div>
             ) : !pumpPortalConnected && pumpPortalError ? (
-              <div className="py-10 text-center text-red-400">
+              <div className="py-10 text-center" style={{ color: '#f26681' }}>
                 Connection error: {pumpPortalError}
               </div>
             ) : (
@@ -1612,7 +1684,7 @@ export default function DiscoverPage() {
                   ))}
                 </div>
               ) : newPairsError ? (
-                <div className="py-10 text-center text-red-400">
+                <div className="py-10 text-center" style={{ color: '#f26681' }}>
                   {newPairsError}
                 </div>
               ) : processedNewPairs.length > 0 ? (
