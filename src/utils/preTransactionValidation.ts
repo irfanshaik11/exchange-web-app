@@ -108,6 +108,7 @@ export const checkMinimumAmount = (
     'PumpAmm': 0.0001,
     'Pumpfun': 0.0001,
     'meteora dbc': 0.0001,
+    'Meteora': 0.0001,
   };
 
   const minAmount = minimums[poolType] || 0.0001;
