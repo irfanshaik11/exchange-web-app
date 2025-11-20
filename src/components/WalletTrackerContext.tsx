@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import toast from 'react-hot-toast';
 import {
   createWalletTrackerWebSocket,
   type WalletTrackerWebSocket,
@@ -9,6 +8,8 @@ import {
   type WatchWallet
 } from '~/utils/walletTracking';
 import { useUser } from './UserContext';
+import { showEnhancedToast } from '~/utils/enhancedToast';
+import { normalizeImageUrl } from '~/utils/images';
 
 const HISTORY_LIMIT = 50;
 // Use 7 days window to ensure backfilled transactions are included
@@ -317,17 +318,159 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         }
       }
       
-      // Show toast notification with custom styling
-      toast.custom(
-        () => (
-          <div className="animate-fade-in fixed top-8 left-1/2 z-50 w-fit -translate-x-1/2 rounded-lg border border-emerald-400/50 bg-gradient-to-r from-emerald-500 to-green-500 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-400/30">
-            {walletName} {side}{' '}
-            <span className="font-bold">{tokenName}</span>
-            {amountDisplay ? ` for ${amountDisplay}` : ''}
+      // Check if display notifications is enabled
+      const displayNotificationsEnabled = (() => {
+        if (typeof window === 'undefined') return true;
+        try {
+          const saved = localStorage.getItem('notification-display-enabled');
+          return saved !== 'false'; // Default to true
+        } catch {
+          return true;
+        }
+      })();
+
+      // Check if transaction sounds is enabled
+      const transactionSoundsEnabled = (() => {
+        if (typeof window === 'undefined') return true;
+        try {
+          const saved = localStorage.getItem('transaction-sounds-enabled');
+          return saved !== 'false'; // Default to true
+        } catch {
+          return true;
+        }
+      })();
+
+      // Play notification sound if enabled
+      if (transactionSoundsEnabled && typeof window !== 'undefined') {
+        try {
+          // Create a pleasant notification sound using Web Audio API
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+
+          // Set frequency for a pleasant chime (two-tone)
+          oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+          oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
+
+          // Set volume envelope
+          gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+          gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+
+          oscillator.start(audioContext.currentTime);
+          oscillator.stop(audioContext.currentTime + 0.2);
+        } catch (error) {
+          // Silent fail if audio context fails (e.g., user hasn't interacted with page)
+          console.log('Audio playback failed:', error);
+        }
+      }
+
+      // Show toast notification using enhanced toast only if enabled
+      if (displayNotificationsEnabled) {
+        // Get token image from metadata
+        const tokenImage = (() => {
+          const cachedMetadata = tokenMetadata.get(normalizedEvent.mint);
+          if (cachedMetadata?.image || cachedMetadata?.uri || cachedMetadata?.logo) {
+            return normalizeImageUrl(cachedMetadata.image || cachedMetadata.uri || cachedMetadata.logo);
+          }
+          return null;
+        })();
+
+        const isBuy = normalizedEvent.side === 'buy';
+        const sideColor = isBuy ? '#70E0B0' : '#ff6b6b';
+        const sideText = isBuy ? 'BOUGHT' : 'SOLD';
+        const sideIcon = isBuy ? '↑' : '↓';
+
+        // Create custom content for live trades toast
+        const customContent = (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '4px 0' }}>
+            {/* Token Image */}
+            {tokenImage ? (
+              <img
+                src={tokenImage}
+                alt={tokenName}
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  objectFit: 'cover',
+                  border: `2px solid ${sideColor}40`,
+                  flexShrink: 0,
+                }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  flexShrink: 0,
+                  border: `2px solid ${sideColor}40`,
+                }}
+              >
+                {tokenName?.charAt(0)?.toUpperCase() || '?'}
+              </div>
+            )}
+
+            {/* Content */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Wallet name and side */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{ fontSize: '13px', color: '#9CA3AF', fontWeight: '500' }}>
+                  {walletName}
+                </span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: sideColor,
+                    backgroundColor: `${sideColor}20`,
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    letterSpacing: '0.5px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <span>{sideIcon}</span>
+                  {sideText}
+                </span>
+              </div>
+
+              {/* Token name */}
+              <div style={{ fontSize: '15px', fontWeight: '600', color: '#E6E7EA', marginBottom: '2px' }}>
+                {tokenName}
+              </div>
+
+              {/* Amount */}
+              {amountDisplay && (
+                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>
+                  {amountDisplay}
+                </div>
+              )}
+            </div>
           </div>
-        ),
-        { duration: 5000, position: 'top-center' }
-      );
+        );
+
+        showEnhancedToast('success', '', {
+          duration: 5000,
+          customContent,
+        });
+      }
     };
 
     const handleConnect = () => {

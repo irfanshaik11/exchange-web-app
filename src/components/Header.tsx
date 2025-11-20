@@ -20,8 +20,8 @@ const AX = {
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
-  text: "#f0f5f5",
-  muted: "#9CA3AF",
+  text: "#c7c9d1",
+  muted: "#c7c9d1",
   mint: "#18c48c",
   mintHover: "#12a877",
   sell: "#FF4D7F",
@@ -93,6 +93,34 @@ export default function Header({
   selectedTimeframe = "1h",
   isSticky = true,
 }: HeaderProps) {
+  const [headerBarVisible, setHeaderBarVisible] = useState(true);
+  
+  // Check for header bar visibility on mount and when body class changes
+  useEffect(() => {
+    const checkVisibility = () => {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('header-bar-visible');
+        const visible = saved !== 'false';
+        setHeaderBarVisible(visible);
+      }
+    };
+    
+    checkVisibility();
+    
+    // Listen for storage changes (in case changed in another tab/window)
+    window.addEventListener('storage', checkVisibility);
+    
+    // Also check body class
+    const observer = new MutationObserver(checkVisibility);
+    if (document.body) {
+      observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    }
+    
+    return () => {
+      window.removeEventListener('storage', checkVisibility);
+      observer.disconnect();
+    };
+  }, []);
   const router = useRouter();
   const isDiscover = router.pathname === "/";
   const { user, loading: userLoading, solBalance } = useUser();
@@ -509,7 +537,7 @@ export default function Header({
           className="flex max-w-full items-center justify-between border-b px-2 md:px-4 pt-4 pb-2.5"
           style={{ backgroundColor: "#06070b", borderColor: AX.border }}
         >
-          <div className="flex min-w-0 items-center gap-2 md:gap-3 flex-1 overflow-hidden">
+            <div className="flex min-w-0 items-center gap-2 md:gap-3 flex-1 overflow-hidden">
             <Link
               href="/pulse"
               className="flex items-center text-xl tracking-tight select-none flex-shrink-0"
@@ -1251,12 +1279,13 @@ export default function Header({
                 </button>
               )
             )}
+            </div>
           </div>
-        </div>
-        <div
-          className="flex items-center gap-2 px-3 py-0.5"
-          style={{ backgroundColor: "#06070b" }}
-        >
+        {headerBarVisible && (
+          <div
+            className="flex items-center gap-2 px-3 py-0.5"
+            style={{ backgroundColor: "#06070b" }}
+          >
           {/* extra toolbar section */}
           <div className="group relative">
             <button
@@ -1367,7 +1396,8 @@ export default function Header({
           <div className="h-4 border-r" style={{ borderColor: AX.border }}>
             {" "}
           </div>
-        </div>
+          </div>
+        )}
       </header>
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} initialTab={depositInitialTab} />
       <WithdrawModal

@@ -27,6 +27,7 @@ export interface EnhancedToastOptions extends ToastOptions {
   showExplorerLink?: boolean;
   txHash?: string;
   suggestions?: string[];
+  customContent?: React.ReactNode;
 }
 
 const baseStyle = {
@@ -84,6 +85,7 @@ const EnhancedToastContent = ({
   txHash,
   suggestions,
   toastId,
+  customContent,
 }: {
   type: ToastType;
   title?: string;
@@ -94,8 +96,26 @@ const EnhancedToastContent = ({
   txHash?: string;
   suggestions?: string[];
   toastId?: string;
+  customContent?: React.ReactNode;
 }) => {
   const style = typeStyles[type];
+
+  // If custom content is provided, render it instead of default content
+  if (customContent) {
+    return (
+      <div 
+        style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '320px' }}
+        onClick={(e) => {
+          const target = e.target as HTMLElement;
+          if (!target.closest('a') && !target.closest('button')) {
+            if (toastId) toast.dismiss(toastId);
+          }
+        }}
+      >
+        {customContent}
+      </div>
+    );
+  }
 
   return (
     <div 
@@ -207,6 +227,20 @@ const EnhancedToastContent = ({
   );
 };
 
+// Get toast position from localStorage
+const getToastPosition = (): 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' => {
+  if (typeof window === 'undefined') return 'bottom-center';
+  try {
+    const saved = localStorage.getItem('toast-position');
+    if (saved && ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
+      return saved as any;
+    }
+  } catch {
+    // Ignore
+  }
+  return 'bottom-center';
+};
+
 // Main enhanced toast function
 export const showEnhancedToast = (
   type: ToastType,
@@ -218,9 +252,12 @@ export const showEnhancedToast = (
   // Use priority-based duration, but allow override via options
   const duration = options?.duration || priorityDurations[type];
   
+  // Get position from options or localStorage
+  const position = options?.position || getToastPosition();
+  
   const toastOptions: ToastOptions = {
     duration,
-    position: 'top-center',
+    position,
     ...options,
     style: {
       ...baseStyle,
@@ -243,6 +280,7 @@ export const showEnhancedToast = (
       txHash={options?.txHash}
       suggestions={options?.suggestions}
       toastId={finalId}
+      customContent={options?.customContent}
     />
   );
 
@@ -262,6 +300,7 @@ export const showEnhancedToast = (
       txHash={options?.txHash}
       suggestions={options?.suggestions}
       toastId={finalId}
+      customContent={options?.customContent}
     />,
     { ...toastOptions, id: finalId }
   );
@@ -283,10 +322,13 @@ export const updateEnhancedToast = (
   // Use priority-based duration, but allow override via options
   const duration = options?.duration || priorityDurations[type];
   
+  // Get position from options or localStorage
+  const position = options?.position || getToastPosition();
+  
   const toastOptions: ToastOptions = {
     id,
     duration,
-    position: 'top-center',
+    position,
     ...options,
     style: {
       ...baseStyle,
@@ -306,6 +348,7 @@ export const updateEnhancedToast = (
       txHash={options?.txHash}
       suggestions={options?.suggestions}
       toastId={id}
+      customContent={options?.customContent}
     />
   );
 
