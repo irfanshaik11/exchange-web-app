@@ -39,6 +39,7 @@ interface DepositModalProps {
   open: boolean;
   onClose: () => void;
   initialTab?: TabType;
+  selectedChain?: string;
 }
 
 type TabType = 'convert' | 'deposit' | 'buy' | 'withdraw';
@@ -54,7 +55,12 @@ interface WithdrawalTransaction {
   completedAt?: string;
 }
 
-const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab = 'deposit' }) => {
+const DepositModal: React.FC<DepositModalProps> = ({
+  open,
+  onClose,
+  initialTab = 'deposit',
+  selectedChain = 'sol',
+}) => {
   const { user, loading: userLoading, refreshUser, refreshBalance, solBalance } = useUser();
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [show, setShow] = useState(false);
@@ -62,7 +68,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [moonPayLoaded, setMoonPayLoaded] = useState(false);
   const [jupiterLoaded, setJupiterLoaded] = useState(false);
-  const [primaryWalletAddress, setPrimaryWalletAddress] = useState<string | null>(null);
+  const [primaryWalletAddresses, setPrimaryWalletAddresses] = useState<{
+    solana: string | null;
+    ethereum: string | null;
+  }>({ solana: null, ethereum: null });
   const [primaryWalletLabel, setPrimaryWalletLabel] = useState<string | null>(null);
   const [primaryWalletLoading, setPrimaryWalletLoading] = useState(false);
   const [walletsRefreshKey, setWalletsRefreshKey] = useState(0);
@@ -104,7 +113,13 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     }
   }, [open, refreshBalance]);
 
-  const depositAddress = primaryWalletAddress || user?.publicKey || "";
+  const depositAddress =
+    selectedChain === 'sol'
+      ? primaryWalletAddresses.solana || user?.publicKey || ""
+      : primaryWalletAddresses.ethereum ||
+        primaryWalletAddresses.solana ||
+        user?.publicKey ||
+        "";
 
   useEffect(() => {
     if (depositAddress) {
@@ -128,6 +143,17 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
   }, [depositAddress]);
 
   const copyToClipboard = (text: string) => {
+    if (!text) {
+      toast.error("No address available to copy", {
+        duration: 2000,
+        style: {
+          background: '#1E1F26',
+          color: '#E6E7EA',
+          border: '1px solid #ff6b6b',
+        }
+      });
+      return;
+    }
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
       navigator.clipboard
         .writeText(text)
@@ -303,7 +329,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
   // Fetch the user's primary wallet so deposits go to the right address
   useEffect(() => {
     if (!user?.id || !user?.bearerToken) {
-      setPrimaryWalletAddress(null);
+      setPrimaryWalletAddresses({ solana: null, ethereum: null });
       setPrimaryWalletLabel(null);
       return;
     }
@@ -327,18 +353,40 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
         }
 
         const data = await res.json();
-        const wallets: Array<{ address: string; label?: string | null; isPrimary?: boolean }> =
+        const wallets: Array<{
+          address?: string;
+          solanaAddress?: string;
+          ethereumAddress?: string;
+          label?: string | null;
+          isPrimary?: boolean;
+        }> =
           Array.isArray(data?.wallets) ? data.wallets : [];
         const primary = wallets.find((w) => w.isPrimary) ?? wallets[0];
 
         if (!aborted) {
-          setPrimaryWalletAddress(primary?.address ?? null);
+          const solanaAddr =
+            typeof primary?.solanaAddress === "string" && primary.solanaAddress.length > 0
+              ? primary.solanaAddress
+              : typeof primary?.address === "string"
+              ? primary.address
+              : null;
+          const ethAddr =
+            typeof primary?.ethereumAddress === "string" && primary.ethereumAddress.length > 0
+              ? primary.ethereumAddress
+              : null;
+          setPrimaryWalletAddresses({
+            solana: solanaAddr,
+            ethereum: ethAddr,
+          });
           setPrimaryWalletLabel(primary?.label ?? null);
         }
       } catch (error) {
         console.error("Failed to fetch primary wallet:", error);
         if (!aborted) {
-          setPrimaryWalletAddress((prev) => prev ?? user.publicKey ?? null);
+          setPrimaryWalletAddresses((prev) => ({
+            solana: prev.solana ?? user?.publicKey ?? null,
+            ethereum: prev.ethereum,
+          }));
         }
       } finally {
         if (!aborted) {

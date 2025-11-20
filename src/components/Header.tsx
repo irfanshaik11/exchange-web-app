@@ -1516,6 +1516,7 @@ export default function Header({
         open={depositOpen}
         onClose={() => setDepositOpen(false)}
         initialTab={depositInitialTab}
+        selectedChain={currentChain}
       />
       <WithdrawModal
         isOpen={withdrawOpen}

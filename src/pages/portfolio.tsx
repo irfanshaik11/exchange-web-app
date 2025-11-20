@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Head from "next/head";
+import { useRouter } from "next/router";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import Positions from "../components/trade/Positions";
@@ -72,14 +73,59 @@ interface TokenMetadataCache {
 }
 
 interface UserWallet {
-  id: string;          // DB id of the wallet
-  label: string;       // "Narrative Main", "Wallet 2", etc.
-  address: string;     // public key
-  balance: number;     // SOL balance in SOL
+  id: string;
+  label: string;
+  address: string;
+  solanaAddress: string;
+  ethereumAddress: string;
+  balance: number;
   holdingsCount: number;
   isArchived?: boolean;
   isPrimary?: boolean;
 }
+
+const normalizeWalletFromApi = (
+  wallet: any,
+  fallbackIndex?: number
+): UserWallet => {
+  const solanaAddress =
+    typeof wallet?.solanaAddress === "string" && wallet.solanaAddress.length > 0
+      ? wallet.solanaAddress
+      : typeof wallet?.address === "string"
+      ? wallet.address
+      : "";
+  const ethereumAddress =
+    typeof wallet?.ethereumAddress === "string" && wallet.ethereumAddress.length > 0
+      ? wallet.ethereumAddress
+      : "";
+  const resolvedAddress = solanaAddress || ethereumAddress || "";
+  let label = typeof wallet?.label === "string" ? wallet.label : undefined;
+  if (!label) {
+    if (typeof fallbackIndex === "number") {
+      label = fallbackIndex === 0 ? "Narrative Main" : `Wallet ${fallbackIndex + 1}`;
+    } else {
+      label = "Wallet";
+    }
+  }
+  return {
+    id: wallet?.id ?? "",
+    label,
+    address: resolvedAddress,
+    solanaAddress: solanaAddress,
+    ethereumAddress,
+    balance: typeof wallet?.balance === "number" ? wallet.balance : 0,
+    holdingsCount: typeof wallet?.holdingsCount === "number" ? wallet.holdingsCount : 0,
+    isArchived: Boolean(wallet?.isArchived),
+    isPrimary: Boolean(wallet?.isPrimary),
+  };
+};
+
+const getAddressForChain = (wallet: UserWallet, chain: string) => {
+  if (chain === "sol") {
+    return wallet.solanaAddress || wallet.address || "";
+  }
+  return wallet.ethereumAddress || wallet.solanaAddress || wallet.address || "";
+};
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const CACHE_KEY = "tokenMetadataCache";
@@ -89,6 +135,8 @@ export default function PortfolioPage() {
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
   const { user, loading: userLoading, solBalance, usdcBalance } = useUser();
+  const router = useRouter();
+  const currentChain = (router.query.chain as string) || "sol";
   const [walletChecked, setWalletChecked] = useState(false);
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [loadingTradeHistory, setLoadingTradeHistory] = useState(true);
@@ -707,56 +755,46 @@ export default function PortfolioPage() {
     document.body.removeChild(link);
   };
 
-    useEffect(() => {
-    const fetchWallets = async () => {
-      if (!user?.id) {
-        setWallets([]);
-        return;
-      }
+  const fetchWallets = useCallback(async () => {
+    if (!user?.id) {
+      setWallets([]);
+      return;
+    }
 
-      setLoadingWallets(true);
-      try {
-        // Adjust this URL to your backend / API route
-        const res = await fetch(
-  `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
-  {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${user.bearerToken}`,
-    },
-  }
-);
-
-        if (!res.ok) {
-          throw new Error(`Failed to fetch wallets: ${res.status}`);
+    setLoadingWallets(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
         }
+      );
 
-        // Expecting something like: { wallets: UserWallet[] }
-        const data = await res.json();
-
-        // Map backend fields → frontend shape if needed
-        const mappedWallets: UserWallet[] = data.wallets.map((w: any, index: number) => ({
-          id: w.id,
-          label: w.label ?? (index === 0 ? "Narrative Main" : `Wallet ${index + 1}`),
-          address: w.address,                 // Turnkey wallet public key
-          balance: w.balance ?? 0,            // SOL balance (backend calculated)
-          holdingsCount: w.holdingsCount ?? 0,
-          isArchived: w.isArchived ?? false,
-          isPrimary: w.isPrimary ?? index === 0,
-        }));
-
-        setWallets(mappedWallets);
-        notifyWalletsUpdated();
-      } catch (err) {
-        console.error(err);
-        toast.error("Failed to load wallets");
-      } finally {
-        setLoadingWallets(false);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch wallets: ${res.status}`);
       }
-    };
 
-    fetchWallets();
+      const data = await res.json();
+      const mappedWallets: UserWallet[] = Array.isArray(data.wallets)
+        ? data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
+        : [];
+
+      setWallets(mappedWallets);
+      notifyWalletsUpdated();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load wallets");
+    } finally {
+      setLoadingWallets(false);
+    }
   }, [user?.id, user?.bearerToken]);
+
+  useEffect(() => {
+    fetchWallets();
+  }, [fetchWallets]);
 
     const handleCreateWallet = async () => {
     if (!user?.id) {
@@ -791,23 +829,15 @@ export default function PortfolioPage() {
       }
 
       const createdRaw = await res.json();
+      const newWalletData = createdRaw?.wallet ?? createdRaw;
 
       setWallets((prev) => {
         const nextIndex = prev.length;
-        const newWallet: UserWallet = {
-          id: createdRaw.id,
-          label:
-            createdRaw.label ??
-            (nextIndex === 0 ? "Narrative Main" : `Wallet ${nextIndex + 1}`),
-          address: createdRaw.address,
-          balance: createdRaw.balance ?? 0,
-          holdingsCount: createdRaw.holdingsCount ?? 0,
-          isArchived: createdRaw.isArchived ?? false,
-          isPrimary: createdRaw.isPrimary ?? false,
-        };
+        const newWallet = normalizeWalletFromApi(newWalletData, nextIndex);
         return [...prev, newWallet];
       });
       notifyWalletsUpdated();
+      await fetchWallets();
 
       toast.success("New wallet created");
     } catch (err) {
@@ -875,26 +905,25 @@ export default function PortfolioPage() {
 
       const data = await res.json().catch(() => ({}));
       if (Array.isArray(data?.wallets)) {
-        const mapped: UserWallet[] = data.wallets.map((w: any, index: number) => ({
-          id: w.id,
-          label: w.label ?? (index === 0 ? "Narrative Main" : `Wallet ${index + 1}`),
-          address: w.address,
-          balance: w.balance ?? 0,
-          holdingsCount: w.holdingsCount ?? 0,
-          isArchived: w.isArchived ?? false,
-          isPrimary: w.isPrimary ?? index === 0,
-        }));
-        setWallets(mapped);
+        setWallets(
+          data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
+        );
+      } else if (data?.wallet) {
+        setWallets((prev) => {
+          const currentIndex = prev.findIndex((wallet) => wallet.id === editingWalletId);
+          const normalized = normalizeWalletFromApi(
+            data.wallet,
+            currentIndex >= 0 ? currentIndex : undefined
+          );
+          return prev.map((wallet) =>
+            wallet.id === editingWalletId ? normalized : wallet
+          );
+        });
       } else {
-        const updatedLabel =
-          (data?.wallet?.label as string | undefined) ?? trimmed;
         setWallets((prev) =>
           prev.map((wallet) =>
             wallet.id === editingWalletId
-              ? {
-                  ...wallet,
-                  label: updatedLabel,
-                }
+              ? { ...wallet, label: trimmed }
               : wallet
           )
         );
@@ -947,18 +976,9 @@ export default function PortfolioPage() {
         return;
       }
 
-      const mappedWallets: UserWallet[] = data.wallets.map(
-        (w: any, index: number) => ({
-          id: w.id,
-          label:
-            w.label ?? (index === 0 ? "Narrative Main" : `Wallet ${index + 1}`),
-          address: w.address,
-          balance: w.balance ?? 0,
-          holdingsCount: w.holdingsCount ?? 0,
-          isArchived: w.isArchived ?? false,
-          isPrimary: w.isPrimary ?? index === 0,
-        })
-      );
+      const mappedWallets: UserWallet[] = Array.isArray(data.wallets)
+        ? data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
+        : [];
 
       setWallets(mappedWallets);
       notifyWalletsUpdated();
@@ -1771,7 +1791,13 @@ export default function PortfolioPage() {
                     ) : (
                       wallets
                         .filter((w) => (showHidden ? true : !w.isArchived))
-                        .map((wallet) => (
+                        .map((wallet) => {
+                          const displayAddress = getAddressForChain(wallet, currentChain);
+                          const truncated =
+                            displayAddress.length > 8
+                              ? `${displayAddress.slice(0, 4)}...${displayAddress.slice(-4)}`
+                              : displayAddress;
+                          return (
                           <div
                             key={wallet.id}
                             className="border-b border-[#2A2B33] hover:bg-[#17191E] transition"
@@ -1840,14 +1866,18 @@ export default function PortfolioPage() {
                                     )}
                                   </div>
                                   <div className="text-xs text-[#9CA3AF] font-mono truncate">
-                                    {wallet.address.slice(0, 4)}...{wallet.address.slice(-4)}
+                                    {truncated || "—"}
                                   </div>
                                 </div>
                                 <button
                                   className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0"
                                   onClick={() => {
-                                    navigator.clipboard.writeText(wallet.address).catch(() => {});
-                                    toast.success("Address copied");
+                                    if (displayAddress) {
+                                      navigator.clipboard.writeText(displayAddress).then(
+                                        () => toast.success("Address copied"),
+                                        () => toast.error("Failed to copy address")
+                                      );
+                                    }
                                   }}
                                 >
                                   <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
@@ -1902,9 +1932,10 @@ export default function PortfolioPage() {
                               </div>
                             </div>
                           </div>
-                        ))
-                    )}
-                  </div>
+                        );
+                        })
+                  )}
+                </div>
                 </div>
 
                 {/* Right Panel Content */}
