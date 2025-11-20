@@ -11,8 +11,37 @@ interface WalletTrackerPopupProps {
 }
 
 const WalletTrackerPopup: React.FC<WalletTrackerPopupProps> = ({ isOpen, onClose }) => {
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [size, setSize] = useState({ width: 600, height: 600 });
+  // Load position and size from localStorage
+  const getInitialPosition = (): { x: number; y: number } => {
+    if (typeof window === 'undefined') return { x: 0, y: 0 };
+    try {
+      const saved = localStorage.getItem('wallet-popup-position');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return { x: parsed.x || 0, y: parsed.y || 0 };
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return { x: 0, y: 0 };
+  };
+
+  const getInitialSize = (): { width: number; height: number } => {
+    if (typeof window === 'undefined') return { width: 600, height: 600 };
+    try {
+      const saved = localStorage.getItem('wallet-popup-size');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return { width: parsed.width || 600, height: parsed.height || 600 };
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return { width: 600, height: 600 };
+  };
+
+  const [position, setPosition] = useState(getInitialPosition);
+  const [size, setSize] = useState(getInitialSize);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -34,17 +63,34 @@ const WalletTrackerPopup: React.FC<WalletTrackerPopupProps> = ({ isOpen, onClose
     sizeRef.current = size;
   }, [size]);
 
-  // Initialize position in center of screen
+  // Initialize position in center of screen only if no saved position exists
   useEffect(() => {
     if (isOpen && typeof window !== 'undefined') {
-      const centerX = window.innerWidth / 2 - size.width / 2;
-      const centerY = window.innerHeight / 2 - size.height / 2;
-      setPosition({
-        x: Math.max(20, Math.min(centerX, window.innerWidth - size.width - 20)),
-        y: Math.max(20, Math.min(centerY, window.innerHeight - size.height - 20)),
-      });
+      const saved = localStorage.getItem('wallet-popup-position');
+      if (!saved) {
+        // Only center if no saved position
+        const centerX = window.innerWidth / 2 - size.width / 2;
+        const centerY = window.innerHeight / 2 - size.height / 2;
+        setPosition({
+          x: Math.max(20, Math.min(centerX, window.innerWidth - size.width - 20)),
+          y: Math.max(20, Math.min(centerY, window.innerHeight - size.height - 20)),
+        });
+      }
     }
-  }, [isOpen, size.width, size.height]);
+  }, [isOpen]);
+
+  // Save position and size to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isOpen) {
+      localStorage.setItem('wallet-popup-position', JSON.stringify(position));
+    }
+  }, [position, isOpen]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isOpen) {
+      localStorage.setItem('wallet-popup-size', JSON.stringify(size));
+    }
+  }, [size, isOpen]);
 
   // Handle drag functionality - optimized for performance
   const handlePointerMove = useCallback((e: PointerEvent) => {
@@ -216,7 +262,8 @@ const WalletTrackerPopup: React.FC<WalletTrackerPopupProps> = ({ isOpen, onClose
           maxHeight: '90vh',
           minWidth: '400px',
           minHeight: '300px',
-          backgroundColor: (isDragging || isResizing) ? 'rgba(5, 6, 8, 0.95)' : '#050608',
+          backgroundColor: '#050608',
+          opacity: (isDragging || isResizing) ? 0.85 : 1,
           cursor: isDragging ? 'grabbing' : 'default',
           zIndex: 10000,
           display: 'flex',
@@ -232,11 +279,11 @@ const WalletTrackerPopup: React.FC<WalletTrackerPopupProps> = ({ isOpen, onClose
           onPointerDown={handlePointerDown}
         >
           <div className="flex items-center gap-2">
-            {/* ::: Drag handle */}
-            <div className="flex items-center gap-1">
-              <span className="text-[#9CA3AF] text-lg font-bold">:</span>
-              <span className="text-[#9CA3AF] text-lg font-bold">:</span>
-              <span className="text-[#9CA3AF] text-lg font-bold">:</span>
+            {/* Grid icon drag handle */}
+            <div className="w-4 h-4 grid grid-cols-3 gap-0.5">
+              {[...Array(9)].map((_, i) => (
+                <div key={i} className="w-0.5 h-0.5 bg-[#9CA3AF] rounded" />
+              ))}
             </div>
             <span className="text-sm font-semibold text-white ml-2">Wallet Tracker</span>
           </div>

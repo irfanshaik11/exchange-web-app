@@ -24,6 +24,7 @@ import WalletSwitcher from './WalletSwitcher';
 import WalletTrackerPopup from './WalletTrackerPopup';
 import TwitterTrackerPopup from './TwitterTrackerPopup';
 import DiscoverPopup from './DiscoverPopup';
+import PulsePopup from './PulsePopup';
 import { useQuickBuy } from './QuickBuyContext';
 import { useSolPrice } from './SolPriceContext';
 import { useUser } from './UserContext';
@@ -78,9 +79,22 @@ const AX = {
 
 export default function Footer() {
   const router = useRouter();
-  const [showWalletDropdown, setShowWalletDropdown] = useState(false);
-  const [showTwitterDropdown, setShowTwitterDropdown] = useState(false);
-  const [showDiscoverDropdown, setShowDiscoverDropdown] = useState(false);
+  
+  // Load popup states from localStorage on mount
+  const getInitialPopupState = (key: string, defaultValue: boolean = false): boolean => {
+    if (typeof window === 'undefined') return defaultValue;
+    try {
+      const saved = localStorage.getItem(`footer-popup-${key}`);
+      return saved === 'true';
+    } catch {
+      return defaultValue;
+    }
+  };
+
+  const [showWalletDropdown, setShowWalletDropdown] = useState(() => getInitialPopupState('wallet'));
+  const [showTwitterDropdown, setShowTwitterDropdown] = useState(() => getInitialPopupState('twitter'));
+  const [showDiscoverDropdown, setShowDiscoverDropdown] = useState(() => getInitialPopupState('discover'));
+  const [showPulseDropdown, setShowPulseDropdown] = useState(() => getInitialPopupState('pulse'));
   const [showGlobalDropdown, setShowGlobalDropdown] = useState(false);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [showPnLModal, setShowPnLModal] = useState(false);
@@ -92,6 +106,31 @@ export default function Footer() {
   const { activePreset } = useQuickBuy();
   const { solPrice } = useSolPrice(); // Use shared SOL price from context
   const { solBalance } = useUser();
+
+  // Save popup states to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('footer-popup-wallet', String(showWalletDropdown));
+    }
+  }, [showWalletDropdown]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('footer-popup-twitter', String(showTwitterDropdown));
+    }
+  }, [showTwitterDropdown]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('footer-popup-discover', String(showDiscoverDropdown));
+    }
+  }, [showDiscoverDropdown]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('footer-popup-pulse', String(showPulseDropdown));
+    }
+  }, [showPulseDropdown]);
 
   // Check backend health and measure latency
   useEffect(() => {
@@ -211,7 +250,7 @@ export default function Footer() {
         {/* Left Section - Preset Button */}
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           <button
-            className="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-2 py-1 rounded-md text-xs sm:text-xs font-medium transition-all duration-300 ease-out"
+            className="flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-md text-[11px] sm:text-xs font-medium transition-all duration-300 ease-out"
             style={{
               backgroundColor: AX.mint,
               color: '#000000',
@@ -227,8 +266,8 @@ export default function Footer() {
               e.currentTarget.style.boxShadow = 'none';
             }}
           >
-            <FaBars size={9} className="sm:w-3 sm:h-3" />
-            <FaCog size={9} className="sm:w-3 sm:h-3" />
+            <FaBars size={11} className="sm:w-3 sm:h-3" />
+            <FaCog size={11} className="sm:w-3 sm:h-3" />
             <span className="hidden sm:inline leading-none">PRESET {activePreset + 1}</span>
             <span className="sm:hidden leading-none">P{activePreset + 1}</span>
           </button>
@@ -238,7 +277,7 @@ export default function Footer() {
               {/* Commented out: Original wallet button that navigates to trackers page */}
               {/* <button
                 onClick={() => router.push('/trackers')}
-                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-2 py-0.5 rounded-full border transition-all duration-300 ease-out"
+                className="flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-full border transition-all duration-300 ease-out"
                 style={{
                   backgroundColor: 'transparent',
                   borderColor: AX.border,
@@ -261,7 +300,7 @@ export default function Footer() {
               {/* New: Wallet button that opens popup */}
               <button
                 onClick={() => setShowWalletDropdown(!showWalletDropdown)}
-                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-2 py-0.5 rounded-full border transition-all duration-300 ease-out"
+                className="flex items-center gap-1 sm:gap-2 px-2 py-1 rounded-full border transition-all duration-300 ease-out"
                 style={{
                   backgroundColor: showWalletDropdown ? `${AX.mint}20` : 'transparent',
                   borderColor: showWalletDropdown ? AX.mint : AX.border,
@@ -280,7 +319,7 @@ export default function Footer() {
                   }
                 }}
               >
-                <FaWallet size={9} className="sm:w-3 sm:h-3" />
+                <FaWallet size={11} className="sm:w-3 sm:h-3" />
                 <SolanaIcon size={12} />
                 <span className="text-[11px] sm:text-xs font-medium leading-none">{Number.isFinite(solBalance) ? solBalance.toFixed(4) : '0.0000'}</span>
               </button>
@@ -291,7 +330,7 @@ export default function Footer() {
         <div className="flex items-center gap-1 flex-shrink-0">
           {navLinks.map((link, index) => {
             const IconComponent = link.icon;
-            const isActive = link.name === 'Wallet' ? showWalletDropdown : link.name === 'Twitter' ? showTwitterDropdown : link.name === 'Discover' ? showDiscoverDropdown : router.pathname === link.href;
+            const isActive = link.name === 'Wallet' ? showWalletDropdown : link.name === 'Twitter' ? showTwitterDropdown : link.name === 'Discover' ? showDiscoverDropdown : link.name === 'Pulse' ? showPulseDropdown : router.pathname === link.href;
             
             return (
               <React.Fragment key={link.name}>
@@ -304,7 +343,7 @@ export default function Footer() {
                 {link.name === 'Wallet' ? (
                   <button
                     onClick={() => setShowWalletDropdown(!showWalletDropdown)}
-                    className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
+                    className="relative flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
                       backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
@@ -328,7 +367,7 @@ export default function Footer() {
                 ) : link.name === 'Twitter' ? (
                   <button
                     onClick={() => setShowTwitterDropdown(!showTwitterDropdown)}
-                    className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
+                    className="relative flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
                       backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
@@ -352,7 +391,31 @@ export default function Footer() {
                 ) : link.name === 'Discover' ? (
                   <button
                     onClick={() => setShowDiscoverDropdown(!showDiscoverDropdown)}
-                    className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
+                    className="relative flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
+                    style={{
+                      color: isActive ? AX.mint : AX.muted,
+                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.mint;
+                        e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.color = AX.muted;
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    <IconComponent size={11} className="sm:w-3 sm:h-3" />
+                    <span className="text-[11px] sm:text-xs hidden sm:inline leading-none">{link.name}</span>
+                  </button>
+                ) : link.name === 'Pulse' ? (
+                  <button
+                    onClick={() => setShowPulseDropdown(!showPulseDropdown)}
+                    className="relative flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
                       backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
@@ -376,7 +439,7 @@ export default function Footer() {
                 ) : (
                   <Link
                     href={link.href}
-                    className="relative flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
+                    className="relative flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
                       backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
@@ -418,7 +481,7 @@ export default function Footer() {
           {/* PnL Link */}
           <button
             onClick={() => setShowPnLModal(!showPnLModal)}
-            className="flex items-center gap-1 sm:gap-2 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
+            className="flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
             style={{
               color: showPnLModal ? AX.mint : AX.muted,
               backgroundColor: showPnLModal ? `${AX.mint}20` : 'transparent'
@@ -443,9 +506,9 @@ export default function Footer() {
           <div className="w-px h-3 sm:h-4" style={{ backgroundColor: AX.border }} />
 
           {/* Solana Price */}
-          <div className="flex items-center gap-1 px-1 sm:px-2 py-0.5 rounded-full border" style={{ borderColor: AX.border }}>
-            <SolanaIcon size={14} />
-            <span className="text-xs sm:text-sm font-medium" style={{ color: AX.green }}>
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full border" style={{ borderColor: AX.border }}>
+            <SolanaIcon size={12} />
+            <span className="text-[11px] sm:text-xs font-medium" style={{ color: AX.green }}>
               {solPrice > 0 ? `$${solPrice.toFixed(2)}` : '...'}
             </span>
           </div>
@@ -471,7 +534,7 @@ export default function Footer() {
             <button
               ref={globalButtonRef}
               onClick={() => setShowGlobalDropdown(!showGlobalDropdown)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded transition-all duration-300 ease-out"
+              className="flex items-center gap-1 px-2 py-1 rounded transition-all duration-300 ease-out"
               style={{ color: AX.text }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = AX.surface;
@@ -480,8 +543,8 @@ export default function Footer() {
                 e.currentTarget.style.backgroundColor = 'transparent';
               }}
             >
-              <span className="text-xs font-medium leading-none">{selectedRegion.substring(0, 2).toUpperCase()}</span>
-              <FaChevronDown size={8} />
+              <span className="text-[11px] sm:text-xs font-medium leading-none">{selectedRegion.substring(0, 2).toUpperCase()}</span>
+              <FaChevronDown size={11} className="sm:w-3 sm:h-3" />
             </button>
 
             {/* Regions Modal */}
@@ -587,7 +650,7 @@ export default function Footer() {
                   }}
                   title={utility.tooltip}
                 >
-                  <IconComponent size={12} className="sm:w-3 sm:h-3" />
+                  <IconComponent size={11} className="sm:w-3 sm:h-3" />
                 </button>
               );
             })}
@@ -605,7 +668,7 @@ export default function Footer() {
                   href={social.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-1 sm:px-2 py-0.5 rounded transition-all duration-300 ease-out group"
+                  className="flex items-center gap-1 px-2 py-1 rounded transition-all duration-300 ease-out group"
                   style={{ color: AX.muted }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = AX.mint;
@@ -617,7 +680,7 @@ export default function Footer() {
                   }}
                   title={social.tooltip}
                 >
-                  <IconComponent size={15} className="sm:w-4 sm:h-4" />
+                  <IconComponent size={11} className="sm:w-3 sm:h-3" />
                   {social.text && <span className="text-[11px] sm:text-xs hidden sm:inline leading-none">{social.text}</span>}
                 </Link>
               );
@@ -660,6 +723,12 @@ export default function Footer() {
       <DiscoverPopup
         isOpen={showDiscoverDropdown}
         onClose={() => setShowDiscoverDropdown(false)}
+      />
+      
+      {/* Pulse Popup */}
+      <PulsePopup
+        isOpen={showPulseDropdown}
+        onClose={() => setShowPulseDropdown(false)}
       />
     </footer>
   );

@@ -25,7 +25,22 @@ const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
 const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, token }) => {
   const { user, solBalance } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  // Load position from localStorage
+  const getInitialPosition = (): { x: number; y: number } => {
+    if (typeof window === 'undefined') return { x: 0, y: 0 };
+    try {
+      const saved = localStorage.getItem('instant-trade-popup-position');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return { x: parsed.x || 0, y: parsed.y || 0 };
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return { x: 0, y: 0 };
+  };
+
+  const [position, setPosition] = useState(getInitialPosition);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [tokenBalance, setTokenBalance] = useState<number>(0);
@@ -172,15 +187,40 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
   const allowDecimal = (v: string) => /^\d*([.]\d{0,9})?$/.test(v);
 
-  // Initialize position in center of screen
+  // Initialize position - use saved position if available, otherwise center
   useEffect(() => {
-    if (isOpen) {
-      setPosition({
-        x: window.innerWidth / 2 - 200, // Approximate center (modal width ~400px)
-        y: window.innerHeight / 2 - 250, // Approximate center
-      });
+    if (isOpen && typeof window !== 'undefined') {
+      const MIN_Y = -40; // Ensure header is always visible
+      const saved = localStorage.getItem('instant-trade-popup-position');
+      if (!saved) {
+        // Only center if no saved position exists
+        setPosition({
+          x: window.innerWidth / 2 - 200, // Approximate center (modal width ~400px)
+          y: window.innerHeight / 2 - 250, // Approximate center
+        });
+      } else {
+        // Use saved position, but ensure it respects minimum Y constraint
+        try {
+          const parsed = JSON.parse(saved);
+          const constrainedY = Math.max(MIN_Y, parsed.y || 0);
+          setPosition({ x: parsed.x || 0, y: constrainedY });
+        } catch {
+          // If parse fails, center it
+          setPosition({
+            x: window.innerWidth / 2 - 200,
+            y: window.innerHeight / 2 - 250,
+          });
+        }
+      }
     }
   }, [isOpen]);
+
+  // Save position to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined' && isOpen) {
+      localStorage.setItem('instant-trade-popup-position', JSON.stringify(position));
+    }
+  }, [position, isOpen]);
 
   // Handle drag functionality - use callbacks and refs to avoid dependency issues
   const handlePointerMove = useCallback((e: PointerEvent) => {
@@ -188,9 +228,19 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
     e.preventDefault();
 
+    const nextX = e.clientX - dragStartRef.current.x;
+    const nextY = e.clientY - dragStartRef.current.y;
+    
+    // Constrain Y position to ensure the header (drag handle) is always visible
+    // Header is approximately 56px tall (py-3 padding + content), so we allow it to go slightly above
+    // but ensure at least part of the header is visible (minimum Y of -40px allows header to be partially visible)
+    const MIN_Y = -40; // Allow header to be partially visible at top
+    
+    const constrainedY = Math.max(MIN_Y, nextY);
+
     const nextPosition = {
-      x: e.clientX - dragStartRef.current.x,
-      y: e.clientY - dragStartRef.current.y,
+      x: nextX,
+      y: constrainedY,
     };
 
     positionRef.current = nextPosition;

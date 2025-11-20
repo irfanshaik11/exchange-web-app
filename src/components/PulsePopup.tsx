@@ -3,19 +3,19 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FaTimes } from 'react-icons/fa';
-import DiscoverContent from './DiscoverContent';
+import PulseContent from './PulseContent';
 
-interface DiscoverPopupProps {
+interface PulsePopupProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
+const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
   // Load position and size from localStorage
   const getInitialPosition = (): { x: number; y: number } => {
     if (typeof window === 'undefined') return { x: 0, y: 0 };
     try {
-      const saved = localStorage.getItem('discover-popup-position');
+      const saved = localStorage.getItem('pulse-popup-position');
       if (saved) {
         const parsed = JSON.parse(saved);
         return { x: parsed.x || 0, y: parsed.y || 0 };
@@ -27,17 +27,17 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
   };
 
   const getInitialSize = (): { width: number; height: number } => {
-    if (typeof window === 'undefined') return { width: 1000, height: 700 };
+    if (typeof window === 'undefined') return { width: 800, height: 700 };
     try {
-      const saved = localStorage.getItem('discover-popup-size');
+      const saved = localStorage.getItem('pulse-popup-size');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return { width: parsed.width || 1000, height: parsed.height || 700 };
+        return { width: parsed.width || 800, height: parsed.height || 700 };
       }
     } catch {
       // Ignore parse errors
     }
-    return { width: 1000, height: 700 };
+    return { width: 800, height: 700 };
   };
 
   const [position, setPosition] = useState(getInitialPosition);
@@ -66,7 +66,7 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
   // Initialize position in center of screen only if no saved position exists
   useEffect(() => {
     if (isOpen && typeof window !== 'undefined') {
-      const saved = localStorage.getItem('discover-popup-position');
+      const saved = localStorage.getItem('pulse-popup-position');
       if (!saved) {
         // Only center if no saved position
         const centerX = window.innerWidth / 2 - size.width / 2;
@@ -82,13 +82,13 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
   // Save position and size to localStorage whenever they change
   useEffect(() => {
     if (typeof window !== 'undefined' && isOpen) {
-      localStorage.setItem('discover-popup-position', JSON.stringify(position));
+      localStorage.setItem('pulse-popup-position', JSON.stringify(position));
     }
   }, [position, isOpen]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && isOpen) {
-      localStorage.setItem('discover-popup-size', JSON.stringify(size));
+      localStorage.setItem('pulse-popup-size', JSON.stringify(size));
     }
   }, [size, isOpen]);
 
@@ -101,7 +101,7 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
       const deltaX = e.clientX - resizeStartRef.current.x;
       const deltaY = e.clientY - resizeStartRef.current.y;
       
-      const newWidth = Math.max(600, Math.min(1400, resizeStartRef.current.width + deltaX));
+      const newWidth = Math.max(600, Math.min(1600, resizeStartRef.current.width + deltaX));
       const newHeight = Math.max(400, Math.min(window.innerHeight - 40, resizeStartRef.current.height + deltaY));
       
       // Direct DOM update for smooth resizing
@@ -285,7 +285,7 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
                 <div key={i} className="w-0.5 h-0.5 bg-[#9CA3AF] rounded" />
               ))}
             </div>
-            <span className="text-sm font-semibold text-white ml-2">Discover</span>
+            <span className="text-sm font-semibold text-white ml-2">Pulse</span>
           </div>
 
           {/* Close button */}
@@ -297,30 +297,35 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Content - Discover Page */}
-        <div className="flex-1 overflow-hidden min-h-0">
-          <DiscoverContent />
+        {/* Content - Pulse Page */}
+        <div className="flex-1 overflow-hidden min-h-0" style={{ maxWidth: '100%' }}>
+          <div className="h-full w-full" style={{ maxWidth: size.width < 1024 ? '100%' : 'none' }}>
+            <PulseContent forceMobileView={size.width < 1024} />
+          </div>
         </div>
 
         {/* Resize Handle - Bottom Right Corner */}
         <div
           ref={resizeHandleRef}
-          className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize z-20"
+          className="absolute bottom-0 right-0 w-8 h-8 cursor-nwse-resize z-20"
           style={{
             background: 'transparent',
           }}
           onPointerDown={handlePointerDown}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.cursor = 'nwse-resize';
+          }}
         >
-          {/* Visual resize indicator - more visible */}
-          <div className="absolute bottom-0 right-0 w-5 h-5 flex items-end justify-end">
+          {/* Visual resize indicator - more visible and larger */}
+          <div className="absolute bottom-0 right-0 w-6 h-6 flex items-end justify-end">
             <div className="flex flex-col gap-0.5">
               <div className="flex gap-0.5">
-                <div className="w-1 h-1 bg-[#9CA3AF] rounded-sm"></div>
-                <div className="w-1 h-1 bg-[#9CA3AF] rounded-sm"></div>
+                <div className="w-1.5 h-1.5 bg-[#9CA3AF] rounded-sm"></div>
+                <div className="w-1.5 h-1.5 bg-[#9CA3AF] rounded-sm"></div>
               </div>
               <div className="flex gap-0.5">
-                <div className="w-1 h-1 bg-[#9CA3AF] rounded-sm"></div>
-                <div className="w-1 h-1 bg-[#9CA3AF] rounded-sm"></div>
+                <div className="w-1.5 h-1.5 bg-[#9CA3AF] rounded-sm"></div>
+                <div className="w-1.5 h-1.5 bg-[#9CA3AF] rounded-sm"></div>
               </div>
             </div>
           </div>
@@ -331,5 +336,5 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
   );
 };
 
-export default DiscoverPopup;
+export default PulsePopup;
 
