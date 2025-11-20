@@ -837,7 +837,7 @@ export default function PulsePage() {
         <div className="w-full px-6 pt-4 flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="mb-1">
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 px-2 mb-1">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 px-2 mb-4">
               <div className="flex items-center gap-3">
                 <h1 className="text-xl font-bold">Trenches</h1>
                 <div className="flex items-center gap-3">
@@ -1075,7 +1075,7 @@ export default function PulsePage() {
                 />
               </div>
               {/* Desktop: All tables horizontally */}
-              <div className="hidden lg:flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+              <div className="hidden lg:flex gap-4 flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
                 <PulseTable title="New Pairs" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="first" showBubbleMetrics={false} />
                 <PulseTable title="Final Stretch" tokens={[]} loading skeletonRowCount={10} showBubbleMetrics={false} />
                 <PulseTable title="Migrated" tokens={[]} loading skeletonRowCount={10} isFirstOrLast="last" showBubbleMetrics={false} />

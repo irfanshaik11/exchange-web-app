@@ -20,6 +20,7 @@ import { FilterProvider } from '../components/FilterContext';
 import { SolPriceProvider } from '../components/SolPriceContext';
 import { WalletTrackerProvider } from '../components/WalletTrackerContext';
 import { ReferralAccessGate } from '../components/ReferralAccessGate';
+import { ThemeProvider } from '../components/ThemeContext';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
@@ -226,6 +227,32 @@ function MobileBlocker({ children }: { children: React.ReactNode }) {
 }
 
 const MyApp: AppType = ({ Component, pageProps }) => {
+  const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('bottom-center');
+
+  // Load toast position from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('toast-position');
+      if (saved && ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
+        setToastPosition(saved as any);
+      }
+    }
+  }, []);
+
+  // Listen for toast position changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handlePositionChange = (e: CustomEvent) => {
+      setToastPosition(e.detail.position);
+    };
+
+    window.addEventListener('toast-position-changed', handlePositionChange as EventListener);
+    return () => {
+      window.removeEventListener('toast-position-changed', handlePositionChange as EventListener);
+    };
+  }, []);
+
   return (
     <>
       <Head>
@@ -285,36 +312,40 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                   <TokenHandler />
                   <ReferralTracker />
                   <SolPriceProvider>
-                    <QuickBuyProvider>
-                      <WatchlistProvider>
-                        <FilterProvider>
-                          <WalletTrackerProvider>
-                            <ReferralAccessGate>
-                              <Component {...pageProps} />
-                            </ReferralAccessGate>
-                          </WalletTrackerProvider>
-                        </FilterProvider>
-                      </WatchlistProvider>
-                    </QuickBuyProvider>
-                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                    <ThemeProvider>
+                      <QuickBuyProvider>
+                        <WatchlistProvider>
+                          <FilterProvider>
+                            <WalletTrackerProvider>
+                              <ReferralAccessGate>
+                                <Component {...pageProps} />
+                              </ReferralAccessGate>
+                            </WalletTrackerProvider>
+                          </FilterProvider>
+                        </WatchlistProvider>
+                      </QuickBuyProvider>
+                      <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                    </ThemeProvider>
                   </SolPriceProvider>
                 </UserProvider>
               </RainbowKitProvider>
             </QueryClientProvider>
           </WagmiProvider>
           <Toaster 
-            position="top-right"
+            position={toastPosition}
             toastOptions={{
               duration: 4000,
               style: {
                 background: '#1E1F26',
                 color: '#E6E7EA',
                 border: '1px solid #4B5563',
-                borderRadius: '8px',
+                borderRadius: '12px',
                 fontSize: '14px',
                 fontWeight: '500',
-                maxWidth: '400px',
-                zIndex: 9999
+                maxWidth: '480px',
+                padding: '16px',
+                zIndex: 9999,
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
               },
               success: {
                 style: {

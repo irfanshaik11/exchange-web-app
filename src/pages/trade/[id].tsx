@@ -99,7 +99,26 @@ export default function TradePage() {
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
-  const [isInstantTradeOpen, setIsInstantTradeOpen] = useState(false);
+  
+  // Load instant trade open state from localStorage
+  const getInitialInstantTradeState = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const saved = localStorage.getItem('instant-trade-popup-open');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  };
+  
+  const [isInstantTradeOpen, setIsInstantTradeOpen] = useState(getInitialInstantTradeState);
+  
+  // Save instant trade open state to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('instant-trade-popup-open', String(isInstantTradeOpen));
+    }
+  }, [isInstantTradeOpen]);
 
   const modalDragRef = useRef<HTMLDivElement | null>(null);
   const dragStartY = useRef(0);
