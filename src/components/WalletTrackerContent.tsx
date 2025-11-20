@@ -11,6 +11,7 @@ import {
   getTrackedWallets,
   getWalletSolBalance,
   getWalletsLastActive,
+  addTrackedWallet,
   type WatchWallet,
   type WalletEvent,
   type TradeEvent,
@@ -83,8 +84,23 @@ export default function WalletTrackerContent() {
     watchedWallets: globalWatchedWallets,
     refreshWatchedWallets,
   } = useWalletTracker();
-  const { presets, activePreset, quickBuyAmount } = useQuickBuy();
+  const { presets, activePreset } = useQuickBuy();
 
+  // Load quickBuyAmount from localStorage with fallback
+  const getInitialQuickBuyAmount = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('quickBuyAmount');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+    }
+    return 0.05;
+  };
+
+  const [quickBuyAmount, setQuickBuyAmount] = useState(getInitialQuickBuyAmount().toString());
   const [activeTab, setActiveTab] = useState(0);
   const [showAddWalletModal, setShowAddWalletModal] = useState(false);
   const [wallets, setWallets] = useState<Wallet[]>([]);
@@ -209,6 +225,33 @@ export default function WalletTrackerContent() {
     setShowAddWalletModal(true);
   };
 
+  const handleAddWallet = async (address: string, name: string, emoji?: string) => {
+    try {
+      // Add to backend with notifications enabled by default
+      await addTrackedWallet(address, name, user?.id, emoji, true);
+      
+      // Save notification preference to localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`wallet_notifications_${address}`, JSON.stringify(true));
+      }
+
+      // Reload from backend (this will also refresh global watched wallets)
+      await loadWalletsFromBackend();
+      await refreshWatchedWallets();
+
+      setShowAddWalletModal(false);
+
+      showEnhancedToast('success', 'Wallet added!', {
+        title: 'Success',
+      });
+    } catch (error: any) {
+      const message = error?.message || "Failed to add wallet";
+      showEnhancedToast('error', message, {
+        title: 'Error',
+      });
+    }
+  };
+
   const handleExportAddresses = () => {
     const walletsData = wallets.map((w) => ({
       name: w.name || "Unnamed Wallet",
@@ -228,7 +271,7 @@ export default function WalletTrackerContent() {
     try {
       const { toggleWalletNotifications } = await import("~/utils/walletTracking");
       for (const wallet of watchedWallets) {
-        await toggleWalletNotifications(wallet.address, user.id, !allEnabled);
+        await toggleWalletNotifications(wallet.address, !allEnabled, user.id);
       }
       await refreshWatchedWallets();
     } catch (error) {
@@ -829,13 +872,15 @@ export default function WalletTrackerContent() {
           loadWalletsFromBackend();
           refreshWatchedWallets();
         }}
+        onAddWallet={handleAddWallet}
       />
       <ImportExportWalletModal
+        mode="import"
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
-        onImport={() => {
-          loadWalletsFromBackend();
-          refreshWatchedWallets();
+        onImport={async (imported, onProgress) => {
+          await loadWalletsFromBackend();
+          await refreshWatchedWallets();
         }}
       />
     </div>

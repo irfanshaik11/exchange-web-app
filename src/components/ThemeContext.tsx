@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 export type ThemePreset = 'dark' | 'light' | 'dusk' | 'astro' | 'neo' | 'crimson' | 'stealth-blue' | 'orange' | 'custom';
 

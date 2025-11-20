@@ -342,7 +342,7 @@ export default function TwitterTrackerContent() {
       <AddTwitterHandleModal
         isOpen={showAddTwitterModal}
         onClose={() => setShowAddTwitterModal(false)}
-        onAdd={handleAddTwitterAccount}
+        onAddTwitterHandle={handleAddTwitterAccount}
       />
     </div>
   );
