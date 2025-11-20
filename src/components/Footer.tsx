@@ -7,7 +7,6 @@ import {
   FaCompass, 
   FaChartLine, 
   FaChartBar,
-  FaPalette,
   FaDiscord,
   FaFileAlt,
   FaChevronDown,
@@ -19,6 +18,7 @@ import {
 import { GoServer } from 'react-icons/go';
 import { VscWindow } from 'react-icons/vsc';
 import { IoIosNotificationsOutline } from 'react-icons/io';
+import { IoColorPaletteOutline } from 'react-icons/io5';
 import QuickBuySettingsModal from './QuickBuySettingsModal';
 import PnLModal from './PnLModal';
 import WalletSwitcher from './WalletSwitcher';
@@ -26,6 +26,8 @@ import WalletTrackerPopup from './WalletTrackerPopup';
 import TwitterTrackerPopup from './TwitterTrackerPopup';
 import DiscoverPopup from './DiscoverPopup';
 import PulsePopup from './PulsePopup';
+import NotificationSettingsModal from './NotificationSettingsModal';
+import ThemeCustomizationModal from './ThemeCustomizationModal';
 import { useQuickBuy } from './QuickBuyContext';
 import { useSolPrice } from './SolPriceContext';
 import { useUser } from './UserContext';
@@ -93,7 +95,7 @@ const UtilityIconButton: React.FC<{
         <IconComponent 
           size={iconSize} 
           className={iconSize > 11 ? "sm:w-4 sm:h-4" : "sm:w-3 sm:h-3"}
-          strokeWidth={strokeWidth}
+          {...(strokeWidth !== undefined ? { strokeWidth } : {})}
         />
       </button>
       {tooltip && showTooltip && typeof window !== 'undefined' && createPortal(
@@ -184,6 +186,8 @@ export default function Footer() {
   const [showGlobalDropdown, setShowGlobalDropdown] = useState(false);
   const [showPresetModal, setShowPresetModal] = useState(false);
   const [showPnLModal, setShowPnLModal] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [showThemeCustomization, setShowThemeCustomization] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [latency, setLatency] = useState<number | null>(null);
   const [modalPosition, setModalPosition] = useState({ bottom: 0, right: 0 });
@@ -342,11 +346,23 @@ export default function Footer() {
       tooltip: headerBarVisible ? "Hide Watchlist Ticker" : "Show Watchlist Ticker", 
       onClick: () => setHeaderBarVisible(!headerBarVisible),
       isActive: headerBarVisible,
-      iconSize: 14,
+      iconSize: 16,
       strokeWidth: 0.7
     },
-    { icon: IoIosNotificationsOutline, tooltip: "Notifications", iconSize: 14, strokeWidth: 0.7 },
-    { icon: FaPalette, tooltip: "Theme" },
+    { 
+      icon: IoIosNotificationsOutline, 
+      tooltip: "Notifications", 
+      iconSize: 16, 
+      strokeWidth: 0.7,
+      onClick: () => setShowNotificationSettings(true)
+    },
+    { 
+      icon: IoColorPaletteOutline, 
+      tooltip: "Customize Theme", 
+      iconSize: 16,
+      strokeWidth: 0.7,
+      onClick: () => setShowThemeCustomization(true)
+    },
   ];
 
   const socialLinks = [
@@ -844,6 +860,18 @@ export default function Footer() {
       <PulsePopup
         isOpen={showPulseDropdown}
         onClose={() => setShowPulseDropdown(false)}
+      />
+
+      {/* Notification Settings Modal */}
+      <NotificationSettingsModal
+        isOpen={showNotificationSettings}
+        onClose={() => setShowNotificationSettings(false)}
+      />
+
+      {/* Theme Customization Modal */}
+      <ThemeCustomizationModal
+        isOpen={showThemeCustomization}
+        onClose={() => setShowThemeCustomization(false)}
       />
     </footer>
   );
