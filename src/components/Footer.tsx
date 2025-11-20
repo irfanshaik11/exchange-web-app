@@ -7,7 +7,6 @@ import {
   FaCompass, 
   FaChartLine, 
   FaChartBar,
-  FaBell,
   FaPalette,
   FaDiscord,
   FaFileAlt,
@@ -18,6 +17,8 @@ import {
   FaTimes
 } from 'react-icons/fa';
 import { GoServer } from 'react-icons/go';
+import { VscWindow } from 'react-icons/vsc';
+import { IoIosNotificationsOutline } from 'react-icons/io';
 import QuickBuySettingsModal from './QuickBuySettingsModal';
 import PnLModal from './PnLModal';
 import WalletSwitcher from './WalletSwitcher';
@@ -36,6 +37,91 @@ const XIcon = ({ size = 14 }: { size?: number }) => (
     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
   </svg>
 );
+
+// Utility Icon Button with Tooltip Component
+const UtilityIconButton: React.FC<{
+  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+  tooltip?: string;
+  onClick?: () => void;
+  isActive?: boolean;
+  iconSize?: number;
+  strokeWidth?: number;
+}> = ({ icon: IconComponent, tooltip, onClick, isActive = false, iconSize = 11, strokeWidth }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const buttonRef = React.useRef<HTMLButtonElement>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ bottom: 0, left: 0 });
+
+  const updateTooltipPosition = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setTooltipPosition({
+        bottom: window.innerHeight - rect.top + 8,
+        left: rect.left + rect.width / 2,
+      });
+    }
+  };
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        className="p-1 rounded transition-all duration-300 ease-out"
+        style={{ 
+          color: isActive ? AX.text : AX.muted,
+          backgroundColor: isActive ? `${AX.mint}10` : 'transparent',
+          cursor: 'pointer'
+        }}
+        onClick={onClick}
+        onMouseEnter={(e) => {
+          if (!isActive) {
+            e.currentTarget.style.color = AX.mint;
+            e.currentTarget.style.backgroundColor = `${AX.mint}10`;
+          }
+          if (tooltip) {
+            updateTooltipPosition();
+            setShowTooltip(true);
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isActive) {
+            e.currentTarget.style.color = AX.muted;
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }
+          setShowTooltip(false);
+        }}
+      >
+        <IconComponent 
+          size={iconSize} 
+          className={iconSize > 11 ? "sm:w-4 sm:h-4" : "sm:w-3 sm:h-3"}
+          strokeWidth={strokeWidth}
+        />
+      </button>
+      {tooltip && showTooltip && typeof window !== 'undefined' && createPortal(
+        <div
+          className="fixed px-2 py-1 rounded text-xs font-medium pointer-events-none whitespace-nowrap"
+          style={{
+            backgroundColor: AX.surface,
+            color: AX.text,
+            border: `1px solid ${AX.border}`,
+            boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+            zIndex: 99999,
+            bottom: `${tooltipPosition.bottom}px`,
+            left: `${tooltipPosition.left}px`,
+            transform: 'translateX(-50%)',
+          }}
+        >
+          {tooltip}
+          {/* Tooltip arrow pointing down */}
+          <div
+            className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent"
+            style={{ borderTopColor: AX.surface }}
+          />
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
 
 // Official Solana logo component
 export const SolanaIcon = ({ size = 16 }: { size?: number }) => (
@@ -66,8 +152,8 @@ const AX = {
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
-  text: "#E6E7EA",
-  muted: "#9CA3AF",
+  text: "#c7c9d1",
+  muted: "#c7c9d1",
   mint: "#70E0B0",
   mintHover: "#58B890",
   sell: "#FF4D7F",
@@ -103,6 +189,31 @@ export default function Footer() {
   const [modalPosition, setModalPosition] = useState({ bottom: 0, right: 0 });
   const [selectedRegion, setSelectedRegion] = useState('Europe');
   const globalButtonRef = React.useRef<HTMLButtonElement>(null);
+  
+  // Load header bar visibility state from localStorage
+  const getInitialHeaderBarVisible = (): boolean => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const saved = localStorage.getItem('header-bar-visible');
+      return saved !== 'false'; // Default to visible
+    } catch {
+      return true;
+    }
+  };
+  
+  const [headerBarVisible, setHeaderBarVisible] = useState(getInitialHeaderBarVisible);
+  
+  // Save header bar visibility to localStorage and update body class
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('header-bar-visible', String(headerBarVisible));
+      if (headerBarVisible) {
+        document.body.classList.remove('hide-header-bar');
+      } else {
+        document.body.classList.add('hide-header-bar');
+      }
+    }
+  }, [headerBarVisible]);
   const { activePreset } = useQuickBuy();
   const { solPrice } = useSolPrice(); // Use shared SOL price from context
   const { solBalance } = useUser();
@@ -226,8 +337,15 @@ export default function Footer() {
   ];
 
   const utilityIcons = [
-    { icon: FaBars, tooltip: "Layout" },
-    { icon: FaBell, tooltip: "Notifications" },
+    { 
+      icon: VscWindow, 
+      tooltip: headerBarVisible ? "Hide Watchlist Ticker" : "Show Watchlist Ticker", 
+      onClick: () => setHeaderBarVisible(!headerBarVisible),
+      isActive: headerBarVisible,
+      iconSize: 14,
+      strokeWidth: 0.7
+    },
+    { icon: IoIosNotificationsOutline, tooltip: "Notifications", iconSize: 14, strokeWidth: 0.7 },
     { icon: FaPalette, tooltip: "Theme" },
   ];
 
@@ -254,7 +372,8 @@ export default function Footer() {
             style={{
               backgroundColor: AX.mint,
               color: '#000000',
-              border: `1px solid ${AX.mint}`
+              border: `1px solid ${AX.mint}`,
+              cursor: 'pointer'
             }}
             onClick={() => setShowPresetModal(true)}
             onMouseEnter={(e) => {
@@ -304,7 +423,8 @@ export default function Footer() {
                 style={{
                   backgroundColor: showWalletDropdown ? `${AX.mint}20` : 'transparent',
                   borderColor: showWalletDropdown ? AX.mint : AX.border,
-                  color: showWalletDropdown ? AX.mint : AX.text
+                  color: showWalletDropdown ? AX.mint : AX.text,
+                  cursor: 'pointer'
                 }}
                 onMouseEnter={(e) => {
                   if (!showWalletDropdown) {
@@ -346,7 +466,8 @@ export default function Footer() {
                     className="relative flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
-                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
+                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent',
+                      cursor: 'pointer'
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
@@ -370,7 +491,8 @@ export default function Footer() {
                     className="relative flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
-                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
+                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent',
+                      cursor: 'pointer'
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
@@ -394,7 +516,8 @@ export default function Footer() {
                     className="relative flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
-                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
+                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent',
+                      cursor: 'pointer'
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
@@ -418,7 +541,8 @@ export default function Footer() {
                     className="relative flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
                     style={{
                       color: isActive ? AX.mint : AX.muted,
-                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent'
+                      backgroundColor: isActive ? `${AX.mint}20` : 'transparent',
+                      cursor: 'pointer'
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
@@ -484,7 +608,8 @@ export default function Footer() {
             className="flex items-center gap-1 sm:gap-2 px-2 py-1 rounded transition-all duration-300 ease-out group"
             style={{
               color: showPnLModal ? AX.mint : AX.muted,
-              backgroundColor: showPnLModal ? `${AX.mint}20` : 'transparent'
+              backgroundColor: showPnLModal ? `${AX.mint}20` : 'transparent',
+              cursor: 'pointer'
             }}
             onMouseEnter={(e) => {
               if (!showPnLModal) {
@@ -633,27 +758,17 @@ export default function Footer() {
 
           {/* Utility Icons */}
           <div className="flex items-center gap-1">
-            {utilityIcons.map((utility, index) => {
-              const IconComponent = utility.icon;
-              return (
-                <button
-                  key={index}
-                  className="p-1 rounded transition-all duration-300 ease-out group"
-                  style={{ color: AX.muted }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = AX.mint;
-                    e.currentTarget.style.backgroundColor = `${AX.mint}10`;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = AX.muted;
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }}
-                  title={utility.tooltip}
-                >
-                  <IconComponent size={11} className="sm:w-3 sm:h-3" />
-                </button>
-              );
-            })}
+            {utilityIcons.map((utility, index) => (
+              <UtilityIconButton
+                key={index}
+                icon={utility.icon}
+                tooltip={utility.tooltip}
+                onClick={utility.onClick}
+                isActive={utility.isActive}
+                iconSize={(utility as any).iconSize}
+                strokeWidth={(utility as any).strokeWidth}
+              />
+            ))}
           </div>
 
           <div className="w-px h-3 sm:h-4 hidden sm:block" style={{ backgroundColor: AX.border }} />
@@ -669,7 +784,7 @@ export default function Footer() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1 px-2 py-1 rounded transition-all duration-300 ease-out group"
-                  style={{ color: AX.muted }}
+                  style={{ color: AX.muted, cursor: 'pointer' }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = AX.mint;
                     e.currentTarget.style.backgroundColor = `${AX.mint}10`;
