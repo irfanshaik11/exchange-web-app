@@ -45,25 +45,162 @@ const ALLOWED = [
   'media.launchonsoar.com',
 ];
 
+// Allowed image MIME types - only image types are permitted
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'image/avif',
+  'image/bmp',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+  'image/ico',
+];
+
 function isAllowedHost(host: string) {
   return ALLOWED.some(d => host === d || host.endsWith('.' + d));
+}
+
+function isValidImageMimeType(contentType: string | null): boolean {
+  if (!contentType) return false;
+  // Remove charset and other parameters (e.g., "image/jpeg; charset=utf-8" -> "image/jpeg")
+  const baseType = contentType.split(';')[0].trim().toLowerCase();
+  return ALLOWED_IMAGE_TYPES.includes(baseType);
+}
+
+function isValidImageContent(buffer: Buffer): boolean {
+  // Minimum size check
+  if (buffer.length < 4) return false;
+
+  // Check magic bytes for various image formats
+  const bytes = buffer.slice(0, 12);
+
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return true;
+  }
+
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  ) {
+    return true;
+  }
+
+  // GIF: 47 49 46 38 (GIF8)
+  if (
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38
+  ) {
+    return true;
+  }
+
+  // WebP: RIFF...WEBP
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return true;
+  }
+
+  // AVIF: ftyp box with 'avif' brand
+  if (
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70
+  ) {
+    // Check for avif brand (typically at offset 8)
+    const ftypContent = buffer.slice(8, 20).toString('ascii');
+    if (ftypContent.includes('avif')) {
+      return true;
+    }
+  }
+
+  // BMP: 42 4D
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return true;
+  }
+
+  // ICO: 00 00 01 00 or 00 00 02 00
+  if (
+    bytes[0] === 0x00 &&
+    bytes[1] === 0x00 &&
+    bytes[2] === 0x01 &&
+    bytes[3] === 0x00
+  ) {
+    return true;
+  }
+  if (
+    bytes[0] === 0x00 &&
+    bytes[1] === 0x00 &&
+    bytes[2] === 0x02 &&
+    bytes[3] === 0x00
+  ) {
+    return true;
+  }
+
+  // SVG: Check if it starts with <svg or <?xml
+  if (buffer.length >= 100) {
+    const textStart = buffer.slice(0, 100).toString('utf-8').trim();
+    if (textStart.startsWith('<svg') || textStart.startsWith('<?xml')) {
+      // Additional validation: should contain svg tag
+      if (textStart.toLowerCase().includes('<svg')) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function setSecurityHeaders(res: NextApiResponse) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+}
+
+function sendError(res: NextApiResponse, status: number, message: string) {
+  setSecurityHeaders(res);
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.status(status).send(message);
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     const url = String(req.query.url || '');
-    if (!url) return res.status(400).send('Missing url');
+    if (!url) {
+      return sendError(res, 400, 'Missing url parameter');
+    }
     let parsed: URL;
     try {
       parsed = new URL(url);
     } catch {
-      return res.status(400).send('Invalid URL');
+      return sendError(res, 400, 'Invalid URL format');
     }
     if (parsed.protocol !== 'https:') {
-      return res.status(400).send('Only https URLs are allowed');
+      return sendError(res, 400, 'Only HTTPS URLs are allowed');
     }
     if (!isAllowedHost(parsed.hostname)) {
-      return res.status(403).send('Host not allowed');
+      return sendError(res, 403, 'Host not allowed');
     }
 
     // IPFS multi-gateway fallback if /ipfs/<cid>
@@ -115,18 +252,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!upstream) {
       console.error('[image proxy] error:', lastErr?.message || lastErr);
-      return res.status(502).send('fetch failed');
+      return sendError(res, 502, 'Failed to fetch image');
     }
 
-    // Stream response
-    const ctype = upstream.headers.get('content-type') || 'image/*';
-    res.setHeader('Content-Type', ctype);
-    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400');
+    // Get and validate content type
+    const contentType = upstream.headers.get('content-type');
+    if (!isValidImageMimeType(contentType)) {
+      console.error('[image proxy] invalid content type:', contentType);
+      return sendError(res, 415, 'Unsupported media type');
+    }
+
+    // Get response body and validate it's actually an image
     const body = Buffer.from(await upstream.arrayBuffer());
+    
+    // Validate content is actually an image using magic bytes
+    if (!isValidImageContent(body)) {
+      console.error('[image proxy] invalid image content detected');
+      return sendError(res, 415, 'Invalid image content');
+    }
+
+    // Extract base content type (remove charset parameters)
+    const baseContentType = contentType?.split(';')[0].trim() || 'image/jpeg';
+
+    // Set security headers
+    setSecurityHeaders(res);
+    
+    // Set response headers
+    res.setHeader('Content-Type', baseContentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400');
+    
+    // Send validated image content
     res.status(200).send(body);
   } catch (err: any) {
-    if (err?.name === 'AbortError') return res.status(408).send('Timeout');
+    if (err?.name === 'AbortError') {
+      return sendError(res, 408, 'Request timeout');
+    }
     console.error('[image proxy] fatal:', err?.message || err);
-    return res.status(502).send('Bad gateway');
+    return sendError(res, 502, 'Internal server error');
   }
 }
