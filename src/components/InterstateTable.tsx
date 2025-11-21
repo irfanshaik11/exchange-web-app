@@ -63,6 +63,7 @@ interface InterstateTableProps {
   selectedTimeframe: '5m' | '1h' | '6h' | '24h';
   quickBuyAmount?: number | string;
   skeletonRowCount?: number;
+  isDiscoverPage?: boolean;
 }
 
 interface HeaderConfig {
@@ -1333,7 +1334,8 @@ export default function InterstateTable({
   setSort, 
   selectedTimeframe, 
   quickBuyAmount = 0.44, 
-  skeletonRowCount = 6 
+  skeletonRowCount = 6,
+  isDiscoverPage: isDiscoverPageProp
 }: InterstateTableProps) {
   const router = useRouter();
   const { filter } = useFilter();
@@ -1410,7 +1412,7 @@ export default function InterstateTable({
     }
   }, [rows, selectedTimeframe]);
 
-  const isDiscoverPage = router.pathname === '/discover';
+  const isDiscoverPage = isDiscoverPageProp !== undefined ? isDiscoverPageProp : router.pathname === '/discover';
   
   return (
     <div className="overflow-x-auto shadow-lg" style={{ 
