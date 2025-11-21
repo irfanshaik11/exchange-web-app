@@ -28,8 +28,10 @@ import {
   FaGem,
   FaPause,
   FaPlay,
+  FaTelegram,
 } from "react-icons/fa";
-import { FaDice } from "react-icons/fa6";
+import { PiCrownSimpleLight, PiRobotLight, PiRobotThin, PiTelegramLogo } from "react-icons/pi";
+import { FaDice, FaXTwitter } from "react-icons/fa6";
 import {
   BsPersonGear,
   BsCoin,
@@ -39,8 +41,8 @@ import {
   BsArrowUp,
   BsSliders2,
 } from "react-icons/bs";
-import { LuChefHat } from "react-icons/lu";
-import { RiGhostLine, RiFlaskLine } from "react-icons/ri";
+import { LuChefHat, LuCrown } from "react-icons/lu";
+import { RiGhostLine, RiFlaskLine, RiRobot2Line } from "react-icons/ri";
 import { BiCandles, BiRefresh } from "react-icons/bi";
 import {
   HiChartBar,
@@ -63,7 +65,7 @@ import { useRouter } from "next/router";
 import { fetchTokenMetadata } from "~/utils/functions";
 import { LuPill, LuSearch } from "react-icons/lu";
 import Link from "next/link";
-import { CiSearch } from "react-icons/ci";
+import { CiSearch, CiTrophy } from "react-icons/ci";
 import FastImage from "./FastImage";
 import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 // import SolanaTokenAnalytics from "./SolanaTokenAnalytics";
@@ -89,6 +91,7 @@ import {
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
+import { FiGlobe } from "react-icons/fi";
 
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
@@ -6201,15 +6204,12 @@ function PulseTable({
                             </button>
                           </div>
                         </div>
-                        <div
-                          className="mt-1 flex items-center gap-1 text-xs lg:gap-2"
-                          style={{ color: AX.aiGreen }}
-                        >
+                        <div className="mt-1 flex items-center gap-1 text-xs lg:gap-2">
                           <span>{getAgeLabel(token)}</span>
                           {/* Socials */}
-                          <div className="relative flex items-center gap-1 lg:gap-2">
+                          <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1">
                             {/* Pump.fun Link - only show for pump tokens */}
-                            {token.mint.slice(-4) === "pump" && (
+                            {/* {token.mint.slice(-4) === "pump" && (
                               <Link
                                 target="_blank"
                                 href={`https://pump.fun/coin/${token.mint}`}
@@ -6234,60 +6234,13 @@ function PulseTable({
                                   style={{ strokeWidth: "3" }}
                                 />
                               </Link>
-                            )}
+                            )} */}
 
-                            {/* Search on Twitter Button - show for all tokens */}
-                            <button
-                              className="cursor-pointer transition-colors duration-200"
-                              style={{ color: AX.muted }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.color = AX.aiCyan;
-                                const tooltip = document.getElementById(
-                                  `search-tooltip-${idx}`,
-                                ) as HTMLElement;
-                                if (tooltip) {
-                                  const rect =
-                                    e.currentTarget.getBoundingClientRect();
-                                  tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                  tooltip.style.top = `${rect.top - 10}px`;
-                                  tooltip.style.opacity = "1";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.color = AX.muted;
-                                const tooltip = document.getElementById(
-                                  `search-tooltip-${idx}`,
-                                ) as HTMLElement;
-                                if (tooltip) tooltip.style.opacity = "0";
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault(); // Prevent Link navigation
-                                const searchQuery =
-                                  `${token.symbol} ${token.name}`.trim();
-                                const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-                                window.open(twitterUrl, "_blank");
-                              }}
-                            >
-                              <FaSearch
-                                size={10}
-                                className="lg:h-3 lg:w-3"
-                                style={{ strokeWidth: "3" }}
-                              />
-                            </button>
                             {/* X Profile Preview Button */}
                             <div className="relative">
                               <button
                                 className="flex items-center justify-center rounded transition-colors duration-200"
-                                style={{
-                                  backgroundColor: "#111214",
-                                  padding: "2px",
-                                  width: "18px",
-                                  height: "18px",
-                                  color: "#36d8ff",
-                                }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.color = "#36d8ff";
                                   const tooltip = document.getElementById(
                                     `profile-tooltip-${idx}`,
                                   ) as HTMLElement;
@@ -6310,7 +6263,6 @@ function PulseTable({
                                   });
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.color = "#36d8ff";
                                   const tooltip = document.getElementById(
                                     `profile-tooltip-${idx}`,
                                   ) as HTMLElement;
@@ -6324,9 +6276,9 @@ function PulseTable({
                                   window.open(profileUrl, "_blank");
                                 }}
                               >
-                                <IoPersonOutline
-                                  size={12}
-                                  style={{ strokeWidth: "2" }}
+                                <FaXTwitter
+                                  size={16}
+                                  className="text-neutral-400"
                                 />
                               </button>
 
@@ -6580,41 +6532,94 @@ function PulseTable({
                               )}
                             </div>
 
-                            {/* People Icon - Total Holders */}
-                            <div className="relative flex items-center gap-1">
-                              <div
-                                className="flex cursor-help items-center justify-center rounded"
-                                style={{
-                                  backgroundColor: "#111214",
-                                  padding: "2px",
-                                  width: "18px",
-                                  height: "18px",
-                                }}
-                                title="Holders"
-                              >
-                                <GoPeople
-                                  size={12}
-                                  style={{ color: "#36d8ff", strokeWidth: "3" }}
-                                />
+                            {token.links && (
+                              <button>
+                                <PiTelegramLogo size={16} />
+                              </button>
+                            )}
+
+                            {token.links && (
+                              <button>
+                                <FiGlobe size={16} />
+                              </button>
+                            )}
+
+                            {/* Search on Twitter Button - show for all tokens */}
+                            <button
+                              className="cursor-pointer transition-colors duration-200"
+                              style={{ color: AX.muted }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = AX.aiCyan;
+                                const tooltip = document.getElementById(
+                                  `search-tooltip-${idx}`,
+                                ) as HTMLElement;
+                                if (tooltip) {
+                                  const rect =
+                                    e.currentTarget.getBoundingClientRect();
+                                  tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                  tooltip.style.top = `${rect.top - 10}px`;
+                                  tooltip.style.opacity = "1";
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = AX.muted;
+                                const tooltip = document.getElementById(
+                                  `search-tooltip-${idx}`,
+                                ) as HTMLElement;
+                                if (tooltip) tooltip.style.opacity = "0";
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault(); // Prevent Link navigation
+                                const searchQuery =
+                                  `${token.symbol} ${token.name}`.trim();
+                                const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
+                                window.open(twitterUrl, "_blank");
+                              }}
+                            >
+                              <LuSearch size={16} />
+                            </button>
+
+                            <div className="flex flex-row gap-2 font-light ml-1">
+                              <div className="flex items-center gap-1 text-violet-200">
+                                <PiCrownSimpleLight size={16} />
+                                <span className="text-sm text-white">0</span>
                               </div>
-                              <span
-                                className="text-xs"
-                                style={{ color: AX.text }}
-                              >
-                                {(() => {
-                                  const holders =
-                                    token.total_holders ||
-                                    token.unique_wallets_24h ||
-                                    0;
-                                  if (holders >= 1e9)
-                                    return `${(holders / 1e9).toFixed(1)}B`;
-                                  if (holders >= 1e6)
-                                    return `${(holders / 1e6).toFixed(1)}M`;
-                                  if (holders >= 1e3)
-                                    return `${(holders / 1e3).toFixed(1)}K`;
-                                  return holders.toString();
-                                })()}
-                              </span>
+
+                              <div className="flex items-center gap-1 text-violet-200">
+                                <CiTrophy size={16} />
+                                <span className="text-sm text-white">0</span>
+                              </div>
+
+                              <div className="flex items-center gap-1 text-violet-200">
+                                <PiRobotLight  size={16} />
+                                <span className="text-sm text-white">0</span>
+                              </div>
+
+                              {/* People Icon - Total Holders */}
+                              <div className="relative flex items-center gap-1">
+                                <div
+                                  className="flex cursor-help items-center justify-center rounded text-violet-200"
+                                  title="Holders"
+                                >
+                                  <GoPeople size={16} />
+                                </div>
+                                <span className="text-sm text-white">
+                                  {(() => {
+                                    const holders =
+                                      token.total_holders ||
+                                      token.unique_wallets_24h ||
+                                      0;
+                                    if (holders >= 1e9)
+                                      return `${(holders / 1e9).toFixed(1)}B`;
+                                    if (holders >= 1e6)
+                                      return `${(holders / 1e6).toFixed(1)}M`;
+                                    if (holders >= 1e3)
+                                      return `${(holders / 1e3).toFixed(1)}K`;
+                                    return holders.toString();
+                                  })()}
+                                </span>
+                              </div>
                             </div>
 
                             {/* Pump.fun Tooltip */}
@@ -6644,7 +6649,7 @@ function PulseTable({
                       <div className="items-right justify-right flex flex-col items-end gap-1 text-right">
                         <div
                           className={
-                            "justify-right flex flex-row text-xs text-neutral-400 lg:text-xs items-center gap-2"
+                            "justify-right flex flex-row items-center gap-2 text-xs text-neutral-400 lg:text-xs"
                           }
                         >
                           <span style={{ color: AX.muted }}>
