@@ -139,7 +139,14 @@ export default function Header({
   }, []);
   const router = useRouter();
   const isDiscover = router.pathname === "/";
-  const { user, loading: userLoading, solBalance } = useUser();
+  const {
+    user,
+    loading: userLoading,
+    solBalance,
+    refreshBalance,
+    primaryWalletAddresses,
+    chainBalances,
+  } = useUser();
   const currentChain = (router.query.chain as string) || "sol";
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
@@ -167,6 +174,70 @@ export default function Header({
     isPumpToken: boolean;
   } | null>(null);
   const lastCheckedClipboard = useRef<string>("");
+
+  const chainSymbols: Record<string, string> = {
+    sol: "SOL",
+    monad: "MON",
+    eth: "ETH",
+    bnb: "BNB",
+    base: "BASE",
+  };
+  const [chainBalance, setChainBalance] = useState<number>(
+    chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0),
+  );
+  const formatBalance = (value: number, digits = 3) => {
+    if (value === 0) return "0";
+    const fixed = value.toFixed(digits);
+    return fixed.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+  };
+  const formatMultiDigitBalance = (value: number) =>
+    Math.abs(value) >= 100
+      ? value.toLocaleString(undefined, {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        })
+      : formatBalance(value);
+  const formatCurrency = (value: number) =>
+    value.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+  useEffect(() => {
+    const address =
+      currentChain === "sol"
+        ? primaryWalletAddresses.solana || user?.publicKey || null
+        : primaryWalletAddresses.ethereum || null;
+
+    if (!address) {
+      if (currentChain === "sol" && user?.publicKey) {
+        refreshBalance({ chain: "sol", address: user.publicKey }).then((res) => {
+          if (res?.balance !== undefined) {
+            setChainBalance(res.balance);
+          }
+        });
+      } else {
+        setChainBalance(0);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    refreshBalance({ chain: currentChain, address }).then((res) => {
+      if (!cancelled && res?.balance !== undefined) {
+        setChainBalance(res.balance);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentChain,
+    primaryWalletAddresses.solana,
+    primaryWalletAddresses.ethereum,
+    user?.publicKey,
+    refreshBalance,
+  ]);
 
   const processClipboardValue = useCallback(
     async (rawValue: string) => {
@@ -1025,9 +1096,9 @@ export default function Header({
                   >
                     {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                   </div>
-                  <div className="flex flex-col text-left items-left gap-0">
+                    <div className="flex flex-col text-left items-left gap-0">
                     <div className="text-sm text-white">
-                      {solBalance.toFixed(2)} SOL
+                      {formatBalance(chainBalance)} {chainSymbols[currentChain] ?? "SOL"}
                     </div> 
                     <div className="text-xs text-neutral-500">
                       {user.name ? user.name : user.publicKey.slice(0,4).concat(user.name.slice(-4))}
@@ -1072,11 +1143,11 @@ export default function Header({
 
                       {/* Total Value */}
                       <div className="mb-3">
-                        <div className="mb-1 text-xs text-neutral-400">
+                      <div className="mb-1 text-xs text-neutral-400">
                           Total Value
                         </div>
                         <div className="text-2xl font-bold text-white">
-                          ${(solBalance * 100).toFixed(2)}
+                          ${formatCurrency(chainBalance * 100)}
                         </div>
                       </div>
 
@@ -1092,7 +1163,7 @@ export default function Header({
                             className="h-4 w-4 rounded-md"
                           />
                           <span className="text-sm text-[#f0f5f5]">
-                            ≈ {solBalance.toFixed(3)}
+                            ≈ {formatBalance(chainBalance)} {chainSymbols[currentChain] ?? "SOL"}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1114,7 +1185,9 @@ export default function Header({
                             alt="SOL"
                             className="h-4 w-4 rounded-md"
                           />
-                          <span className="text-sm text-[#f0f5f5]">0</span>
+                          <span className="text-sm text-[#f0f5f5]">
+                            {formatMultiDigitBalance(chainBalance)}
+                          </span>
                         </div>
                       </div>
 

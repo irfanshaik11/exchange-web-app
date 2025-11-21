@@ -192,7 +192,7 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
       // Don't close modal - show success message and history button
       
     } catch (error: any) {
-      console.error("Withdrawal failed:", error);
+      console.warn("Withdrawal failed:", error);
       setIsLoading(false);
       const errorMessage = error.message || "❌ Withdrawal failed. Please try again.";
       setMessage({ type: "error", text: errorMessage });

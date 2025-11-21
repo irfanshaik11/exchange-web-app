@@ -55,6 +55,41 @@ interface WithdrawalTransaction {
   completedAt?: string;
 }
 
+const CHAIN_CONFIG: Record<
+  string,
+  { tokenSymbol: string; networkName: string; iconUrl?: string }
+> = {
+  sol: {
+    tokenSymbol: "SOL",
+    networkName: "Solana",
+    iconUrl:
+      "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+  },
+  monad: {
+    tokenSymbol: "MON",
+    networkName: "Monad",
+    iconUrl: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+  },
+  eth: {
+    tokenSymbol: "ETH",
+    networkName: "Ethereum",
+    iconUrl:
+      "https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png",
+  },
+  bnb: {
+    tokenSymbol: "BNB",
+    networkName: "BNB Chain",
+    iconUrl:
+      "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+  },
+  base: {
+    tokenSymbol: "BASE",
+    networkName: "Base",
+    iconUrl:
+      "https://avatars.githubusercontent.com/u/108554348?s=280&v=4",
+  },
+};
+
 const DepositModal: React.FC<DepositModalProps> = ({
   open,
   onClose,
@@ -90,6 +125,11 @@ const DepositModal: React.FC<DepositModalProps> = ({
   const MIN_WITHDRAWAL = 0.001;
   const MAX_WITHDRAWAL = 100;
   const minimumReserve = 0.00139;
+
+  const chainConfig = CHAIN_CONFIG[selectedChain] ?? CHAIN_CONFIG.sol;
+  const tokenSymbol = chainConfig.tokenSymbol;
+  const networkName = chainConfig.networkName;
+  const isSolChain = selectedChain === 'sol';
 
   // Update active tab when initialTab changes
   useEffect(() => {
@@ -284,7 +324,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
     if (activeTab === 'withdraw' && open) {
       fetchWithdrawalFee();
     }
-  }, [activeTab, open]);
+  }, [activeTab, open, selectedChain]);
 
   // Reset withdraw form when modal closes or tab changes
   useEffect(() => {
@@ -306,11 +346,15 @@ const DepositModal: React.FC<DepositModalProps> = ({
 
   const fetchWithdrawalFee = async () => {
     try {
-      const feeData = await getWithdrawalFee();
-      const fee = typeof feeData === 'number' ? feeData : (feeData as any).fee || 0.0005;
+      const feeData = await getWithdrawalFee(selectedChain);
+      const fee =
+        typeof feeData === "number"
+          ? feeData
+          : (feeData as any)?.fee ?? withdrawalFee;
       setWithdrawalFee(fee);
     } catch (error) {
-      console.error('Failed to fetch withdrawal fee:', error);
+      console.error("Failed to fetch withdrawal fee:", error);
+      // quietly keep prior fallback without surfacing an error toast
     }
   };
 
@@ -442,18 +486,18 @@ const DepositModal: React.FC<DepositModalProps> = ({
     }
 
     if (amount < MIN_WITHDRAWAL) {
-      setWithdrawMessage({ type: "error", text: `Minimum withdrawal is ${MIN_WITHDRAWAL} SOL.` });
+      setWithdrawMessage({ type: "error", text: `Minimum withdrawal is ${MIN_WITHDRAWAL} ${tokenSymbol}.` });
       return;
     }
 
     if (amount > MAX_WITHDRAWAL) {
-      setWithdrawMessage({ type: "error", text: `Maximum withdrawal is ${MAX_WITHDRAWAL} SOL per transaction.` });
+      setWithdrawMessage({ type: "error", text: `Maximum withdrawal is ${MAX_WITHDRAWAL} ${tokenSymbol} per transaction.` });
       return;
     }
 
     const totalRequired = amount + withdrawalFee;
     if (totalRequired > solBalance) {
-      setWithdrawMessage({ type: "error", text: `Insufficient balance. You need ${totalRequired.toFixed(4)} SOL (including ${withdrawalFee.toFixed(4)} SOL fee).` });
+      setWithdrawMessage({ type: "error", text: `Insufficient balance. You need ${totalRequired.toFixed(4)} ${tokenSymbol} (including ${withdrawalFee.toFixed(4)} ${tokenSymbol} fee).` });
       return;
     }
 
@@ -462,15 +506,33 @@ const DepositModal: React.FC<DepositModalProps> = ({
       return;
     }
 
-    // Basic Solana address validation
-    if (destinationAddress.length < 32 || destinationAddress.length > 44) {
-      setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
-      return;
+    if (isSolChain) {
+      if (destinationAddress.length < 32 || destinationAddress.length > 44) {
+        setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
+        return;
+      }
+      const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
+      if (!base58Regex.test(destinationAddress)) {
+        setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
+        return;
+      }
+    } else {
+      const evmRegex = /^0x[a-fA-F0-9]{40}$/;
+      if (!evmRegex.test(destinationAddress)) {
+        setWithdrawMessage({ type: "error", text: "Invalid EVM address format (expected 0x...)."});
+        return;
+      }
     }
 
-    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
-    if (!base58Regex.test(destinationAddress)) {
-      setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
+    const sourceAddress =
+      selectedChain === "sol"
+        ? primaryWalletAddresses.solana
+        : primaryWalletAddresses.ethereum;
+    if (!sourceAddress) {
+      setWithdrawMessage({
+        type: "error",
+        text: `Primary ${tokenSymbol} wallet not found. Please set a primary wallet.`,
+      });
       return;
     }
 
@@ -481,13 +543,15 @@ const DepositModal: React.FC<DepositModalProps> = ({
     try {
       const result = await withdrawSOL({
         amount,
-        destinationAddress
+        destinationAddress,
+        sourceAddress,
+        chain: selectedChain,
       }, user.bearerToken);
       
       if (result && result.txSignature) {
         setWithdrawMessage({ 
           type: "success", 
-          text: `Withdrawal successful! ${amount} SOL sent to ${destinationAddress.slice(0, 6)}...${destinationAddress.slice(-4)}`
+          text: `Withdrawal successful! ${amount} ${tokenSymbol} sent to ${destinationAddress.slice(0, 6)}...${destinationAddress.slice(-4)}`
         });
         setTxSignature(result.txSignature || null);
         setWithdrawAmount("");
@@ -522,7 +586,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
         });
       }
     } catch (error: any) {
-      console.error("Withdrawal error:", error);
+      console.warn("Withdrawal error:", error);
       const errorMessage = error?.message || "An error occurred during withdrawal.";
       setWithdrawMessage({ type: "error", text: errorMessage });
       
@@ -542,7 +606,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
   // Function to show MoonPay widget
   const showMoonPay = async () => {
     if (!depositAddress) {
-      toast.error("Add a primary wallet before buying SOL.", {
+      toast.error(`Add a primary wallet before buying ${tokenSymbol}.`, {
         duration: 2000,
         style: {
           background: '#1E1F26',
@@ -691,9 +755,10 @@ const DepositModal: React.FC<DepositModalProps> = ({
           {/* Subtitle */}
           <div className="px-6 pb-3 text-neutral-400 text-sm">
             {activeTab === 'convert' && 'Convert your crypto to SOL'}
-            {activeTab === 'deposit' && 'Deposit SOL to your Narrative wallet'}
-            {activeTab === 'buy' && 'Buy SOL with fiat currency'}
-            {activeTab === 'withdraw' && 'Withdraw SOL to an external wallet'}
+            {activeTab === 'deposit' &&
+              `Deposit ${tokenSymbol} to your Narrative wallet`}
+            {activeTab === 'buy' && `Buy ${tokenSymbol} with fiat currency`}
+            {activeTab === 'withdraw' && `Withdraw ${tokenSymbol} to an external wallet`}
           </div>
 
           {/* Content */}
@@ -773,15 +838,21 @@ const DepositModal: React.FC<DepositModalProps> = ({
                     </div>
                     <div className="text-right">
                       <div className="flex items-center gap-2 text-2xl font-bold text-white">
-                        <img
-                          src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                          alt="SOL"
-                          className="w-5 h-5 rounded-full"
-                        />
+                        {chainConfig.iconUrl ? (
+                          <img
+                            src={chainConfig.iconUrl}
+                            alt={chainConfig.tokenSymbol}
+                            className="w-5 h-5 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full bg-neutral-600 flex items-center justify-center text-[10px]">
+                            {chainConfig.tokenSymbol.slice(0, 2)}
+                          </div>
+                        )}
                         {solBalance.toFixed(4)}
                       </div>
                       <div className="text-xs text-neutral-400 mt-1">
-                        SOL Balance
+                        {chainConfig.tokenSymbol} Balance
                       </div>
                     </div>
                   </div>
@@ -823,8 +894,8 @@ const DepositModal: React.FC<DepositModalProps> = ({
                     </div>
                     <div className="text-sm leading-relaxed" style={{ color: "#fbbf24" }}>
                       <span className="font-semibold">Caution: </span>
-                      This address only supports SOL deposits via the Solana network. Please do not use other networks to avoid any loss of funds.
-                    </div>
+                      This address only supports {chainConfig.tokenSymbol} deposits via the {chainConfig.networkName} network. Please do not use other networks to avoid any loss of funds.
+                  </div>
                   </div>
 
                   {/* Copy Button */}
@@ -852,7 +923,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                 <div className="rounded-3xl border p-6" style={{ backgroundColor: "#0a0b0f", borderColor: "#2A2B33" }}>
                   <div className="mb-6">
                     <div className="flex items-center gap-3 mb-3">
-                      <h3 className="text-lg font-semibold text-white">Buy SOL with Card</h3>
+                      <h3 className="text-lg font-semibold text-white">Buy {tokenSymbol} with Card</h3>
                       <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ backgroundColor: "#7D00FF" }}>
                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="white">
                           <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
@@ -861,7 +932,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       </div>
                     </div>
                     <p className="text-sm text-neutral-400">
-                      Purchase SOL using your credit or debit card through MoonPay
+                      Purchase {tokenSymbol} using your credit or debit card through MoonPay
                     </p>
                   </div>
 
@@ -885,7 +956,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="white">
                               <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
                             </svg>
-                            <span>Buy SOL with MoonPay</span>
+                            <span>Buy {tokenSymbol} with MoonPay</span>
                           </>
                         ) : (
                           'Loading MoonPay...'
@@ -901,13 +972,13 @@ const DepositModal: React.FC<DepositModalProps> = ({
                         </div>
                         <div className="text-sm leading-relaxed" style={{ color: "#60a5fa" }}>
                           <span className="font-semibold">Note: </span>
-                          You will be redirected to MoonPay to complete your purchase. SOL will be sent directly to your Narrative wallet address.
+                          You will be redirected to MoonPay to complete your purchase. {tokenSymbol} will be sent directly to your Narrative wallet address.
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div className="rounded-3xl border border-yellow-500/30 bg-yellow-900/20 p-6 text-center">
-                      <div className="text-sm text-yellow-400">Please login first to buy SOL</div>
+                      <div className="text-sm text-yellow-400">Please login first to buy {tokenSymbol}</div>
                     </div>
                   )}
                 </div>
@@ -938,12 +1009,18 @@ const DepositModal: React.FC<DepositModalProps> = ({
                         <div>
                           <div className="text-xs text-neutral-400 mb-1">Available Balance</div>
                           <div className="text-2xl font-bold text-white flex items-center gap-2">
-                            <img
-                              src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                              alt="SOL"
-                              className="w-5 h-5 rounded-full"
-                            />
-                            {solBalance.toFixed(4)} SOL
+                            {chainConfig.iconUrl ? (
+                              <img
+                                src={chainConfig.iconUrl}
+                                alt={tokenSymbol}
+                                className="w-5 h-5 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-neutral-600 flex items-center justify-center text-[10px]">
+                                {tokenSymbol.slice(0, 2)}
+                              </div>
+                            )}
+                            {solBalance.toFixed(4)} {tokenSymbol}
                           </div>
                         </div>
                         <button
@@ -966,7 +1043,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       {/* Amount Input */}
                       <div>
                         <label className="block text-sm font-medium text-neutral-300 mb-2">
-                          Amount (SOL)
+                          Amount ({tokenSymbol})
                         </label>
                         <div className="relative">
                           <input
@@ -994,7 +1071,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                           </button>
                         </div>
                         <div className="mt-1 text-xs text-neutral-400">
-                          Fee: {withdrawalFee.toFixed(4)} SOL • Min: {MIN_WITHDRAWAL} SOL • Max: {MAX_WITHDRAWAL} SOL
+                          Fee: {withdrawalFee.toFixed(4)} {tokenSymbol} • Min: {MIN_WITHDRAWAL} {tokenSymbol} • Max: {MAX_WITHDRAWAL} {tokenSymbol}
                         </div>
                       </div>
 
@@ -1007,7 +1084,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                           type="text"
                           value={destinationAddress}
                           onChange={(e) => setDestinationAddress(e.target.value)}
-                          placeholder="Enter Solana wallet address"
+                          placeholder={`Enter ${networkName} wallet address`}
                           className="w-full px-4 py-3 rounded-xl text-white placeholder-neutral-500 focus:outline-none focus:ring-2 font-mono text-sm"
                           style={{
                             backgroundColor: "#0a0b0f",
@@ -1022,16 +1099,16 @@ const DepositModal: React.FC<DepositModalProps> = ({
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                               <span className="text-neutral-400">Amount</span>
-                              <span className="text-white">{Number(withdrawAmount).toFixed(4)} SOL</span>
+                              <span className="text-white">{Number(withdrawAmount).toFixed(4)} {tokenSymbol}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-neutral-400">Network Fee</span>
-                              <span className="text-white">{withdrawalFee.toFixed(4)} SOL</span>
+                              <span className="text-white">{withdrawalFee.toFixed(4)} {tokenSymbol}</span>
                             </div>
                             <div className="border-t pt-2" style={{ borderColor: "#2A2B33" }}>
                               <div className="flex justify-between font-semibold">
                                 <span className="text-neutral-300">Total Deducted</span>
-                                <span className="text-white">{(Number(withdrawAmount) + withdrawalFee).toFixed(4)} SOL</span>
+                                <span className="text-white">{(Number(withdrawAmount) + withdrawalFee).toFixed(4)} {tokenSymbol}</span>
                               </div>
                             </div>
                           </div>
@@ -1080,7 +1157,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                         className="w-full py-4 rounded-3xl font-semibold text-base transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{ backgroundColor: "#E8E9EB", color: "#000000" }}
                       >
-                        {isWithdrawLoading ? 'Processing...' : 'Withdraw SOL'}
+                        {isWithdrawLoading ? 'Processing...' : `Withdraw ${tokenSymbol}`}
                       </button>
 
                       {/* Warning */}
@@ -1140,7 +1217,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                                   {tx.status === 'pending' && <FaClock className="text-yellow-400" size={16} />}
                                   {tx.status === 'failed' && <FaExclamationCircle className="text-orange-400" size={16} />}
                                   <span className="text-white font-semibold">
-                                    {typeof tx.amount === 'string' ? parseFloat(tx.amount).toFixed(4) : tx.amount.toFixed(4)} SOL
+                                    {typeof tx.amount === 'string' ? parseFloat(tx.amount).toFixed(4) : tx.amount.toFixed(4)} {tokenSymbol}
                                   </span>
                                 </div>
                                 <span className={`text-xs px-2 py-1 rounded-full ${

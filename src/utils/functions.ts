@@ -1,5 +1,6 @@
 import { env } from '../env';
 import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
+import { ethers } from 'ethers';
 
 export interface PositionRow {
   tokenAddress: string;
@@ -228,6 +229,23 @@ export async function getSolBalance(address: string, isDevnet = false) {
     return sol;
   } catch (error) {
     console.error('Failed to fetch balance:', error);
+    return null;
+  }
+}
+
+export async function getMonadBalance(address: string) {
+  const rpcUrl = env.NEXT_PUBLIC_MONAD_RPC_URL || env.MONAD_RPC_URL;
+  if (!rpcUrl) {
+    console.warn('Monad RPC URL not configured');
+    return null;
+  }
+  try {
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const weiBalance = await provider.getBalance(address);
+    const mon = Number(weiBalance) / 1e18;
+    return mon;
+  } catch (error) {
+    console.error('Failed to fetch Monad balance:', error);
     return null;
   }
 }

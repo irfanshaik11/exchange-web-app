@@ -134,7 +134,7 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance } = useUser();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || "sol";
   const [walletChecked, setWalletChecked] = useState(false);
@@ -162,6 +162,7 @@ export default function PortfolioPage() {
   const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
   const [walletRenameValue, setWalletRenameValue] = useState("");
   const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
 
   const notifyWalletsUpdated = () => {
     if (typeof window !== "undefined") {
@@ -791,6 +792,51 @@ export default function PortfolioPage() {
       setLoadingWallets(false);
     }
   }, [user?.id, user?.bearerToken]);
+
+  useEffect(() => {
+    if (!user || wallets.length === 0) {
+      setWalletBalances({});
+      return;
+    }
+
+    const isSolChain = currentChain === "sol";
+    let cancelled = false;
+    const loadBalances = async () => {
+      try {
+        const balances = await Promise.all(
+          wallets.map(async (wallet) => {
+            const address =
+              isSolChain
+                ? wallet.solanaAddress || wallet.address
+                : wallet.ethereumAddress || null;
+            if (!address) {
+              return [wallet.id, isSolChain ? wallet.balance : 0] as const;
+            }
+            const result = await refreshBalance({
+              chain: currentChain,
+              address,
+            });
+            const fallback = isSolChain ? wallet.balance : 0;
+            return [wallet.id, result?.balance ?? fallback] as const;
+          }),
+        );
+        if (!cancelled) {
+          setWalletBalances(Object.fromEntries(balances));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch wallet balances:", error);
+        }
+      }
+    };
+
+    loadBalances();
+    const interval = setInterval(loadBalances, 12000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user?.id, wallets, refreshBalance, currentChain]);
 
   useEffect(() => {
     fetchWallets();
@@ -1912,7 +1958,9 @@ export default function PortfolioPage() {
                                   }}
                                 />
                                 <span className="text-xs text-white">
-                                  {formatSmartNumber(wallet.balance)}
+                                  {formatSmartNumber(
+                                    walletBalances[wallet.id] ?? wallet.balance,
+                                  )}
                                 </span>
                               </div>
 
