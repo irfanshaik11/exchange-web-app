@@ -29,8 +29,18 @@ import {
   FaPause,
   FaPlay,
   FaTelegram,
+  FaRegUser,
 } from "react-icons/fa";
-import { PiCrownSimpleLight, PiRobotLight, PiRobotThin, PiTelegramLogo } from "react-icons/pi";
+import { GiSeatedMouse } from "react-icons/gi";
+import {
+  PiCrownSimpleLight,
+  PiFishSimpleLight,
+  PiLeafLight,
+  PiRobotLight,
+  PiRobotThin,
+  PiTarget,
+  PiTelegramLogo,
+} from "react-icons/pi";
 import { FaDice, FaXTwitter } from "react-icons/fa6";
 import {
   BsPersonGear,
@@ -50,7 +60,7 @@ import {
   HiLightningBolt,
   HiSparkles,
 } from "react-icons/hi";
-import { GoPeople } from "react-icons/go";
+import { GoPeople, GoStack } from "react-icons/go";
 import { IoPersonOutline } from "react-icons/io5";
 import { MdTrendingUp, MdEmojiEvents, MdDynamicFeed } from "react-icons/md";
 import { SiSolana } from "react-icons/si";
@@ -92,6 +102,7 @@ import {
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { FiGlobe } from "react-icons/fi";
+import BottomCardInfoHolder from "./BottomCardInfoHolder";
 
 /* ---- Enhanced Axiom AI Palette ---- */
 const AX = {
@@ -5868,7 +5879,7 @@ function PulseTable({
                 <Link
                   href={`/trade/${pairAddress}?${queryParams}`}
                   key={pairAddress}
-                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 transition-all duration-300 ease-out"
+                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-6 transition-all duration-300 ease-out py-2"
                   style={{
                     borderColor: AX.border,
                     backgroundColor: "transparent",
@@ -5939,277 +5950,290 @@ function PulseTable({
                     }
                   }}
                 >
-                  {/* Subtle wave animation for top 3 final stretch tokens */}
-                  {waveTokens.has(idx) && (
-                    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
+                  <div className="flex w-full flex-col gap-2">
+                    <div className="flex w-full flex-row gap-2">
+                      {/* Subtle wave animation for top 3 final stretch tokens */}
+                      {waveTokens.has(idx) && (
+                        <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
+                          <div
+                            className="absolute top-0 left-0 h-full w-full"
+                            style={{
+                              background:
+                                "linear-gradient(90deg, transparent, rgba(49, 227, 172, 0.2), rgba(49, 227, 172, 0.4), rgba(49, 227, 172, 0.2), transparent)",
+                              animation:
+                                "subtleWaveFlow 3s ease-in-out infinite",
+                              filter: "blur(0.5px)",
+                            }}
+                          ></div>
+                        </div>
+                      )}
+
+                      {/* Status popout on hover */}
+                      {(() => {
+                        // Determine token status based on title and token data
+                        const isNewPairs = title.toLowerCase().includes("new");
+                        const isFinalStretch =
+                          title.toLowerCase().includes("final") ||
+                          title.toLowerCase().includes("stretch");
+                        const isMigrated = title
+                          .toLowerCase()
+                          .includes("migrated");
+
+                        // Get launchpad protocol
+                        const launchpadProtocol =
+                          (token as any).launchpad_protocol?.toLowerCase() ||
+                          "";
+
+                        return (
+                          <span
+                            className={`status-popup fixed hidden border px-2 py-1 text-xs shadow-none`}
+                            style={{
+                              pointerEvents: "none",
+                              backgroundColor: AX.surface,
+                              borderColor: AX.border,
+                              color: AX.text,
+                              zIndex: 99999,
+                              left: "50%",
+                              top: "100px",
+                              transform: "translateX(-50%)",
+                              borderRadius: "6px",
+                              fontSize: "11px",
+                              fontWeight: "500",
+                            }}
+                          >
+                            {(() => {
+                              if (isNewPairs) {
+                                // Show bonding curve progress for tokens in new pairs
+                                // bonding_pct is already in 0-100 range from backend (percentages)
+                                const bondingProgress =
+                                  typeof token.bonding_pct === "number"
+                                    ? Math.round(token.bonding_pct)
+                                    : Math.round(
+                                        parseFloat(token.bonding_pct || "0"),
+                                      );
+
+                                return (
+                                  <span style={{ color: AX.aiGreen }}>
+                                    Bonding Curve: {bondingProgress}%
+                                  </span>
+                                );
+                              } else if (isFinalStretch) {
+                                // Show "Migrating" for final stretch tokens
+                                return (
+                                  <span style={{ color: AX.aiCyan }}>
+                                    Migrating
+                                  </span>
+                                );
+                              } else if (isMigrated) {
+                                // Show protocol-specific text for migrated tokens
+                                if (launchpadProtocol.includes("meteora")) {
+                                  return (
+                                    <span style={{ color: AX.aiBlue }}>
+                                      Virtual Curve
+                                    </span>
+                                  );
+                                } else if (launchpadProtocol.includes("pump")) {
+                                  return (
+                                    <span style={{ color: AX.aiBlue }}>
+                                      PumpV1
+                                    </span>
+                                  );
+                                } else if (
+                                  launchpadProtocol.includes("bonk") ||
+                                  launchpadProtocol.includes("raydium") ||
+                                  launchpadProtocol.includes("launchlab")
+                                ) {
+                                  return (
+                                    <span style={{ color: AX.aiBlue }}>
+                                      LaunchLab
+                                    </span>
+                                  );
+                                } else {
+                                  // Fallback to "Migrated" for unknown protocols
+                                  return (
+                                    <span style={{ color: AX.aiBlue }}>
+                                      Migrated
+                                    </span>
+                                  );
+                                }
+                              } else {
+                                // Fallback to bonding curve progress
+                                const bondingProgress =
+                                  typeof token.bonding_curve_progress ===
+                                  "number"
+                                    ? Math.round(token.bonding_curve_progress)
+                                    : Math.round(
+                                        parseFloat(
+                                          token.bonding_curve_progress || "0",
+                                        ),
+                                      );
+                                return (
+                                  <span style={{ color: AX.aiGreen }}>
+                                    Bonding: {bondingProgress}%
+                                  </span>
+                                );
+                              }
+                            })()}
+                          </span>
+                        );
+                      })()}
+                      {/* Profile Picture & Address */}
                       <div
-                        className="absolute top-0 left-0 h-full w-full"
+                        className="relative flex flex-shrink-0 flex-col items-center pt-1"
                         style={{
-                          background:
-                            "linear-gradient(90deg, transparent, rgba(49, 227, 172, 0.2), rgba(49, 227, 172, 0.4), rgba(49, 227, 172, 0.2), transparent)",
-                          animation: "subtleWaveFlow 3s ease-in-out infinite",
-                          filter: "blur(0.5px)",
-                        }}
-                      ></div>
-                    </div>
-                  )}
-
-                  {/* Status popout on hover */}
-                  {(() => {
-                    // Determine token status based on title and token data
-                    const isNewPairs = title.toLowerCase().includes("new");
-                    const isFinalStretch =
-                      title.toLowerCase().includes("final") ||
-                      title.toLowerCase().includes("stretch");
-                    const isMigrated = title.toLowerCase().includes("migrated");
-
-                    // Get launchpad protocol
-                    const launchpadProtocol =
-                      (token as any).launchpad_protocol?.toLowerCase() || "";
-
-                    return (
-                      <span
-                        className={`status-popup fixed hidden border px-2 py-1 text-xs shadow-none`}
-                        style={{
-                          pointerEvents: "none",
-                          backgroundColor: AX.surface,
-                          borderColor: AX.border,
-                          color: AX.text,
-                          zIndex: 99999,
-                          left: "50%",
-                          top: "100px",
-                          transform: "translateX(-50%)",
-                          borderRadius: "6px",
-                          fontSize: "11px",
-                          fontWeight: "500",
+                          width: "81px",
+                          minWidth: "81px",
+                          maxWidth: "81px",
                         }}
                       >
-                        {(() => {
-                          if (isNewPairs) {
-                            // Show bonding curve progress for tokens in new pairs
-                            // bonding_pct is already in 0-100 range from backend (percentages)
-                            const bondingProgress =
-                              typeof token.bonding_pct === "number"
-                                ? Math.round(token.bonding_pct)
-                                : Math.round(
-                                    parseFloat(token.bonding_pct || "0"),
-                                  );
-
-                            return (
-                              <span style={{ color: AX.aiGreen }}>
-                                Bonding Curve: {bondingProgress}%
-                              </span>
-                            );
-                          } else if (isFinalStretch) {
-                            // Show "Migrating" for final stretch tokens
-                            return (
-                              <span style={{ color: AX.aiCyan }}>
-                                Migrating
-                              </span>
-                            );
-                          } else if (isMigrated) {
-                            // Show protocol-specific text for migrated tokens
-                            if (launchpadProtocol.includes("meteora")) {
-                              return (
-                                <span style={{ color: AX.aiBlue }}>
-                                  Virtual Curve
-                                </span>
-                              );
-                            } else if (launchpadProtocol.includes("pump")) {
-                              return (
-                                <span style={{ color: AX.aiBlue }}>PumpV1</span>
-                              );
-                            } else if (
-                              launchpadProtocol.includes("bonk") ||
-                              launchpadProtocol.includes("raydium") ||
-                              launchpadProtocol.includes("launchlab")
-                            ) {
-                              return (
-                                <span style={{ color: AX.aiBlue }}>
-                                  LaunchLab
-                                </span>
-                              );
-                            } else {
-                              // Fallback to "Migrated" for unknown protocols
-                              return (
-                                <span style={{ color: AX.aiBlue }}>
-                                  Migrated
-                                </span>
-                              );
-                            }
-                          } else {
-                            // Fallback to bonding curve progress
-                            const bondingProgress =
-                              typeof token.bonding_curve_progress === "number"
-                                ? Math.round(token.bonding_curve_progress)
-                                : Math.round(
-                                    parseFloat(
-                                      token.bonding_curve_progress || "0",
-                                    ),
-                                  );
-                            return (
-                              <span style={{ color: AX.aiGreen }}>
-                                Bonding: {bondingProgress}%
-                              </span>
-                            );
+                        <TokenImage
+                          token={token}
+                          priority={title === "New Pairs"}
+                          isNewPairs={title === "New Pairs"}
+                          columnType={
+                            title.toLowerCase().includes("migrated")
+                              ? "migrated"
+                              : title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                ? "final-stretch"
+                                : "new"
                           }
-                        })()}
-                      </span>
-                    );
-                  })()}
-                  {/* Profile Picture & Address */}
-                  <div
-                    className="relative flex flex-shrink-0 flex-col items-center pt-1"
-                    style={{
-                      width: "81px",
-                      minWidth: "81px",
-                      maxWidth: "81px",
-                    }}
-                  >
-                    <TokenImage
-                      token={token}
-                      priority={title === "New Pairs"}
-                      isNewPairs={title === "New Pairs"}
-                      columnType={
-                        title.toLowerCase().includes("migrated")
-                          ? "migrated"
-                          : title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch")
-                            ? "final-stretch"
-                            : "new"
-                      }
-                    />
-                    {/* Token Metrics */}
-                    {/* <div className="absolute bottom-16 -right-49">
+                        />
+                        {/* Token Metrics */}
+                        {/* <div className="absolute bottom-16 -right-49">
                     <TokenMetrics 
                       token={token} 
                       rank={idx + 1} 
                       totalTokens={memoizedTokens.length} 
                     />
                   </div> */}
-                    <span
+                        {/* <span
                       className="mt-2 mb-1 max-w-[60px] truncate font-mono text-[9px] lg:max-w-[70px] lg:text-[10px]"
                       style={{ color: AX.muted }}
                     >
                       {shortAddr(token)}
-                    </span>
-                  </div>
-                  {/* Main Info Section */}
-                  <div className="flex w-full min-w-0 flex-col gap-1">
-                    {/* Top Row */}
-                    <div className="flex flex-row justify-between gap-2">
-                      {/* Left: Token Info & Socials */}
-                      <div className="flex min-w-0 flex-col">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span
-                            className="flex-shrink-0 text-sm font-semibold lg:text-base"
-                            style={{ color: AX.text }}
-                          >
-                            {token.symbol}
-                          </span>
-                          <span
-                            className="truncate text-xs lg:text-sm"
-                            style={{ color: AX.muted }}
-                          >
-                            {token.name}
-                          </span>
-                          <div className="relative ml-1">
-                            <button
-                              className="transition-colors duration-200"
-                              style={{ color: AX.muted }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.color = AX.aiBlue;
-                                e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
-                                const tooltip = document.getElementById(
-                                  `copy-tooltip-${idx}`,
-                                ) as HTMLElement;
-                                if (tooltip) {
-                                  const rect =
-                                    e.currentTarget.getBoundingClientRect();
-                                  tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                  tooltip.style.top = `${rect.top - 10}px`;
-                                  tooltip.style.opacity = "1";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.color = AX.muted;
-                                e.currentTarget.style.boxShadow = "none";
-                                const tooltip = document.getElementById(
-                                  `copy-tooltip-${idx}`,
-                                ) as HTMLElement;
-                                if (tooltip) tooltip.style.opacity = "0";
-                              }}
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                try {
-                                  await navigator.clipboard.writeText(
-                                    token.mint,
-                                  );
-                                  showCenteredSuccessToast(
-                                    "Copied to clipboard",
-                                  );
-                                  // Show success feedback
-                                  const button =
-                                    e.currentTarget as HTMLButtonElement;
-                                  if (button && button.style) {
-                                    const originalColor =
-                                      button.style.color || AX.muted;
-                                    button.style.color = AX.aiGreen;
-                                    setTimeout(() => {
-                                      if (button && button.style) {
-                                        button.style.color = originalColor;
-                                      }
-                                    }, 1000);
-                                  }
-                                } catch (err) {
-                                  console.error(
-                                    "Failed to copy to clipboard:",
-                                    err,
-                                  );
-                                  // Fallback for older browsers
-                                  const textArea =
-                                    document.createElement("textarea");
-                                  textArea.value = token.mint;
-                                  document.body.appendChild(textArea);
-                                  textArea.select();
-                                  try {
-                                    document.execCommand("copy");
-                                    showCenteredSuccessToast(
-                                      "Copied to clipboard",
-                                    );
-                                    const button =
-                                      e.currentTarget as HTMLButtonElement;
-                                    if (button && button.style) {
-                                      const originalColor =
-                                        button.style.color || AX.muted;
-                                      button.style.color = AX.aiGreen;
-                                      setTimeout(() => {
-                                        if (button && button.style) {
-                                          button.style.color = originalColor;
-                                        }
-                                      }, 1000);
+                    </span> */}
+                      </div>
+                      {/* Main Info Section */}
+                      <div className="flex w-full min-w-0 flex-col gap-1">
+                        {/* Top Row */}
+                        <div className="flex flex-row justify-between gap-2">
+                          {/* Left: Token Info & Socials */}
+                          <div className="flex min-w-0 flex-col">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span
+                                className="flex-shrink-0 text-sm font-semibold lg:text-base"
+                                style={{ color: AX.text }}
+                              >
+                                {token.symbol}
+                              </span>
+                              <span
+                                className="truncate text-xs lg:text-sm"
+                                style={{ color: AX.muted }}
+                              >
+                                {token.name}
+                              </span>
+                              <div className="relative ml-1">
+                                <button
+                                  className="transition-colors duration-200"
+                                  style={{ color: AX.muted }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.color = AX.aiBlue;
+                                    e.currentTarget.style.boxShadow = `0 0 6px ${AX.glowBlue}`;
+                                    const tooltip = document.getElementById(
+                                      `copy-tooltip-${idx}`,
+                                    ) as HTMLElement;
+                                    if (tooltip) {
+                                      const rect =
+                                        e.currentTarget.getBoundingClientRect();
+                                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                      tooltip.style.top = `${rect.top - 10}px`;
+                                      tooltip.style.opacity = "1";
                                     }
-                                  } catch (fallbackErr) {
-                                    console.error(
-                                      "Fallback copy failed:",
-                                      fallbackErr,
-                                    );
-                                  }
-                                  document.body.removeChild(textArea);
-                                }
-                              }}
-                            >
-                              <FaRegCopy size={10} className="lg:h-3 lg:w-3" />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="mt-1 flex items-center gap-1 text-xs lg:gap-2">
-                          <span>{getAgeLabel(token)}</span>
-                          {/* Socials */}
-                          <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1">
-                            {/* Pump.fun Link - only show for pump tokens */}
-                            {/* {token.mint.slice(-4) === "pump" && (
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.color = AX.muted;
+                                    e.currentTarget.style.boxShadow = "none";
+                                    const tooltip = document.getElementById(
+                                      `copy-tooltip-${idx}`,
+                                    ) as HTMLElement;
+                                    if (tooltip) tooltip.style.opacity = "0";
+                                  }}
+                                  onClick={async (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    try {
+                                      await navigator.clipboard.writeText(
+                                        token.mint,
+                                      );
+                                      showCenteredSuccessToast(
+                                        "Copied to clipboard",
+                                      );
+                                      // Show success feedback
+                                      const button =
+                                        e.currentTarget as HTMLButtonElement;
+                                      if (button && button.style) {
+                                        const originalColor =
+                                          button.style.color || AX.muted;
+                                        button.style.color = AX.aiGreen;
+                                        setTimeout(() => {
+                                          if (button && button.style) {
+                                            button.style.color = originalColor;
+                                          }
+                                        }, 1000);
+                                      }
+                                    } catch (err) {
+                                      console.error(
+                                        "Failed to copy to clipboard:",
+                                        err,
+                                      );
+                                      // Fallback for older browsers
+                                      const textArea =
+                                        document.createElement("textarea");
+                                      textArea.value = token.mint;
+                                      document.body.appendChild(textArea);
+                                      textArea.select();
+                                      try {
+                                        document.execCommand("copy");
+                                        showCenteredSuccessToast(
+                                          "Copied to clipboard",
+                                        );
+                                        const button =
+                                          e.currentTarget as HTMLButtonElement;
+                                        if (button && button.style) {
+                                          const originalColor =
+                                            button.style.color || AX.muted;
+                                          button.style.color = AX.aiGreen;
+                                          setTimeout(() => {
+                                            if (button && button.style) {
+                                              button.style.color =
+                                                originalColor;
+                                            }
+                                          }, 1000);
+                                        }
+                                      } catch (fallbackErr) {
+                                        console.error(
+                                          "Fallback copy failed:",
+                                          fallbackErr,
+                                        );
+                                      }
+                                      document.body.removeChild(textArea);
+                                    }
+                                  }}
+                                >
+                                  <FaRegCopy
+                                    size={10}
+                                    className="lg:h-3 lg:w-3"
+                                  />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="mt-1 flex items-center gap-1 text-xs lg:gap-2">
+                              <span>{getAgeLabel(token)}</span>
+                              {/* Socials */}
+                              <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1">
+                                {/* Pump.fun Link - only show for pump tokens */}
+                                {/* {token.mint.slice(-4) === "pump" && (
                               <Link
                                 target="_blank"
                                 href={`https://pump.fun/coin/${token.mint}`}
@@ -6236,446 +6260,472 @@ function PulseTable({
                               </Link>
                             )} */}
 
-                            {/* X Profile Preview Button */}
-                            <div className="relative">
-                              <button
-                                className="flex items-center justify-center rounded transition-colors duration-200"
-                                onMouseEnter={(e) => {
-                                  const tooltip = document.getElementById(
-                                    `profile-tooltip-${idx}`,
-                                  ) as HTMLElement;
-                                  if (tooltip) {
-                                    const rect =
-                                      e.currentTarget.getBoundingClientRect();
-                                    tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                    tooltip.style.top = `${rect.top - 10}px`;
-                                    tooltip.style.opacity = "1";
-                                  }
-                                  // Show X profile preview
-                                  setShowXPreview(idx);
-                                  // Store button position for popup positioning
-                                  const buttonRect =
-                                    e.currentTarget.getBoundingClientRect();
-                                  setButtonPosition({
-                                    left:
-                                      buttonRect.left + buttonRect.width / 2,
-                                    top: buttonRect.top - 20,
-                                  });
-                                }}
-                                onMouseLeave={(e) => {
-                                  const tooltip = document.getElementById(
-                                    `profile-tooltip-${idx}`,
-                                  ) as HTMLElement;
-                                  if (tooltip) tooltip.style.opacity = "0";
-                                }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  e.preventDefault(); // Prevent Link navigation
-                                  // Open X profile in new tab
-                                  const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                                  window.open(profileUrl, "_blank");
-                                }}
-                              >
-                                <FaXTwitter
-                                  size={16}
-                                  className="text-neutral-400"
-                                />
-                              </button>
-
-                              {/* Small X Profile Preview - positioned near token */}
-                              {showXPreview === idx && buttonPosition && (
-                                <div
-                                  className="fixed"
-                                  style={{
-                                    left: `${buttonPosition.left}px`,
-                                    top: `${buttonPosition.top - 300}px`,
-                                    transform: "translate(-50%, 0)",
-                                    width: "280px",
-                                    zIndex: 999999,
-                                  }}
-                                  onMouseEnter={() => {
-                                    // Keep popup open when hovering over it
-                                  }}
-                                  onMouseLeave={() => {
-                                    // Hide popup when leaving the popup area
-                                    setShowXPreview(null);
-                                  }}
-                                >
-                                  <div
-                                    className="overflow-hidden rounded-xl"
-                                    style={{
-                                      backgroundColor: AX.surface,
-                                      border: `1px solid ${AX.border}`,
-                                      boxShadow: `0 12px 48px rgba(0, 0, 0, 0.5), 0 0 24px ${AX.glowBlue}`,
-                                      backdropFilter: "blur(10px)",
+                                {/* X Profile Preview Button */}
+                                <div className="relative">
+                                  <button
+                                    className="flex items-center justify-center rounded transition-colors duration-200"
+                                    onMouseEnter={(e) => {
+                                      const tooltip = document.getElementById(
+                                        `profile-tooltip-${idx}`,
+                                      ) as HTMLElement;
+                                      if (tooltip) {
+                                        const rect =
+                                          e.currentTarget.getBoundingClientRect();
+                                        tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                        tooltip.style.top = `${rect.top - 10}px`;
+                                        tooltip.style.opacity = "1";
+                                      }
+                                      // Show X profile preview
+                                      setShowXPreview(idx);
+                                      // Store button position for popup positioning
+                                      const buttonRect =
+                                        e.currentTarget.getBoundingClientRect();
+                                      setButtonPosition({
+                                        left:
+                                          buttonRect.left +
+                                          buttonRect.width / 2,
+                                        top: buttonRect.top - 20,
+                                      });
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      const tooltip = document.getElementById(
+                                        `profile-tooltip-${idx}`,
+                                      ) as HTMLElement;
+                                      if (tooltip) tooltip.style.opacity = "0";
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      e.preventDefault(); // Prevent Link navigation
+                                      // Open X profile in new tab
+                                      const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                                      window.open(profileUrl, "_blank");
                                     }}
                                   >
-                                    {/* X Icon Header */}
+                                    <FaXTwitter
+                                      size={16}
+                                      className="text-neutral-400"
+                                    />
+                                  </button>
+
+                                  {/* Small X Profile Preview - positioned near token */}
+                                  {showXPreview === idx && buttonPosition && (
                                     <div
-                                      className="flex items-center justify-between border-b px-4 py-3"
-                                      style={{ borderColor: "#2f3336" }}
+                                      className="fixed"
+                                      style={{
+                                        left: `${buttonPosition.left}px`,
+                                        top: `${buttonPosition.top - 300}px`,
+                                        transform: "translate(-50%, 0)",
+                                        width: "280px",
+                                        zIndex: 999999,
+                                      }}
+                                      onMouseEnter={() => {
+                                        // Keep popup open when hovering over it
+                                      }}
+                                      onMouseLeave={() => {
+                                        // Hide popup when leaving the popup area
+                                        setShowXPreview(null);
+                                      }}
                                     >
-                                      <div className="flex items-center gap-3">
+                                      <div
+                                        className="overflow-hidden rounded-xl"
+                                        style={{
+                                          backgroundColor: AX.surface,
+                                          border: `1px solid ${AX.border}`,
+                                          boxShadow: `0 12px 48px rgba(0, 0, 0, 0.5), 0 0 24px ${AX.glowBlue}`,
+                                          backdropFilter: "blur(10px)",
+                                        }}
+                                      >
+                                        {/* X Icon Header */}
                                         <div
-                                          className="flex h-7 w-7 items-center justify-center rounded-full"
-                                          style={{ backgroundColor: "#1d9bf0" }}
+                                          className="flex items-center justify-between border-b px-4 py-3"
+                                          style={{ borderColor: "#2f3336" }}
                                         >
-                                          <svg
-                                            width="16"
-                                            height="16"
-                                            viewBox="0 0 24 24"
-                                            fill="currentColor"
-                                            style={{ color: "#f0f5f5" }}
-                                          >
-                                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                                          </svg>
-                                        </div>
-                                        <div>
-                                          <div
-                                            className="text-sm font-bold"
-                                            style={{ color: "#f0f5f5" }}
-                                          >
-                                            X Profile
+                                          <div className="flex items-center gap-3">
+                                            <div
+                                              className="flex h-7 w-7 items-center justify-center rounded-full"
+                                              style={{
+                                                backgroundColor: "#1d9bf0",
+                                              }}
+                                            >
+                                              <svg
+                                                width="16"
+                                                height="16"
+                                                viewBox="0 0 24 24"
+                                                fill="currentColor"
+                                                style={{ color: "#f0f5f5" }}
+                                              >
+                                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                                              </svg>
+                                            </div>
+                                            <div>
+                                              <div
+                                                className="text-sm font-bold"
+                                                style={{ color: "#f0f5f5" }}
+                                              >
+                                                X Profile
+                                              </div>
+                                              <div className="text-xs text-gray-400">
+                                                Live Preview
+                                              </div>
+                                            </div>
                                           </div>
-                                          <div className="text-xs text-gray-400">
-                                            Live Preview
+                                          <div className="flex items-center gap-1">
+                                            <div
+                                              className="h-2 w-2 rounded-full"
+                                              style={{
+                                                backgroundColor: "#31e3ac",
+                                              }}
+                                            ></div>
+                                            <span className="text-xs text-gray-400">
+                                              Live
+                                            </span>
                                           </div>
                                         </div>
-                                      </div>
-                                      <div className="flex items-center gap-1">
-                                        <div
-                                          className="h-2 w-2 rounded-full"
-                                          style={{ backgroundColor: "#31e3ac" }}
-                                        ></div>
-                                        <span className="text-xs text-gray-400">
-                                          Live
-                                        </span>
-                                      </div>
-                                    </div>
 
-                                    {/* Official X Profile Layout */}
-                                    <div className="px-4 py-4">
-                                      {/* Profile Picture */}
-                                      <div className="mb-4 flex justify-center">
-                                        <div
-                                          className="h-20 w-20 overflow-hidden rounded-full"
-                                          style={{
-                                            backgroundColor: "#1a1a1a",
-                                            border: `3px solid #2f3336`,
-                                          }}
-                                        >
-                                          <img
-                                            src={`https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=80&background=1a1a1a&color=ffffff&bold=true`}
-                                            alt={`${token.symbol} profile`}
-                                            className="h-full w-full object-cover"
-                                            onError={(e) => {
-                                              const target =
-                                                e.target as HTMLImageElement;
-                                              target.style.display = "none";
-                                              const fallback =
-                                                target.nextElementSibling as HTMLElement;
-                                              if (fallback)
-                                                fallback.style.display = "flex";
-                                            }}
-                                          />
-                                          <div
-                                            className="flex h-full w-full items-center justify-center text-xl font-bold"
-                                            style={{
-                                              backgroundColor: "#1a1a1a",
-                                              color: "#f0f5f5",
-                                              display: "none",
-                                            }}
-                                          >
-                                            {token.symbol?.slice(0, 2) || "??"}
+                                        {/* Official X Profile Layout */}
+                                        <div className="px-4 py-4">
+                                          {/* Profile Picture */}
+                                          <div className="mb-4 flex justify-center">
+                                            <div
+                                              className="h-20 w-20 overflow-hidden rounded-full"
+                                              style={{
+                                                backgroundColor: "#1a1a1a",
+                                                border: `3px solid #2f3336`,
+                                              }}
+                                            >
+                                              <img
+                                                src={`https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=80&background=1a1a1a&color=ffffff&bold=true`}
+                                                alt={`${token.symbol} profile`}
+                                                className="h-full w-full object-cover"
+                                                onError={(e) => {
+                                                  const target =
+                                                    e.target as HTMLImageElement;
+                                                  target.style.display = "none";
+                                                  const fallback =
+                                                    target.nextElementSibling as HTMLElement;
+                                                  if (fallback)
+                                                    fallback.style.display =
+                                                      "flex";
+                                                }}
+                                              />
+                                              <div
+                                                className="flex h-full w-full items-center justify-center text-xl font-bold"
+                                                style={{
+                                                  backgroundColor: "#1a1a1a",
+                                                  color: "#f0f5f5",
+                                                  display: "none",
+                                                }}
+                                              >
+                                                {token.symbol?.slice(0, 2) ||
+                                                  "??"}
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Profile Info */}
+                                          <div className="mb-4 text-center">
+                                            <div className="mb-1 flex items-center justify-center gap-2">
+                                              <h3
+                                                className="text-xl font-bold"
+                                                style={{ color: "#f0f5f5" }}
+                                              >
+                                                {token.symbol || "Unknown"}
+                                              </h3>
+                                              {/* Verified Badge */}
+                                              <div
+                                                className="flex h-6 w-6 items-center justify-center rounded-full"
+                                                style={{
+                                                  backgroundColor: "#1d9bf0",
+                                                }}
+                                              >
+                                                <svg
+                                                  width="14"
+                                                  height="14"
+                                                  viewBox="0 0 24 24"
+                                                  fill="none"
+                                                  stroke="#f0f5f5"
+                                                  strokeWidth="2"
+                                                  strokeLinecap="round"
+                                                  strokeLinejoin="round"
+                                                >
+                                                  <path d="M9 12l2 2 4-4" />
+                                                  <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                                                </svg>
+                                              </div>
+                                            </div>
+                                            <p className="mb-3 text-sm text-gray-400">
+                                              @
+                                              {token.symbol?.toLowerCase() ||
+                                                "unknown"}
+                                            </p>
+                                            <p
+                                              className="px-2 text-sm leading-relaxed"
+                                              style={{ color: "#f0f5f5" }}
+                                            >
+                                              {token.description ||
+                                                `Official ${token.symbol || "token"} community. Join the conversation!`}
+                                            </p>
+                                          </div>
+
+                                          {/* Follow Button */}
+                                          <div className="mb-4 flex justify-center">
+                                            <button
+                                              className="rounded-full px-6 py-2 text-sm font-semibold transition-all duration-200"
+                                              style={{
+                                                backgroundColor: "#f0f5f5",
+                                                color: "#000000",
+                                              }}
+                                              onMouseEnter={(e) => {
+                                                e.currentTarget.style.backgroundColor =
+                                                  "#e7e9ea";
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                e.currentTarget.style.backgroundColor =
+                                                  "#f0f5f5";
+                                              }}
+                                            >
+                                              Follow
+                                            </button>
                                           </div>
                                         </div>
-                                      </div>
 
-                                      {/* Profile Info */}
-                                      <div className="mb-4 text-center">
-                                        <div className="mb-1 flex items-center justify-center gap-2">
-                                          <h3
-                                            className="text-xl font-bold"
-                                            style={{ color: "#f0f5f5" }}
-                                          >
-                                            {token.symbol || "Unknown"}
-                                          </h3>
-                                          {/* Verified Badge */}
-                                          <div
-                                            className="flex h-6 w-6 items-center justify-center rounded-full"
-                                            style={{
-                                              backgroundColor: "#1d9bf0",
-                                            }}
-                                          >
+                                        {/* Join Date Section */}
+                                        <div className="px-4 pb-3">
+                                          <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
                                             <svg
                                               width="14"
                                               height="14"
                                               viewBox="0 0 24 24"
                                               fill="none"
-                                              stroke="#f0f5f5"
+                                              stroke="currentColor"
                                               strokeWidth="2"
                                               strokeLinecap="round"
                                               strokeLinejoin="round"
                                             >
-                                              <path d="M9 12l2 2 4-4" />
-                                              <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                                              <rect
+                                                x="3"
+                                                y="4"
+                                                width="18"
+                                                height="18"
+                                                rx="2"
+                                                ry="2"
+                                              />
+                                              <line
+                                                x1="16"
+                                                y1="2"
+                                                x2="16"
+                                                y2="6"
+                                              />
+                                              <line
+                                                x1="8"
+                                                y1="2"
+                                                x2="8"
+                                                y2="6"
+                                              />
+                                              <line
+                                                x1="3"
+                                                y1="10"
+                                                x2="21"
+                                                y2="10"
+                                              />
                                             </svg>
+                                            <span>
+                                              Joined{" "}
+                                              {new Date().toLocaleDateString(
+                                                "en-US",
+                                                {
+                                                  month: "short",
+                                                  year: "numeric",
+                                                },
+                                              )}
+                                            </span>
                                           </div>
                                         </div>
-                                        <p className="mb-3 text-sm text-gray-400">
-                                          @
-                                          {token.symbol?.toLowerCase() ||
-                                            "unknown"}
-                                        </p>
-                                        <p
-                                          className="px-2 text-sm leading-relaxed"
-                                          style={{ color: "#f0f5f5" }}
-                                        >
-                                          {token.description ||
-                                            `Official ${token.symbol || "token"} community. Join the conversation!`}
-                                        </p>
+                                        {/* Action Button */}
+                                        <div className="px-4 pb-4">
+                                          <button
+                                            className="w-full rounded-full px-4 py-3 text-sm font-semibold transition-all duration-200"
+                                            style={{
+                                              backgroundColor: "#1d9bf0",
+                                              color: "#ffffff",
+                                              border: "1px solid #1d9bf0",
+                                            }}
+                                            onMouseEnter={(e) => {
+                                              e.currentTarget.style.backgroundColor =
+                                                "#1a8cd8";
+                                              e.currentTarget.style.borderColor =
+                                                "#1a8cd8";
+                                            }}
+                                            onMouseLeave={(e) => {
+                                              e.currentTarget.style.backgroundColor =
+                                                "#1d9bf0";
+                                              e.currentTarget.style.borderColor =
+                                                "#1d9bf0";
+                                            }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                                              window.open(profileUrl, "_blank");
+                                            }}
+                                          >
+                                            See profile on X
+                                          </button>
+                                        </div>
                                       </div>
+                                    </div>
+                                  )}
+                                </div>
 
-                                      {/* Follow Button */}
-                                      <div className="mb-4 flex justify-center">
-                                        <button
-                                          className="rounded-full px-6 py-2 text-sm font-semibold transition-all duration-200"
-                                          style={{
-                                            backgroundColor: "#f0f5f5",
-                                            color: "#000000",
-                                          }}
-                                          onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor =
-                                              "#e7e9ea";
-                                          }}
-                                          onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor =
-                                              "#f0f5f5";
-                                          }}
-                                        >
-                                          Follow
-                                        </button>
-                                      </div>
-                                    </div>
+                                {token.links && (
+                                  <button>
+                                    <PiTelegramLogo size={16} />
+                                  </button>
+                                )}
 
-                                    {/* Join Date Section */}
-                                    <div className="px-4 pb-3">
-                                      <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
-                                        <svg
-                                          width="14"
-                                          height="14"
-                                          viewBox="0 0 24 24"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeWidth="2"
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                        >
-                                          <rect
-                                            x="3"
-                                            y="4"
-                                            width="18"
-                                            height="18"
-                                            rx="2"
-                                            ry="2"
-                                          />
-                                          <line x1="16" y1="2" x2="16" y2="6" />
-                                          <line x1="8" y1="2" x2="8" y2="6" />
-                                          <line
-                                            x1="3"
-                                            y1="10"
-                                            x2="21"
-                                            y2="10"
-                                          />
-                                        </svg>
-                                        <span>
-                                          Joined{" "}
-                                          {new Date().toLocaleDateString(
-                                            "en-US",
-                                            { month: "short", year: "numeric" },
-                                          )}
-                                        </span>
-                                      </div>
+                                {token.links && (
+                                  <button>
+                                    <FiGlobe size={16} />
+                                  </button>
+                                )}
+
+                                {/* Search on Twitter Button - show for all tokens */}
+                                <button
+                                  className="cursor-pointer transition-colors duration-200"
+                                  style={{ color: AX.muted }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.color = AX.aiCyan;
+                                    const tooltip = document.getElementById(
+                                      `search-tooltip-${idx}`,
+                                    ) as HTMLElement;
+                                    if (tooltip) {
+                                      const rect =
+                                        e.currentTarget.getBoundingClientRect();
+                                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                                      tooltip.style.top = `${rect.top - 10}px`;
+                                      tooltip.style.opacity = "1";
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.color = AX.muted;
+                                    const tooltip = document.getElementById(
+                                      `search-tooltip-${idx}`,
+                                    ) as HTMLElement;
+                                    if (tooltip) tooltip.style.opacity = "0";
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault(); // Prevent Link navigation
+                                    const searchQuery =
+                                      `${token.symbol} ${token.name}`.trim();
+                                    const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
+                                    window.open(twitterUrl, "_blank");
+                                  }}
+                                >
+                                  <LuSearch size={16} />
+                                </button>
+
+                                <div className="ml-1 flex flex-row gap-2 font-light">
+                                  <div className="flex items-center gap-1 text-violet-200">
+                                    <PiCrownSimpleLight size={16} />
+                                    <span className="text-sm text-white">
+                                      0
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 text-violet-200">
+                                    <CiTrophy size={16} />
+                                    <span className="text-sm text-white">
+                                      0
+                                    </span>
+                                  </div>
+
+                                  {/* People Icon - Total Holders */}
+                                  <div className="relative flex items-center gap-1">
+                                    <div
+                                      className="flex cursor-help items-center justify-center rounded text-violet-200"
+                                      title="Holders"
+                                    >
+                                      <GoPeople size={16} />
                                     </div>
-                                    {/* Action Button */}
-                                    <div className="px-4 pb-4">
-                                      <button
-                                        className="w-full rounded-full px-4 py-3 text-sm font-semibold transition-all duration-200"
-                                        style={{
-                                          backgroundColor: "#1d9bf0",
-                                          color: "#ffffff",
-                                          border: "1px solid #1d9bf0",
-                                        }}
-                                        onMouseEnter={(e) => {
-                                          e.currentTarget.style.backgroundColor =
-                                            "#1a8cd8";
-                                          e.currentTarget.style.borderColor =
-                                            "#1a8cd8";
-                                        }}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.style.backgroundColor =
-                                            "#1d9bf0";
-                                          e.currentTarget.style.borderColor =
-                                            "#1d9bf0";
-                                        }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
-                                          window.open(profileUrl, "_blank");
-                                        }}
-                                      >
-                                        See profile on X
-                                      </button>
-                                    </div>
+                                    <span className="text-sm text-white">
+                                      {(() => {
+                                        const holders =
+                                          token.total_holders ||
+                                          token.unique_wallets_24h ||
+                                          0;
+                                        if (holders >= 1e9)
+                                          return `${(holders / 1e9).toFixed(1)}B`;
+                                        if (holders >= 1e6)
+                                          return `${(holders / 1e6).toFixed(1)}M`;
+                                        if (holders >= 1e3)
+                                          return `${(holders / 1e3).toFixed(1)}K`;
+                                        return holders.toString();
+                                      })()}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1 text-violet-200">
+                                    <PiRobotLight size={16} />
+                                    <span className="text-sm text-white">
+                                      0
+                                    </span>
                                   </div>
                                 </div>
-                              )}
-                            </div>
 
-                            {token.links && (
-                              <button>
-                                <PiTelegramLogo size={16} />
-                              </button>
-                            )}
-
-                            {token.links && (
-                              <button>
-                                <FiGlobe size={16} />
-                              </button>
-                            )}
-
-                            {/* Search on Twitter Button - show for all tokens */}
-                            <button
-                              className="cursor-pointer transition-colors duration-200"
-                              style={{ color: AX.muted }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.color = AX.aiCyan;
-                                const tooltip = document.getElementById(
-                                  `search-tooltip-${idx}`,
-                                ) as HTMLElement;
-                                if (tooltip) {
-                                  const rect =
-                                    e.currentTarget.getBoundingClientRect();
-                                  tooltip.style.left = `${rect.left + rect.width / 2}px`;
-                                  tooltip.style.top = `${rect.top - 10}px`;
-                                  tooltip.style.opacity = "1";
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.color = AX.muted;
-                                const tooltip = document.getElementById(
-                                  `search-tooltip-${idx}`,
-                                ) as HTMLElement;
-                                if (tooltip) tooltip.style.opacity = "0";
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault(); // Prevent Link navigation
-                                const searchQuery =
-                                  `${token.symbol} ${token.name}`.trim();
-                                const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
-                                window.open(twitterUrl, "_blank");
-                              }}
-                            >
-                              <LuSearch size={16} />
-                            </button>
-
-                            <div className="flex flex-row gap-2 font-light ml-1">
-                              <div className="flex items-center gap-1 text-violet-200">
-                                <PiCrownSimpleLight size={16} />
-                                <span className="text-sm text-white">0</span>
-                              </div>
-
-                              <div className="flex items-center gap-1 text-violet-200">
-                                <CiTrophy size={16} />
-                                <span className="text-sm text-white">0</span>
-                              </div>
-
-                              <div className="flex items-center gap-1 text-violet-200">
-                                <PiRobotLight  size={16} />
-                                <span className="text-sm text-white">0</span>
-                              </div>
-
-                              {/* People Icon - Total Holders */}
-                              <div className="relative flex items-center gap-1">
-                                <div
-                                  className="flex cursor-help items-center justify-center rounded text-violet-200"
-                                  title="Holders"
-                                >
-                                  <GoPeople size={16} />
-                                </div>
-                                <span className="text-sm text-white">
-                                  {(() => {
-                                    const holders =
-                                      token.total_holders ||
-                                      token.unique_wallets_24h ||
-                                      0;
-                                    if (holders >= 1e9)
-                                      return `${(holders / 1e9).toFixed(1)}B`;
-                                    if (holders >= 1e6)
-                                      return `${(holders / 1e6).toFixed(1)}M`;
-                                    if (holders >= 1e3)
-                                      return `${(holders / 1e3).toFixed(1)}K`;
-                                    return holders.toString();
-                                  })()}
-                                </span>
+                                {/* Pump.fun Tooltip */}
+                                {token.mint.slice(-4) === "pump" && (
+                                  <div
+                                    className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                                    style={{
+                                      zIndex: 99999,
+                                      backgroundColor: AX.surface,
+                                      color: AX.text,
+                                      border: `1px solid ${AX.border}`,
+                                      boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+                                    }}
+                                  >
+                                    View on Pump.fun
+                                    {/* Tooltip arrow */}
+                                    <div
+                                      className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                                      style={{ borderTopColor: AX.surface }}
+                                    ></div>
+                                  </div>
+                                )}
                               </div>
                             </div>
-
-                            {/* Pump.fun Tooltip */}
-                            {token.mint.slice(-4) === "pump" && (
-                              <div
-                                className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
-                                style={{
-                                  zIndex: 99999,
-                                  backgroundColor: AX.surface,
-                                  color: AX.text,
-                                  border: `1px solid ${AX.border}`,
-                                  boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
-                                }}
-                              >
-                                View on Pump.fun
-                                {/* Tooltip arrow */}
-                                <div
-                                  className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
-                                  style={{ borderTopColor: AX.surface }}
-                                ></div>
-                              </div>
-                            )}
                           </div>
-                        </div>
-                      </div>
-                      {/* Right: MC, V, F, TX */}
-                      <div className="items-right justify-right flex flex-col items-end gap-1 text-right">
-                        <div
-                          className={
-                            "justify-right flex flex-row items-center gap-2 text-xs text-neutral-400 lg:text-xs"
-                          }
-                        >
-                          <span style={{ color: AX.muted }}>
-                            MC:{" "}
-                            {(() => {
-                              const isFinalStretchColumn =
-                                title.toLowerCase().includes("final") ||
-                                title.toLowerCase().includes("stretch");
-                              const lp = (
-                                (token as any).launchpad_protocol || ""
-                              ).toLowerCase();
-                              const bonding = (token as any).bonding_pct ?? 0;
-                              const hasGreenWave =
-                                isFinalStretchColumn &&
-                                lp.includes("meteora") &&
-                                bonding > 98.6;
-                              const mcVal =
-                                (token as any).fully_diluted_value ??
-                                (token as any).market_cap_usd ??
-                                0;
-                              return (
-                                <span className="number-font text-xs text-white">
-                                  {formatMarketCap(mcVal)}
-                                </span>
-                              );
-                              /*  if (hasGreenWave) {
+                          {/* Right: MC, V, F, TX */}
+                          <div className="items-right justify-right flex flex-col items-end gap-1 text-right">
+                            <div
+                              className={
+                                "justify-right flex flex-row items-center gap-2 text-xs text-neutral-400 lg:text-xs"
+                              }
+                            >
+                              <span style={{ color: AX.muted }}>
+                                MC:{" "}
+                                {(() => {
+                                  const isFinalStretchColumn =
+                                    title.toLowerCase().includes("final") ||
+                                    title.toLowerCase().includes("stretch");
+                                  const lp = (
+                                    (token as any).launchpad_protocol || ""
+                                  ).toLowerCase();
+                                  const bonding =
+                                    (token as any).bonding_pct ?? 0;
+                                  const hasGreenWave =
+                                    isFinalStretchColumn &&
+                                    lp.includes("meteora") &&
+                                    bonding > 98.6;
+                                  const mcVal =
+                                    (token as any).fully_diluted_value ??
+                                    (token as any).market_cap_usd ??
+                                    0;
+                                  return (
+                                    <span className="number-font text-xs text-white">
+                                      {formatMarketCap(mcVal)}
+                                    </span>
+                                  );
+                                  /*  if (hasGreenWave) {
                                return (
                                  <span className="text-sm lg:text-base font-medium number-font text-white">
                                    <SmoothNumber value={mcVal} formatter={(val) => `$${formatMarketCap(val)}`} duration={300} />
@@ -6687,73 +6737,75 @@ function PulseTable({
                                  <SmoothNumber value={mcVal} formatter={(val) => `$${formatMarketCap(val)}`} duration={300} />
                                </SmartColor>
                              ); */
-                            })()}
-                          </span>
-                          <span style={{ color: AX.muted }}>
-                            <span className="text-xs">V:</span>{" "}
-                            <span
-                              className="number-font text-xs"
-                              style={{
-                                color: "#ffffff",
-                              }}
-                            >
-                              <SmoothNumber
-                                value={(token as any).volume_24h || 0}
-                                formatter={(val) => {
-                                  const rounded = Math.round(val);
-                                  if (rounded >= 1e12)
-                                    return `$${Math.round(rounded / 1e12)}T`;
-                                  if (rounded >= 1e9)
-                                    return `$${Math.round(rounded / 1e9)}B`;
-                                  if (rounded >= 1e6)
-                                    return `$${Math.round(rounded / 1e6)}M`;
-                                  if (rounded >= 1e3)
-                                    return `$${Math.round(rounded / 1e3)}K`;
-                                  return `$${rounded}`;
-                                }}
-                                duration={300}
-                              />
-                            </span>
-                          </span>
-                          <div className="flex items-center gap-2 text-xs">
-                            <div
-                              className="flex flex-row items-center gap-1"
-                              style={{ color: AX.muted }}
-                            >
-                              <span className="text-xs">Tx:</span>{" "}
-                              <span
-                                className="text-xs"
-                                style={{
-                                  color: "#ffffff",
-                                }}
-                              >
-                                <SmoothNumber
-                                  value={(() => {
-                                    const buys = token.total_buys_24h ?? 0;
-                                    const sells = token.total_sells_24h ?? 0;
-                                    const total = buys + sells;
-                                    // Debug logging
-                                    if (
-                                      token.symbol === "HEAVEN" ||
-                                      total < 20
-                                    ) {
-                                      console.log(
-                                        `[PulseTable TX] ${token.symbol}:`,
-                                        {
-                                          total_buys_24h: token.total_buys_24h,
-                                          total_sells_24h:
-                                            token.total_sells_24h,
-                                          calculated: total,
-                                          mint: token.mint,
-                                        },
-                                      );
-                                    }
-                                    return total;
-                                  })()}
-                                  duration={0}
-                                />
+                                })()}
                               </span>
-                              {/* <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
+                              <span style={{ color: AX.muted }}>
+                                <span className="text-xs">V:</span>{" "}
+                                <span
+                                  className="number-font text-xs"
+                                  style={{
+                                    color: "#ffffff",
+                                  }}
+                                >
+                                  <SmoothNumber
+                                    value={(token as any).volume_24h || 0}
+                                    formatter={(val) => {
+                                      const rounded = Math.round(val);
+                                      if (rounded >= 1e12)
+                                        return `$${Math.round(rounded / 1e12)}T`;
+                                      if (rounded >= 1e9)
+                                        return `$${Math.round(rounded / 1e9)}B`;
+                                      if (rounded >= 1e6)
+                                        return `$${Math.round(rounded / 1e6)}M`;
+                                      if (rounded >= 1e3)
+                                        return `$${Math.round(rounded / 1e3)}K`;
+                                      return `$${rounded}`;
+                                    }}
+                                    duration={300}
+                                  />
+                                </span>
+                              </span>
+                              <div className="flex items-center gap-2 text-xs">
+                                <div
+                                  className="flex flex-row items-center gap-1"
+                                  style={{ color: AX.muted }}
+                                >
+                                  <span className="text-xs">Tx:</span>{" "}
+                                  <span
+                                    className="text-xs"
+                                    style={{
+                                      color: "#ffffff",
+                                    }}
+                                  >
+                                    <SmoothNumber
+                                      value={(() => {
+                                        const buys = token.total_buys_24h ?? 0;
+                                        const sells =
+                                          token.total_sells_24h ?? 0;
+                                        const total = buys + sells;
+                                        // Debug logging
+                                        if (
+                                          token.symbol === "HEAVEN" ||
+                                          total < 20
+                                        ) {
+                                          console.log(
+                                            `[PulseTable TX] ${token.symbol}:`,
+                                            {
+                                              total_buys_24h:
+                                                token.total_buys_24h,
+                                              total_sells_24h:
+                                                token.total_sells_24h,
+                                              calculated: total,
+                                              mint: token.mint,
+                                            },
+                                          );
+                                        }
+                                        return total;
+                                      })()}
+                                      duration={0}
+                                    />
+                                  </span>
+                                  {/* <div className="ml-1 flex h-0.5 w-8 overflow-hidden rounded-full bg-gray-700">
                               <div
                                 className="h-full"
                                 style={{
@@ -6781,238 +6833,251 @@ function PulseTable({
                                 }}
                               ></div>
                             </div> */}
+                                </div>
+                              </div>
                             </div>
+
+                            <button
+                              className="z-50 flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
+                              style={{
+                                backgroundColor:
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                    ? "#101114"
+                                    : AX.aiGreen,
+                                color:
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                    ? AX.aiGreen
+                                    : "#000000",
+                                border:
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch")
+                                    ? `1px solid ${AX.aiGreen}`
+                                    : "1px solid rgba(0,0,0,0.15)",
+                              }}
+                              onMouseEnter={(e) => {
+                                const isFinal =
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch");
+                                e.currentTarget.style.backgroundColor = isFinal
+                                  ? "#101114"
+                                  : AX.aiGreenHover;
+                                e.currentTarget.style.transform =
+                                  "translateY(-1px)";
+                                e.currentTarget.style.boxShadow = isFinal
+                                  ? `0 0 10px ${AX.glowGreen}`
+                                  : "0 4px 14px rgba(112, 224, 176, 0.25)";
+                              }}
+                              onMouseLeave={(e) => {
+                                const isFinal =
+                                  title.toLowerCase().includes("final") ||
+                                  title.toLowerCase().includes("stretch");
+                                e.currentTarget.style.backgroundColor = isFinal
+                                  ? "#101114"
+                                  : AX.aiGreen;
+                                e.currentTarget.style.transform =
+                                  "translateY(0)";
+                                e.currentTarget.style.boxShadow = "none";
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault(); // Prevent Link navigation
+                                // For migrated column, don't check bonding/snipe logic - just quick buy
+                                const isMigratedColumn = title
+                                  .toLowerCase()
+                                  .includes("migrated");
+
+                                if (isMigratedColumn) {
+                                  handleQuickBuy(token);
+                                } else {
+                                  // For other columns, check for high bonding Meteora tokens
+                                  const launchpadProtocol =
+                                    (
+                                      token as any
+                                    ).launchpad_protocol?.toLowerCase() || "";
+                                  const isMeteora =
+                                    launchpadProtocol.includes("meteora");
+                                  const bondingPct =
+                                    (token as any).bonding_pct ?? 0;
+                                  const isHighBondingMeteora =
+                                    isMeteora && bondingPct > 98.6;
+
+                                  if (isHighBondingMeteora) {
+                                    setSelectedToken(token);
+                                    setShowSnipeModal(true);
+                                  } else {
+                                    handleQuickBuy(token);
+                                  }
+                                }
+                              }}
+                            >
+                              {(() => {
+                                const isMigratedColumn = title
+                                  .toLowerCase()
+                                  .includes("migrated");
+
+                                // For migrated column, always show regular thunder (no snipe icon)
+                                if (isMigratedColumn) {
+                                  return (
+                                    <>
+                                      <HiLightningBolt
+                                        className="text-black"
+                                        size={14}
+                                      />{" "}
+                                      <span className="number-font">
+                                        {thunderAmount || "0"}
+                                      </span>
+                                      <span className="number-font"> SOL</span>
+                                    </>
+                                  );
+                                }
+
+                                // For other columns, check for high bonding Meteora tokens
+                                const launchpadProtocol =
+                                  (
+                                    token as any
+                                  ).launchpad_protocol?.toLowerCase() || "";
+                                const isMeteora =
+                                  launchpadProtocol.includes("meteora");
+                                const bondingPct =
+                                  (token as any).bonding_pct ?? 0;
+                                const isHighBondingMeteora =
+                                  isMeteora && bondingPct > 98.6;
+
+                                if (isHighBondingMeteora) {
+                                  // Snipe icon (crosshair) rendered in green
+                                  const isFinal =
+                                    title.toLowerCase().includes("final") ||
+                                    title.toLowerCase().includes("stretch");
+                                  return (
+                                    <>
+                                      <svg
+                                        width="18"
+                                        height="18"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.8"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        style={{ color: AX.aiGreen }}
+                                      >
+                                        <circle cx="12" cy="12" r="7" />
+                                        <line x1="12" y1="3" x2="12" y2="7" />
+                                        <line x1="12" y1="17" x2="12" y2="21" />
+                                        <line x1="3" y1="12" x2="7" y2="12" />
+                                        <line x1="17" y1="12" x2="21" y2="12" />
+                                        <circle cx="12" cy="12" r="2.2" />
+                                      </svg>
+                                      <span
+                                        className="number-font"
+                                        style={{
+                                          color: isFinal
+                                            ? AX.aiGreen
+                                            : undefined,
+                                        }}
+                                      >
+                                        {thunderAmount || "0"} SOL
+                                      </span>
+                                    </>
+                                  );
+                                } else {
+                                  // Regular thunder for other tokens
+                                  return (
+                                    <>
+                                      <HiLightningBolt
+                                        className={"text-black"}
+                                        style={{
+                                          color:
+                                            title
+                                              .toLowerCase()
+                                              .includes("final") ||
+                                            title
+                                              .toLowerCase()
+                                              .includes("stretch")
+                                              ? AX.aiGreen
+                                              : "#000000",
+                                        }}
+                                        size={14}
+                                      />
+                                      <span
+                                        className="number-font"
+                                        style={{
+                                          color:
+                                            title
+                                              .toLowerCase()
+                                              .includes("final") ||
+                                            title
+                                              .toLowerCase()
+                                              .includes("stretch")
+                                              ? AX.aiGreen
+                                              : undefined,
+                                        }}
+                                      >
+                                        {thunderAmount || "0"} SOL
+                                      </span>
+                                    </>
+                                  );
+                                }
+                              })()}
+                            </button>
                           </div>
                         </div>
+                      </div>
+                      {/* Bottom Row */}
 
-                        <button
-                          className="z-50 flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
+                      <div className="absolute bottom-2 left-24 flex hidden flex-row items-center gap-1">
+                        {/* Buyers percentage - Green */}
+                        <span
+                          className="number-font flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all duration-200"
                           style={{
-                            backgroundColor:
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch")
-                                ? "#101114"
-                                : AX.aiGreen,
-                            color:
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch")
-                                ? AX.aiGreen
-                                : "#000000",
-                            border:
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch")
-                                ? `1px solid ${AX.aiGreen}`
-                                : "1px solid rgba(0,0,0,0.15)",
-                          }}
-                          onMouseEnter={(e) => {
-                            const isFinal =
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch");
-                            e.currentTarget.style.backgroundColor = isFinal
-                              ? "#101114"
-                              : AX.aiGreenHover;
-                            e.currentTarget.style.transform =
-                              "translateY(-1px)";
-                            e.currentTarget.style.boxShadow = isFinal
-                              ? `0 0 10px ${AX.glowGreen}`
-                              : "0 4px 14px rgba(112, 224, 176, 0.25)";
-                          }}
-                          onMouseLeave={(e) => {
-                            const isFinal =
-                              title.toLowerCase().includes("final") ||
-                              title.toLowerCase().includes("stretch");
-                            e.currentTarget.style.backgroundColor = isFinal
-                              ? "#101114"
-                              : AX.aiGreen;
-                            e.currentTarget.style.transform = "translateY(0)";
-                            e.currentTarget.style.boxShadow = "none";
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault(); // Prevent Link navigation
-                            // For migrated column, don't check bonding/snipe logic - just quick buy
-                            const isMigratedColumn = title
-                              .toLowerCase()
-                              .includes("migrated");
-
-                            if (isMigratedColumn) {
-                              handleQuickBuy(token);
-                            } else {
-                              // For other columns, check for high bonding Meteora tokens
-                              const launchpadProtocol =
-                                (
-                                  token as any
-                                ).launchpad_protocol?.toLowerCase() || "";
-                              const isMeteora =
-                                launchpadProtocol.includes("meteora");
-                              const bondingPct =
-                                (token as any).bonding_pct ?? 0;
-                              const isHighBondingMeteora =
-                                isMeteora && bondingPct > 98.6;
-
-                              if (isHighBondingMeteora) {
-                                setSelectedToken(token);
-                                setShowSnipeModal(true);
-                              } else {
-                                handleQuickBuy(token);
-                              }
-                            }
+                            color: AX.aiGreen,
+                            fontSize: "11px",
+                            fontWeight: "600",
+                            borderColor: "rgba(107, 114, 128, 0.1)",
+                            backgroundColor: "transparent",
                           }}
                         >
-                          {(() => {
-                            const isMigratedColumn = title
-                              .toLowerCase()
-                              .includes("migrated");
+                          <BsPersonGear size={13} />{" "}
+                          <span className="number-font">
+                            {Math.round(
+                              ((token.total_buyers_5m ?? 0) /
+                                Math.max(
+                                  1,
+                                  (token.total_buyers_5m ?? 0) +
+                                    (token.total_sellers_5m ?? 0),
+                                )) *
+                                100,
+                            )}
+                            %
+                          </span>
+                        </span>
 
-                            // For migrated column, always show regular thunder (no snipe icon)
-                            if (isMigratedColumn) {
-                              return (
-                                <>
-                                  <HiLightningBolt
-                                    className="text-black"
-                                    size={14}
-                                  />{" "}
-                                  <span className="number-font">
-                                    {thunderAmount || "0"}
-                                  </span>
-                                  <span className="number-font"> SOL</span>
-                                </>
-                              );
-                            }
+                        {/* DS indicator - Blue with time */}
+                        <span
+                          className="flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all duration-200"
+                          style={{
+                            color: "#3B82F6",
+                            fontSize: "11px",
+                            fontWeight: "500",
+                            borderColor: "rgba(107, 114, 128, 0.1)",
+                            backgroundColor: "transparent",
+                          }}
+                        >
+                          <LuChefHat size={13} /> DS{" "}
+                          <span style={{ color: "#f0f5f5" }}>
+                            <TokenAge
+                              createdAt={
+                                (token as any).created_at ||
+                                (token as any).launch_time
+                              }
+                            />
+                          </span>
+                        </span>
 
-                            // For other columns, check for high bonding Meteora tokens
-                            const launchpadProtocol =
-                              (
-                                token as any
-                              ).launchpad_protocol?.toLowerCase() || "";
-                            const isMeteora =
-                              launchpadProtocol.includes("meteora");
-                            const bondingPct = (token as any).bonding_pct ?? 0;
-                            const isHighBondingMeteora =
-                              isMeteora && bondingPct > 98.6;
-
-                            if (isHighBondingMeteora) {
-                              // Snipe icon (crosshair) rendered in green
-                              const isFinal =
-                                title.toLowerCase().includes("final") ||
-                                title.toLowerCase().includes("stretch");
-                              return (
-                                <>
-                                  <svg
-                                    width="18"
-                                    height="18"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.8"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    style={{ color: AX.aiGreen }}
-                                  >
-                                    <circle cx="12" cy="12" r="7" />
-                                    <line x1="12" y1="3" x2="12" y2="7" />
-                                    <line x1="12" y1="17" x2="12" y2="21" />
-                                    <line x1="3" y1="12" x2="7" y2="12" />
-                                    <line x1="17" y1="12" x2="21" y2="12" />
-                                    <circle cx="12" cy="12" r="2.2" />
-                                  </svg>
-                                  <span
-                                    className="number-font"
-                                    style={{
-                                      color: isFinal ? AX.aiGreen : undefined,
-                                    }}
-                                  >
-                                    {thunderAmount || "0"} SOL
-                                  </span>
-                                </>
-                              );
-                            } else {
-                              // Regular thunder for other tokens
-                              return (
-                                <>
-                                  <HiLightningBolt
-                                    className={"text-black"}
-                                    style={{
-                                      color:
-                                        title.toLowerCase().includes("final") ||
-                                        title.toLowerCase().includes("stretch")
-                                          ? AX.aiGreen
-                                          : "#000000",
-                                    }}
-                                    size={14}
-                                  />
-                                  <span
-                                    className="number-font"
-                                    style={{
-                                      color:
-                                        title.toLowerCase().includes("final") ||
-                                        title.toLowerCase().includes("stretch")
-                                          ? AX.aiGreen
-                                          : undefined,
-                                    }}
-                                  >
-                                    {thunderAmount || "0"} SOL
-                                  </span>
-                                </>
-                              );
-                            }
-                          })()}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Bottom Row */}
-                  <div className="absolute bottom-2 left-24 flex flex-row items-center gap-1">
-                    {/* Buyers percentage - Green */}
-                    <span
-                      className="number-font flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all duration-200"
-                      style={{
-                        color: AX.aiGreen,
-                        fontSize: "11px",
-                        fontWeight: "600",
-                        borderColor: "rgba(107, 114, 128, 0.1)",
-                        backgroundColor: "transparent",
-                      }}
-                    >
-                      <BsPersonGear size={13} />{" "}
-                      <span className="number-font">
-                        {Math.round(
-                          ((token.total_buyers_5m ?? 0) /
-                            Math.max(
-                              1,
-                              (token.total_buyers_5m ?? 0) +
-                                (token.total_sellers_5m ?? 0),
-                            )) *
-                            100,
-                        )}
-                        %
-                      </span>
-                    </span>
-
-                    {/* DS indicator - Blue with time */}
-                    <span
-                      className="flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-all duration-200"
-                      style={{
-                        color: "#3B82F6",
-                        fontSize: "11px",
-                        fontWeight: "500",
-                        borderColor: "rgba(107, 114, 128, 0.1)",
-                        backgroundColor: "transparent",
-                      }}
-                    >
-                      <LuChefHat size={13} /> DS{" "}
-                      <span style={{ color: "#f0f5f5" }}>
-                        <TokenAge
-                          createdAt={
-                            (token as any).created_at ||
-                            (token as any).launch_time
-                          }
-                        />
-                      </span>
-                    </span>
-
-                    {/* Snipe percentage - Red */}
-                    {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                        {/* Snipe percentage - Red */}
+                        {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: '#d11f3a',
                           fontSize: '11px',
@@ -7053,8 +7118,8 @@ function PulseTable({
                     })()}
                   </span> */}
 
-                    {/* Ghost percentage (Insider Holdings) - Green */}
-                    {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                        {/* Ghost percentage (Insider Holdings) - Green */}
+                        {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -7066,8 +7131,8 @@ function PulseTable({
                     <span className="text-xs text-gray-500">-</span>
                   </span> */}
 
-                    {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
-                    {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                        {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
+                        {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
                         style={{ 
                           color: AX.aiGreen,
                           fontSize: '11px',
@@ -7078,90 +7143,103 @@ function PulseTable({
                     <FaDice size={13} />
                     <span className="text-xs text-gray-500">-</span>
                   </span> */}
+                      </div>
+
+                      {/* Red Meteora -> Arrows -> Yellow Meteora for High Bonding Tokens - Bottom-right of full row */}
+                      {(() => {
+                        const launchpadProtocol =
+                          (token as any).launchpad_protocol?.toLowerCase() ||
+                          "";
+                        const isMeteora = launchpadProtocol.includes("meteora");
+                        const bondingPct = (token as any).bonding_pct ?? 0;
+                        const isFinalStretch =
+                          title.toLowerCase().includes("final") ||
+                          title.toLowerCase().includes("stretch");
+                        const isMigratedColumn = title
+                          .toLowerCase()
+                          .includes("migrated");
+                        const isHighBondingMeteora =
+                          isFinalStretch &&
+                          !isMigratedColumn &&
+                          isMeteora &&
+                          bondingPct > 98.6;
+
+                        if (isHighBondingMeteora) {
+                          return (
+                            <div className="absolute right-2 bottom-2 z-0 flex items-center gap-0.5">
+                              {/* Red Meteora Logo (left) */}
+                              <div
+                                className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
+                                style={{
+                                  border: "0.5px solid #d11f3a",
+                                  backgroundColor: "transparent",
+                                }}
+                              >
+                                <img
+                                  src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
+                                  alt="Meteora"
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+
+                              {/* 3 Green Chevron Arrows */}
+                              {[0, 1, 2].map((i) => (
+                                <svg
+                                  key={i}
+                                  width="3"
+                                  height="4"
+                                  viewBox="0 0 3 4"
+                                  fill="none"
+                                  className="animate-pulse"
+                                  style={{
+                                    animationDelay: `${i * 0.2}s`,
+                                    animationDuration: "1s",
+                                  }}
+                                >
+                                  <path
+                                    d="M0.5 0.5L2.5 2L0.5 3.5"
+                                    stroke="#31e3ac"
+                                    strokeWidth="1"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                              ))}
+
+                              {/* Yellow Meteora Logo (right) */}
+                              <div
+                                className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
+                                style={{
+                                  border: "0.5px solid #fbbf24",
+                                  backgroundColor: "transparent",
+                                }}
+                              >
+                                <img
+                                  src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
+                                  alt="Meteora"
+                                  className="h-full w-full object-cover"
+                                  style={{
+                                    filter:
+                                      "sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                    <div className="flex flex-row items-center gap-1">
+                      <BottomCardInfoHolder PassedIcon={FaRegUser } value={0.2} />
+                      <BottomCardInfoHolder PassedIcon={LuChefHat} value={0.2} />
+                      <BottomCardInfoHolder PassedIcon={GiSeatedMouse } value={0.2} />
+                      <BottomCardInfoHolder PassedIcon={GoStack} value={0.2} />
+                      <BottomCardInfoHolder PassedIcon={PiFishSimpleLight } value={0.2} />
+                      <BottomCardInfoHolder PassedIcon={PiLeafLight } value={0.2} />
+                      <BottomCardInfoHolder PassedIcon={PiTarget} value={0.2} green={false} />
+                    </div>
                   </div>
-                  {/* Red Meteora -> Arrows -> Yellow Meteora for High Bonding Tokens - Bottom-right of full row */}
-                  {(() => {
-                    const launchpadProtocol =
-                      (token as any).launchpad_protocol?.toLowerCase() || "";
-                    const isMeteora = launchpadProtocol.includes("meteora");
-                    const bondingPct = (token as any).bonding_pct ?? 0;
-                    const isFinalStretch =
-                      title.toLowerCase().includes("final") ||
-                      title.toLowerCase().includes("stretch");
-                    const isMigratedColumn = title
-                      .toLowerCase()
-                      .includes("migrated");
-                    const isHighBondingMeteora =
-                      isFinalStretch &&
-                      !isMigratedColumn &&
-                      isMeteora &&
-                      bondingPct > 98.6;
-
-                    if (isHighBondingMeteora) {
-                      return (
-                        <div className="absolute right-2 bottom-2 z-0 flex items-center gap-0.5">
-                          {/* Red Meteora Logo (left) */}
-                          <div
-                            className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
-                            style={{
-                              border: "0.5px solid #d11f3a",
-                              backgroundColor: "transparent",
-                            }}
-                          >
-                            <img
-                              src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
-                              alt="Meteora"
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-
-                          {/* 3 Green Chevron Arrows */}
-                          {[0, 1, 2].map((i) => (
-                            <svg
-                              key={i}
-                              width="3"
-                              height="4"
-                              viewBox="0 0 3 4"
-                              fill="none"
-                              className="animate-pulse"
-                              style={{
-                                animationDelay: `${i * 0.2}s`,
-                                animationDuration: "1s",
-                              }}
-                            >
-                              <path
-                                d="M0.5 0.5L2.5 2L0.5 3.5"
-                                stroke="#31e3ac"
-                                strokeWidth="1"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          ))}
-
-                          {/* Yellow Meteora Logo (right) */}
-                          <div
-                            className="relative flex h-4 w-4 items-center justify-center overflow-hidden rounded-full"
-                            style={{
-                              border: "0.5px solid #fbbf24",
-                              backgroundColor: "transparent",
-                            }}
-                          >
-                            <img
-                              src="https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013"
-                              alt="Meteora"
-                              className="h-full w-full object-cover"
-                              style={{
-                                filter:
-                                  "sepia(1) saturate(5) hue-rotate(5deg) brightness(1.1)",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
                 </Link>
               );
             })
