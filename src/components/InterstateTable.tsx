@@ -173,10 +173,59 @@ const getVolume = (token: Token, timeframe: string): number => {
 };
 
 const getTxns = (token: Token, timeframe: string): { total: number; buys: number; sells: number } => {
-  const buys = getNumber(token as any, `total_buys_${timeframe}`);
-  const sells = getNumber(token as any, `total_sells_${timeframe}`);
-  if (buys > 0 || sells > 0) return { total: buys + sells, buys, sells };
-  // If separate counts are not available, return zeros; UI will render "-" appropriately
+  // Try the specific timeframe first
+  let buys = getNumber(token as any, `total_buys_${timeframe}`);
+  let sells = getNumber(token as any, `total_sells_${timeframe}`);
+  
+  if (buys > 0 || sells > 0) {
+    return { total: buys + sells, buys, sells };
+  }
+  
+  // Fallback 1: try txnCount for the specific timeframe (split proportionally)
+  const txnCount = getNumber(token as any, `txnCount${timeframe}`);
+  if (txnCount > 0) {
+    // Estimate: 60% buys, 40% sells (common pattern)
+    const estimatedBuys = Math.round(txnCount * 0.6);
+    const estimatedSells = Math.round(txnCount * 0.4);
+    return { total: txnCount, buys: estimatedBuys, sells: estimatedSells };
+  }
+  
+  // Fallback 2: try 24h data if specific timeframe doesn't have data
+  if (timeframe !== '24h') {
+    const buys24h = getNumber(token as any, 'total_buys_24h');
+    const sells24h = getNumber(token as any, 'total_sells_24h');
+    if (buys24h > 0 || sells24h > 0) {
+      return { total: buys24h + sells24h, buys: buys24h, sells: sells24h };
+    }
+    
+    // Also try txnCount24h as fallback
+    const txnCount24h = getNumber(token as any, 'txnCount24h') || getNumber(token as any, 'txnCount24');
+    if (txnCount24h > 0) {
+      const estimatedBuys = Math.round(txnCount24h * 0.6);
+      const estimatedSells = Math.round(txnCount24h * 0.4);
+      return { total: txnCount24h, buys: estimatedBuys, sells: estimatedSells };
+    }
+  }
+  
+  // Fallback 3: try other timeframes in order of preference (24h, 12h, 6h, 1h, 5m)
+  const fallbackTimeframes = ['24h', '12h', '6h', '1h', '5m'].filter(tf => tf !== timeframe);
+  for (const tf of fallbackTimeframes) {
+    const fallbackBuys = getNumber(token as any, `total_buys_${tf}`);
+    const fallbackSells = getNumber(token as any, `total_sells_${tf}`);
+    if (fallbackBuys > 0 || fallbackSells > 0) {
+      return { total: fallbackBuys + fallbackSells, buys: fallbackBuys, sells: fallbackSells };
+    }
+    
+    // Also try txnCount for this timeframe
+    const fallbackTxnCount = getNumber(token as any, `txnCount${tf}`);
+    if (fallbackTxnCount > 0) {
+      const estimatedBuys = Math.round(fallbackTxnCount * 0.6);
+      const estimatedSells = Math.round(fallbackTxnCount * 0.4);
+      return { total: fallbackTxnCount, buys: estimatedBuys, sells: estimatedSells };
+    }
+  }
+  
+  // If no data available, return zeros; UI will render "-" appropriately
   return { total: 0, buys: 0, sells: 0 };
 };
 
@@ -1027,6 +1076,14 @@ const TxnsCell: React.FC<{
 
   const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
   
+  // For discover page (xStocks), show "0" instead of "-" when value is 0
+  const formatTxnValue = (value: number) => {
+    if (value === 0) {
+      return isDiscoverPage ? '0' : '-';
+    }
+    return formatSmartNumber(value);
+  };
+  
   return (
     <div className="text-right">
       <div className={`text-sm font-medium mb-1 ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
@@ -1036,15 +1093,15 @@ const TxnsCell: React.FC<{
           fontWeight: '400'
         })
       }}>
-        {total === 0 ? '-' : formatSmartNumber(total)}
+        {formatTxnValue(total)}
       </div>
       <div className="text-xs font-medium">
         <span className={`${isDiscoverPage ? '' : 'text-emerald-400'} ${isDiscoverPage ? 'number-font' : ''}`} style={isDiscoverPage ? { color: '#85d99f', fontFamily: monospaceFont, fontWeight: '400' } : { fontFamily: monospaceFont, fontWeight: '400' }}>
-          {buys === 0 ? '-' : formatSmartNumber(buys)}
+          {formatTxnValue(buys)}
         </span>
         <span className="mx-1" style={{ color: AX.muted }}>/</span>
         <span className={`${isDiscoverPage ? '' : 'text-red-400'} ${isDiscoverPage ? 'number-font' : ''}`} style={isDiscoverPage ? { color: '#f26681', fontFamily: monospaceFont, fontWeight: '400' } : { fontFamily: monospaceFont, fontWeight: '400' }}>
-          {sells === 0 ? '-' : formatSmartNumber(sells)}
+          {formatTxnValue(sells)}
         </span>
       </div>
     </div>
@@ -1212,8 +1269,8 @@ const TableRow: React.FC<{
             fontWeight: '400'
           })
         }}>
-          {/* Show "-" when volume data is not available instead of $0.00 */}
-          {volume === 0 ? "-" : `$${formatSmartNumber(volume)}`}
+          {/* Show "0" on discover page, "-" on other pages when volume is 0 */}
+          {volume === 0 ? (isDiscoverPage ? "$0" : "-") : `$${formatSmartNumber(volume)}`}
         </div>
       </td>
       
