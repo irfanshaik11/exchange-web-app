@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import PulseTable from '../components/PulseTable';
 import BnbTable from '../components/BnbTable';
+import MonadTable from '../components/MonadTable';
 import PulseControlBar from '../components/PulseControlBar';
 import type { Token } from '~/utils/db';
 import Header from '../components/Header';
@@ -87,10 +88,10 @@ export default function PulsePage() {
   const { user } = useUser();
   const router = useRouter();
   const chain = router.query.chain as string | undefined;
-  const isBnbRoute = chain === 'bnb';
+  // const isBnbRoute = chain === 'bnb';
   const isMonadRoute = chain === 'monad';
-  const isBaseRoute = chain === 'base';
-  const isEthereumRoute = chain === 'eth';
+  // const isBaseRoute = chain === 'base';
+  // const isEthereumRoute = chain === 'eth';
   const isSolanaRoute = chain === 'sol' || !chain; // Default to Solana if no chain specified
   const chainButtonBase =
     'relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]';
@@ -99,26 +100,26 @@ export default function PulsePage() {
       ? 'bg-[#222733] text-white shadow-lg shadow-emerald-500/20'
       : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
   }`;
-  const bnbButtonClasses = `${chainButtonBase} ${
-    isBnbRoute
-      ? 'bg-[#222733] text-white shadow-lg shadow-blue-500/20'
-      : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
-  }`;
+  // const bnbButtonClasses = `${chainButtonBase} ${
+  //   isBnbRoute
+  //     ? 'bg-[#222733] text-white shadow-lg shadow-blue-500/20'
+  //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  // }`;
   const monadButtonClasses = `${chainButtonBase} ${
     isMonadRoute
       ? 'bg-[#222733] text-white shadow-lg shadow-purple-500/20'
       : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
   }`;
-  const baseButtonClasses = `${chainButtonBase} ${
-    isBaseRoute
-      ? 'bg-[#222733] text-white shadow-lg shadow-blue-400/20'
-      : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
-  }`;
-  const ethButtonClasses = `${chainButtonBase} ${
-    isEthereumRoute
-      ? 'bg-[#222733] text-white shadow-lg shadow-emerald-400/20'
-      : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
-  }`;
+  // const baseButtonClasses = `${chainButtonBase} ${
+  //   isBaseRoute
+  //     ? 'bg-[#222733] text-white shadow-lg shadow-blue-400/20'
+  //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  // }`;
+  // const ethButtonClasses = `${chainButtonBase} ${
+  //   isEthereumRoute
+  //     ? 'bg-[#222733] text-white shadow-lg shadow-emerald-400/20'
+  //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  // }`;
 
   // Redirect to /pulse?chain=sol if no chain parameter is present
   useEffect(() => {
@@ -870,7 +871,7 @@ export default function PulsePage() {
                       Soon
                     </span>
                   </Link>
-                  <Link
+                  {/* <Link
                     href="/pulse?chain=bnb"
                     aria-label="View BNB tokens (beta)"
                     className={bnbButtonClasses}
@@ -879,8 +880,8 @@ export default function PulsePage() {
                     <span className="absolute -bottom-1 -right-3 rounded-full border border-blue-500 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-blue-500 shadow-lg shadow-blue-500/30" style={{ backgroundColor: '#06070b' }}>
                       Beta
                     </span>
-                  </Link>
-                  <Link
+                  </Link> */}
+                  {/* <Link
                     href="/pulse?chain=base"
                     aria-label="View Base tokens (coming soon)"
                     className={baseButtonClasses}
@@ -893,8 +894,8 @@ export default function PulsePage() {
                     <span className="absolute -bottom-1 -right-4 rounded-full border border-sky-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-sky-300 shadow-lg shadow-sky-500/30" style={{ backgroundColor: '#06070b' }}>
                       Soon
                     </span>
-                  </Link>
-                  <Link
+                  </Link> */}
+                  {/* <Link
                     href="/pulse?chain=eth"
                     aria-label="View Ethereum tokens (coming soon)"
                     className={ethButtonClasses}
@@ -907,7 +908,7 @@ export default function PulsePage() {
                     <span className="absolute -bottom-1 -right-4 rounded-full border border-emerald-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-emerald-300 shadow-lg shadow-emerald-500/30" style={{ backgroundColor: '#06070b' }}>
                       Soon
                     </span>
-                  </Link>
+                  </Link> */}
                 </div>
               </div>
               {/* <PulseControlBar className="mb-0.5" /> */}
@@ -965,7 +966,7 @@ export default function PulsePage() {
             </div>
           </div>
 
-          {isBnbRoute ? (
+          {false ? ( // isBnbRoute commented out
             <div className="w-full">
               {/* Mobile: Single table based on active tab */}
               <div className="lg:hidden">
@@ -1010,56 +1011,50 @@ export default function PulsePage() {
                 <BnbTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" showBubbleMetrics={false} />
               </div>
             </div>
-          ) : isMonadRoute || isBaseRoute || isEthereumRoute ? (
-            <div className="mt-12 flex flex-col items-center justify-center gap-6 rounded-2xl border border-neutral-800/80 bg-[#0a0b10] px-6 py-16 text-center shadow-inner shadow-black/40">
-              <img
-                src={
-                  isMonadRoute
-                    ? "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                    : isBaseRoute
-                      ? "https://avatars.githubusercontent.com/u/108554348?s=280&v=4"
-                      : "https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png"
-                }
-                alt={
-                  isMonadRoute
-                    ? "Monad"
-                    : isBaseRoute
-                      ? "Base"
-                      : "Ethereum"
-                }
-                className="h-24 w-24 rounded-full object-cover bg-black/60 p-1"
-              />
-              <div className="space-y-2">
-                <h2 className="text-xl font-semibold text-neutral-100">
-                  {isMonadRoute
-                    ? 'Monad support is on the way'
-                    : isBaseRoute
-                      ? 'Base support is on the way'
-                      : 'Ethereum support is on the way'}
-                </h2>
-                <p className="max-w-md text-sm text-neutral-400">
-                  {isMonadRoute
-                    ? 'We\'re building out dedicated flows for Monad tokens. Check back soon for real-time liquidity and launch data.'
-                    : isBaseRoute
-                      ? 'We\'re building out dedicated flows for Base tokens. Check back soon for real-time liquidity and launch data.'
-                      : 'We\'re building out dedicated flows for Ethereum tokens. Check back soon for real-time liquidity and launch data.'}
-                </p>
+          ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
+            <div className="w-full">
+              {/* Mobile: Single table based on active tab */}
+              <div className="lg:hidden">
+                <div className="transition-all duration-300 ease-in-out">
+                  {activeTab === 'new' && (
+                    <MonadTable 
+                      title="New Pairs" 
+                      tokens={enrichedNewPairsToShow as any} 
+                      loading={newPairsLoading} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                  {activeTab === 'final-stretch' && (
+                    <MonadTable 
+                      title="Final Stretch" 
+                      tokens={enrichedFinalStretch as any} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                  {activeTab === 'migrated' && (
+                    <MonadTable 
+                      title="Migrated" 
+                      tokens={enrichedMigrated as any} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                </div>
               </div>
-              <button
-                onClick={() => router.push('/pulse?chain=sol')}
-                className="inline-flex items-center gap-2 rounded-full border border-neutral-700/70 bg-neutral-800/60 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-200 transition-colors hover:border-emerald-500/60 hover:bg-neutral-800"
-              >
-                Back to Solana
-              </button>
-              <a
-                href="https://discord.gg/sACYQmCsTJ"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-neutral-700/70 bg-neutral-800/30 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-200 transition-colors hover:border-purple-500/60 hover:bg-neutral-800"
-              >
-                <FaDiscord className="h-4 w-4 text-[#5865F2]" />
-                Join Discord
-              </a>
+              {/* Desktop: All tables horizontally */}
+              <div className="hidden lg:flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+                <MonadTable 
+                  title="New Pairs" 
+                  tokens={enrichedNewPairsToShow as any} 
+                  loading={newPairsLoading} 
+                  isFirstOrLast="first" 
+                  showBubbleMetrics={false} 
+                />
+                <MonadTable title="Final Stretch" tokens={enrichedFinalStretch as any} showBubbleMetrics={false} />
+                <MonadTable title="Migrated" tokens={enrichedMigrated as any} isFirstOrLast="last" showBubbleMetrics={false} />
+              </div>
             </div>
           ) : isLoading ? (
             <div className="w-full">
