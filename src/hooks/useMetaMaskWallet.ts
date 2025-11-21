@@ -174,32 +174,37 @@ export function useMetaMaskWallet(): UseMetaMaskWalletReturn {
     setState(prev => ({ ...prev, connecting: true, error: null }));
 
     try {
-      // Check if MetaMask is locked by trying to get accounts first
-      // If MetaMask is locked, this will return an empty array but won't throw
-      let isLocked = false;
-      try {
-        const testAccounts = await metamaskProvider.request({ method: 'eth_accounts' });
-        // If we get here and accounts is empty, MetaMask might be locked or not connected
-        if (!testAccounts || testAccounts.length === 0) {
-          // Could be locked or just not connected - we'll find out when we request
-          isLocked = true;
-        }
-      } catch (testError: any) {
-        // If this throws, MetaMask is likely locked
-        console.log('MetaMask might be locked:', testError);
-        isLocked = true;
-      }
-
-      // Now request accounts
+      // Request accounts - this will trigger MetaMask to open if needed
       // If locked, this should trigger MetaMask to open and ask for unlock
       const timeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve('TIMEOUT'), 60000);
+        setTimeout(() => resolve('TIMEOUT'), 30000); // Reduced to 30 seconds
       });
 
-      const result = await Promise.race([
-        metamaskProvider.request({ method: 'eth_requestAccounts' }),
-        timeoutPromise
-      ]);
+      let result: any;
+      try {
+        result = await Promise.race([
+          metamaskProvider.request({ 
+            method: 'eth_requestAccounts',
+            params: [] // Explicitly pass empty params array
+          }),
+          timeoutPromise
+        ]);
+      } catch (requestError: any) {
+        // Handle specific MetaMask errors
+        console.error('MetaMask request error:', requestError);
+        
+        if (requestError.code === 4001) {
+          throw new Error('You rejected the connection request');
+        } else if (requestError.code === -32002) {
+          throw new Error('MetaMask is already processing a request. Please check your MetaMask extension.');
+        } else if (requestError.code === -32603) {
+          throw new Error('MetaMask internal error. Please unlock MetaMask and try again.');
+        } else if (requestError.message) {
+          throw new Error(requestError.message);
+        } else {
+          throw new Error('Failed to connect to MetaMask. Please check that MetaMask is unlocked and try again.');
+        }
+      }
       
       // Check if we got a timeout
       if (result === 'TIMEOUT') {
@@ -217,7 +222,7 @@ export function useMetaMaskWallet(): UseMetaMaskWalletReturn {
       const address = accounts && accounts.length > 0 ? accounts[0] : null;
 
       if (!address) {
-        throw new Error('No accounts returned from MetaMask');
+        throw new Error('No accounts returned from MetaMask. Please make sure MetaMask is unlocked and has accounts.');
       }
 
       // Store connection state in localStorage
@@ -238,6 +243,12 @@ export function useMetaMaskWallet(): UseMetaMaskWalletReturn {
       return true;
     } catch (error: any) {
       console.error('MetaMask connection error:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
 
       let errorMessage = 'Failed to connect to MetaMask';
 
@@ -245,24 +256,28 @@ export function useMetaMaskWallet(): UseMetaMaskWalletReturn {
       if (error.code === 4001) {
         errorMessage = 'You rejected the connection request';
       } else if (error.code === -32002) {
-        errorMessage = 'MetaMask is already open. Please check your MetaMask extension.';
+        errorMessage = 'MetaMask is already processing a request. Please check your MetaMask extension and wait a moment.';
       } else if (error.code === -32603) {
-        errorMessage = 'Internal error. Please unlock MetaMask and try again.';
+        errorMessage = 'MetaMask internal error. Please unlock MetaMask and try again.';
       } else if (error.code === -32601) {
-        errorMessage = 'MetaMask method not found. Please update MetaMask.';
+        errorMessage = 'MetaMask method not found. Please update MetaMask to the latest version.';
       } else if (error.code === -32700) {
         errorMessage = 'Invalid request. Please try again.';
-      } else if (error.message?.includes('Already processing')) {
-        errorMessage = 'MetaMask is already processing a request. Please wait or check MetaMask.';
-      } else if (error.message?.includes('timed out')) {
-        errorMessage = 'Request timed out. Please try again.';
-      } else if (error.message?.includes('locked')) {
+      } else if (error.message?.includes('Already processing') || error.message?.includes('already processing')) {
+        errorMessage = 'MetaMask is already processing a request. Please wait a moment or check your MetaMask extension.';
+      } else if (error.message?.includes('timed out') || error.message?.includes('timeout')) {
+        errorMessage = 'Request timed out. Please check MetaMask and try again.';
+      } else if (error.message?.includes('locked') || error.message?.includes('Locked')) {
         errorMessage = 'Please unlock MetaMask and try again.';
-      } else if (error.message?.includes('User rejected')) {
-        errorMessage = 'You rejected the request';
+      } else if (error.message?.includes('User rejected') || error.message?.includes('user rejected')) {
+        errorMessage = 'You rejected the connection request';
+      } else if (error.message?.includes('No accounts returned')) {
+        errorMessage = 'No accounts found in MetaMask. Please make sure MetaMask is unlocked and has at least one account.';
       } else if (error.message) {
         // Use the original error message if it's user-friendly
-        errorMessage = error.message.length < 100 ? error.message : 'Failed to connect to MetaMask';
+        errorMessage = error.message.length < 150 ? error.message : 'Failed to connect to MetaMask. Please check that MetaMask is unlocked and try again.';
+      } else {
+        errorMessage = 'Failed to connect to MetaMask. Please check that MetaMask is installed, unlocked, and try again.';
       }
 
       setState(prev => ({
