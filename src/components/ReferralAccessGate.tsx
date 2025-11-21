@@ -957,7 +957,7 @@ export function ReferralAccessGate({
                     type="submit"
                     fullWidth
                     loading={status === "validating"}
-                    className="h-14 text-base uppercase tracking-[0.4em] !bg-black text-white hover:!bg-neutral-900 border-[0.5px] border-[#f0f5f5]"
+                    className="h-14 text-base uppercase tracking-[0.4em] !bg-black !text-[#f0f5f5] hover:!bg-neutral-900 border-[0.5px] border-[#f0f5f5]"
                   >
                     Unlock Access
                   </InterstateButton>

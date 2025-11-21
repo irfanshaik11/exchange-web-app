@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import Head from "next/head";
-import { Copy, Gift, Users, Wallet } from "lucide-react";
+import { Copy, Gift, Users, Wallet, Trophy, Medal } from "lucide-react";
 import Header from "~/components/Header";
 import InterstateButton from "~/components/InterstateButton";
 import Footer from '~/components/Footer';
 import { useUser } from "~/components/UserContext";
-import { ensureReferralCodeForUser, fetchReferralCodeForUser } from "~/utils/referrals";
+import { ensureReferralCodeForUser, fetchReferralCodeForUser, getReferralLeaderboard, type LeaderboardEntry } from "~/utils/referrals";
 
 const referralRows = [
   {
@@ -24,13 +24,18 @@ const referralRows = [
   },
 ];
 
+type ViewMode = "my-referrals" | "leaderboard";
+
 export default function RewardsPage() {
-  const { user } = useUser();
+  const { user, refreshUser } = useUser();
   const [copied, setCopied] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [loadingReferral, setLoadingReferral] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [referralError, setReferralError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("my-referrals");
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const referralLink = referralCode
     ? `https://app.narrative.trade?referrer=${referralCode}`
     : "";
@@ -51,7 +56,11 @@ export default function RewardsPage() {
       try {
         setLoadingReferral(true);
         setReferralError(null);
-        const record = await fetchReferralCodeForUser(user.id);
+        if (!user.bearerToken || !user.id) {
+          setReferralCode(null);
+          return;
+        }
+        const record = await fetchReferralCodeForUser(user.bearerToken, user.id);
         if (cancelled) return;
         if (record) {
           setReferralCode(record.referralCode);
@@ -82,7 +91,7 @@ export default function RewardsPage() {
   }, [user?.id]);
 
   const handleGenerateCode = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.id || !user?.bearerToken) {
       setReferralError("Sign in to generate a referral code.");
       return;
     }
@@ -90,7 +99,22 @@ export default function RewardsPage() {
     try {
       setIsGenerating(true);
       setReferralError(null);
-      const record = await ensureReferralCodeForUser(user.id);
+      
+      // Verify token exists before making the request
+      if (!user.bearerToken || user.bearerToken.trim() === '') {
+        setReferralError("Authentication token is missing. Please sign in again.");
+        return;
+      }
+
+      // Try to refresh user token first to ensure it's valid
+      try {
+        await refreshUser();
+      } catch (refreshError) {
+        console.warn("Failed to refresh user token:", refreshError);
+        // Continue anyway with existing token
+      }
+
+      const record = await ensureReferralCodeForUser(user.bearerToken);
       setReferralCode(record.referralCode);
       setCopied(false);
     } catch (error: any) {
@@ -98,11 +122,23 @@ export default function RewardsPage() {
         error instanceof Error
           ? error.message
           : "Unable to generate referral code";
-      setReferralError(message);
+      
+      // Check if it's an authentication error and suggest signing in again
+      if (message.includes('token') || message.includes('Invalid') || message.includes('expired') || message.includes('403') || message.includes('401')) {
+        setReferralError(`${message}. Please try signing out and signing in again.`);
+        // Optionally refresh user to get a new token
+        try {
+          await refreshUser();
+        } catch (refreshError) {
+          console.error("Failed to refresh user after error:", refreshError);
+        }
+      } else {
+        setReferralError(message);
+      }
     } finally {
       setIsGenerating(false);
     }
-  }, [user?.id]);
+  }, [user?.id, user?.bearerToken]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -121,6 +157,24 @@ export default function RewardsPage() {
       console.error("Unable to copy referral link", error);
     }
   }, [referralLink]);
+
+  useEffect(() => {
+    if (viewMode === "leaderboard") {
+      const loadLeaderboard = async () => {
+        try {
+          setLoadingLeaderboard(true);
+          const response = await getReferralLeaderboard(50, 0);
+          setLeaderboard(response.data);
+        } catch (error) {
+          console.error("Failed to load leaderboard:", error);
+          setLeaderboard([]);
+        } finally {
+          setLoadingLeaderboard(false);
+        }
+      };
+      loadLeaderboard();
+    }
+  }, [viewMode]);
 
   return (
     <>
@@ -250,55 +304,144 @@ export default function RewardsPage() {
 
             <div className="space-y-6">
               <div className="flex items-center gap-4">
-                <button className="rounded-full border border-neutral-800 bg-neutral-900/70 px-5 py-2 text-xs font-semibold tracking-[0.25em] text-neutral-200 uppercase transition hover:border-neutral-700 hover:text-[#f0f5f5]">
+                <button
+                  onClick={() => setViewMode("my-referrals")}
+                  className={`rounded-full border px-5 py-2 text-xs font-semibold tracking-[0.25em] uppercase transition ${
+                    viewMode === "my-referrals"
+                      ? "border-neutral-800 bg-neutral-900/70 text-neutral-200 hover:border-neutral-700 hover:text-[#f0f5f5]"
+                      : "border-neutral-900/60 bg-neutral-950/40 text-neutral-600 hover:border-neutral-800 hover:text-neutral-300"
+                  }`}
+                >
                   My Referrals
                 </button>
-                <button className="rounded-full border border-neutral-900/60 bg-neutral-950/40 px-5 py-2 text-xs font-semibold tracking-[0.25em] text-neutral-600 uppercase transition hover:border-neutral-800 hover:text-neutral-300">
-                  Leaderboard (soon)
+                <button
+                  onClick={() => setViewMode("leaderboard")}
+                  className={`rounded-full border px-5 py-2 text-xs font-semibold tracking-[0.25em] uppercase transition ${
+                    viewMode === "leaderboard"
+                      ? "border-neutral-800 bg-neutral-900/70 text-neutral-200 hover:border-neutral-700 hover:text-[#f0f5f5]"
+                      : "border-neutral-900/60 bg-neutral-950/40 text-neutral-600 hover:border-neutral-800 hover:text-neutral-300"
+                  }`}
+                >
+                  Leaderboard
                 </button>
               </div>
 
-              <div className="overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-950/60 shadow-xl shadow-black/20">
-                <div className="border-b border-neutral-800 bg-neutral-900/70 px-6 py-4 text-xs tracking-[0.3em] text-neutral-500 uppercase">
-                  Referral Rewards
-                </div>
-                <table className="w-full text-left text-sm text-neutral-300">
-                  <thead className="bg-neutral-950/60 text-neutral-500">
-                    <tr>
-                      <th className="px-6 py-4 font-medium">Referral Level</th>
-                      <th className="px-6 py-4 font-medium">SOL Rewards</th>
-                      <th className="px-6 py-4 font-medium">XCC Rewards</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {referralRows.map((row) => (
-                      <tr
-                        key={row.level}
-                        className="border-t border-neutral-900/80 text-neutral-200"
-                      >
-                        <td className="px-6 py-5 align-top">
-                          <div className="text-base font-semibold text-[#f0f5f5]">
-                            {row.level}
-                          </div>
-                          <p className="mt-2 max-w-md text-xs text-neutral-500">
-                            {row.summary}
-                          </p>
-                        </td>
-                        <td className="px-6 py-5 align-top">
-                          <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300">
-                            {row.solRewards}
-                          </div>
-                        </td>
-                        <td className="px-6 py-5 align-top">
-                          <div className="rounded-2xl border border-fuchsia-500/40 bg-fuchsia-600/10 px-4 py-2 text-sm font-medium text-fuchsia-200">
-                            {row.xccRewards}
-                          </div>
-                        </td>
+              {viewMode === "my-referrals" ? (
+                <div className="overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-950/60 shadow-xl shadow-black/20">
+                  <div className="border-b border-neutral-800 bg-neutral-900/70 px-6 py-4 text-xs tracking-[0.3em] text-neutral-500 uppercase">
+                    Referral Rewards
+                  </div>
+                  <table className="w-full text-left text-sm text-neutral-300">
+                    <thead className="bg-neutral-950/60 text-neutral-500">
+                      <tr>
+                        <th className="px-6 py-4 font-medium">Referral Level</th>
+                        <th className="px-6 py-4 font-medium">SOL Rewards</th>
+                        <th className="px-6 py-4 font-medium">XCC Rewards</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {referralRows.map((row) => (
+                        <tr
+                          key={row.level}
+                          className="border-t border-neutral-900/80 text-neutral-200"
+                        >
+                          <td className="px-6 py-5 align-top">
+                            <div className="text-base font-semibold text-[#f0f5f5]">
+                              {row.level}
+                            </div>
+                            <p className="mt-2 max-w-md text-xs text-neutral-500">
+                              {row.summary}
+                            </p>
+                          </td>
+                          <td className="px-6 py-5 align-top">
+                            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300">
+                              {row.solRewards}
+                            </div>
+                          </td>
+                          <td className="px-6 py-5 align-top">
+                            <div className="rounded-2xl border border-fuchsia-500/40 bg-fuchsia-600/10 px-4 py-2 text-sm font-medium text-fuchsia-200">
+                              {row.xccRewards}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-950/60 shadow-xl shadow-black/20">
+                  <div className="border-b border-neutral-800 bg-neutral-900/70 px-6 py-4 text-xs tracking-[0.3em] text-neutral-500 uppercase">
+                    Top Traders (Referred Users)
+                  </div>
+                  {loadingLeaderboard ? (
+                    <div className="px-6 py-12 text-center text-neutral-400">
+                      Loading leaderboard...
+                    </div>
+                  ) : leaderboard.length === 0 ? (
+                    <div className="px-6 py-12 text-center text-neutral-400">
+                      No referrals yet. Be the first to invite friends!
+                    </div>
+              ) : (
+                <div className="divide-y divide-neutral-800">
+                  {leaderboard.map((entry, index) => {
+                    const isCurrentUser = user?.id === entry.userId || user?.id === String(entry.userId);
+                    const getRankIcon = () => {
+                      if (index === 0) return <Trophy className="h-5 w-5 text-yellow-400" />;
+                      if (index === 1) return <Medal className="h-5 w-5 text-gray-300" />;
+                      if (index === 2) return <Medal className="h-5 w-5 text-amber-600" />;
+                      return <span className="text-neutral-500 font-semibold">#{index + 1}</span>;
+                    };
+
+                    const formatVolume = (volume: number) => {
+                      if (volume >= 1000000) return `$${(volume / 1000000).toFixed(2)}M`;
+                      if (volume >= 1000) return `$${(volume / 1000).toFixed(2)}K`;
+                      return `$${volume.toFixed(2)}`;
+                    };
+
+                    return (
+                      <div
+                        key={entry.id}
+                        className={`px-6 py-4 flex items-center justify-between transition ${
+                          isCurrentUser
+                            ? "bg-neutral-900/50 border-l-2 border-fuchsia-500"
+                            : "hover:bg-neutral-900/30"
+                        }`}
+                      >
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <div className="w-8 flex items-center justify-center flex-shrink-0">
+                            {getRankIcon()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-[#f0f5f5] truncate">
+                                {entry.userName || entry.userEmail || `User ${entry.userId}`}
+                              </span>
+                              {isCurrentUser && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30 flex-shrink-0">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center mt-1">
+															<span className="text-xs text-neutral-500">
+																{entry.totalTrades} {entry.totalTrades === 1 ? "trade" : "trades"}
+															</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right ml-4 flex-shrink-0">
+                          <div className="text-lg font-semibold text-[#f0f5f5]">
+                            {formatVolume(entry.totalTradingVolume)}
+                          </div>
+                          <div className="text-xs text-neutral-500">Volume</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col justify-between rounded-3xl border border-neutral-800 bg-gradient-to-br from-neutral-950/90 via-neutral-900/80 to-neutral-950/90 px-8 py-10 shadow-2xl shadow-purple-900/20">

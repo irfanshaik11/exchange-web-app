@@ -8,7 +8,7 @@ const USER_CACHE_KEY = 'codex_user_info_cache';
 import { getSolBalance } from '~/utils/functions';
 import { clearStoredReferralAccess, getStoredReferralCodeHint, clearStoredReferralCodeHint } from '../utils/referralStorage';
 import toast from 'react-hot-toast';
-import { recordReferralUsage } from '~/utils/referrals';
+import { recordReferralUsage, checkReferralUsageForUser } from '~/utils/referrals';
 
 
 export interface UserInfo {
@@ -133,13 +133,37 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const { user: fetchedUser } = await getUserById(token);
       if (fetchedUser) {
         setUser({ bearerToken: token, ...fetchedUser });
-        const referralCode = getStoredReferralCodeHint();
-        if (referralCode && fetchedUser?.id) {
-          try {
-            await recordReferralUsage(String(fetchedUser.id), referralCode);
+        
+        // Check if user has already used a referral code
+        try {
+          const { hasUsedReferral } = await checkReferralUsageForUser(token, String(fetchedUser.id));
+          
+          // Only record referral usage if user hasn't used one before
+          if (!hasUsedReferral) {
+            const referralCode = getStoredReferralCodeHint();
+            if (referralCode && fetchedUser?.id) {
+              try {
+                await recordReferralUsage(token, referralCode);
+                clearStoredReferralCodeHint();
+              } catch (error) {
+                console.warn('Failed to record referral usage', error);
+              }
+            }
+          } else {
+            // User already used a referral, clear any stored hint
             clearStoredReferralCodeHint();
-          } catch (error) {
-            console.warn('Failed to record referral usage', error);
+          }
+        } catch (error) {
+          console.warn('Failed to check referral usage', error);
+          // Try to record anyway if check fails (fallback)
+          const referralCode = getStoredReferralCodeHint();
+          if (referralCode && fetchedUser?.id) {
+            try {
+              await recordReferralUsage(token, referralCode);
+              clearStoredReferralCodeHint();
+            } catch (recordError) {
+              console.warn('Failed to record referral usage', recordError);
+            }
           }
         }
       } else {
