@@ -1,19 +1,20 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
-import Head from "next/head";
-import Link from "next/link";
-import { useRouter } from "next/router";
-import PulseTable from "../components/PulseTable";
-import BnbTable from "../components/BnbTable";
-import PulseControlBar from "../components/PulseControlBar";
-import type { Token } from "~/utils/db";
-import Header from "../components/Header";
-import Footer from "../components/Footer";
-import UpdatesModal from "../components/UpdatesModal";
-import { useUser } from "../components/UserContext";
-import Cookies from "js-cookie";
-import usePaginatedTokensWebSocket from "../hooks/usePaginatedTokensWebSocket";
-import { useRealtimeWebSocket } from "../hooks/useRealtimeWebSocket";
-import { usePulseWebSocket } from "../hooks/usePulseWebSocket";
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import Head from 'next/head';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import PulseTable from '../components/PulseTable';
+import BnbTable from '../components/BnbTable';
+import MonadTable from '../components/MonadTable';
+import PulseControlBar from '../components/PulseControlBar';
+import type { Token } from '~/utils/db';
+import Header from '../components/Header';
+import Footer from '../components/Footer';
+import UpdatesModal from '../components/UpdatesModal';
+import { useUser } from '../components/UserContext';
+import Cookies from 'js-cookie';
+import usePaginatedTokensWebSocket from '../hooks/usePaginatedTokensWebSocket';
+import { useRealtimeWebSocket } from '../hooks/useRealtimeWebSocket';
+import { usePulseWebSocket } from '../hooks/usePulseWebSocket';
 // import { PriorityImageSearcher } from '../utils/imageSearch'; // DISABLED - no external image searches
 import { useImagePreloader } from "../hooks/useImagePreloader";
 import {
@@ -101,11 +102,11 @@ export default function PulsePage() {
   const { user } = useUser();
   const router = useRouter();
   const chain = router.query.chain as string | undefined;
-  const isBnbRoute = chain === "bnb";
-  const isMonadRoute = chain === "monad";
-  const isBaseRoute = chain === "base";
-  const isEthereumRoute = chain === "eth";
-  const isSolanaRoute = chain === "sol" || !chain; // Default to Solana if no chain specified
+  // const isBnbRoute = chain === 'bnb';
+  const isMonadRoute = chain === 'monad';
+  // const isBaseRoute = chain === 'base';
+  // const isEthereumRoute = chain === 'eth';
+  const isSolanaRoute = chain === 'sol' || !chain; // Default to Solana if no chain specified
   const chainButtonBase =
     "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]";
   const solanaButtonClasses = `${chainButtonBase} ${
@@ -113,26 +114,26 @@ export default function PulsePage() {
       ? "bg-[#222733] text-white shadow-lg shadow-emerald-500/20"
       : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
   }`;
-  const bnbButtonClasses = `${chainButtonBase} ${
-    isBnbRoute
-      ? "bg-[#222733] text-white shadow-lg shadow-blue-500/20"
-      : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
-  }`;
+  // const bnbButtonClasses = `${chainButtonBase} ${
+  //   isBnbRoute
+  //     ? 'bg-[#222733] text-white shadow-lg shadow-blue-500/20'
+  //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  // }`;
   const monadButtonClasses = `${chainButtonBase} ${
     isMonadRoute
       ? "bg-[#222733] text-white shadow-lg shadow-purple-500/20"
       : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
   }`;
-  const baseButtonClasses = `${chainButtonBase} ${
-    isBaseRoute
-      ? "bg-[#222733] text-white shadow-lg shadow-blue-400/20"
-      : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
-  }`;
-  const ethButtonClasses = `${chainButtonBase} ${
-    isEthereumRoute
-      ? "bg-[#222733] text-white shadow-lg shadow-emerald-400/20"
-      : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
-  }`;
+  // const baseButtonClasses = `${chainButtonBase} ${
+  //   isBaseRoute
+  //     ? 'bg-[#222733] text-white shadow-lg shadow-blue-400/20'
+  //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  // }`;
+  // const ethButtonClasses = `${chainButtonBase} ${
+  //   isEthereumRoute
+  //     ? 'bg-[#222733] text-white shadow-lg shadow-emerald-400/20'
+  //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
+  // }`;
 
   // Redirect to /pulse?chain=sol if no chain parameter is present
   useEffect(() => {
@@ -237,8 +238,15 @@ export default function PulsePage() {
   }, []);
 
   const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
-
   const [httpFinalStretchTick, setHttpFinalStretchTick] = useState(0);
+
+  // Monad-specific state for all three tabs
+  const [monadNew, setMonadNew] = useState<any[]>([]);
+  const [monadNewTick, setMonadNewTick] = useState(0);
+  const [monadFinalStretch, setMonadFinalStretch] = useState<any[]>([]);
+  const [monadFinalStretchTick, setMonadFinalStretchTick] = useState(0);
+  const [monadMigrated, setMonadMigrated] = useState<any[]>([]);
+  const [monadMigratedTick, setMonadMigratedTick] = useState(0);
 
   // Function to fetch token image from backend
   const fetchTokenImage = useCallback(
@@ -288,8 +296,10 @@ export default function PulsePage() {
   useEffect(() => {
     const immediatePoll = async () => {
       try {
-        // Always use Next.js API proxy to avoid CORS issues
-        const apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+        // Use Monad endpoints when chain is monad, otherwise use Solana endpoints
+        const apiUrl = isMonadRoute
+          ? `/api/token-service/pulse-final-stretch-monad?limit=50&t=${Date.now()}`
+          : `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
 
         const res = await fetch(apiUrl, {
           cache: "no-store",
@@ -314,19 +324,26 @@ export default function PulsePage() {
             });
 
             if (filteredData.length === 0) {
-              console.log(
-                "[Final Stretch] ⚠️ All tokens filtered due to zero liquidity. Clearing final stretch list.",
-              );
+              console.log('[Final Stretch] ⚠️ All tokens filtered due to zero liquidity. Clearing final stretch list.');
+              if (isMonadRoute) {
+                setMonadFinalStretch([]);
+                setMonadFinalStretchTick((t) => t + 1);
+              } else {
               setHttpFinalStretch([]);
               setHttpFinalStretchTick((t) => t + 1);
+              }
               return;
             }
 
+            if (isMonadRoute) {
+              setMonadFinalStretch(filteredData as any[]);
+              setMonadFinalStretchTick((t) => t + 1);
+              console.log(`[Final Stretch Monad] Immediate poll got ${filteredData.length} tokens (after filtering)`);
+            } else {
             setHttpFinalStretch(filteredData as any[]);
             setHttpFinalStretchTick((t) => t + 1);
-            console.log(
-              `[Final Stretch] Immediate poll got ${filteredData.length} tokens (after filtering)`,
-            );
+            console.log(`[Final Stretch] Immediate poll got ${filteredData.length} tokens (after filtering)`);
+            }
           }
         }
       } catch (error) {
@@ -335,7 +352,77 @@ export default function PulsePage() {
     };
 
     immediatePoll();
-  }, []);
+  }, [isMonadRoute]);
+
+  // Fetch Monad data when chain is monad
+  useEffect(() => {
+    if (!isMonadRoute) {
+      // Clear Monad data when switching away from Monad
+      setMonadNew([]);
+      setMonadFinalStretch([]);
+      setMonadMigrated([]);
+      setMonadNewTick(0);
+      setMonadFinalStretchTick(0);
+      setMonadMigratedTick(0);
+      return;
+    }
+
+    console.log('[Pulse] 🌊 Fetching Monad data for chain=monad');
+
+    const fetchMonadData = async () => {
+      try {
+        // Fetch new pairs
+        console.log('[Monad] Fetching new pairs...');
+        const newRes = await fetch(`/api/token-service/pulse-new-monad?limit=50&t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
+        if (newRes.ok) {
+          const newData = await newRes.json();
+          const filteredNew = Array.isArray(newData) ? newData.filter((t: any) => !isZeroLiquidityToken(t)) : [];
+          setMonadNew(filteredNew);
+          setMonadNewTick(prev => prev + 1);
+          console.log(`[Monad] ✅ Fetched ${filteredNew.length} new tokens`);
+        } else {
+          console.error(`[Monad] ❌ Failed to fetch new pairs: ${newRes.status}`);
+        }
+
+        // Fetch final stretch tokens (already handled in immediatePoll, but fetch here too for consistency)
+        console.log('[Monad] Fetching final stretch tokens...');
+        const finalStretchRes = await fetch(`/api/token-service/pulse-final-stretch-monad?limit=50&t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
+        if (finalStretchRes.ok) {
+          const finalStretchData = await finalStretchRes.json();
+          const filteredFinalStretch = Array.isArray(finalStretchData) ? finalStretchData.filter((t: any) => !isZeroLiquidityToken(t)) : [];
+          setMonadFinalStretch(filteredFinalStretch);
+          setMonadFinalStretchTick(prev => prev + 1);
+          console.log(`[Monad] ✅ Fetched ${filteredFinalStretch.length} final stretch tokens`);
+        }
+
+        // Fetch migrated tokens
+        console.log('[Monad] Fetching migrated tokens...');
+        const migratedRes = await fetch(`/api/token-service/pulse-migrated-monad?limit=70&t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
+        if (migratedRes.ok) {
+          const migratedData = await migratedRes.json();
+          const filteredMigrated = Array.isArray(migratedData) ? migratedData.filter((t: any) => !isZeroLiquidityToken(t)) : [];
+          setMonadMigrated(filteredMigrated);
+          setMonadMigratedTick(prev => prev + 1);
+          console.log(`[Monad] ✅ Fetched ${filteredMigrated.length} migrated tokens`);
+        } else {
+          console.error(`[Monad] ❌ Failed to fetch migrated tokens: ${migratedRes.status}`);
+        }
+      } catch (error) {
+        console.error('[Monad] ❌ Failed to fetch Monad data:', error);
+      }
+    };
+
+    fetchMonadData();
+  }, [isMonadRoute, isZeroLiquidityToken, chain]);
 
   // Convert launchpad tokens to Token format for PulseTable
   const convertLaunchpadToToken = useCallback(
@@ -469,10 +556,16 @@ export default function PulsePage() {
   const combinedMigrated = useMemo(() => [...migrated], [migrated]);
 
   // Memoize the loading state to prevent unnecessary re-renders
+  // For Monad route, check Monad data; for Solana route, check Solana data
   const isLoading = useMemo(() => {
+    if (isMonadRoute) {
+      // For Monad, check if Monad data is loaded
+      return monadNew.length === 0 && monadNewTick === 0;
+    }
+    // For Solana, use existing logic
     return !tokens.length && !launchpadData?.new?.length && !httpNew.length;
-  }, [tokens.length, launchpadData?.new?.length, httpNew.length]);
-
+  }, [isMonadRoute, tokens.length, launchpadData?.new?.length, httpNew.length, monadNew.length, monadNewTick]);
+  
   const newPairsLoading = isLoading;
 
   const hasError = useMemo(() => {
@@ -585,9 +678,14 @@ export default function PulsePage() {
   };
 
   const buildNewPairs = (): any[] => {
-    // Prefer real-time WS data first, then fall back to combined data (includes launchpad)
-    const source = wsNewEnriched.length ? wsNewEnriched : combinedNewPairs;
+    // NOTE: For Monad route, we bypass this function and use monadNew directly in enrichedNewPairsToShow
+    // This function is only used for Solana route
 
+    // For Solana route, use existing logic
+    const source = wsNewEnriched.length
+      ? wsNewEnriched
+      : combinedNewPairs;
+    
     const uniq = new Map<string, any>();
     for (const t of source as any[]) {
       const key = (t?.pair_address || t?.mint) as string | undefined;
@@ -630,6 +728,10 @@ export default function PulsePage() {
   };
 
   const buildMigrated = (): any[] => {
+    // NOTE: For Monad route, we bypass this function and use monadMigrated directly in enrichedMigrated
+    // This function is only used for Solana route
+
+    // For Solana route, use existing logic
     const source = migratedTokensQuery;
     if (!Array.isArray(source) || source.length === 0) return [];
 
@@ -667,6 +769,10 @@ export default function PulsePage() {
   };
 
   const buildFinalStretch = (): any[] => {
+    // NOTE: For Monad route, we bypass this function and use monadFinalStretch directly in enrichedFinalStretch
+    // This function is only used for Solana route
+
+    // For Solana route, use existing logic
     const source = finalStretchTokensQuery;
     if (!Array.isArray(source) || source.length === 0) return [];
 
@@ -704,14 +810,15 @@ export default function PulsePage() {
   };
 
   // Use the processed data from build functions (single definitions)
-  const newPairsToShow = useMemo(
-    () => buildNewPairs(),
-    [combinedNewPairs, wsNewEnriched],
+  // Include all dependencies - React will handle the conditional logic
+  const newPairsToShow = useMemo(() => buildNewPairs(), 
+    [isMonadRoute, monadNew, monadNewTick, combinedNewPairs, wsNewEnriched, isZeroLiquidityToken]
   );
-  const migratedToShow = useMemo(() => buildMigrated(), [migratedTokensQuery]);
-  const finalStretchToShow = useMemo(
-    () => buildFinalStretch(),
-    [finalStretchTokensQuery],
+  const migratedToShow = useMemo(() => buildMigrated(), 
+    [isMonadRoute, monadMigrated, monadMigratedTick, migratedTokensQuery, isZeroLiquidityToken]
+  );
+  const finalStretchToShow = useMemo(() => buildFinalStretch(), 
+    [isMonadRoute, monadFinalStretch, monadFinalStretchTick, finalStretchTokensQuery, isZeroLiquidityToken]
   );
 
   // Track httpNew changes for debugging
@@ -789,42 +896,42 @@ export default function PulsePage() {
 
   // DEBUG: Log the data being passed to UI
   useEffect(() => {
-    console.log(
-      `[Pulse] 🎯 UI Data - newPairsToShow: ${newPairsToShow.length}, httpNew: ${httpNew.length}, httpNewTick: ${httpNewTick}`,
-    );
+    console.log(`[Pulse] 🎯 UI Data - chain: ${chain}, isMonadRoute: ${isMonadRoute}`);
+    console.log(`[Pulse] 🎯 UI Data - newPairsToShow: ${newPairsToShow.length}, httpNew: ${httpNew.length}, httpNewTick: ${httpNewTick}, monadNew: ${monadNew.length}, monadNewTick: ${monadNewTick}`);
     if (newPairsToShow.length > 0) {
-      console.log(
-        `[Pulse] 🎯 First token in UI:`,
-        newPairsToShow[0]?.name || "none",
-      );
+      console.log(`[Pulse] 🎯 First token in UI:`, newPairsToShow[0]?.name || 'none', `chain: ${(newPairsToShow[0] as any)?.chain || 'unknown'}`);
     }
-  }, [newPairsToShow, httpNew, httpNewTick]);
+  }, [newPairsToShow, httpNew, httpNewTick, isMonadRoute, chain, monadNew, monadNewTick]);
 
   // DEBUG: Log migrated data
   useEffect(() => {
-    console.log(
-      `[Pulse] 🎯 Migrated UI Data - migratedToShow: ${migratedToShow.length}, httpMigrated: ${httpMigrated.length}, httpMigratedTick: ${httpMigratedTick}`,
-    );
+    console.log(`[Pulse] 🎯 Migrated UI Data - chain: ${chain}, isMonadRoute: ${isMonadRoute}`);
+    console.log(`[Pulse] 🎯 Migrated UI Data - migratedToShow: ${migratedToShow.length}, httpMigrated: ${httpMigrated.length}, httpMigratedTick: ${httpMigratedTick}, monadMigrated: ${monadMigrated.length}, monadMigratedTick: ${monadMigratedTick}`);
     if (migratedToShow.length > 0) {
-      console.log(
-        `[Pulse] 🎯 First migrated token in UI:`,
-        migratedToShow[0]?.name || "none",
-      );
+      console.log(`[Pulse] 🎯 First migrated token in UI:`, migratedToShow[0]?.name || 'none', `chain: ${(migratedToShow[0] as any)?.chain || 'unknown'}`);
     }
-  }, [migratedToShow, httpMigrated, httpMigratedTick]);
+  }, [migratedToShow, httpMigrated, httpMigratedTick, isMonadRoute, chain, monadMigrated, monadMigratedTick]);
 
-  // Fetch initial migrated tokens on page load
+  // Fetch initial migrated tokens on page load (only for Solana route)
   useEffect(() => {
+    if (isMonadRoute) {
+      // Monad migrated tokens are already fetched in the Monad data effect above
+      return;
+    }
+
     const fetchInitialMigratedTokens = async () => {
       try {
         console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
-        const url = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/pulse/migrated?limit=70`;
-        console.log(`[Pulse] 🔄 URL:`, url);
-        console.log(
-          `[Pulse] 🔄 env.NEXT_PUBLIC_GO_SERVICE_URL:`,
-          env.NEXT_PUBLIC_GO_SERVICE_URL,
-        );
-        const response = await fetch(url);
+        const endpoint = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/pulse/migrated?limit=70`;
+        console.log(`[Pulse] 🔄 URL:`, endpoint);
+        console.log(`[Pulse] 🔄 Chain: Solana`);
+        const response = await fetch(endpoint, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
         console.log(`[Pulse] 🔄 Response status:`, response.status);
         if (response.ok) {
           const data = await response.json();
@@ -891,7 +998,7 @@ export default function PulsePage() {
     };
 
     fetchInitialMigratedTokens();
-  }, []); // Run once on mount
+  }, [isMonadRoute]); // Re-run when chain changes
 
   // Debug: log top entries order and timestamps (after data is computed)
   if (typeof window !== "undefined") {
@@ -980,10 +1087,21 @@ export default function PulsePage() {
     [marketData],
   );
 
-  // SIMPLIFIED: Just pass the data directly
-  const enrichedNewPairsToShow = newPairsToShow;
-  const enrichedFinalStretch = finalStretchToShow;
-  const enrichedMigrated = migratedToShow;
+  // For Monad route, ONLY use Monad data - never Solana data
+  // For Solana route, use the regular build function results
+  const enrichedNewPairsToShow = isMonadRoute ? monadNew : newPairsToShow;
+  const enrichedFinalStretch = isMonadRoute ? monadFinalStretch : finalStretchToShow;
+  const enrichedMigrated = isMonadRoute ? monadMigrated : migratedToShow;
+  
+  // DEBUG: Log what's being passed to MonadTable
+  useEffect(() => {
+    if (isMonadRoute) {
+      console.log(`[Pulse] 🌊 Monad Route Active - enrichedNewPairsToShow: ${enrichedNewPairsToShow.length}, enrichedFinalStretch: ${enrichedFinalStretch.length}, enrichedMigrated: ${enrichedMigrated.length}`);
+      if (enrichedNewPairsToShow.length > 0) {
+        console.log(`[Pulse] 🌊 First Monad token in enrichedNewPairsToShow:`, enrichedNewPairsToShow[0]?.name || 'none');
+      }
+    }
+  }, [isMonadRoute, enrichedNewPairsToShow, enrichedFinalStretch, enrichedMigrated]);
 
   if (typeof window !== "undefined") {
     try {
@@ -1009,102 +1127,75 @@ export default function PulsePage() {
         <Header />
         <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-6 pt-4">
           <div className="mb-1">
-            <div className="mb-4 flex w-full flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex w-full flex-row items-center justify-between gap-3">
-                <div className="flex flex-row items-center gap-2">
-                  <h1 className="text-xl font-bold">Trenches</h1>
-                  <div className="flex items-center gap-3">
-                    <Link
-                      href="/pulse?chain=sol"
-                      aria-label="View Solana tokens"
-                      className={solanaButtonClasses}
-                    >
-                      <img
-                        src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
-                        alt="Solana"
-                        className="h-6 w-6 rounded-full object-contain"
-                        style={{
-                          mixBlendMode: "screen",
-                          filter: "contrast(1.2)",
-                        }}
-                      />
-                    </Link>
-                    <Link
-                      href="/pulse?chain=monad"
-                      aria-label="View Monad tokens (coming soon)"
-                      className={monadButtonClasses}
-                    >
-                      <img
-                        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                        alt="Monad"
-                        className="h-7 w-7 rounded-full object-cover"
-                      />
-                      <span
-                        className="absolute -right-4 -bottom-1 rounded-full border border-purple-400 px-1.5 py-px text-[6px] font-semibold tracking-[0.18em] text-purple-300 uppercase shadow-lg shadow-purple-500/30"
-                        style={{ backgroundColor: "#06070b" }}
-                      >
-                        Soon
-                      </span>
-                    </Link>
-                    <Link
-                      href="/pulse?chain=bnb"
-                      aria-label="View BNB tokens (beta)"
-                      className={bnbButtonClasses}
-                    >
-                      <SiBinance className="h-4 w-4 text-[#F3BA2F]" />
-                      <span
-                        className="absolute -right-3 -bottom-1 rounded-full border border-blue-500 px-1.5 py-px text-[6px] font-semibold tracking-[0.18em] text-blue-500 uppercase shadow-lg shadow-blue-500/30"
-                        style={{ backgroundColor: "#06070b" }}
-                      >
-                        Beta
-                      </span>
-                    </Link>
-                    <Link
-                      href="/pulse?chain=base"
-                      aria-label="View Base tokens (coming soon)"
-                      className={baseButtonClasses}
-                    >
-                      <img
-                        src="https://avatars.githubusercontent.com/u/108554348?s=280&v=4"
-                        alt="Base"
-                        className="h-7 w-7 rounded-full object-cover"
-                      />
-                      <span
-                        className="absolute -right-4 -bottom-1 rounded-full border border-sky-400 px-1.5 py-px text-[6px] font-semibold tracking-[0.18em] text-sky-300 uppercase shadow-lg shadow-sky-500/30"
-                        style={{ backgroundColor: "#06070b" }}
-                      >
-                        Soon
-                      </span>
-                    </Link>
-                    <Link
-                      href="/pulse?chain=eth"
-                      aria-label="View Ethereum tokens (coming soon)"
-                      className={ethButtonClasses}
-                    >
-                      <img
-                        src="https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png"
-                        alt="Ethereum"
-                        className="h-7 w-7 rounded-full object-cover"
-                      />
-                      <span
-                        className="absolute -right-4 -bottom-1 rounded-full border border-emerald-400 px-1.5 py-px text-[6px] font-semibold tracking-[0.18em] text-emerald-300 uppercase shadow-lg shadow-emerald-500/30"
-                        style={{ backgroundColor: "#06070b" }}
-                      >
-                        Soon
-                      </span>
-                    </Link>
-                  </div>
-                </div>
-                <div className="flex flex-row items-center gap-8 text-gray-500">
-                  <AiOutlineQuestionCircle
-                    size={22}
-                  />
-                  <div className="flex flex-row gap-2 items-center">
-                    <BsLayoutThreeColumns size={18} />
-                    Layout
-                  </div>
-                  <BsBookmarkX size={18} />
-                  <CiSettings size={24} />
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 px-2 mb-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-bold">Trenches</h1>
+                <div className="flex items-center gap-3">
+                  <Link
+                    href="/pulse?chain=sol"
+                    aria-label="View Solana tokens"
+                    className={solanaButtonClasses}
+                  >
+                    <img
+                      src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                      alt="Solana"
+                      className="h-6 w-6 rounded-full object-contain"
+                      style={{ 
+                        mixBlendMode: 'screen',
+                        filter: 'contrast(1.2)'
+                      }}
+                    />
+                  </Link>
+                  <Link
+                    href="/pulse?chain=monad"
+                    aria-label="View Monad tokens"
+                    className={monadButtonClasses}
+                  >
+                    <img
+                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                      alt="Monad"
+                      className="h-7 w-7 rounded-full object-cover"
+                    />
+                  </Link>
+                  {/* <Link
+                    href="/pulse?chain=bnb"
+                    aria-label="View BNB tokens (beta)"
+                    className={bnbButtonClasses}
+                  >
+                    <SiBinance className="h-4 w-4 text-[#F3BA2F]" />
+                    <span className="absolute -bottom-1 -right-3 rounded-full border border-blue-500 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-blue-500 shadow-lg shadow-blue-500/30" style={{ backgroundColor: '#06070b' }}>
+                      Beta
+                    </span>
+                  </Link> */}
+                  {/* <Link
+                    href="/pulse?chain=base"
+                    aria-label="View Base tokens (coming soon)"
+                    className={baseButtonClasses}
+                  >
+                    <img
+                      src="https://avatars.githubusercontent.com/u/108554348?s=280&v=4"
+                      alt="Base"
+                      className="h-7 w-7 rounded-full object-cover"
+                    />
+                    <span className="absolute -bottom-1 -right-4 rounded-full border border-sky-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-sky-300 shadow-lg shadow-sky-500/30" style={{ backgroundColor: '#06070b' }}>
+                      Soon
+                    </span>
+                  </Link> */}
+                  {/* <Link
+                    href="/pulse?chain=eth"
+                    aria-label="View Ethereum tokens (coming soon)"
+                    className={ethButtonClasses}
+                  >
+                    <img
+                      src="https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png"
+                      alt="Ethereum"
+                      className="h-7 w-7 rounded-full object-cover"
+                    />
+                    <span className="absolute -bottom-1 -right-4 rounded-full border border-emerald-400 px-1.5 py-px text-[6px] font-semibold uppercase tracking-[0.18em] text-emerald-300 shadow-lg shadow-emerald-500/30" style={{ backgroundColor: '#06070b' }}>
+                      Soon
+                    </span>
+                  </Link> */}
                 </div>
               </div>
               {/* <PulseControlBar className="mb-0.5" /> */}
@@ -1168,7 +1259,7 @@ export default function PulsePage() {
             </div>
           </div>
 
-          {isBnbRoute ? (
+          {false ? ( // isBnbRoute commented out
             <div className="w-full">
               {/* Mobile: Single table based on active tab */}
               <div className="lg:hidden">
@@ -1222,50 +1313,50 @@ export default function PulsePage() {
                 />
               </div>
             </div>
-          ) : isMonadRoute || isBaseRoute || isEthereumRoute ? (
-            <div className="mt-12 flex flex-col items-center justify-center gap-6 rounded-2xl border border-neutral-800/80 bg-[#0a0b10] px-6 py-16 text-center shadow-inner shadow-black/40">
-              <img
-                src={
-                  isMonadRoute
-                    ? "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                    : isBaseRoute
-                      ? "https://avatars.githubusercontent.com/u/108554348?s=280&v=4"
-                      : "https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png"
-                }
-                alt={isMonadRoute ? "Monad" : isBaseRoute ? "Base" : "Ethereum"}
-                className="h-24 w-24 rounded-full bg-black/60 object-cover p-1"
-              />
-              <div className="space-y-2">
-                <h2 className="text-xl font-semibold text-neutral-100">
-                  {isMonadRoute
-                    ? "Monad support is on the way"
-                    : isBaseRoute
-                      ? "Base support is on the way"
-                      : "Ethereum support is on the way"}
-                </h2>
-                <p className="max-w-md text-sm text-neutral-400">
-                  {isMonadRoute
-                    ? "We're building out dedicated flows for Monad tokens. Check back soon for real-time liquidity and launch data."
-                    : isBaseRoute
-                      ? "We're building out dedicated flows for Base tokens. Check back soon for real-time liquidity and launch data."
-                      : "We're building out dedicated flows for Ethereum tokens. Check back soon for real-time liquidity and launch data."}
-                </p>
+          ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
+            <div className="w-full">
+              {/* Mobile: Single table based on active tab */}
+              <div className="lg:hidden">
+                <div className="transition-all duration-300 ease-in-out">
+                  {activeTab === 'new' && (
+                    <MonadTable 
+                      title="New Pairs" 
+                      tokens={[] as any} 
+                      loading={false} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                  {activeTab === 'final-stretch' && (
+                    <MonadTable 
+                      title="Final Stretch" 
+                      tokens={[] as any} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                  {activeTab === 'migrated' && (
+                    <MonadTable 
+                      title="Migrated" 
+                      tokens={[] as any} 
+                      isFirstOrLast="only" 
+                      showBubbleMetrics={false} 
+                    />
+                  )}
+                </div>
               </div>
-              <button
-                onClick={() => router.push("/pulse?chain=sol")}
-                className="inline-flex items-center gap-2 rounded-full border border-neutral-700/70 bg-neutral-800/60 px-4 py-2 text-xs font-semibold tracking-[0.18em] text-neutral-200 uppercase transition-colors hover:border-emerald-500/60 hover:bg-neutral-800"
-              >
-                Back to Solana
-              </button>
-              <a
-                href="https://discord.gg/sACYQmCsTJ"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-full border border-neutral-700/70 bg-neutral-800/30 px-4 py-2 text-xs font-semibold tracking-[0.18em] text-neutral-200 uppercase transition-colors hover:border-purple-500/60 hover:bg-neutral-800"
-              >
-                <FaDiscord className="h-4 w-4 text-[#5865F2]" />
-                Join Discord
-              </a>
+              {/* Desktop: All tables horizontally */}
+              <div className="hidden lg:flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+                <MonadTable 
+                  title="New Pairs" 
+                  tokens={[] as any} 
+                  loading={false} 
+                  isFirstOrLast="first" 
+                  showBubbleMetrics={false} 
+                />
+                <MonadTable title="Final Stretch" tokens={[] as any} showBubbleMetrics={false} />
+                <MonadTable title="Migrated" tokens={[] as any} isFirstOrLast="last" showBubbleMetrics={false} />
+              </div>
             </div>
           ) : isLoading ? (
             <div className="w-full">

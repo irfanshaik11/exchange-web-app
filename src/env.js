@@ -26,6 +26,7 @@ export const env = createEnv({
     NEXT_PUBLIC_WEBSOCKET_URL: z.string().url(),
     NEXT_PUBLIC_BACKEND_URL: z.string(),
     NEXT_PUBLIC_GO_SERVICE_URL: z.string().url(),
+    NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL: z.string().url().optional(),
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED: z.preprocess(
       (val) => val === "true" || val === true,
       z.boolean(),
@@ -59,6 +60,7 @@ export const env = createEnv({
     X_REDIRECT_URI: process.env.X_REDIRECT_URI,
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
     NEXT_PUBLIC_GO_SERVICE_URL: process.env.NEXT_PUBLIC_GO_SERVICE_URL,
+    NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL: process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL,
     NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL,
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED:
       process.env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED,
