@@ -939,6 +939,8 @@ export default function DiscoverPage() {
         const payload = await response.json();
         if (cancelled) return;
 
+        // COMMENTED OUT: filterTokens processing temporarily disabled
+        /*
         if (payload?.filterTokens?.results) {
           const results = payload.filterTokens.results || [];
           
@@ -968,6 +970,10 @@ export default function DiscoverPage() {
           setXStocksError(null);
           saveToCache(deduped);
         }
+        */
+        // Empty response while filterTokens is disabled
+        setXStocksRaw([]);
+        setXStocksError(null);
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Failed to fetch xStocks';
