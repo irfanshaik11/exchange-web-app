@@ -22,24 +22,24 @@ const blockchains: Blockchain[] = [
     logo: 'https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1',
     color: '#9B59B6' 
   },
-  { 
-    id: 'eth', 
-    name: 'Ethereum', 
-    logo: 'https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png',
-    color: '#627EEA' 
-  },
-  { 
-    id: 'bnb', 
-    name: 'BNB Chain', 
-    logo: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
-    color: '#F3BA2F' 
-  },
-  { 
-    id: 'base', 
-    name: 'Base', 
-    logo: 'https://avatars.githubusercontent.com/u/108554348?s=280&v=4',
-    color: '#0052FF' 
-  },
+  // { 
+  //   id: 'eth', 
+  //   name: 'Ethereum', 
+  //   logo: 'https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png',
+  //   color: '#627EEA' 
+  // },
+  // { 
+  //   id: 'bnb', 
+  //   name: 'BNB Chain', 
+  //   logo: 'https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png',
+  //   color: '#F3BA2F' 
+  // },
+  // { 
+  //   id: 'base', 
+  //   name: 'Base', 
+  //   logo: 'https://avatars.githubusercontent.com/u/108554348?s=280&v=4',
+  //   color: '#0052FF' 
+  // },
 ];
 
 const AX = {

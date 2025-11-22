@@ -2,17 +2,21 @@ import { type AppType } from "next/app";
 import { Inter } from "next/font/google";
 import "~/styles/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
-import { getDefaultConfig, RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
-import { WagmiProvider } from "wagmi";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { queryClient } from '../lib/queryClient';
+import { WagmiProviderWrapper } from '../components/WagmiProviderWrapper';
 import { UserProvider, useUser } from "../components/UserContext";
 import { Toaster } from 'react-hot-toast';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
-import LoginModal from '../components/LoginModal';
+import dynamic from 'next/dynamic';
+
+// Dynamically import LoginModal with no SSR to prevent wagmi provider issues
+const LoginModal = dynamic(() => import('../components/LoginModal'), {
+  ssr: false,
+});
 import { env } from '../env';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
@@ -97,7 +101,7 @@ const config = getDefaultConfig({
   appName: "Meme Dashboard",
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "YOUR_PROJECT_ID", // TODO: Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in your environment
   chains: [mainnet],
-  ssr: true,
+  ssr: true, // Keep SSR enabled, but handle client-side rendering in wrapper
 });
 
 const inter = Inter({
@@ -161,67 +165,79 @@ function ReferralTracker() {
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // Only render on client side to prevent SSR issues with wagmi
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  
+  useEffect(() => {
+    if (!isMounted) return;
     if (enforceLogin && !userLoading && !user) {
       setLoginOpen(true);
     }
     if (user && loginOpen) {
       setLoginOpen(false);
     }
-  }, [user, userLoading, enforceLogin, loginOpen]);
+  }, [user, userLoading, enforceLogin, loginOpen, isMounted]);
+  
   // Prevent closing if not logged in
   const handleLoginClose = () => {
     if (user) setLoginOpen(false);
   };
-  if (!enforceLogin) return null;
+  
+  if (!enforceLogin || !isMounted) return null;
+  
   return (
     <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
   );
 }
 
 function MobileBlocker({ children }: { children: React.ReactNode }) {
-  const [isMobile, setIsMobile] = useState(false);
-  const [isClient, setIsClient] = useState(false);
+  // Mobile blocker disabled - commented out but kept for future use
+  // const [isMobile, setIsMobile] = useState(false);
+  // const [isClient, setIsClient] = useState(false);
 
-  useEffect(() => {
-    setIsClient(true);
-    
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 500);
-    };
+  // useEffect(() => {
+  //   setIsClient(true);
+  //   
+  //   const checkMobile = () => {
+  //     setIsMobile(window.innerWidth < 500);
+  //   };
 
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  //   checkMobile();
+  //   window.addEventListener('resize', checkMobile);
+  //   return () => window.removeEventListener('resize', checkMobile);
+  // }, []);
 
-  // Show nothing during SSR/initial load to prevent hydration issues
-  if (!isClient) {
-    return null;
-  }
+  // // Show nothing during SSR/initial load to prevent hydration issues
+  // if (!isClient) {
+  //   return null;
+  // }
 
-  if (isMobile) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
-        <div className="text-center">
-          <div className="mb-6">
-            <img 
-              src="/logo.png" 
-              alt="Logo" 
-              className="w-24 h-24 mx-auto mb-6 object-contain"
-            />
-          </div>
-          <h1 className="text-2xl font-bold mb-2">We're Coming Soon on Mobile!</h1>
-          <p className="text-gray-400 mb-4">
-            Our mobile experience is currently in development.
-          </p>
-          <p className="text-sm text-gray-500">
-            Please visit us on desktop for the full experience.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // if (isMobile) {
+  //   return (
+  //     <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
+  //       <div className="text-center">
+  //         <div className="mb-6">
+  //           <img 
+  //             src="/logo.png" 
+  //             alt="Logo" 
+  //             className="w-24 h-24 mx-auto mb-6 object-contain"
+  //           />
+  //         </div>
+  //         <h1 className="text-2xl font-bold mb-2">We're Coming Soon on Mobile!</h1>
+  //         <p className="text-gray-400 mb-4">
+  //           Our mobile experience is currently in development.
+  //         </p>
+  //         <p className="text-sm text-gray-500">
+  //           Please visit us on desktop for the full experience.
+  //         </p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return <>{children}</>;
 }
@@ -305,32 +321,28 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       </Head>
       <div className={inter.className}>
         <MobileBlocker>
-          <WagmiProvider config={config}>
-            <QueryClientProvider client={queryClient}>
-              <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
-                <UserProvider>
-                  <TokenHandler />
-                  <ReferralTracker />
-                  <SolPriceProvider>
-                    <ThemeProvider>
-                      <QuickBuyProvider>
-                        <WatchlistProvider>
-                          <FilterProvider>
-                            <WalletTrackerProvider>
-                              <ReferralAccessGate>
-                                <Component {...pageProps} />
-                              </ReferralAccessGate>
-                            </WalletTrackerProvider>
-                          </FilterProvider>
-                        </WatchlistProvider>
-                      </QuickBuyProvider>
-                      <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
-                    </ThemeProvider>
-                  </SolPriceProvider>
-                </UserProvider>
-              </RainbowKitProvider>
-            </QueryClientProvider>
-          </WagmiProvider>
+          <WagmiProviderWrapper config={config} queryClient={queryClient}>
+            <UserProvider>
+              <TokenHandler />
+              <ReferralTracker />
+              <SolPriceProvider>
+                <ThemeProvider>
+                  <QuickBuyProvider>
+                    <WatchlistProvider>
+                      <FilterProvider>
+                        <WalletTrackerProvider>
+                          <ReferralAccessGate>
+                            <Component {...pageProps} />
+                          </ReferralAccessGate>
+                        </WalletTrackerProvider>
+                      </FilterProvider>
+                    </WatchlistProvider>
+                  </QuickBuyProvider>
+                  <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                </ThemeProvider>
+              </SolPriceProvider>
+            </UserProvider>
+          </WagmiProviderWrapper>
           <Toaster 
             position={toastPosition}
             toastOptions={{

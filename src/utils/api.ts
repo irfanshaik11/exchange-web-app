@@ -133,7 +133,7 @@ async function apiFetch<T = unknown>(
         // Suppress console.error for expected validation errors to prevent Next.js dev overlay
         const EXPECTED_ERROR_CODES = [
           'NO_HOLDINGS', 'INSUFFICIENT_BALANCE', 'VALIDATION_ERROR',
-          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED', 'METEORA_NO_LIQUIDITY', 'TURNKEY_NOT_SUPPORTED'
+          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED', 'METEORA_NO_LIQUIDITY', 'TURNKEY_NOT_SUPPORTED', 'TOKEN_NOT_SUPPORTED'
         ];
         if (EXPECTED_ERROR_CODES.includes(code)) {
           // Mark as expected error (won't trigger Next.js error overlay in dev)
