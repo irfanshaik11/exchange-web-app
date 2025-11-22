@@ -2610,8 +2610,7 @@ function MonadTable({
             {filters.protocols.length > 0 && (
               <span 
                 className="absolute -top-1 -right-1 text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
-                style={{ backgroundColor: '#9B59B6' }}
-                style={{ color: '#f0f5f5', fontSize: '10px' }}
+                style={{ backgroundColor: '#9B59B6', color: '#f0f5f5', fontSize: '10px' }}
               >
                 {filters.protocols.length}
               </span>
@@ -5464,8 +5463,7 @@ function MonadTable({
               type="text"
               value="https://api.mainnet-beta.solana.com"
               className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': '#9B59B6' } as React.CSSProperties}
-              style={{ color: '#f0f5f5' }}
+              style={{ '--tw-ring-color': '#9B59B6', color: '#f0f5f5' } as React.CSSProperties}
               readOnly
             />
           </div>
