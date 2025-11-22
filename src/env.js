@@ -15,6 +15,7 @@ export const env = createEnv({
     X_CLIENT_ID: z.string(),
     X_CLIENT_SECRET: z.string(),
     X_REDIRECT_URI: z.string().url(),
+    MONAD_RPC_URL: z.string().url().optional(),
   },
 
   /**
@@ -26,6 +27,7 @@ export const env = createEnv({
     NEXT_PUBLIC_WEBSOCKET_URL: z.string().url(),
     NEXT_PUBLIC_BACKEND_URL: z.string(),
     NEXT_PUBLIC_GO_SERVICE_URL: z.string().url(),
+    NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL: z.string().url().optional(),
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED: z.preprocess(
       (val) => val === "true" || val === true,
       z.boolean(),
@@ -40,7 +42,7 @@ export const env = createEnv({
       .preprocess((val) => val === "true" || val === true, z.boolean())
       .optional(),
     NEXT_PUBLIC_DEFAULT_REFERRAL_CODE: z.string().optional(),
-
+    NEXT_PUBLIC_MONAD_RPC_URL: z.string().url(),
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
 
@@ -57,8 +59,10 @@ export const env = createEnv({
     X_CLIENT_ID: process.env.X_CLIENT_ID,
     X_CLIENT_SECRET: process.env.X_CLIENT_SECRET,
     X_REDIRECT_URI: process.env.X_REDIRECT_URI,
+    MONAD_RPC_URL: process.env.MONAD_RPC_URL,
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
     NEXT_PUBLIC_GO_SERVICE_URL: process.env.NEXT_PUBLIC_GO_SERVICE_URL,
+    NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL: process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL,
     NEXT_PUBLIC_WEBSOCKET_URL: process.env.NEXT_PUBLIC_WEBSOCKET_URL,
     NEXT_PUBLIC_IS_BACKEND_DEPLOYED:
       process.env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED,
@@ -70,6 +74,7 @@ export const env = createEnv({
 		NEXT_PUBLIC_SOLANA_RPC: process.env.NEXT_PUBLIC_SOLANA_RPC,
 		NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS: process.env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS,
     NEXT_PUBLIC_DEFAULT_REFERRAL_CODE: process.env.NEXT_PUBLIC_DEFAULT_REFERRAL_CODE,
+    NEXT_PUBLIC_MONAD_RPC_URL: process.env.NEXT_PUBLIC_MONAD_RPC_URL,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**

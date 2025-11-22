@@ -845,6 +845,10 @@ export default function DiscoverPage() {
         pair_address: pair.address || token.address || '',
         created_at: result.createdAt || pair.createdAt || Date.now(),
         
+        // Protocol - xStocks use Raydium Launchpad
+        protocol: 'Raydium Launchpad',
+        launchpad_protocol: 'Raydium Launchpad',
+        
         // Image
         uri: getImage(),
         logo: getImage(),

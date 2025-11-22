@@ -3467,18 +3467,9 @@ function PulseTable({
         <div className="flex items-center gap-2">
           {/* Keyword Search Box */}
           <div
-            className="hidden items-center gap-1 overflow-hidden rounded-md border px-1.5 sm:flex"
-            style={{
-              borderColor: AX.border,
-              backgroundColor: "#272a2e",
-              paddingTop: "4px",
-              paddingBottom: "4px",
-              minWidth: "120px",
-              width: "120px",
-              height: "24px",
-            }}
+            className="hidden items-center gap-1 overflow-hidden rounded-md border px-1.5 py-1 sm:flex border-neutral-800 border-2 max-w-32"
           >
-            <LuSearch size={12} style={{ color: AX.muted, flexShrink: 0 }} />
+            <LuSearch size={16} style={{ color: AX.muted, flexShrink: 0 }} />
             <input
               type="text"
               value={filters.searchKeywords}
@@ -3488,24 +3479,14 @@ function PulseTable({
                   searchKeywords: e.target.value,
                 }));
               }}
-              placeholder="keyword1, keyword2"
+              placeholder="Search..."
               className="min-w-0 flex-1 border-none bg-transparent text-left text-xs font-medium placeholder-gray-500 outline-none"
-              style={{ color: AX.text, width: "100%", maxWidth: "100%" }}
             />
           </div>
 
           {/* Thunder Icon and Amount Entry - Separate Thin Box */}
           <div
-            className="hidden items-center justify-center gap-1 rounded-md border px-1.5 sm:flex"
-            style={{
-              borderColor: AX.border,
-              backgroundColor: "#272a2e",
-              paddingTop: "4px",
-              paddingBottom: "4px",
-              minWidth: "70px",
-              width: "70px",
-              height: "24px",
-            }}
+            className="hidden items-center justify-center gap-1 rounded-md border px-1.5 py-1 sm:flex  border-neutral-800 border-2 max-w-32"
           >
             <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
             <input
@@ -3543,32 +3524,15 @@ function PulseTable({
 
           {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
           <div
-            className="relative hidden items-center justify-center gap-1 rounded-md border px-1.5 sm:flex"
-            style={{
-              borderColor: AX.border,
-              backgroundColor: "#272a2e",
-              paddingTop: "4px",
-              paddingBottom: "4px",
-              minWidth: "80px",
-              width: "80px",
-              height: "24px",
-            }}
+            className="relative hidden items-center justify-center rounded-md border-2 border-neutral-800 px-1.5 sm:flex"
           >
-            {["P1", "P2", "P3"].map((pill) => (
+            {["P1", "P2", "P3"].map((pill, i) => (
               <div
                 key={pill}
                 className="relative flex items-center justify-center"
               >
                 <button
-                  className="flex cursor-pointer items-center justify-center rounded px-1 text-xs font-medium transition-all duration-200"
-                  style={{
-                    paddingTop: "2px",
-                    paddingBottom: "2px",
-                    backgroundColor:
-                      selectedPill === pill
-                        ? "rgba(24, 196, 140, 0.15)"
-                        : "rgba(22, 23, 28, 0.6)",
-                  }}
+                  className={`flex cursor-pointer items-center justify-center text-xs px-1.5 font-medium text-xl transition-all duration-200 ${selectedPill == pill ? `text-emerald-300` : `text-gray-500`}`}
                   onClick={() => {
                     // Update local preset selection for this column only
                     setSelectedPill(pill);
@@ -3676,6 +3640,8 @@ function PulseTable({
                       </div>
                     );
                   })()}
+
+                {i < 2 ? <div className="h-6 border-r-2 border-neutral-800"></div> : "" }
               </div>
             ))}
           </div>

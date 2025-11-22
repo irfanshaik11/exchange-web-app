@@ -39,6 +39,7 @@ interface DepositModalProps {
   open: boolean;
   onClose: () => void;
   initialTab?: TabType;
+  selectedChain?: string;
 }
 
 type TabType = 'convert' | 'deposit' | 'buy' | 'withdraw';
@@ -54,14 +55,61 @@ interface WithdrawalTransaction {
   completedAt?: string;
 }
 
-const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab = 'deposit' }) => {
-  const { user, loading: userLoading, refreshUser, refreshBalance, solBalance } = useUser();
+const CHAIN_CONFIG: Record<
+  string,
+  { tokenSymbol: string; networkName: string; iconUrl?: string }
+> = {
+  sol: {
+    tokenSymbol: "SOL",
+    networkName: "Solana",
+    iconUrl:
+      "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+  },
+  monad: {
+    tokenSymbol: "MON",
+    networkName: "Monad",
+    iconUrl: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+  },
+  eth: {
+    tokenSymbol: "ETH",
+    networkName: "Ethereum",
+    iconUrl:
+      "https://s2.coinmarketcap.com/static/img/coins/200x200/1027.png",
+  },
+  bnb: {
+    tokenSymbol: "BNB",
+    networkName: "BNB Chain",
+    iconUrl:
+      "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+  },
+  base: {
+    tokenSymbol: "BASE",
+    networkName: "Base",
+    iconUrl:
+      "https://avatars.githubusercontent.com/u/108554348?s=280&v=4",
+  },
+};
+
+const DepositModal: React.FC<DepositModalProps> = ({
+  open,
+  onClose,
+  initialTab = 'deposit',
+  selectedChain = 'sol',
+}) => {
+  const { user, loading: userLoading, refreshUser, refreshBalance, solBalance, chainBalances } = useUser();
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [moonPayLoaded, setMoonPayLoaded] = useState(false);
   const [jupiterLoaded, setJupiterLoaded] = useState(false);
+  const [primaryWalletAddresses, setPrimaryWalletAddresses] = useState<{
+    solana: string | null;
+    ethereum: string | null;
+  }>({ solana: null, ethereum: null });
+  const [primaryWalletLabel, setPrimaryWalletLabel] = useState<string | null>(null);
+  const [primaryWalletLoading, setPrimaryWalletLoading] = useState(false);
+  const [walletsRefreshKey, setWalletsRefreshKey] = useState(0);
   
   // Withdraw tab states
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -78,6 +126,17 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
   const MAX_WITHDRAWAL = 100;
   const minimumReserve = 0.00139;
 
+  const chainConfig = CHAIN_CONFIG[selectedChain] ?? CHAIN_CONFIG.sol;
+  const tokenSymbol = chainConfig.tokenSymbol;
+  const networkName = chainConfig.networkName;
+  const isSolChain = selectedChain === 'sol';
+  const chainBalance =
+    selectedChain === 'sol'
+      ? chainBalances[selectedChain] ?? solBalance
+      : chainBalances[selectedChain] ?? 0;
+  const numericWithdrawAmount = Number(withdrawAmount || 0);
+  const totalWithdrawalAmount = numericWithdrawAmount + withdrawalFee;
+
   // Update active tab when initialTab changes
   useEffect(() => {
     if (open) {
@@ -89,20 +148,30 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     if (open) {
       setShow(true);
       document.body.style.overflow = "hidden";
-      // Refresh balance when modal opens
-      if (refreshBalance) {
-        refreshBalance();
-      }
     } else {
       const timeout = setTimeout(() => setShow(false), 300);
       document.body.style.overflow = "";
       return () => clearTimeout(timeout);
     }
-  }, [open, refreshBalance]);
+  }, [open]);
+
+  const depositAddress =
+    selectedChain === 'sol'
+      ? primaryWalletAddresses.solana || user?.publicKey || ""
+      : primaryWalletAddresses.ethereum ||
+        primaryWalletAddresses.solana ||
+        user?.publicKey ||
+        "";
 
   useEffect(() => {
-    if (user?.publicKey) {
-      QRCode.toDataURL(user.publicKey, {
+    if (!open) return;
+    if (!depositAddress) return;
+    refreshBalance({ chain: selectedChain, address: depositAddress });
+  }, [open, depositAddress, selectedChain, refreshBalance]);
+
+  useEffect(() => {
+    if (depositAddress) {
+      QRCode.toDataURL(depositAddress, {
         width: 280,
         margin: 2,
         color: {
@@ -119,9 +188,20 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     } else {
       setQrCodeDataUrl("");
     }
-  }, [user?.publicKey]);
+  }, [depositAddress]);
 
   const copyToClipboard = (text: string) => {
+    if (!text) {
+      toast.error("No address available to copy", {
+        duration: 2000,
+        style: {
+          background: '#1E1F26',
+          color: '#E6E7EA',
+          border: '1px solid #ff6b6b',
+        }
+      });
+      return;
+    }
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
       navigator.clipboard
         .writeText(text)
@@ -252,7 +332,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     if (activeTab === 'withdraw' && open) {
       fetchWithdrawalFee();
     }
-  }, [activeTab, open]);
+  }, [activeTab, open, selectedChain]);
 
   // Reset withdraw form when modal closes or tab changes
   useEffect(() => {
@@ -274,13 +354,104 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
 
   const fetchWithdrawalFee = async () => {
     try {
-      const feeData = await getWithdrawalFee();
-      const fee = typeof feeData === 'number' ? feeData : (feeData as any).fee || 0.0005;
+      const feeData = await getWithdrawalFee(selectedChain);
+      const fee =
+        typeof feeData === "number"
+          ? feeData
+          : (feeData as any)?.fee ?? withdrawalFee;
       setWithdrawalFee(fee);
     } catch (error) {
-      console.error('Failed to fetch withdrawal fee:', error);
+      console.error("Failed to fetch withdrawal fee:", error);
+      // quietly keep prior fallback without surfacing an error toast
     }
   };
+
+  // Trigger wallet refresh whenever other parts of the app dispatch the event
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleWalletsUpdated = () => {
+      setWalletsRefreshKey((key) => key + 1);
+    };
+    window.addEventListener("wallets-updated", handleWalletsUpdated);
+    return () => {
+      window.removeEventListener("wallets-updated", handleWalletsUpdated);
+    };
+  }, []);
+
+  // Fetch the user's primary wallet so deposits go to the right address
+  useEffect(() => {
+    if (!user?.id || !user?.bearerToken) {
+      setPrimaryWalletAddresses({ solana: null, ethereum: null });
+      setPrimaryWalletLabel(null);
+      return;
+    }
+
+    let aborted = false;
+    const fetchPrimaryWallet = async () => {
+      setPrimaryWalletLoading(true);
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${user.bearerToken}`,
+            },
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error(`Failed to load wallets: ${res.status}`);
+        }
+
+        const data = await res.json();
+        const wallets: Array<{
+          address?: string;
+          solanaAddress?: string;
+          ethereumAddress?: string;
+          label?: string | null;
+          isPrimary?: boolean;
+        }> =
+          Array.isArray(data?.wallets) ? data.wallets : [];
+        const primary = wallets.find((w) => w.isPrimary) ?? wallets[0];
+
+        if (!aborted) {
+          const solanaAddr =
+            typeof primary?.solanaAddress === "string" && primary.solanaAddress.length > 0
+              ? primary.solanaAddress
+              : typeof primary?.address === "string"
+              ? primary.address
+              : null;
+          const ethAddr =
+            typeof primary?.ethereumAddress === "string" && primary.ethereumAddress.length > 0
+              ? primary.ethereumAddress
+              : null;
+          setPrimaryWalletAddresses({
+            solana: solanaAddr,
+            ethereum: ethAddr,
+          });
+          setPrimaryWalletLabel(primary?.label ?? null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch primary wallet:", error);
+        if (!aborted) {
+          setPrimaryWalletAddresses((prev) => ({
+            solana: prev.solana ?? user?.publicKey ?? null,
+            ethereum: prev.ethereum,
+          }));
+        }
+      } finally {
+        if (!aborted) {
+          setPrimaryWalletLoading(false);
+        }
+      }
+    };
+
+    fetchPrimaryWallet();
+    return () => {
+      aborted = true;
+    };
+  }, [user?.id, user?.bearerToken, user?.publicKey, walletsRefreshKey]);
 
   const fetchHistory = async () => {
     if (!user?.bearerToken) return;
@@ -306,7 +477,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
   };
 
   const handleMaxClick = () => {
-    const maxAmount = Math.max(0, solBalance - minimumReserve);
+    const maxAmount = Math.max(0, chainBalance - minimumReserve);
     setWithdrawAmount(maxAmount.toFixed(4));
   };
 
@@ -323,18 +494,21 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     }
 
     if (amount < MIN_WITHDRAWAL) {
-      setWithdrawMessage({ type: "error", text: `Minimum withdrawal is ${MIN_WITHDRAWAL} SOL.` });
+      setWithdrawMessage({ type: "error", text: `Minimum withdrawal is ${MIN_WITHDRAWAL} ${tokenSymbol}.` });
       return;
     }
 
     if (amount > MAX_WITHDRAWAL) {
-      setWithdrawMessage({ type: "error", text: `Maximum withdrawal is ${MAX_WITHDRAWAL} SOL per transaction.` });
+      setWithdrawMessage({ type: "error", text: `Maximum withdrawal is ${MAX_WITHDRAWAL} ${tokenSymbol} per transaction.` });
       return;
     }
 
     const totalRequired = amount + withdrawalFee;
-    if (totalRequired > solBalance) {
-      setWithdrawMessage({ type: "error", text: `Insufficient balance. You need ${totalRequired.toFixed(4)} SOL (including ${withdrawalFee.toFixed(4)} SOL fee).` });
+    if (totalRequired > chainBalance) {
+      setWithdrawMessage({
+        type: "error",
+        text: `Insufficient balance. You need ${totalRequired.toFixed(4)} ${tokenSymbol} (including ${withdrawalFee.toFixed(4)} ${tokenSymbol} fee).`,
+      });
       return;
     }
 
@@ -343,15 +517,34 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
       return;
     }
 
-    // Basic Solana address validation
-    if (destinationAddress.length < 32 || destinationAddress.length > 44) {
-      setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
-      return;
+    if (isSolChain) {
+      if (destinationAddress.length < 32 || destinationAddress.length > 44) {
+        setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
+        return;
+      }
+      const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
+      if (!base58Regex.test(destinationAddress)) {
+        setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
+        return;
+      }
+    } else {
+      const evmRegex = /^0x[a-fA-F0-9]{40}$/;
+      if (!evmRegex.test(destinationAddress)) {
+        setWithdrawMessage({ type: "error", text: "Invalid EVM address format (expected 0x...)."});
+        return;
+      }
     }
 
-    const base58Regex = /^[1-9A-HJ-NP-Za-km-z]+$/;
-    if (!base58Regex.test(destinationAddress)) {
-      setWithdrawMessage({ type: "error", text: "Invalid Solana address format." });
+    const sourceAddress =
+      selectedChain === "sol"
+        ? primaryWalletAddresses.solana
+        : primaryWalletAddresses.ethereum;
+    const chainCode = selectedChain === "monad" ? "MON" : "SOL";
+    if (!sourceAddress) {
+      setWithdrawMessage({
+        type: "error",
+        text: `Primary ${tokenSymbol} wallet not found. Please set a primary wallet.`,
+      });
       return;
     }
 
@@ -360,50 +553,54 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
     setTxSignature(null);
 
     try {
-      const result = await withdrawSOL({
-        amount,
-        destinationAddress
-      }, user.bearerToken);
+      const result = await withdrawSOL(
+        {
+          amount,
+          destinationAddress,
+          sourceAddress,
+          chain: chainCode,
+        },
+        user.bearerToken,
+      );
       
-      if (result && result.txSignature) {
-        setWithdrawMessage({ 
-          type: "success", 
-          text: `Withdrawal successful! ${amount} SOL sent to ${destinationAddress.slice(0, 6)}...${destinationAddress.slice(-4)}`
-        });
-        setTxSignature(result.txSignature || null);
+      const isSuccess = result?.txSignature || result?.message?.toLowerCase().includes("withdraw");
+      if (isSuccess) {
+        if (result?.txSignature) {
+          setTxSignature(result.txSignature);
+        }
         setWithdrawAmount("");
         setDestinationAddress("");
-        
-        toast.success("Withdrawal successful!", {
+        setWithdrawMessage({
+          type: "success",
+          text: "Withdrawal complete!",
+        });
+        toast.success("Withdrawal complete!", {
           duration: 3000,
           style: {
-            background: '#1E1F26',
-            color: '#E6E7EA',
-            border: '1px solid #18c48c',
-          }
+            background: "#1E1F26",
+            color: "#E6E7EA",
+            border: "1px solid #18c48c",
+          },
         });
-
-        // Refresh balance
-        if (refreshBalance) {
-          setTimeout(() => refreshBalance(), 2000);
-        }
+        setTimeout(() => {
+          refreshBalance({ chain: selectedChain, address: sourceAddress });
+        }, 2000);
       } else {
-        setWithdrawMessage({ 
-          type: "error", 
-          text: result?.message || "Withdrawal failed. Please try again."
+        setWithdrawMessage({
+          type: "error",
+          text: result?.message || "Withdrawal failed. Please try again.",
         });
-        
         toast.error(result?.message || "Withdrawal failed", {
           duration: 3000,
           style: {
-            background: '#1E1F26',
-            color: '#E6E7EA',
-            border: '1px solid #ff6b6b',
-          }
+            background: "#1E1F26",
+            color: "#E6E7EA",
+            border: "1px solid #ff6b6b",
+          },
         });
       }
     } catch (error: any) {
-      console.error("Withdrawal error:", error);
+      console.warn("Withdrawal error:", error);
       const errorMessage = error?.message || "An error occurred during withdrawal.";
       setWithdrawMessage({ type: "error", text: errorMessage });
       
@@ -422,6 +619,18 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
 
   // Function to show MoonPay widget
   const showMoonPay = async () => {
+    if (!depositAddress) {
+      toast.error(`Add a primary wallet before buying ${tokenSymbol}.`, {
+        duration: 2000,
+        style: {
+          background: '#1E1F26',
+          color: '#E6E7EA',
+          border: '1px solid #ff6b6b',
+        }
+      });
+      return;
+    }
+
     if (!moonPayLoaded || !window.MoonPayWebSdk) {
       toast.error("MoonPay is loading, please try again in a moment", {
         duration: 2000,
@@ -445,7 +654,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
           baseCurrencyCode: 'usd',
           baseCurrencyAmount: '100',
           defaultCurrencyCode: 'sol',
-          walletAddress: user?.publicKey || '',
+          walletAddress: depositAddress,
         }
       });
 
@@ -560,9 +769,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
           {/* Subtitle */}
           <div className="px-6 pb-3 text-neutral-400 text-sm">
             {activeTab === 'convert' && 'Convert your crypto to SOL'}
-            {activeTab === 'deposit' && 'Deposit SOL to your Narrative wallet'}
-            {activeTab === 'buy' && 'Buy SOL with fiat currency'}
-            {activeTab === 'withdraw' && 'Withdraw SOL to an external wallet'}
+            {activeTab === 'deposit' &&
+              `Deposit ${tokenSymbol} to your Narrative wallet`}
+            {activeTab === 'buy' && `Buy ${tokenSymbol} with fiat currency`}
+            {activeTab === 'withdraw' && `Withdraw ${tokenSymbol} to an external wallet`}
           </div>
 
           {/* Content */}
@@ -613,7 +823,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
             {/* Deposit Tab */}
             {activeTab === 'deposit' && (
               <>
-                {userLoading ? (
+                {userLoading || primaryWalletLoading ? (
                   <div className="flex items-center justify-center h-64">
                     <div className="text-neutral-400">Loading wallet data...</div>
                   </div>
@@ -629,28 +839,34 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                       </button>
                     )}
                   </div>
-                ) : user.publicKey ? (
+                ) : depositAddress ? (
               <div className="space-y-6">
                 {/* Wallet Info Box */}
                 <div className="rounded-3xl border p-4" style={{ backgroundColor: "#0a0b0f", borderColor: "#2A2B33" }}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-xs text-neutral-400 mb-1">Narrative Wallet</div>
+                      <div className="text-xs text-neutral-400 mb-1">{primaryWalletLabel || "Narrative Wallet"}</div>
                       <div className="text-sm text-neutral-300 font-mono">
-                        {user.publicKey.slice(0, 4)}...{user.publicKey.slice(-4)}
+                        {depositAddress.slice(0, 4)}...{depositAddress.slice(-4)}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="flex items-center gap-2 text-2xl font-bold text-white">
-                        <img
-                          src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                          alt="SOL"
-                          className="w-5 h-5 rounded-full"
-                        />
-                        {solBalance.toFixed(4)}
+                        {chainConfig.iconUrl ? (
+                          <img
+                            src={chainConfig.iconUrl}
+                            alt={chainConfig.tokenSymbol}
+                            className="w-5 h-5 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-5 h-5 rounded-full bg-neutral-600 flex items-center justify-center text-[10px]">
+                            {chainConfig.tokenSymbol.slice(0, 2)}
+                          </div>
+                        )}
+                        {chainBalance.toFixed(4)}
                       </div>
                       <div className="text-xs text-neutral-400 mt-1">
-                        SOL Balance
+                        {chainConfig.tokenSymbol} Balance
                       </div>
                     </div>
                   </div>
@@ -679,7 +895,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                     className="w-full p-4 rounded-3xl text-center break-all font-mono text-sm"
                     style={{ backgroundColor: "#0a0b0f", color: "#E6E7EA" }}
                   >
-                    {user.publicKey}
+                    {depositAddress}
                   </div>
 
                   {/* Caution Message */}
@@ -692,13 +908,13 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                     </div>
                     <div className="text-sm leading-relaxed" style={{ color: "#fbbf24" }}>
                       <span className="font-semibold">Caution: </span>
-                      This address only supports SOL deposits via the Solana network. Please do not use other networks to avoid any loss of funds.
-                    </div>
+                      This address only supports {chainConfig.tokenSymbol} deposits via the {chainConfig.networkName} network. Please do not use other networks to avoid any loss of funds.
+                  </div>
                   </div>
 
                   {/* Copy Button */}
                   <button
-                    onClick={() => copyToClipboard(user.publicKey)}
+                    onClick={() => copyToClipboard(depositAddress)}
                     className="w-full py-4 rounded-3xl font-semibold text-base transition-all duration-200 hover:opacity-90"
                     style={{ backgroundColor: "#E8E9EB", color: "#000000" }}
                   >
@@ -721,7 +937,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                 <div className="rounded-3xl border p-6" style={{ backgroundColor: "#0a0b0f", borderColor: "#2A2B33" }}>
                   <div className="mb-6">
                     <div className="flex items-center gap-3 mb-3">
-                      <h3 className="text-lg font-semibold text-white">Buy SOL with Card</h3>
+                      <h3 className="text-lg font-semibold text-white">Buy {tokenSymbol} with Card</h3>
                       <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ backgroundColor: "#7D00FF" }}>
                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="white">
                           <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
@@ -730,16 +946,16 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                       </div>
                     </div>
                     <p className="text-sm text-neutral-400">
-                      Purchase SOL using your credit or debit card through MoonPay
+                      Purchase {tokenSymbol} using your credit or debit card through MoonPay
                     </p>
                   </div>
 
-                  {user?.publicKey ? (
+                  {depositAddress ? (
                     <div className="space-y-4">
                       <div className="rounded-2xl p-4" style={{ backgroundColor: "#1a1b20", borderColor: "#2A2B33", border: "1px solid" }}>
                         <div className="text-xs text-neutral-400 mb-1">Delivery Address</div>
                         <div className="text-sm text-neutral-300 font-mono break-all">
-                          {user.publicKey}
+                          {depositAddress}
                         </div>
                       </div>
 
@@ -754,7 +970,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="white">
                               <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
                             </svg>
-                            <span>Buy SOL with MoonPay</span>
+                            <span>Buy {tokenSymbol} with MoonPay</span>
                           </>
                         ) : (
                           'Loading MoonPay...'
@@ -770,13 +986,13 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                         </div>
                         <div className="text-sm leading-relaxed" style={{ color: "#60a5fa" }}>
                           <span className="font-semibold">Note: </span>
-                          You will be redirected to MoonPay to complete your purchase. SOL will be sent directly to your Narrative wallet address.
+                          You will be redirected to MoonPay to complete your purchase. {tokenSymbol} will be sent directly to your Narrative wallet address.
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div className="rounded-3xl border border-yellow-500/30 bg-yellow-900/20 p-6 text-center">
-                      <div className="text-sm text-yellow-400">Please login first to buy SOL</div>
+                      <div className="text-sm text-yellow-400">Please login first to buy {tokenSymbol}</div>
                     </div>
                   )}
                 </div>
@@ -807,12 +1023,18 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                         <div>
                           <div className="text-xs text-neutral-400 mb-1">Available Balance</div>
                           <div className="text-2xl font-bold text-white flex items-center gap-2">
-                            <img
-                              src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                              alt="SOL"
-                              className="w-5 h-5 rounded-full"
-                            />
-                            {solBalance.toFixed(4)} SOL
+                            {chainConfig.iconUrl ? (
+                              <img
+                                src={chainConfig.iconUrl}
+                                alt={tokenSymbol}
+                                className="w-5 h-5 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-5 h-5 rounded-full bg-neutral-600 flex items-center justify-center text-[10px]">
+                                {tokenSymbol.slice(0, 2)}
+                              </div>
+                            )}
+                            {chainBalance.toFixed(4)} {tokenSymbol}
                           </div>
                         </div>
                         <button
@@ -835,7 +1057,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                       {/* Amount Input */}
                       <div>
                         <label className="block text-sm font-medium text-neutral-300 mb-2">
-                          Amount (SOL)
+                          Amount ({tokenSymbol})
                         </label>
                         <div className="relative">
                           <input
@@ -863,7 +1085,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                           </button>
                         </div>
                         <div className="mt-1 text-xs text-neutral-400">
-                          Fee: {withdrawalFee.toFixed(4)} SOL • Min: {MIN_WITHDRAWAL} SOL • Max: {MAX_WITHDRAWAL} SOL
+                          Fee: {withdrawalFee.toFixed(4)} {tokenSymbol} • Min: {MIN_WITHDRAWAL} {tokenSymbol} • Max: {MAX_WITHDRAWAL} {tokenSymbol}
                         </div>
                       </div>
 
@@ -876,7 +1098,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                           type="text"
                           value={destinationAddress}
                           onChange={(e) => setDestinationAddress(e.target.value)}
-                          placeholder="Enter Solana wallet address"
+                          placeholder={`Enter ${networkName} wallet address`}
                           className="w-full px-4 py-3 rounded-xl text-white placeholder-neutral-500 focus:outline-none focus:ring-2 font-mono text-sm"
                           style={{
                             backgroundColor: "#0a0b0f",
@@ -886,21 +1108,21 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                       </div>
 
                       {/* Summary */}
-                      {withdrawAmount && Number(withdrawAmount) > 0 && (
+                      {withdrawAmount && numericWithdrawAmount > 0 && (
                         <div className="rounded-2xl p-4" style={{ backgroundColor: "#0a0b0f", border: "1px solid #2A2B33" }}>
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                               <span className="text-neutral-400">Amount</span>
-                              <span className="text-white">{Number(withdrawAmount).toFixed(4)} SOL</span>
+                              <span className="text-white">{numericWithdrawAmount.toFixed(4)} {tokenSymbol}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-neutral-400">Network Fee</span>
-                              <span className="text-white">{withdrawalFee.toFixed(4)} SOL</span>
+                              <span className="text-white">{withdrawalFee.toFixed(4)} {tokenSymbol}</span>
                             </div>
                             <div className="border-t pt-2" style={{ borderColor: "#2A2B33" }}>
                               <div className="flex justify-between font-semibold">
                                 <span className="text-neutral-300">Total Deducted</span>
-                                <span className="text-white">{(Number(withdrawAmount) + withdrawalFee).toFixed(4)} SOL</span>
+                                <span className="text-white">{totalWithdrawalAmount.toFixed(4)} {tokenSymbol}</span>
                               </div>
                             </div>
                           </div>
@@ -945,11 +1167,19 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                       {/* Withdraw Button */}
                       <button
                         onClick={handleWithdraw}
-                        disabled={isWithdrawLoading || !withdrawAmount || !destinationAddress}
+                        disabled={
+                          isWithdrawLoading ||
+                          !withdrawAmount ||
+                          !destinationAddress ||
+                          numericWithdrawAmount <= 0 ||
+                          numericWithdrawAmount < MIN_WITHDRAWAL ||
+                          numericWithdrawAmount > MAX_WITHDRAWAL ||
+                          totalWithdrawalAmount > chainBalance
+                        }
                         className="w-full py-4 rounded-3xl font-semibold text-base transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{ backgroundColor: "#E8E9EB", color: "#000000" }}
                       >
-                        {isWithdrawLoading ? 'Processing...' : 'Withdraw SOL'}
+                        {isWithdrawLoading ? 'Processing...' : `Withdraw ${tokenSymbol}`}
                       </button>
 
                       {/* Warning */}
@@ -1009,7 +1239,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ open, onClose, initialTab =
                                   {tx.status === 'pending' && <FaClock className="text-yellow-400" size={16} />}
                                   {tx.status === 'failed' && <FaExclamationCircle className="text-orange-400" size={16} />}
                                   <span className="text-white font-semibold">
-                                    {typeof tx.amount === 'string' ? parseFloat(tx.amount).toFixed(4) : tx.amount.toFixed(4)} SOL
+                                    {typeof tx.amount === 'string' ? parseFloat(tx.amount).toFixed(4) : tx.amount.toFixed(4)} {tokenSymbol}
                                   </span>
                                 </div>
                                 <span className={`text-xs px-2 py-1 rounded-full ${

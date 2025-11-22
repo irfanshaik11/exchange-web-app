@@ -1,6 +1,11 @@
 export function normalizeImageUrl(src?: string | null): string | null {
   if (!src) return null;
   try {
+    // Pass through relative paths (starting with /)
+    if (src.startsWith('/')) {
+      return src;
+    }
+    
     // Unwrap Next.js image proxy URLs (e.g., pump.fun/_next/image?url=...)
     try {
       const u = new URL(src);
@@ -8,7 +13,7 @@ export function normalizeImageUrl(src?: string | null): string | null {
         src = u.searchParams.get('url') || src;
       }
     } catch {}
-
+    
     // Force https for http URLs (most hosts support TLS)
     if (src.startsWith('http://')) {
       src = src.replace(/^http:\/\//i, 'https://');
@@ -102,6 +107,17 @@ function isValidImageUrl(url: string): boolean {
       }
     }
     
+    // Accept relative paths that start with / and have image extensions
+    if (url.startsWith('/')) {
+      const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp'];
+      const hasImageExtension = imageExtensions.some(ext => 
+        url.toLowerCase().includes(ext) || url.toLowerCase().includes(ext + '?')
+      );
+      if (hasImageExtension) {
+        return true;
+      }
+    }
+    
     // Reject non-HTTP/HTTPS protocols
     if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('ipfs://')) {
       return false;
@@ -128,7 +144,8 @@ function isValidImageUrl(url: string): boolean {
     const knownImageHosts = [
       'ipfs.io', 'cloudflare-ipfs.com', 'gateway.pinata.cloud',
       'token-media.defined.fi', 'images.pump.fun', 'pump.fun',
-      'pbs.twimg.com', 'twimg.com', 'cdn.pump.fun'
+      'pbs.twimg.com', 'twimg.com', 'cdn.pump.fun',
+      'bluey.tv', 'www.bluey.tv' // Add Bluey image host
     ];
     
     if (knownImageHosts.some(host => url.includes(host))) {

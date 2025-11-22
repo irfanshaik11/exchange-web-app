@@ -419,6 +419,10 @@ export default function DiscoverContent() {
         pair_address: pair.address || token.address || '',
         created_at: result.createdAt || pair.createdAt || Date.now(),
         
+        // Protocol - xStocks use Raydium Launchpad
+        protocol: 'Raydium Launchpad',
+        launchpad_protocol: 'Raydium Launchpad',
+        
         uri: getImage(),
         logo: getImage(),
         image: getImage(),
