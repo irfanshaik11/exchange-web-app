@@ -332,6 +332,8 @@ export const getLimitOrderExecutionResult = (
 interface WithdrawParams {
   amount: number;
   destinationAddress: string;
+  sourceAddress?: string;
+  chain?: string;
 }
 
 export const withdrawSOL = (params: WithdrawParams, authToken: string) =>
@@ -367,10 +369,27 @@ export const getWithdrawalHistory = (authToken: string) =>
     authToken,
   });
 
-export const getWithdrawalFee = () =>
-  apiFetch<{ fee: number; rentExemptMinimum: number; fallbackFee: number; minimumReserve: number }>("/api/users/withdrawal-fee", {
-    method: "GET",
-  });
+export const getWithdrawalFee = async (chain?: string) => {
+  const query = chain ? `?chain=${encodeURIComponent(chain)}` : "";
+  try {
+    return await apiFetch<{
+      fee: number;
+      rentExemptMinimum: number;
+      fallbackFee: number;
+      minimumReserve: number;
+    }>(`/api/users/withdrawal-fee${query}`, {
+      method: "GET",
+    });
+  } catch (error) {
+    console.warn("Using fallback withdrawal fee (endpoint unavailable).", error);
+    return {
+      fee: 0.0005,
+      rentExemptMinimum: 0,
+      fallbackFee: 0,
+      minimumReserve: 0,
+    };
+  }
+};
 
 export const updateLimitOrder = (
   params: UpdateLimitOrderParams,
@@ -701,4 +720,3 @@ export const getTokenHolders = async (
 };
 
 export { apiFetch };
-
