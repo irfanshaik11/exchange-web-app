@@ -159,6 +159,7 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
       const result = await withdrawSOL({
         amount: amount,
         destinationAddress: destinationAddress.trim(),
+        chain: 'SOL',
       }, user.bearerToken);
       
       // Clear loading state immediately on success
@@ -167,24 +168,12 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
       // Store transaction signature immediately (transaction is sent, confirmation happens in background)
       if (result.txSignature) {
         setTxSignature(result.txSignature);
-        
-        // Show success message with Solscan link immediately
-        setMessage({
-          type: "success",
-          text: `✅ Withdrawal sent! ${amount.toFixed(4)} SOL to ${destinationAddress.slice(0, 8)}...${destinationAddress.slice(-8)}`,
-        });
-        
-        // Show toast immediately
-        toast.success(`Withdrawal sent! ${amount.toFixed(4)} SOL`, {
-          duration: 5000,
-        });
-      } else {
-        setMessage({
-          type: "success",
-          text: `✅ Withdrawal successful! ${amount.toFixed(4)} SOL sent to ${destinationAddress.slice(0, 8)}...${destinationAddress.slice(-8)}`,
-        });
-        toast.success(`Withdrawal successful! ${amount.toFixed(4)} SOL sent`);
       }
+      setMessage({
+        type: "success",
+        text: "Withdrawal complete!",
+      });
+      toast.success("Withdrawal complete!");
       
       // Refresh balance after successful withdrawal
       refreshBalance();

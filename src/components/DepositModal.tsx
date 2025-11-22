@@ -96,7 +96,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
   initialTab = 'deposit',
   selectedChain = 'sol',
 }) => {
-  const { user, loading: userLoading, refreshUser, refreshBalance, solBalance } = useUser();
+  const { user, loading: userLoading, refreshUser, refreshBalance, solBalance, chainBalances } = useUser();
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -130,6 +130,12 @@ const DepositModal: React.FC<DepositModalProps> = ({
   const tokenSymbol = chainConfig.tokenSymbol;
   const networkName = chainConfig.networkName;
   const isSolChain = selectedChain === 'sol';
+  const chainBalance =
+    selectedChain === 'sol'
+      ? chainBalances[selectedChain] ?? solBalance
+      : chainBalances[selectedChain] ?? 0;
+  const numericWithdrawAmount = Number(withdrawAmount || 0);
+  const totalWithdrawalAmount = numericWithdrawAmount + withdrawalFee;
 
   // Update active tab when initialTab changes
   useEffect(() => {
@@ -142,16 +148,12 @@ const DepositModal: React.FC<DepositModalProps> = ({
     if (open) {
       setShow(true);
       document.body.style.overflow = "hidden";
-      // Refresh balance when modal opens
-      if (refreshBalance) {
-        refreshBalance();
-      }
     } else {
       const timeout = setTimeout(() => setShow(false), 300);
       document.body.style.overflow = "";
       return () => clearTimeout(timeout);
     }
-  }, [open, refreshBalance]);
+  }, [open]);
 
   const depositAddress =
     selectedChain === 'sol'
@@ -160,6 +162,12 @@ const DepositModal: React.FC<DepositModalProps> = ({
         primaryWalletAddresses.solana ||
         user?.publicKey ||
         "";
+
+  useEffect(() => {
+    if (!open) return;
+    if (!depositAddress) return;
+    refreshBalance({ chain: selectedChain, address: depositAddress });
+  }, [open, depositAddress, selectedChain, refreshBalance]);
 
   useEffect(() => {
     if (depositAddress) {
@@ -469,7 +477,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
   };
 
   const handleMaxClick = () => {
-    const maxAmount = Math.max(0, solBalance - minimumReserve);
+    const maxAmount = Math.max(0, chainBalance - minimumReserve);
     setWithdrawAmount(maxAmount.toFixed(4));
   };
 
@@ -496,8 +504,11 @@ const DepositModal: React.FC<DepositModalProps> = ({
     }
 
     const totalRequired = amount + withdrawalFee;
-    if (totalRequired > solBalance) {
-      setWithdrawMessage({ type: "error", text: `Insufficient balance. You need ${totalRequired.toFixed(4)} ${tokenSymbol} (including ${withdrawalFee.toFixed(4)} ${tokenSymbol} fee).` });
+    if (totalRequired > chainBalance) {
+      setWithdrawMessage({
+        type: "error",
+        text: `Insufficient balance. You need ${totalRequired.toFixed(4)} ${tokenSymbol} (including ${withdrawalFee.toFixed(4)} ${tokenSymbol} fee).`,
+      });
       return;
     }
 
@@ -528,6 +539,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
       selectedChain === "sol"
         ? primaryWalletAddresses.solana
         : primaryWalletAddresses.ethereum;
+    const chainCode = selectedChain === "monad" ? "MON" : "SOL";
     if (!sourceAddress) {
       setWithdrawMessage({
         type: "error",
@@ -541,48 +553,50 @@ const DepositModal: React.FC<DepositModalProps> = ({
     setTxSignature(null);
 
     try {
-      const result = await withdrawSOL({
-        amount,
-        destinationAddress,
-        sourceAddress,
-        chain: selectedChain,
-      }, user.bearerToken);
+      const result = await withdrawSOL(
+        {
+          amount,
+          destinationAddress,
+          sourceAddress,
+          chain: chainCode,
+        },
+        user.bearerToken,
+      );
       
-      if (result && result.txSignature) {
-        setWithdrawMessage({ 
-          type: "success", 
-          text: `Withdrawal successful! ${amount} ${tokenSymbol} sent to ${destinationAddress.slice(0, 6)}...${destinationAddress.slice(-4)}`
-        });
-        setTxSignature(result.txSignature || null);
+      const isSuccess = result?.txSignature || result?.message?.toLowerCase().includes("withdraw");
+      if (isSuccess) {
+        if (result?.txSignature) {
+          setTxSignature(result.txSignature);
+        }
         setWithdrawAmount("");
         setDestinationAddress("");
-        
-        toast.success("Withdrawal successful!", {
+        setWithdrawMessage({
+          type: "success",
+          text: "Withdrawal complete!",
+        });
+        toast.success("Withdrawal complete!", {
           duration: 3000,
           style: {
-            background: '#1E1F26',
-            color: '#E6E7EA',
-            border: '1px solid #18c48c',
-          }
+            background: "#1E1F26",
+            color: "#E6E7EA",
+            border: "1px solid #18c48c",
+          },
         });
-
-        // Refresh balance
-        if (refreshBalance) {
-          setTimeout(() => refreshBalance(), 2000);
-        }
+        setTimeout(() => {
+          refreshBalance({ chain: selectedChain, address: sourceAddress });
+        }, 2000);
       } else {
-        setWithdrawMessage({ 
-          type: "error", 
-          text: result?.message || "Withdrawal failed. Please try again."
+        setWithdrawMessage({
+          type: "error",
+          text: result?.message || "Withdrawal failed. Please try again.",
         });
-        
         toast.error(result?.message || "Withdrawal failed", {
           duration: 3000,
           style: {
-            background: '#1E1F26',
-            color: '#E6E7EA',
-            border: '1px solid #ff6b6b',
-          }
+            background: "#1E1F26",
+            color: "#E6E7EA",
+            border: "1px solid #ff6b6b",
+          },
         });
       }
     } catch (error: any) {
@@ -849,7 +863,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                             {chainConfig.tokenSymbol.slice(0, 2)}
                           </div>
                         )}
-                        {solBalance.toFixed(4)}
+                        {chainBalance.toFixed(4)}
                       </div>
                       <div className="text-xs text-neutral-400 mt-1">
                         {chainConfig.tokenSymbol} Balance
@@ -1020,7 +1034,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                                 {tokenSymbol.slice(0, 2)}
                               </div>
                             )}
-                            {solBalance.toFixed(4)} {tokenSymbol}
+                            {chainBalance.toFixed(4)} {tokenSymbol}
                           </div>
                         </div>
                         <button
@@ -1094,12 +1108,12 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       </div>
 
                       {/* Summary */}
-                      {withdrawAmount && Number(withdrawAmount) > 0 && (
+                      {withdrawAmount && numericWithdrawAmount > 0 && (
                         <div className="rounded-2xl p-4" style={{ backgroundColor: "#0a0b0f", border: "1px solid #2A2B33" }}>
                           <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                               <span className="text-neutral-400">Amount</span>
-                              <span className="text-white">{Number(withdrawAmount).toFixed(4)} {tokenSymbol}</span>
+                              <span className="text-white">{numericWithdrawAmount.toFixed(4)} {tokenSymbol}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-neutral-400">Network Fee</span>
@@ -1108,7 +1122,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                             <div className="border-t pt-2" style={{ borderColor: "#2A2B33" }}>
                               <div className="flex justify-between font-semibold">
                                 <span className="text-neutral-300">Total Deducted</span>
-                                <span className="text-white">{(Number(withdrawAmount) + withdrawalFee).toFixed(4)} {tokenSymbol}</span>
+                                <span className="text-white">{totalWithdrawalAmount.toFixed(4)} {tokenSymbol}</span>
                               </div>
                             </div>
                           </div>
@@ -1153,7 +1167,15 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       {/* Withdraw Button */}
                       <button
                         onClick={handleWithdraw}
-                        disabled={isWithdrawLoading || !withdrawAmount || !destinationAddress}
+                        disabled={
+                          isWithdrawLoading ||
+                          !withdrawAmount ||
+                          !destinationAddress ||
+                          numericWithdrawAmount <= 0 ||
+                          numericWithdrawAmount < MIN_WITHDRAWAL ||
+                          numericWithdrawAmount > MAX_WITHDRAWAL ||
+                          totalWithdrawalAmount > chainBalance
+                        }
                         className="w-full py-4 rounded-3xl font-semibold text-base transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{ backgroundColor: "#E8E9EB", color: "#000000" }}
                       >

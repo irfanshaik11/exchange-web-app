@@ -784,6 +784,7 @@ export default function PortfolioPage() {
         : [];
 
       setWallets(mappedWallets);
+      setWalletBalances(Object.fromEntries(mappedWallets.map((w) => [w.id, w.balance])));
       notifyWalletsUpdated();
     } catch (err) {
       console.error(err);
@@ -793,50 +794,43 @@ export default function PortfolioPage() {
     }
   }, [user?.id, user?.bearerToken]);
 
+  // Refresh only the selected primary wallet balance for the current chain
   useEffect(() => {
     if (!user || wallets.length === 0) {
-      setWalletBalances({});
       return;
     }
 
-    const isSolChain = currentChain === "sol";
+    const primaryWallet =
+      wallets.find((w) => w.isPrimary) ?? wallets[0] ?? null;
+    if (!primaryWallet) return;
+
+    const address =
+      currentChain === "sol"
+        ? primaryWallet.solanaAddress || primaryWallet.address
+        : primaryWallet.ethereumAddress || null;
+    if (!address) return;
+
     let cancelled = false;
-    const loadBalances = async () => {
-      try {
-        const balances = await Promise.all(
-          wallets.map(async (wallet) => {
-            const address =
-              isSolChain
-                ? wallet.solanaAddress || wallet.address
-                : wallet.ethereumAddress || null;
-            if (!address) {
-              return [wallet.id, isSolChain ? wallet.balance : 0] as const;
-            }
-            const result = await refreshBalance({
-              chain: currentChain,
-              address,
-            });
-            const fallback = isSolChain ? wallet.balance : 0;
-            return [wallet.id, result?.balance ?? fallback] as const;
-          }),
-        );
-        if (!cancelled) {
-          setWalletBalances(Object.fromEntries(balances));
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("Failed to fetch wallet balances:", error);
-        }
+    const refreshPrimary = async () => {
+      const result = await refreshBalance({
+        chain: currentChain,
+        address,
+      });
+      if (!cancelled && result?.balance !== undefined) {
+        setWalletBalances((prev) => ({
+          ...prev,
+          [primaryWallet.id]: result.balance,
+        }));
       }
     };
 
-    loadBalances();
-    const interval = setInterval(loadBalances, 12000);
+    refreshPrimary();
+    const interval = setInterval(refreshPrimary, 12000);
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [user?.id, wallets, refreshBalance, currentChain]);
+  }, [user?.id, wallets, currentChain, refreshBalance]);
 
   useEffect(() => {
     fetchWallets();
