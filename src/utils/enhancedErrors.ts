@@ -257,7 +257,22 @@ export const enhanceError = (
           canRetry: false,
           actions: [{ label: 'View Explorer', action: 'view_explorer' }],
         };
- 
+
+      case 'TOKEN_NOT_SUPPORTED':
+        return {
+          title: 'Token Not Supported Yet',
+          description: `${context.token?.symbol || 'This token'} is too new to be traded via aggregators. CLMM pools require Jupiter support.`,
+          suggestions: [
+            'Wait for the token to gain liquidity and aggregator support (usually takes time after launch)',
+            'Try trading on Raydium directly if supported',
+            'Check if the token has been launched recently',
+            'Use tokens with established liquidity instead',
+            'Try CPMM pools for better compatibility with new tokens',
+          ],
+          canRetry: false,
+          actions: [{ label: 'Refresh Data', action: 'refresh_data' }],
+        };
+
       default:
         return {
           title: 'Trade Failed',

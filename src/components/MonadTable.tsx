@@ -627,6 +627,8 @@ function TokenImage({
 
   // Protocol color mapping - matches the filter section colors (subtle versions)
   const protocolColorMap: Record<string, string> = {
+    'nad.fun': '#eab308',     // Yellow for nad.fun
+    'nadfun': '#eab308',      // Yellow for nadfun
     'pump': '#9B59B6',        // Purple for pump.fun
     'pump.fun': '#9B59B6',    // Purple for pump.fun
     'bonk': '#ff6b35',        // Orange for bonk
@@ -657,7 +659,12 @@ function TokenImage({
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
     
     if (!launchpadProtocol) {
-      return '#9B59B6'; // Default purple
+      return '#eab308'; // Default yellow for nad.fun
+    }
+    
+    // Special handling for nad.fun - yellow color
+    if (launchpadProtocol.includes('nad.fun') || launchpadProtocol === 'nadfun') {
+      return '#eab308'; // Yellow for nad.fun
     }
     
     // Special handling for Meteora - use column type since Meteora doesn't have bonding scores
@@ -723,16 +730,21 @@ function TokenImage({
       return protocolColorMap['jupiter'];
     }
     
-    // Default to purple if no match found
-    return '#9B59B6';
+    // Default to yellow for nad.fun if no match found
+    return '#eab308';
   };
   // Get icon based on token data - dynamically maps launchpad_protocol to icon
   const getTokenIcon = (token: Token): string => {
     const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase();
     
     if (!launchpadProtocol) {
-      // Default to pump.fun icon if no protocol info
-      return 'https://pump.fun/pump-logomark.svg';
+      // Default to nad.fun icon if no protocol info
+      return 'https://avatars.githubusercontent.com/u/173274001?s=200&v=4';
+    }
+    
+    // Map nad.fun to GitHub avatar
+    if (launchpadProtocol.includes('nad.fun') || launchpadProtocol === 'nadfun') {
+      return 'https://avatars.githubusercontent.com/u/173274001?s=200&v=4';
     }
     
     // Map launchpad_protocol to external logo URLs
@@ -971,7 +983,7 @@ function TokenImage({
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || 'Protocol'} logo`}
             className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
             style={{
-              filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
+              filter: 'none' // Keep original logo colors - don't apply yellow filter
             }}
           />
         </div>
@@ -1434,7 +1446,10 @@ function MonadTable({
   const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Wave animation for migrating tokens
   const { solPrice } = useSolPrice(); // Use shared SOL price from Footer context
   
-  // State for filtered tokens from API
+  // State for Monad tokens fetched directly from Monad token service
+  const [monadTokens, setMonadTokens] = useState<Token[]>([]);
+  const [isFetchingMonad, setIsFetchingMonad] = useState(true);
+  // Legacy state for filtered tokens (not used for Monad, kept for compatibility)
   const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
   const isNewPairs = title.toLowerCase().includes('new');
@@ -1469,7 +1484,7 @@ function MonadTable({
   
   const [filters, setFilters] = useState({
     // Protocols
-    protocols: ['All'] as string[],
+    protocols: ['nad.fun'] as string[],
     // Quote Tokens
     quoteTokens: [] as string[],
     // Keywords
@@ -1561,9 +1576,8 @@ function MonadTable({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const hasSpecificProtocols =
-      filters.protocols.length > 0 && !filters.protocols.includes('All');
-    if (hasSpecificProtocols) return;
+    // MonadTable always uses nad.fun - always save WebSocket cache
+    // (No need to check for 'All' since it doesn't exist in MonadTable)
     try {
       const payload = {
         data: wsTokens,
@@ -1585,26 +1599,8 @@ function MonadTable({
   // Map frontend protocol names to backend protocol names
   const mapProtocolToBackend = useCallback((protocol: string): string[] => {
     switch (protocol) {
-      case 'Pump':
-        return ['pump.fun'];
-      case 'Pump AMM':
-        return ['pump.fun'];
-      case 'Raydium':
-        return ['raydium', 'raydiumlaunchpad'];
-      case 'Meteora AMM':
-        return ['meteora'];
-      case 'Meteora AMM V2':
-        return ['meteora'];
-      case 'Bonk':
-        return ['bonk'];
-      case 'Bags':
-        return ['bags'];
-      case 'Moonit':
-        return ['moonit'];
-      case 'Boop':
-        return ['boopfun'];
-      case 'LaunchLab':
-        return ['launchlab'];
+      case 'nad.fun':
+        return ['nad.fun'];
       case 'All':
         return ['all'];
       default:
@@ -1612,7 +1608,52 @@ function MonadTable({
     }
   }, []);
 
-  // Fetch filtered tokens from API when protocols are selected
+  // Fetch Monad tokens directly from Monad token service on mount and when title changes
+  const fetchMonadTokens = useCallback(async () => {
+    setIsFetchingMonad(true);
+    try {
+      // Determine the endpoint based on column type - ALWAYS use Monad-specific endpoints
+      let endpoint = '/api/token-service/pulse-new-monad';
+      let limit = 50;
+      if (title.toLowerCase().includes('final stretch')) {
+        endpoint = '/api/token-service/pulse-final-stretch-monad';
+        limit = 50;
+      } else if (title.toLowerCase().includes('migrated')) {
+        endpoint = '/api/token-service/pulse-migrated-monad';
+        limit = 70;
+      }
+
+      console.log(`[MonadTable ${title}] 🌊 Fetching Monad tokens from ${endpoint} (filtered to nad.fun only)`);
+      // Only fetch nad.fun tokens
+      const response = await fetch(`${endpoint}?limit=${limit}&protocols=nad.fun&t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const next = Array.isArray(data) ? data : [];
+        // NO filtering - use data directly from Monad token service
+        setMonadTokens(next as Token[]);
+        console.log(`[MonadTable ${title}] ✅ Fetched ${next.length} Monad tokens (no filtering)`);
+      } else {
+        console.error(`[MonadTable ${title}] ❌ Failed to fetch Monad tokens: ${response.status}`);
+        setMonadTokens([]);
+      }
+    } catch (error) {
+      console.error(`[MonadTable ${title}] ❌ Error fetching Monad tokens:`, error);
+      setMonadTokens([]);
+    } finally {
+      setIsFetchingMonad(false);
+    }
+  }, [title]);
+
+  // Fetch Monad tokens on mount and when title changes
+  useEffect(() => {
+    fetchMonadTokens();
+  }, [fetchMonadTokens]);
+
+  // Fetch filtered tokens from API when protocols are selected (for protocol filtering only)
   const fetchFilteredTokens = useCallback(async (protocols: string[]) => {
     if (protocols.length === 0) {
       setFilteredTokens([]);
@@ -1621,18 +1662,17 @@ function MonadTable({
 
     setIsFetchingFiltered(true);
     try {
-
       const backendProtocols = protocols.flatMap(mapProtocolToBackend);
       const protocolsParam = backendProtocols.join(',');
       
-      // Determine the endpoint based on column type
-      let endpoint = '/api/token-service/pulse-new';
+      // Determine the endpoint based on column type - use Monad-specific endpoints
+      let endpoint = '/api/token-service/pulse-new-monad';
       let limit = 50;
       if (title.toLowerCase().includes('final stretch')) {
-        endpoint = '/api/token-service/pulse-final-stretch';
+        endpoint = '/api/token-service/pulse-final-stretch-monad';
         limit = 50;
       } else if (title.toLowerCase().includes('migrated')) {
-        endpoint = '/api/token-service/pulse-migrated';
+        endpoint = '/api/token-service/pulse-migrated-monad';
         limit = 70;
       }
 
@@ -1640,7 +1680,8 @@ function MonadTable({
       if (response.ok) {
         const data = await response.json();
         const next = Array.isArray(data) ? data : [];
-        setFilteredTokens(filterNonZeroLiquidity(next as Token[]));
+        // NO filtering - use data directly from API
+        setFilteredTokens(next as Token[]);
       } else {
         console.error('Failed to fetch filtered tokens:', response.status);
         setFilteredTokens([]);
@@ -1813,7 +1854,8 @@ function MonadTable({
   // Fetch filtered tokens when protocols change
   useEffect(() => {
     // Treat ['All'] the same as no filter - don't fetch filtered data
-    const hasSpecificProtocols = filters.protocols.length > 0 && !filters.protocols.includes('All');
+    // MonadTable always uses nad.fun - no 'All' option
+    const hasSpecificProtocols = filters.protocols.length > 0;
 
     if (hasSpecificProtocols) {
       fetchFilteredTokens(filters.protocols);
@@ -1850,7 +1892,7 @@ function MonadTable({
 
   const handleResetFilters = () => {
     const defaultFilters = {
-      protocols: [] as string[],
+      protocols: ['nad.fun'] as string[],
       quoteTokens: [] as string[],
       searchKeywords: '',
       excludeKeywords: '',
@@ -2003,10 +2045,7 @@ function MonadTable({
 
   // Protocol and quote token data with official icons from web3icons
   const protocols = [
-    { name: 'All', icon: <span className="text-sm">🌐</span>, color: '#9333ea' },
-    { name: 'Pump', icon: <Image src="/pump.svg" alt="Pump" width={16} height={16} className="rounded-full" />, color: '#00ff88' },
-    { name: 'Bonk', icon: <div className="w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center text-xs font-bold" style={{ color: '#f0f5f5' }}>B</div>, color: '#ff6b35' },
-    { name: 'Bags', icon: <Image src="https://bags.fm/assets/images/bags-icon.png" alt="Bags" width={16} height={16} className="rounded-full" />, color: '#00d4aa' },
+    { name: 'nad.fun', icon: <Image src="https://avatars.githubusercontent.com/u/173274001?s=200&v=4" alt="nad.fun" width={16} height={16} className="rounded-full" />, color: '#eab308' },
     // { name: 'Moonshot', icon: <Image src="https://play-lh.googleusercontent.com/bmv_OqsfmlR2Tfd7-4I2HS1twZdiJmmyX0warik6UxhUdSfegPMegeIRxxj9LGUBAQM" alt="Moonshot" width={16} height={16} className="rounded-full" />, color: '#a855f7' },
     // { name: 'Heaven', icon: <Image src="data:image/png;base64,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" alt="Heaven" width={16} height={16} className="rounded-full" />, color: '#8b5cf6' },
     // { name: 'Daos.fun', icon: <TokenDAO variant="branded" size={16} className="rounded-full" />, color: '#06b6d4' },
@@ -2014,13 +2053,6 @@ function MonadTable({
     // { name: 'Sugar', icon: <Image src="https://cdn.vectorstock.com/i/1000v/28/93/sugar-donut-icon-vector-9992893.jpg" alt="Sugar" width={16} height={16} className="rounded-full" />, color: '#ec4899' },
     // { name: 'Believe', icon: <Image src="https://cryptoast.fr/wp-content/uploads/2025/05/believe-launchcoin-logo.png" alt="Believe" width={16} height={16} className="rounded-full" />, color: '#10b981' },
     // { name: 'Jupiter Studio', icon: <TokenJUP variant="branded" size={16} className="rounded-full" />, color: '#8b5cf6' },
-    { name: 'Moonit', icon: <Image src="/moonit.svg" alt="Moonit" width={16} height={16} className="rounded-full" />, color: '#fbbf24' },
-    { name: 'Boop', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/36393.png" alt="Boop" width={16} height={16} className="rounded-full" />, color: '#3b82f6' },
-    { name: 'LaunchLab', icon: <Image src="https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png" alt="LaunchLab" width={16} height={16} className="rounded-full" style={{ filter: 'hue-rotate(180deg) saturate(2) brightness(1.1)' }} />, color: '#3b82f6' },
-    // { name: 'Dynamic BC', icon: <Image src="https://cdn.prod.website-files.com/626692727bba3f384e008e8a/67a5dca8b3ee5d0703f70040_icon-primary.webp" alt="Dynamic BC" width={16} height={16} className="rounded-full" />, color: '#f97316' },
-    { name: 'Raydium', icon: <div className="w-4 h-4 bg-gray-500 rounded-full flex items-center justify-center text-xs font-bold" style={{ color: '#f0f5f5' }}>R</div>, color: '#6b7280' },
-    { name: 'Meteora AMM', icon: <Image src="/meteora.svg" alt="Meteora" width={16} height={16} className="rounded-full" />, color: '#92400e' },
-    { name: 'Meteora AMM V2', icon: <Image src="/meteora.svg" alt="Meteora V2" width={16} height={16} className="rounded-full" />, color: '#a16207' },
     // { name: 'Pump AMM', icon: <Image src="/pump.svg" alt="Pump AMM" width={16} height={16} className="rounded-full" />, color: '#64748b' },
     // { name: 'Orca', icon: <Image src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT9zFRQAbDsrkXwAJkZYVE-AIO3OyfVxYYm9w&s" alt="Orca" width={16} height={16} className="rounded-full" />, color: '#0ea5e9' }
   ];
@@ -2080,481 +2112,60 @@ function MonadTable({
   };
   // Removed duplicate mapProtocolToBackend and getTokenProtocol functions
   // Protocol filtering is now 100% server-side via HTTP API and WebSocket
-  // Filter and sort tokens
+  // MonadTable ONLY uses Monad token service data - NO FE filtering, IGNORE tokens prop
   const filteredAndSortedTokens = useMemo(() => {
-    console.log(`[PulseTable ${title}] 🔧 filteredAndSortedTokens recomputing, tokens count: ${tokens?.length || 0}, filteredTokens: ${filteredTokens.length}, wsTokens: ${wsTokens.length}`);
+    console.log(`[MonadTable ${title}] 🔧 MonadTable filtering - monadTokens: ${monadTokens.length}, filteredTokens: ${filteredTokens.length}`);
 
-    // Data source priority:
-    // 1. WebSocket real-time tokens (for instant updates)
-    // 2. HTTP API filtered tokens (when protocol filters active)
-    // 3. Original tokens prop (fallback)
-    let filtered: Token[];
-    const hasSpecificProtocols = filters.protocols.length > 0 && !filters.protocols.includes('All');
+    // MonadTable ONLY uses Monad token service endpoints - IGNORE tokens prop entirely
+    // Use filteredTokens if protocol filter is active, otherwise use monadTokens
+    // MonadTable always uses nad.fun - no 'All' option
+    const hasSpecificProtocols = filters.protocols.length > 0;
 
-    // Merge WebSocket tokens with HTTP API tokens (deduplicate by mint)
-    const mergedMap = new Map<string, Token>();
+    // Use filtered tokens if protocols are selected, otherwise use base Monad tokens
+    // NEVER use tokens prop - only use Monad endpoints
+    let tokensToUse = hasSpecificProtocols && filteredTokens.length > 0 ? filteredTokens : monadTokens;
+    
+    // NO FRONTEND FILTERING AT ALL - use tokens directly from Monad token service as-is
+    // Only apply keyword search if provided (user-initiated search)
+    let filtered: Token[] = tokensToUse;
 
-    // Use filteredTokens if available (either from specific filters or fresh "All" fetch)
-    // Otherwise fall back to tokens prop
-    const baseTokens = filteredTokens.length > 0 ? filteredTokens : tokens;
+    console.log(`[MonadTable ${title}] 🔀 Using ${hasSpecificProtocols ? 'filtered' : 'base'} Monad tokens: ${tokensToUse.length} tokens (NO FE filtering)`);
 
-    // First add HTTP API tokens (either filtered or from props)
-    baseTokens.forEach(token => mergedMap.set(token.mint, token));
-
-    // Then add/overwrite with WebSocket tokens (they're more recent and real-time)
-    // For new pairs, prioritize speed - filter after merge, not during
-    wsTokens.forEach(token => mergedMap.set(token.mint, token));
-
-    // Filter zero liquidity tokens - but do it fast for new pairs
-    const isNewPairs = title.toLowerCase().includes('new');
-    if (isNewPairs) {
-      // Fast path for new pairs: filter in-place to avoid extra array creation
-      const allTokens = Array.from(mergedMap.values()) as Token[];
-      filtered = allTokens.filter(token => !hasZeroLiquidity(token));
-    } else {
-      filtered = filterNonZeroLiquidity(Array.from(mergedMap.values()) as Token[]);
-    }
-
-    if (hasSpecificProtocols) {
-      console.log(`[PulseTable ${title}] 🔀 Merged filtered tokens: ${filteredTokens.length} HTTP + ${wsTokens.length} WS = ${filtered.length} total`);
-    } else {
-      console.log(`[PulseTable ${title}] 🔀 Merged tokens (showing All): ${baseTokens.length} HTTP + ${wsTokens.length} WS = ${filtered.length} total`);
-    }
-
-    // Filter out tokens without migrated_pool_address in the Migrated column
-    // Skip this filter when protocol filtering is applied (API already returns valid migrated tokens)
-    if (title.toLowerCase().includes('migrated') && filters.protocols.length === 0) {
-      filtered = filtered.filter(token => {
-        const hasMigratedPoolAddress = !!(token as any).migrated_pool_address;
-        return hasMigratedPoolAddress;
-      });
-    }
-
-    // Protocol filtering is now handled by the API, so we skip client-side filtering
-    // when protocols are selected (filteredTokens already contains the filtered results)
-
-    // Apply keyword filters
+    // Only apply keyword search filters (user-initiated), NO other filtering
     if (filters.searchKeywords.trim()) {
       const searchTerms = filters.searchKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
       if (searchTerms.length > 0) {
-        const beforeCount = filtered.length;
         filtered = filtered.filter(token => {
           const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
           return searchTerms.some(term => tokenText.includes(term));
         });
-        console.log(`[Keyword Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for search keywords:`, searchTerms);
       }
     }
 
     if (filters.excludeKeywords.trim()) {
       const excludeTerms = filters.excludeKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
       if (excludeTerms.length > 0) {
-        const beforeCount = filtered.length;
         filtered = filtered.filter(token => {
           const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
           return !excludeTerms.some(term => tokenText.includes(term));
         });
-        console.log(`[Exclude Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for exclude keywords:`, excludeTerms);
       }
     }
 
-    // Apply quote token filters
-    if (filters.quoteTokens.length > 0) {
-      const beforeCount = filtered.length;
-      filtered = filtered.filter(token => {
-        // For now, we'll filter based on pair address patterns or other heuristics
-        // Since we don't have explicit quote token data, we'll use pair address patterns
-        const pairAddress = token.pair_address;
-        if (!pairAddress) return false;
-        
-        return filters.quoteTokens.some(quoteToken => {
-          // This is a simplified approach - in reality you'd need to check the actual pair
-          // For now, we'll just return true if any quote token is selected
-          // You might want to implement more sophisticated logic based on your data
-          return true;
-        });
-      });
-      console.log(`[Quote Token Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for quote tokens:`, filters.quoteTokens);
-    }
+    // NO FE filtering at all - skip all other filters (quote tokens, dexPaid, caEndsInPump, age, market cap, volume, liquidity, etc.)
+    // Return tokens exactly as received from Monad token service (only keyword search applied if user initiated)
 
-    // Apply dexPaid filter
-    if (filters.dexPaid) {
-      const beforeCount = filtered.length;
-      filtered = filtered.filter(token => {
-        // Check if token has paid dex fees (this would need to be implemented based on your data structure)
-        // For now, we'll assume all tokens have paid if this filter is enabled
-        return true; // Placeholder - implement based on actual dexPaid field
-      });
-      console.log(`[DexPaid Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for dexPaid:`, filters.dexPaid);
-    }
-
-    // Apply caEndsInPump filter
-    if (filters.caEndsInPump) {
-      const beforeCount = filtered.length;
-      filtered = filtered.filter(token => {
-        // Check if contract address ends in "pump"
-        return token.mint && token.mint.toLowerCase().endsWith('pump');
-      });
-      console.log(`[CA Ends in Pump Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for caEndsInPump:`, filters.caEndsInPump);
-    }
-
-    // Apply age filters
-    if (filters.minAge || filters.maxAge) {
-      const beforeCount = filtered.length;
-      filtered = filtered.filter(token => {
-        const launchTime = (token as any).launch_time || (token as any).created_at;
-        if (!launchTime) return false;
-        
-        const launchDate = new Date(launchTime);
-        const now = new Date();
-        const ageInMinutes = (now.getTime() - launchDate.getTime()) / (1000 * 60);
-        
-        let ageInTargetUnit = ageInMinutes;
-        if (filters.ageUnit === 'h') {
-          ageInTargetUnit = ageInMinutes / 60;
-        } else if (filters.ageUnit === 'd') {
-          ageInTargetUnit = ageInMinutes / (60 * 24);
-        }
-        
-        const minAge = filters.minAge ? parseFloat(filters.minAge) : 0;
-        const maxAge = filters.maxAge ? parseFloat(filters.maxAge) : Infinity;
-        
-        return ageInTargetUnit >= minAge && ageInTargetUnit <= maxAge;
-      });
-      console.log(`[Age Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for age range:`, filters.minAge, '-', filters.maxAge, filters.ageUnit);
-    }
-
-    // Apply top 10 holders percent filter
-    if (filters.top10HoldersPercent) {
-      const beforeCount = filtered.length;
-      const threshold = parseFloat(filters.top10HoldersPercent);
-      filtered = filtered.filter(token => {
-        // This would need to be implemented based on actual holder data
-        // For now, we'll skip this filter as we don't have holder data
-        return true;
-      });
-      console.log(`[Top 10 Holders Filter] Filtered ${beforeCount} tokens to ${filtered.length} tokens for top10HoldersPercent:`, threshold);
-    }
-
-    // Apply filters
-    if (filters.minMarketCap) {
-      const minMC = parseFloat(filters.minMarketCap);
-      filtered = filtered.filter(token => {
-        const marketCap = (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
-        return marketCap >= minMC;
-      });
-    }
-
-    if (filters.maxMarketCap) {
-      const maxMC = parseFloat(filters.maxMarketCap);
-      filtered = filtered.filter(token => {
-        const marketCap = (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
-        return marketCap <= maxMC;
-      });
-    }
-
-    if (filters.minVolume) {
-      const minVol = parseFloat(filters.minVolume);
-      filtered = filtered.filter(token => {
-        const volume = (token as any).volume_24h ?? 0;
-        return volume >= minVol;
-      });
-    }
-
-    if (filters.maxVolume) {
-      const maxVol = parseFloat(filters.maxVolume);
-      filtered = filtered.filter(token => {
-        const volume = (token as any).volume_24h ?? 0;
-        return volume <= maxVol;
-      });
-    }
-
-    // Apply liquidity filters
-    if (filters.minLiquidity) {
-      const minLiq = parseFloat(filters.minLiquidity);
-      filtered = filtered.filter(token => {
-        const liquidity = (token as any).total_liquidity_usd ?? 0;
-        return liquidity >= minLiq;
-      });
-    }
-
-    if (filters.maxLiquidity) {
-      const maxLiq = parseFloat(filters.maxLiquidity);
-      filtered = filtered.filter(token => {
-        const liquidity = (token as any).total_liquidity_usd ?? 0;
-        return liquidity <= maxLiq;
-      });
-    }
-    // Apply bonding curve percent filters
-    if (filters.bCurvePercentMin) {
-      const minBC = parseFloat(filters.bCurvePercentMin);
-      filtered = filtered.filter(token => {
-        const bondingCurve = (token as any).bonding_pct ?? 0;
-        return bondingCurve >= minBC;
-      });
-    }
-
-    if (filters.bCurvePercentMax) {
-      const maxBC = parseFloat(filters.bCurvePercentMax);
-      filtered = filtered.filter(token => {
-        const bondingCurve = (token as any).bonding_pct ?? 0;
-        return bondingCurve <= maxBC;
-      });
-    }
-
-    // Apply transaction count filters
-    if (filters.txnsMin) {
-      const minTxns = parseFloat(filters.txnsMin);
-      filtered = filtered.filter(token => {
-        const txns = ((token as any).total_buys_24h ?? 0) + ((token as any).total_sells_24h ?? 0);
-        return txns >= minTxns;
-      });
-    }
-
-    if (filters.txnsMax) {
-      const maxTxns = parseFloat(filters.txnsMax);
-      filtered = filtered.filter(token => {
-        const txns = ((token as any).total_buys_24h ?? 0) + ((token as any).total_sells_24h ?? 0);
-        return txns <= maxTxns;
-      });
-    }
-
-    // Apply buy count filters
-    if (filters.numBuysMin) {
-      const minBuys = parseFloat(filters.numBuysMin);
-      filtered = filtered.filter(token => {
-        const buys = (token as any).total_buys_24h ?? 0;
-        return buys >= minBuys;
-      });
-    }
-
-    if (filters.numBuysMax) {
-      const maxBuys = parseFloat(filters.numBuysMax);
-      filtered = filtered.filter(token => {
-        const buys = (token as any).total_buys_24h ?? 0;
-        return buys <= maxBuys;
-      });
-    }
-
-    // Apply sell count filters
-    if (filters.numSellsMin) {
-      const minSells = parseFloat(filters.numSellsMin);
-      filtered = filtered.filter(token => {
-        const sells = (token as any).total_sells_24h ?? 0;
-        return sells >= minSells;
-      });
-    }
-
-    if (filters.numSellsMax) {
-      const maxSells = parseFloat(filters.numSellsMax);
-      filtered = filtered.filter(token => {
-        const sells = (token as any).total_sells_24h ?? 0;
-        return sells <= maxSells;
-      });
-    }
-
-    // Apply unique wallets filters
-    if (filters.holdersMin) {
-      const minHolders = parseFloat(filters.holdersMin);
-      filtered = filtered.filter(token => {
-        const holders = (token as any).unique_wallets_24h ?? 0;
-        return holders >= minHolders;
-      });
-    }
-
-    if (filters.holdersMax) {
-      const maxHolders = parseFloat(filters.holdersMax);
-      filtered = filtered.filter(token => {
-        const holders = (token as any).unique_wallets_24h ?? 0;
-        return holders <= maxHolders;
-      });
-    }
-
-    // Apply social media filters
-    if (filters.hasWebsite) {
-      filtered = filtered.filter(token => {
-        const website = (token as any).website ?? (token as any).website_url ?? '';
-        return website && website.trim().length > 0;
-      });
-    }
-
-    if (filters.hasTwitter) {
-      filtered = filtered.filter(token => {
-        const twitter = (token as any).twitter ?? (token as any).twitter_url ?? (token as any).x ?? (token as any).x_url ?? '';
-        return twitter && twitter.trim().length > 0;
-      });
-    }
-
-    if (filters.hasTelegram) {
-      filtered = filtered.filter(token => {
-        const telegram = (token as any).telegram ?? (token as any).telegram_url ?? '';
-        return telegram && telegram.trim().length > 0;
-      });
-    }
-
-    if (filters.atLeastOneSocial) {
-      filtered = filtered.filter(token => {
-        const website = (token as any).website ?? (token as any).website_url ?? '';
-        const twitter = (token as any).twitter ?? (token as any).twitter_url ?? (token as any).x ?? (token as any).x_url ?? '';
-        const telegram = (token as any).telegram ?? (token as any).telegram_url ?? '';
-        return (website && website.trim().length > 0) || 
-               (twitter && twitter.trim().length > 0) || 
-               (telegram && telegram.trim().length > 0);
-      });
-    }
-
-    if (filters.onlyPumpLive) {
-      filtered = filtered.filter(token => {
-        const protocol = (token as any).launchpad_protocol?.toLowerCase() || '';
-        const isLive = (token as any).is_live ?? (token as any).isLive ?? true;
-        return protocol.includes('pump') && isLive;
-      });
-    }
-
-    // Sort tokens
+    // Simple sort by created_at (newest first) - NO other sorting or filtering
     filtered.sort((a, b) => {
-      // Special sorting for New Pairs: always sort by newest first (fastest path - no filtering delays)
-      const isNewPairs = title.toLowerCase().includes("new") && !title.toLowerCase().includes("migrated");
-      if (isNewPairs) {
-        const aTimestamp = getTokenTimestamp(a, NEW_PAIRS_TIMESTAMP_FIELDS);
-        const bTimestamp = getTokenTimestamp(b, NEW_PAIRS_TIMESTAMP_FIELDS);
-        return bTimestamp - aTimestamp;
-      }
-      
-      // Special sorting for Migrated: sort by token's original age (youngest tokens first)
-      // Use created_at/launch_time, NOT migrated_time
-      const isMigrated = title.toLowerCase().includes("migrated");
-      if (isMigrated) {
-        const aTimestamp = getTokenTimestamp(a, MIGRATED_TIMESTAMP_FIELDS);
-        const bTimestamp = getTokenTimestamp(b, MIGRATED_TIMESTAMP_FIELDS);
-        
-        // Debug logging for first 3 tokens to verify token age (not migration time) is being used
-        if (typeof window !== 'undefined' && filtered.length > 0) {
-          const aIdx = filtered.indexOf(a);
-          const bIdx = filtered.indexOf(b);
-          if (aIdx < 3 || bIdx < 3) {
-            console.log(`[PulseTable ${title}] Migrated sorting by token age:`, {
-              tokenA: { 
-                name: a.name, 
-                symbol: a.symbol, 
-                ts: aTimestamp,
-                created_at: (a as any).created_at,
-                launch_time: (a as any).launch_time,
-                migrated_time: (a as any).migrated_time,
-              },
-              tokenB: { 
-                name: b.name, 
-                symbol: b.symbol, 
-                ts: bTimestamp,
-                created_at: (b as any).created_at,
-                launch_time: (b as any).launch_time,
-                migrated_time: (b as any).migrated_time,
-              },
-              diff: bTimestamp - aTimestamp,
-              result: bTimestamp > aTimestamp ? 'B first (younger)' : 'A first (younger)'
-            });
-          }
-        }
-        
-        return bTimestamp - aTimestamp;
-      }
-      
-      // Special sorting for Final Stretch: prioritize high bonding Meteora tokens by newest + highest bonding
-      if (title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch")) {
-        const aLaunchpadProtocol = (a as any).launchpad_protocol?.toLowerCase() || '';
-        const bLaunchpadProtocol = (b as any).launchpad_protocol?.toLowerCase() || '';
-        const aIsMeteora = aLaunchpadProtocol.includes('meteora');
-        const bIsMeteora = bLaunchpadProtocol.includes('meteora');
-        const aBondingPct = (a as any).bonding_pct ?? 0;
-        const bBondingPct = (b as any).bonding_pct ?? 0;
-        const aIsHighBondingMeteora = aIsMeteora && aBondingPct > 98.6;
-        const bIsHighBondingMeteora = bIsMeteora && bBondingPct > 98.6;
-        
-        // High bonding Meteora tokens go to top
-        if (aIsHighBondingMeteora && !bIsHighBondingMeteora) return -1;
-        if (!aIsHighBondingMeteora && bIsHighBondingMeteora) return 1;
-        
-        // If both are high bonding Meteora, sort by timestamp (newest first), then bonding percentage
-        if (aIsHighBondingMeteora && bIsHighBondingMeteora) {
-          const aTimestamp = getTokenTimestamp(a, BASE_TIMESTAMP_FIELDS);
-          const bTimestamp = getTokenTimestamp(b, BASE_TIMESTAMP_FIELDS);
-          
-          const timestampDiff = bTimestamp - aTimestamp;
-          if (Math.abs(timestampDiff) > 60000) { // If timestamps differ by more than 1 minute
-            return timestampDiff;
-          }
-          
-          // If timestamps are similar, sort by bonding percentage (highest first)
-          return bBondingPct - aBondingPct;
-        }
-      }
-      let aValue, bValue;
-      
-      // Sorting applied (debug logs removed for performance)
-      
-      switch (filters.sortBy) {
-        case 'marketCap':
-          aValue = (a as any).fully_diluted_value ?? (a as any).market_cap_usd ?? 0;
-          bValue = (b as any).fully_diluted_value ?? (b as any).market_cap_usd ?? 0;
-          break;
-        case 'volume':
-          aValue = (a as any).volume_24h ?? 0;
-          bValue = (b as any).volume_24h ?? 0;
-          break;
-        case 'symbol':
-          aValue = a.symbol?.toLowerCase() ?? '';
-          bValue = b.symbol?.toLowerCase() ?? '';
-          break;
-        case 'timestamp':
-        case 'time': {
-          const timestampFields = isMigrated
-            ? MIGRATED_TIMESTAMP_FIELDS
-            : isNewPairs
-              ? NEW_PAIRS_TIMESTAMP_FIELDS
-              : BASE_TIMESTAMP_FIELDS;
-          aValue = getTokenTimestamp(a, timestampFields);
-          bValue = getTokenTimestamp(b, timestampFields);
-          
-          // Debug logging for timestamp sorting
-          if (typeof window !== 'undefined' && title.toLowerCase().includes('migrated') && filtered.length > 0) { 
-            // Log first 3 tokens to verify migrated_time is being used
-            if (filtered.indexOf(a) < 3 || filtered.indexOf(b) < 3) {
-              console.log(`[PulseTable] ${title} timestamp sorting:`, {
-                tokenA: { 
-                  name: a.name, 
-                  symbol: a.symbol, 
-                  ts: aValue, 
-                  migrated_time: (a as any).migrated_time,
-                  launch_time: (a as any).launch_time 
-                },
-                tokenB: { 
-                  name: b.name, 
-                  symbol: b.symbol, 
-                  ts: bValue, 
-                  migrated_time: (b as any).migrated_time,
-                  launch_time: (b as any).launch_time 
-                },
-                diff: bValue - aValue,
-                result: bValue > aValue ? 'B first (newer)' : 'A first (newer)'
-              });
-            }
-          }
-          break;
-        }
-        default:
-          aValue = (a as any).fully_diluted_value ?? (a as any).market_cap_usd ?? 0;
-          bValue = (b as any).fully_diluted_value ?? (b as any).market_cap_usd ?? 0;
-      }
-
-      if (filters.sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
+      const aTime = (a as any).created_at || (a as any).launch_time || '';
+      const bTime = (b as any).created_at || (b as any).launch_time || '';
+      const aTs = aTime ? new Date(aTime).getTime() : 0;
+      const bTs = bTime ? new Date(bTime).getTime() : 0;
+      return bTs - aTs; // Newest first
     });
 
     return filtered;
-  }, [tokens, filteredTokens, wsTokens, title, filters.protocols, filters.quoteTokens, filters.searchKeywords, filters.excludeKeywords, filters.dexPaid, filters.caEndsInPump, filters.minAge, filters.maxAge, filters.ageUnit, filters.top10HoldersPercent, filters.minMarketCap, filters.maxMarketCap, filters.minVolume, filters.maxVolume, filters.minLiquidity, filters.maxLiquidity, filters.bCurvePercentMin, filters.bCurvePercentMax, filters.txnsMin, filters.txnsMax, filters.numBuysMin, filters.numBuysMax, filters.numSellsMin, filters.numSellsMax, filters.holdersMin, filters.holdersMax, filters.hasWebsite, filters.hasTwitter, filters.hasTelegram, filters.atLeastOneSocial, filters.onlyPumpLive, filters.sortBy, filters.sortOrder]);
+  }, [monadTokens, filteredTokens, title, filters.protocols, filters.searchKeywords, filters.excludeKeywords]);
 
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => {
@@ -2996,13 +2607,13 @@ function MonadTable({
             <BsSliders2 size={14} />
             
             {/* Protocol Filter Count Indicator (exclude 'All') */}
-            {filters.protocols.filter((p: string) => p !== 'All').length > 0 && (
+            {filters.protocols.length > 0 && (
               <span 
                 className="absolute -top-1 -right-1 text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
                 style={{ backgroundColor: '#9B59B6' }}
                 style={{ color: '#f0f5f5', fontSize: '10px' }}
               >
-                {filters.protocols.filter((p: string) => p !== 'All').length}
+                {filters.protocols.length}
               </span>
             )}
           </button>
@@ -3065,9 +2676,9 @@ function MonadTable({
                 <button 
                   className="p-2 rounded hover:bg-gray-700 transition-colors mr-2 cursor-pointer"
                   onClick={() => {
-                    // Reset all filters
+                    // Reset all filters (but keep nad.fun selected)
                     setFilters({
-                      protocols: [],
+                      protocols: ['nad.fun'],
                       quoteTokens: [],
                       searchKeywords: '',
                       excludeKeywords: '',
@@ -3153,11 +2764,11 @@ function MonadTable({
                         e.currentTarget.style.transform = 'scale(1)';
                       }}
                       onClick={() => {
-                        // Simply revert to ['All'] - same as default state, no API call needed
+                        // Simply revert to ['nad.fun'] - same as default state, no API call needed
                         handlePendingFilterChange(prev => {
                           return {
                             ...prev,
-                            protocols: ['All']
+                            protocols: ['nad.fun']
                           };
                         });
                       }}
@@ -3214,19 +2825,18 @@ function MonadTable({
 
                             // If clicking "All", clear all other protocols
                             if (clickedProtocol === 'All') {
-                              return { ...prev, protocols: ['All'] };
+                              return { ...prev, protocols: ['nad.fun'] };
                             }
 
                             // If clicking a specific protocol
                             if (currentProtocols.includes(clickedProtocol)) {
                               // Deselecting a protocol
-                              const remaining = currentProtocols.filter(p => p !== clickedProtocol && p !== 'All');
-                              // If no protocols left, revert to 'All'
-                              return { ...prev, protocols: remaining.length === 0 ? ['All'] : remaining };
+                              const remaining = currentProtocols.filter(p => p !== clickedProtocol);
+                              // If no protocols left, keep nad.fun (always required)
+                              return { ...prev, protocols: remaining.length === 0 ? ['nad.fun'] : remaining };
                             } else {
-                              // Selecting a new protocol - remove 'All' and add the new one
-                              const withoutAll = currentProtocols.filter(p => p !== 'All');
-                              return { ...prev, protocols: [...withoutAll, clickedProtocol] };
+                              // Selecting a new protocol - add it (nad.fun is always included)
+                              return { ...prev, protocols: [...currentProtocols, clickedProtocol] };
                             }
                           });
                         }}
@@ -3239,7 +2849,7 @@ function MonadTable({
                 </div>
 
                 {/* Quote Tokens */}
-                <div className="mb-4">
+                {/* <div className="mb-4">
                   <h4 className="text-sm font-medium mb-2" style={{ color: AX.text }}>Quote Tokens</h4>
                   <div className="flex gap-3">
                     {quoteTokens.map((token) => (
@@ -3297,7 +2907,7 @@ function MonadTable({
                       </button>
                     ))}
                   </div>
-                </div>
+                </div> */}
                 {/* Keywords */}
                 <div className="mb-6">
                   <h4 className="text-sm font-medium mb-2" style={{ color: AX.text }}>Search Keywords</h4>
@@ -4593,8 +4203,8 @@ function MonadTable({
           </div>
         </div>
       </div>
-      <div className="custom-scrollbar flex-1 overflow-y-scroll ">
-        {loading && tokens.length === 0 ? (
+      <div className="custom-scrollbar flex-1 overflow-y-auto min-h-0">
+        {(loading || isFetchingMonad) && monadTokens.length === 0 ? (
           Array.from({ length: skeletonRowCount }).map((_, idx) => (
             <div
               key={idx}
@@ -4648,7 +4258,7 @@ function MonadTable({
               </div>
             </div>
           ))
-        ) : tokens.length === 0 ? (
+        ) : (monadTokens.length === 0 && filteredTokens.length === 0 && !isFetchingMonad && !isFetchingFiltered) ? (
           <div className="py-8 text-center" style={{ color: AX.muted }}>
             No tokens found.
           </div>
@@ -4948,7 +4558,7 @@ function MonadTable({
                         </button>
                       </div>
                       </div>
-                      <div className="mt-1 flex items-center gap-1 lg:gap-2 text-xs" style={{ color: AX.aiGreen }}>
+                      <div className="mt-1 flex items-center gap-1 lg:gap-2 text-xs" style={{ color: '#31e3ac' }}>
                         <span>{getAgeLabel(token)}</span>
                         {/* Socials */}
                         <div className="relative flex items-center gap-1 lg:gap-2">
@@ -5501,8 +5111,8 @@ function MonadTable({
                           borderColor: 'rgba(107, 114, 128, 0.1)',
                           backgroundColor: 'transparent'
                         }}>
-                    <LuChefHat size={13} /> DS{" "}
-                    <span style={{ color: '#f0f5f5' }}>
+                    <LuChefHat size={13} style={{ color: '#3B82F6' }} /> DS{" "}
+                    <span style={{ color: '#3B82F6', display: 'inline-block' }}>
                       <TokenAge
                         createdAt={(token as any).created_at || (token as any).launch_time}
                       />
