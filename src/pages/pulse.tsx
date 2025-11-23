@@ -194,12 +194,6 @@ export default function PulsePage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-<<<<<<< HEAD
-  
-  // React Query client for manual cache updates from WebSocket
-  const queryClient = useQueryClient();
-=======
->>>>>>> 97e1d7d7e9d04d8fb44ab1cfd7bf77feead06e56
 
   // React Query hooks - instant cache
   const {
@@ -834,11 +828,6 @@ export default function PulsePage() {
   };
 
   // Use the processed data from build functions (single definitions)
-<<<<<<< HEAD
-  const newPairsToShow = useMemo(() => buildNewPairs(), [combinedNewPairs, wsNewEnriched, tokens, dataUpdatedAt]);
-  const migratedToShow = useMemo(() => buildMigrated(), [migratedTokensQuery]);
-  const finalStretchToShow = useMemo(() => buildFinalStretch(), [finalStretchTokensQuery]);
-=======
   // Include all dependencies - React will handle the conditional logic
   const newPairsToShow = useMemo(() => buildNewPairs(), 
     [isMonadRoute, monadNew, monadNewTick, combinedNewPairs, wsNewEnriched, isZeroLiquidityToken]
@@ -849,7 +838,6 @@ export default function PulsePage() {
   const finalStretchToShow = useMemo(() => buildFinalStretch(), 
     [isMonadRoute, monadFinalStretch, monadFinalStretchTick, finalStretchTokensQuery, isZeroLiquidityToken]
   );
->>>>>>> 97e1d7d7e9d04d8fb44ab1cfd7bf77feead06e56
 
   // Track httpNew changes for debugging
   useEffect(() => {
