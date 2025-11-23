@@ -100,6 +100,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         unique_traders: toNumber(r.unique_traders) || 0,
         is_graduated: r.is_graduated || false,
         updated_at: r.updated_at || null,
+        creator_wallet: r.creator_wallet || null,
+        creator_address: r.creator_wallet || null, // Alias for consistency
       };
     }) : [];
 
