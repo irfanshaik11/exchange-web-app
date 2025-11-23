@@ -200,13 +200,25 @@ const AddressDisplay: React.FC<{
 const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Get token metrics (using token-analytics if available)
-  const sniperPercent = token?.sniper_holding_percentage ?? 0;
-  const bundlePercent = token?.bundle_holding_percentage ?? 0;
-  const insiderPercent = token?.insider_holding_percentage ?? 0;
-  const devPercent = token?.dev_holding_percentage ?? 0;
+  // Get token metrics (using Codex fields if available, fallback to token-analytics)
+  // Parse string values to numbers (backend returns decimals as strings)
+  const parsePercentage = (val: any): number => {
+    if (val == null) return 0;
+    const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+    return isNaN(num) ? 0 : num;
+  };
+  
+  const sniperPercent = parsePercentage(token?.sniper_held_percentage ?? token?.sniper_holding_percentage);
+  const bundlePercent = parsePercentage(token?.bundler_held_percentage ?? token?.bundle_holding_percentage);
+  const insiderPercent = parsePercentage(token?.insider_held_percentage ?? token?.insider_holding_percentage);
+  const devPercent = parsePercentage(token?.dev_held_percentage ?? token?.dev_holding_percentage);
   const top10Percent = token?.top10_holding_percentage ?? 0;
   const lpBurned = token?.lp_burned ?? false;
+  
+  // Get counts from Codex
+  const sniperCount = token?.sniper_count ?? undefined;
+  const bundlerCount = token?.bundler_count ?? undefined;
+  const insiderCount = token?.insider_count ?? undefined;
 
   return (
     <div className="border-t border-[#2A2B33]">
@@ -294,7 +306,12 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
                     {sniperPercent > 0 ? `${sniperPercent.toFixed(1)}%` : '0%'}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Snipers H.</div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                  Snipers H.
+                  {sniperCount !== undefined && (
+                    <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({sniperCount})</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -310,7 +327,12 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
                     {insiderPercent > 0 ? `${insiderPercent.toFixed(1)}%` : '0%'}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Insiders</div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                  Insiders
+                  {insiderCount !== undefined && (
+                    <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({insiderCount})</div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -323,7 +345,12 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
                     {bundlePercent > 0 ? `${bundlePercent.toFixed(2)}%` : '0%'}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Bundlers</div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                  Bundlers
+                  {bundlerCount !== undefined && (
+                    <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({bundlerCount})</div>
+                  )}
+                </div>
               </div>
             </div>
 
