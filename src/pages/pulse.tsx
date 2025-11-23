@@ -197,8 +197,6 @@ export default function PulsePage() {
 
   // React Query client for manual cache updates from WebSocket
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<TabType>("new");
-  const [activeChain, setActiveChain] = useState<ChainType>("solana");
 
   // React Query hooks - instant cache
   const {
