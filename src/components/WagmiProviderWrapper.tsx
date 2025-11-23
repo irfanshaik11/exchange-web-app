@@ -17,9 +17,9 @@ export function WagmiProviderWrapper({ config, queryClient, children }: WagmiPro
     setIsClient(true);
   }, []);
 
-  // During SSR, render children without providers to prevent wagmi hook errors
+  // During SSR/first render, hold off rendering to avoid hooks running without providers
   if (!isClient) {
-    return <>{children}</>;
+    return null;
   }
 
   // On client, render with providers
@@ -33,4 +33,3 @@ export function WagmiProviderWrapper({ config, queryClient, children }: WagmiPro
     </WagmiProvider>
   );
 }
-
