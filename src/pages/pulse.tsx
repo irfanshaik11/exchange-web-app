@@ -217,25 +217,12 @@ export default function PulsePage() {
     isLoading: launchpadLoading,
     error: launchpadError,
     isStale: launchpadStale,
-<<<<<<< HEAD
-    refetch: refreshLaunchpadData
-  } = useQueryLaunchpadData();
-
-  const {
-    data: finalStretchTokensQuery = [],
-  } = useQueryFinalStretch();
-
-  const {
-    data: migratedTokensQuery = [],
-  } = useQueryMigrated();
-=======
     refetch: refreshLaunchpadData,
   } = useQueryLaunchpadData();
 
   const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch();
 
   const { data: migratedTokensQuery = [] } = useQueryMigrated();
->>>>>>> 97e1d7d7e9d04d8fb44ab1cfd7bf77feead06e56
 
   // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
   const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
