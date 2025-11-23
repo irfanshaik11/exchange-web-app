@@ -17,6 +17,11 @@ import dynamic from 'next/dynamic';
 const LoginModal = dynamic(() => import('../components/LoginModal'), {
   ssr: false,
 });
+
+// Dynamically import MonadTradeBanner with no SSR for animations
+const MonadTradeBanner = dynamic(() => import('../components/MonadTradeBanner'), {
+  ssr: false,
+});
 import { env } from '../env';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
@@ -321,6 +326,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       </Head>
       <div className={inter.className}>
         <MobileBlocker>
+          <MonadTradeBanner />
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
             <UserProvider>
               <TokenHandler />
