@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-const GO_SERVICE_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+// Use NEXT_PUBLIC_TOKEN_SERVICE_URL first (for production), then fallback to NEXT_PUBLIC_GO_SERVICE_URL
+const GO_SERVICE_URL = (process.env.NEXT_PUBLIC_TOKEN_SERVICE_URL || process.env.NEXT_PUBLIC_GO_SERVICE_URL || '').replace(/\/$/, '');
 console.log('GO_SERVICE_URL:', GO_SERVICE_URL);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -38,6 +39,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       endpoint = `/v1/trade/view?pair_address=${pairAddr}`;
       address = pairAddr;
       console.log(`Fetching trade data by PAIR address: ${GO_SERVICE_URL}${endpoint}`);
+    }
+
+    if (!GO_SERVICE_URL) {
+      console.error('GO_SERVICE_URL is not configured');
+      return res.status(500).json({ error: 'Token service URL not configured' });
     }
 
     const response = await fetch(`${GO_SERVICE_URL}${endpoint}`);
