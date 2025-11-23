@@ -20,7 +20,6 @@ import { SiSolana } from "react-icons/si";
 import toast from "react-hot-toast";
 import { FiEdit2, FiCheck, FiX } from "react-icons/fi";
 
-
 // Stacked Token Boxes Component
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
   <InterstateTooltip label="Tokens held">
