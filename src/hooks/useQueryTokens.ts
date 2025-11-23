@@ -67,12 +67,12 @@ export function useQueryNewPairs(): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.newPairs(),
     queryFn: fetchNewPairs,
-    staleTime: 30 * 1000,          // Consider fresh for 30 seconds (WebSocket provides real-time updates)
+    staleTime: Infinity,           // Never mark as stale - WebSocket provides updates
     gcTime: 10 * 60 * 1000,        // Keep in cache for 10 min for instant display
     refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
     refetchOnReconnect: true,      // Refetch on reconnect to catch missed updates
-    refetchOnMount: true,          // Load once on mount
-    // ✅ NO POLLING - WebSocket provides instant updates via query invalidation
+    refetchOnMount: true,          // ✅ ALWAYS fetch on mount to ensure fresh data
+    // ✅ NO POLLING - WebSocket provides instant updates via cache updates
     retry: 1,
   });
 }

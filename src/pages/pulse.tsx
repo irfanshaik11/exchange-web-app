@@ -551,42 +551,22 @@ export default function PulsePage() {
   );
 
   // Segregate regular tokens (stable refs)
-  const newPairs = useMemo(
-    () =>
-      tokens.filter((t) => {
-        const v =
-          typeof t.bonding_curve_progress === "string"
-            ? parseFloat(t.bonding_curve_progress)
-            : (t.bonding_curve_progress as number);
-        const prog = isFinite(v as number) ? Number(v) : 0;
-        return prog < 0.6;
-      }),
-    [tokens],
-  );
-  const finalStretch = useMemo(
-    () =>
-      tokens.filter((t) => {
-        const v =
-          typeof t.bonding_curve_progress === "string"
-            ? parseFloat(t.bonding_curve_progress)
-            : (t.bonding_curve_progress as number);
-        const prog = isFinite(v as number) ? Number(v) : 0;
-        return prog >= 0.6 && prog < 0.85;
-      }),
-    [tokens],
-  );
-  const migrated = useMemo(
-    () =>
-      tokens.filter((t) => {
-        const v =
-          typeof t.bonding_curve_progress === "string"
-            ? parseFloat(t.bonding_curve_progress)
-            : (t.bonding_curve_progress as number);
-        const prog = isFinite(v as number) ? Number(v) : 0;
-        return prog >= 0.85;
-      }),
-    [tokens],
-  );
+  // Note: bonding_curve_progress is in percentage format (0-100), not decimal (0-1)
+  const newPairs = useMemo(() => tokens.filter(t => {
+    const v = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : (t.bonding_curve_progress as number);
+    const prog = isFinite(v as number) ? Number(v) : 0;
+    return prog < 60; // Changed from 0.6 to 60 (percentage format)
+  }), [tokens]);
+  const finalStretch = useMemo(() => tokens.filter(t => {
+    const v = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : (t.bonding_curve_progress as number);
+    const prog = isFinite(v as number) ? Number(v) : 0;
+    return prog >= 60 && prog < 85; // Changed from 0.6/0.85 to 60/85 (percentage format)
+  }), [tokens]);
+  const migrated = useMemo(() => tokens.filter(t => {
+    const v = typeof t.bonding_curve_progress === 'string' ? parseFloat(t.bonding_curve_progress) : (t.bonding_curve_progress as number);
+    const prog = isFinite(v as number) ? Number(v) : 0;
+    return prog >= 85; // Changed from 0.85 to 85 (percentage format)
+  }), [tokens]);
 
   // Convert and combine launchpad tokens (stable refs)
   const launchpadNewPairs = useMemo(
