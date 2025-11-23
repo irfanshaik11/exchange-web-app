@@ -36,17 +36,46 @@ export default function FastImage({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
-  // Use proxy for defined.fi URLs to avoid CORS issues
-  const imageUrl = finalSrc?.includes('token-media.defined.fi') 
+  // Use proxy for IPFS URLs, defined.fi, debridge, and other CORS-prone domains
+  // IPFS gateways can have CORS restrictions, so proxy them
+  const needsProxy = finalSrc && (
+    finalSrc.includes('token-media.defined.fi') ||
+    finalSrc.includes('ipfs.io') ||
+    finalSrc.includes('cloudflare-ipfs.com') ||
+    finalSrc.includes('gateway.pinata.cloud') ||
+    finalSrc.includes('ipfs/') ||
+    finalSrc.startsWith('ipfs://') ||
+    finalSrc.includes('tokens.debridge.finance') ||
+    finalSrc.includes('debridge.finance') ||
+    finalSrc.includes('launchonsoar.com')
+  );
+  
+  const imageUrl = needsProxy && finalSrc
     ? `/api/image?url=${encodeURIComponent(finalSrc)}`
     : finalSrc;
 
+  // Debug logging to help diagnose image loading issues
+  React.useEffect(() => {
+    if (imageUrl) {
+      console.log(`[FastImage] Loading image:`, imageUrl, `for ${symbol || name || alt}`);
+    } else {
+      console.warn(`[FastImage] No image URL provided for ${symbol || name || alt}`);
+    }
+  }, [imageUrl, symbol, name, alt]);
+
   const handleLoad = () => {
+    console.log(`[FastImage] Image loaded successfully:`, imageUrl);
     setImageLoaded(true);
     setImageError(false);
   };
 
-  const handleError = () => {
+  const handleError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    const target = e.target as HTMLImageElement;
+    console.error(`[FastImage] Image failed to load:`, imageUrl, `Error:`, {
+      src: target.src,
+      naturalWidth: target.naturalWidth,
+      naturalHeight: target.naturalHeight,
+    });
     setImageError(true);
     setImageLoaded(false);
   };
@@ -65,7 +94,22 @@ export default function FastImage({
     return '?';
   };
 
-  if (!imageUrl || imageError) {
+  // Only show fallback if there's truly no image URL or if there was an error
+  // Don't show fallback while image is still loading
+  if (!imageUrl) {
+    return (
+      <div
+        className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg`}
+        style={{ width, height }}
+      >
+        <span className="text-lg">{getFirstLetter()}</span>
+        {showBubble && <ImageBubble src={bubbleSrc} />}
+      </div>
+    );
+  }
+
+  if (imageError) {
+    // Show fallback on error but log for debugging
     return (
       <div
         className={`relative ${className} flex items-center justify-center bg-gradient-to-br from-gray-800 to-black text-white font-bold shadow-lg`}
@@ -95,6 +139,7 @@ export default function FastImage({
         width={width}
         height={height}
         className={`transition-opacity duration-200 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         onLoad={handleLoad}
         onError={handleError}
         loading={priority ? 'eager' : 'lazy'} // Eager loading for priority images

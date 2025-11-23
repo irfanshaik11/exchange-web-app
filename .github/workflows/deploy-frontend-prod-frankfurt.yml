@@ -56,9 +56,8 @@ jobs:
             --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/trace.append \
             --service-account=486942555299-compute@developer.gserviceaccount.com \
             --region=$REGION \
-            --tags=http-server,https-server,lb-health-check \
-            --create-disk=auto-delete=yes,boot=yes,device-name=interstate-narrative-frontend-prod,image=interstate-narrative-frontend-prod-image-04112025,mode=rw,provisioned-iops=3600,provisioned-throughput=290,size=100,type=hyperdisk-balanced \
-            --create-disk=auto-delete=yes,device-name=persistent-disk-1,mode=rw,size=100,type=hyperdisk-balanced \
+            --tags=lb-health-check \
+            --create-disk=auto-delete=yes,boot=yes,device-name=interstate-narrative-frontend-prod,image=interstate-narrative-frontend-prod-image-17112025,mode=rw,provisioned-iops=3600,provisioned-throughput=290,size=100,type=hyperdisk-balanced \
             --no-shielded-secure-boot \
             --shielded-vtpm \
             --shielded-integrity-monitoring \

@@ -19,7 +19,7 @@ const AX = {
   surface: "#16171C",
   surface2: "#121317",
   border: "#24252C",
-  text: "#E6E7EA",
+  text: "#f0f5f5",
   muted: "#9CA3AF",
   mint: "#18c48c",
   mintHover: "#12a877",

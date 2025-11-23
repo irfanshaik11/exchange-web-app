@@ -184,6 +184,8 @@ export function ReferralAccessGate({
   const [discordJoined, setDiscordJoined] = useState(false);
   const [showCongratsModal, setShowCongratsModal] = useState(false);
   const [waitlistNumber, setWaitlistNumber] = useState<number | null>(null);
+  const [showValidatingPopup, setShowValidatingPopup] = useState(false);
+  const [wasWindowBlurred, setWasWindowBlurred] = useState(false);
 
   // Calculate quest progress
   const questProgressData = useMemo(() => {
@@ -382,6 +384,9 @@ export function ReferralAccessGate({
       setError(null);
       setInfo(null);
 
+      // Special handling for admin code - always grant access
+      const isAdminCode = normalized === 'NARRATIVE-ADMIN-247';
+      
       // Validate with backend and mark waitlist as activated (number -> 0) on success.
       // If the user has no waitlist row yet, create it and retry once.
       (async () => {
@@ -391,6 +396,23 @@ export function ReferralAccessGate({
             setError("Please login first.");
             return;
           }
+          
+          // For admin code, grant access immediately as fallback
+          if (isAdminCode) {
+            try {
+              await redeemAccessCode({
+                userId: Number(user.id),
+                accessCode: normalized,
+              });
+            } catch (adminErr: any) {
+              // Even if backend fails, grant access for admin code
+              console.warn('Admin code backend validation failed, granting access anyway:', adminErr);
+            }
+            persistAccess(user.id);
+            grantAccess();
+            return;
+          }
+          
           try {
             await redeemAccessCode({
               userId: Number(user.id),
@@ -417,7 +439,7 @@ export function ReferralAccessGate({
         }
       })();
     },
-    [requireReferralAccess, codeInput, grantAccess],
+    [requireReferralAccess, codeInput, grantAccess, user],
   );
 
   useEffect(() => {
@@ -500,18 +522,44 @@ export function ReferralAccessGate({
     }
   }, [showWaitlist, checkTwitterAuth]);
 
-  // Check for Twitter OAuth callback in URL
+  // Check for Twitter OAuth callback in URL - PRIORITY: Show waitlist immediately
   useEffect(() => {
     if (!router.isReady) return;
-    const { twitter_error, twitter_success } = router.query;
+    const { twitter_error, twitter_success, show_quests } = router.query;
     
     if (twitter_success === 'true') {
-      checkTwitterAuth();
+      // IMMEDIATELY show waitlist modal to prevent referral overlay from showing
+      setShowWaitlist(true);
+      
+      // Check Twitter auth and save Twitter info to database
+      checkTwitterAuth().then(async () => {
+        // Save Twitter info to database
+        if (user?.id) {
+          try {
+            const response = await fetch('/api/twitter/verify-auth');
+            const data = await response.json();
+            if (data.authenticated && data.user) {
+              // Save Twitter info to waitlist
+              await completeAllQuests({
+                userId: Number(user.id),
+                twitterId: data.user.id,
+                twitterUsername: data.user.username,
+              }).catch(err => {
+                console.error('Failed to save Twitter info to waitlist:', err);
+              });
+            }
+          } catch (error) {
+            console.error('Error saving Twitter info:', error);
+          }
+        }
+      });
+      
       // Clean up URL
       const [pathPart, searchPart] = router.asPath.split('?');
       if (searchPart) {
         const params = new URLSearchParams(searchPart);
         params.delete('twitter_success');
+        params.delete('show_quests');
         const cleaned = params.toString();
         router.replace(
           cleaned ? `${pathPart}?${cleaned}` : pathPart,
@@ -534,7 +582,76 @@ export function ReferralAccessGate({
         );
       }
     }
-  }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth]);
+  }, [router.isReady, router.query, router.asPath, router, checkTwitterAuth, user]);
+
+  // Reset blur state when waitlist modal closes
+  useEffect(() => {
+    if (!showWaitlist) {
+      setWasWindowBlurred(false);
+      setShowValidatingPopup(false);
+    }
+  }, [showWaitlist]);
+
+  // Detect when user returns to the page after opening quest links
+  useEffect(() => {
+    if (!showWaitlist) return;
+
+    const handleBlur = () => {
+      setWasWindowBlurred(true);
+    };
+
+    const handleFocus = async () => {
+      if (wasWindowBlurred && showWaitlist) {
+        // Show validating popup
+        setShowValidatingPopup(true);
+        
+        // Verify quest status
+        await checkTwitterAuth();
+        
+        // Check follow, like, repost, reply status via API
+        try {
+          const [followRes, likeRes, repostRes, replyRes] = await Promise.all([
+            fetch('/api/twitter/check-follow').catch(() => null),
+            fetch('/api/twitter/check-like').catch(() => null),
+            fetch('/api/twitter/check-retweet').catch(() => null),
+            fetch('/api/twitter/check-reply').catch(() => null),
+          ]);
+
+          if (followRes?.ok) {
+            const data = await followRes.json();
+            if (data.following) setNarrativeFollowed(true);
+          }
+          if (likeRes?.ok) {
+            const data = await likeRes.json();
+            if (data.liked) setPostLiked(true);
+          }
+          if (repostRes?.ok) {
+            const data = await repostRes.json();
+            if (data.retweeted) setPostReposted(true);
+          }
+          if (replyRes?.ok) {
+            const data = await replyRes.json();
+            if (data.replied) setPostReplied(true);
+          }
+        } catch (error) {
+          console.error('Error checking quest status:', error);
+        }
+
+        // Hide validating popup after a delay
+        setTimeout(() => {
+          setShowValidatingPopup(false);
+        }, 2000);
+      }
+    };
+
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [showWaitlist, wasWindowBlurred, checkTwitterAuth]);
 
   // Retrieve waitlist number from URL query parameter or sessionStorage
   useEffect(() => {
@@ -560,13 +677,42 @@ export function ReferralAccessGate({
   }, [router.isReady, router.query.number]);
 
   // Handle Twitter linking
-  const handleLinkTwitter = useCallback(() => {
-    // Mark as completed immediately when button is clicked
-    setTwitterLinked(true);
+  const handleLinkTwitter = useCallback((e?: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent any default behavior and stop propagation
+    e?.preventDefault();
+    e?.stopPropagation();
+    
+    // Prepare auth URL
     const currentPath = router.asPath.split('?')[0];
     const returnUrl = `${currentPath}?twitter_success=true`;
-    window.open(`/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`, '_blank');
+    const authUrl = `/api/twitter/auth?return_url=${encodeURIComponent(returnUrl)}`;
+    
+    // Open in a new tab
+    window.open(authUrl, '_blank');
   }, [router.asPath]);
+
+  // Handle Twitter disconnecting
+  const handleDisconnectTwitter = useCallback(async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent any default behavior and stop propagation
+    e?.preventDefault();
+    e?.stopPropagation();
+    
+    try {
+      const response = await fetch('/api/twitter/disconnect', {
+        method: 'POST',
+      });
+      
+      if (response.ok) {
+        // Update local state
+        setTwitterLinked(false);
+        setTwitterUsername(null);
+      } else {
+        console.error('Failed to disconnect Twitter account');
+      }
+    } catch (error) {
+      console.error('Error disconnecting Twitter account:', error);
+    }
+  }, []);
 
   // Phantom Wallet Login handler
   const handlePhantomLogin = useCallback(async () => {
@@ -723,7 +869,9 @@ export function ReferralAccessGate({
     );
   }
 
-  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist;
+  // Don't show referral overlay if Twitter OAuth just completed (twitter_success in URL)
+  const hasTwitterSuccess = router.isReady && router.query.twitter_success === 'true';
+  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist && !hasTwitterSuccess;
 
   return (
     <ReferralAccessContext.Provider value={contextValue}>
@@ -744,7 +892,7 @@ export function ReferralAccessGate({
                     <p className="text-xs uppercase tracking-[0.35em] text-emerald-400/80">
                       Narrative Access
                     </p>
-                    <h2 className="mt-2 text-2xl font-semibold text-white md:text-3xl">
+                    <h2 className="mt-2 text-2xl font-semibold text-[#f0f5f5] md:text-3xl">
                       Enter your referral code
                     </h2>
                   </div>
@@ -779,7 +927,7 @@ export function ReferralAccessGate({
                         setError(null);
                       }}
                       placeholder="ENTER-CODE-HERE"
-                      className="w-full rounded-2xl border border-neutral-700/60 bg-neutral-900/70 px-5 py-4 font-semibold tracking-[0.2em] text-white placeholder:text-neutral-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                      className="w-full rounded-2xl border border-neutral-700/60 bg-neutral-900/70 px-5 py-4 font-semibold tracking-[0.2em] text-[#f0f5f5] placeholder:text-neutral-500 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                       maxLength={64}
                       spellCheck={false}
                       autoCapitalize="characters"
@@ -809,7 +957,7 @@ export function ReferralAccessGate({
                     type="submit"
                     fullWidth
                     loading={status === "validating"}
-                    className="h-14 text-base uppercase tracking-[0.4em] !bg-black text-white hover:!bg-neutral-900 border-[0.5px] border-white"
+                    className="h-14 text-base uppercase tracking-[0.4em] !bg-black text-white hover:!bg-neutral-900 border-[0.5px] border-[#f0f5f5]"
                   >
                     Unlock Access
                   </InterstateButton>
@@ -829,7 +977,7 @@ export function ReferralAccessGate({
                     onClick={() => {
                       setShowWaitlist(true);
                     }}
-                    className="h-14 text-base uppercase tracking-[0.4em] bg-black text-white hover:bg-neutral-900"
+                    className="h-14 text-base uppercase tracking-[0.4em] bg-black text-[#f0f5f5] hover:bg-neutral-900"
                   >
                     Join Waitlist
                   </InterstateButton>
@@ -861,7 +1009,7 @@ export function ReferralAccessGate({
                       </svg>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-bold text-white">{questProgressData.rank}</div>
+                      <div className="text-sm font-bold text-[#f0f5f5]">{questProgressData.rank}</div>
                       <div className="mt-1">
                         <div className="w-full h-1.5 bg-neutral-700 rounded-full overflow-hidden">
                           <div
@@ -883,7 +1031,7 @@ export function ReferralAccessGate({
                   <p className="text-xs uppercase tracking-[0.35em] text-blue-400/80">
                     Join Waitlist
                   </p>
-                  <h2 className="mt-1 text-lg font-semibold text-white md:text-xl">
+                  <h2 className="mt-1 text-lg font-semibold text-[#f0f5f5] md:text-xl">
                     Get Early Access
                   </h2>
                 </div>
@@ -936,19 +1084,19 @@ export function ReferralAccessGate({
                           </svg>
                           <div>
                             {twitterUsername ? (
-                              <p className="text-white font-medium">@{twitterUsername}</p>
+                              <p className="text-[#f0f5f5] font-medium">@{twitterUsername}</p>
                             ) : (
-                              <p className="text-white font-medium">Twitter Linked</p>
+                              <p className="text-[#f0f5f5] font-medium">Twitter Linked</p>
                             )}
                             <p className="text-xs text-blue-300/80">Twitter account linked</p>
                           </div>
                         </div>
                         <InterstateButton
                           type="button"
-                          onClick={handleLinkTwitter}
-                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                          onClick={handleDisconnectTwitter}
+                          className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-[#f0f5f5]"
                         >
-                          Re-link
+                          Disconnect
                         </InterstateButton>
                       </div>
                     ) : (
@@ -957,7 +1105,7 @@ export function ReferralAccessGate({
                         onClick={handleLinkTwitter}
                         loading={checkingTwitter}
                         fullWidth
-                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-[#f0f5f5] hover:bg-blue-700 flex items-center justify-center gap-2"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -979,7 +1127,7 @@ export function ReferralAccessGate({
                             <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                           </svg>
                           <div>
-                            <p className="text-white font-medium">@narrative_hq</p>
+                            <p className="text-[#f0f5f5] font-medium">@narrative_hq</p>
                             <p className="text-xs text-blue-300/80">Following</p>
                           </div>
                         </div>
@@ -988,7 +1136,7 @@ export function ReferralAccessGate({
                           onClick={() => {
                             window.open("https://twitter.com/narrative_hq", "_blank");
                           }}
-                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
                           Open Twitter
                         </InterstateButton>
@@ -1001,7 +1149,7 @@ export function ReferralAccessGate({
                           setNarrativeFollowed(true);
                         }}
                         fullWidth
-                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-[#f0f5f5] hover:bg-blue-700 flex items-center justify-center gap-2"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
@@ -1023,7 +1171,7 @@ export function ReferralAccessGate({
                             <path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/>
                           </svg>
                           <div>
-                            <p className="text-white font-medium">Post liked</p>
+                            <p className="text-[#f0f5f5] font-medium">Post liked</p>
                             <p className="text-xs text-blue-300/80">Thank you for the like!</p>
                           </div>
                         </div>
@@ -1032,7 +1180,7 @@ export function ReferralAccessGate({
                           onClick={() => {
                             window.open("https://twitter.com/narrative_hq", "_blank");
                           }}
-                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
                           View Posts
                         </InterstateButton>
@@ -1045,7 +1193,7 @@ export function ReferralAccessGate({
                           setPostLiked(true);
                         }}
                         fullWidth
-                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-[#f0f5f5] hover:bg-blue-700 flex items-center justify-center gap-2"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/>
@@ -1067,7 +1215,7 @@ export function ReferralAccessGate({
                             <path d="M4.75 3.79l4.603 4.3-1.706 1.82L6 8.38v7.24c0 .97.784 1.75 1.75 1.75H13V20H7.75c-2.347 0-4.25-1.9-4.25-4.25V8.38L1.853 9.91.147 8.09l4.603-4.3zm11.5 2.71H11V4h5.25c2.347 0 4.25 1.9 4.25 4.25v7.24l1.647-1.53 1.706 1.82-4.603 4.3-4.603-4.3 1.706-1.82L18 15.62V8.38c0-.97-.784-1.75-1.75-1.75z"/>
                           </svg>
                           <div>
-                            <p className="text-white font-medium">Post reposted</p>
+                            <p className="text-[#f0f5f5] font-medium">Post reposted</p>
                             <p className="text-xs text-blue-300/80">Thank you for sharing!</p>
                           </div>
                         </div>
@@ -1076,7 +1224,7 @@ export function ReferralAccessGate({
                           onClick={() => {
                             window.open("https://twitter.com/narrative_hq", "_blank");
                           }}
-                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
                           View Posts
                         </InterstateButton>
@@ -1089,7 +1237,7 @@ export function ReferralAccessGate({
                           setPostReposted(true);
                         }}
                         fullWidth
-                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-[#f0f5f5] hover:bg-blue-700 flex items-center justify-center gap-2"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M4.75 3.79l4.603 4.3-1.706 1.82L6 8.38v7.24c0 .97.784 1.75 1.75 1.75H13V20H7.75c-2.347 0-4.25-1.9-4.25-4.25V8.38L1.853 9.91.147 8.09l4.603-4.3zm11.5 2.71H11V4h5.25c2.347 0 4.25 1.9 4.25 4.25v7.24l1.647-1.53 1.706 1.82-4.603 4.3-4.603-4.3 1.706-1.82L18 15.62V8.38c0-.97-.784-1.75-1.75-1.75z"/>
@@ -1111,7 +1259,7 @@ export function ReferralAccessGate({
                             <path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.09 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/>
                           </svg>
                           <div>
-                            <p className="text-white font-medium">Post replied</p>
+                            <p className="text-[#f0f5f5] font-medium">Post replied</p>
                             <p className="text-xs text-blue-300/80">Thank you for engaging!</p>
                           </div>
                         </div>
@@ -1120,7 +1268,7 @@ export function ReferralAccessGate({
                           onClick={() => {
                             window.open("https://twitter.com/narrative_hq", "_blank");
                           }}
-                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
                           View Posts
                         </InterstateButton>
@@ -1133,7 +1281,7 @@ export function ReferralAccessGate({
                           setPostReplied(true);
                         }}
                         fullWidth
-                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-[#f0f5f5] hover:bg-blue-700 flex items-center justify-center gap-2"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.09 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/>
@@ -1153,7 +1301,7 @@ export function ReferralAccessGate({
                         <div className="flex items-center gap-2">
                           <FaDiscord className="w-5 h-5 text-blue-400" />
                           <div>
-                            <p className="text-white font-medium">Discord Joined</p>
+                            <p className="text-[#f0f5f5] font-medium">Discord Joined</p>
                             <p className="text-xs text-blue-300/80">You've joined our Discord</p>
                           </div>
                         </div>
@@ -1162,7 +1310,7 @@ export function ReferralAccessGate({
                           onClick={() => {
                             window.open("https://discord.gg/QZGmpmvCNE", "_blank");
                           }}
-                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white"
+                          className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-[#f0f5f5]"
                         >
                           Open Discord
                         </InterstateButton>
@@ -1175,7 +1323,7 @@ export function ReferralAccessGate({
                           setDiscordJoined(true);
                         }}
                         fullWidth
-                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-2"
+                        className="h-9 text-xs uppercase tracking-[0.3em] bg-blue-600 text-[#f0f5f5] hover:bg-blue-700 flex items-center justify-center gap-2"
                       >
                         <FaDiscord className="w-5 h-5" />
                         Join Discord
@@ -1196,7 +1344,7 @@ export function ReferralAccessGate({
                         setWaitlistForm({ ...waitlistForm, telegram: e.target.value });
                       }}
                       placeholder="@username"
-                      className="w-full rounded-lg border border-neutral-700/60 bg-neutral-900/70 px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                      className="w-full rounded-lg border border-neutral-700/60 bg-neutral-900/70 px-3 py-2 text-sm text-[#f0f5f5] placeholder:text-neutral-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                       disabled={waitlistSubmitting}
                     />
                   </div>
@@ -1220,7 +1368,7 @@ export function ReferralAccessGate({
                     }}
                     fullWidth
                     disabled={questProgressData.completedCount < questProgressData.totalQuests || !telegramUsername.trim()}
-                    className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-purple-600"
+                    className="h-10 text-xs uppercase tracking-[0.3em] bg-gradient-to-r from-blue-600 to-purple-600 text-[#f0f5f5] hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-purple-600"
                   >
                     Complete All Quests
                   </InterstateButton>
@@ -1269,16 +1417,16 @@ export function ReferralAccessGate({
                     </div>
                   </div>
 
-                  <h1 className="text-2xl md:text-3xl font-bold text-white mb-3">
+                  <h1 className="text-2xl md:text-3xl font-bold text-[#f0f5f5] mb-3">
                     You are on the waitlist!
                   </h1>
 
                   {waitlistNumber ? (
                     <div className="mb-6">
-                      <p className="text-sm text-neutral-400 mb-2">Your waitlist number</p>
+                      <p className="text-sm text-neutral-400 mb-2">Your waitlist group</p>
                       <div className="inline-block px-6 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
                         <span className="text-3xl md:text-4xl font-bold text-emerald-400">
-                          #{waitlistNumber}
+                          Group A
                         </span>
                       </div>
                     </div>
@@ -1291,7 +1439,7 @@ export function ReferralAccessGate({
                   )}
 
                   <p className="text-sm text-neutral-300/90 mb-8 max-w-sm mx-auto">
-                    Thank you for completing all quests! We'll notify you when your spot is ready.
+                    Thank you for completing all quests! You will get access in less than 2-3 weeks!
                   </p>
 
                   <InterstateButton
@@ -1300,11 +1448,32 @@ export function ReferralAccessGate({
                       window.location.href = "https://www.narrative.trade";
                     }}
                     fullWidth
-                    className="h-12 text-base uppercase tracking-[0.4em] bg-emerald-600 text-white hover:bg-emerald-700"
+                    className="h-12 text-base uppercase tracking-[0.4em] bg-emerald-600 text-[#f0f5f5] hover:bg-emerald-700"
                   >
                     Return Home
                   </InterstateButton>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Validating Popup */}
+      {showValidatingPopup && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-neutral-950/50 backdrop-blur-sm">
+          <div className="relative bg-neutral-900/95 border border-neutral-700/50 rounded-2xl p-8 shadow-2xl min-w-[280px]">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              {/* X Logo */}
+              <div className="w-16 h-16 flex items-center justify-center">
+                <svg className="w-full h-full text-[#f0f5f5]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+              </div>
+              {/* Loading Text */}
+              <div className="flex flex-col items-center space-y-2">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#f0f5f5]/40 border-t-white" />
+                <p className="text-base font-medium text-[#f0f5f5]">Validating</p>
               </div>
             </div>
           </div>
@@ -1332,7 +1501,7 @@ export function ReferralAccessGate({
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <div className="text-lg font-bold text-white">{questProgress.rank}</div>
+                      <div className="text-lg font-bold text-[#f0f5f5]">{questProgress.rank}</div>
                       <div className="mt-2">
                         <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
                           <div
@@ -1350,14 +1519,14 @@ export function ReferralAccessGate({
 
                 {/* Complete Quests Section */}
                 <div className="mb-8">
-                  <h2 className="text-2xl font-bold text-white mb-2">Complete Quests</h2>
+                  <h2 className="text-2xl font-bold text-[#f0f5f5] mb-2">Complete Quests</h2>
                   <p className="text-sm text-neutral-400 mb-4">Earn XP to rank up and earn future rewards.</p>
                   
                   <div className="space-y-3">
                     {/* Link your X */}
                     <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="text-white font-medium mb-1">Link your X</div>
+                        <div className="text-[#f0f5f5] font-medium mb-1">Link your X</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1366,7 +1535,7 @@ export function ReferralAccessGate({
                           // TODO: Implement X linking
                           window.open("https://twitter.com/intent/tweet?text=Check%20out%20Narrative!", "_blank");
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#f0f5f5] text-sm"
                         disabled={questProgress.completedQuests.includes("link-x")}
                       >
                         {questProgress.completedQuests.includes("link-x") ? "Completed" : "Link X"}
@@ -1376,7 +1545,7 @@ export function ReferralAccessGate({
                     {/* Follow @TradeBoba */}
                     <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="text-white font-medium mb-1">Follow @TradeBoba</div>
+                        <div className="text-[#f0f5f5] font-medium mb-1">Follow @TradeBoba</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1389,7 +1558,7 @@ export function ReferralAccessGate({
                           // TODO: Implement follow action
                           window.open("https://twitter.com/TradeBoba", "_blank");
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#f0f5f5] text-sm"
                         disabled={questProgress.completedQuests.includes("follow-tradeboba")}
                       >
                         {questProgress.completedQuests.includes("follow-tradeboba") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Follow" : "Link X First"}
@@ -1399,7 +1568,7 @@ export function ReferralAccessGate({
                     {/* Like a post */}
                     <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="text-white font-medium mb-1">Like a post</div>
+                        <div className="text-[#f0f5f5] font-medium mb-1">Like a post</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1411,7 +1580,7 @@ export function ReferralAccessGate({
                           }
                           // TODO: Implement like action
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#f0f5f5] text-sm"
                         disabled={questProgress.completedQuests.includes("like-post")}
                       >
                         {questProgress.completedQuests.includes("like-post") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Like" : "Link X First"}
@@ -1421,7 +1590,7 @@ export function ReferralAccessGate({
                     {/* Repost a post */}
                     <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="text-white font-medium mb-1">Repost a post</div>
+                        <div className="text-[#f0f5f5] font-medium mb-1">Repost a post</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1433,7 +1602,7 @@ export function ReferralAccessGate({
                           }
                           // TODO: Implement repost action
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#f0f5f5] text-sm"
                         disabled={questProgress.completedQuests.includes("repost-post")}
                       >
                         {questProgress.completedQuests.includes("repost-post") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Repost" : "Link X First"}
@@ -1443,7 +1612,7 @@ export function ReferralAccessGate({
                     {/* Reply to a post */}
                     <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="text-white font-medium mb-1">Reply to a post</div>
+                        <div className="text-[#f0f5f5] font-medium mb-1">Reply to a post</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1455,7 +1624,7 @@ export function ReferralAccessGate({
                           }
                           // TODO: Implement reply action
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#f0f5f5] text-sm"
                         disabled={questProgress.completedQuests.includes("reply-post")}
                       >
                         {questProgress.completedQuests.includes("reply-post") ? "Completed" : questProgress.completedQuests.includes("link-x") ? "Reply" : "Link X First"}
@@ -1465,7 +1634,7 @@ export function ReferralAccessGate({
                     {/* Join Discord */}
                     <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="text-white font-medium mb-1">Join Discord</div>
+                        <div className="text-[#f0f5f5] font-medium mb-1">Join Discord</div>
                         <div className="text-xs text-neutral-400">Earn 25 XP</div>
                       </div>
                       <InterstateButton
@@ -1474,7 +1643,7 @@ export function ReferralAccessGate({
                           window.open("https://discord.gg/QZGmpmvCNE", "_blank");
                           // TODO: Implement Discord join verification
                         }}
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#f0f5f5] text-sm"
                         disabled={questProgress.completedQuests.includes("join-discord")}
                       >
                         {questProgress.completedQuests.includes("join-discord") ? "Completed" : "Join"}
@@ -1488,7 +1657,7 @@ export function ReferralAccessGate({
                   <div className="text-center text-sm text-neutral-400 mb-4">Bonus Quest</div>
                   <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50 flex items-center justify-between">
                     <div className="flex-1">
-                      <div className="text-white font-medium mb-1">Complete all quests</div>
+                      <div className="text-[#f0f5f5] font-medium mb-1">Complete all quests</div>
                       <div className="text-xs text-neutral-400">Earn 50 XP</div>
                     </div>
                     <div className="text-sm text-neutral-400">
@@ -1506,7 +1675,7 @@ export function ReferralAccessGate({
                       setShowQuests(false);
                       grantAccess();
                     }}
-                    className="h-12 text-base uppercase tracking-[0.4em] bg-purple-600 text-white hover:bg-purple-700"
+                    className="h-12 text-base uppercase tracking-[0.4em] bg-purple-600 text-[#f0f5f5] hover:bg-purple-700"
                   >
                     Skip for Now
                   </InterstateButton>
@@ -1522,7 +1691,7 @@ export function ReferralAccessGate({
                         alert("Complete more quests to unlock access!");
                       }
                     }}
-                    className="h-12 text-base uppercase tracking-[0.4em] bg-black text-white hover:bg-neutral-900"
+                    className="h-12 text-base uppercase tracking-[0.4em] bg-black text-[#f0f5f5] hover:bg-neutral-900"
                     disabled={questProgress.completedQuests.length < 6}
                   >
                     Continue

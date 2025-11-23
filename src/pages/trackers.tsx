@@ -38,6 +38,14 @@ import TwitterAccountRow from "../components/TwitterAccountRow";
 import { FiSettings, FiBell, FiShare2, FiRss } from "react-icons/fi";
 import { SiSolana } from "react-icons/si";
 import { RiExchangeDollarLine } from "react-icons/ri";
+import { useQuickBuy } from "~/components/QuickBuyContext";
+import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
+import { showEnhancedToast } from "~/utils/enhancedToast";
+import type { Token } from "~/utils/db";
+import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
+import { HiLightningBolt } from "react-icons/hi";
+import { useFilter } from "../components/FilterContext";
+import FilterPopout from "../components/FilterPopout";
 
 const TABS = ["Wallet Manager", "Live Trades"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
@@ -60,7 +68,8 @@ function normalizeAssetUrl(raw?: string | null): string | null {
     const cid = s.replace(/^ipfs[/:]/i, "");
     return `https://cloudflare-ipfs.com/ipfs/${cid}`;
   }
-  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s)) return `https://arweave.net/${s}`;
+  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s))
+    return `https://arweave.net/${s}`;
   if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
   if (s.startsWith("https://")) return s;
   return null;
@@ -70,7 +79,8 @@ function normalizeAssetUrl(raw?: string | null): string | null {
 function getTokenAge(createdAt: string | number | null | undefined): string {
   if (!createdAt && createdAt !== 0) return "";
   let timestamp = createdAt as any;
-  if (typeof timestamp === "number" && timestamp < 10000000000) timestamp *= 1000;
+  if (typeof timestamp === "number" && timestamp < 10000000000)
+    timestamp *= 1000;
   const d = new Date(timestamp);
   if (isNaN(d.getTime())) return "";
   const ms = Date.now() - d.getTime();
@@ -154,11 +164,10 @@ const EMOJIS = [
 const MAX_WALLETS = 500;
 const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
 
-const getRandomEmoji = () =>
-  EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 
 export default function TrackersPage() {
-  const { user } = useUser();
+  const { user, solBalance } = useUser();
   const {
     wsConnected,
     latestTrades,
@@ -175,7 +184,8 @@ export default function TrackersPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [toast, setToast] = useState("");
   const [scannedWallet, setScannedWallet] = useState<Wallet | null>(null);
-  const [isTogglingAllNotifications, setIsTogglingAllNotifications] = useState(false);
+  const [isTogglingAllNotifications, setIsTogglingAllNotifications] =
+    useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(384); // 384px = w-96
   const [isResizing, setIsResizing] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -210,7 +220,37 @@ export default function TrackersPage() {
   const fetchedMintsRef = useRef<Set<string>>(new Set());
   const [showUSD, setShowUSD] = useState(false); // Toggle between USD and SOL display
 
-  const ensureNotificationsEnabled = async (walletsToEnable: { address: string }[]) => {
+  // Quick Buy functionality
+  const { presets, activePreset, setActivePreset } = useQuickBuy();
+
+  // Filter functionality
+  const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
+  const { filter } = useFilter();
+  const [localFilters, setLocalFilters] = useState(filter);
+
+  // Load quickBuyAmount from localStorage with fallback
+  const getInitialQuickBuyAmount = () => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("quickBuyAmount");
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+    }
+    return 0.0001;
+  };
+
+  const [quickBuyAmount, setQuickBuyAmount] = useState(
+    getInitialQuickBuyAmount().toString(),
+  );
+  const [selectedPill, setSelectedPill] = useState("P1"); // Local preset selection for trackers page
+  const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
+
+  const ensureNotificationsEnabled = async (
+    walletsToEnable: { address: string }[],
+  ) => {
     if (!walletsToEnable.length) return;
     try {
       const results = await Promise.allSettled(
@@ -226,7 +266,10 @@ export default function TrackersPage() {
         );
       }
     } catch (error) {
-      console.warn("[Trackers] Failed to enable notifications after bulk add:", error);
+      console.warn(
+        "[Trackers] Failed to enable notifications after bulk add:",
+        error,
+      );
     }
   };
 
@@ -295,9 +338,7 @@ export default function TrackersPage() {
           .slice(0, 3)
           .map(shortenAddress)
           .join(", ")}${
-          skippedByLimit.length > 3
-            ? ` +${skippedByLimit.length - 3}`
-            : ""
+          skippedByLimit.length > 3 ? ` +${skippedByLimit.length - 3}` : ""
         })`,
       );
     }
@@ -393,19 +434,21 @@ export default function TrackersPage() {
   const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = !isMobile || mobileMainTab === "twitter";
-  
+
   // Calculate if all notifications are enabled
-  const allNotificationsEnabled = watchedWallets.length > 0 && watchedWallets.every(w => w.notificationsEnabled);
-  
+  const allNotificationsEnabled =
+    watchedWallets.length > 0 &&
+    watchedWallets.every((w) => w.notificationsEnabled);
+
   // Debug logging
   useEffect(() => {
-    console.log('🔍 Notification Status:', {
+    console.log("🔍 Notification Status:", {
       totalWallets: watchedWallets.length,
       allNotificationsEnabled,
-      walletStates: watchedWallets.map(w => ({
+      walletStates: watchedWallets.map((w) => ({
         address: w.address.slice(0, 8),
-        enabled: w.notificationsEnabled
-      }))
+        enabled: w.notificationsEnabled,
+      })),
     });
   }, [watchedWallets, allNotificationsEnabled]);
 
@@ -431,10 +474,10 @@ export default function TrackersPage() {
   // Hydrate wallets from localStorage cache on mount
   useEffect(() => {
     if (typeof window === "undefined" || !user?.id) return;
-    
+
     const cacheKey = `walletTracker:wallets:${user.id}`;
     const cached = localStorage.getItem(cacheKey);
-    
+
     if (cached) {
       try {
         const parsedCache = JSON.parse(cached);
@@ -507,8 +550,8 @@ export default function TrackersPage() {
         setWalletBalances({});
         // Clear cache
         if (typeof window !== "undefined") {
-          Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('walletTracker:wallets:')) {
+          Object.keys(localStorage).forEach((key) => {
+            if (key.startsWith("walletTracker:wallets:")) {
               localStorage.removeItem(key);
             }
           });
@@ -523,14 +566,14 @@ export default function TrackersPage() {
       await refreshWatchedWallets();
 
       const allWallets = tracked;
-      
+
       // Only update state and cache if we actually got wallets
       // This prevents empty arrays from overwriting cache on errors
       if (allWallets.length === 0) {
-        console.log('No wallets returned from backend - keeping cached data');
+        console.log("No wallets returned from backend - keeping cached data");
         return;
       }
-      
+
       setWatchedWallets(allWallets);
 
       // Convert backend wallets to frontend format
@@ -565,7 +608,7 @@ export default function TrackersPage() {
         if (balance !== null) {
           setWalletBalances((prev) => {
             const updated = { ...prev, [wallet.address]: balance };
-            
+
             // Update balance in cache
             if (typeof window !== "undefined") {
               const cacheKey = `walletTracker:wallets:${user.id}`;
@@ -580,7 +623,7 @@ export default function TrackersPage() {
                 }
               }
             }
-            
+
             return updated;
           });
         }
@@ -610,7 +653,10 @@ export default function TrackersPage() {
   useEffect(() => {
     const addresses = watchedWallets
       .map((wallet) => wallet.address)
-      .filter((address): address is string => typeof address === "string" && address.length > 0);
+      .filter(
+        (address): address is string =>
+          typeof address === "string" && address.length > 0,
+      );
 
     if (addresses.length === 0) {
       setLastActiveMap({});
@@ -660,15 +706,15 @@ export default function TrackersPage() {
 
     // Extract unique trades that we haven't fetched yet
     const tradesToFetch = latestTrades.filter(
-      (trade) => !fetchedMintsRef.current.has(trade.mint)
+      (trade) => !fetchedMintsRef.current.has(trade.mint),
     );
 
     if (tradesToFetch.length === 0) {
       return;
     }
-    
+
     // Mark these mints as being fetched to prevent duplicate requests
-    tradesToFetch.forEach(trade => fetchedMintsRef.current.add(trade.mint));
+    tradesToFetch.forEach((trade) => fetchedMintsRef.current.add(trade.mint));
 
     // Fetch all tokens in parallel using Promise.allSettled for maximum speed
     Promise.allSettled(
@@ -677,36 +723,45 @@ export default function TrackersPage() {
           // Try to use pair_address if available, otherwise use mint_address
           const params = new URLSearchParams();
           if (trade.pair_address) {
-            params.set('pair_address', trade.pair_address);
+            params.set("pair_address", trade.pair_address);
           } else {
-            params.set('mint_address', trade.mint);
+            params.set("mint_address", trade.mint);
           }
-          
+
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
-          
-          const response = await fetch(`/api/token-service/trade-view?${params.toString()}`, {
-            signal: controller.signal
-          });
+
+          const response = await fetch(
+            `/api/token-service/trade-view?${params.toString()}`,
+            {
+              signal: controller.signal,
+            },
+          );
           clearTimeout(timeoutId);
-          
+
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
           }
-          
+
           const data = await response.json();
           const token = data?.token;
-          
+
           if (token) {
             const metadata = {
               symbol: token.symbol || trade.symbol || null,
               name: token.name || trade.name || null,
               image: token.uri || token.image || token.logo || null,
-              launchpad_protocol: token.launchpad_protocol || token.protocol || null,
-              market_cap_usd: token.market_cap_usd || token.marketCapUsd || token.fully_diluted_value || null,
-              createdAt: token.created_at || token.createdAt || token.CreatedAt || null,
+              launchpad_protocol:
+                token.launchpad_protocol || token.protocol || null,
+              market_cap_usd:
+                token.market_cap_usd ||
+                token.marketCapUsd ||
+                token.fully_diluted_value ||
+                null,
+              createdAt:
+                token.created_at || token.createdAt || token.CreatedAt || null,
             };
-            
+
             // Update state immediately for this token (progressive rendering)
             setTokenMetadata((prev) => {
               const updated = new Map(prev);
@@ -717,7 +772,7 @@ export default function TrackersPage() {
         } catch (error) {
           // Silent fail - will use fallback UI
         }
-      })
+      }),
     );
   }, [latestTrades]);
 
@@ -762,10 +817,13 @@ export default function TrackersPage() {
     try {
       // Add to backend with notifications enabled by default
       await addTrackedWallet(address, name, user?.id, emoji, true);
-      
+
       // Save notification preference to localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(`wallet_notifications_${address}`, JSON.stringify(true));
+      if (typeof window !== "undefined") {
+        localStorage.setItem(
+          `wallet_notifications_${address}`,
+          JSON.stringify(true),
+        );
       }
 
       // Reload from backend (this will also refresh global watched wallets)
@@ -795,24 +853,64 @@ export default function TrackersPage() {
         await Promise.all(
           wallets.map((w) => removeTrackedWallet(w.address, user?.id)),
         );
-        
+
         // Clear all state
         setWatchedWallets([]);
         setWallets([]);
         setWalletBalances({});
-        
-        // Clear cache
+
+        // Clear wallet cache
         if (typeof window !== "undefined" && user?.id) {
           const cacheKey = `walletTracker:wallets:${user.id}`;
           localStorage.removeItem(cacheKey);
         }
-        
+
+        // Clear live trades cache
+        if (typeof window !== "undefined") {
+          const userKey = user?.id ? getLiveTradesCacheKey(user.id) : null;
+          const globalKey = getLiveTradesCacheKey();
+          if (userKey) localStorage.removeItem(userKey);
+          localStorage.removeItem(globalKey);
+        }
+
+        // Clear cached live trades state
+        setCachedLiveTrades([]);
+
         // Refresh global watched wallets
         await refreshWatchedWallets();
       } else {
         // Remove single wallet
         await removeTrackedWallet(addressToRemove, user?.id);
-        
+
+        // Filter out trades from deleted wallet
+        setCachedLiveTrades((prev) =>
+          prev.filter((trade) => trade.wallet !== addressToRemove),
+        );
+
+        // Clear trades from localStorage for this wallet
+        if (typeof window !== "undefined") {
+          const userKey = user?.id ? getLiveTradesCacheKey(user.id) : null;
+          const globalKey = getLiveTradesCacheKey();
+
+          // Get current cached trades and filter
+          const cacheKey = userKey || globalKey;
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              if (Array.isArray(parsed)) {
+                const filtered = parsed.filter(
+                  (trade: TradeEvent) => trade.wallet !== addressToRemove,
+                );
+                localStorage.setItem(cacheKey, JSON.stringify(filtered));
+              }
+            } catch (e) {
+              // If parsing fails, just remove the cache
+              localStorage.removeItem(cacheKey);
+            }
+          }
+        }
+
         // Reload from backend (this will also refresh global watched wallets)
         await loadWalletsFromBackend();
       }
@@ -828,49 +926,135 @@ export default function TrackersPage() {
   // Toggle all wallet notifications
   const handleToggleAllNotifications = async () => {
     if (watchedWallets.length === 0) {
-      console.log('No wallets to toggle');
+      console.log("No wallets to toggle");
       return;
     }
-    
+
     if (isTogglingAllNotifications) {
-      console.log('⏳ Already toggling, please wait...');
+      console.log("⏳ Already toggling, please wait...");
       return;
     }
-    
+
     setIsTogglingAllNotifications(true);
-    
+
     try {
       // Determine new state: if all are enabled, disable all. Otherwise, enable all.
       const newState = !allNotificationsEnabled;
-      console.log(`🔔 Toggle all notifications: ${allNotificationsEnabled} → ${newState}`);
+      console.log(
+        `🔔 Toggle all notifications: ${allNotificationsEnabled} → ${newState}`,
+      );
       console.log(`📊 Toggling ${watchedWallets.length} wallets`);
-      
+
       // Toggle each wallet's notifications
-      const togglePromises = watchedWallets.map(wallet => {
-        console.log(`  - ${wallet.address.slice(0, 8)}... from ${wallet.notificationsEnabled} to ${newState}`);
-        return toggleWalletNotifications(wallet.address, newState, wallet.ownerId || undefined);
+      const togglePromises = watchedWallets.map((wallet) => {
+        console.log(
+          `  - ${wallet.address.slice(0, 8)}... from ${wallet.notificationsEnabled} to ${newState}`,
+        );
+        return toggleWalletNotifications(
+          wallet.address,
+          newState,
+          wallet.ownerId || undefined,
+        );
       });
-      
+
       const results = await Promise.all(togglePromises);
-      console.log('✅ All API calls completed:', results);
-      
+      console.log("✅ All API calls completed:", results);
+
       // Update localStorage for each wallet
-      watchedWallets.forEach(wallet => {
+      watchedWallets.forEach((wallet) => {
         const storageKey = `wallet_notifications_${wallet.address}`;
         localStorage.setItem(storageKey, JSON.stringify(newState));
-        console.log(`💾 Saved to localStorage: ${wallet.address.slice(0, 8)}... = ${newState}`);
+        console.log(
+          `💾 Saved to localStorage: ${wallet.address.slice(0, 8)}... = ${newState}`,
+        );
       });
-      
+
       // Reload from backend to refresh state
-      console.log('🔄 Reloading wallets from backend...');
+      console.log("🔄 Reloading wallets from backend...");
       await loadWalletsFromBackend();
       await refreshWatchedWallets();
-      console.log('✅ State refreshed - Ready for next toggle');
+      console.log("✅ State refreshed - Ready for next toggle");
     } catch (error) {
-      console.error('❌ Failed to toggle all notifications:', error);
+      console.error("❌ Failed to toggle all notifications:", error);
     } finally {
       setIsTogglingAllNotifications(false);
     }
+  };
+
+  // QUICK BUY handler – using enhanced trade flow (same as discover page)
+  const handleQuickBuy = async (trade: TradeEvent) => {
+    console.log("🎯 Quick Buy called for token:", trade.symbol || trade.mint);
+
+    if (!user?.bearerToken || !user?.id) {
+      console.log("❌ User not logged in");
+      showEnhancedToast("warning", "Please connect your wallet to trade", {
+        title: "Authentication Required",
+      });
+      return;
+    }
+
+    const buyAmount = parseFloat(quickBuyAmount);
+    if (isNaN(buyAmount) || buyAmount <= 0) {
+      console.log("❌ Invalid buy amount:", quickBuyAmount);
+      showEnhancedToast(
+        "warning",
+        "Please enter a valid SOL amount (minimum 0.001 SOL)",
+        {
+          title: "Invalid Amount",
+        },
+      );
+      return;
+    }
+
+    const presetIndex = parseInt(selectedPill.replace("P", "")) - 1;
+    const preset = presets[presetIndex];
+    if (!preset) {
+      console.log("❌ Quick buy preset missing for index", presetIndex);
+      showEnhancedToast("error", "Quick buy preset not configured", {
+        title: "Configuration Error",
+        suggestions: ["Update your presets in settings"],
+      });
+      return;
+    }
+
+    const settings = preset.quickBuySettings;
+
+    // Get token metadata from the tokenMetadata map
+    const metadata = tokenMetadata.get(trade.mint);
+
+    // Construct a Token object from the TradeEvent
+    const token = {
+      mint: trade.mint,
+      pair_address: trade.pair_address || trade.mint,
+      symbol: trade.symbol || metadata?.symbol || "UNKNOWN",
+      name: trade.name || metadata?.name || "Unknown Token",
+      image: metadata?.image || null,
+      launchpad_protocol: metadata?.launchpad_protocol || null,
+      market_cap_usd: metadata?.market_cap_usd || null,
+      // Add other required Token fields with sensible defaults
+    } as unknown as Token;
+
+    // Execute enhanced trade with all features
+    const result = await executeEnhancedTrade({
+      token,
+      amount: buyAmount,
+      side: "buy",
+      settings,
+      user: { bearerToken: user.bearerToken, id: user.id },
+      solBalance: Number(solBalance || 0),
+      solPriceUsd: 150, // TODO: Get real SOL price
+      onSuccess: (txHash, stats) => {
+        console.log("✅ Quick Buy successful:", { txHash, stats });
+      },
+      onError: (error) => {
+        console.error("❌ Quick Buy failed:", error);
+      },
+      onWarning: (warnings) => {
+        console.warn("⚠️ Pre-transaction warnings:", warnings);
+      },
+    });
+
+    return result;
   };
 
   // Helper to format date
@@ -885,14 +1069,25 @@ export default function TrackersPage() {
       wallet.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wallet.address.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+  // Filter live trades to only show trades from currently watched wallets
+  const watchedWalletAddresses = new Set(watchedWallets.map((w) => w.address));
+  const filteredLatestTrades = latestTrades.filter((trade) =>
+    watchedWalletAddresses.has(trade.wallet),
+  );
+  const filteredCachedTrades = cachedLiveTrades.filter((trade) =>
+    watchedWalletAddresses.has(trade.wallet),
+  );
+
   const liveTradesToRender =
-    latestTrades.length > 0 ? latestTrades : cachedLiveTrades;
+    filteredLatestTrades.length > 0
+      ? filteredLatestTrades
+      : filteredCachedTrades;
 
   // Twitter functions
   const loadTwitterAccounts = async () => {
     try {
-    const accounts = await getTrackedTwitterAccounts(user?.id);
-    setTwitterAccounts(accounts);
+      const accounts = await getTrackedTwitterAccounts(user?.id);
+      setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
       setTwitterAccounts([]);
@@ -1006,7 +1201,11 @@ export default function TrackersPage() {
           const duplicateExisting: string[] = [];
           const duplicateWithinImport: string[] = [];
           const invalidWallets: string[] = [];
-          const walletsToAdd: { address: string; name: string; emoji?: string }[] = [];
+          const walletsToAdd: {
+            address: string;
+            name: string;
+            emoji?: string;
+          }[] = [];
 
           transformedWallets.forEach(
             (wallet: { address: string; name: string }) => {
@@ -1050,9 +1249,12 @@ export default function TrackersPage() {
           let successCount = walletsToAdd.length;
           let errorCount = 0;
 
-          if (typeof window !== 'undefined') {
+          if (typeof window !== "undefined") {
             walletsToAdd.forEach((wallet) => {
-              localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+              localStorage.setItem(
+                `wallet_notifications_${wallet.address}`,
+                JSON.stringify(true),
+              );
             });
           }
 
@@ -1083,20 +1285,30 @@ export default function TrackersPage() {
   return (
     <>
       <Head>
-        <title>Trackers | Interstate Memeboard</title>
+        <title>Trackers | Narrative Memeboard</title>
       </Head>
       <div className="mb-20">
         <div className="flex min-h-screen flex-col bg-[#050608] text-neutral-100">
           <Header isSticky={false} />
+          <div className="my-4 flex flex-col gap-4 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
+            {/* Tabs Section - Scrollable on mobile */}
+            <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
+              <button
+                className={`hover:text-[#f0f5f5]"} cursor-pointer text-sm font-light whitespace-nowrap text-[#f0f5f5] transition-colors sm:text-base lg:text-lg`}
+              >
+                Trackers
+              </button>
+            </div>
+          </div>
           <div className="w-full flex-grow">
             {/* Main Content Area: Two Columns */}
-            <div className="flex h-full flex-col gap-4 px-4 lg:flex-row">
+            <div className="flex flex-col gap-4 px-2 sm:px-4 lg:flex-row">
               {isMobile && (
-                <div className="mt-4 flex w-full rounded-full bg-[#111111] p-1 text-xs font-medium text-neutral-400">
+                <div className="flex w-full rounded-full bg-[#111111] p-0.5 text-[10px] font-medium text-neutral-400 sm:p-1 sm:text-xs">
                   <button
-                    className={`flex-1 rounded-full px-3 py-2 transition-colors duration-200 ${
+                    className={`flex-1 rounded-full px-2 py-1.5 transition-colors duration-200 sm:px-3 sm:py-2 ${
                       mobileMainTab === "wallets"
-                        ? "bg-[#70E0B0] text-neutral-900 font-semibold"
+                        ? "bg-[#70E0B0] font-semibold text-neutral-900"
                         : "text-neutral-300 hover:text-white"
                     }`}
                     onClick={() => setMobileMainTab("wallets")}
@@ -1104,9 +1316,9 @@ export default function TrackersPage() {
                     Wallet Tracker
                   </button>
                   <button
-                    className={`flex-1 rounded-full px-3 py-2 transition-colors duration-200 ${
+                    className={`flex-1 rounded-full px-2 py-1.5 transition-colors duration-200 sm:px-3 sm:py-2 ${
                       mobileMainTab === "twitter"
-                        ? "bg-[#70E0B0] text-neutral-900 font-semibold"
+                        ? "bg-[#70E0B0] font-semibold text-neutral-900"
                         : "text-neutral-300 hover:text-white"
                     }`}
                     onClick={() => setMobileMainTab("twitter")}
@@ -1119,9 +1331,9 @@ export default function TrackersPage() {
               {/* LEFT: WALLET SECTION */}
               {showWalletSection && (
                 <div
-                  className="mt-4 flex h-full min-h-[530px] flex-1 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-4 min-w-0"
+                  className="flex h-full min-h-[400px] min-w-0 flex-1 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2 sm:min-h-[530px] sm:px-4"
                   style={{
-                    maxHeight: "calc(100vh - 160px)",
+                    maxHeight: "calc(100vh - 140px)",
                   }}
                 >
                   {/* If user is not logged in, show GMGN-style empty state */}
@@ -1129,7 +1341,7 @@ export default function TrackersPage() {
                     <div className="flex flex-1 items-center justify-center">
                       <div className="text-center">
                         <p className="mb-4 text-sm text-neutral-400">
-                          You are not logged in to Interstate
+                          You are not logged in to Narrative
                         </p>
                         <button
                           className="inline-flex items-center justify-center rounded-full border border-neutral-600 px-6 py-1.5 text-xs font-medium text-neutral-100 transition-colors duration-200 hover:border-neutral-400 hover:bg-neutral-800/60"
@@ -1145,13 +1357,13 @@ export default function TrackersPage() {
                   ) : (
                     <>
                       {/* HEADER BAR – three zones like reference screenshot */}
-                      <div className="flex flex-wrap items-center gap-4 border-b border-neutral-800/60 py-2">
+                      <div className="flex flex-col flex-wrap items-stretch gap-2 border-b border-neutral-800/60 py-2 sm:flex-row sm:items-center sm:gap-4">
                         {/* Left: tabs + wallet count */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                           {TABS.map((tab, i) => (
                             <button
                               key={tab}
-                              className={`cursor-pointer rounded-lg px-2 py-1 text-xs transition-all duration-300 ${
+                              className={`cursor-pointer rounded-lg px-1.5 py-1 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-2 sm:text-xs ${
                                 activeTab === i
                                   ? "bg-[#111111] font-medium text-white"
                                   : "font-medium text-neutral-400 hover:bg-[#141414] hover:text-white"
@@ -1160,29 +1372,32 @@ export default function TrackersPage() {
                             >
                               {tab}
                               {tab === "Live Trades" && (
-                                <span className="ml-1 animate-pulse text-sm text-pink-400">
+                                <span className="ml-0.5 animate-pulse text-xs text-pink-400 sm:ml-1 sm:text-sm">
                                   •
                                 </span>
                               )}
                             </button>
                           ))}
-                          <div className="flex items-center rounded-full bg-[#111111] px-3 py-1 text-[11px] text-neutral-300">
+                          <div className="flex items-center rounded-full bg-[#111111] px-2 py-0.5 text-[10px] text-neutral-300 sm:px-3 sm:py-1 sm:text-[11px]">
                             <span className="font-medium text-white">
                               {watchedWallets.length}
                             </span>
-                            <span className="ml-1 text-neutral-400">
+                            <span className="ml-0.5 hidden text-neutral-400 sm:ml-1 sm:inline">
                               /{MAX_WALLETS} wallet
                               {watchedWallets.length === 1 ? "" : "s"}
+                            </span>
+                            <span className="ml-0.5 text-neutral-400 sm:ml-1 sm:hidden">
+                              /{MAX_WALLETS}
                             </span>
                           </div>
                         </div>
 
                         {/* Middle: search bar (center, max width) */}
-                        <div className="flex-1 flex justify-center">
+                        <div className="flex min-w-0 flex-1 justify-start">
                           <input
                             type="text"
-                            placeholder="Search by name or addr..."
-                            className="w-full max-w-md rounded-full border border-neutral-800 bg-[#050608] px-4 py-1 text-xs text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none"
+                            placeholder="Search by address"
+                            className="w-full max-w-md rounded-full border border-neutral-800 bg-[#050608] px-3 py-1 text-[10px] text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none sm:px-4 sm:text-xs"
                             disabled={activeTab === 1}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -1190,53 +1405,61 @@ export default function TrackersPage() {
                         </div>
 
                         {/* Right: actions (Import / Export / icons / Add Wallet) */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1 sm:gap-2">
                           {activeTab === 0 && (
                             <>
                               <button
-                                className="rounded-full bg-[#111111] px-4 py-1 text-xs font-semibold text-white transition-all duration-300 hover:bg-[#181818]"
+                                className="rounded-full bg-[#111111] px-2 py-1 text-[10px] font-semibold whitespace-nowrap text-white transition-all duration-300 hover:bg-[#181818] sm:px-4 sm:text-xs"
                                 onClick={() => setShowImportModal(true)}
                               >
                                 Import
                               </button>
                               <button
-                                className="rounded-full bg-[#111111] px-4 py-1 text-xs font-semibold text-white transition-all duration-300 hover:bg-[#181818]"
+                                className="rounded-full bg-[#111111] px-2 py-1 text-[10px] font-semibold whitespace-nowrap text-white transition-all duration-300 hover:bg-[#181818] sm:px-4 sm:text-xs"
                                 onClick={handleExportAddresses}
                               >
                                 Export
                               </button>
 
-                              {/* Icon buttons */}
+                              {/* Icon buttons - hide some on mobile */}
                               <button
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                className="hidden h-7 w-7 items-center justify-center rounded-full bg-[#111111] text-sm text-neutral-400 transition-all duration-300 hover:bg-[#181818] hover:text-white sm:flex sm:h-8 sm:w-8"
                                 type="button"
                               >
-                                <FiSettings className="h-4 w-4" />
+                                <FiSettings className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                               </button>
                               <button
-                                className={`flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] transition-all duration-300 hover:bg-[#181818] ${isTogglingAllNotifications ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+                                className={`flex h-7 w-7 items-center justify-center rounded-full bg-[#111111] transition-all duration-300 hover:bg-[#181818] sm:h-8 sm:w-8 ${isTogglingAllNotifications ? "cursor-wait opacity-50" : "cursor-pointer"}`}
                                 type="button"
                                 onClick={handleToggleAllNotifications}
                                 disabled={isTogglingAllNotifications}
-                                title={isTogglingAllNotifications ? "Toggling..." : allNotificationsEnabled ? "Disable all notifications" : "Enable all notifications"}
+                                title={
+                                  isTogglingAllNotifications
+                                    ? "Toggling..."
+                                    : allNotificationsEnabled
+                                      ? "Disable all notifications"
+                                      : "Enable all notifications"
+                                }
                               >
-                                <FiBell className={`h-4 w-4 ${allNotificationsEnabled ? 'text-pink-500' : 'text-neutral-600'}`} />
+                                <FiBell
+                                  className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${allNotificationsEnabled ? "text-pink-500" : "text-neutral-600"}`}
+                                />
                               </button>
                               <button
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                className="hidden h-7 w-7 items-center justify-center rounded-full bg-[#111111] text-sm text-neutral-400 transition-all duration-300 hover:bg-[#181818] hover:text-white sm:flex sm:h-8 sm:w-8"
                                 type="button"
                               >
-                                <FiShare2 className="h-4 w-4" />
+                                <FiShare2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                               </button>
                               <button
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#111111] text-neutral-400 text-sm transition-all duration-300 hover:bg-[#181818] hover:text-white"
+                                className="hidden h-7 w-7 items-center justify-center rounded-full bg-[#111111] text-sm text-neutral-400 transition-all duration-300 hover:bg-[#181818] hover:text-white sm:flex sm:h-8 sm:w-8"
                                 type="button"
                               >
-                                <FiRss className="h-4 w-4" />
+                                <FiRss className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                               </button>
 
                               <button
-                                className="rounded-full px-4 py-1 text-xs font-semibold transition-all duration-300"
+                                className="rounded-full px-2 py-1 text-[10px] font-semibold whitespace-nowrap transition-all duration-300 sm:px-4 sm:text-xs"
                                 style={{
                                   backgroundColor: "#70E0B0",
                                   color: "#000000",
@@ -1265,18 +1488,22 @@ export default function TrackersPage() {
                         </div>
                       </div>
 
-                      <div className="flex-1 overflow-y-auto min-h-0">
+                      <div className="min-h-0 flex-1 overflow-y-auto">
                         {activeTab === 0 ? (
                           <>
-                            <div className="flex items-center border-b border-neutral-800/60 p-2">
-                              <div className="flex w-full items-center gap-4 text-xs font-medium text-neutral-400">
-                                <span className="w-28 flex justify-center">Created</span>
+                            <div className="flex items-center border-b border-neutral-800/60 p-1.5 sm:p-2">
+                              <div className="flex w-full items-center gap-2 text-[10px] font-medium text-neutral-400 sm:gap-4 sm:text-xs">
+                                <span className="flex w-16 justify-center sm:w-28">
+                                  Created
+                                </span>
                                 <span className="min-w-0 flex-1">Name</span>
-                                <span className="w-36">Balance</span>
-                                <span className="w-28">Last Active</span>
-                                <div className="flex-1 flex items-center justify-end">
+                                <span className="w-20 sm:w-36">Balance</span>
+                                <span className="hidden w-16 justify-center sm:flex sm:w-28">
+                                  Last Active
+                                </span>
+                                <div className="flex flex-1 items-center justify-end">
                                   <button
-                                    className="whitespace-nowrap text-xs font-semibold text-red-400 transition-colors duration-300 hover:text-red-300"
+                                    className="text-[10px] font-semibold whitespace-nowrap text-red-400 transition-colors duration-300 hover:text-red-300 sm:text-xs"
                                     onClick={() => handleRemoveWallet("all")}
                                   >
                                     Remove All
@@ -1291,13 +1518,12 @@ export default function TrackersPage() {
                                 </span>
                               </div>
                             ) : (
-                              <div className="overflow-x-auto">
-                                <table className="w-full min-w-[640px] text-xs">
+                              <div className="scrollbar-hide overflow-x-auto">
+                                <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
                                   <tbody>
                                     {filteredWallets.map((wallet) => {
                                       const watched = watchedWallets.find(
-                                        (ww) =>
-                                          ww.address === wallet.address,
+                                        (ww) => ww.address === wallet.address,
                                       );
                                       const events =
                                         walletEvents[wallet.address] || [];
@@ -1310,7 +1536,9 @@ export default function TrackersPage() {
                                           watchedWallet={watched}
                                           events={events}
                                           balance={balance}
-                                          lastActive={lastActiveMap[wallet.address]}
+                                          lastActive={
+                                            lastActiveMap[wallet.address]
+                                          }
                                           onRemove={handleRemoveWallet}
                                           onClick={setScannedWallet}
                                           onNotificationToggle={async (
@@ -1333,7 +1561,7 @@ export default function TrackersPage() {
                             {liveTradesToRender.length === 0 ? (
                               <div className="flex h-64 flex-col items-center justify-center">
                                 <span className="text-neutral-400">
-                                  {wsConnected 
+                                  {wsConnected
                                     ? "Listening for trades from tracked wallets..."
                                     : "No live trades yet. Add wallets to start tracking!"}
                                 </span>
@@ -1345,44 +1573,384 @@ export default function TrackersPage() {
                               </div>
                             ) : (
                               <div className="overflow-x-auto overflow-y-auto">
+                                {/* Quick Buy Controls - Aligned to right above Action column */}
+                                <div className="mt-2 mb-2 flex flex-wrap items-center justify-end gap-1.5 sm:mt-4 sm:mb-4 sm:gap-2">
+                                  {/* Filter button */}
+                                  <div className="relative">
+                                    <button
+                                      className="relative flex cursor-pointer items-center justify-center gap-1 rounded-full border border-[#2A2B33] bg-[#17191E] px-2 py-1 text-[#9CA3AF] transition-all duration-300 ease-out hover:text-[#E6E7EA] sm:gap-2 sm:px-3.5 sm:py-1.5"
+                                      onClick={() =>
+                                        setIsFilterPopoutOpen(true)
+                                      }
+                                    >
+                                      {/* filter glyph */}
+                                      <svg
+                                        width="11"
+                                        height="11"
+                                        className="sm:h-[13px] sm:w-[13px]"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      >
+                                        <line x1="4" y1="6" x2="20" y2="6" />
+                                        <circle cx="8" cy="6" r="2" />
+                                        <line x1="4" y1="12" x2="20" y2="12" />
+                                        <circle cx="16" cy="12" r="2" />
+                                        <line x1="4" y1="18" x2="20" y2="18" />
+                                        <circle cx="8" cy="18" r="2" />
+                                      </svg>
+                                      <span className="hidden text-[10px] font-medium sm:inline sm:text-sm">
+                                        Filter
+                                      </span>
+                                      <svg
+                                        className="hidden h-3 w-3 sm:block sm:h-3.5 sm:w-3.5"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          d="M19 9l-7 7-7-7"
+                                        />
+                                      </svg>
+                                    </button>
+                                  </div>
+
+                                  <div
+                                    className="flex items-center justify-center gap-1 rounded-full border bg-[#17191E] px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5"
+                                    style={{ borderColor: "#2A2B33" }}
+                                  >
+                                    {/* Amount - Editable */}
+                                    <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+                                      <HiLightningBolt
+                                        size={10}
+                                        className="sm:h-3 sm:w-3"
+                                        style={{ color: "#22C55E" }}
+                                      />
+                                      <input
+                                        type="text"
+                                        value={quickBuyAmount}
+                                        inputMode="decimal"
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          // Allow only digits and at most one decimal point
+                                          if (
+                                            value === "" ||
+                                            /^\d*\.?\d*$/.test(value)
+                                          ) {
+                                            setQuickBuyAmount(value);
+                                            const numValue = Number(value) || 0;
+                                            if (typeof window !== "undefined") {
+                                              localStorage.setItem(
+                                                "quickBuyAmount",
+                                                numValue.toString(),
+                                              );
+                                            }
+                                          }
+                                        }}
+                                        onKeyDown={(e) => {
+                                          // Block non-numeric keys except control/navigation keys and '.'
+                                          const allowedKeys = [
+                                            "Backspace",
+                                            "Delete",
+                                            "ArrowLeft",
+                                            "ArrowRight",
+                                            "Tab",
+                                            "Home",
+                                            "End",
+                                          ];
+                                          if (allowedKeys.includes(e.key))
+                                            return;
+                                          if (e.key === ".") return;
+                                          if (!/^[0-9]$/.test(e.key)) {
+                                            e.preventDefault();
+                                          }
+                                        }}
+                                        className="w-8 border-none bg-transparent text-center text-[10px] font-medium outline-none sm:w-10 sm:text-xs"
+                                        style={{ color: "#E6E7EA" }}
+                                      />
+                                    </div>
+
+                                    {/* Solana Symbol */}
+                                    <div className="flex items-center justify-center">
+                                      <svg
+                                        width="10"
+                                        height="10"
+                                        className="sm:h-3 sm:w-3"
+                                        viewBox="0 0 397.7 311.7"
+                                        fill="none"
+                                      >
+                                        <path
+                                          d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z"
+                                          fill="url(#paint0_linear_solana_tracker)"
+                                        />
+                                        <path
+                                          d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"
+                                          fill="url(#paint1_linear_solana_tracker)"
+                                        />
+                                        <path
+                                          d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"
+                                          fill="url(#paint2_linear_solana_tracker)"
+                                        />
+                                        <defs>
+                                          <linearGradient
+                                            id="paint0_linear_solana_tracker"
+                                            x1="360.8"
+                                            y1="351.5"
+                                            x2="141.44"
+                                            y2="132.14"
+                                            gradientUnits="userSpaceOnUse"
+                                          >
+                                            <stop
+                                              offset="0"
+                                              stopColor="#00FFA3"
+                                            />
+                                            <stop
+                                              offset="1"
+                                              stopColor="#DC1FFF"
+                                            />
+                                          </linearGradient>
+                                          <linearGradient
+                                            id="paint1_linear_solana_tracker"
+                                            x1="264.8"
+                                            y1="116.2"
+                                            x2="45.44"
+                                            y2="-103.16"
+                                            gradientUnits="userSpaceOnUse"
+                                          >
+                                            <stop
+                                              offset="0"
+                                              stopColor="#00FFA3"
+                                            />
+                                            <stop
+                                              offset="1"
+                                              stopColor="#DC1FFF"
+                                            />
+                                          </linearGradient>
+                                          <linearGradient
+                                            id="paint2_linear_solana_tracker"
+                                            x1="312.5"
+                                            y1="233.9"
+                                            x2="93.14"
+                                            y2="14.54"
+                                            gradientUnits="userSpaceOnUse"
+                                          >
+                                            <stop
+                                              offset="0"
+                                              stopColor="#00FFA3"
+                                            />
+                                            <stop
+                                              offset="1"
+                                              stopColor="#DC1FFF"
+                                            />
+                                          </linearGradient>
+                                        </defs>
+                                      </svg>
+                                    </div>
+
+                                    {/* Separator */}
+                                    <div className="h-3 w-px bg-gray-600 sm:h-4"></div>
+
+                                    {/* P1 P2 P3 Pill - Simple Toggle */}
+                                    <div className="relative flex items-center justify-center gap-0.5 sm:gap-1">
+                                      {["P1", "P2", "P3"].map((pill) => {
+                                        const presetIndex =
+                                          parseInt(pill.replace("P", "")) - 1;
+                                        const preset = presets[presetIndex];
+                                        const settings =
+                                          preset?.quickBuySettings;
+
+                                        return (
+                                          <div
+                                            key={pill}
+                                            className="relative flex items-center justify-center"
+                                          >
+                                            <button
+                                              className={`flex cursor-pointer items-center justify-center px-1 py-0.5 text-[10px] font-medium transition-all duration-200 sm:px-1.5 sm:text-xs ${
+                                                selectedPill === pill
+                                                  ? "text-green-400"
+                                                  : "text-gray-400 hover:text-white"
+                                              }`}
+                                              onClick={() => {
+                                                setSelectedPill(pill);
+                                                setActivePreset(presetIndex); // Also update global preset for consistency
+                                                console.log(
+                                                  `Selected ${pill} in trackers page`,
+                                                );
+                                              }}
+                                              onMouseEnter={() =>
+                                                setShowPillTooltip(pill)
+                                              }
+                                              onMouseLeave={() =>
+                                                setShowPillTooltip(null)
+                                              }
+                                            >
+                                              {pill}
+                                            </button>
+
+                                            {/* Tooltip for each pill */}
+                                            {showPillTooltip === pill &&
+                                              settings && (
+                                                <div
+                                                  className="absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border shadow-xl"
+                                                  style={{
+                                                    backgroundColor:
+                                                      "rgba(15, 16, 18, 0.95)",
+                                                    borderColor: "#2A2B33",
+                                                  }}
+                                                >
+                                                  <div className="space-y-1.5 p-2">
+                                                    {/* Slippage - Running person icon */}
+                                                    <div className="flex items-center gap-1.5">
+                                                      <FaRunning
+                                                        size={10}
+                                                        className="opacity-80"
+                                                        style={{
+                                                          strokeWidth: "1",
+                                                        }}
+                                                      />
+                                                      <span className="text-xs font-light text-gray-300">
+                                                        {(
+                                                          settings.maxSlippage *
+                                                          100
+                                                        ).toFixed(0)}
+                                                        %
+                                                      </span>
+                                                    </div>
+
+                                                    {/* Priority Fee - Gas pump icon with yellow styling */}
+                                                    <div className="flex items-center gap-1.5">
+                                                      <FaGasPump
+                                                        size={10}
+                                                        className="opacity-90"
+                                                        style={{
+                                                          color: "#FCD34D",
+                                                          strokeWidth: "1",
+                                                        }}
+                                                      />
+                                                      <span className="text-xs font-light text-yellow-400">
+                                                        {settings.priority}
+                                                      </span>
+                                                      <span className="text-xs font-light text-red-500">
+                                                        ⚠
+                                                      </span>
+                                                    </div>
+
+                                                    {/* Bribe - Coins icon with yellow styling */}
+                                                    <div className="flex items-center gap-1.5">
+                                                      <FaCoins
+                                                        size={10}
+                                                        className="opacity-90"
+                                                        style={{
+                                                          color: "#FCD34D",
+                                                          strokeWidth: "1",
+                                                        }}
+                                                      />
+                                                      <span className="text-xs font-light text-yellow-400">
+                                                        {settings.bribe}
+                                                      </span>
+                                                      <span className="text-xs font-light text-red-500">
+                                                        ⚠
+                                                      </span>
+                                                    </div>
+
+                                                    {/* MEV Protection - Ban icon */}
+                                                    <div className="flex items-center gap-1.5">
+                                                      <FaBan
+                                                        size={10}
+                                                        className="opacity-90"
+                                                        style={{
+                                                          strokeWidth: "1",
+                                                        }}
+                                                      />
+                                                      <span className="text-xs font-light text-gray-300">
+                                                        {settings.mevMode ===
+                                                        "off"
+                                                          ? "Off"
+                                                          : settings.mevMode ===
+                                                              "reduced"
+                                                            ? "Reduced"
+                                                            : "Secure"}
+                                                      </span>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+
                                 {/* SVG gradient for Solana icon */}
-                                <svg className="absolute w-0 h-0 pointer-events-none">
+                                <svg className="pointer-events-none absolute h-0 w-0">
                                   <defs>
-                                    <linearGradient id="solana-gradient-tracker" x1="0%" y1="0%" x2="100%" y2="100%">
-                                      <stop offset="0%" style={{ stopColor: '#00FFA3', stopOpacity: 1 }} />
-                                      <stop offset="100%" style={{ stopColor: '#DC1FFF', stopOpacity: 1 }} />
+                                    <linearGradient
+                                      id="solana-gradient-tracker"
+                                      x1="0%"
+                                      y1="0%"
+                                      x2="100%"
+                                      y2="100%"
+                                    >
+                                      <stop
+                                        offset="0%"
+                                        style={{
+                                          stopColor: "#00FFA3",
+                                          stopOpacity: 1,
+                                        }}
+                                      />
+                                      <stop
+                                        offset="100%"
+                                        style={{
+                                          stopColor: "#DC1FFF",
+                                          stopOpacity: 1,
+                                        }}
+                                      />
                                     </linearGradient>
                                   </defs>
                                 </svg>
-                                <table className="mt-2 w-full min-w-[720px] text-xs">
+                                <table className="mt-2 w-full min-w-[600px] text-[10px] sm:min-w-[720px] sm:text-xs">
                                   <thead>
                                     <tr className="border-b border-neutral-800/60">
-                                      <th className="w-20 px-2 py-2 text-left text-sm text-neutral-400">
+                                      <th className="w-16 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-20 sm:px-2 sm:py-2 sm:text-sm">
                                         Time
                                       </th>
-                                      <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
+                                      <th className="w-20 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-24 sm:px-2 sm:py-2 sm:text-sm">
                                         Wallet
                                       </th>
-                                      <th className="w-12 px-2 py-2 text-left text-sm text-neutral-400">
+                                      <th className="w-10 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-12 sm:px-2 sm:py-2 sm:text-sm">
                                         Side
                                       </th>
-                                      <th className="w-48 px-2 py-2 text-left text-sm text-neutral-400">
+                                      <th className="w-36 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-48 sm:px-2 sm:py-2 sm:text-sm">
                                         Token
                                       </th>
-                                      <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
-                                        <div className="flex items-center gap-1">
+                                      <th className="w-20 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-24 sm:px-2 sm:py-2 sm:text-sm">
+                                        <div className="flex items-center gap-0.5 sm:gap-1">
                                           <span>Amount</span>
                                           <button
                                             onClick={() => setShowUSD(!showUSD)}
-                                            className={`transition-colors ${showUSD ? 'text-green-400' : 'text-neutral-400 hover:text-neutral-300'}`}
-                                            title={showUSD ? 'Switch to SOL' : 'Switch to USD'}
+                                            className={`transition-colors ${showUSD ? "text-green-400" : "text-neutral-400 hover:text-neutral-300"}`}
+                                            title={
+                                              showUSD
+                                                ? "Switch to SOL"
+                                                : "Switch to USD"
+                                            }
                                           >
-                                            <RiExchangeDollarLine className="h-4 w-4" />
+                                            <RiExchangeDollarLine className="h-3 w-3 sm:h-4 sm:w-4" />
                                           </button>
                                         </div>
                                       </th>
-                                      <th className="w-24 px-2 py-2 text-left text-sm text-neutral-400">
+                                      <th className="w-16 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-24 sm:px-2 sm:py-2 sm:text-sm">
                                         MC
+                                      </th>
+                                      <th className="w-20 px-1 py-1.5 text-center text-[10px] text-neutral-400 sm:w-28 sm:px-2 sm:py-2 sm:text-sm">
+                                        Quick Buy
                                       </th>
                                     </tr>
                                   </thead>
@@ -1399,7 +1967,7 @@ export default function TrackersPage() {
                                       const metadata = tokenMetadata.get(
                                         trade.mint,
                                       );
-                                      
+
                                       // Priority: websocket symbol > metadata symbol > websocket name > metadata name > fallback
                                       const displaySymbol =
                                         trade.symbol ||
@@ -1407,66 +1975,122 @@ export default function TrackersPage() {
                                         trade.name ||
                                         metadata?.name ||
                                         trade.mint.slice(0, 8) + "...";
-                                      const displayName = trade.name || metadata?.name;
-                                      
+                                      const displayName =
+                                        trade.name || metadata?.name;
+
                                       // Debug: Log what we're displaying
-                                      if (displaySymbol === trade.mint.slice(0, 8) + "...") {
-                                        console.log('[Live Trades] Showing fallback address for', trade.mint.slice(0, 8), {
-                                          trade_symbol: trade.symbol,
-                                          trade_name: trade.name,
-                                          metadata_symbol: metadata?.symbol,
-                                          metadata_name: metadata?.name,
-                                          has_metadata: !!metadata,
-                                        });
+                                      if (
+                                        displaySymbol ===
+                                        trade.mint.slice(0, 8) + "..."
+                                      ) {
+                                        console.log(
+                                          "[Live Trades] Showing fallback address for",
+                                          trade.mint.slice(0, 8),
+                                          {
+                                            trade_symbol: trade.symbol,
+                                            trade_name: trade.name,
+                                            metadata_symbol: metadata?.symbol,
+                                            metadata_name: metadata?.name,
+                                            has_metadata: !!metadata,
+                                          },
+                                        );
                                       }
-                                      
+
                                       // Get token image URL - prioritize metadata image and normalize it
                                       const rawImg = metadata?.image;
-                                      const tokenImageUrl = normalizeAssetUrl(rawImg);
+                                      const tokenImageUrl =
+                                        normalizeAssetUrl(rawImg);
                                       const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                        displaySymbol || "T"
+                                        displaySymbol || "T",
                                       )}&background=0f1012&color=E6E7EA&size=28`;
-                                      const launchpadProtocol = metadata?.launchpad_protocol?.toLowerCase() || '';
-                                      
+                                      const launchpadProtocol =
+                                        metadata?.launchpad_protocol?.toLowerCase() ||
+                                        "";
+
                                       // Get protocol icon (exact logic from PulseTable)
-                                      const getProtocolIcon = (protocol: string): string => {
-                                        if (!protocol) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
-                                        if (protocol.includes('pump')) return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
-                                        if (protocol.includes('meteora')) return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
-                                        if (protocol.includes('raydium')) return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
-                                        if (protocol.includes('boop')) return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
-                                        if (protocol.includes('moonit') || protocol.includes('moonshot') || protocol.includes('moonshoot')) return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
-                                        if (protocol.includes('bonk')) return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
-                                        if (protocol.includes('bags')) return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
-                                        if (protocol.includes('launch')) return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
-                                        return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
+                                      const getProtocolIcon = (
+                                        protocol: string,
+                                      ): string => {
+                                        if (!protocol)
+                                          return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
+                                        if (protocol.includes("pump"))
+                                          return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
+                                        if (protocol.includes("meteora"))
+                                          return "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013";
+                                        if (protocol.includes("raydium"))
+                                          return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
+                                        if (protocol.includes("boop"))
+                                          return "https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true";
+                                        if (
+                                          protocol.includes("moonit") ||
+                                          protocol.includes("moonshot") ||
+                                          protocol.includes("moonshoot")
+                                        )
+                                          return "https://avatars.githubusercontent.com/u/174132191?s=280&v=4";
+                                        if (protocol.includes("bonk"))
+                                          return "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png";
+                                        if (protocol.includes("bags"))
+                                          return "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw";
+                                        if (protocol.includes("launch"))
+                                          return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
+                                        return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
                                       };
-                                      
+
                                       // Get protocol color (exact logic from PulseTable)
-                                      const getProtocolColor = (protocol: string): string => {
-                                        if (!protocol) return '#22c55e';
-                                        if (protocol.includes('pump')) return '#22c55e';
-                                        if (protocol.includes('meteora')) return '#ff4662';
-                                        if (protocol.includes('raydium')) return '#5c51f7';
-                                        if (protocol.includes('moonit') || protocol.includes('moonshot') || protocol.includes('moonshoot')) return '#eab308';
-                                        if (protocol.includes('boop')) return '#134577';
-                                        if (protocol.includes('bonk')) return '#ff6b35';
-                                        if (protocol.includes('bags')) return '#22c55e';
-                                        if (protocol.includes('launch')) return '#3b82f6';
-                                        if (protocol.includes('orca')) return '#0ea5e9';
-                                        if (protocol.includes('jupiter')) return '#8b5cf6';
-                                        return '#22c55e';
+                                      const getProtocolColor = (
+                                        protocol: string,
+                                      ): string => {
+                                        if (!protocol) return "#22c55e";
+                                        if (protocol.includes("pump"))
+                                          return "#22c55e";
+                                        if (protocol.includes("meteora"))
+                                          return "#ff4662";
+                                        if (protocol.includes("raydium"))
+                                          return "#5c51f7";
+                                        if (
+                                          protocol.includes("moonit") ||
+                                          protocol.includes("moonshot") ||
+                                          protocol.includes("moonshoot")
+                                        )
+                                          return "#eab308";
+                                        if (protocol.includes("boop"))
+                                          return "#134577";
+                                        if (protocol.includes("bonk"))
+                                          return "#ff6b35";
+                                        if (protocol.includes("bags"))
+                                          return "#22c55e";
+                                        if (protocol.includes("launch"))
+                                          return "#3b82f6";
+                                        if (protocol.includes("orca"))
+                                          return "#0ea5e9";
+                                        if (protocol.includes("jupiter"))
+                                          return "#8b5cf6";
+                                        return "#22c55e";
                                       };
-                                      
-                                      const protocolIcon = getProtocolIcon(launchpadProtocol);
-                                      const protocolColor = getProtocolColor(launchpadProtocol);
-                                      
+
+                                      const protocolIcon =
+                                        getProtocolIcon(launchpadProtocol);
+                                      const protocolColor =
+                                        getProtocolColor(launchpadProtocol);
+
                                       // Check if token should have full circle image (no white space)
-                                      const isMeteora = launchpadProtocol.includes('meteora');
-                                      const isBonk = launchpadProtocol.includes('bonk');
-                                      const isBags = launchpadProtocol.includes('bags');
-                                      const isMoonit = launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot');
-                                      const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
+                                      const isMeteora =
+                                        launchpadProtocol.includes("meteora");
+                                      const isBonk =
+                                        launchpadProtocol.includes("bonk");
+                                      const isBags =
+                                        launchpadProtocol.includes("bags");
+                                      const isMoonit =
+                                        launchpadProtocol.includes("moonit") ||
+                                        launchpadProtocol.includes(
+                                          "moonshot",
+                                        ) ||
+                                        launchpadProtocol.includes("moonshoot");
+                                      const isFullCircleImage =
+                                        isMeteora ||
+                                        isBonk ||
+                                        isBags ||
+                                        isMoonit;
 
                                       const tokenAgeLabel = formatTokenAge(
                                         (trade as any).created_at ??
@@ -1477,12 +2101,30 @@ export default function TrackersPage() {
                                       return (
                                         <tr
                                           key={`${trade.tx}-${idx}`}
-                                          className="border-b border-neutral-800/50 transition-colors duration-300 hover:bg-neutral-900/40"
+                                          className="group relative border-b border-neutral-800/50 transition-all duration-300"
+                                          style={{
+                                            backgroundColor:
+                                              trade.side === "buy"
+                                                ? "rgba(34, 197, 94, 0.08)"
+                                                : "rgba(239, 68, 68, 0.08)",
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor =
+                                              trade.side === "buy"
+                                                ? "rgba(34, 197, 94, 0.15)"
+                                                : "rgba(239, 68, 68, 0.15)";
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor =
+                                              trade.side === "buy"
+                                                ? "rgba(34, 197, 94, 0.08)"
+                                                : "rgba(239, 68, 68, 0.08)";
+                                          }}
                                         >
-                                          <td className="w-20 px-2 py-2 text-neutral-400">
+                                          <td className="w-16 px-1 py-1.5 text-[9px] text-neutral-400 sm:w-20 sm:px-2 sm:py-2 sm:text-xs">
                                             {timeAgo}
                                           </td>
-                                          <td className="w-24 px-2 py-2 font-mono">
+                                          <td className="w-20 px-1 py-1.5 font-mono text-[9px] sm:w-24 sm:px-2 sm:py-2 sm:text-xs">
                                             <span
                                               className="truncate"
                                               title={trade.wallet}
@@ -1493,9 +2135,9 @@ export default function TrackersPage() {
                                                   "..."}
                                             </span>
                                           </td>
-                                          <td className="w-12 px-2 py-2">
+                                          <td className="w-10 px-1 py-1.5 sm:w-12 sm:px-2 sm:py-2">
                                             <span
-                                              className={`rounded px-1 py-0.5 text-[10px] font-semibold ${
+                                              className={`rounded px-0.5 py-0.5 text-[9px] font-semibold sm:px-1 sm:text-[10px] ${
                                                 trade.side === "buy"
                                                   ? "bg-green-500/20 text-green-400"
                                                   : "bg-red-500/20 text-red-400"
@@ -1504,117 +2146,179 @@ export default function TrackersPage() {
                                               {trade.side.toUpperCase()}
                                             </span>
                                           </td>
-                                          <td className="w-48 px-2 py-2">
+                                          <td className="w-36 px-1 py-1.5 sm:w-48 sm:px-2 sm:py-2">
                                             <button
                                               onClick={async () => {
                                                 // Use liquidity pool / trading pair address (pair_address) for navigation
                                                 // This should be pre-resolved by WalletTrackerContext, but we have a fallback
-                                                let tokenAddress = trade.pair_address;
-                                                
+                                                let tokenAddress =
+                                                  trade.pair_address;
+
                                                 // Fallback: if pair_address is not available, resolve it now
-                                                if (!tokenAddress && trade.mint) {
-                                                  console.log('[Trackers] pair_address not found, resolving from mint:', trade.mint);
-                                                  
+                                                if (
+                                                  !tokenAddress &&
+                                                  trade.mint
+                                                ) {
+                                                  console.log(
+                                                    "[Trackers] pair_address not found, resolving from mint:",
+                                                    trade.mint,
+                                                  );
+
                                                   try {
                                                     // First try to get it from token search (most reliable)
-                                                    const searchResponse = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`);
-                                                    
+                                                    const searchResponse =
+                                                      await fetch(
+                                                        `/api/token-service/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`,
+                                                      );
+
                                                     if (searchResponse.ok) {
-                                                      const searchData = await searchResponse.json();
-                                                      if (searchData.tokens && searchData.tokens.length > 0) {
-                                                        const token = searchData.tokens[0];
-                                                        tokenAddress = token.pair_address || token.poolId;
-                                                        console.log('[Trackers] Resolved pair_address from search:', tokenAddress);
+                                                      const searchData =
+                                                        await searchResponse.json();
+                                                      if (
+                                                        searchData.tokens &&
+                                                        searchData.tokens
+                                                          .length > 0
+                                                      ) {
+                                                        const token =
+                                                          searchData.tokens[0];
+                                                        tokenAddress =
+                                                          token.pair_address ||
+                                                          token.poolId;
+                                                        console.log(
+                                                          "[Trackers] Resolved pair_address from search:",
+                                                          tokenAddress,
+                                                        );
                                                       }
                                                     }
-                                                    
+
                                                     // Fallback to hydrate-pair if search didn't work
                                                     if (!tokenAddress) {
-                                                      const hydrateResponse = await fetch('/api/token-service/hydrate-pair', {
-                                                        method: 'POST',
-                                                        headers: { 'Content-Type': 'application/json' },
-                                                        body: JSON.stringify({ mint: trade.mint }),
-                                                      });
-                                                      
+                                                      const hydrateResponse =
+                                                        await fetch(
+                                                          "/api/token-service/hydrate-pair",
+                                                          {
+                                                            method: "POST",
+                                                            headers: {
+                                                              "Content-Type":
+                                                                "application/json",
+                                                            },
+                                                            body: JSON.stringify(
+                                                              {
+                                                                mint: trade.mint,
+                                                              },
+                                                            ),
+                                                          },
+                                                        );
+
                                                       if (hydrateResponse.ok) {
-                                                        const hydrateData = await hydrateResponse.json();
-                                                        tokenAddress = hydrateData.pair_address || hydrateData.poolId;
-                                                        console.log('[Trackers] Resolved pair_address from hydrate:', tokenAddress);
+                                                        const hydrateData =
+                                                          await hydrateResponse.json();
+                                                        tokenAddress =
+                                                          hydrateData.pair_address ||
+                                                          hydrateData.poolId;
+                                                        console.log(
+                                                          "[Trackers] Resolved pair_address from hydrate:",
+                                                          tokenAddress,
+                                                        );
                                                       }
                                                     }
                                                   } catch (error) {
-                                                    console.warn('[Trackers] Failed to resolve pair_address:', error);
+                                                    console.warn(
+                                                      "[Trackers] Failed to resolve pair_address:",
+                                                      error,
+                                                    );
                                                   }
                                                 }
-                                                
+
                                                 // Final fallback to mint if resolution failed
                                                 if (!tokenAddress) {
                                                   tokenAddress = trade.mint;
-                                                  console.warn('[Trackers] Using mint as fallback:', tokenAddress);
+                                                  console.warn(
+                                                    "[Trackers] Using mint as fallback:",
+                                                    tokenAddress,
+                                                  );
                                                 }
 
-                                                console.log('[Trackers] Navigating with address:', tokenAddress, 'for token:', displaySymbol);
+                                                console.log(
+                                                  "[Trackers] Navigating with address:",
+                                                  tokenAddress,
+                                                  "for token:",
+                                                  displaySymbol,
+                                                );
                                                 window.location.href = `/trade/${tokenAddress}`;
                                               }}
-                                              className="flex items-center gap-2 font-mono text-emerald-300 hover:text-emerald-200 transition-colors cursor-pointer"
-                                            title={displayName || undefined}
-                                          >
+                                              className="flex cursor-pointer items-center gap-1 font-mono text-[9px] text-emerald-300 transition-colors hover:text-emerald-200 sm:gap-2 sm:text-xs"
+                                              title={displayName || undefined}
+                                            >
                                               {/* Token icon with protocol badge (smaller version of PulseTable) */}
-                                              <div className="relative flex items-center justify-center flex-shrink-0"
-                                                   style={{ width: 28, height: 28 }}>
+                                              <div className="relative flex h-5 w-5 flex-shrink-0 items-center justify-center sm:h-7 sm:w-7">
                                                 {/* Main token image with border */}
-                                                <div 
+                                                <div
                                                   className="relative rounded-sm"
                                                   style={{
                                                     border: `1px solid ${protocolColor}B3`,
-                                                    padding: '2px',
-                                                    backgroundColor: '#06070b'
+                                                    padding: "2px",
+                                                    backgroundColor: "#06070b",
                                                   }}
                                                 >
-                                                  <div className="relative rounded-sm overflow-hidden"
-                                                       style={{ width: 22, height: 22 }}>
+                                                  <div className="relative h-4 w-4 overflow-hidden rounded-sm sm:h-[22px] sm:w-[22px]">
                                                     <img
-                                                      src={tokenImageUrl || fallbackAvatar}
-                                                      alt={displayName || displaySymbol}
-                                                      className="w-full h-full object-cover"
+                                                      src={
+                                                        tokenImageUrl ||
+                                                        fallbackAvatar
+                                                      }
+                                                      alt={
+                                                        displayName ||
+                                                        displaySymbol
+                                                      }
+                                                      className="h-full w-full object-cover"
                                                       onError={(e) => {
-                                                        e.currentTarget.src = fallbackAvatar;
+                                                        e.currentTarget.src =
+                                                          fallbackAvatar;
                                                       }}
                                                     />
                                                   </div>
                                                 </div>
-                                                
+
                                                 {/* Protocol badge icon (bottom-right corner) */}
-                                                <div 
-                                                  className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/4 translate-y-1/4"
-                                                  style={{ 
-                                                    width: 10, 
+                                                <div
+                                                  className="absolute right-0 bottom-0 flex translate-x-1/4 translate-y-1/4 transform items-center justify-center rounded-full bg-white"
+                                                  style={{
+                                                    width: 10,
                                                     height: 10,
                                                     border: `1px solid ${protocolColor}`,
-                                                    boxShadow: `0 0 2px ${protocolColor}60`
+                                                    boxShadow: `0 0 2px ${protocolColor}60`,
                                                   }}
                                                 >
                                                   <img
                                                     src={protocolIcon}
                                                     alt="Protocol"
-                                                    className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+                                                    className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
                                                     style={{
-                                                      filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
+                                                      filter:
+                                                        protocolColor ===
+                                                        "#eab308"
+                                                          ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
+                                                          : "none",
                                                     }}
                                                   />
                                                 </div>
                                               </div>
-                                              <div className="flex items-center gap-1.5 min-w-0 leading-tight text-left">
-                                                <span className="font-medium text-base text-neutral-100 truncate">
+                                              <div className="flex min-w-0 items-center gap-1 text-left leading-tight sm:gap-1.5">
+                                                <span className="truncate text-xs font-medium text-neutral-100 sm:text-base">
                                                   {displaySymbol}
                                                 </span>
                                                 {(() => {
-                                                  const age = getTokenAge(metadata?.createdAt);
+                                                  const age = getTokenAge(
+                                                    metadata?.createdAt,
+                                                  );
                                                   if (age) {
                                                     return (
                                                       <>
-                                                        <span className="text-neutral-500">•</span>
-                                                        <span className="text-sm text-green-400 font-medium whitespace-nowrap">
+                                                        <span className="text-neutral-500">
+                                                          •
+                                                        </span>
+                                                        <span className="text-sm font-medium whitespace-nowrap text-green-400">
                                                           {age}
                                                         </span>
                                                       </>
@@ -1625,43 +2329,63 @@ export default function TrackersPage() {
                                               </div>
                                             </button>
                                           </td>
-                                          <td className="w-24 px-2 py-2 text-neutral-200">
-                                            <div className="flex items-center gap-1">
+                                          <td className="w-20 px-1 py-1.5 text-[9px] text-neutral-200 sm:w-24 sm:px-2 sm:py-2 sm:text-xs">
+                                            <div className="flex items-center gap-0.5 sm:gap-1">
                                               {showUSD ? (
-                                                <span className="text-green-400 font-semibold">$</span>
+                                                <span className="text-[9px] font-semibold text-green-400 sm:text-xs">
+                                                  $
+                                                </span>
                                               ) : (
                                                 <SiSolana
-                                                  className="h-3 w-3 inline-block flex-shrink-0"
+                                                  className="inline-block h-2.5 w-2.5 flex-shrink-0 sm:h-3 sm:w-3"
                                                   aria-hidden="true"
                                                   style={{
-                                                    color: 'unset',
-                                                    fill: 'url(#solana-gradient-tracker)',
-                                                    filter: 'none',
+                                                    color: "unset",
+                                                    fill: "url(#solana-gradient-tracker)",
+                                                    filter: "none",
                                                   }}
                                                 />
                                               )}
-                                              <span>
+                                              <span className="text-[9px] sm:text-xs">
                                                 {(() => {
                                                   if (showUSD) {
                                                     // Display USD price from websocket
-                                                    if (trade.price_usd !== null && trade.price_usd !== undefined) {
+                                                    if (
+                                                      trade.price_usd !==
+                                                        null &&
+                                                      trade.price_usd !==
+                                                        undefined
+                                                    ) {
                                                       // Format USD with commas and 2 decimal places
-                                                      return new Intl.NumberFormat('en-US', {
-                                                        minimumFractionDigits: 2,
-                                                        maximumFractionDigits: 2
-                                                      }).format(trade.price_usd);
+                                                      return new Intl.NumberFormat(
+                                                        "en-US",
+                                                        {
+                                                          minimumFractionDigits: 2,
+                                                          maximumFractionDigits: 2,
+                                                        },
+                                                      ).format(trade.price_usd);
                                                     }
-                                                    return '-';
+                                                    return "-";
                                                   } else {
                                                     // Display SOL amount with 4 decimal places
-                                                    if (trade.sol_spent !== null && trade.sol_spent !== undefined) {
+                                                    if (
+                                                      trade.sol_spent !==
+                                                        null &&
+                                                      trade.sol_spent !==
+                                                        undefined
+                                                    ) {
                                                       // Check if value is in lamports (very large numbers) and convert to SOL
-                                                      let solAmount = Math.abs(trade.sol_spent);
+                                                      let solAmount = Math.abs(
+                                                        trade.sol_spent,
+                                                      );
                                                       if (solAmount > 1000) {
                                                         // Likely in lamports, convert to SOL (1 SOL = 1e9 lamports)
-                                                        solAmount = solAmount / 1e9;
+                                                        solAmount =
+                                                          solAmount / 1e9;
                                                       }
-                                                      return solAmount.toFixed(4);
+                                                      return solAmount.toFixed(
+                                                        4,
+                                                      );
                                                     }
                                                     // Fallback to token amount if sol_spent is not available
                                                     return `${trade.amount.toFixed(4)} tokens`;
@@ -1670,12 +2394,56 @@ export default function TrackersPage() {
                                               </span>
                                             </div>
                                           </td>
-                                          <td className="w-24 px-2 py-2 text-neutral-300">
+                                          <td className="w-16 px-1 py-1.5 text-[9px] text-neutral-300 sm:w-24 sm:px-2 sm:py-2 sm:text-xs">
                                             {(() => {
-                                              const marketCap = metadata?.market_cap_usd;
-                                              if (!marketCap || marketCap === 0) return <span className="text-neutral-500">-</span>;
+                                              const marketCap =
+                                                metadata?.market_cap_usd;
+                                              if (!marketCap || marketCap === 0)
+                                                return (
+                                                  <span className="text-neutral-500">
+                                                    -
+                                                  </span>
+                                                );
                                               return `$${formatMarketCap(marketCap)}`;
                                             })()}
+                                          </td>
+                                          <td className="w-20 px-1 py-1.5 sm:w-28 sm:px-2 sm:py-2">
+                                            <div className="flex items-center justify-center">
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleQuickBuy(trade);
+                                                }}
+                                                className="z-50 flex cursor-pointer items-center justify-center gap-1 rounded-full px-2 py-1 text-[9px] font-bold whitespace-nowrap opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100 sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-sm"
+                                                style={{
+                                                  backgroundColor: "#18c48c",
+                                                  color: "#000000",
+                                                  border:
+                                                    "1px solid rgba(0,0,0,0.15)",
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                  e.currentTarget.style.backgroundColor =
+                                                    "#12a877";
+                                                  e.currentTarget.style.transform =
+                                                    "translateY(-1px)";
+                                                  e.currentTarget.style.boxShadow =
+                                                    "0 4px 14px rgba(112, 224, 176, 0.25)";
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                  e.currentTarget.style.backgroundColor =
+                                                    "#18c48c";
+                                                  e.currentTarget.style.transform =
+                                                    "translateY(0)";
+                                                  e.currentTarget.style.boxShadow =
+                                                    "none";
+                                                }}
+                                              >
+                                                <HiLightningBolt className="h-2.5 w-2.5 text-black sm:h-3.5 sm:w-3.5" />
+                                                <span className="text-[9px] sm:text-xs">
+                                                  {quickBuyAmount} SOL
+                                                </span>
+                                              </button>
+                                            </div>
                                           </td>
                                         </tr>
                                       );
@@ -1705,11 +2473,11 @@ export default function TrackersPage() {
               {/* RIGHT: TWITTER SECTION */}
               {showTwitterSection && (
                 <div
-                  className="mt-4 flex h-full min-h-[530px] flex-shrink-0 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2"
+                  className="flex h-full min-h-[400px] flex-shrink-0 flex-col overflow-hidden border border-neutral-900/80 bg-[#050608] px-2 sm:min-h-[530px] sm:px-2.5"
                   style={
                     isMobile
                       ? {
-                          maxHeight: "calc(100vh - 160px)",
+                          maxHeight: "calc(100vh - 140px)",
                         }
                       : {
                           width: `${sidebarWidth}px`,
@@ -1720,12 +2488,12 @@ export default function TrackersPage() {
                   }
                 >
                   {/* Twitter Tabs Header */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800/60 pt-4 pb-2">
-                    <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-neutral-800/60 pt-2 pb-1.5 sm:gap-2 sm:pt-4 sm:pb-2">
+                    <div className="flex gap-1 sm:gap-2">
                       {TWITTER_TABS.map((tab, i) => (
                         <button
                           key={tab}
-                          className={`cursor-pointer rounded-lg px-3 py-1 text-xs transition-all duration-300 ${
+                          className={`cursor-pointer rounded-lg px-2 py-0.5 text-[10px] whitespace-nowrap transition-all duration-300 sm:px-3 sm:py-1 sm:text-xs ${
                             twitterTab === i
                               ? "bg-[#70E0B0] font-medium text-neutral-900"
                               : "font-medium text-neutral-400 hover:bg-[#141414] hover:text-white"
@@ -1738,7 +2506,7 @@ export default function TrackersPage() {
                     </div>
                     {twitterTab === 0 && (
                       <button
-                        className="cursor-pointer rounded-lg px-3 py-1 text-xs font-semibold text-neutral-900 transition-all duration-300"
+                        className="cursor-pointer rounded-lg px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-neutral-900 transition-all duration-300 sm:px-3 sm:py-1 sm:text-xs"
                         style={{
                           backgroundColor: "#70E0B0",
                           border: "none",
@@ -1762,7 +2530,7 @@ export default function TrackersPage() {
                   </div>
 
                   {/* Twitter Content */}
-                  <div className="flex-1 overflow-y-auto min-h-0">
+                  <div className="min-h-0 flex-1 overflow-y-auto">
                     {twitterTab === 0 ? (
                       // Tracked Accounts Tab
                       <>
@@ -1773,20 +2541,20 @@ export default function TrackersPage() {
                             </span>
                           </div>
                         ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full min-w-[520px] text-xs">
+                          <div className="scrollbar-hide overflow-x-auto">
+                            <table className="w-full min-w-[400px] text-[10px] sm:min-w-[520px] sm:text-xs">
                               <thead>
                                 <tr className="border-b border-neutral-800/60">
-                                  <th className="px-2 py-2 text-left text-sm text-neutral-400">
+                                  <th className="px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
                                     Account
                                   </th>
-                                  <th className="px-2 py-2 text-left text-sm text-neutral-400">
+                                  <th className="px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
                                     Followers
                                   </th>
-                                  <th className="px-2 py-2 text-left text-sm text-neutral-400">
+                                  <th className="px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
                                     Added
                                   </th>
-                                  <th className="px-2 py-2 text-right text-sm text-neutral-400">
+                                  <th className="px-1 py-1.5 text-right text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
                                     Actions
                                   </th>
                                 </tr>
@@ -1878,7 +2646,7 @@ export default function TrackersPage() {
                                 </div>
 
                                 {/* Tweet Text */}
-                                <p className="mb-2 whitespace-pre-wrap break-words text-sm text-neutral-200">
+                                <p className="mb-2 text-sm break-words whitespace-pre-wrap text-neutral-200">
                                   {tweet.text}
                                 </p>
 
@@ -1891,10 +2659,10 @@ export default function TrackersPage() {
                                         tweet.images.length === 1
                                           ? "1fr"
                                           : tweet.images.length === 2
-                                          ? "1fr 1fr"
-                                          : tweet.images.length === 3
-                                          ? "1fr 1fr"
-                                          : "repeat(2, 1fr)",
+                                            ? "1fr 1fr"
+                                            : tweet.images.length === 3
+                                              ? "1fr 1fr"
+                                              : "repeat(2, 1fr)",
                                     }}
                                   >
                                     {tweet.images.map((imageUrl, idx) => (
@@ -2046,9 +2814,12 @@ export default function TrackersPage() {
               processed = walletsToAdd.length;
               onProgress?.(processed, total);
 
-              if (typeof window !== 'undefined') {
+              if (typeof window !== "undefined") {
                 walletsToAdd.forEach((wallet) => {
-                  localStorage.setItem(`wallet_notifications_${wallet.address}`, JSON.stringify(true));
+                  localStorage.setItem(
+                    `wallet_notifications_${wallet.address}`,
+                    JSON.stringify(true),
+                  );
                 });
               }
 
@@ -2091,9 +2862,18 @@ export default function TrackersPage() {
           onAddTwitterHandle={handleAddTwitterAccount}
         />
 
+        {/* Filter Popout */}
+        {isFilterPopoutOpen && (
+          <FilterPopout
+            open={isFilterPopoutOpen}
+            onClose={() => setIsFilterPopoutOpen(false)}
+            onApplyFilters={(filters) => setLocalFilters(filters)}
+            currentFilters={localFilters}
+          />
+        )}
+
         <Footer />
       </div>
     </>
   );
 }
-

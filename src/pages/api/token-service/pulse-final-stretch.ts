@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { extractTokenImage } from '~/utils/images';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Disable caching for realtime freshness
@@ -161,9 +162,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             launch_time: r.launch_time || null,
             launchpad_protocol: r.launchpad_protocol || null, // Pass through protocol for filtering and colors
             status: r.status || null,
-            // Optional extra fields used by the UI
-            logo: r.logo || r.uri || r.image || null,
-            image: r.image || r.uri || r.logo || null,
+            // Optional extra fields used by the UI - extract image from multiple possible field names
+            logo: extractTokenImage(r) || null,
+            image: extractTokenImage(r) || null,
             uri: r.uri || null,
             // TX data fields from Codex API with fallback logic for older tokens
             total_buy_volume_5m: (r.total_buy_volume_5m ?? 0) || estimateFrom24h(totalBuyVolume24h, '5m'),

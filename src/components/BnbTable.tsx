@@ -19,7 +19,9 @@ import {
   FaDollarSign,
   FaRocket,
   FaChartBar,
-  FaGem
+  FaGem,
+  FaPause,
+  FaPlay
 } from "react-icons/fa";
 import { FaDice } from "react-icons/fa6";
 import { BsPersonGear, BsCoin, BsMoon, BsCloud, BsCup, BsArrowUp } from "react-icons/bs";
@@ -1239,6 +1241,8 @@ function BnbTable({
   const [priority, setPriority] = useState(0);
   const [bribe, setBribe] = useState(0);
   const [activeFilterTab, setActiveFilterTab] = useState('New Pairs');
+  const [isHeaderHovered, setIsHeaderHovered] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [activeCategoryTab, setActiveCategoryTab] = useState('Audit');
   const [selectedPill, setSelectedPill] = useState('P1'); // Each column has its own preset selection
   // Load thunderAmount from localStorage with fallback - separate storage for each column
@@ -2390,17 +2394,43 @@ function BnbTable({
       }}
     >
       <div 
-        className="mb-2 flex items-center justify-between border-b p-2 text-lg font-bold"
+        className="mb-2 flex items-center justify-between border-b p-2 text-lg font-bold relative group"
         style={{ 
           backgroundColor: 'transparent', 
           borderColor: AX.border, 
           color: AX.text 
         }}
+        onMouseEnter={() => setIsHeaderHovered(true)}
+        onMouseLeave={() => setIsHeaderHovered(false)}
       >
-        <span className="text-sm lg:text-base" style={{ 
-          fontWeight: '300',
-          letterSpacing: '0.5px'
-        }}>{title}</span>
+        {/* Left side container for pause button and title */}
+        <div className="flex items-center gap-2">
+          {/* Pause/Play button - appears on hover */}
+          <button
+            onClick={() => setIsPaused(!isPaused)}
+            className={`transition-all duration-200 hover:scale-110 ${
+              isHeaderHovered ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{ 
+              color: isPaused ? AX.aiBlue : AX.aiGreen,
+              cursor: 'pointer',
+              background: 'transparent',
+              border: 'none',
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title={isPaused ? 'Resume' : 'Pause'}
+          >
+            {isPaused ? <FaPlay size={14} /> : <FaPause size={14} />}
+          </button>
+          
+          <span className="text-sm lg:text-base" style={{ 
+            fontWeight: '300',
+            letterSpacing: '0.5px'
+          }}>{title}</span>
+        </div>
         
         {/* Right side container for pill and filter */}
         <div className="flex items-center gap-2">

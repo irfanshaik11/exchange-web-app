@@ -19,6 +19,7 @@ import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
+import { BsSliders2 } from "react-icons/bs";
 import { prefetchTradeData } from "~/utils/tokenCache";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
@@ -30,7 +31,7 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
 export default function DiscoverPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'dex' | 'live'>('newPairs');
+  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>('newPairs');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -82,6 +83,28 @@ export default function DiscoverPage() {
   });
   const [newPairsLoading, setNewPairsLoading] = useState(false);
   const [newPairsError, setNewPairsError] = useState<string | null>(null);
+
+  // xStocks state
+  const [xStocksRaw, setXStocksRaw] = useState<TokenWithDexPaid[]>(() => {
+    // Initialize with cached data if available (no loading state)
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('discover_xstocks_cache');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - parsed.timestamp;
+          if (age < 60 * 1000 && parsed.data && parsed.data.length > 0) {
+            return parsed.data;
+          }
+        }
+      } catch {
+        // Ignore cache errors on init
+      }
+    }
+    return [];
+  });
+  const [xStocksLoading, setXStocksLoading] = useState(false);
+  const [xStocksError, setXStocksError] = useState<string | null>(null);
 
   // 🔒 Image cache: tokenId -> { cover?: string; avatar?: string }
   const imageCacheRef = useRef<Map<string, { cover?: string; avatar?: string }>>(new Map());
@@ -427,8 +450,8 @@ export default function DiscoverPage() {
       }
 
       try {
-        // Use Next.js API proxy - remove timestamp to allow server-side caching
-        const response = await fetch(`/api/token-service/pulse-new?limit=200`, {
+        // Use Next.js API proxy with fresh=1 to bypass cache and get latest data with correct image mapping
+        const response = await fetch(`/api/token-service/pulse-new?limit=200&fresh=1`, {
           headers: {
             'Cache-Control': 'no-cache',
             Pragma: 'no-cache',
@@ -484,18 +507,23 @@ export default function DiscoverPage() {
             normalized.liquidity_usd = liquidity;
             normalized.total_liquidity_usd = liquidity;
 
-            normalized.volume_24h =
-              toNumber(token.volume_24h ?? token.volume24h) ||
-              sumVolumes(token.total_buy_volume_24h, token.total_sell_volume_24h);
-            normalized.volume_6h =
-              toNumber(token.volume_6h ?? token.volume6h) ||
-              sumVolumes(token.total_buy_volume_6h, token.total_sell_volume_6h);
-            normalized.volume_1h =
-              toNumber(token.volume_1h ?? token.volume1h) ||
-              sumVolumes(token.total_buy_volume_1h, token.total_sell_volume_1h);
-            normalized.volume_5m =
-              toNumber(token.volume_5m ?? token.volume5m) ||
-              sumVolumes(token.total_buy_volume_5m, token.total_sell_volume_5m);
+            // Volume fields - prefer buy/sell volume sum if available, otherwise use provided value
+            // This ensures we get accurate volume even if the direct volume field is 0 or missing
+            const sum24h = sumVolumes(token.total_buy_volume_24h, token.total_sell_volume_24h);
+            const vol24h = token.volume_24h ?? token.volume24h;
+            normalized.volume_24h = sum24h > 0 ? sum24h : (vol24h !== undefined && vol24h !== null ? toNumber(vol24h) : 0);
+            
+            const sum6h = sumVolumes(token.total_buy_volume_6h, token.total_sell_volume_6h);
+            const vol6h = token.volume_6h ?? token.volume6h;
+            normalized.volume_6h = sum6h > 0 ? sum6h : (vol6h !== undefined && vol6h !== null ? toNumber(vol6h) : 0);
+            
+            const sum1h = sumVolumes(token.total_buy_volume_1h, token.total_sell_volume_1h);
+            const vol1h = token.volume_1h ?? token.volume1h;
+            normalized.volume_1h = sum1h > 0 ? sum1h : (vol1h !== undefined && vol1h !== null ? toNumber(vol1h) : 0);
+            
+            const sum5m = sumVolumes(token.total_buy_volume_5m, token.total_sell_volume_5m);
+            const vol5m = token.volume_5m ?? token.volume5m;
+            normalized.volume_5m = sum5m > 0 ? sum5m : (vol5m !== undefined && vol5m !== null ? toNumber(vol5m) : 0);
 
             const normalizePercent = (value: any) => {
               const num = toNumber(value);
@@ -517,6 +545,21 @@ export default function DiscoverPage() {
 
             if (!normalized.created_at && token.launch_time) {
               normalized.created_at = token.launch_time;
+            }
+
+            // CRITICAL: Preserve image fields from API response
+            // The pulse-new endpoint already maps these using extractTokenImage
+            if (token.logo) {
+              normalized.logo = token.logo;
+            }
+            if (token.image) {
+              normalized.image = token.image;
+            }
+            if (token.uri) {
+              normalized.uri = token.uri;
+            }
+            if (token.imageUrl) {
+              normalized.imageUrl = token.imageUrl;
             }
 
             // CRITICAL: Preserve launchpad_protocol for pool type detection
@@ -684,6 +727,294 @@ export default function DiscoverPage() {
     };
   }, []); // Empty deps - only run once on mount, cache prevents re-fetching
 
+  // Fetch xStocks data
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const CACHE_KEY = 'discover_xstocks_cache';
+    const CACHE_TTL = 30 * 1000; // 30 seconds
+    const STALE_THRESHOLD = 60 * 1000; // 60 seconds
+
+    const loadFromCache = (): TokenWithDexPaid[] | null => {
+      try {
+        if (typeof window === 'undefined') return null;
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - parsed.timestamp;
+          if (age < STALE_THRESHOLD) {
+            console.log(`[Discover] Loaded ${parsed.data.length} xStocks from cache (age: ${Math.round(age / 1000)}s)`);
+            return parsed.data;
+          } else {
+            localStorage.removeItem(CACHE_KEY);
+          }
+        }
+      } catch (err) {
+        console.warn('[Discover] Failed to load xStocks cache:', err);
+        localStorage.removeItem(CACHE_KEY);
+      }
+      return null;
+    };
+
+    const saveToCache = (data: TokenWithDexPaid[]) => {
+      try {
+        if (typeof window === 'undefined') return;
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          data,
+          timestamp: Date.now(),
+        }));
+        console.log(`[Discover] Cached ${data.length} xStocks`);
+      } catch (err) {
+        console.warn('[Discover] Failed to save xStocks cache:', err);
+      }
+    };
+
+    const toNumber = (value: any): number => {
+      if (typeof value === 'number') {
+        return Number.isFinite(value) ? value : 0;
+      }
+      if (typeof value === 'string') {
+        const cleaned = value.trim();
+        if (!cleaned || cleaned === '0' || cleaned === 'null') return 0;
+        const parsed = Number(cleaned);
+        return Number.isFinite(parsed) ? parsed : 0;
+      }
+      return 0;
+    };
+
+    const normalizeXStocksToken = (result: any): TokenWithDexPaid => {
+      const token = result.token || {};
+      const pair = result.pair || {};
+
+      // Get image from token.info or token directly
+      const getImage = () => {
+        return token.info?.imageThumbUrl || token.info?.imageSmallUrl || token.info?.imageLargeUrl ||
+               token.imageThumbUrl || token.imageSmallUrl || token.imageLargeUrl ||
+               undefined;
+      };
+
+      const marketCap = toNumber(result.marketCap || '0');
+      const liquidity = toNumber(result.liquidity || '0');
+      
+      // Volume fields - convert strings to numbers
+      const volume24h = toNumber(result.volume24 || '0');
+      const volume12h = toNumber(result.volume12 || '0');
+      const volume4h = toNumber(result.volume4 || '0');
+      const volume1h = toNumber(result.volume1 || '0');
+      const volume5m = toNumber(result.volume5m || '0');
+      
+      // Price change fields - convert strings to numbers
+      const change24h = toNumber(result.change24 || '0');
+      const change12h = toNumber(result.change12 || '0');
+      const change4h = toNumber(result.change4 || '0');
+      const change1h = toNumber(result.change1 || '0');
+      const change5m = toNumber(result.change5m || '0');
+
+      const normalized: Record<string, any> = {
+        mint: token.address || '',
+        name: token.name || '',
+        symbol: token.symbol || '',
+        decimals: token.decimals || 9,
+        networkId: token.networkId || 1399811149,
+        
+        // Market data
+        market_cap_usd: marketCap,
+        fully_diluted_value: marketCap,
+        liquidity_usd: liquidity,
+        total_liquidity_usd: liquidity,
+        price_usd: toNumber(result.priceUSD || '0'),
+        
+        // Volumes
+        volume_24h: volume24h,
+        volume_12h: volume12h,
+        volume_6h: volume4h > 0 ? volume4h : (volume12h / 2), // Use volume4 if available, otherwise estimate from volume12
+        volume_4h: volume4h,
+        volume_1h: volume1h,
+        volume_5m: volume5m,
+        
+        // Price changes
+        price_percent_change_24h: change24h * 100, // Convert to percentage
+        price_percent_change_12h: change12h * 100,
+        price_percent_change_6h: change4h * 100, // Use change4 for 6h
+        price_percent_change_4h: change4h * 100,
+        price_percent_change_1h: change1h * 100,
+        price_percent_change_5m: change5m * 100,
+        
+        // Pair address
+        pair_address: pair.address || token.address || '',
+        created_at: result.createdAt || pair.createdAt || Date.now(),
+        
+        // Protocol - xStocks use Raydium Launchpad
+        protocol: 'Raydium Launchpad',
+        launchpad_protocol: 'Raydium Launchpad',
+        
+        // Image
+        uri: getImage(),
+        logo: getImage(),
+        image: getImage(),
+        imageUrl: getImage(),
+        
+        // Additional fields from xStocks response
+        holders: result.holders || 0,
+        
+        // Transaction counts - map Codex fields to frontend expected format
+        // Codex provides: buyCount1, buyCount4, buyCount12, buyCount24, buyCount5m
+        // Frontend expects: total_buys_1h, total_buys_6h, total_buys_12h, total_buys_24h, total_buys_5m
+        total_buys_1h: toNumber(result.buyCount1 || '0'),
+        total_buys_6h: toNumber(result.buyCount4 || '0'), // Using 4h as approximation for 6h
+        total_buys_12h: toNumber(result.buyCount12 || '0'),
+        total_buys_24h: toNumber(result.buyCount24 || '0'),
+        total_buys_5m: toNumber(result.buyCount5m || '0'),
+        
+        // Same for sells
+        total_sells_1h: toNumber(result.sellCount1 || '0'),
+        total_sells_6h: toNumber(result.sellCount4 || '0'), // Using 4h as approximation for 6h
+        total_sells_12h: toNumber(result.sellCount12 || '0'),
+        total_sells_24h: toNumber(result.sellCount24 || '0'),
+        total_sells_5m: toNumber(result.sellCount5m || '0'),
+        
+        // Total transaction counts for fallback (txnCount = buyCount + sellCount)
+        // These are useful when buyCount/sellCount are 0 but txnCount has data
+        txnCount1h: toNumber(result.txnCount1 || '0'),
+        txnCount6h: toNumber(result.txnCount4 || '0'), // Using 4h as approximation for 6h
+        txnCount12h: toNumber(result.txnCount12 || '0'),
+        txnCount24h: toNumber(result.txnCount24 || '0'),
+        txnCount5m: toNumber(result.txnCount5m || '0'),
+        
+        // Keep original fields for reference and fallback
+        buyCount24: result.buyCount24 || 0,
+        sellCount24: result.sellCount24 || 0,
+        txnCount24: result.txnCount24 || 0,
+      };
+
+      return normalized as TokenWithDexPaid;
+    };
+
+    const fetchXStocks = async (useCache = true, showLoading = false) => {
+      if (cancelled) return;
+
+      if (useCache) {
+        const cached = loadFromCache();
+        if (cached && cached.length > 0) {
+          setXStocksRaw(cached);
+          setXStocksError(null);
+          setXStocksLoading(false);
+          
+          // Refresh in background if stale
+          try {
+            const cachedData = localStorage.getItem(CACHE_KEY);
+            if (cachedData) {
+              const parsed = JSON.parse(cachedData);
+              const age = Date.now() - parsed.timestamp;
+              if (age > CACHE_TTL) {
+                fetchXStocks(false, false).catch(err => {
+                  console.error('[Discover] xStocks background refresh failed:', err);
+                });
+              }
+            }
+          } catch {
+            // Ignore
+          }
+          return;
+        }
+      }
+
+      if (showLoading) {
+        setXStocksLoading(true);
+      }
+
+      try {
+        const response = await fetch(`/api/token-service/xstocks?limit=50`, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            Pragma: 'no-cache',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Request failed with status ${response.status}`);
+        }
+
+        const payload = await response.json();
+        if (cancelled) return;
+
+        // COMMENTED OUT: filterTokens processing temporarily disabled
+        /*
+        if (payload?.filterTokens?.results) {
+          const results = payload.filterTokens.results || [];
+          
+          const normalized = results
+            .filter((result: any) => {
+              const token = result.token;
+              if (!token || !token.address) return false;
+              if (isWrappedSol({ mint: token.address })) return false;
+              
+              // Filter out zero liquidity
+              const liq = toNumber(result.liquidity || '0');
+              if (liq <= 0) return false;
+              
+              return true;
+            })
+            .map(normalizeXStocksToken);
+
+          // Deduplicate by mint
+          const seen = new Set<string>();
+          const deduped = normalized.filter((token: TokenWithDexPaid) => {
+            if (!token.mint || seen.has(token.mint)) return false;
+            seen.add(token.mint);
+            return true;
+          });
+
+          setXStocksRaw(deduped);
+          setXStocksError(null);
+          saveToCache(deduped);
+        }
+        */
+        // Empty response while filterTokens is disabled
+        setXStocksRaw([]);
+        setXStocksError(null);
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Failed to fetch xStocks';
+        setXStocksError(message);
+        console.error('[Discover] Failed to fetch xStocks:', err);
+        
+        if (useCache) {
+          const cached = loadFromCache();
+          if (cached && cached.length > 0) {
+            setXStocksRaw(cached);
+            setXStocksError(null);
+          }
+        }
+      } finally {
+        if (!cancelled && showLoading) {
+          setXStocksLoading(false);
+        }
+      }
+    };
+
+    const hasInitialData = xStocksRaw.length > 0;
+    
+    if (hasInitialData) {
+      setXStocksLoading(false);
+      fetchXStocks(false, false).catch(err => {
+        console.error('[Discover] xStocks background fetch failed:', err);
+      });
+    } else {
+      fetchXStocks(true, true);
+    }
+    
+    intervalId = setInterval(() => fetchXStocks(true, false), 60_000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, []); // Empty deps - only run once on mount
+
   // Debug log to track timeframe changes
   // useEffect(() => {
   //   console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
@@ -755,14 +1086,24 @@ export default function DiscoverPage() {
   };
 
   // Helper to compute volume by timeframe for sorting in trending view
+  // Checks direct volume field first, then calculates from buy/sell volumes
   const getVolumeForTimeframe = useCallback((t: any, tf: Timeframe) => {
-    const v = t?.[`volume_${tf}`];
-    if (typeof v === 'number') return v;
-    if (typeof v === 'string' && v.trim() !== '') {
-      const n = parseFloat(v);
-      return isNaN(n) ? 0 : n;
+    // Try direct volume field first
+    let vol = t?.[`volume_${tf}`];
+    if (typeof vol === 'number' && vol > 0) return vol;
+    if (typeof vol === 'string' && vol.trim() !== '') {
+      const n = parseFloat(vol);
+      if (!isNaN(n) && n > 0) return n;
     }
-    return 0;
+    
+    // If volume is 0 or missing, try calculating from buy/sell volumes
+    const buyVol = t?.[`total_buy_volume_${tf}`];
+    const sellVol = t?.[`total_sell_volume_${tf}`];
+    const buyNum = typeof buyVol === 'number' ? buyVol : (typeof buyVol === 'string' ? parseFloat(buyVol) || 0 : 0);
+    const sellNum = typeof sellVol === 'number' ? sellVol : (typeof sellVol === 'string' ? parseFloat(sellVol) || 0 : 0);
+    const sum = buyNum + sellNum;
+    
+    return sum > 0 ? sum : 0;
   }, []);
 
   // Map AMM IDs to protocol patterns (same logic as PulseTable)
@@ -864,6 +1205,19 @@ export default function DiscoverPage() {
     return filtered;
   }, [localFilters, selectedTimeframe, getVolumeForTimeframe, mapAmmToProtocolPatterns]);
 
+  // Count active filters for badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (localFilters.amms && localFilters.amms.length > 0) count += localFilters.amms.length;
+    if (localFilters.searchKeywords?.trim()) count++;
+    if (localFilters.excludeKeywords?.trim()) count++;
+    if (localFilters.dexPaid) count++;
+    if (localFilters.marketCapMin || localFilters.marketCapMax) count++;
+    if (localFilters.volumeMin || localFilters.volumeMax) count++;
+    if (localFilters.liquidityMin || localFilters.liquidityMax) count++;
+    return count;
+  }, [localFilters]);
+
   // Sorting handler
   const handleSort = (key: typeof sortKey) => {
     if (sortKey === key) {
@@ -961,13 +1315,19 @@ export default function DiscoverPage() {
       // Final filter before setting displayed - also deduplicate by mint/address
       const finalSafe = sortedTokens.filter(t => t && t.mint && !isWrappedSol(t));
       
+      // Filter out tokens with no image on trending tab
+      const withImages = finalSafe.filter((t: any) => {
+        const hasImage = t?.uri || t?.logo || t?.image || t?.imageUrl;
+        return hasImage && hasImage !== '' && hasImage !== 'null' && hasImage !== null;
+      });
+      
       // CRITICAL: Deduplicate using Set to track seen mints AND addresses
       // This prevents duplicate wrapped SOL with different pair_addresses
       const seenAddresses = new Set<string>();
       const seenMints = new Set<string>();
       const uniqueSafe: TokenWithDexPaid[] = [];
       
-      for (const token of finalSafe) {
+      for (const token of withImages) {
         const mint = token.mint;
         const address = token.pair_address;
         
@@ -1009,6 +1369,24 @@ export default function DiscoverPage() {
       // Filter out Meteora tokens from new pairs
       const protocol = ((token as any).launchpad_protocol || (token as any).launchpadProtocol || (token as any).protocol || '').toLowerCase();
       if (protocol.includes('meteora')) {
+        return false;
+      }
+      // Filter out tokens with 0 liquidity
+      const liquidity = Number((token as any).total_liquidity_usd || (token as any).liquidity_usd || 0);
+      if (liquidity <= 0) {
+        return false;
+      }
+      // Filter out tokens with 0 volume - check all timeframes
+      const hasVolume = ['1h', '6h', '24h', '5m'].some(tf => {
+        const vol = getVolumeForTimeframe(token, tf as Timeframe);
+        return vol > 0;
+      });
+      if (!hasVolume) {
+        return false;
+      }
+      // Filter out tokens with no image
+      const hasImage = (token as any)?.uri || (token as any)?.logo || (token as any)?.image || (token as any)?.imageUrl;
+      if (!hasImage || hasImage === '' || hasImage === 'null' || hasImage === null) {
         return false;
       }
       return true;
@@ -1073,6 +1451,75 @@ export default function DiscoverPage() {
     [processedNewPairs]
   );
 
+  // Process xStocks data similar to newPairs
+  const processedXStocks = useMemo(() => {
+    if (!xStocksRaw || xStocksRaw.length === 0) {
+      return [] as TokenWithDexPaid[];
+    }
+
+    const base = xStocksRaw.filter((token) => {
+      if (!token || !token.mint || isWrappedSol(token)) {
+        return false;
+      }
+      // Filter out tokens with 0 liquidity
+      const liquidity = Number((token as any).total_liquidity_usd || (token as any).liquidity_usd || 0);
+      if (liquidity <= 0) {
+        return false;
+      }
+      return true;
+    });
+
+    // Apply filters
+    const filtered = applyFilters(base);
+
+    // Sort tokens
+    const sortedTokens = [...filtered].sort((a, b) => {
+      let aVal = 0, bVal = 0;
+      if (sortKey === 'volume') {
+        aVal = getVolumeForTimeframe(a, selectedTimeframe);
+        bVal = getVolumeForTimeframe(b, selectedTimeframe);
+      } else if (sortKey === 'liquidity' || sortKey === 'total_liquidity_usd') {
+        aVal = Number((a as any).total_liquidity_usd) || 0;
+        bVal = Number((b as any).total_liquidity_usd) || 0;
+      } else if (sortKey === 'market_cap_total' || sortKey === 'fully_diluted_value') {
+        aVal = Number((a as any).fully_diluted_value) || 0;
+        bVal = Number((b as any).fully_diluted_value) || 0;
+      } else {
+        aVal = Number((a as any)[sortKey]) || 0;
+        bVal = Number((b as any)[sortKey]) || 0;
+      }
+      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+
+    // Deduplicate
+    const seenMints = new Set<string>();
+    const seenAddresses = new Set<string>();
+    const unique: TokenWithDexPaid[] = [];
+
+    for (const token of sortedTokens) {
+      const mint = token?.mint;
+      const address = (token as any)?.pair_address;
+
+      if (mint && seenMints.has(mint)) continue;
+      if (address && seenAddresses.has(address)) continue;
+
+      if (mint) seenMints.add(mint);
+      if (address) seenAddresses.add(address);
+      unique.push(token);
+    }
+
+    return unique;
+  }, [xStocksRaw, applyFilters, getVolumeForTimeframe, isWrappedSol, sortDirection, sortKey, selectedTimeframe]);
+
+  const xStocksRows = useMemo(
+    () =>
+      processedXStocks.map((token, index) => ({
+        token,
+        i: index,
+      })),
+    [processedXStocks]
+  );
+
   const renderPrimaryTable = () => {
     if (displayed.length > 0) {
       return (
@@ -1119,7 +1566,7 @@ export default function DiscoverPage() {
     }
 
     if (tokenError) {
-      return <div className="py-10 text-center text-red-400">{tokenError}</div>;
+      return <div className="py-10 text-center" style={{ color: '#f26681' }}>{tokenError}</div>;
     }
 
     return <div className="py-10 text-center text-[#9CA3AF]">No tokens found.</div>;
@@ -1264,43 +1711,56 @@ export default function DiscoverPage() {
         <link rel="preload" as="image" href="/placeholder/fallback-avatar.jpg" />
       </Head>
 
-      <div className="min-h-screen text-[#E6E7EA] relative" style={{ backgroundColor: '#06070b' }}>
+      <div className="min-h-screen text-[#E6E7EA] relative" style={{ backgroundColor: '#111214' }}>
         {/* Header */}
-        <div style={{ position: 'relative', zIndex: 100 }}>
+        <div className='relative' style={{ zIndex: 100 }}>
           <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
         </div>
 
         {/* Tab Navigation */}
-        <div className="mx-auto my-4 flex flex-row items-center justify-between gap-6 px-8 max-w-[98%]">
-          <div className="flex max-w-7xl items-center gap-6">
-             <button
-              className={`text-lg font-light transition-colors ${activeTab === "trending" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+        <div className="my-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-6 px-4 sm:px-6 lg:px-8">
+          {/* Tabs Section - Scrollable on mobile */}
+          <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 overflow-x-auto scrollbar-hide pb-2 lg:pb-0 -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+            <button
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
             <button
-              className={`text-lg font-light transition-colors ${activeTab === "newPairs" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "newPairs" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("newPairs")}
             >
               New Pairs
             </button>
+            <button
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              onClick={() => setActiveTab("xStocks")}
+            >
+              xStocks
+            </button>
+            <button
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              onClick={() => setActiveTab("surge")}
+            >
+              Surge
+            </button>
+            <button
+              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "live" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              onClick={() => setActiveTab("live")}
+            >
+              Pump Live
+            </button>
             {/* <button
-              className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
+              className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("dex")}
             >
               DEX Screener
             </button> */}
-            {/* <button
-              className={`text-lg font-light transition-colors ${activeTab === "live" ? "text-white" : "text-[#6B7280] hover:text-white"} cursor-pointer`}
-              onClick={() => setActiveTab("live")}
-            >
-              Pump Live
-            </button> */}
           </div>
 
-          {/* Right controls (unchanged) */}
-          <div className="flex flex-row items-center gap-4">
+          {/* Right controls - Stack on mobile, row on desktop */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-4">
             {/* Connection status - commented out per user request */}
             {/* <div className="flex items-center gap-2">
               <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-400' : usingFallback ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
@@ -1309,170 +1769,202 @@ export default function DiscoverPage() {
               </span>
             </div> */}
 
-            {/* Timeframes - hide when on live tab */}
-            {activeTab !== 'live' && activeTab !== 'newPairs' && (
-              <div className="flex max-w-7xl items-center gap-3 text-sm font-medium">
+            {/* Timeframes - hide when on live tab, new pairs, xStocks, or surge */}
+            {activeTab !== 'live' && activeTab !== 'newPairs' && activeTab !== 'xStocks' && activeTab !== 'surge' && (
+              <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border relative"
+                   style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '130px', width: '130px', height: '28px' }}>
                 {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
-                  <button
-                    key={tf}
-                    className={(selectedTimeframe === tf ? "text-white " : "text-[#9CA3AF] hover:text-white ") + "cursor-pointer transition-colors"}
-                    onClick={() => handleTimeframeClick(tf)}
-                  >
-                    {tf}
-                  </button>
+                  <div key={tf} className="relative flex items-center justify-center">
+                    <button
+                      className="px-1 text-sm font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded whitespace-nowrap"
+                      style={{
+                        paddingTop: '2px',
+                        paddingBottom: '2px',
+                        backgroundColor: selectedTimeframe === tf 
+                          ? 'rgba(24, 196, 140, 0.15)' 
+                          : 'rgba(22, 23, 28, 0.6)',
+                        color: selectedTimeframe === tf ? '#f0f5f5' : ''
+                      }}
+                      onClick={() => handleTimeframeClick(tf)}
+                      onMouseEnter={(e) => {
+                        if (selectedTimeframe !== tf) {
+                          e.currentTarget.style.color = '#f0f5f5';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedTimeframe !== tf) {
+                          e.currentTarget.style.color = '';
+                        }
+                      }}
+                    >
+                      {tf}
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
 
             {/* Filter button - hidden when in Live Pump tab */}
             {activeTab !== 'live' && (
-              <div className="relative">
+              <div className="hidden sm:flex items-center justify-center rounded-md px-1.5 gap-1 border relative"
+                   style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '85px', width: '85px', height: '28px' }}>
                 <button
-                  className="flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-full transition-all duration-300 ease-out cursor-pointer relative mr-2 bg-[#17191E] border border-[#2A2B33] text-[#9CA3AF] hover:text-[#E6E7EA]"
+                  className="flex items-center justify-between w-full h-full transition-all duration-200 cursor-pointer relative"
                   onClick={() => setIsFilterPopoutOpen(true)}
+                  onMouseEnter={(e) => {
+                    const text = e.currentTarget.querySelector('span');
+                    const icon = e.currentTarget.querySelector('svg');
+                    if (text) text.style.color = '#f0f5f5';
+                    if (icon) icon.style.color = '#f0f5f5';
+                  }}
+                  onMouseLeave={(e) => {
+                    const text = e.currentTarget.querySelector('span');
+                    const icon = e.currentTarget.querySelector('svg');
+                    const activeColor = isFilterPopoutOpen ? '#526fff' : '#9CA3AF';
+                    if (text) text.style.color = activeColor;
+                    if (icon) icon.style.color = activeColor;
+                  }}
                 >
-                  {/* filter glyph */}
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="4" y1="6" x2="20" y2="6"/><circle cx="8" cy="6" r="2"/>
-                    <line x1="4" y1="12" x2="20" y2="12"/><circle cx="16" cy="12" r="2"/>
-                    <line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="18" r="2"/>
-                  </svg>
-                  <span className="font-medium text-sm">Filter</span>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
+                  <span 
+                    className="text-sm font-medium"
+                    style={{ color: isFilterPopoutOpen ? '#526fff' : '#9CA3AF' }}
+                  >
+                    Filter
+                  </span>
+                  <BsSliders2 
+                    size={14} 
+                    style={{ color: isFilterPopoutOpen ? '#526fff' : '#9CA3AF' }}
+                  />
+                  
+                  {/* Active Filter Count Badge */}
+                  {activeFilterCount > 0 && (
+                    <span 
+                      className="absolute -top-1 -right-1 text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
+                      style={{ backgroundColor: '#85d99f', color: '#f0f5f5', fontSize: '10px' }}
+                    >
+                      {activeFilterCount}
+                    </span>
+                  )}
                 </button>
               </div>
             )}
 
-            {/* Quick Buy - Same as PulseTable */}
-            <div className="flex items-center justify-center rounded-full px-3 py-1.5 gap-2 border bg-[#17191E]"
-                 style={{ borderColor: '#2A2B33' }}>
-              {/* Amount - Editable */}
-              <div className="flex items-center justify-center gap-1">
-                <HiLightningBolt size={12} style={{ color: '#22C55E' }} />
-                <input
-                  type="text"
-                  value={quickBuyAmount}
-                  inputMode="decimal"
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Allow only digits and at most one decimal point
-                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                      setQuickBuyAmount(value);
-                      const numValue = Number(value) || 0;
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('quickBuyAmount', numValue.toString());
-                      }
+            {/* Thunder Icon and Amount Entry - Separate Thin Box */}
+            <div className="hidden sm:flex items-center justify-center rounded-md px-1.5 gap-1 border"
+                 style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '85px', width: '85px', height: '28px' }}>
+              <HiLightningBolt size={14} style={{ color: '#31e3ac' }} />
+              <input
+                type="text"
+                value={quickBuyAmount}
+                inputMode="decimal"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // Allow only digits and at most one decimal point
+                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                    setQuickBuyAmount(value);
+                    const numValue = Number(value) || 0;
+                    if (typeof window !== 'undefined') {
+                      localStorage.setItem('quickBuyAmount', numValue.toString());
                     }
-                  }}
-                  onKeyDown={(e) => {
-                    // Block non-numeric keys except control/navigation keys and '.'
-                    const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
-                    if (allowedKeys.includes(e.key)) return;
-                    if (e.key === '.') return;
-                    if (!/^[0-9]$/.test(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  className="bg-transparent border-none outline-none text-xs font-medium w-10 text-center"
-                  style={{ color: '#E6E7EA' }}
-                />
-              </div>
-              
-              {/* Solana Symbol */}
-              <div className="flex items-center justify-center">
-                <svg width="12" height="12" viewBox="0 0 397.7 311.7" fill="none">
-                  <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z" fill="url(#paint0_linear_solana_discover)"/>
-                  <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="url(#paint1_linear_solana_discover)"/>
-                  <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="url(#paint2_linear_solana_discover)"/>
-                  <defs>
-                    <linearGradient id="paint0_linear_solana_discover" x1="360.8" y1="351.5" x2="141.44" y2="132.14" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                    <linearGradient id="paint1_linear_solana_discover" x1="264.8" y1="116.2" x2="45.44" y2="-103.16" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                    <linearGradient id="paint2_linear_solana_discover" x1="312.5" y1="233.9" x2="93.14" y2="14.54" gradientUnits="userSpaceOnUse">
-                      <stop offset="0" stopColor="#00FFA3"/>
-                      <stop offset="1" stopColor="#DC1FFF"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-              
-              {/* Separator */}
-              <div className="w-px h-4 bg-gray-600"></div>
-              
-              {/* P1 P2 P3 Pill - Simple Toggle */}
-              <div className="flex items-center justify-center gap-1 relative">
-                {['P1', 'P2', 'P3'].map((pill) => {
-                  const presetIndex = parseInt(pill.replace('P', '')) - 1;
-                  const preset = presets[presetIndex];
-                  const settings = preset?.quickBuySettings;
-                  
-                  return (
-                    <div key={pill} className="relative flex items-center justify-center">
-                      <button
-                        className={`px-1.5 py-0.5 text-xs font-medium transition-all duration-200 cursor-pointer flex items-center justify-center ${
-                          selectedPill === pill ? 'text-green-400' : 'text-gray-400 hover:text-white'
-                        }`}
-                        onClick={() => {
-                          setSelectedPill(pill);
-                          setActivePreset(presetIndex); // Also update global preset for consistency
-                          console.log(`Selected ${pill} in discover page`);
-                        }}
-                        onMouseEnter={() => setShowPillTooltip(pill)}
-                        onMouseLeave={() => setShowPillTooltip(null)}
-                      >
-                        {pill}
-                      </button>
-                      
-                      {/* Tooltip for each pill */}
-                      {showPillTooltip === pill && settings && (
-                        <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
-                             style={{ 
-                               backgroundColor: 'rgba(15, 16, 18, 0.95)',
-                               borderColor: '#2A2B33' 
-                             }}>
-                          <div className="p-2 space-y-1.5">
-                            {/* Slippage - Running person icon */}
-                            <div className="flex items-center gap-1.5">
-                              <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '1' }} />
-                              <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
-                            </div>
-                            
-                            {/* Priority Fee - Gas pump icon with yellow styling */}
-                            <div className="flex items-center gap-1.5">
-                              <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                              <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
-                              <span className="text-red-500 text-xs font-light">⚠</span>
-                            </div>
-                            
-                            {/* Bribe - Coins icon with yellow styling */}
-                            <div className="flex items-center gap-1.5">
-                              <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '1' }} />
-                              <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
-                              <span className="text-red-500 text-xs font-light">⚠</span>
-                            </div>
-                            
-                            {/* MEV Protection - Ban icon */}
-                            <div className="flex items-center gap-1.5">
-                              <FaBan size={10} className="opacity-90" style={{ strokeWidth: '1' }} />
-                              <span className="text-gray-300 text-xs font-light">
-                                {settings.mevMode === 'off' ? 'Off' : 
-                                 settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
-                              </span>
-                            </div>
+                  }
+                }}
+                onKeyDown={(e) => {
+                  // Block non-numeric keys except control/navigation keys and '.'
+                  const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
+                  if (allowedKeys.includes(e.key)) return;
+                  if (e.key === '.') return;
+                  if (!/^[0-9]$/.test(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
+                className="bg-transparent border-none outline-none text-sm font-medium w-12 text-center"
+                style={{ color: '#f0f5f5' }}
+              />
+            </div>
+            
+            {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
+            <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border relative"
+                 style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '100px', width: '100px', height: '28px' }}>
+              {['P1', 'P2', 'P3'].map((pill) => {
+                const presetIndex = parseInt(pill.replace('P', '')) - 1;
+                const preset = presets[presetIndex];
+                const settings = preset?.quickBuySettings;
+                
+                return (
+                  <div key={pill} className="relative flex items-center justify-center">
+                    <button
+                      className="px-1 text-sm font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded"
+                      style={{
+                        paddingTop: '2px',
+                        paddingBottom: '2px',
+                        backgroundColor: selectedPill === pill 
+                          ? 'rgba(24, 196, 140, 0.15)' 
+                          : 'rgba(22, 23, 28, 0.6)',
+                        color: selectedPill === pill ? '#f0f5f5' : ''
+                      }}
+                      onClick={() => {
+                        setSelectedPill(pill);
+                        setActivePreset(presetIndex); // Also update global preset for consistency
+                        console.log(`Selected ${pill} in discover page`);
+                      }}
+                      onMouseEnter={(e) => {
+                        if (selectedPill !== pill) {
+                          e.currentTarget.style.color = '#f0f5f5';
+                        }
+                        setShowPillTooltip(pill);
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedPill !== pill) {
+                          e.currentTarget.style.color = '';
+                        }
+                        setShowPillTooltip(null);
+                      }}
+                    >
+                      {pill}
+                    </button>
+                    
+                    {/* Tooltip for each pill */}
+                    {showPillTooltip === pill && settings && (
+                      <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
+                           style={{ 
+                             backgroundColor: 'rgba(15, 16, 18, 0.95)',
+                             borderColor: '#24252C' 
+                           }}>
+                        <div className="p-2 space-y-1.5">
+                          {/* Slippage - Running person icon */}
+                          <div className="flex items-center gap-1.5">
+                            <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '2' }} />
+                            <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
+                          </div>
+                          
+                          {/* Priority Fee - Gas pump icon with yellow styling */}
+                          <div className="flex items-center gap-1.5">
+                            <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '2' }} />
+                            <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
+                            <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
+                          </div>
+                          
+                          {/* Bribe - Coins icon with yellow styling */}
+                          <div className="flex items-center gap-1.5">
+                            <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '2' }} />
+                            <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
+                            <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
+                          </div>
+                          
+                          {/* MEV Protection - Ban icon */}
+                          <div className="flex items-center gap-1.5">
+                            <FaBan size={10} className="opacity-90" style={{ strokeWidth: '2' }} />
+                            <span className="text-gray-300 text-xs font-light">
+                              {settings.mevMode === 'off' ? 'Off' : 
+                               settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
+                            </span>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1488,7 +1980,7 @@ export default function DiscoverPage() {
         )}
 
         {/* Main Content */}
-        <main className="mx-auto px-8 pb-10 max-w-[98%]">
+        <main className="w-full">
           {activeTab === 'live' ? (
             pumpPortalTokens.length > 0 ? (
               <PumpLive
@@ -1544,7 +2036,7 @@ export default function DiscoverPage() {
                 Waiting for live tokens...
               </div>
             ) : !pumpPortalConnected && pumpPortalError ? (
-              <div className="py-10 text-center text-red-400">
+              <div className="py-10 text-center" style={{ color: '#f26681' }}>
                 Connection error: {pumpPortalError}
               </div>
             ) : (
@@ -1556,14 +2048,13 @@ export default function DiscoverPage() {
             )
           ) : activeTab === 'newPairs' ? (
             <section aria-label="New Pairs">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white">New Pairs</h2>
+              {/* <div className="mb-4 flex items-center justify-between">
                 {newPairsLoading && (
                   <span className="text-xs font-medium text-[#9CA3AF]">
                     Updating…
                   </span>
                 )}
-              </div>
+              </div> */}
 
               {newPairsLoading && processedNewPairs.length === 0 && newPairsRaw.length === 0 ? (
                 <div className="space-y-4">
@@ -1572,7 +2063,7 @@ export default function DiscoverPage() {
                   ))}
                 </div>
               ) : newPairsError ? (
-                <div className="py-10 text-center text-red-400">
+                <div className="py-10 text-center" style={{ color: '#f26681' }}>
                   {newPairsError}
                 </div>
               ) : processedNewPairs.length > 0 ? (
@@ -1590,6 +2081,57 @@ export default function DiscoverPage() {
                   No new pairs available right now. Check back shortly.
                 </div>
               )}
+            </section>
+          ) : activeTab === 'xStocks' ? (
+            <section aria-label="xStocks" className="pb-8">
+              {xStocksLoading && processedXStocks.length === 0 && xStocksRaw.length === 0 ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
+                  ))}
+                </div>
+              ) : xStocksError && processedXStocks.length === 0 ? (
+                <div className="py-10 text-center text-[#f26681]">
+                  Error loading xStocks: {xStocksError}
+                </div>
+              ) : processedXStocks.length > 0 ? (
+                <InterstateTable
+                  rows={xStocksRows}
+                  onQuickBuy={handleQuickBuy}
+                  sortKey={sortKey}
+                  sortDirection={sortDirection}
+                  setSort={handleSort}
+                  selectedTimeframe={selectedTimeframe}
+                  quickBuyAmount={Number(quickBuyAmount) || 0}
+                />
+              ) : (
+                <div className="py-10 text-center text-[#9CA3AF]">
+                  No xStocks available right now. Check back shortly.
+                </div>
+              )}
+            </section>
+          ) : activeTab === 'surge' ? (
+            <section aria-label="Surge">
+              {/* <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-[#f0f5f5]">Surge</h2>
+              </div> */}
+              
+              {/* Placeholder for Surge data - replace with actual data source */}
+              <div className="py-10 text-center text-[#9CA3AF]">
+                Surge data coming soon. Connect your data source here.
+              </div>
+              
+              {/* When you have Surge data, use InterstateTable like this:
+              <InterstateTable
+                rows={surgeRows}
+                onQuickBuy={handleQuickBuy}
+                sortKey={sortKey}
+                sortDirection={sortDirection}
+                setSort={handleSort}
+                selectedTimeframe={selectedTimeframe}
+                quickBuyAmount={Number(quickBuyAmount) || 0}
+              />
+              */}
             </section>
           ) : (
             renderPrimaryTable()

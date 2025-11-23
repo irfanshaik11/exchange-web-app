@@ -37,7 +37,7 @@ const AX = {
   surface: "#1E1F26",
   surface2: "#17191E",
   border: "#2A2B33",
-  text: "#E6E7EA",
+  text: "#f0f5f5",
   muted: "#9CA3AF",
   mint: "#70E0B0",
   mintHover: "#58B890",
@@ -99,7 +99,26 @@ export default function TradePage() {
   const [search, setSearch] = useState("");
   const [showMobileTradeModal, setShowMobileTradeModal] = useState(false);
   const [isClosingModal, setIsClosingModal] = useState(false);
-  const [isInstantTradeOpen, setIsInstantTradeOpen] = useState(false);
+  
+  // Load instant trade open state from localStorage
+  const getInitialInstantTradeState = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const saved = localStorage.getItem('instant-trade-popup-open');
+      return saved === 'true';
+    } catch {
+      return false;
+    }
+  };
+  
+  const [isInstantTradeOpen, setIsInstantTradeOpen] = useState(getInitialInstantTradeState);
+  
+  // Save instant trade open state to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('instant-trade-popup-open', String(isInstantTradeOpen));
+    }
+  }, [isInstantTradeOpen]);
 
   const modalDragRef = useRef<HTMLDivElement | null>(null);
   const dragStartY = useRef(0);
@@ -505,7 +524,7 @@ export default function TradePage() {
         style={{ 
           backgroundColor: "#0f1012", 
           color: AX.text, 
-          fontFamily: "Inter, ui-sans-serif, system-ui",
+          fontFamily: "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Inter\", system-ui, sans-serif",
         }}
       >
         {/* Top global header */}

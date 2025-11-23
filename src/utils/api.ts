@@ -133,7 +133,7 @@ async function apiFetch<T = unknown>(
         // Suppress console.error for expected validation errors to prevent Next.js dev overlay
         const EXPECTED_ERROR_CODES = [
           'NO_HOLDINGS', 'INSUFFICIENT_BALANCE', 'VALIDATION_ERROR',
-          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED', 'METEORA_NO_LIQUIDITY', 'TURNKEY_NOT_SUPPORTED'
+          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED', 'METEORA_NO_LIQUIDITY', 'TURNKEY_NOT_SUPPORTED', 'TOKEN_NOT_SUPPORTED'
         ];
         if (EXPECTED_ERROR_CODES.includes(code)) {
           // Mark as expected error (won't trigger Next.js error overlay in dev)
@@ -332,6 +332,8 @@ export const getLimitOrderExecutionResult = (
 interface WithdrawParams {
   amount: number;
   destinationAddress: string;
+  sourceAddress?: string;
+  chain?: string;
 }
 
 export const withdrawSOL = (params: WithdrawParams, authToken: string) =>
@@ -367,10 +369,27 @@ export const getWithdrawalHistory = (authToken: string) =>
     authToken,
   });
 
-export const getWithdrawalFee = () =>
-  apiFetch<{ fee: number; rentExemptMinimum: number; fallbackFee: number; minimumReserve: number }>("/api/users/withdrawal-fee", {
-    method: "GET",
-  });
+export const getWithdrawalFee = async (chain?: string) => {
+  const query = chain ? `?chain=${encodeURIComponent(chain)}` : "";
+  try {
+    return await apiFetch<{
+      fee: number;
+      rentExemptMinimum: number;
+      fallbackFee: number;
+      minimumReserve: number;
+    }>(`/api/users/withdrawal-fee${query}`, {
+      method: "GET",
+    });
+  } catch (error) {
+    console.warn("Using fallback withdrawal fee (endpoint unavailable).", error);
+    return {
+      fee: 0.0005,
+      rentExemptMinimum: 0,
+      fallbackFee: 0,
+      minimumReserve: 0,
+    };
+  }
+};
 
 export const updateLimitOrder = (
   params: UpdateLimitOrderParams,
@@ -449,6 +468,8 @@ export const completeAllQuests = (params: {
   userId?: number;
   walletId?: string;
   telegramId?: string;
+  twitterId?: string;
+  twitterUsername?: string;
 }) =>
   apiFetch<{ waitlist: {
     id: number;
@@ -456,6 +477,8 @@ export const completeAllQuests = (params: {
     walletId?: string | null;
     waitlistNumber: string; // bigint as string
     telegramId?: string | null;
+    twitterId?: string | null;
+    twitterUsername?: string | null;
     status: 'waiting' | 'invited' | 'activated' | 'removed';
     joinedAt: string;
     invitedAt?: string | null;
@@ -697,4 +720,3 @@ export const getTokenHolders = async (
 };
 
 export { apiFetch };
-

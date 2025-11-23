@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Head from "next/head";
+import { useRouter } from "next/router";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import Positions from "../components/trade/Positions";
@@ -16,6 +17,8 @@ import { formatSmartNumber } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
 import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
+import toast from "react-hot-toast";
+import { FiEdit2, FiCheck, FiX } from "react-icons/fi";
 
 // Stacked Token Boxes Component
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
@@ -39,7 +42,7 @@ const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
           />
         ))}
       </div>
-      <span className="text-sm text-white">{count}</span>
+      <span className="text-sm text-[#f0f5f5]">{count}</span>
     </div>
   </InterstateTooltip>
 );
@@ -68,6 +71,61 @@ interface TokenMetadataCache {
   timestamp: number; // When it was cached
 }
 
+interface UserWallet {
+  id: string;
+  label: string;
+  address: string;
+  solanaAddress: string;
+  ethereumAddress: string;
+  balance: number;
+  holdingsCount: number;
+  isArchived?: boolean;
+  isPrimary?: boolean;
+}
+
+const normalizeWalletFromApi = (
+  wallet: any,
+  fallbackIndex?: number
+): UserWallet => {
+  const solanaAddress =
+    typeof wallet?.solanaAddress === "string" && wallet.solanaAddress.length > 0
+      ? wallet.solanaAddress
+      : typeof wallet?.address === "string"
+      ? wallet.address
+      : "";
+  const ethereumAddress =
+    typeof wallet?.ethereumAddress === "string" && wallet.ethereumAddress.length > 0
+      ? wallet.ethereumAddress
+      : "";
+  const resolvedAddress = solanaAddress || ethereumAddress || "";
+  let label = typeof wallet?.label === "string" ? wallet.label : undefined;
+  if (!label) {
+    if (typeof fallbackIndex === "number") {
+      label = fallbackIndex === 0 ? "Narrative Main" : `Wallet ${fallbackIndex + 1}`;
+    } else {
+      label = "Wallet";
+    }
+  }
+  return {
+    id: wallet?.id ?? "",
+    label,
+    address: resolvedAddress,
+    solanaAddress: solanaAddress,
+    ethereumAddress,
+    balance: typeof wallet?.balance === "number" ? wallet.balance : 0,
+    holdingsCount: typeof wallet?.holdingsCount === "number" ? wallet.holdingsCount : 0,
+    isArchived: Boolean(wallet?.isArchived),
+    isPrimary: Boolean(wallet?.isPrimary),
+  };
+};
+
+const getAddressForChain = (wallet: UserWallet, chain: string) => {
+  if (chain === "sol") {
+    return wallet.solanaAddress || wallet.address || "";
+  }
+  return wallet.ethereumAddress || wallet.solanaAddress || wallet.address || "";
+};
+
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const CACHE_KEY = "tokenMetadataCache";
 
@@ -75,7 +133,9 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance } = useUser();
+  const router = useRouter();
+  const currentChain = (router.query.chain as string) || "sol";
   const [walletChecked, setWalletChecked] = useState(false);
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [loadingTradeHistory, setLoadingTradeHistory] = useState(true);
@@ -95,6 +155,20 @@ export default function PortfolioPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
   const [solPrice, setSolPrice] = useState(0);
+  const [wallets, setWallets] = useState<UserWallet[]>([]);
+  const [loadingWallets, setLoadingWallets] = useState(false);
+  const [creatingWallet, setCreatingWallet] = useState(false);
+  const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
+  const [walletRenameValue, setWalletRenameValue] = useState("");
+  const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+
+  const notifyWalletsUpdated = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("wallets-updated"));
+    }
+  };
+
 
   // Shared token metadata cache across all tabs
   const [tokenMetadataCache, setTokenMetadataCache] =
@@ -681,6 +755,282 @@ export default function PortfolioPage() {
     document.body.removeChild(link);
   };
 
+  const fetchWallets = useCallback(async () => {
+    if (!user?.id) {
+      setWallets([]);
+      return;
+    }
+
+    setLoadingWallets(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch wallets: ${res.status}`);
+      }
+
+      const data = await res.json();
+      const mappedWallets: UserWallet[] = Array.isArray(data.wallets)
+        ? data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
+        : [];
+
+      setWallets(mappedWallets);
+      setWalletBalances(Object.fromEntries(mappedWallets.map((w) => [w.id, w.balance])));
+      notifyWalletsUpdated();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load wallets");
+    } finally {
+      setLoadingWallets(false);
+    }
+  }, [user?.id, user?.bearerToken]);
+
+  // Refresh only the selected primary wallet balance for the current chain
+  useEffect(() => {
+    if (!user || wallets.length === 0) {
+      return;
+    }
+
+    const primaryWallet =
+      wallets.find((w) => w.isPrimary) ?? wallets[0] ?? null;
+    if (!primaryWallet) return;
+
+    const address =
+      currentChain === "sol"
+        ? primaryWallet.solanaAddress || primaryWallet.address
+        : primaryWallet.ethereumAddress || null;
+    if (!address) return;
+
+    let cancelled = false;
+    const refreshPrimary = async () => {
+      const result = await refreshBalance({
+        chain: currentChain,
+        address,
+      });
+      if (!cancelled && result?.balance !== undefined) {
+        setWalletBalances((prev) => ({
+          ...prev,
+          [primaryWallet.id]: result.balance,
+        }));
+      }
+    };
+
+    refreshPrimary();
+    const interval = setInterval(refreshPrimary, 12000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user?.id, wallets, currentChain, refreshBalance]);
+
+  useEffect(() => {
+    fetchWallets();
+  }, [fetchWallets]);
+
+    const handleCreateWallet = async () => {
+    if (!user?.id) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    setCreatingWallet(true);
+    try {
+      // POST to your backend which does:
+      // - create Turnkey sub-org / wallet for this user
+      // - persist wallet to DB
+      // - return the new wallet with balance = 0 (or computed)
+      const res = await fetch(
+  `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${user.bearerToken}`,
+    },
+    body: JSON.stringify({
+      userId: user.id,
+      // you can optionally send: label, chain, etc.
+    }),
+  }
+);
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        throw new Error(`Failed to create wallet: ${res.status} ${errorText}`);
+      }
+
+      const createdRaw = await res.json();
+      const newWalletData = createdRaw?.wallet ?? createdRaw;
+
+      setWallets((prev) => {
+        const nextIndex = prev.length;
+        const newWallet = normalizeWalletFromApi(newWalletData, nextIndex);
+        return [...prev, newWallet];
+      });
+      notifyWalletsUpdated();
+      await fetchWallets();
+
+      toast.success("New wallet created");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not create wallet");
+    } finally {
+      setCreatingWallet(false);
+    }
+  };
+
+  const handleBeginRenameWallet = (wallet: UserWallet) => {
+    setEditingWalletId(wallet.id);
+    setWalletRenameValue(wallet.label || "");
+  };
+
+  const handleCancelRenameWallet = () => {
+    setEditingWalletId(null);
+    setWalletRenameValue("");
+    setRenamingWalletId(null);
+  };
+
+  const handleRenameWallet = async () => {
+    if (!editingWalletId || !user?.bearerToken) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    const trimmed = walletRenameValue.trim();
+    if (!trimmed) {
+      toast.error("Wallet name cannot be empty");
+      return;
+    }
+
+    const currentLabel =
+      wallets.find((wallet) => wallet.id === editingWalletId)?.label ?? "";
+    if (trimmed === currentLabel.trim()) {
+      handleCancelRenameWallet();
+      return;
+    }
+
+    try {
+      setRenamingWalletId(editingWalletId);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet/${editingWalletId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+          body: JSON.stringify({
+            label: trimmed,
+            userId: user.id,
+            walletId: editingWalletId,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        throw new Error(
+          errorText || `Failed to rename wallet (${res.status})`
+        );
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.wallets)) {
+        setWallets(
+          data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
+        );
+      } else if (data?.wallet) {
+        setWallets((prev) => {
+          const currentIndex = prev.findIndex((wallet) => wallet.id === editingWalletId);
+          const normalized = normalizeWalletFromApi(
+            data.wallet,
+            currentIndex >= 0 ? currentIndex : undefined
+          );
+          return prev.map((wallet) =>
+            wallet.id === editingWalletId ? normalized : wallet
+          );
+        });
+      } else {
+        setWallets((prev) =>
+          prev.map((wallet) =>
+            wallet.id === editingWalletId
+              ? { ...wallet, label: trimmed }
+              : wallet
+          )
+        );
+      }
+      notifyWalletsUpdated();
+
+      toast.success("Wallet name updated");
+      setEditingWalletId(null);
+      setWalletRenameValue("");
+    } catch (err) {
+      console.error("Failed to rename wallet:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to rename wallet"
+      );
+    } finally {
+      setRenamingWalletId(null);
+    }
+  };
+
+    const handleSetPrimaryWallet = async (walletId: string) => {
+    if (!user?.id) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet/${walletId}/primary`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        console.error("Failed to set primary wallet:", res.status, errorText);
+        toast.error("Failed to set primary wallet");
+        return;
+      }
+
+      const data = await res.json();
+
+      // backend setPrimaryWallet returns: { success, message, wallets }
+      if (!data.wallets) {
+        toast.success("Primary wallet updated");
+        return;
+      }
+
+      const mappedWallets: UserWallet[] = Array.isArray(data.wallets)
+        ? data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
+        : [];
+
+      setWallets(mappedWallets);
+      notifyWalletsUpdated();
+      toast.success("Primary wallet updated");
+    } catch (err) {
+      console.error("Error setting primary wallet:", err);
+      toast.error("Failed to set primary wallet");
+    }
+  };
+
+
+
+
   return (
     <>
       <Head>
@@ -688,35 +1038,36 @@ export default function PortfolioPage() {
       </Head>
       <div className="min-h-screen bg-[#050608] text-[#E6E7EA]">
         <Header />
-        <div className="px-6 pt-6">
+        <div className="px-6 pt-5">
+
           {/* Section Tabs */}
-          <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4 px-2">
             <div className="flex gap-8">
               <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "spot"
-                    ? "text-white"
-                    : "text-[#6B7280] hover:text-white"
+                    ? "text-[#f0f5f5]"
+                    : "text-[#6B7280] hover:text-[#f0f5f5]"
                 }`}
                 onClick={() => setActiveSection("spot")}
               >
                 Spot
               </button>
-              {/* <button
+              <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "wallet"
-                    ? "text-white"
-                    : "text-[#6B7280] hover:text-white"
+                    ? "text-[#f0f5f5]"
+                    : "text-[#6B7280] hover:text-[#f0f5f5]"
                 }`}
                 onClick={() => setActiveSection("wallet")}
               >
                 Wallets
-              </button> */}
+              </button>
               {/* <button
                 className={`text-lg font-light transition cursor-pointer ${
                   activeSection === "perpetuals"
-                    ? "text-white"
-                    : "text-[#6B7280] hover:text-white"
+                    ? "text-[#f0f5f5]"
+                    : "text-[#6B7280] hover:text-[#f0f5f5]"
                 }`}
                 onClick={() => setActiveSection("perpetuals")}
               >
@@ -781,8 +1132,8 @@ export default function PortfolioPage() {
                     onClick={() => setSelectedTimeframe("1d")}
                     className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "1d"
-                        ? "text-white"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                   >
                     1d
@@ -791,8 +1142,8 @@ export default function PortfolioPage() {
                     onClick={() => setSelectedTimeframe("7d")}
                     className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "7d"
-                        ? "text-white"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                   >
                     7d
@@ -801,8 +1152,8 @@ export default function PortfolioPage() {
                     onClick={() => setSelectedTimeframe("30d")}
                     className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "30d"
-                        ? "text-white"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                   >
                     30d
@@ -811,8 +1162,8 @@ export default function PortfolioPage() {
                     onClick={() => setSelectedTimeframe("Max")}
                     className={`px-3 py-1 text-xs cursor-pointer transition-colors ${
                       selectedTimeframe === "Max"
-                        ? "text-white"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                   >
                     Max
@@ -829,7 +1180,7 @@ export default function PortfolioPage() {
               <div className="grid grid-cols-3 gap-6">
                 {/* Balance */}
                 <div className="bg-[#101114] rounded-lg p-6">
-                  <div className="mb-4 text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                  <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                     Balance
                   </div>
                   <div className="space-y-4">
@@ -837,7 +1188,7 @@ export default function PortfolioPage() {
                       <div className="text-[#6B7280] text-sm font-light">
                         Total Value
                       </div>
-                      <div className="text-2xl font-light text-white">
+                      <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -852,7 +1203,7 @@ export default function PortfolioPage() {
                       <div className="text-[#6B7280] text-sm font-light">
                         Unrealized PNL
                       </div>
-                      <div className="text-2xl font-light text-white">
+                      <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -867,7 +1218,7 @@ export default function PortfolioPage() {
                       <div className="text-[#6B7280] text-sm font-light">
                         Available Balance
                       </div>
-                      <div className="text-2xl font-light text-white">
+                      <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -884,7 +1235,7 @@ export default function PortfolioPage() {
                 {/* Realized PNL */}
                 <div className="bg-[#101114] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
-                    <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                    <div className="text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                       Realized PNL
                     </div>
                     {/* Calendar icon commented out */}
@@ -1055,13 +1406,13 @@ export default function PortfolioPage() {
                 {/* Performance */}
                 <div className="bg-[#101114] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
-                    <div className="text-white text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                    <div className="text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
                       Performance
                     </div>
                     <InterstateTooltip label="Export">
                       <button
                         onClick={exportPerformanceData}
-                        className="text-[#9CA3AF] text-sm cursor-pointer hover:text-white transition-colors"
+                        className="text-[#9CA3AF] text-sm cursor-pointer hover:text-[#f0f5f5] transition-colors"
                       >
                         <FaUpload />
                       </button>
@@ -1072,7 +1423,7 @@ export default function PortfolioPage() {
                       <span className="text-[#6B7280] font-light">
                         {selectedTimeframe} Unrealized PNL
                       </span>
-                      <span className="text-white font-light">
+                      <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -1089,7 +1440,7 @@ export default function PortfolioPage() {
                       <span className="text-[#6B7280] font-light">
                         {selectedTimeframe} Realized PNL
                       </span>
-                      <span className="text-white font-light">
+                      <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
                             <SolIcon />
@@ -1110,7 +1461,7 @@ export default function PortfolioPage() {
                       <span className="text-[#6B7280] font-light">
                         {selectedTimeframe} Total TXNS
                       </span>
-                      <span className="text-white font-light">
+                      <span className="text-[#f0f5f5] font-light">
                         {timeframeMetrics.winningTrades}/
                         {timeframeMetrics.losingTrades}
                       </span>
@@ -1125,7 +1476,7 @@ export default function PortfolioPage() {
                             &gt;500%
                           </span>
                         </div>
-                        <span className="text-white font-light">
+                        <span className="text-[#f0f5f5] font-light">
                           {performanceBreakdown.above500}
                         </span>
                       </div>
@@ -1136,7 +1487,7 @@ export default function PortfolioPage() {
                             200% ~ 500%
                           </span>
                         </div>
-                        <span className="text-white font-light">
+                        <span className="text-[#f0f5f5] font-light">
                           {performanceBreakdown.between200And500}
                         </span>
                       </div>
@@ -1158,7 +1509,7 @@ export default function PortfolioPage() {
                             0% ~ -50%
                           </span>
                         </div>
-                        <span className="text-white font-light">
+                        <span className="text-[#f0f5f5] font-light">
                           {performanceBreakdown.between0AndMinus50}
                         </span>
                       </div>
@@ -1169,7 +1520,7 @@ export default function PortfolioPage() {
                             &lt; -50%
                           </span>
                         </div>
-                        <span className="text-white font-light">
+                        <span className="text-[#f0f5f5] font-light">
                           {performanceBreakdown.belowMinus50}
                         </span>
                       </div>
@@ -1191,8 +1542,8 @@ export default function PortfolioPage() {
                         key={tab}
                         className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                           activeSpotTab === i
-                            ? "text-white border-b-2 border-[#70E0B0]"
-                            : "text-[#9CA3AF] hover:text-white"
+                            ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
+                            : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                         }`}
                         onClick={() => setActiveSpotTab(i)}
                       >
@@ -1214,7 +1565,7 @@ export default function PortfolioPage() {
                       {searchQuery.trim() && (
                         <button
                           onClick={() => setSearchQuery("")}
-                          className="text-[#9CA3AF] hover:text-white transition-colors"
+                          className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors"
                         >
                           <FaTimes className="text-xs" />
                         </button>
@@ -1240,7 +1591,7 @@ export default function PortfolioPage() {
                       className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer text-xs ${
                         !showHidden
                           ? "bg-[#2A2B33] text-[#70E0B0]"
-                          : "bg-transparent hover:bg-[#2A2B33] text-[#9CA3AF] hover:text-white"
+                          : "bg-transparent hover:bg-[#2A2B33] text-[#9CA3AF] hover:text-[#f0f5f5]"
                       }`}
                     >
                       <svg
@@ -1266,7 +1617,7 @@ export default function PortfolioPage() {
                     </button>
                     <button
                       onClick={() => setSortByUSD(!sortByUSD)}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer bg-transparent text-[#9CA3AF] hover:text-white text-xs"
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg transition-all duration-200 cursor-pointer bg-transparent text-[#9CA3AF] hover:text-[#f0f5f5] text-xs"
                     >
                       <span className="text-xs">↑↓</span>
                       {sortByUSD ? "USD" : "SOL"}
@@ -1389,7 +1740,7 @@ export default function PortfolioPage() {
                       className={`flex items-center gap-1 px-1 ml-10 py-1 rounded-full transition-colors duration-200 cursor-pointer text-xs whitespace-nowrap ${
                         !showHidden
                           ? "text-[#70E0B0]"
-                          : "text-[#9CA3AF] hover:text-white"
+                          : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                       }`}
                     >
                       <svg
@@ -1416,18 +1767,26 @@ export default function PortfolioPage() {
                       <span className="hidden sm:inline">Show Archived</span>
                       <span className="sm:hidden">Archived</span>
                     </button>
-                    <button className="px-3  py-1 rounded-full bg-[#374151] text-xs text-white hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap">
+                    <button className="px-3  py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap">
                       Import
                     </button>
-                    <button className="px-2 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:bg-[#58B890] transition-colors cursor-pointer whitespace-nowrap">
-                      Create Wallet
-                    </button>
+                    <button
+                    onClick={handleCreateWallet}
+                    disabled={creatingWallet || !user}
+                    className={`px-2 py-1 rounded-full text-xs whitespace-nowrap transition-colors cursor-pointer
+                      ${creatingWallet || !user
+                        ? "bg-[#374151] text-[#9CA3AF] cursor-not-allowed" : "bg-[#70E0B0] text-[#1A1A1A] hover:bg-[#58B890]"
+}`}
+          >
+                  {creatingWallet ? "Creating..." : "Create Wallet"}
+                </button>
+
                   </div>
                 </div>
 
                 {/* Right Panel Header */}
                 <div className="px-2 py-4 border-l border-[#2A2B33]">
-                  <h3 className="text-white font-medium text-sm">Source wallets</h3>
+                  <h3 className="text-[#f0f5f5] font-medium text-sm">Source wallets</h3>
                 </div>
               </div>
 
@@ -1456,83 +1815,168 @@ export default function PortfolioPage() {
                 {/* Left Panel Content */}
                 <div className="px-4 py-3 ">
                   <div className="min-h-[300px]">
-                    {user ? (
-                      <div className="border-b border-[#2A2B33] hover:bg-[#17191E] transition">
-                        <div className="grid grid-cols-4 gap-2 items-center py-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-3 h-3 rounded bg-[#FF6B35] flex-shrink-0"></div>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium text-white text-sm truncate">
-                                Interstate Main
-                              </div>
-                              <div className="text-xs text-[#9CA3AF] font-mono truncate">
-                                {user.publicKey.slice(0, 4)}...
-                                {user.publicKey.slice(-4)}
-                              </div>
-                            </div>
-                            <button className="text-[#9CA3AF] hover:text-white flex-shrink-0">
-                              <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
-                                <rect
-                                  x="9"
-                                  y="9"
-                                  width="13"
-                                  height="13"
-                                  rx="2"
-                                  ry="2"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                />
-                                <path
-                                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                />
-                              </svg>
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-1 justify-center">
-                            <SiSolana
-                              className="h-3 w-3 flex-shrink-0"
-                              aria-hidden="true"
-                              style={{
-                                color: "unset",
-                                fill: "url(#solana-gradient-wallets)",
-                                filter: "none",
-                              }}
-                            />
-                            <svg className="absolute w-0 h-0">
-                              <defs>
-                                <linearGradient
-                                  id="solana-gradient-wallets"
-                                  x1="0%"
-                                  y1="0%"
-                                  x2="100%"
-                                  y2="0%"
-                                >
-                                  <stop offset="0%" stopColor="#9945FF" />
-                                  <stop offset="100%" stopColor="#14F195" />
-                                </linearGradient>
-                              </defs>
-                            </svg>
-                            <span className="text-xs text:white">0</span>
-                          </div>
-                          <div className="flex items-center gap-1 justify-center">
-                            <div className="w-5 h-2.5 bg-[#374151] rounded-sm relative">
-                              <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-[#70E0B0] rounded-sm"></div>
-                            </div>
-                            <span className="text-xs text-[#9CA3AF]">0</span>
-                          </div>
-                          <div className="text-center">
-                            <span className="text-xs text-[#9CA3AF]">-</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
+                    {!user ? (
                       <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
                         Please log in to view your wallets.
                       </div>
-                    )}
-                  </div>
+                    ) : loadingWallets ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        Loading wallets...
+                      </div>
+                    ) : wallets.length === 0 ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        No wallets yet. Click &quot;Create Wallet&quot; to get started.
+                      </div>
+                    ) : (
+                      wallets
+                        .filter((w) => (showHidden ? true : !w.isArchived))
+                        .map((wallet) => {
+                          const displayAddress = getAddressForChain(wallet, currentChain);
+                          const truncated =
+                            displayAddress.length > 8
+                              ? `${displayAddress.slice(0, 4)}...${displayAddress.slice(-4)}`
+                              : displayAddress;
+                          return (
+                          <div
+                            key={wallet.id}
+                            className="border-b border-[#2A2B33] hover:bg-[#17191E] transition"
+                          >
+                            <div className="grid grid-cols-4 gap-2 items-center py-3">
+                              {/* Wallet + address */}
+                              <div className="flex items-center gap-2 min-w-0">
+                                <button
+                                  className={`w-3 h-3 rounded flex-shrink-0 transition ${
+                                    wallet.isPrimary ? "bg-[#FF6B35]" : "bg-[#374151]"
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetPrimaryWallet(wallet.id);
+                                  }}
+                                  title={
+                                    wallet.isPrimary ? "Primary wallet" : "Set as primary wallet"
+                                  }
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium text-[#f0f5f5] text-sm flex items-center gap-2">
+                                    {editingWalletId === wallet.id ? (
+                                      <>
+                                        <input
+                                          className="bg-[#0f1014] border border-[#2A2B33] rounded px-2 py-1 text-xs text-[#f0f5f5] focus:outline-none focus:ring-1 focus:ring-[#70E0B0]"
+                                          value={walletRenameValue}
+                                          onChange={(e) => setWalletRenameValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              handleRenameWallet();
+                                            } else if (e.key === "Escape") {
+                                              handleCancelRenameWallet();
+                                            }
+                                          }}
+                                          autoFocus
+                                        />
+                                        <button
+                                          type="button"
+                                          className="text-[#70E0B0] hover:text-[#58B890]"
+                                          onClick={handleRenameWallet}
+                                          disabled={renamingWalletId === wallet.id}
+                                        >
+                                          <FiCheck size={14} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="text-[#9CA3AF] hover:text-[#f0f5f5]"
+                                          onClick={handleCancelRenameWallet}
+                                          disabled={renamingWalletId === wallet.id}
+                                        >
+                                          <FiX size={14} />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>{wallet.label}</span>
+                                        <button
+                                          type="button"
+                                          className="text-[#9CA3AF] hover:text-[#f0f5f5]"
+                                          onClick={() => handleBeginRenameWallet(wallet)}
+                                          title="Rename wallet"
+                                        >
+                                          <FiEdit2 size={14} />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-[#9CA3AF] font-mono truncate">
+                                    {truncated || "—"}
+                                  </div>
+                                </div>
+                                <button
+                                  className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0"
+                                  onClick={() => {
+                                    if (displayAddress) {
+                                      navigator.clipboard.writeText(displayAddress).then(
+                                        () => toast.success("Address copied"),
+                                        () => toast.error("Failed to copy address")
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                    <rect
+                                      x="9"
+                                      y="9"
+                                      width="13"
+                                      height="13"
+                                      rx="2"
+                                      ry="2"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    />
+                                    <path
+                                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+
+                              {/* Balance */}
+                              <div className="flex items-center gap-1 justify-center">
+                                <SiSolana
+                                  className="h-3 w-3 flex-shrink-0"
+                                  aria-hidden="true"
+                                  style={{
+                                    color: "unset",
+                                    fill: "url(#solana-gradient-wallets)",
+                                    filter: "none",
+                                  }}
+                                />
+                                <span className="text-xs text-white">
+                                  {formatSmartNumber(
+                                    walletBalances[wallet.id] ?? wallet.balance,
+                                  )}
+                                </span>
+                              </div>
+
+                              {/* Holdings */}
+                              <div className="flex items-center gap-1 justify-center">
+                                <div className="w-5 h-2.5 bg-[#374151] rounded-sm relative">
+                                  <div className="absolute top-0 left-0 w-2 h-2 bg-[#70E0B0] rounded-sm"></div>
+                                </div>
+                                <span className="text-xs text-[#9CA3AF]">
+                                  {wallet.holdingsCount}
+                                </span>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="text-center">
+                                <span className="text-xs text-[#9CA3AF]">-</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                        })
+                  )}
+                </div>
                 </div>
 
                 {/* Right Panel Content */}
@@ -1555,7 +1999,7 @@ export default function PortfolioPage() {
 
                   {/* Destination Section */}
                   <div className="px-4 py-2 border-t border-[#2A2B33] flex items-center justify-between">
-                    <h3 className="text-white font-medium text-sm">Destination</h3>
+                    <h3 className="text-[#f0f5f5] font-medium text-sm">Destination</h3>
                     <button className="px-3 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:bg-[#58B890] transition-colors cursor-pointer">
                       Start Transfer
                     </button>
@@ -1582,7 +2026,7 @@ export default function PortfolioPage() {
             <div className="space-y-6">
               {/* Header with Time Range */}
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-light text-white">Your holdings</h2>
+                <h2 className="text-2xl font-light text-[#f0f5f5]">Your holdings</h2>
                 <div className="flex items-center gap-2">
                   {["1d", "7d", "30d", "Max"].map((period, index) => (
                     <button
@@ -1590,7 +2034,7 @@ export default function PortfolioPage() {
                       className={`px-3 py-1 text-sm transition-colors cursor-pointer ${
                         period === "Max"
                           ? "text-[#70E0B0] bg-[#70E0B0]/10 rounded"
-                          : "text-[#9CA3AF] hover:text-white"
+                          : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                       }`}
                     >
                       {period}
@@ -1603,19 +2047,19 @@ export default function PortfolioPage() {
               <div className="grid grid-cols-2 gap-6">
                 {/* Left Panel - Performance Metrics */}
                 <div className="bg-[#101114] rounded-lg p-6">
-                  <h3 className="text-white font-medium text-lg mb-4">Performance</h3>
+                  <h3 className="text-[#f0f5f5] font-medium text-lg mb-4">Performance</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         All Time Volume
                       </div>
-                      <div className="text-2xl font-light text-white">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
                     </div>
                     <div>
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         All Time PNL
                       </div>
-                      <div className="text-2xl font-light text-white">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
                       <div className="text-xs text-[#9CA3AF] mt-1">
                         Number of Trades: 0
                       </div>
@@ -1624,14 +2068,14 @@ export default function PortfolioPage() {
                       <div className="text-sm text-[#9CA3AF] mb-1">
                         Account Value
                       </div>
-                      <div className="text-2xl font-light text-white">$0</div>
+                      <div className="text-2xl font-light text-[#f0f5f5]">$0</div>
                     </div>
                   </div>
                 </div>
 
                 {/* Right Panel - PNL Chart */}
                 <div className="bg-[#101114] rounded-lg p-6">
-                  <h3 className="text-white font-medium text-lg mb-4">PNL</h3>
+                  <h3 className="text-[#f0f5f5] font-medium text-lg mb-4">PNL</h3>
                   <div className="h-48 flex items-center justify-center relative">
                     {/* Simple chart representation */}
                     <div className="w-full h-24 border-b border-[#2A2B33] relative">
@@ -1641,7 +2085,7 @@ export default function PortfolioPage() {
                     </div>
                     {/* Chart icon in bottom right */}
                     <div className="absolute bottom-2 right-2 w-6 h-6 border border-white rounded flex items-center justify-center">
-                      <span className="text-xs text-white">T</span>
+                      <span className="text-xs text-[#f0f5f5]">T</span>
                     </div>
                   </div>
                 </div>
@@ -1654,8 +2098,8 @@ export default function PortfolioPage() {
                   <button
                     className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                       activePerpetualsTab === 0
-                        ? "text-white border-b-2 border-[#70E0B0]"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                     onClick={() => setActivePerpetualsTab(0)}
                   >
@@ -1664,8 +2108,8 @@ export default function PortfolioPage() {
                   <button
                     className={`px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
                       activePerpetualsTab === 1
-                        ? "text-white border-b-2 border-[#70E0B0]"
-                        : "text-[#9CA3AF] hover:text-white"
+                        ? "text-[#f0f5f5] border-b-2 border-[#70E0B0]"
+                        : "text-[#9CA3AF] hover:text-[#f0f5f5]"
                     }`}
                     onClick={() => setActivePerpetualsTab(1)}
                   >

@@ -1,18 +1,22 @@
 import { type AppType } from "next/app";
-import { Geist } from "next/font/google";
+import { Inter } from "next/font/google";
 import "~/styles/globals.css";
 import "@rainbow-me/rainbowkit/styles.css";
-import { getDefaultConfig, RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
-import { WagmiProvider } from "wagmi";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { queryClient } from '../lib/queryClient';
+import { WagmiProviderWrapper } from '../components/WagmiProviderWrapper';
 import { UserProvider, useUser } from "../components/UserContext";
 import { Toaster } from 'react-hot-toast';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
-import LoginModal from '../components/LoginModal';
+import dynamic from 'next/dynamic';
+
+// Dynamically import LoginModal with no SSR to prevent wagmi provider issues
+const LoginModal = dynamic(() => import('../components/LoginModal'), {
+  ssr: false,
+});
 import { env } from '../env';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
@@ -20,6 +24,7 @@ import { FilterProvider } from '../components/FilterContext';
 import { SolPriceProvider } from '../components/SolPriceContext';
 import { WalletTrackerProvider } from '../components/WalletTrackerContext';
 import { ReferralAccessGate } from '../components/ReferralAccessGate';
+import { ThemeProvider } from '../components/ThemeContext';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
@@ -96,11 +101,13 @@ const config = getDefaultConfig({
   appName: "Meme Dashboard",
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "YOUR_PROJECT_ID", // TODO: Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in your environment
   chains: [mainnet],
-  ssr: true,
+  ssr: true, // Keep SSR enabled, but handle client-side rendering in wrapper
 });
 
-const geist = Geist({
-  subsets: ["latin"],
+const inter = Inter({
+  weight: ['400', '500'],
+  subsets: ['latin'],
+  variable: '--font-inter',
 });
 
 function TokenHandler() {
@@ -158,72 +165,110 @@ function ReferralTracker() {
 function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   const { user, loading: userLoading } = useUser();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+  
+  // Only render on client side to prevent SSR issues with wagmi
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+  
+  useEffect(() => {
+    if (!isMounted) return;
     if (enforceLogin && !userLoading && !user) {
       setLoginOpen(true);
     }
     if (user && loginOpen) {
       setLoginOpen(false);
     }
-  }, [user, userLoading, enforceLogin, loginOpen]);
+  }, [user, userLoading, enforceLogin, loginOpen, isMounted]);
+  
   // Prevent closing if not logged in
   const handleLoginClose = () => {
     if (user) setLoginOpen(false);
   };
-  if (!enforceLogin) return null;
+  
+  if (!enforceLogin || !isMounted) return null;
+  
   return (
     <LoginModal open={loginOpen} onClose={handleLoginClose} forceLogin={!user && !userLoading} />
   );
 }
 
 function MobileBlocker({ children }: { children: React.ReactNode }) {
-  const [isMobile, setIsMobile] = useState(false);
-  const [isClient, setIsClient] = useState(false);
+  // Mobile blocker disabled - commented out but kept for future use
+  // const [isMobile, setIsMobile] = useState(false);
+  // const [isClient, setIsClient] = useState(false);
 
-  useEffect(() => {
-    setIsClient(true);
-    
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 500);
-    };
+  // useEffect(() => {
+  //   setIsClient(true);
+  //   
+  //   const checkMobile = () => {
+  //     setIsMobile(window.innerWidth < 500);
+  //   };
 
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  //   checkMobile();
+  //   window.addEventListener('resize', checkMobile);
+  //   return () => window.removeEventListener('resize', checkMobile);
+  // }, []);
 
-  // Show nothing during SSR/initial load to prevent hydration issues
-  if (!isClient) {
-    return null;
-  }
+  // // Show nothing during SSR/initial load to prevent hydration issues
+  // if (!isClient) {
+  //   return null;
+  // }
 
-  if (isMobile) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
-        <div className="text-center">
-          <div className="mb-6">
-            <img 
-              src="/logo.png" 
-              alt="Logo" 
-              className="w-24 h-24 mx-auto mb-6 object-contain"
-            />
-          </div>
-          <h1 className="text-2xl font-bold mb-2">We're Coming Soon on Mobile!</h1>
-          <p className="text-gray-400 mb-4">
-            Our mobile experience is currently in development.
-          </p>
-          <p className="text-sm text-gray-500">
-            Please visit us on desktop for the full experience.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // if (isMobile) {
+  //   return (
+  //     <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
+  //       <div className="text-center">
+  //         <div className="mb-6">
+  //           <img 
+  //             src="/logo.png" 
+  //             alt="Logo" 
+  //             className="w-24 h-24 mx-auto mb-6 object-contain"
+  //           />
+  //         </div>
+  //         <h1 className="text-2xl font-bold mb-2">We're Coming Soon on Mobile!</h1>
+  //         <p className="text-gray-400 mb-4">
+  //           Our mobile experience is currently in development.
+  //         </p>
+  //         <p className="text-sm text-gray-500">
+  //           Please visit us on desktop for the full experience.
+  //         </p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return <>{children}</>;
 }
 
 const MyApp: AppType = ({ Component, pageProps }) => {
+  const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('bottom-center');
+
+  // Load toast position from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('toast-position');
+      if (saved && ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
+        setToastPosition(saved as any);
+      }
+    }
+  }, []);
+
+  // Listen for toast position changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handlePositionChange = (e: CustomEvent) => {
+      setToastPosition(e.detail.position);
+    };
+
+    window.addEventListener('toast-position-changed', handlePositionChange as EventListener);
+    return () => {
+      window.removeEventListener('toast-position-changed', handlePositionChange as EventListener);
+    };
+  }, []);
+
   return (
     <>
       <Head>
@@ -235,62 +280,84 @@ const MyApp: AppType = ({ Component, pageProps }) => {
             color: white !important;
             margin: 0;
             padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif !important;
+            font-weight: 400 !important;
           }
           #__next {
             background-color: #101114;
             min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif !important;
           }
           * {
             transition: none !important;
+            font-family: inherit;
+          }
+          h1, h2, h3, h4, h5, h6 {
+            font-weight: 500 !important;
           }
         `}</style>
         <style dangerouslySetInnerHTML={{
           __html: `
-            html, body { background-color: #101114 !important; color: white !important; }
-            #__next { background-color: #101114; min-height: 100vh; }
-            * { transition: none !important; }
+            html, body { 
+              background-color: #101114 !important; 
+              color: white !important; 
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif !important;
+              font-weight: 400 !important;
+            }
+            #__next { 
+              background-color: #101114; 
+              min-height: 100vh; 
+              font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif !important;
+            }
+            * { 
+              transition: none !important; 
+              font-family: inherit;
+            }
+            h1, h2, h3, h4, h5, h6 {
+              font-weight: 500 !important;
+            }
           `
         }} />
       </Head>
-      <div className={geist.className}>
+      <div className={inter.className}>
         <MobileBlocker>
-          <WagmiProvider config={config}>
-            <QueryClientProvider client={queryClient}>
-              <RainbowKitProvider theme={darkTheme({ accentColor: "#10b981" })}>
-                <UserProvider>
-                  <TokenHandler />
-                  <ReferralTracker />
-                  <SolPriceProvider>
-                    <QuickBuyProvider>
-                      <WatchlistProvider>
-                        <FilterProvider>
-                          <WalletTrackerProvider>
-                            <ReferralAccessGate>
-                              <Component {...pageProps} />
-                            </ReferralAccessGate>
-                          </WalletTrackerProvider>
-                        </FilterProvider>
-                      </WatchlistProvider>
-                    </QuickBuyProvider>
-                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
-                  </SolPriceProvider>
-                </UserProvider>
-              </RainbowKitProvider>
-            </QueryClientProvider>
-          </WagmiProvider>
+          <WagmiProviderWrapper config={config} queryClient={queryClient}>
+            <UserProvider>
+              <TokenHandler />
+              <ReferralTracker />
+              <SolPriceProvider>
+                <ThemeProvider>
+                  <QuickBuyProvider>
+                    <WatchlistProvider>
+                      <FilterProvider>
+                        <WalletTrackerProvider>
+                          <ReferralAccessGate>
+                            <Component {...pageProps} />
+                          </ReferralAccessGate>
+                        </WalletTrackerProvider>
+                      </FilterProvider>
+                    </WatchlistProvider>
+                  </QuickBuyProvider>
+                  <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                </ThemeProvider>
+              </SolPriceProvider>
+            </UserProvider>
+          </WagmiProviderWrapper>
           <Toaster 
-            position="top-right"
+            position={toastPosition}
             toastOptions={{
               duration: 4000,
               style: {
                 background: '#1E1F26',
                 color: '#E6E7EA',
                 border: '1px solid #4B5563',
-                borderRadius: '8px',
+                borderRadius: '12px',
                 fontSize: '14px',
                 fontWeight: '500',
-                maxWidth: '400px',
-                zIndex: 9999
+                maxWidth: '480px',
+                padding: '16px',
+                zIndex: 9999,
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
               },
               success: {
                 style: {

@@ -1,13 +1,19 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import {
   FaQuestionCircle,
+  FaRegStar,
+  FaStar,
 } from "react-icons/fa";
 import { User, Globe, Search, Copy } from "lucide-react";
+import { HiLightningBolt } from "react-icons/hi";
 import InterstateButton from "./InterstateButton";
 import Image from 'next/image';
 import InterstateTooltip from './InterstateTooltip';
 import CustomCheckbox from './CustomCheckbox';
 import { useRouter } from "next/router";
+import { useWatchlist } from "./WatchlistContext";
+import { showEnhancedToast } from "~/utils/enhancedToast";
+import { SolanaIcon } from './Footer';
 import type { Token as BaseToken } from "~/utils/db";
 import { formatSmartNumber, formatMarketCap } from '~/utils/db';
 import SkeletonRow from './InterstateTable/SkeletonRow';
@@ -57,6 +63,7 @@ interface InterstateTableProps {
   selectedTimeframe: '5m' | '1h' | '6h' | '24h';
   quickBuyAmount?: number | string;
   skeletonRowCount?: number;
+  isDiscoverPage?: boolean;
 }
 
 interface HeaderConfig {
@@ -118,17 +125,48 @@ const getNumber = (obj: any, key: string): number => {
 };
 
 const getVolume = (token: Token, timeframe: string): number => {
-  // Use the volume fields that backend provides: volume_5m, volume_1h, volume_6h, volume_24h
-  let volume = getNumber(token as any, `volume_${timeframe}`);
+  // Helper to get volume from a specific timeframe, including buy/sell calculation
+  const getVolumeForTimeframe = (tf: string): number => {
+    // First try direct volume field
+    let vol = getNumber(token as any, `volume_${tf}`);
+    
+    // If 0, try calculating from buy/sell volumes
+    if (vol === 0) {
+      const buyVol = getNumber(token as any, `total_buy_volume_${tf}`);
+      const sellVol = getNumber(token as any, `total_sell_volume_${tf}`);
+      vol = buyVol + sellVol;
+    }
+    
+    return vol;
+  };
   
-  // Fallback for missing timeframes - use available data
+  // Try the requested timeframe first
+  let volume = getVolumeForTimeframe(timeframe);
+  
+  // If still 0, try all other timeframes in order of preference
   if (volume === 0) {
-    if (timeframe === '6h' || timeframe === '24h') {
-      // For 6h and 24h, fallback to 1h data if available
-      volume = getNumber(token as any, 'volume_1h');
-    } else if (timeframe === '1h') {
-      // For 1h, fallback to 5m data if available
-      volume = getNumber(token as any, 'volume_5m');
+    const timeframes = ['1h', '6h', '24h', '5m'];
+    for (const tf of timeframes) {
+      if (tf !== timeframe) {
+        volume = getVolumeForTimeframe(tf);
+        if (volume > 0) {
+          // Found volume in another timeframe, use it
+          break;
+        }
+      }
+    }
+  }
+  
+  // Last resort: if we have 24h volume, estimate for the requested timeframe
+  if (volume === 0) {
+    const vol24h = getVolumeForTimeframe('24h');
+    if (vol24h > 0) {
+      switch (timeframe) {
+        case '5m': volume = vol24h / 288; break;
+        case '1h': volume = vol24h / 24; break;
+        case '6h': volume = vol24h / 4; break;
+        case '24h': volume = vol24h; break;
+      }
     }
   }
   
@@ -136,10 +174,59 @@ const getVolume = (token: Token, timeframe: string): number => {
 };
 
 const getTxns = (token: Token, timeframe: string): { total: number; buys: number; sells: number } => {
-  const buys = getNumber(token as any, `total_buys_${timeframe}`);
-  const sells = getNumber(token as any, `total_sells_${timeframe}`);
-  if (buys > 0 || sells > 0) return { total: buys + sells, buys, sells };
-  // If separate counts are not available, return zeros; UI will render "-" appropriately
+  // Try the specific timeframe first
+  let buys = getNumber(token as any, `total_buys_${timeframe}`);
+  let sells = getNumber(token as any, `total_sells_${timeframe}`);
+  
+  if (buys > 0 || sells > 0) {
+    return { total: buys + sells, buys, sells };
+  }
+  
+  // Fallback 1: try txnCount for the specific timeframe (split proportionally)
+  const txnCount = getNumber(token as any, `txnCount${timeframe}`);
+  if (txnCount > 0) {
+    // Estimate: 60% buys, 40% sells (common pattern)
+    const estimatedBuys = Math.round(txnCount * 0.6);
+    const estimatedSells = Math.round(txnCount * 0.4);
+    return { total: txnCount, buys: estimatedBuys, sells: estimatedSells };
+  }
+  
+  // Fallback 2: try 24h data if specific timeframe doesn't have data
+  if (timeframe !== '24h') {
+    const buys24h = getNumber(token as any, 'total_buys_24h');
+    const sells24h = getNumber(token as any, 'total_sells_24h');
+    if (buys24h > 0 || sells24h > 0) {
+      return { total: buys24h + sells24h, buys: buys24h, sells: sells24h };
+    }
+    
+    // Also try txnCount24h as fallback
+    const txnCount24h = getNumber(token as any, 'txnCount24h') || getNumber(token as any, 'txnCount24');
+    if (txnCount24h > 0) {
+      const estimatedBuys = Math.round(txnCount24h * 0.6);
+      const estimatedSells = Math.round(txnCount24h * 0.4);
+      return { total: txnCount24h, buys: estimatedBuys, sells: estimatedSells };
+    }
+  }
+  
+  // Fallback 3: try other timeframes in order of preference (24h, 12h, 6h, 1h, 5m)
+  const fallbackTimeframes = ['24h', '12h', '6h', '1h', '5m'].filter(tf => tf !== timeframe);
+  for (const tf of fallbackTimeframes) {
+    const fallbackBuys = getNumber(token as any, `total_buys_${tf}`);
+    const fallbackSells = getNumber(token as any, `total_sells_${tf}`);
+    if (fallbackBuys > 0 || fallbackSells > 0) {
+      return { total: fallbackBuys + fallbackSells, buys: fallbackBuys, sells: fallbackSells };
+    }
+    
+    // Also try txnCount for this timeframe
+    const fallbackTxnCount = getNumber(token as any, `txnCount${tf}`);
+    if (fallbackTxnCount > 0) {
+      const estimatedBuys = Math.round(fallbackTxnCount * 0.6);
+      const estimatedSells = Math.round(fallbackTxnCount * 0.4);
+      return { total: fallbackTxnCount, buys: estimatedBuys, sells: estimatedSells };
+    }
+  }
+  
+  // If no data available, return zeros; UI will render "-" appropriately
   return { total: 0, buys: 0, sells: 0 };
 };
 
@@ -233,13 +320,14 @@ const TableHeader: React.FC<{
   sortKey?: string;
   sortDirection?: 'asc' | 'desc';
   onSort?: (key: string) => void;
-}> = ({ sortKey, sortDirection, onSort }) => (
+  isDiscoverPage?: boolean;
+}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false }) => (
   <thead>
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
       {TABLE_HEADERS.map((header, idx) => (
         <th
           key={idx}
-          className={`${header.width} px-4 py-4 text-${header.align} text-xs font-medium tracking-wide uppercase ${
+          className={`${header.width} px-4 ${isDiscoverPage ? 'py-2' : 'py-4'} text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
             header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
           }`}
           style={{ color: '#787a8d', fontWeight: '300' }}
@@ -325,76 +413,42 @@ const TokenAvatar: React.FC<{
     return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
   };
 
-  const protocolColor = getProtocolColor(token);
-  const tokenIcon = getTokenIcon(token);
   const imageUrl = (token as any).uri || (token as any).image || token.logo;
-  const launchpadProtocol = (token as any).launchpad_protocol?.toLowerCase() || '';
-  const isFullCircleImage = launchpadProtocol.includes('meteora') || 
-                           launchpadProtocol.includes('bonk') || 
-                           launchpadProtocol.includes('bags') || 
-                           launchpadProtocol.includes('moonit') || 
-                           launchpadProtocol.includes('moonshot');
 
   return (
-    <div className="relative h-16 w-16 flex items-center justify-center">
-      {/* Outer border container */}
-      <div 
-        className="relative rounded-lg transition-all duration-300"
-        style={{
-          border: `1px solid ${protocolColor}`,
-          padding: '2px'
-        }}
-      >
-        {/* Inner silver border container */}
-        <div 
-          className="relative rounded-lg"
-          style={{
-            border: `1px solid rgba(192, 192, 192, 0.5)`,
-            padding: '2px'
-          }}
-        >
-          {/* Image container */}
-          <div className="relative rounded-lg overflow-hidden" style={{ width: '56px', height: '56px' }}>
-            {loading && !showInitial ? (
-              <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: AX.surface2 }}>
-                <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
-              </div>
-            ) : meta || imageUrl ? (
-              <img
-                src={extractMetaImage(meta) || imageUrl || token.logo || ''}
-                alt={token.name || token.symbol || ''}
-                width={56}
-                height={56}
-                className="h-full w-full object-cover transition-all duration-300"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center rounded-lg" style={{ backgroundColor: AX.surface2, width: '56px', height: '56px' }}>
-                <span className="text-lg font-bold" style={{ color: AX.text }}>{initial}</span>
-              </div>
-            )}
+    <div className="relative h-12 w-12 flex items-center justify-center">
+      {/* Image container - circular */}
+      <div className="relative rounded-full overflow-hidden" style={{ width: '48px', height: '48px' }}>
+        {loading && !showInitial ? (
+          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2 }}>
+            <div className="w-6 h-6 border-2 border-t-2 border-b-2 border-yellow-400 rounded-full animate-spin"></div>
           </div>
-        </div>
+        ) : meta || imageUrl ? (
+          <img
+            src={extractMetaImage(meta) || imageUrl || token.logo || ''}
+            alt={token.name || token.symbol || ''}
+            width={48}
+            height={48}
+            className="h-full w-full object-cover rounded-full transition-all duration-300"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center rounded-full" style={{ backgroundColor: AX.surface2, width: '48px', height: '48px' }}>
+            <span className="text-sm font-bold" style={{ color: AX.text }}>{initial}</span>
+          </div>
+        )}
       </div>
       
-      {/* Protocol icon bubble - positioned outside the image container */}
+      {/* Solana logo bubble - positioned at bottom right */}
       <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
            style={{ 
-             width: 20, 
-             height: 20,
-             border: `2px solid ${protocolColor}`,
-             boxShadow: `0 0 4px ${protocolColor}60`
+             width: 14, 
+             height: 14,
+             padding: '1px'
            }}>
-        <img
-          src={tokenIcon}
-          alt={`${(token as any).launchpad_protocol || 'Protocol'} logo`}
-          className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
-          style={{
-            filter: protocolColor === '#eab308' ? 'sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)' : 'none'
-          }}
-        />
+        <SolanaIcon size={12} />
       </div>
     </div>
   );
@@ -404,12 +458,97 @@ const TokenAvatar: React.FC<{
 const TokenInfo: React.FC<{ 
   token: Token; 
   i: number; 
-  sortedRows: InterstateTableRow[] 
-}> = ({ token, i, sortedRows }) => {
+  sortedRows: InterstateTableRow[];
+  isDiscoverPage?: boolean;
+}> = ({ token, i, sortedRows, isDiscoverPage = false }) => {
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
+  
+  // Watchlist functionality
+  const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
+  const tokenAddress = token.pair_address || token.mint || '';
+  const isWatched = isInWatchlist(tokenAddress);
+  
+  const handleWatchlistClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isWatched) {
+      removeFromWatchlist(tokenAddress);
+      showEnhancedToast('info', 'Removed from watchlist');
+    } else {
+      addToWatchlist(token);
+      showEnhancedToast('success', 'Added to watchlist');
+    }
+  }, [isWatched, tokenAddress, token, addToWatchlist, removeFromWatchlist]);
+  
+  // Calculate actual token age for discover page
+  const getTokenAge = useCallback(() => {
+    if (!isDiscoverPage) return timeLabel;
+    
+    try {
+      const createdAt = (token as any).created_at || (token as any).launch_time;
+      if (!createdAt) return '-';
+      
+      let timestamp: number | null = null;
+      if (typeof createdAt === 'string') {
+        const parsed = Date.parse(createdAt);
+        if (!isNaN(parsed)) timestamp = parsed;
+      } else if (typeof createdAt === 'number') {
+        // Heuristic: treat 13-digit as ms, 10-digit as seconds
+        if (createdAt > 1e12) timestamp = createdAt;
+        else if (createdAt > 1e9) timestamp = createdAt * 1000;
+      }
+      
+      if (!timestamp) return '-';
+      
+      const ageMs = Date.now() - timestamp;
+      const ageHours = ageMs / (1000 * 60 * 60);
+      
+      if (ageHours < 1) {
+        const ageMins = Math.floor(ageMs / (1000 * 60));
+        return ageMins < 1 ? '<1m' : `${ageMins}m`;
+      } else if (ageHours < 24) {
+        return `${Math.floor(ageHours)}h`;
+      } else {
+        return `${Math.floor(ageHours / 24)}d`;
+      }
+    } catch {
+      return '-';
+    }
+  }, [token, isDiscoverPage, timeLabel]);
+  
+  const tokenAge = getTokenAge();
+  
+  // Calculate age color for discover page
+  const getAgeColor = useCallback(() => {
+    if (!isDiscoverPage) return '#85d99f';
+    
+    try {
+      const createdAt = (token as any).created_at || (token as any).launch_time;
+      if (!createdAt) return '#85d99f';
+      
+      let timestamp: number | null = null;
+      if (typeof createdAt === 'string') {
+        const parsed = Date.parse(createdAt);
+        if (!isNaN(parsed)) timestamp = parsed;
+      } else if (typeof createdAt === 'number') {
+        if (createdAt > 1e12) timestamp = createdAt;
+        else if (createdAt > 1e9) timestamp = createdAt * 1000;
+      }
+      
+      if (!timestamp) return '#85d99f';
+      
+      const ageMs = Date.now() - timestamp;
+      const ageHours = ageMs / (1000 * 60 * 60);
+      
+      return ageHours < 1 ? '#f2c367' : '#f26681';
+    } catch {
+      return '#85d99f';
+    }
+  }, [token, isDiscoverPage]);
+  
+  const ageColor = getAgeColor();
 
   // const similarTokens = useMemo(() => 
   //   sortedRows
@@ -433,7 +572,7 @@ const TokenInfo: React.FC<{
         <div className="text-sm font-medium mb-2" style={{ color: AX.muted }}>({token.symbol})</div>
         <p className="text-base font-semibold" style={{ color: AX.text }}>
           $<SubscriptNumber value={token.usd_price} />{' '}
-          <span className={`text-sm ${token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+          <span className={`text-sm ${isDiscoverPage ? '' : (token.price_percent_change_1h >= 0 ? 'text-emerald-400' : 'text-red-400')}`} style={isDiscoverPage ? { color: token.price_percent_change_1h >= 0 ? '#85d99f' : '#f26681' } : {}}>
             {formatPercentChange(token.price_percent_change_1h)}%
           </span>
         </p>
@@ -462,7 +601,23 @@ const TokenInfo: React.FC<{
   );
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
+      {/* Watchlist button */}
+      <button
+        onClick={handleWatchlistClick}
+        className="flex items-center justify-center transition-colors duration-200 cursor-pointer hover:opacity-80"
+        style={{ color: isWatched ? '#f2c367' : AX.muted }}
+        title={isWatched ? "Remove from watchlist" : "Add to watchlist"}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = isWatched ? '#f2c367' : '#73c5ff';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = isWatched ? '#f2c367' : AX.muted;
+        }}
+      >
+        {isWatched ? <FaStar className="w-5 h-5" /> : <FaRegStar className="w-5 h-5" />}
+      </button>
+      
       <InterstateTooltip
         width={undefined}
         height={undefined}
@@ -503,16 +658,16 @@ const TokenInfo: React.FC<{
         </div>
         
         <div className="flex items-center gap-2">
-          <span className="text-xs text-emerald-400" style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace', fontWeight: 400 }}>
-            {timeLabel}
+          <span className={`text-xs ${isDiscoverPage ? 'number-font' : 'text-emerald-400'}`} style={{ color: isDiscoverPage ? ageColor : undefined, fontWeight: isDiscoverPage ? 700 : 400, ...(isDiscoverPage ? {} : { fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }) }}>
+            {tokenAge}
           </span>
           <div className="flex items-center gap-1.5 text-sky-400">
             {/* User icon - Twitter profile */}
             <button
               className="transition-colors duration-200 cursor-pointer hover:text-blue-400"
-              style={{ color: AX.muted }}
+              style={{ color: isDiscoverPage ? '#73c5ff' : AX.muted }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = AX.aiBlue;
+                e.currentTarget.style.color = isDiscoverPage ? '#73c5ff' : AX.aiBlue;
                 // Show X profile preview
                 setShowXPreview(true);
                 // Store button position for popup positioning
@@ -540,7 +695,7 @@ const TokenInfo: React.FC<{
                 setButtonPosition({ left, top });
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = AX.muted;
+                e.currentTarget.style.color = isDiscoverPage ? '#73c5ff' : AX.muted;
                 setShowXPreview(false);
               }}
               onClick={(e) => {
@@ -550,7 +705,7 @@ const TokenInfo: React.FC<{
               }}
               title="View Twitter profile"
             >
-              <User className="w-3 h-3" />
+              <User className="w-3 h-3" strokeWidth={2.5} />
             </button>
 
             {/* Globe icon - Block explorer / Website */}
@@ -576,10 +731,10 @@ const TokenInfo: React.FC<{
 
             {/* Search icon - Twitter search */}
             <button
-              className="transition-colors duration-200 cursor-pointer hover:text-emerald-400"
+              className={`transition-colors duration-200 cursor-pointer ${isDiscoverPage ? '' : 'hover:text-emerald-400'}`}
               style={{ color: AX.muted }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = AX.aiCyan;
+                e.currentTarget.style.color = isDiscoverPage ? '#85d99f' : AX.aiCyan;
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.color = AX.muted;
@@ -667,7 +822,7 @@ const TokenInfo: React.FC<{
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                <div className={`w-2 h-2 rounded-full ${isDiscoverPage ? '' : 'bg-green-500'}`} style={isDiscoverPage ? { backgroundColor: '#85d99f' } : {}}></div>
                 <span className="text-xs text-gray-400">Live</span>
               </div>
             </div>
@@ -854,10 +1009,24 @@ const MarketCapCell: React.FC<{
   token: Token;
   selectedTimeframe: string;
   animationState: Record<string, 'up' | 'down' | null>;
-}> = ({ token, selectedTimeframe, animationState }) => {
+  isDiscoverPage?: boolean;
+}> = ({ token, selectedTimeframe, animationState, isDiscoverPage = false }) => {
   const percentChange = getTokenStat(token, 'price_percent_change', selectedTimeframe);
   const percentFieldKey = `${token.pair_address}-price_percent_change_${selectedTimeframe}`;
   const isPositive = percentChange >= 0;
+
+  // Calculate market cap color for discover page
+  const marketCap = token.fully_diluted_value || 0;
+  let marketCapColor = AX.text;
+  if (isDiscoverPage) {
+    if (marketCap > 100000) {
+      marketCapColor = '#f2c367';
+    } else if (marketCap > 40000) {
+      marketCapColor = '#73c5ff';
+    } else {
+      marketCapColor = '#85d99f';
+    }
+  }
 
   // Debug logging for MarketCapCell
   // console.log('MarketCapCell Debug:', {
@@ -871,10 +1040,12 @@ const MarketCapCell: React.FC<{
 
   return (
     <div className="text-right">
-      <div className="text-sm font-semibold" style={{ 
-        color: AX.text,
-        fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-        fontWeight: '400'
+      <div className={`text-sm font-semibold ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
+        color: isDiscoverPage ? marketCapColor : AX.text,
+        ...(isDiscoverPage ? {} : {
+          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+          fontWeight: '400'
+        })
       }}>
         {(() => {
           // console.log('MarketCapCell formatSmartNumber call with:', token.fully_diluted_value);
@@ -900,27 +1071,38 @@ const MarketCapCell: React.FC<{
 const TxnsCell: React.FC<{
   token: Token;
   selectedTimeframe: string;
-}> = ({ token, selectedTimeframe }) => {
+  isDiscoverPage?: boolean;
+}> = ({ token, selectedTimeframe, isDiscoverPage = false }) => {
   const { total, buys, sells } = getTxns(token, selectedTimeframe);
 
   const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
   
+  // For discover page (xStocks), show "0" instead of "-" when value is 0
+  const formatTxnValue = (value: number) => {
+    if (value === 0) {
+      return isDiscoverPage ? '0' : '-';
+    }
+    return formatSmartNumber(value);
+  };
+  
   return (
     <div className="text-right">
-      <div className="text-sm font-medium mb-1" style={{ 
+      <div className={`text-sm font-medium mb-1 ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
         color: AX.text,
-        fontFamily: monospaceFont,
-        fontWeight: '400'
+        ...(isDiscoverPage ? {} : {
+          fontFamily: monospaceFont,
+          fontWeight: '400'
+        })
       }}>
-        {total === 0 ? '-' : formatSmartNumber(total)}
+        {formatTxnValue(total)}
       </div>
       <div className="text-xs font-medium">
-        <span className="text-emerald-400" style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
-          {buys === 0 ? '-' : formatSmartNumber(buys)}
+        <span className={`${isDiscoverPage ? '' : 'text-emerald-400'} ${isDiscoverPage ? 'number-font' : ''}`} style={isDiscoverPage ? { color: '#85d99f', fontFamily: monospaceFont, fontWeight: '400' } : { fontFamily: monospaceFont, fontWeight: '400' }}>
+          {formatTxnValue(buys)}
         </span>
         <span className="mx-1" style={{ color: AX.muted }}>/</span>
-        <span className="text-red-400" style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
-          {sells === 0 ? '-' : formatSmartNumber(sells)}
+        <span className={`${isDiscoverPage ? '' : 'text-red-400'} ${isDiscoverPage ? 'number-font' : ''}`} style={isDiscoverPage ? { color: '#f26681', fontFamily: monospaceFont, fontWeight: '400' } : { fontFamily: monospaceFont, fontWeight: '400' }}>
+          {formatTxnValue(sells)}
         </span>
       </div>
     </div>
@@ -931,7 +1113,8 @@ const TxnsCell: React.FC<{
 const AuditLogCell: React.FC<{
   token: Token;
   selectedTimeframe: string;
-}> = ({ token, selectedTimeframe }) => {
+  isDiscoverPage?: boolean;
+}> = ({ token, selectedTimeframe, isDiscoverPage = false }) => {
   const percentChange = getTokenStat(token, 'price_percent_change', selectedTimeframe);
 
   const buyCount = (token as any)[`total_buys_${selectedTimeframe}`] || 0;
@@ -942,20 +1125,22 @@ const AuditLogCell: React.FC<{
   return (
     <div className="flex flex-col items-center gap-1">
       <div className="flex items-center gap-1">
-        <span className={`w-2 h-2 rounded-full ${percentChange >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}></span>
-        <span className="text-xs font-medium" style={{ 
+        <span className={`w-2 h-2 rounded-full ${isDiscoverPage ? '' : (percentChange >= 0 ? 'bg-emerald-400' : 'bg-red-400')}`} style={isDiscoverPage ? { backgroundColor: percentChange >= 0 ? '#85d99f' : '#f26681' } : {}}></span>
+        <span className={`text-xs font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
           color: AX.text,
-          fontFamily: monospaceFont,
-          fontWeight: '400'
+          ...(isDiscoverPage ? {} : {
+            fontFamily: monospaceFont,
+            fontWeight: '400'
+          })
         }}>
           {Math.abs(percentChange).toFixed(2)}%
         </span>
       </div>
       <div className="flex gap-2 text-xs" style={{ color: AX.muted }}>
-        <span style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+        <span className={isDiscoverPage ? 'number-font' : ''} style={isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' }}>
           B: {formatSmartNumber(buyCount)}
         </span>
-        <span style={{ fontFamily: monospaceFont, fontWeight: '400' }}>
+        <span className={isDiscoverPage ? 'number-font' : ''} style={isDiscoverPage ? {} : { fontFamily: monospaceFont, fontWeight: '400' }}>
           S: {formatSmartNumber(sellCount)}
         </span>
       </div>
@@ -973,6 +1158,7 @@ const TableRow: React.FC<{
   animationState: Record<string, 'up' | 'down' | null>;
   sortedRows: InterstateTableRow[];
   onClick: () => void;
+  isDiscoverPage?: boolean;
 }> = React.memo(({ 
   token, 
   i, 
@@ -981,7 +1167,8 @@ const TableRow: React.FC<{
   quickBuyAmount, 
   animationState, 
   sortedRows, 
-  onClick 
+  onClick,
+  isDiscoverPage = false
 }) => {
   const handleQuickBuy = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1006,26 +1193,41 @@ const TableRow: React.FC<{
   //   fallbackAggregated: (token as any)[`volume_${selectedTimeframe}`],
   // });
 
+  // Calculate alternating row background color for discover page
+  const rowBgColor = isDiscoverPage 
+    ? (i % 2 === 0 ? '#111214' : '#15161a')
+    : 'transparent';
+  
   return (
     <tr 
-      className="cursor-pointer border-b" 
+      className={`cursor-pointer ${isDiscoverPage ? '' : 'border-b'}`} 
       style={{ 
-        borderColor: AX.border,
+        ...(isDiscoverPage ? {} : { borderColor: AX.border }),
+        backgroundColor: rowBgColor,
         transition: 'none' // Disable all transitions for instant rendering
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = AX.surface2; }}
-      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+      onMouseEnter={(e) => { 
+        if (isDiscoverPage) {
+          e.currentTarget.style.backgroundColor = i % 2 === 0 ? '#1a1b1f' : '#1c1d22';
+        } else {
+          e.currentTarget.style.backgroundColor = AX.surface2;
+        }
+      }}
+      onMouseLeave={(e) => { 
+        e.currentTarget.style.backgroundColor = rowBgColor;
+      }}
       onClick={onClick}
     >
       <td className="w-80 px-4 py-4 align-middle">
-        <TokenInfo token={token} i={i} sortedRows={sortedRows} />
+        <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} />
       </td>
       
       <td className="w-32 px-4 py-4 align-middle">
         <MarketCapCell 
           token={token} 
           selectedTimeframe={selectedTimeframe} 
-          animationState={animationState} 
+          animationState={animationState}
+          isDiscoverPage={isDiscoverPage}
         />
       </td>
       
@@ -1038,28 +1240,43 @@ const TableRow: React.FC<{
           });
           return null;
         })()} */}
-        <div className="text-sm font-medium" style={{ 
-          color: AX.text,
-          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-          fontWeight: '400'
-        }}>
-          ${formatSmartNumber(token.total_liquidity_usd)}
-        </div>
+        {(() => {
+          // Calculate liquidity color for discover page
+          const liquidity = token.total_liquidity_usd || 0;
+          let liquidityColor = AX.text;
+          if (isDiscoverPage && liquidity < 1000) {
+            liquidityColor = '#f26681';
+          }
+          
+          return (
+            <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
+              color: isDiscoverPage ? liquidityColor : AX.text,
+              ...(isDiscoverPage ? {} : {
+                fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                fontWeight: '400'
+              })
+            }}>
+              ${formatSmartNumber(token.total_liquidity_usd)}
+            </div>
+          );
+        })()}
       </td>
       
       <td className="w-28 px-4 py-4 align-middle text-right">
-        <div className="text-sm font-medium" style={{ 
+        <div className={`text-sm font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
           color: AX.text,
-          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-          fontWeight: '400'
+          ...(isDiscoverPage ? {} : {
+            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+            fontWeight: '400'
+          })
         }}>
-          {/* Show "-" when volume data is not available instead of $0.00 */}
-          {volume === 0 ? "-" : `$${formatSmartNumber(volume)}`}
+          {/* Show "0" on discover page, "-" on other pages when volume is 0 */}
+          {volume === 0 ? (isDiscoverPage ? "$0" : "-") : `$${formatSmartNumber(volume)}`}
         </div>
       </td>
       
       <td className="w-24 px-4 py-4 align-middle">
-        <TxnsCell token={token} selectedTimeframe={selectedTimeframe} />
+        <TxnsCell token={token} selectedTimeframe={selectedTimeframe} isDiscoverPage={isDiscoverPage} />
       </td>
       
       {/* Token Info column - commented out per user request */}
@@ -1068,14 +1285,39 @@ const TableRow: React.FC<{
       </td> */}
       
       <td className="w-32 px-4 py-4 align-middle text-center">
-        <InterstateButton
-          variant="primary"
-          size="sm"
-          className="!px-3 !py-2 text-xs font-medium w-full"
-          onClick={handleQuickBuy}
-        >
-          Buy {quickBuyAmount} SOL
-        </InterstateButton>
+        {isDiscoverPage ? (
+          <button
+            onClick={handleQuickBuy}
+            className="flex items-center justify-center gap-1.5 text-xs font-medium transition-all duration-200 cursor-pointer"
+            style={{
+              backgroundColor: '#272a2e',
+              color: '#85d99f',
+              padding: '8px 12px',
+              borderRadius: '4px',
+              minHeight: '32px',
+              width: 'auto',
+              maxWidth: '120px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#2f3238';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#272a2e';
+            }}
+          >
+            <HiLightningBolt size={14} style={{ color: '#85d99f' }} />
+            <span style={{ color: '#85d99f' }}>{quickBuyAmount} SOL</span>
+          </button>
+        ) : (
+          <InterstateButton
+            variant="primary"
+            size="sm"
+            className="!px-3 !py-2 text-xs font-medium w-full"
+            onClick={handleQuickBuy}
+          >
+            Buy {quickBuyAmount} SOL
+          </InterstateButton>
+        )}
       </td>
     </tr>
   );
@@ -1092,7 +1334,8 @@ export default function InterstateTable({
   setSort, 
   selectedTimeframe, 
   quickBuyAmount = 0.44, 
-  skeletonRowCount = 6 
+  skeletonRowCount = 6,
+  isDiscoverPage: isDiscoverPageProp
 }: InterstateTableProps) {
   const router = useRouter();
   const { filter } = useFilter();
@@ -1169,29 +1412,42 @@ export default function InterstateTable({
     }
   }, [rows, selectedTimeframe]);
 
-  const isDiscoverPage = router.pathname === '/discover';
+  const isDiscoverPage = isDiscoverPageProp !== undefined ? isDiscoverPageProp : router.pathname === '/discover';
   
   return (
-    <div className="overflow-x-auto shadow-lg rounded-lg" style={{ 
-      backgroundColor: isDiscoverPage ? '#101114' : 'rgba(30, 31, 38, 0.3)', 
-      border: `1px solid ${AX.border}`,
-      borderColor: AX.border 
+    <div className="overflow-x-auto shadow-lg" style={{ 
+      backgroundColor: isDiscoverPage ? '#111214' : 'rgba(30, 31, 38, 0.3)', 
+      ...(isDiscoverPage ? {
+        borderTop: `1px solid ${AX.border}`,
+        borderLeft: 'none',
+        borderRight: 'none',
+        borderBottom: 'none',
+        borderRadius: '0'
+      } : {
+        border: `1px solid ${AX.border}`,
+        borderRadius: '0.5rem'
+      })
     }}>
       <style jsx>{`
+        .number-font {
+          font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+        }
         .price-animate-up {
-          background: rgba(52, 211, 153, 0.2);
+          background: ${isDiscoverPage ? 'rgba(133, 217, 159, 0.2)' : 'rgba(52, 211, 153, 0.2)'};
           animation: pulse-green 0.6s ease-out;
         }
         .price-animate-down {
-          background: rgba(248, 113, 113, 0.2);
+          background: ${isDiscoverPage ? 'rgba(242, 102, 129, 0.2)' : 'rgba(248, 113, 113, 0.2)'};
           animation: pulse-red 0.6s ease-out;
         }
         @keyframes pulse-green {
-          0% { background: rgba(52, 211, 153, 0.4); }
+          0% { background: ${isDiscoverPage ? 'rgba(133, 217, 159, 0.4)' : 'rgba(52, 211, 153, 0.4)'}; }
           100% { background: transparent; }
         }
         @keyframes pulse-red {
-          0% { background: rgba(248, 113, 113, 0.4); }
+          0% { background: ${isDiscoverPage ? 'rgba(242, 102, 129, 0.4)' : 'rgba(248, 113, 113, 0.4)'}; }
           100% { background: transparent; }
         }
         table {
@@ -1211,7 +1467,8 @@ export default function InterstateTable({
         <TableHeader 
           sortKey={sortKey} 
           sortDirection={sortDirection} 
-          onSort={setSort} 
+          onSort={setSort}
+          isDiscoverPage={isDiscoverPage}
         />
         
         <tbody>
@@ -1270,6 +1527,7 @@ export default function InterstateTable({
                   animationState={animationState}
                   sortedRows={sortedRows}
                   onClick={handleTokenClick}
+                  isDiscoverPage={isDiscoverPage}
                 />
               );
             })

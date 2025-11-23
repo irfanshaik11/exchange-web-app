@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { extractTokenImage } from '~/utils/images';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set appropriate cache headers for better performance
@@ -132,8 +133,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               volume_30m: 0,
               total_liquidity_usd: parseFloat(r.liquidity || r.total_liquidity_usd || '0'),
               created_at: r.createdAt ? new Date(r.createdAt * 1000).toISOString() : null,
-              logo: r.imageUrl || r.logo || null,
-              image: r.imageUrl || r.image || null,
+              // Extract image from multiple possible field names
+              logo: extractTokenImage(r) || null,
+              image: extractTokenImage(r) || null,
               total_buys_5m: timeframe === '5m' ? totalBuys : 0,
               total_buys_1h: timeframe === '1h' ? totalBuys : 0,
               total_buys_6h: timeframe === '6h' ? totalBuys : 0,
@@ -167,8 +169,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               volume_30m: 0,
               total_liquidity_usd: 0, // Legacy format doesn't have liquidity
               created_at: null,
-              logo: null,
-              image: null,
+              // Extract image from multiple possible field names (even in legacy format)
+              logo: extractTokenImage(r) || null,
+              image: extractTokenImage(r) || null,
               total_buys_5m: 0,
               total_buys_1h: 0,
               total_buys_6h: 0,
