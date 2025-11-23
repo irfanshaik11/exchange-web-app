@@ -1,11 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getSolBalance } from "~/utils/functions";
+import { getSolBalance, getMonadBalance } from "~/utils/functions";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only allow GET requests
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  const chain = typeof req.query.chain === 'string' ? req.query.chain : 'sol';
 
   // Validate address parameter exists
   if (!req.query.address || typeof req.query.address !== 'string') {
@@ -14,21 +16,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const addr = decodeURIComponent(req.query.address as string);
 
-  // Basic Solana address validation (should be 32-44 characters, base58)
-  if (addr.length < 32 || addr.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(addr)) {
-    return res.status(400).json({ error: 'Invalid Solana address format' });
+  if (chain === 'sol') {
+    // Basic Solana address validation (should be 32-44 characters, base58)
+    if (addr.length < 32 || addr.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/.test(addr)) {
+      return res.status(400).json({ error: 'Invalid Solana address format' });
+    }
+  } else {
+    // EVM-style validation for Monad or other chains
+    if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+      return res.status(400).json({ error: 'Invalid EVM address format' });
+    }
   }
 
   try {
-    const balance = await getSolBalance(addr, false);
+    let balance: number | null = null;
+    let usdBalance = 0;
+
+    if (chain === 'sol') {
+      balance = await getSolBalance(addr, false);
+
+      if (balance !== null) {
+        const ratio = await getSolPriceInUSDC();
+        usdBalance = ratio ? ratio * balance : 0;
+      }
+    } else if (chain === 'monad') {
+      balance = await getMonadBalance(addr);
+      // TODO: replace with real MON/USD price feed when available
+      // For now we leave usdBalance = 0
+    } else {
+      return res.status(400).json({ error: 'Unsupported chain' });
+    }
 
     // Handle case where balance fetch failed
     if (balance === null) {
       return res.status(500).json({ error: 'Failed to fetch balance' });
     }
-
-    const ratio = await getSolPriceInUSDC();
-    const usdBalance = ratio ? ratio * balance : 0;
 
     res.status(200).json({ data: { balance, usdBalance }});
   } catch (e) {
