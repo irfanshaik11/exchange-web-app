@@ -195,6 +195,11 @@ export default function PulsePage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  // React Query client for manual cache updates from WebSocket
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<TabType>("new");
+  const [activeChain, setActiveChain] = useState<ChainType>("solana");
+
   // React Query hooks - instant cache
   const {
     data: tokens = [],
