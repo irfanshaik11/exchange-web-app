@@ -595,6 +595,52 @@ export const tradeSellExactAmount = (params: SellExactAmountParams) =>
   });
 
 /* -------------------------------------------------------------------------- */
+/*                          Monad Trading endpoints                            */
+/* -------------------------------------------------------------------------- */
+
+export type MonadBuyParams = {
+  tokenAddress: string; // ERC-20 token address (0x format)
+  amountMON: number; // Amount in MON (native currency)
+  launchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs'; // Launchpad identifier
+  slippage?: number; // Optional: Slippage percentage (e.g., 5 for 5%)
+};
+
+export type MonadSellParams = {
+  tokenAddress: string; // ERC-20 token address
+  launchpad: 'nadfun' | 'flapsh-simple'; // Launchpad identifier (flapsh-devs doesn't support sells)
+  tokenAmount?: string; // Optional: Exact token amount to sell (mutually exclusive with percentage)
+  percentage?: number; // Optional: Percentage of balance to sell (1-100, mutually exclusive with tokenAmount)
+  slippage?: number; // Optional: Slippage percentage
+};
+
+export const tradeMonadBuy = (params: MonadBuyParams, authToken: string) =>
+  apiFetch<{
+    success: boolean;
+    txHash: string;
+    blockNumber: number;
+    launchpad: string;
+    tokenAddress: string;
+    amountMON: number;
+  }>("/api/trade/monad/buy", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+export const tradeMonadSell = (params: MonadSellParams, authToken: string) =>
+  apiFetch<{
+    success: boolean;
+    txHash: string;
+    blockNumber: number;
+    launchpad: string;
+    tokenAddress: string;
+  }>("/api/trade/monad/sell", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+/* -------------------------------------------------------------------------- */
 /*                       Token Analytics endpoints (Rust)                     */
 /* -------------------------------------------------------------------------- */
 

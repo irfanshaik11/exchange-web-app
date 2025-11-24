@@ -61,7 +61,7 @@ import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { extractTokenImage } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
-import { tradeBuy, createLimitOrder, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { tradeBuy, tradeMonadBuy, createLimitOrder, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
@@ -1987,8 +1987,26 @@ function MonadTable({
     return parseInt(selectedPill.replace('P', '')) - 1;
   };
   // QUICK BUY handler – with detailed logging
+  // Helper function to map launchpad protocol to backend format
+  const getMonadLaunchpad = (token: Token): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
+    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || '';
+    
+    if (protocol.includes('nad.fun') || protocol.includes('nadfun')) {
+      return 'nadfun';
+    } else if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
+      // Check if it's devs portal (usually has 'dev' in the name or specific identifier)
+      if (protocol.includes('dev')) {
+        return 'flapsh-devs';
+      }
+      return 'flapsh-simple';
+    }
+    
+    // Default to nadfun if unknown
+    return 'nadfun';
+  };
+
   const handleQuickBuy = async (token: Token) => {
-    console.log("🎯 Enhanced Quick Buy called for token:", token.symbol);
+    console.log("🎯 Monad Quick Buy called for token:", token.symbol);
     
     if (!user?.bearerToken || !user?.id) {
       console.log("❌ User not logged in");
@@ -2001,46 +2019,77 @@ function MonadTable({
     const buyAmount = parseFloat(thunderAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
       console.log("❌ Invalid buy amount:", thunderAmount);
-      showEnhancedToast('warning', 'Please enter a valid SOL amount (minimum 0.001 SOL)', {
+      showEnhancedToast('warning', 'Please enter a valid MON amount (minimum 0.001 MON)', {
         title: 'Invalid Amount',
       });
       return;
     }
 
-    const presetIndex = getPresetIndex(); // Use local preset selection based on selectedPill
-    const preset = presets[presetIndex];
-    if (!preset) {
-      console.log("❌ Quick buy preset missing for index", presetIndex);
-      showEnhancedToast('error', 'Quick buy preset not configured', {
-        title: 'Configuration Error',
-        suggestions: ['Update your presets in settings'],
+    if (!token.mint) {
+      console.log("❌ Invalid token - missing mint address");
+      showEnhancedToast('error', 'Invalid token information', {
+        title: 'Token Error',
       });
       return;
     }
 
-    const settings = preset.quickBuySettings;
+    const presetIndex = getPresetIndex();
+    const preset = presets[presetIndex];
+    const settings = (preset?.quickBuySettings || {}) as any;
+    
+    // Get launchpad from token
+    const launchpad = getMonadLaunchpad(token);
+    const tokenAddress = token.mint; // Monad uses mint address (0x format)
+    
+    // Get slippage from preset or use default (15%)
+    const slippage = settings?.maxSlippage ? (settings.maxSlippage * 100) : 15;
 
-    // Execute enhanced trade with all features
-    const result = await executeEnhancedTrade({
-      token,
-      amount: buyAmount,
-      side: 'buy',
-      settings,
-      user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: Number(solBalance || 0),
-      solPriceUsd: 150, // TODO: Get real SOL price
-      onSuccess: (txHash, stats) => {
-        console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });
-      },
-      onError: (error) => {
-        console.error('❌ Enhanced Quick Buy failed:', error);
-      },
-      onWarning: (warnings) => {
-        console.warn('⚠️ Pre-transaction warnings:', warnings);
-      },
+    console.log("📤 Monad Quick Buy params:", {
+      tokenAddress,
+      amountMON: buyAmount,
+      launchpad,
+      slippage,
     });
 
-    return result;
+    const toastId = showEnhancedToast('loading', 'Executing Monad buy...', {
+      title: 'Processing Trade',
+      description: `${buyAmount} MON → ${token.symbol}`,
+    });
+
+    try {
+      const result = await tradeMonadBuy(
+        {
+          tokenAddress,
+          amountMON: buyAmount,
+          launchpad,
+          slippage,
+        },
+        user.bearerToken
+      );
+
+      if (result.success && result.txHash) {
+        updateEnhancedToast(toastId, 'success', 'Buy successful!', {
+          title: 'Trade Executed',
+          description: `Tx: ${result.txHash.slice(0, 8)}...`,
+        });
+        console.log('✅ Monad Quick Buy successful:', result);
+        return { success: true, txHash: result.txHash };
+      } else {
+        const errorMsg = (result as any)?.error || 'Unknown error';
+        updateEnhancedToast(toastId, 'error', 'Buy failed', {
+          title: 'Trade Failed',
+          description: errorMsg,
+        });
+        return { success: false, error: errorMsg };
+      }
+    } catch (error: any) {
+      console.error('❌ Monad Quick Buy failed:', error);
+      const errorMessage = error?.message || error?.error || 'Trade failed. Please try again.';
+      updateEnhancedToast(toastId, 'error', errorMessage, {
+        title: 'Trade Failed',
+      });
+      return { success: false, error: errorMessage };
+    }
   };
 
   // Protocol and quote token data with official icons from web3icons
