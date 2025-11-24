@@ -53,7 +53,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [solBalance, setSolBalance] = useState(0);
   const [usdcBalance, setUsdcBalance] = useState(0);
-  const [lastNotifiedBalance, setLastNotifiedBalance] = useState(0);
+  const [lastNotifiedBalance, setLastNotifiedBalance] = useState<Record<string, number>>({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [primaryWalletAddresses, setPrimaryWalletAddresses] = useState<{
     solana: string | null;
@@ -63,6 +63,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [chainBalances, setChainBalances] = useState<Record<string, number>>({
     sol: 0,
   });
+  const [balanceCheckInProgress, setBalanceCheckInProgress] = useState<Record<string, boolean>>({});
 
   const persistUser = useCallback((value: UserInfo | null) => {
     if (typeof window === 'undefined') return;
@@ -144,88 +145,125 @@ export function UserProvider({ children }: { children: ReactNode }) {
         : primaryWalletAddresses.ethereum) ||
       (chain === 'sol' ? user?.publicKey : null);
 
-    if (targetAddress) {
-      try {
-        const response = await fetch(
-          `/api/get-sol-bal?chain=${encodeURIComponent(chain)}&address=${encodeURIComponent(
-            targetAddress,
-          )}`,
-        );
-        
-        if (!response.ok) {
-          console.warn('Failed to fetch SOL balance:', response.status, response.statusText);
-          return null;
-        }
-        
-        const data = await response.json();
-        
-        // Check if the response has the expected structure
-        if (!data || !data.data || typeof data.data.balance === 'undefined') {
-          console.warn('Invalid balance response structure:', data);
-          return null;
-        }
-        
-        const newBalance = data.data.balance;
-        const newUsdBalance = data.data.usdBalance;
+    if (!targetAddress) return null;
 
-        setChainBalances((prev) => ({
-          ...prev,
-          [chain]: newBalance,
-        }));
+    // Prevent multiple simultaneous balance checks for the same address
+    const checkKey = `${chain}:${targetAddress}`;
+    if (balanceCheckInProgress[checkKey]) {
+      console.log(`⏸️ Balance check already in progress for ${checkKey}`);
+      return null;
+    }
 
-        if (chain === 'sol') {
-          console.log(
-            `Balance check: current=${solBalance.toFixed(4)}, new=${newBalance.toFixed(
-              4,
-            )}, lastNotified=${lastNotifiedBalance.toFixed(4)}`,
-          );
+    setBalanceCheckInProgress((prev) => ({ ...prev, [checkKey]: true }));
 
-          if (newBalance > lastNotifiedBalance && lastNotifiedBalance >= 0 && notificationsEnabled) {
-            const depositAmount = newBalance - lastNotifiedBalance;
-            console.log(
-              `🚨 DEPOSIT DETECTED: ${depositAmount.toFixed(4)} SOL (from ${lastNotifiedBalance.toFixed(
-                4,
-              )} to ${newBalance.toFixed(4)})`,
-            );
-            showEnhancedToast('success', `🎉 Deposit received! +${depositAmount.toFixed(4)} SOL`, {
-              duration: 5000,
-              style: {
-                background: '#10B981',
-                color: '#fff',
-              },
-            });
-            setLastNotifiedBalance(newBalance);
-            console.log(`✅ Updated lastNotifiedBalance to: ${newBalance.toFixed(4)}`);
-          } else if (newBalance > lastNotifiedBalance && lastNotifiedBalance >= 0 && !notificationsEnabled) {
-            console.log(
-              `🚨 DEPOSIT DETECTED but notifications disabled: ${(newBalance - lastNotifiedBalance).toFixed(4)} SOL`,
-            );
-            setLastNotifiedBalance(newBalance);
-          } else {
-            console.log('ℹ️ No deposit detected. Balance unchanged or already notified.');
-          }
-
-          setSolBalance(newBalance);
-          setUsdcBalance(newUsdBalance);
-        }
-        return { balance: newBalance, usdBalance: newUsdBalance };
-      } catch (error) {
-        console.error('Failed to refresh balance:', error);
+    try {
+      const response = await fetch(
+        `/api/get-sol-bal?chain=${encodeURIComponent(chain)}&address=${encodeURIComponent(
+          targetAddress,
+        )}`,
+      );
+      
+      if (!response.ok) {
+        console.warn('Failed to fetch SOL balance:', response.status, response.statusText);
         return null;
       }
+      
+      const data = await response.json();
+      
+      // Check if the response has the expected structure
+      if (!data || !data.data || typeof data.data.balance === 'undefined') {
+        console.warn('Invalid balance response structure:', data);
+        return null;
+      }
+      
+      const newBalance = data.data.balance;
+      const newUsdBalance = data.data.usdBalance;
+
+      setChainBalances((prev) => ({
+        ...prev,
+        [chain]: newBalance,
+      }));
+
+      if (chain === 'sol') {
+        const lastNotified = lastNotifiedBalance[targetAddress] ?? newBalance;
+        
+        console.log(
+          `Balance check for ${targetAddress}: current=${solBalance.toFixed(4)}, new=${newBalance.toFixed(
+            4,
+          )}, lastNotified=${lastNotified.toFixed(4)}`,
+        );
+
+        // Only show notification if:
+        // 1. Balance actually increased (not just wallet change)
+        // 2. We have a previous balance to compare (not first check)
+        // 3. Notifications are enabled
+        // 4. The increase is significant (more than 0.0001 SOL to avoid dust)
+        const depositAmount = newBalance - lastNotified;
+        const isSignificantIncrease = depositAmount > 0.0001;
+        const hasPreviousBalance = lastNotified !== newBalance && lastNotified > 0;
+
+        if (isSignificantIncrease && hasPreviousBalance && notificationsEnabled) {
+          console.log(
+            `🚨 DEPOSIT DETECTED: ${depositAmount.toFixed(4)} SOL (from ${lastNotified.toFixed(
+              4,
+            )} to ${newBalance.toFixed(4)})`,
+          );
+          showEnhancedToast('success', `Deposit received`, {
+            title: '🎉 Balance Updated',
+            description: `+${depositAmount.toFixed(4)} SOL`,
+            duration: 5000,
+          });
+          setLastNotifiedBalance((prev) => ({ ...prev, [targetAddress]: newBalance }));
+          console.log(`✅ Updated lastNotifiedBalance for ${targetAddress} to: ${newBalance.toFixed(4)}`);
+        } else if (isSignificantIncrease && hasPreviousBalance && !notificationsEnabled) {
+          console.log(
+            `🚨 DEPOSIT DETECTED but notifications disabled: ${depositAmount.toFixed(4)} SOL`,
+          );
+          setLastNotifiedBalance((prev) => ({ ...prev, [targetAddress]: newBalance }));
+        } else {
+          // Initialize or update lastNotifiedBalance without showing notification
+          if (!lastNotifiedBalance[targetAddress]) {
+            setLastNotifiedBalance((prev) => ({ ...prev, [targetAddress]: newBalance }));
+            console.log(`🔧 Initialized lastNotifiedBalance for ${targetAddress}: ${newBalance.toFixed(4)}`);
+          } else {
+            // Update lastNotifiedBalance even if no deposit detected (for balance tracking)
+            setLastNotifiedBalance((prev) => ({ ...prev, [targetAddress]: newBalance }));
+            console.log('ℹ️ No deposit detected. Balance unchanged or already notified.');
+          }
+        }
+
+        // Always update balance state regardless of notification logic
+        setSolBalance(newBalance);
+        setUsdcBalance(newUsdBalance);
+      }
+      return { balance: newBalance, usdBalance: newUsdBalance };
+    } catch (error) {
+      console.error('Failed to refresh balance:', error);
+      return null;
+    } finally {
+      setBalanceCheckInProgress((prev) => {
+        const updated = { ...prev };
+        delete updated[checkKey];
+        return updated;
+      });
     }
-    return null;
   }, [
     primaryWalletAddresses.solana,
     primaryWalletAddresses.ethereum,
     user?.publicKey,
-    lastNotifiedBalance,
     notificationsEnabled,
+    solBalance,
   ]);
 
   useEffect(() => {
     if (!user) return;
+    
+    // Reset lastNotifiedBalance when wallet addresses change to prevent false notifications
     if (primaryWalletAddresses.solana) {
+      // Initialize lastNotifiedBalance for new wallet address if not exists
+      if (!lastNotifiedBalance[primaryWalletAddresses.solana]) {
+        // Will be set after first balance fetch
+      }
       refreshBalance({ chain: 'sol', address: primaryWalletAddresses.solana });
     }
     if (primaryWalletAddresses.ethereum) {
@@ -313,7 +351,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     Cookies.remove('token');
     setUser(null);
     setSolBalance(0);
-    setLastNotifiedBalance(0);
+    setLastNotifiedBalance({});
+    setBalanceCheckInProgress({});
     if (typeof window !== 'undefined') {
       clearStoredReferralAccess();
       window.dispatchEvent(new Event('referral-access-reset'));
@@ -345,11 +384,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
           const currentUsdBalance = res.usdBalance;
           
           // Set the initial balance as the last notified balance to prevent false notifications
-          setLastNotifiedBalance(currentBalance);
+          setLastNotifiedBalance((prev) => ({ ...prev, [address]: currentBalance }));
           setSolBalance(currentBalance);
           setUsdcBalance(currentUsdBalance);
           
-          console.log(`🔧 INITIALIZED balance tracking: ${currentBalance.toFixed(4)} SOL (lastNotifiedBalance set to ${currentBalance.toFixed(4)})`);
+          console.log(`🔧 INITIALIZED balance tracking for ${address}: ${currentBalance.toFixed(4)} SOL (lastNotifiedBalance set to ${currentBalance.toFixed(4)})`);
           
           // Enable notifications after initialization is complete
           setTimeout(() => {

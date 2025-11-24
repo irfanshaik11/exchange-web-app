@@ -7199,11 +7199,39 @@ function PulseTable({
                     <div className="flex flex-row items-center gap-1">
                       <BottomCardInfoHolder PassedIcon={FaRegUser } value={0.2} />
                       <BottomCardInfoHolder PassedIcon={LuChefHat} value={0.2} />
-                      <BottomCardInfoHolder PassedIcon={GiSeatedMouse } value={0.2} />
-                      <BottomCardInfoHolder PassedIcon={GoStack} value={0.2} />
+                      <BottomCardInfoHolder 
+                        PassedIcon={GiSeatedMouse} 
+                        value={(() => {
+                          const val = (token as any).insider_held_percentage;
+                          const num = typeof val === 'string' ? parseFloat(val) : (val ?? 0);
+                          return isNaN(num) ? 0 : num;
+                        })().toFixed(2)} 
+                        tooltip="Insider Holdings"
+                        count={(token as any).insider_count ?? undefined}
+                      />
+                      <BottomCardInfoHolder 
+                        PassedIcon={GoStack} 
+                        value={(() => {
+                          const val = (token as any).bundler_held_percentage;
+                          const num = typeof val === 'string' ? parseFloat(val) : (val ?? 0);
+                          return isNaN(num) ? 0 : num;
+                        })().toFixed(2)}
+                        tooltip="Bundler Holdings"
+                        count={(token as any).bundler_count ?? undefined}
+                      />
                       <BottomCardInfoHolder PassedIcon={PiFishSimpleLight } value={0.2} />
                       <BottomCardInfoHolder PassedIcon={PiLeafLight } value={0.2} />
-                      <BottomCardInfoHolder PassedIcon={PiTarget} value={0.2} green={false} />
+                      <BottomCardInfoHolder 
+                        PassedIcon={PiTarget} 
+                        value={(() => {
+                          const val = (token as any).sniper_held_percentage;
+                          const num = typeof val === 'string' ? parseFloat(val) : (val ?? 0);
+                          return isNaN(num) ? 0 : num;
+                        })().toFixed(2)} 
+                        green={false}
+                        tooltip="Sniper Holdings"
+                        count={(token as any).sniper_count ?? undefined}
+                      />
                     </div>
                   </div>
                 </Link>

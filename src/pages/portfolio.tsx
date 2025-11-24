@@ -1958,13 +1958,13 @@ export default function PortfolioPage() {
                               </div>
 
                               {/* Holdings */}
-                              <div className="flex items-center gap-1 justify-center">
-                                <div className="w-5 h-2.5 bg-[#374151] rounded-sm relative">
-                                  <div className="absolute top-0 left-0 w-2 h-2 bg-[#70E0B0] rounded-sm"></div>
-                                </div>
-                                <span className="text-xs text-[#9CA3AF]">
-                                  {wallet.holdingsCount}
-                                </span>
+                              <div className="flex items-center justify-center">
+                                <StackedTokenBoxes count={
+                                  // Use API value if available and > 0, otherwise fallback to positions.length for primary wallet
+                                  wallet.holdingsCount > 0 
+                                    ? wallet.holdingsCount 
+                                    : (wallet.isPrimary && positions.length > 0 ? positions.length : wallet.holdingsCount)
+                                } />
                               </div>
 
                               {/* Actions */}

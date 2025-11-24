@@ -4285,7 +4285,7 @@ function MonadTable({
 
               return (
                 <Link
-                  href={`/trade/${pairAddress}?${queryParams}`}
+                  href={`/trade/monad/${pairAddress}?${queryParams}`}
                   key={pairAddress}
                 className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 transition-all duration-300 ease-out"
                 style={{ 
@@ -4295,8 +4295,8 @@ function MonadTable({
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
                   
-                  // Prefetch trade page for instant navigation
-                  router.prefetch(`/trade/${pairAddress}?${queryParams}`);
+                  // Prefetch Monad trade page for instant navigation
+                  router.prefetch(`/trade/monad/${pairAddress}?${queryParams}`);
                   
                   // Cache token metadata for instant display
                   try {
