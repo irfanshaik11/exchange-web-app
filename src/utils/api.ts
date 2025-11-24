@@ -216,8 +216,34 @@ export const metamaskLogin = (
   });
 };
 
+// Turnkey Session Login - Exchange Turnkey session token for JWT
+export const turnkeySessionLogin = (params: {
+  organizationId: string;
+  userId?: string;
+  sessionToken?: string;
+}) =>
+  apiFetch<{ token: string; user: { id: string; email: string; name: string } }>(
+    "/api/users/turnkey/session/login",
+    {
+      method: "POST",
+      body: params,
+    }
+  );
+
 /** Returns the Google OAuth redirect URL (client will navigate to it) */
-export const googleAuthUrl = `${env.NEXT_PUBLIC_BACKEND_URL}/api/users/auth/google`;
+export const initGoogleTurnkeyAuth = (params: {
+  publicKey: string;
+  publicKeyUncompressed: string;
+  codeVerifier: string;
+  origin: string;
+}) =>
+  apiFetch<{ authUrl: string; state: string; expiresInMs: number }>(
+    "/api/users/auth/google/init",
+    {
+      method: "POST",
+      body: params,
+    }
+  );
 
 /* -------------------------------------------------------------------------- */
 /*                             Referral endpoints                              */

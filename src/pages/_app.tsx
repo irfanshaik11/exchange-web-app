@@ -34,6 +34,7 @@ import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
 import { storeReferralCodeHint } from '~/utils/referralStorage';
+import { TurnkeyProviderWrapper } from '../components/TurnkeyProviderWrapper';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -179,8 +180,24 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   
   useEffect(() => {
     if (!isMounted) return;
+    
+    // Check if there's a token in cookies - if so, wait for user to load
+    const token = Cookies.get('token');
+    
     if (enforceLogin && !userLoading && !user) {
-      setLoginOpen(true);
+      // If there's a token, wait a bit longer for user state to load
+      // This handles the case where we just logged in and redirected
+      const delay = token ? 1500 : 500;
+      const timeout = setTimeout(() => {
+        // Double-check token still exists and user still isn't loaded
+        const currentToken = Cookies.get('token');
+        if (!currentToken || user) {
+          // Token was removed or user loaded, don't show login
+          return;
+        }
+        setLoginOpen(true);
+      }, delay);
+      return () => clearTimeout(timeout);
     }
     if (user && loginOpen) {
       setLoginOpen(false);
@@ -327,28 +344,30 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       <div className={inter.className}>
         <MobileBlocker>
           <MonadTradeBanner />
-          <WagmiProviderWrapper config={config} queryClient={queryClient}>
-            <UserProvider>
-              <TokenHandler />
-              <ReferralTracker />
-              <SolPriceProvider>
-                <ThemeProvider>
-                  <QuickBuyProvider>
-                    <WatchlistProvider>
-                      <FilterProvider>
-                        <WalletTrackerProvider>
-                          <ReferralAccessGate>
-                            <Component {...pageProps} />
-                          </ReferralAccessGate>
-                        </WalletTrackerProvider>
-                      </FilterProvider>
-                    </WatchlistProvider>
-                  </QuickBuyProvider>
-                  <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
-                </ThemeProvider>
-              </SolPriceProvider>
-            </UserProvider>
-          </WagmiProviderWrapper>
+          <TurnkeyProviderWrapper>
+            <WagmiProviderWrapper config={config} queryClient={queryClient}>
+              <UserProvider>
+                <TokenHandler />
+                <ReferralTracker />
+                <SolPriceProvider>
+                  <ThemeProvider>
+                    <QuickBuyProvider>
+                      <WatchlistProvider>
+                        <FilterProvider>
+                          <WalletTrackerProvider>
+                            <ReferralAccessGate>
+                              <Component {...pageProps} />
+                            </ReferralAccessGate>
+                          </WalletTrackerProvider>
+                        </FilterProvider>
+                      </WatchlistProvider>
+                    </QuickBuyProvider>
+                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                  </ThemeProvider>
+                </SolPriceProvider>
+              </UserProvider>
+            </WagmiProviderWrapper>
+          </TurnkeyProviderWrapper>
           <Toaster 
             position={toastPosition}
             toastOptions={{

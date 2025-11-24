@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { login as apiLogin, register as apiRegister, phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, googleAuthUrl } from '../utils/api';
+import { login as apiLogin, register as apiRegister, phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, turnkeySessionLogin } from '../utils/api';
 import Cookies from 'js-cookie';
 import { useUser } from "./UserContext";
 import InterstatePopout from './InterstatePopout';
@@ -9,6 +9,8 @@ import { toast } from 'react-hot-toast';
 import { useWallet } from "./useWallet";
 import { usePhantomWallet } from '../hooks/usePhantomWallet';
 import { useMetaMaskWallet } from '../hooks/useMetaMaskWallet';
+import { useTurnkey } from '@turnkey/react-wallet-kit';
+import { useRouter } from 'next/router';
 
 const ENABLE_EMAIL_AUTH = false;
 
@@ -50,6 +52,10 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   // Use the new wallet hooks
   const phantomWallet = usePhantomWallet();
   const metaMaskWallet = useMetaMaskWallet();
+  
+  // Turnkey hooks
+  const turnkeyClient = useTurnkey();
+  const router = useRouter();
 
   // Helper function to clear all loading states
   const clearAllLoadingStates = () => {
@@ -77,10 +83,12 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
         setLoading(true);
         refreshUser().then(() => {
           setLoading(false);
-          // If user is now authenticated, close the modal
-          if (user) {
-            onClose();
-          }
+          // Small delay to let user state propagate
+          setTimeout(() => {
+            // Re-check user state after refresh completes
+            const currentUser = user; // This will be stale, but the effect will re-run
+            // The useEffect will re-run when user changes, so we don't need to manually check here
+          }, 100);
         }).catch(() => setLoading(false));
       }
     } else {
@@ -144,20 +152,128 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
     }
   }
 
-  // Google Login handler
-  async function handleGoogleLogin(e: React.FormEvent) {
-    e.preventDefault();
+  // Google Login handler using Turnkey React Wallet Kit
+  const handleGoogleLogin = async (response: any) => {
     setGoogleLoading(true);
     setError(null);
     setSuccess(null);
+
     try {
-      window.location.href = googleAuthUrl;
-    } catch (err) {
-      setError('Login failed');
-    } finally {
+      if (!turnkeyClient) {
+        throw new Error('Turnkey not initialized');
+      }
+
+      // Use Turnkey's handleGoogleOauth which handles the full flow
+      // Use redirect mode (openInPage: true) to avoid COOP policy issues with popups
+      console.log('[Turnkey] 🔵 Starting Google OAuth flow...');
+      await turnkeyClient.handleGoogleOauth({
+        openInPage: true, // Use redirect mode to avoid COOP policy blocking popup
+        onOauthSuccess: async ({ oidcToken, providerName, publicKey }) => {
+          console.log('[Turnkey] ✅ OAuth success callback triggered', {
+            providerName,
+            hasOidcToken: !!oidcToken,
+            hasPublicKey: !!publicKey,
+            oidcTokenLength: oidcToken?.length,
+            publicKeyLength: publicKey?.length,
+            timestamp: new Date().toISOString(),
+          });
+
+          try {
+            // Get session information from Turnkey client (session is a property, not a method)
+            const session = turnkeyClient.session;
+            
+            if (session) {
+              const expiryDate = session.expiry ? new Date(session.expiry * 1000).toISOString() : 'N/A';
+              
+              console.log('[Turnkey] ✅ Session created successfully', {
+                sessionType: session.sessionType,
+                organizationId: session.organizationId || 'N/A',
+                userId: session.userId || 'N/A',
+                expiry: expiryDate,
+                expirationSeconds: session.expirationSeconds || 'N/A',
+                hasToken: !!session.token,
+                hasPublicKey: !!session.publicKey,
+                providerName,
+                timestamp: new Date().toISOString(),
+              });
+
+              // Log full session details
+              console.log('[Turnkey] 📋 Full session details:', {
+                sessionType: session.sessionType,
+                organizationId: session.organizationId,
+                userId: session.userId,
+                expiry: expiryDate,
+                expiryTimestamp: session.expiry,
+                expirationSeconds: session.expirationSeconds,
+                tokenLength: session.token?.length || 0,
+                publicKey: session.publicKey || 'N/A',
+              });
+            } else {
+              console.warn('[Turnkey] ⚠️ Session object is undefined after OAuth success');
+            }
+
+            // Exchange Turnkey session for backend JWT
+            if (!session) {
+              throw new Error('Turnkey session not available');
+            }
+
+            console.log('[Turnkey] 🔄 Exchanging Turnkey session for backend JWT...');
+            const loginResponse = await turnkeySessionLogin({
+              organizationId: session.organizationId,
+              userId: session.userId,
+              sessionToken: session.token,
+            });
+
+            if (!loginResponse?.token) {
+              throw new Error('Failed to get JWT token from backend');
+            }
+
+            // Store JWT token in cookies
+            Cookies.set('token', loginResponse.token, { expires: 7, path: '/' });
+            console.log('[Turnkey] ✅ JWT token stored in cookies');
+
+            // Refresh user state and wait for it to complete
+            await refreshUser();
+            
+            // Verify token is stored
+            const tokenAfterRefresh = Cookies.get('token');
+            if (!tokenAfterRefresh) {
+              throw new Error('Token was not properly stored');
+            }
+            
+            console.log('[Turnkey] ✅ User state refreshed after successful authentication', {
+              hasToken: !!tokenAfterRefresh,
+            });
+            
+            setSuccess('Google login successful!');
+            
+            // Close modal first
+            onClose();
+            setGoogleLoading(false);
+            
+            // Use a hard redirect with window.location to ensure:
+            // 1. The page fully reloads with the new auth state
+            // 2. All components re-initialize with the token from cookies
+            // 3. The GlobalLoginModalManager will check the token and user state on page load
+            // Small delay to ensure modal closes and token is persisted
+            setTimeout(() => {
+              setSuccess(null);
+              // Hard redirect ensures clean state - TokenHandler in _app.tsx will pick up the token
+              window.location.href = '/pulse';
+            }, 600);
+          } catch (sessionError: any) {
+            console.error('[Turnkey] ⚠️ Error during session exchange:', sessionError);
+            setError(sessionError?.message || 'Failed to complete login');
+            setGoogleLoading(false);
+          }
+        },
+      });
+    } catch (err: any) {
+      console.error('Google login failed:', err);
+      setError(err?.message || 'Google login failed');
       setGoogleLoading(false);
     }
-  }
+  };
 
   // Phantom Wallet Login handler - Enhanced with proper connection management
   async function handlePhantomLogin() {
