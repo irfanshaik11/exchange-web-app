@@ -18,6 +18,8 @@ export interface EnhancedToastOptions {
   showExplorerLink?: boolean;
   txHash?: string;
   style?: React.CSSProperties;
+  position?: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+  customContent?: React.ReactNode;
 }
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info' | 'loading';

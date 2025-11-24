@@ -549,7 +549,8 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   useEffect(() => {
     const fetchInitialMigratedTokens = async () => {
       try {
-        const url = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/pulse/migrated?limit=70`;
+        // Use Next.js proxy to avoid CORS issues
+        const url = `/api/token-service/pulse-migrated?limit=70`;
         const response = await fetch(url);
         if (response.ok) {
           const data = await response.json();

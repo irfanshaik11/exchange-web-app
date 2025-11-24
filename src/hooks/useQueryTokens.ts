@@ -30,7 +30,7 @@ async function fetchNewPairs(): Promise<Token[]> {
 }
 
 async function fetchFinalStretch(): Promise<Token[]> {
-  const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+  const apiUrl = `/api/token-service/pulse-final-stretch?limit=100&t=${Date.now()}`;
   const response = await fetch(apiUrl);
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
