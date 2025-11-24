@@ -497,6 +497,7 @@ export default function MonadTradePage() {
                     tokenSymbol={displayToken?.symbol || null}
                     tokenName={displayToken?.name || null}
                     tokenDecimals={displayToken?.decimals || null}
+                    network="monad"
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>

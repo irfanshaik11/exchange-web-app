@@ -1,0 +1,1120 @@
+
+> memecoin-dashboard@0.1.0 dev
+> next dev --turbo
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/kishoreshankarabimanyu/package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * /Users/kishoreshankarabimanyu/Kishore/project/interstate_prod/meme-cointrading-ui/package-lock.json
+   * /Users/kishoreshankarabimanyu/Kishore/project/interstate_prod/package-lock.json
+
+   ▲ Next.js 15.5.6 (Turbopack)
+   - Local:        http://localhost:3000
+   - Network:      http://10.163.101.20:3000
+   - Environments: .env.local
+   - Experiments (use with caution):
+     · optimizePackageImports
+
+ ✓ Starting...
+ ✓ Ready in 1222ms
+ ⚠ Webpack is configured while Turbopack is not, which may cause problems.
+ ⚠ See instructions if you need to configure Turbopack:
+  https://nextjs.org/docs/app/api-reference/next-config-js/turbopack
+
+ ✓ Compiled /api/get-sol-bal in 151ms
+(node:59473) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 787ms
+ ○ Compiling /pulse ...
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 405ms
+ ✓ Compiled /pulse in 8.9s
+(node:59473) ExperimentalWarning: CommonJS module /Users/kishoreshankarabimanyu/Kishore/project/interstate_prod/meme-cointrading-ui/node_modules/@walletconnect/ethereum-provider/dist/index.cjs.js is loading ES Module /Users/kishoreshankarabimanyu/Kishore/project/interstate_prod/meme-cointrading-ui/node_modules/@reown/appkit/dist/esm/exports/core.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+[RollingCache] Skipping localStorage load (SSR environment)
+ GET /pulse 200 in 14289ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 601ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 830ms
+ ✓ Compiled /api/token-service/pulse-final-stretch in 141ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762844549334 200 in 191ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762844549274 200 in 185ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762844549273 200 in 592ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762844549333 200 in 600ms
+ ✓ Compiled /api/image in 99ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_C6fkTEEo7wTqm2mYDC645w74KQcmUPnv5LyAAUsnpump_small.png 200 in 275ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_H2ih45vVpeugsUw9uVGafDVtKp5tL9BNZyobHxUUpump_small.png 200 in 280ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DkN6WXiLwib5Kq7CHqh5JGAEt5nPFXQZhVHMEaSEDfMq_small.png 200 in 289ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_qgAgDcFvkdZ2KDqyicg3UEsha9kqdCG5Wy26Jo9bonk_small.png 200 in 492ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_HJM3s2ojTPC9BcxokwcVBqzjWULwiqim7XWpzf2EnhKC_small.png 200 in 505ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_9EtxRaHaMor3qWeBYLi5y4eAjvm7JNAydHSbGSGZpump_small.png 200 in 243ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Hbftv9uBYqpfmzyo6steXVjAUWBwWK1G8b9SQKvbonk_small.png 200 in 591ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 381ms
+ HEAD /pulse 200 in 374ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 431ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 454ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 442ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 387ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 520ms
+ GET /pulse 200 in 302ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 291ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Fanesha',
+    protocol: 'pump.fun',
+    pair: '2fD9YP3b...',
+    volume_24h: '34367',
+    total_buys_24h: 176,
+    bonding_pct: '0',
+    graduation_percent: '80.73219785177031'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762844623697 200 in 151ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Fanesha',
+    protocol: 'pump.fun',
+    pair: '2fD9YP3b...',
+    volume_24h: '34367',
+    total_buys_24h: 176,
+    bonding_pct: '0',
+    graduation_percent: '80.73219785177031'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762844623749 200 in 93ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762844623695 200 in 302ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762844623748 200 in 228ms
+ HEAD /pulse 200 in 277ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DnfGFiCmYSVDKpddJBkpHnfu5czrCwoGUM6vubzzbonk_small.png 200 in 180ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3dwQY8GaqGHnd9NV522mew5UioaS85Xhgz2JnjGcbonk_small.png 200 in 193ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AZDKrkG5uFN9vkMan1Bk7vqoLaNJXLkpz1h8GjxBbonk_small.png 200 in 202ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_14Lbjdusi6Ftgtq7p2SEH4mAVJs7WBBd2PAXafsUYwen_small.png 200 in 209ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_EtpQtF2hZZaEMZTKCp15MmMtwjsXJGz4Z6ADCUQopump_1760406248_small.png 200 in 234ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_9kupJPCV8PRDPqpAvUrnn9GndabE8tihkWGmFC7wpump_small.png 200 in 158ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_53YLRwDZJBqMSnMLy3sNKRNtgNcranqCw4Q18e1rpump_small.png 200 in 172ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 385ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 389ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 601ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 393ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 384ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_ELgVAEeeST14VCeAXPAheh5M6bfQXdA4NQYn7pyxDuGv_small.png 200 in 54ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 396ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 459ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 359ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 431ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Gzgxj8ff63aEd6WvgM3HgKJwQuPEfYf8Usn59EBLpump_small.png 200 in 83ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 380ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 365ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+ GET /api/token-service/getAllTokens?filter=new&limit=30 200 in 137ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 369ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 425ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 352ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 437ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 402ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 410ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 376ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 431ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_wcHUHMKQNKgkGC68AQc68jT2Xk87wVLue95aaE88ZPb_small.png 200 in 175ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 369ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 323ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 457ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 341ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 289ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 347ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 296ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 354ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 316ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DNv4pPCMPEtfU8mALB1tyW7pKGjPwW5MHQujXoL9EayE_small.png 200 in 69ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 305ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 352ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 292ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 302ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 311ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 479ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 311ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 353ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 293ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 306ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 321ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 337ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 498ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 310ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_HQphWAjr3hkH65LUWFj3Sy5cMtrGDRPXSCjF8wYYbonk_small.png 200 in 176ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Hbftv9uBYqpfmzyo6steXVjAUWBwWK1G8b9SQKvbonk_small.png 200 in 181ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7ADJacn4EzMLukCpX2kppauQfskjLaSeW1xAGWfEbonk_small.png 200 in 150ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_H2ih45vVpeugsUw9uVGafDVtKp5tL9BNZyobHxUUpump%3A1399811149_small.png 200 in 211ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_qgAgDcFvkdZ2KDqyicg3UEsha9kqdCG5Wy26Jo9bonk_small.png 200 in 194ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5iZFw9kSpZd2KZbBYvyF7MdukEyVA3PonDxRVvjJbonk_small.png 200 in 224ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 335ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 295ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 318ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 349ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 389ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 327ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 358ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 392ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 303ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 341ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 314ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 434ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 428ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 481ms
+ ○ Compiling /trade/[id] ...
+ ✓ Compiled /trade/[id] in 4.2s
+ ○ Compiling /api/token-service/hydrate-pair ...
+ ✓ Compiled /api/token-service/hydrate-pair in 809ms
+Backend API error: 404 Failed to find pair address: failed to get token: can't scan into dest[9] (col: bonding_pct): could not convert value '<nil>' to byte array of type '<nil>'
+
+ POST /api/token-service/hydrate-pair 404 in 677ms
+Backend API error: 404 Failed to find pair address: failed to get token: can't scan into dest[9] (col: bonding_pct): could not convert value '<nil>' to byte array of type '<nil>'
+
+ POST /api/token-service/hydrate-pair 404 in 800ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 440ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762845191356 200 in 377ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Trigger',
+    protocol: 'pump.fun',
+    pair: 'FCo9djhw...',
+    volume_24h: '31989',
+    total_buys_24h: 222,
+    bonding_pct: '0',
+    graduation_percent: '91.02480481857266'
+  }
+]
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Trigger',
+    protocol: 'pump.fun',
+    pair: 'FCo9djhw...',
+    volume_24h: '31989',
+    total_buys_24h: 222,
+    bonding_pct: '0',
+    graduation_percent: '91.02480481857266'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762845191357 200 in 438ms
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762845191310 200 in 431ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762845191309 200 in 701ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 455ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 307ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 390ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 376ms
+ GET /api/token-service/similar?mint=WojakB9uH6KgyyanZtb6eSBHiCMZ6nCM1Fat8wCNVFm&limit=12 404 in 642ms
+ GET /api/token-service/reused-image-tokens?mint=WojakB9uH6KgyyanZtb6eSBHiCMZ6nCM1Fat8wCNVFm&limit=12 404 in 622ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 322ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Trigger',
+    protocol: 'pump.fun',
+    pair: 'FCo9djhw...',
+    volume_24h: '32829',
+    total_buys_24h: 227,
+    bonding_pct: '0',
+    graduation_percent: '92.38561185361766'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762845241226 200 in 82ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Trigger',
+    protocol: 'pump.fun',
+    pair: 'FCo9djhw...',
+    volume_24h: '32829',
+    total_buys_24h: 227,
+    bonding_pct: '0',
+    graduation_percent: '92.38561185361766'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762845241198 200 in 91ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762845241198 200 in 97ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762845241226 200 in 104ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FbWUpFYCQkS6fyYkiUwMWQSDyKYsgQnnMVfVQHEpbonk_small.png 200 in 271ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_gfajC7SocZUjHvybYyosqVybQHwegi41FFp2sFFBAGS_1754109393_small.png 200 in 271ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FVsWsRKu59zWafz5gGf9K4ASoYKUBCvfjv5VAXvRpump_small.png 200 in 275ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_6EY7XfqJYw34XdWsUoes3XvxKFTbArr4eGTRsSW1Jdev_small.png 200 in 269ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_537F2K8J39z2MXJkhYWRkwd5FsL8v4aT4LFvi49crbkY_small.png 200 in 275ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_6ziHHNGaVXE956hPvc3n6WBupVMrB4QY1bZ6xoBebonk_small.png 200 in 276ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5ciUYJD7z4Fcmj7dSN2HNdem9rnGVwTdC7YL6MHxBAGS_1754657677_small.png 200 in 66ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_6PCunXFt4xLhuQXyk322eYynzZBkgGxj6a7uPesYpump_small.png 200 in 170ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BZ9nBNN5wQMBwyvQbXqw5ivbQTYkG14dHA5QGdWEpump_small.png 200 in 199ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 300ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Trigger',
+    protocol: 'pump.fun',
+    pair: 'FCo9djhw...',
+    volume_24h: '32829',
+    total_buys_24h: 228,
+    bonding_pct: '0',
+    graduation_percent: '92.22302550210219'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=100&t=1762845250538 200 in 71ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Trigger',
+    protocol: 'pump.fun',
+    pair: 'FCo9djhw...',
+    volume_24h: '32829',
+    total_buys_24h: 228,
+    bonding_pct: '0',
+    graduation_percent: '92.22302550210219'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=100&t=1762845250541 200 in 67ms
+ ○ Compiling /api/token-service/pulse-new ...
+[Proxy:pulse-migrated] Using Go service: http://localhost:8080/v1/pulse/migrated?limit=100&t=1762845250539
+[Proxy:pulse-migrated] Using Go service: http://localhost:8080/v1/pulse/migrated?limit=100&t=1762845250541
+ GET /api/token-service/pulse-migrated?limit=100&t=1762845250539 200 in 332ms
+ GET /api/token-service/pulse-migrated?limit=100&t=1762845250541 200 in 333ms
+ ✓ Compiled /api/token-service/pulse-new in 1877ms
+ GET /api/token-service/pulse-new?limit=100&t=1762845250541 200 in 156ms
+ GET /api/token-service/pulse-new?limit=100&t=1762845250538 200 in 228ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 324ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 282ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 288ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 295ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 302ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 448ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 310ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_2jnmjMdjacDDdY2m7pgFrBhpd8jzot9iuZdeo2P1bonk_small.png 200 in 232ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Bnufh5CA27Wh67Y1jzpDX5pK6p662YufzkY6Nnq8bonk_small.png 200 in 234ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3vGwQ6fcB9MdyhiJFU66qLbTtiKApZtryJ96QMqsbonk_small.png 200 in 622ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 294ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 316ms
+ GET /api/pulse/migrated?limit=10 404 in 341ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 2155ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 324ms
+[Proxy:pulse-migrated] Using Go service: http://localhost:8080/v1/pulse/migrated?limit=5
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 288ms
+ GET /api/token-service/pulse-migrated?limit=5 200 in 50ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 413ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 612ms
+ GET /pulse 200 in 331ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1150ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762845405345 200 in 89ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762845405314 200 in 130ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762845405345 200 in 112ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762845405315 200 in 140ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Ey59PH7Z4BFU4HjyKnyMdWt5GGN76KazTAwQihoUXRnk_small.png 200 in 70ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_6EY7XfqJYw34XdWsUoes3XvxKFTbArr4eGTRsSW1Jdev_small.png 200 in 70ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 456ms
+ HEAD /pulse 200 in 366ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_D1BK2RvJXYzyVWWyh6VqW4kcT5NiA5gZhvBpAn4gKTsf_small.png 200 in 90ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 412ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 488ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 326ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 314ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_GMJPXLTNnFrRFDZSr398wz5L82izLfRQBZtqrq2hpump_small.png 200 in 89ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_HKWXr2eMKYBzYTf8nP1omU2ZRb9rQDtqDAx1WxugBTop_1761162299_small.png 200 in 33ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 346ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 278ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 341ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 307ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7dxbYxn1M15iRQ2sM2cJGuH9fGhrJa6mZkyFTNod1zVX_small.png 200 in 100ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 391ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 338ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 406ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 433ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 352ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BEsm3WjyfcKTaKvFQfggixXmyM3jzKPyCopxDBderray_small.png 200 in 228ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_8GbXdqevvnszRmLNZWASqXMCBWBJ6SobMYV7S9aoxWQB_small.png 200 in 247ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_2jnmjMdjacDDdY2m7pgFrBhpd8jzot9iuZdeo2P1bonk_small.png 200 in 272ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_HufGSwXKGPMRXHRt14kUknsZJuhfHiu8iB5bzwzXA5Ds_small.png 200 in 259ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BhNVNQ315qgawYNxtxvotRiB4xdfsBx25Kn9VkQbA7Kj_small.png 200 in 262ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CeUdTVqAvQAMkeHS6Xh5FNxQEPZXrwReUVk8VvLJKray_small.png 200 in 78ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3vGwQ6fcB9MdyhiJFU66qLbTtiKApZtryJ96QMqsbonk_small.png 200 in 52ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Bnufh5CA27Wh67Y1jzpDX5pK6p662YufzkY6Nnq8bonk_small.png 200 in 53ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FbWUpFYCQkS6fyYkiUwMWQSDyKYsgQnnMVfVQHEpbonk_small.png 200 in 492ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 405ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 375ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BhNVNQ315qgawYNxtxvotRiB4xdfsBx25Kn9VkQbA7Kj_small.png 200 in 141ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AZDKrkG5uFN9vkMan1Bk7vqoLaNJXLkpz1h8GjxBbonk_small.png 200 in 38ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 306ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 284ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 331ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 452ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 434ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3dwQY8GaqGHnd9NV522mew5UioaS85Xhgz2JnjGcbonk_small.png 200 in 63ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 370ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 2875ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 325ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 390ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 803ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 308ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 433ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 422ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 358ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 416ms
+[Proxy:pulse-migrated] Using Go service: http://localhost:8080/v1/pulse/migrated?limit=10
+ GET /api/token-service/pulse-migrated?limit=10 200 in 135ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 485ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 307ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 341ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 321ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 501ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 327ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 514ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 287ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 819ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 318ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 301ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 352ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 327ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 286ms
+ GET /pulse 200 in 4426ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 455ms
+ ✓ Compiled in 3.9s
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'DIAMOND',
+    protocol: 'pump.fun',
+    pair: 'DNtyDUJh...',
+    volume_24h: '92518',
+    total_buys_24h: 774,
+    bonding_pct: '0',
+    graduation_percent: '82.41920098507588'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762845878274 200 in 481ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'DIAMOND',
+    protocol: 'pump.fun',
+    pair: 'DNtyDUJh...',
+    volume_24h: '92518',
+    total_buys_24h: 774,
+    bonding_pct: '0',
+    graduation_percent: '82.41920098507588'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762845878972 200 in 152ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762845878969 200 in 342ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762845878273 200 in 2201ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3dwQY8GaqGHnd9NV522mew5UioaS85Xhgz2JnjGcbonk_small.png 200 in 296ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_J8PYkoX3GgniZpey87JuX9mBJWcH9aWJ1UNGgychpump_small.png 200 in 317ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AZDKrkG5uFN9vkMan1Bk7vqoLaNJXLkpz1h8GjxBbonk_small.png 200 in 84ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_HruKkLrLJ7t1kL8E6HBccSpWdUpnhGmi3SVrB9Jjpump_small.png 200 in 82ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7Q2afV64in6N6SeZsAAB81TJzwDoD6zpqmHkzi9Dcavn_1757490267_small.png 200 in 625ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_75LtqfReNFv59YNW6ERys6MG7TH9e6rDqFbMCsHrADQR_small.png 200 in 694ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_EtpiCAw1xwoBweZ6rFnrGnthHHvqQXm1axmDxYtW7tw4_small.png 200 in 874ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_75LtqfReNFv59YNW6ERys6MG7TH9e6rDqFbMCsHrADQR_small.png 200 in 208ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_EtpiCAw1xwoBweZ6rFnrGnthHHvqQXm1axmDxYtW7tw4_small.png 200 in 216ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_tP7gqdDembzSnkbWkpKz4VxJtJqT1E3Lr658xAepump%3A1399811149_small.png 200 in 338ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BtCcP6uBv4AQ9U6tT4bSh5krcEsycCMu3ix2rYdpump%3A1399811149_small.png 200 in 500ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FHuj5eTcPJPLjiS9PTjPDRnmmmJN8iWNDHorCj5Hpump%3A1399811149_small.png 200 in 517ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3rmKfcVSQ8bWP7L3pthFBtBD8HvRJd2D9wbM15sABAGS_small.png 200 in 1569ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3fmzgpcXpJbacKbZDhBnUA4yRQJjyx9rwm24i4E8pump%3A1399811149_small.png 200 in 207ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CjNQzox2uRfxhh1Z8FwcmuiU6qcPRzX9k9rW4BrCpump%3A1399811149_small.png 200 in 176ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AsidmAiMycxob8TkrGgbBHD6miZ2JSeLFtss8Tr2pump%3A1399811149_small.png 200 in 266ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_8MWu1wgWATyeLwzAXiGUATywMzwLYysJFAUZ8jUfpump%3A1399811149_small.png 200 in 240ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BdGuUUxfp74PnyEYAFnEBFrsHVdDh5PTRHgqqbHKmoon_small.png 200 in 41ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_6oU3KgTxdHpGNhrcFEkK2QJc5jA5LBupHK1BTUWALDUB_small.png 200 in 51ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BdGuUUxfp74PnyEYAFnEBFrsHVdDh5PTRHgqqbHKmoon_small.png 200 in 37ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_6oU3KgTxdHpGNhrcFEkK2QJc5jA5LBupHK1BTUWALDUB_small.png 200 in 42ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 318ms
+[RollingCache] Skipping localStorage load (SSR environment)
+ HEAD /pulse 200 in 1443ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AZmeWVcmmhcFPixQc2YhcSV36HLkioaC8ETd5vz6CFTZ_small.png 200 in 62ms
+ GET /pulse 200 in 316ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 599ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_GbR85DMUA9sVAPnLoQvXqPZUWUvQd3nkvQ33jQ4NBAGS_small.png 200 in 91ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 318ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 337ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 295ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 363ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 355ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 343ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 372ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 348ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 302ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 301ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 308ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3vGwQ6fcB9MdyhiJFU66qLbTtiKApZtryJ96QMqsbonk_small.png 200 in 63ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Bnufh5CA27Wh67Y1jzpDX5pK6p662YufzkY6Nnq8bonk_small.png 200 in 65ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_68YDQ7QMT91YyYkLBvBncoR5nRbRdcBosinv67dx2o75_small.png 200 in 123ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 311ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 299ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 338ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 349ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 454ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 415ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 412ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 324ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 462ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 352ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 404ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 340ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 319ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 296ms
+ POST /api/token-service/hydrate-pair 200 in 43ms
+ POST /api/token-service/hydrate-pair 200 in 41ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_4NnZY9WxBBbT994QKBvEhjGRSajjWkeXPz9HcDhkpump%3A1399811149_small.png 200 in 212ms
+ GET /api/token-service/similar?mint=4NnZY9WxBBbT994QKBvEhjGRSajjWkeXPz9HcDhkpump&limit=12 404 in 364ms
+ GET /api/token-service/reused-image-tokens?mint=4NnZY9WxBBbT994QKBvEhjGRSajjWkeXPz9HcDhkpump&limit=12 404 in 348ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Wiggalon',
+    protocol: 'pump.fun',
+    pair: '44poGCpe...',
+    volume_24h: '51873',
+    total_buys_24h: 265,
+    bonding_pct: '0',
+    graduation_percent: '97.80424126545513'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762846157796 200 in 83ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Wiggalon',
+    protocol: 'pump.fun',
+    pair: '44poGCpe...',
+    volume_24h: '51873',
+    total_buys_24h: 265,
+    bonding_pct: '0',
+    graduation_percent: '97.80424126545513'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762846157815 200 in 77ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762846157795 200 in 103ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762846157815 200 in 118ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Bnufh5CA27Wh67Y1jzpDX5pK6p662YufzkY6Nnq8bonk_small.png 200 in 70ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3vGwQ6fcB9MdyhiJFU66qLbTtiKApZtryJ96QMqsbonk_small.png 200 in 73ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AtmPLwubxo9TsiXwCc6xtsQgASCxsseD4LqoSPNYpump_small.png 200 in 57ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CHLPBWQnph3iPofCZkydjCp5BfW7Vbk8LFNqf8THi6jF_small.png 200 in 60ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CPtijQLEFTiWbeRBxSrh4HqcRmSGNtXCS4bLMhhRzapz_small.png 200 in 100ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_EGummhbSGqP1dy4nxZEmNSWMggphdM2jEZGUpQ9KZZoY_small.png 200 in 106ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7poteE2ymGfGoNP5U9hies3WZvEgKV2CfJzDJNWHPUuX_small.png 200 in 109ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_76N6j2zt2oL3ebg8kt5JcvDVofWv6Lf6Jg8wRyJtfkUD_small.png 200 in 118ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CPtijQLEFTiWbeRBxSrh4HqcRmSGNtXCS4bLMhhRzapz_small.png 200 in 37ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AtmPLwubxo9TsiXwCc6xtsQgASCxsseD4LqoSPNYpump_small.png 200 in 38ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_4NnZY9WxBBbT994QKBvEhjGRSajjWkeXPz9HcDhkpump%3A1399811149_small.png 200 in 43ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEvCYhhuGvde7dFScewA9DjK5pqVU9rQtWYWk1PGpump_small.png 200 in 132ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AvtUvZEbiZmu1q5UkBySRigVHHsQkXqW28SeN8kLpump_small.png 200 in 141ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_J8hQPPAr8XzjTt9MWaW98CSkcwjCccneh1vw8tXrpump%3A1399811149_small.png 200 in 144ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Eeyj5AxERfAdDGn5ZS21gCqL9hAMYje8bYh4TkVpump%3A1399811149_small.png 200 in 113ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7mma4RqZMRMMq8zRtdGnL9ZXYgW9szbEzBnCsuq6pump%3A1399811149_small.png 200 in 121ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DoZCEUPGzDovsokFGKXY2gQMPQ1fEs1MBU4MGTeHpump%3A1399811149_small.png 200 in 123ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_9GSAqRJR7oL4MVxPCBiaPhWpHbTbg7c3jnnyhNGXpump%3A1399811149_small.png 200 in 95ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5Rupcp5JWbz3AxgG16MxVzaPvtHLQxqKw5a2TW2VLV5p%3A1399811149_small.png 200 in 109ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AnwQQNTrvUDQvHL2YakNTi2nKHA69Ywe1FVudiMjpump%3A1399811149_small.png 200 in 109ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_E5iNayqt4FFzPB8NZCtDrzyipkrL92JJnRtYHg9Upump%3A1399811149_small.png 200 in 130ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_B3H35rKsLiw7v57evzT2Rq8QoaL61Acnu1uScWsHpump%3A1399811149_small.png 200 in 123ms
+Backend API error: 404 Failed to find pair address: failed to get token: can't scan into dest[9] (col: bonding_pct): could not convert value '<nil>' to byte array of type '<nil>'
+
+ POST /api/token-service/hydrate-pair 404 in 13ms
+Backend API error: 404 Failed to find pair address: failed to get token: can't scan into dest[9] (col: bonding_pct): could not convert value '<nil>' to byte array of type '<nil>'
+
+ POST /api/token-service/hydrate-pair 404 in 11ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Wiggalon',
+    protocol: 'pump.fun',
+    pair: '44poGCpe...',
+    volume_24h: '52540',
+    total_buys_24h: 268,
+    bonding_pct: '0',
+    graduation_percent: '98.02935973376223'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762846162141 200 in 55ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762846162160 200 in 65ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Wiggalon',
+    protocol: 'pump.fun',
+    pair: '44poGCpe...',
+    volume_24h: '52540',
+    total_buys_24h: 268,
+    bonding_pct: '0',
+    graduation_percent: '98.02935973376223'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762846162160 200 in 110ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762846162140 200 in 128ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 324ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CPtijQLEFTiWbeRBxSrh4HqcRmSGNtXCS4bLMhhRzapz_small.png 200 in 50ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AtmPLwubxo9TsiXwCc6xtsQgASCxsseD4LqoSPNYpump_small.png 200 in 54ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_EGummhbSGqP1dy4nxZEmNSWMggphdM2jEZGUpQ9KZZoY_small.png 200 in 67ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_76N6j2zt2oL3ebg8kt5JcvDVofWv6Lf6Jg8wRyJtfkUD_small.png 200 in 78ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7poteE2ymGfGoNP5U9hies3WZvEgKV2CfJzDJNWHPUuX_small.png 200 in 82ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CHLPBWQnph3iPofCZkydjCp5BfW7Vbk8LFNqf8THi6jF_small.png 200 in 82ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3vGwQ6fcB9MdyhiJFU66qLbTtiKApZtryJ96QMqsbonk_small.png 200 in 66ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Bnufh5CA27Wh67Y1jzpDX5pK6p662YufzkY6Nnq8bonk_small.png 200 in 40ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FbWUpFYCQkS6fyYkiUwMWQSDyKYsgQnnMVfVQHEpbonk_small.png 200 in 73ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5XL4796vCCJupSm1d2iq1UgQVafKhgyTtjAUYELHsmth_small.png 200 in 131ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEurieBiyLJVgUZoJYUPCtiy2NJzHUqYtqwFKtQDpump_small.png 200 in 139ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_bmh6bFhrGK6tDFbFjiHW1JVQg8PRvFAk3FMMFTUpump_small.png 200 in 139ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FEJeRBLnGt2FetV1AwUoT7PoMxMKAfzVkBqWNHvmpump_small.png 200 in 153ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AvtUvZEbiZmu1q5UkBySRigVHHsQkXqW28SeN8kLpump_small.png 200 in 35ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Eeyj5AxERfAdDGn5ZS21gCqL9hAMYje8bYh4TkVpump%3A1399811149_small.png 200 in 38ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_J8hQPPAr8XzjTt9MWaW98CSkcwjCccneh1vw8tXrpump%3A1399811149_small.png 200 in 44ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_4NnZY9WxBBbT994QKBvEhjGRSajjWkeXPz9HcDhkpump%3A1399811149_small.png 200 in 46ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEvCYhhuGvde7dFScewA9DjK5pqVU9rQtWYWk1PGpump_small.png 200 in 47ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BGnJNsqPUCi4WYj6hjn1qHKMxX3RrDrf9oXFUJ6hmoon_small.png 200 in 321ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DoZCEUPGzDovsokFGKXY2gQMPQ1fEs1MBU4MGTeHpump%3A1399811149_small.png 200 in 33ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CPtijQLEFTiWbeRBxSrh4HqcRmSGNtXCS4bLMhhRzapz_small.png 200 in 37ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5Rupcp5JWbz3AxgG16MxVzaPvtHLQxqKw5a2TW2VLV5p%3A1399811149_small.png 200 in 34ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7mma4RqZMRMMq8zRtdGnL9ZXYgW9szbEzBnCsuq6pump%3A1399811149_small.png 200 in 36ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_9GSAqRJR7oL4MVxPCBiaPhWpHbTbg7c3jnnyhNGXpump%3A1399811149_small.png 200 in 35ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FbWUpFYCQkS6fyYkiUwMWQSDyKYsgQnnMVfVQHEpbonk_small.png 200 in 41ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_E5iNayqt4FFzPB8NZCtDrzyipkrL92JJnRtYHg9Upump%3A1399811149_small.png 200 in 45ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5XL4796vCCJupSm1d2iq1UgQVafKhgyTtjAUYELHsmth_small.png 200 in 42ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_bmh6bFhrGK6tDFbFjiHW1JVQg8PRvFAk3FMMFTUpump_small.png 200 in 47ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FEJeRBLnGt2FetV1AwUoT7PoMxMKAfzVkBqWNHvmpump_small.png 200 in 48ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEurieBiyLJVgUZoJYUPCtiy2NJzHUqYtqwFKtQDpump_small.png 200 in 59ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AtmPLwubxo9TsiXwCc6xtsQgASCxsseD4LqoSPNYpump_small.png 200 in 65ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_EGummhbSGqP1dy4nxZEmNSWMggphdM2jEZGUpQ9KZZoY_small.png 200 in 49ms
+ GET /api/token-service/reused-image-tokens?mint=EGummhbSGqP1dy4nxZEmNSWMggphdM2jEZGUpQ9KZZoY&limit=12 404 in 963ms
+ GET /api/token-service/similar?mint=EGummhbSGqP1dy4nxZEmNSWMggphdM2jEZGUpQ9KZZoY&limit=12 404 in 970ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Wiggalon',
+    protocol: 'pump.fun',
+    pair: '44poGCpe...',
+    volume_24h: '54223',
+    total_buys_24h: 270,
+    bonding_pct: '0',
+    graduation_percent: '92.29409380561063'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762846171703 200 in 104ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762846171703 200 in 105ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762846171722 200 in 162ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Wiggalon',
+    protocol: 'pump.fun',
+    pair: '44poGCpe...',
+    volume_24h: '54223',
+    total_buys_24h: 270,
+    bonding_pct: '0',
+    graduation_percent: '92.29409380561063'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762846171722 200 in 217ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CPtijQLEFTiWbeRBxSrh4HqcRmSGNtXCS4bLMhhRzapz_small.png 200 in 90ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FbWUpFYCQkS6fyYkiUwMWQSDyKYsgQnnMVfVQHEpbonk_small.png 200 in 93ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5XL4796vCCJupSm1d2iq1UgQVafKhgyTtjAUYELHsmth_small.png 200 in 95ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_bmh6bFhrGK6tDFbFjiHW1JVQg8PRvFAk3FMMFTUpump_small.png 200 in 125ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEurieBiyLJVgUZoJYUPCtiy2NJzHUqYtqwFKtQDpump_small.png 200 in 132ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AtmPLwubxo9TsiXwCc6xtsQgASCxsseD4LqoSPNYpump_small.png 200 in 48ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FEJeRBLnGt2FetV1AwUoT7PoMxMKAfzVkBqWNHvmpump_small.png 200 in 55ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7poteE2ymGfGoNP5U9hies3WZvEgKV2CfJzDJNWHPUuX_small.png 200 in 99ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CHLPBWQnph3iPofCZkydjCp5BfW7Vbk8LFNqf8THi6jF_small.png 200 in 43ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BGnJNsqPUCi4WYj6hjn1qHKMxX3RrDrf9oXFUJ6hmoon_small.png 200 in 47ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_EGummhbSGqP1dy4nxZEmNSWMggphdM2jEZGUpQ9KZZoY_small.png 200 in 54ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3vGwQ6fcB9MdyhiJFU66qLbTtiKApZtryJ96QMqsbonk_small.png 200 in 54ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Bnufh5CA27Wh67Y1jzpDX5pK6p662YufzkY6Nnq8bonk_small.png 200 in 39ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_2jnmjMdjacDDdY2m7pgFrBhpd8jzot9iuZdeo2P1bonk_small.png 200 in 65ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DCPewv5C4MK7bDMrcsf1rTSQSg5Wucc3XmA8Ryypump_small.png 200 in 77ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 479ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Eeyj5AxERfAdDGn5ZS21gCqL9hAMYje8bYh4TkVpump%3A1399811149_small.png 200 in 47ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_J8hQPPAr8XzjTt9MWaW98CSkcwjCccneh1vw8tXrpump%3A1399811149_small.png 200 in 50ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_4NnZY9WxBBbT994QKBvEhjGRSajjWkeXPz9HcDhkpump%3A1399811149_small.png 200 in 56ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AvtUvZEbiZmu1q5UkBySRigVHHsQkXqW28SeN8kLpump_small.png 200 in 61ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEvCYhhuGvde7dFScewA9DjK5pqVU9rQtWYWk1PGpump_small.png 200 in 58ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CPtijQLEFTiWbeRBxSrh4HqcRmSGNtXCS4bLMhhRzapz_small.png 200 in 75ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7mma4RqZMRMMq8zRtdGnL9ZXYgW9szbEzBnCsuq6pump%3A1399811149_small.png 200 in 39ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DoZCEUPGzDovsokFGKXY2gQMPQ1fEs1MBU4MGTeHpump%3A1399811149_small.png 200 in 37ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_2jnmjMdjacDDdY2m7pgFrBhpd8jzot9iuZdeo2P1bonk_small.png 200 in 32ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FbWUpFYCQkS6fyYkiUwMWQSDyKYsgQnnMVfVQHEpbonk_small.png 200 in 36ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5XL4796vCCJupSm1d2iq1UgQVafKhgyTtjAUYELHsmth_small.png 200 in 37ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_bmh6bFhrGK6tDFbFjiHW1JVQg8PRvFAk3FMMFTUpump_small.png 200 in 39ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FEJeRBLnGt2FetV1AwUoT7PoMxMKAfzVkBqWNHvmpump_small.png 200 in 31ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEurieBiyLJVgUZoJYUPCtiy2NJzHUqYtqwFKtQDpump_small.png 200 in 42ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AtmPLwubxo9TsiXwCc6xtsQgASCxsseD4LqoSPNYpump_small.png 200 in 22ms
+Backend API error: 404 Failed to find pair address: failed to get token: can't scan into dest[9] (col: bonding_pct): could not convert value '<nil>' to byte array of type '<nil>'
+
+ POST /api/token-service/hydrate-pair 404 in 23ms
+Backend API error: 404 Failed to find pair address: failed to get token: can't scan into dest[9] (col: bonding_pct): could not convert value '<nil>' to byte array of type '<nil>'
+
+ POST /api/token-service/hydrate-pair 404 in 25ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 410ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Wiggalon',
+    protocol: 'pump.fun',
+    pair: '44poGCpe...',
+    volume_24h: '54591',
+    total_buys_24h: 273,
+    bonding_pct: '0',
+    graduation_percent: '94.70882473272711'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762846183081 200 in 148ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 2 tokens down to 1 tokens with OHLC data
+[Final Stretch Filter] Top 3 tokens that passed filter: [
+  {
+    symbol: 'Wiggalon',
+    protocol: 'pump.fun',
+    pair: '44poGCpe...',
+    volume_24h: '54591',
+    total_buys_24h: 273,
+    bonding_pct: '0',
+    graduation_percent: '94.70882473272711'
+  }
+]
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762846183104 200 in 197ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762846183104 200 in 218ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762846183081 200 in 338ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_BGnJNsqPUCi4WYj6hjn1qHKMxX3RrDrf9oXFUJ6hmoon_small.png 200 in 104ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_EGummhbSGqP1dy4nxZEmNSWMggphdM2jEZGUpQ9KZZoY_small.png 200 in 107ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3vGwQ6fcB9MdyhiJFU66qLbTtiKApZtryJ96QMqsbonk_small.png 200 in 106ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CHLPBWQnph3iPofCZkydjCp5BfW7Vbk8LFNqf8THi6jF_small.png 200 in 107ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Bnufh5CA27Wh67Y1jzpDX5pK6p662YufzkY6Nnq8bonk_small.png 200 in 106ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7poteE2ymGfGoNP5U9hies3WZvEgKV2CfJzDJNWHPUuX_small.png 200 in 121ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DCPewv5C4MK7bDMrcsf1rTSQSg5Wucc3XmA8Ryypump_small.png 200 in 46ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FbWUpFYCQkS6fyYkiUwMWQSDyKYsgQnnMVfVQHEpbonk_small.png 200 in 45ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_2jnmjMdjacDDdY2m7pgFrBhpd8jzot9iuZdeo2P1bonk_small.png 200 in 46ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5XL4796vCCJupSm1d2iq1UgQVafKhgyTtjAUYELHsmth_small.png 200 in 54ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CPtijQLEFTiWbeRBxSrh4HqcRmSGNtXCS4bLMhhRzapz_small.png 200 in 59ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_bmh6bFhrGK6tDFbFjiHW1JVQg8PRvFAk3FMMFTUpump_small.png 200 in 58ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEurieBiyLJVgUZoJYUPCtiy2NJzHUqYtqwFKtQDpump_small.png 200 in 37ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FEJeRBLnGt2FetV1AwUoT7PoMxMKAfzVkBqWNHvmpump_small.png 200 in 33ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FbWUpFYCQkS6fyYkiUwMWQSDyKYsgQnnMVfVQHEpbonk_small.png 200 in 41ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_CPtijQLEFTiWbeRBxSrh4HqcRmSGNtXCS4bLMhhRzapz_small.png 200 in 44ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_2jnmjMdjacDDdY2m7pgFrBhpd8jzot9iuZdeo2P1bonk_small.png 200 in 52ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_5XL4796vCCJupSm1d2iq1UgQVafKhgyTtjAUYELHsmth_small.png 200 in 57ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEurieBiyLJVgUZoJYUPCtiy2NJzHUqYtqwFKtQDpump_small.png 200 in 57ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_bmh6bFhrGK6tDFbFjiHW1JVQg8PRvFAk3FMMFTUpump_small.png 200 in 59ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FEJeRBLnGt2FetV1AwUoT7PoMxMKAfzVkBqWNHvmpump_small.png 200 in 36ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AvtUvZEbiZmu1q5UkBySRigVHHsQkXqW28SeN8kLpump_small.png 200 in 36ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEvCYhhuGvde7dFScewA9DjK5pqVU9rQtWYWk1PGpump_small.png 200 in 32ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_J8hQPPAr8XzjTt9MWaW98CSkcwjCccneh1vw8tXrpump%3A1399811149_small.png 200 in 43ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_4NnZY9WxBBbT994QKBvEhjGRSajjWkeXPz9HcDhkpump%3A1399811149_small.png 200 in 46ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Eeyj5AxERfAdDGn5ZS21gCqL9hAMYje8bYh4TkVpump%3A1399811149_small.png 200 in 42ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DoZCEUPGzDovsokFGKXY2gQMPQ1fEs1MBU4MGTeHpump%3A1399811149_small.png 200 in 25ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 444ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 313ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 382ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 312ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 298ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 1503ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 467ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 410ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 410ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_8GbXdqevvnszRmLNZWASqXMCBWBJ6SobMYV7S9aoxWQB_small.png 200 in 57ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 491ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 507ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 344ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 361ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 312ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 406ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 302ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 1317ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 308ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 386ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 306ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 543ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 617ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_AF39TLT2fRWrAuuJzHK86vP5FfD6U5DqcjRrGRhfGwoH_small.png 200 in 179ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_8NsR6rPdyp2kXhghpLvT7BSu6s34kDmfcqUDa2omxjjs_small.png 200 in 23ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_w3ZtEJh3zGcnjbPoRZgQ587R7HSQiaFL5dec8BPy6nE_small.png 200 in 60ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_4E2TanUdjVZbMnt1TWGH9R8K6Ud64H8K23utX5zqpump_small.png 200 in 41ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 386ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_J9EpBNGyT8aBZ1LSxW53tiJSCCVk63VtF5sRZH9wpump_small.png 200 in 57ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 315ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_52mCydkGRws1C2AgVvhfPk4UhACRcH6WmkCFWuvUpump_small.png 200 in 62ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_FQQ2ziPCp1N3g8uFKmBZdvLEVziPTRij2DCjZ67yVvse_small.png 200 in 30ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 370ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 434ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 386ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 387ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 355ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 649ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 256ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 304ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 383ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 335ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 339ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 447ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 308ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 238ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 330ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 318ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 653ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 481ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 965ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 520ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 1042ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 392ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 710ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 843ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 702ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 842ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 493ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 429ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 679ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 454ms
+ GET /triot%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreialpyesxjbdo4ztorubkqeoqtpcn7hw6zm34mgrihwh5gcjqhi7za 404 in 861ms
+ GET /ller%20%EF%BF%BDhttps:/encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSAYySGRCJhuFTQfp1VPPRBvQHAwjVnwlS3rA&s 404 in 695ms
+ GET /og%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiguqgwiivoydgy6zojdb5wdeurrfqfv47uufktgab6vfslaroywce 404 in 717ms
+ GET /tronaut%EF%BF%BDhttps:/encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTjrGmLaa4ZXC1I_ahRW3oK6THvuYtAbiWoOw&s 404 in 354ms
+ GET /RQ%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreie5z5nn4452ahph4kvkjsfithrjc5p4o5ftnaetvvjin4wihra67e 404 in 335ms
+ GET /UGGIS%EF%BF%BDhttps:/gateway.pinata.cloud/ipfs/bafkreieds4fvjlbkjmxjgp2izrxluw3sdjpjy6eg2zccgsmg6yeuhlt444 404 in 582ms
+ GET /OXWAP%EF%BF%BDhttps:/gateway.pinata.cloud/ipfs/bafkreidupd4c5vtkvwbazgoich4idldnazo5molpzaw5kmqgokriitoysy 404 in 1655ms
+ GET /ndarin%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreieyhse5jbbafy33nsb7mvtdyck6xsfmomyka26umivyrzf4lap2ni 404 in 918ms
+ GET /AY%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreidb3yq2hctziqotgrurgxafbiaomfxwqrv7ed2ynomz6jnta3nlde 404 in 329ms
+ GET /COG%EF%BF%BDhttps:/ipfs.io/ipfs/QmRaJUZWK6i838xAFvtg2k4dQZFgHyFjU2A9JDyf3nYUnN 404 in 322ms
+ GET /LO%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreih2wemnmwe3l6ysyn3llc5cjqtrvsqu2aobjci7fluzhvcpmjlryi 404 in 697ms
+ GET /ugger%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreia6bjv54siucapzuw4eyfigae47hyvrqjxgyoqygvpfhqgg4xzlu4 404 in 481ms
+ GET /LO%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreie4yuleu5xgdgbrq55idnckaaj5qh7phiorftqsbpiw4jm75my4lu 404 in 496ms
+ GET /ran%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreibhmuh4xyh4z6f6o3sku6l7tnvgfxh7qqxoffxc3bf2x5txxuu2nm 404 in 293ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_7YhKnrgRPkwcXciUvct3tt3PrDg6N6cXGRdGKTV4pump_small.png 200 in 170ms
+ GET /epSeek%EF%BF%BDhttps:/dd.dexscreener.com/ds-data/tokens/solana/9A2jUbgoDY97fruKHXvDd7eQiq4xvnW3By1BfH1Bwn9Y.png?size=lg&key=732aa3 404 in 231ms
+ GET /TC%EF%BF%BD 404 in 302ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 566ms
+ GET /UNTY%20%EF%BF%BDipfs:/QmRjVySyAGxRW7CwMVLLzSNQQRJVydiUbxg1uEbwvkeDwK 404 in 455ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 566ms
+ GET /PR%EF%BF%BDhttps:/ipfs.io/ipfs/QmUgKbp4DUJchGpmCfUn7iS987MUeieLjBJmRUKNGMw7yj 404 in 413ms
+ GET /%EF%BF%BDhttps:/ipfs.io/ipfs/QmUKTNPQSGyFuzcATdgYmB2K7HeGFXaFs1F3tuR8MoptoY 404 in 573ms
+ GET /ra%EF%BF%BDhttps:/cf-ipfs.com/ipfs/QmciaE8qRSBMFPPFPjFkHCFTVFGfNXWGzc619Kt8ncb88g 404 in 299ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 654ms
+ GET /RS%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreidsi3z5pqrf3btxe572vvw2mmmwmt7ww7624heejm24iw7sfekdzu 404 in 371ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 540ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 631ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 1362ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 429ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 680ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 796ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 408ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 543ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 943ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 884ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 367ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 399ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 390ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 711ms
+ GET /pulse 200 in 344ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762848694110 200 in 78ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762848694117 200 in 79ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762848694110 200 in 86ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762848694118 200 in 121ms
+ HEAD /pulse 200 in 289ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DtR4D9FtVoTX2569gaL837ZgrB6wNjj6tkmnX9Rdk9B2_small.png 200 in 261ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh_small.png 200 in 271ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_EJqyZ4taqAVNwTeYrhfNjPdkr3ruZMhARLtNUbsepump%3A1399811149_small.png 200 in 135ms
+ GET /UNTY%20%EF%BF%BDipfs:/QmRjVySyAGxRW7CwMVLLzSNQQRJVydiUbxg1uEbwvkeDwK 404 in 324ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_4Ssp8Q8a5WcSBVGBCMdnAN2vTK53Pg988FCuX1k5pump%3A1399811149_small.png 200 in 208ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_HGBYtT7984Ykuvpkdc2HprZgQsb1osBP58yJGAaopump%3A1399811149_small.png 200 in 158ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 371ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DBeVHH3M6wu9hw6R5w3ZAjf1CYJZa8q3L3b9zcXfpump%3A1399811149_small.png 200 in 124ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_3fwJDPGodCoN5vXULpPJ8jzj98xbgJmfuaE42PCppump%3A1399811149_small.png 200 in 149ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_38RR7YFzgK3PvChAFrCfE1hzo5PLAFVw97eCetZ3pump%3A1399811149_small.png 200 in 186ms
+ GET /UNTY%20%EF%BF%BDipfs:/QmRjVySyAGxRW7CwMVLLzSNQQRJVydiUbxg1uEbwvkeDwK 404 in 231ms
+ GET /ghter%EF%BF%BDhttps:/ipfs.io/ipfs/QmdySVd3VVA6jEqw64qJjAT3JYVqhfReLJYx3CQ1pWzYk8 404 in 240ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_2PXbxugyjewvJeJwQ2C2Yb21nWH8PAxzBunMLeFqpump_small.png 200 in 110ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_9n5QuAHiajPyWwcozGkKLUjt6UJ1HhJSkvXYdjc2pump_small.png 200 in 166ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_DEyxxJTJY2ox9AqyLdebPug6YAdStMfFPSAnWd6Epump%3A1399811149_small.png 200 in 174ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_xr5LTbru61u7NnrN11ZLcv1zxSFJAhaq7z7dBNCdaos_small.png 200 in 197ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_Ha3x1j3BH3ZZqFSzeeRXxz3f6BnSj1F2YRLZkj2ecoin_small.png 200 in 143ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_82C7idEZegedtseQnmTb2M3gSoQbf8MpZTNWSqPupump_small.png 200 in 143ms
+ GET /api/image?url=https%3A%2F%2Ftoken-media.defined.fi%2F1399811149_8ToKRiofNzjDxKGBgje4unJ3hHy7PevpwxrM6UrEVZGk_small.png 200 in 143ms
+ GET /%EF%BF%BD%EF%BF%BDDT%20%EF%BF%BDhttps:/gateway.irys.xyz/4AJVCQEfd0O2juDKG-QVcC68IgA_vcGVeP3B0nBQbmc 404 in 231ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 487ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 373ms
+ GET /pulse 200 in 271ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 250ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762848727620 200 in 55ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762848727626 200 in 56ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762848727620 200 in 57ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762848727626 200 in 121ms
+ HEAD /pulse 200 in 245ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 152ms
+ GET /UNTY%20%EF%BF%BDipfs:/QmRjVySyAGxRW7CwMVLLzSNQQRJVydiUbxg1uEbwvkeDwK 404 in 274ms
+ GET /ghter%EF%BF%BDhttps:/ipfs.io/ipfs/QmdySVd3VVA6jEqw64qJjAT3JYVqhfReLJYx3CQ1pWzYk8 404 in 242ms
+ GET /%EF%BF%BD%EF%BF%BDDT%20%EF%BF%BDhttps:/gateway.irys.xyz/4AJVCQEfd0O2juDKG-QVcC68IgA_vcGVeP3B0nBQbmc 404 in 241ms
+ GET /UNTY%20%EF%BF%BDipfs:/QmRjVySyAGxRW7CwMVLLzSNQQRJVydiUbxg1uEbwvkeDwK 404 in 232ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 404ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 309ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 311ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 269ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 283ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 336ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 495ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 294ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 312ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 325ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 302ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 317ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 291ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 306ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 314ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 417ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 309ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 311ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 341ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 334ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 305ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 305ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 296ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 296ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 305ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 292ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 322ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 299ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 410ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 331ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 318ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 383ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 290ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 319ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 317ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 313ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 293ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 307ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 453ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 400ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 316ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 369ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 273ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 423ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 304ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 347ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 319ms
+ GET /pulse 200 in 301ms
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+[Proxy:getAllTokens] Using Go service pulse endpoint: http://localhost:8080/v1/pulse/new?limit=30
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762849243739 200 in 71ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762849243758 200 in 65ms
+[Final Stretch Filter] Excluding unknown: No trading activity (volume: false, trades: false, traders: true)
+[Final Stretch Filter] Filtered 1 tokens down to 0 tokens with OHLC data
+ GET /api/token-service/pulse-final-stretch?limit=30&t=1762849243742 200 in 73ms
+ GET /api/token-service/getAllTokens?filter=new&limit=30&t=1762849243758 200 in 72ms
+ HEAD /pulse 200 in 232ms
+ GET /UNTY%20%EF%BF%BDipfs:/QmRjVySyAGxRW7CwMVLLzSNQQRJVydiUbxg1uEbwvkeDwK 404 in 232ms
+ GET /%EF%BF%BD%EF%BF%BDDT%20%EF%BF%BDhttps:/gateway.irys.xyz/4AJVCQEfd0O2juDKG-QVcC68IgA_vcGVeP3B0nBQbmc 404 in 258ms
+ GET /ghter%EF%BF%BDhttps:/ipfs.io/ipfs/QmdySVd3VVA6jEqw64qJjAT3JYVqhfReLJYx3CQ1pWzYk8 404 in 258ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 302ms
+ GET /UNTY%20%EF%BF%BDipfs:/QmRjVySyAGxRW7CwMVLLzSNQQRJVydiUbxg1uEbwvkeDwK 404 in 224ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 282ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 279ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 273ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 300ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 283ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 309ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 339ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 319ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 321ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 410ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 432ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 388ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 307ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 294ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 289ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 318ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 283ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 358ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 296ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 290ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 276ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 286ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 303ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 296ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 298ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 291ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 310ms
+ GET /ggablob%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiggybfsslzeulothgg7a2wv2iyxmjajtqxxgtrgzfmvfyhaq2hehu 404 in 237ms
+ GET /sla%EF%BF%BDhttps:/gateway.pinata.cloud/ipfs/bafkreid4qredckx6hoo57usnvaoqwxnthlq5vpn5iaj7wttajdt766tmke 404 in 230ms
+ GET /COG%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreihfkeg5igss6irmxrgs3pjgf53vmweyxp5mkeyvwpru4wclzadfb4 404 in 229ms
+ GET /LO%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreifrii4dl7tmfarwrmaa3pkpqqef7lu2p7tvfywdls4tezhkjl6n64 404 in 213ms
+ GET /epSeek%EF%BF%BDhttps:/dd.dexscreener.com/ds-data/tokens/solana/9A2jUbgoDY97fruKHXvDd7eQiq4xvnW3By1BfH1Bwn9Y.png?size=lg&key=732aa3 404 in 223ms
+ GET /TR%EF%BF%BDhttps:/rs.debot.ai/logo/A9n2QEV2GtyDM9R6ko2Adpy5iuaVM17nJUgXQJYZpump.png?x-oss-process=image/resize,w_128/quality,q_80 404 in 223ms
+ GET /uto%EF%BF%BDhttps:/ipfs.io/ipfs/QmZFDpSmUJwL8jHmKck4c9TtJxPyhf9Ckpt2JiDFmbusjb 404 in 215ms
+ GET /L%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreigyvet3wh7kta3cn26j4jg5bun3rk62gvpmh7vhyuobj22o5gi25m 404 in 217ms
+ GET /og%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiesj3y5a4rpicrldtkselgn5mgj4tikf5zhbeidjwy6ehywb3rhpi 404 in 230ms
+ GET /by%20%EF%BF%BDhttps:/metadata.rapidlaunch.io/metadata/09e87706-a827-406c-954e-fa9c963801d4.json 404 in 231ms
+ GET /kTokSol%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiaqcoigde6jjnnzoagputtuphyk53prvtq5dcem7mk6cwfytuimfe 404 in 231ms
+ GET /gTalk%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreicszmrytbblwn6nxsj33snfcewvo3wz7ykkhniibva3gye5cymqqq 404 in 216ms
+ GET /LO%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreigjzgrpmt4sfoeakn7ieef55alumivdl745qf4e4wwtmpz4rtfacq 404 in 241ms
+ GET /eeThe15%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiapaeo4hjagey5wo7opki44n6q5bi5xjtysnnciclzwappw4bz3s4 404 in 241ms
+ GET /C%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiae53zgqt2rgcfdodmzcxp3ewuwmmbg2mbp7u3xl2q2wn2736632y 404 in 240ms
+ GET /astoise%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiedtugctqdqvwkybtkdsayreirrwkk3hzjs62jusvl2i3yr4a7bpm 404 in 244ms
+ GET /CACOLA%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreidba22sr6is6ywqafhwhyhwtrl5a3mnfjmvv2sx4re46r34s3ekzq 404 in 243ms
+ GET /I%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreidvrdsbr6xubmhkh2a4ixtdxmardwczpc3itqpvz3zptbk7z3prny 404 in 245ms
+ GET /ndernism%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreie44j5yeqya5ejbw6pce5dtgi7xyz4dlq23dmpgctmoan3wriyhze 404 in 229ms
+ GET /ichan%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreietmw2dljgosc43zbatqalkz4cnnh5xlg7n7dxilcibjhmbvzmwb4 404 in 229ms
+ GET /sternak%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreidhdpyrki5yjktndifqohmdktn3l7ptijgowrmedpxmdhufvu2xzq 404 in 216ms
+ GET /tronaut%EF%BF%BDhttps:/encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTjrGmLaa4ZXC1I_ahRW3oK6THvuYtAbiWoOw&s 404 in 222ms
+ GET /ichan%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiedol3yn7oi6ppyurnnbdzdepa2sv32cdtsfwkntosmwkps6prmfe 404 in 221ms
+ GET /11%EF%BF%BDhttps:/ipfs.io/ipfs/QmU7BfhpcbfWJbxLfv9Wwab4iyLmhsaDchdYWhzYpjLW7t 404 in 227ms
+ GET /TA%EF%BF%BDhttps:/raw.githubusercontent.com/metaDAOproject/futarchy/refs/heads/develop/scripts/assets/META/META.json 404 in 229ms
+ GET /tronaut%EF%BF%BDhttps:/encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTjrGmLaa4ZXC1I_ahRW3oK6THvuYtAbiWoOw&s 404 in 224ms
+ GET /PKING%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreicmloqx2ep2gevowlrpb6uy3mjovio44ryikgaivjvuh6v4qdavia 404 in 213ms
+ GET /E%EF%BF%BDhttps:/ore.supply/assets/metadata.json 404 in 221ms
+ GET /bel%EF%BF%BDhttps:/ipfs.io/ipfs/QmPsym3JLQp7wpzFihZDAAfiUDDAqKdhMHCcakEJC3txGk 404 in 222ms
+ GET /ller%20%EF%BF%BDhttps:/encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSAYySGRCJhuFTQfp1VPPRBvQHAwjVnwlS3rA&s 404 in 227ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 311ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 426ms
+ GET /OW%20AI%EF%BF%BDhttps:/gateway.pinata.cloud/ipfs/bafkreidzpay73xgkzmv4ojthyprx4xenqsnpfyohv5rhx3h7msdtre54wm 404 in 241ms
+ GET /%EF%BF%BD%E4%BF%A1%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreibsbr54zfcgxded7lnpyqjtnnm7lxwt7g4c6ltgt2ryelhu2qjfya 404 in 245ms
+ GET /DDY%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreic6tb43f5pcn6f5qxjq7bqliqpscuhhfngdscsce6ljq5ufcdw7h4 404 in 250ms
+ GET /COG%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreihfkeg5igss6irmxrgs3pjgf53vmweyxp5mkeyvwpru4wclzadfb4 404 in 235ms
+ GET /eeThe15%EF%BF%BDhttps:/metadata.rapidlaunch.io/metadata/06cecc32-c82e-4741-89ae-b4ae6dfd0219.json 404 in 232ms
+ GET /me%EF%BF%BDhttps:/rs.debot.ai/logo/HCzpqJ8yHLpNTftyQYHcn5puXztWKHghVxcdBqQfpump.webp?x-oss-process=image/resize,w_128/quality,q_80 404 in 233ms
+ GET /11%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreigavm5qqeto3ai5tpa2pmccxn6vmqlllnesor2oelrk2gof5zw3vy 404 in 257ms
+ GET /BYBONK%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreih5pietcsj723uwsnvzz3wlzqjqmc3oxzqha6vi4jp6fzfpid3ggq 404 in 256ms
+ GET /ichan%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiedol3yn7oi6ppyurnnbdzdepa2sv32cdtsfwkntosmwkps6prmfe 404 in 255ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 291ms
+ GET /gger%EF%BF%BDhttps:/ipfs.io/ipfs/QmRQJqMCJfe12mxmQM8huZdUDzSP79GxN5PutezvPXhEtS 404 in 269ms
+ GET /CR%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreifyqx3onzgbqzqccejxsiqr5zba4jb76yhj3pvydui3gmhvtvtjim 404 in 241ms
+ GET /nosaur%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiad7srdgbplelqnfrvvoebeggshahvpq5ka45yyh2i3rpltgyuj5m 404 in 237ms
+ GET /bes%EF%BF%BDhttps:/metadata.rapidlaunch.io/metadata/6f4659c1-511e-4374-ba7f-9786c3483949.json 404 in 226ms
+ GET /VE%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiahw6avfhkcpnjocepyzi4s32ohosmqw6faxmqngbuzmk6ukvh5uq 404 in 238ms
+ GET /EPE%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreigpur6ufnl3lfqfloe2dj5jilujlog6a4iltkd7fi2rea3wcpexbi 404 in 651ms
+ GET /CR%EF%BF%BDhttps:/ipfs.io/ipfs/QmY9bVbxoqDkm43qLxRxdbzrbW4fpitCAe9x2MFzXLa2Pm 404 in 610ms
+ GET /I%EF%BF%BD 404 in 497ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 750ms
+ GET /LAN%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreigoabi4ck6a4yul5set4pn6f2b2uyv7mdokfoqs65po72ww7mg25i 404 in 343ms
+ GET /epSeek%EF%BF%BDhttps:/dd.dexscreener.com/ds-data/tokens/solana/9A2jUbgoDY97fruKHXvDd7eQiq4xvnW3By1BfH1Bwn9Y.png?size=lg&key=732aa3 404 in 241ms
+ GET /C%EF%BF%BDhttps:/ipfs.io/ipfs/bafkreiaiezz6koszvdoegpf2qsrlpb2nhjq2xd3dgxqqxrlmbsebe26gcu 404 in 241ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 291ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 354ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 421ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 287ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 390ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 293ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 871ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 584ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 574ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 641ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 622ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 755ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 658ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 770ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 605ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 620ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 547ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 623ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 656ms
+Failed to fetch balance: Error: failed to get balance of account HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs: TypeError: fetch failed
+    at async getSolBalance (src/utils/functions.ts:187:22)
+    at async handler (src/pages/api/get-sol-bal.ts:23:21)
+  185 |     const connection = new Connection(clusterApiUrl(clusterApiUrlString), 'confirmed');
+  186 |     const publicKey = new PublicKey(address);
+> 187 |     const lamports = await connection.getBalance(publicKey);
+      |                      ^
+  188 |     const sol = lamports / 1e9;
+  189 |     return sol;
+  190 |   } catch (error) {
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 500 in 444ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 200 in 5202ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 491ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 372ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 404ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 357ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 384ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 519ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 499ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 401ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 362ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 367ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 358ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 357ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 363ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 384ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 649ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 369ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 495ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 452ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 451ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 420ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 501ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 523ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 423ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 419ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 488ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 391ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 371ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 464ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 422ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 471ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 467ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 512ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 580ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 398ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 402ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 353ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 395ms
+ GET /api/get-sol-bal?address=HbYg2A4Ysw2LPMwtAkaH5YN4hsdtY22JV8mogjMPQQZs 304 in 651ms

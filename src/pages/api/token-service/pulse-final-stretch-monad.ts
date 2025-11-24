@@ -1,11 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { extractTokenImage } from '~/utils/images';
-import { env } from '~/env';
+import { Pool } from 'pg';
+
+// Connect to Monad indexer database
+const pool = new Pool({
+  connectionString: process.env.MONAD_DB_URL || 'postgresql://postgres:postgres@localhost:5432/monad_db?sslmode=disable',
+});
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set appropriate cache headers
   const isFresh = req.query.fresh === '1';
-  
+
   if (isFresh) {
     res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -13,52 +18,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } else {
     res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
   }
-  
+
   try {
-    const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(req.query)) {
-      if (Array.isArray(v)) v.forEach((x) => params.append(k, x));
-      else if (v !== undefined) params.append(k, String(v));
-    }
-    
-    // Set default limit if not provided
-    if (!params.get('limit')) params.set('limit', '50');
+    const limit = parseInt(req.query.limit as string) || 50;
 
-    const monadTokenServiceUrl = env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL;
-    
-    if (!monadTokenServiceUrl) {
-      console.error('[pulse-final-stretch-monad] NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL is not set');
-      return res.status(500).json({ error: 'Monad token service URL is not configured' });
-    }
-    
-    const url = `${monadTokenServiceUrl}/v1/pulse/final-stretch?${params.toString()}`;
-    
-    const fetchWithTimeout = async (url: string, timeoutMs = 2500) => {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), timeoutMs);
-      try {
-        const resp = await fetch(url, {
-          headers: { Accept: 'application/json' },
-          cache: 'no-store',
-          signal: ctrl.signal as any,
-        });
-        return resp;
-      } finally {
-        clearTimeout(t);
-      }
-    };
+    // Query Monad database for FINAL_STRETCH status tokens
+    const result = await pool.query(`
+      SELECT
+        address,
+        name,
+        symbol,
+        decimals,
+        status,
+        launchpad_protocol,
+        price_usd,
+        price_monad as price_mon,
+        market_cap_usd,
+        volume_24h_usd,
+        volume_5m_usd,
+        volume_1h_usd,
+        volume_6h_usd,
+        total_transactions,
+        total_buys,
+        total_sells,
+        unique_traders,
+        graduation_percent,
+        is_graduated,
+        image_url,
+        created_at,
+        updated_at
+      FROM monad_tokens
+      WHERE status = 'FINAL_STRETCH'
+      ORDER BY created_at DESC
+      LIMIT $1
+    `, [limit]);
 
-    const response = await fetchWithTimeout(url);
-    
-    if (!response.ok) {
-      console.error(`[pulse-final-stretch-monad] Upstream error: ${response.status}`);
-      return res.status(response.status).json({ error: 'Bad gateway to Monad token service' });
-    }
-
-    const data = await response.json();
-    
-    // Monad token service returns { status: "success", count: number, data: Token[] }
-    const tokens = data?.data || data || [];
+    const tokens = result.rows || [];
     
     // Map Monad token service format to expected frontend format
     // Only map fields that the database actually returns
@@ -102,6 +97,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         updated_at: r.updated_at || null,
         creator_wallet: r.creator_wallet || null,
         creator_address: r.creator_wallet || null, // Alias for consistency
+        graduation_percent: toNumber(r.graduation_percent),
+        bonding_curve_progress: toNumber(r.graduation_percent), // Alias for frontend
       };
     }) : [];
 
