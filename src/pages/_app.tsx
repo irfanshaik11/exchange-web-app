@@ -34,6 +34,7 @@ import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
 import { storeReferralCodeHint } from '~/utils/referralStorage';
+import { TurnkeyProviderWrapper } from '../components/TurnkeyProviderWrapper';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -116,33 +117,66 @@ const inter = Inter({
 });
 
 function TokenHandler() {
-  const { refreshUser } = useUser();
+  const { refreshUser, user, loading: userLoading } = useUser();
+  const router = useRouter();
   const hasProcessedTokenRef = useRef(false);
   const loginToastIdRef = useRef<string | null>(null);
+  const redirectAttemptedRef = useRef(false);
+  
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const url = new URL(window.location.href);
     const token = url.searchParams.get('token');
+    
     if (token) {
       if (hasProcessedTokenRef.current) return;
       hasProcessedTokenRef.current = true;
 
+      console.log('[TokenHandler] Processing token from URL...');
       Cookies.set('token', token, { expires: 7, path: '/' });
+      
       refreshUser().then(() => {
-        loginToastIdRef.current = showEnhancedToast('success', 'You are now signed in.', {
-          id: 'login-success-toast',
-          title: 'Welcome back',
-          duration: 3200,
-        });
-        // Remove token from URL
-        url.searchParams.delete('token');
-        window.history.replaceState({}, document.title, url.pathname + url.search);
+        console.log('[TokenHandler] refreshUser() completed, waiting for user state...');
+      }).catch((error) => {
+        console.error('[TokenHandler] Failed to refresh user after login:', error);
+        hasProcessedTokenRef.current = false;
+        redirectAttemptedRef.current = false;
       });
     } else {
       hasProcessedTokenRef.current = false;
+      redirectAttemptedRef.current = false;
     }
-  }, [refreshUser]);
+  }, [refreshUser, router]);
+  
+  // Separate effect to handle redirect once user state is confirmed
+  useEffect(() => {
+    if (!hasProcessedTokenRef.current) return;
+    if (redirectAttemptedRef.current) return;
+    
+    const url = new URL(window.location.href);
+    const token = url.searchParams.get('token');
+    
+    // Only proceed if we have a token and user is now loaded
+    if (token && user && !userLoading) {
+      console.log('[TokenHandler] ✅ User state confirmed, redirecting to /pulse');
+      
+      loginToastIdRef.current = showEnhancedToast('success', 'You are now signed in.', {
+        id: 'login-success-toast',
+        title: 'Welcome back',
+        duration: 3200,
+      });
+      
+      // Remove token from URL
+      url.searchParams.delete('token');
+      window.history.replaceState({}, document.title, url.pathname + url.search);
+      
+      // Redirect to /pulse dashboard
+      redirectAttemptedRef.current = true;
+      router.push('/pulse');
+    }
+  }, [user, userLoading, router]);
+  
   return null;
 }
 
@@ -179,11 +213,52 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   
   useEffect(() => {
     if (!isMounted) return;
-    if (enforceLogin && !userLoading && !user) {
-      setLoginOpen(true);
-    }
+    
+    // If user is authenticated, close login modal immediately
     if (user && loginOpen) {
       setLoginOpen(false);
+      return;
+    }
+    
+    // Only show login if enforceLogin is true, not loading, and no user
+    if (enforceLogin && !userLoading && !user) {
+      // Check if there's a token in cookies or URL
+      const token = Cookies.get('token');
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasTokenInUrl = urlParams.has('token');
+      
+      // If there's a token (in cookie or URL), wait longer for user state to load
+      // This handles the case where we just logged in and TokenHandler is processing
+      if (token || hasTokenInUrl) {
+        // Wait longer when token exists - TokenHandler needs time to process
+        const timeout = setTimeout(() => {
+          // Final check: token still exists and user still isn't loaded
+          const currentToken = Cookies.get('token');
+          const stillHasTokenInUrl = new URLSearchParams(window.location.search).has('token');
+          
+          // Don't show login if:
+          // 1. Token was removed (user logged out)
+          // 2. User is now loaded (authentication succeeded)
+          // 3. Token is still in URL (TokenHandler is still processing)
+          if (!currentToken || user || stillHasTokenInUrl) {
+            return;
+          }
+          
+          // All checks passed - show login modal
+          console.log('[GlobalLoginModalManager] Showing login modal - no user and no token');
+          setLoginOpen(true);
+        }, 2500); // Increased delay to 2.5 seconds when token exists
+        return () => clearTimeout(timeout);
+      } else {
+        // No token - show login immediately (after short delay)
+        const timeout = setTimeout(() => {
+          if (!user && !userLoading) {
+            console.log('[GlobalLoginModalManager] Showing login modal - no user and no token');
+            setLoginOpen(true);
+          }
+        }, 500);
+        return () => clearTimeout(timeout);
+      }
     }
   }, [user, userLoading, enforceLogin, loginOpen, isMounted]);
   
@@ -327,28 +402,30 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       <div className={inter.className}>
         <MobileBlocker>
           <MonadTradeBanner />
-          <WagmiProviderWrapper config={config} queryClient={queryClient}>
-            <UserProvider>
-              <TokenHandler />
-              <ReferralTracker />
-              <SolPriceProvider>
-                <ThemeProvider>
-                  <QuickBuyProvider>
-                    <WatchlistProvider>
-                      <FilterProvider>
-                        <WalletTrackerProvider>
-                          <ReferralAccessGate>
-                            <Component {...pageProps} />
-                          </ReferralAccessGate>
-                        </WalletTrackerProvider>
-                      </FilterProvider>
-                    </WatchlistProvider>
-                  </QuickBuyProvider>
-                  <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
-                </ThemeProvider>
-              </SolPriceProvider>
-            </UserProvider>
-          </WagmiProviderWrapper>
+          <TurnkeyProviderWrapper>
+            <WagmiProviderWrapper config={config} queryClient={queryClient}>
+              <UserProvider>
+                <TokenHandler />
+                <ReferralTracker />
+                <SolPriceProvider>
+                  <ThemeProvider>
+                    <QuickBuyProvider>
+                      <WatchlistProvider>
+                        <FilterProvider>
+                          <WalletTrackerProvider>
+                            <ReferralAccessGate>
+                              <Component {...pageProps} />
+                            </ReferralAccessGate>
+                          </WalletTrackerProvider>
+                        </FilterProvider>
+                      </WatchlistProvider>
+                    </QuickBuyProvider>
+                    <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                  </ThemeProvider>
+                </SolPriceProvider>
+              </UserProvider>
+            </WagmiProviderWrapper>
+          </TurnkeyProviderWrapper>
           <Toaster 
             position={toastPosition}
             toastOptions={{
