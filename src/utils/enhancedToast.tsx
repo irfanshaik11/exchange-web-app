@@ -28,6 +28,7 @@ export interface EnhancedToastOptions extends ToastOptions {
   txHash?: string;
   suggestions?: string[];
   customContent?: React.ReactNode;
+  position?: 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 }
 
 const baseStyle = {

@@ -943,7 +943,8 @@ export default function PulsePage() {
     const fetchInitialMigratedTokens = async () => {
       try {
         console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
-        const endpoint = `${env.NEXT_PUBLIC_GO_SERVICE_URL}/v1/pulse/migrated?limit=70`;
+        // Use Next.js proxy to avoid CORS issues
+        const endpoint = `/api/token-service/pulse-migrated?limit=70`;
         console.log(`[Pulse] 🔄 URL:`, endpoint);
         console.log(`[Pulse] 🔄 Chain: Solana`);
         const response = await fetch(endpoint, {

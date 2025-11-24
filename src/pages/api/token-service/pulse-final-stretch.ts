@@ -140,7 +140,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           };
 
           return {
-            mint: r.mint || r.mint_address || r.Mint || null,
+            mint: r.mint_address || r.mint || r.Mint || null,
+            mint_address: r.mint_address || r.mint || r.Mint || null, // Also include mint_address for compatibility
             pair_address: r.pair_address || null,
             name: r.name || r.token_name || '',
             symbol: r.symbol || r.token_symbol || '',
