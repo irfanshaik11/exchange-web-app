@@ -13,13 +13,7 @@ const config = {
     position: "bottom-right",
   },
   // Transpile these packages to fix CommonJS/ESM issues
-  transpilePackages: [
-    '@vanilla-extract/sprinkles', 
-    '@vanilla-extract/css', 
-    '@rainbow-me/rainbowkit',
-    '@turnkey/react-wallet-kit',
-    '@turnkey/core',
-  ],
+  transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit'],
   // Optimize package imports for faster loading
   experimental: {
     optimizePackageImports: ['react-icons'],
@@ -32,49 +26,12 @@ const config = {
   turbopack: {
     // Turbopack settings
   },
-  webpack: (config, { isServer }) => {
+  webpack: (config) => {
     // Handle @react-native-async-storage warning (optional dependency for MetaMask SDK)
     config.resolve.fallback = {
       ...config.resolve.fallback,
       '@react-native-async-storage/async-storage': false,
     };
-
-    // Fix ESM module resolution for @turnkey packages
-    // Ensure webpack can resolve .js extensions for ESM imports
-    config.resolve.extensionAlias = {
-      '.js': ['.js', '.ts', '.tsx'],
-      '.mjs': ['.mjs', '.js'],
-    };
-
-    // Add extensions to resolve for ESM modules
-    config.resolve.extensions = [
-      ...(config.resolve.extensions || []),
-      '.mjs',
-      '.js',
-      '.jsx',
-      '.ts',
-      '.tsx',
-    ];
-
-    // Handle ESM imports from @turnkey packages
-    if (!isServer) {
-      config.resolve.alias = {
-        ...config.resolve.alias,
-      };
-      
-      // Use a plugin or rule to fix ESM imports
-      config.module = config.module || {};
-      config.module.rules = config.module.rules || [];
-      
-      // Add a rule to handle @turnkey ESM imports
-      config.module.rules.push({
-        test: /node_modules\/@turnkey\/.*\.mjs$/,
-        type: 'javascript/auto',
-        resolve: {
-          fullySpecified: false,
-        },
-      });
-    }
 
     return config;
   },
