@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import type { Wallet } from '~/utils/functions';
-import { formatSmartNumber } from '~/utils/functions';
+import type { Wallet, TradeRow } from '~/utils/functions';
+import { formatSmartNumber, scanWallet, transformWalletScanToTradeRows } from '~/utils/functions';
 import InterstatePopout from './InterstatePopout';
 import { FaRegCopy, FaCheck, FaStar, FaSearch, FaRegChartBar, FaBell, FaExternalLinkAlt, FaArrowUp, FaArrowDown, FaRegCalendar } from 'react-icons/fa';
 import { FiExternalLink } from 'react-icons/fi';
@@ -11,6 +11,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { batchFetchTokenMetadata } from '~/utils/tokenMetadata';
 import { getWalletSolBalance, getWalletTransactions, getWalletHistory } from '~/utils/walletTracking';
+import Activity from './trade/Activity';
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -68,6 +69,12 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState("Activity");
   
+  // Wallet scan state
+  const [scanData, setScanData] = useState<TradeRow[]>([]);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [walletBalance, setWalletBalance] = useState<{ sol: number; usd: number; usdFormatted: string | null } | null>(null);
+  
   // History data
   const [history, setHistory] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -91,19 +98,39 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
 
   useEffect(() => {
     if (!wallet?.address) return;
+    
     setLoading(true);
+    setScanLoading(true);
     setError(null);
+    setScanError(null);
     
-    // Fetch SOL balance via secure backend endpoint
-    getWalletSolBalance(wallet.address)
-      .then(balance => setBalance(balance))
-      .catch(() => setBalance(null));
-    
-    // Fetch recent transactions via backend (using Helius)
-    getWalletTransactions(wallet.address, 10)
-      .then(transactions => setActivity(transactions))
-      .catch(() => setActivity([]))
-      .finally(() => setLoading(false));
+    // Call scan-wallet backend API
+    scanWallet(wallet.address, 100)
+      .then(data => {
+        // Set wallet balance from scan
+        setWalletBalance(data.balance);
+        setBalance(data.balance.sol);
+        
+        // Transform and set activity data
+        const tradeRows = transformWalletScanToTradeRows(data);
+        setScanData(tradeRows);
+        setActivity(tradeRows);
+      })
+      .catch(err => {
+        console.error('Error scanning wallet:', err);
+        setScanError(err.message || 'Failed to scan wallet');
+        setScanData([]);
+        setActivity([]);
+        
+        // Fallback to old method if scan fails
+        getWalletSolBalance(wallet.address)
+          .then(balance => setBalance(balance))
+          .catch(() => setBalance(null));
+      })
+      .finally(() => {
+        setLoading(false);
+        setScanLoading(false);
+      });
   }, [wallet.address]);
 
   useEffect(() => {
@@ -304,12 +331,17 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
               <div className="text-lg text-white font-semibold">$0</div>
               <div className="text-xs text-neutral-500 mt-2">Available Balance</div>
               <div className="text-lg text-white font-semibold">
-                {tokenBalanceLoading || tokenLoading ? (
-                  <span className="animate-pulse text-neutral-500">—</span>
-                ) : tokenBalanceError ? (
-                  <span className="text-red-400">Error</span>
-                ) : tokenBalance !== null && token ? (
-                  `${tokenBalance} ${token.symbol}`
+                {scanLoading || loading ? (
+                  <span className="animate-pulse text-neutral-500">Loading...</span>
+                ) : walletBalance ? (
+                  <div className="flex flex-col">
+                    <span>{walletBalance.sol.toFixed(4)} SOL</span>
+                    {walletBalance.usdFormatted && (
+                      <span className="text-sm text-neutral-400 font-normal">{walletBalance.usdFormatted}</span>
+                    )}
+                  </div>
+                ) : balance !== null ? (
+                  `${balance.toFixed(4)} SOL`
                 ) : (
                   <span className="text-red-400">No balance</span>
                 )}
@@ -579,7 +611,29 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
               <div className="flex items-center justify-center h-full text-neutral-500">Top 100 - Coming Soon</div>
             )}
             {tab === 'Activity' && (
-              <div className="flex items-center justify-center h-full text-neutral-500">Activity - Coming Soon</div>
+              <div className="w-full h-full">
+                {scanLoading || loading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-neutral-400 animate-pulse">Scanning wallet...</div>
+                  </div>
+                ) : scanError ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-red-400">{scanError}</div>
+                  </div>
+                ) : scanData.length === 0 ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-neutral-500">No activity found</div>
+                  </div>
+                ) : (
+                  <div className="w-full h-full">
+                    <Activity 
+                      trades={scanData} 
+                      loading={false}
+                      tokenMetadataCache={{}}
+                    />
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
