@@ -30,6 +30,7 @@ export interface AdvancedOHLCChartProps {
   tokenSymbol?: string | null;
   tokenName?: string | null;
   tokenDecimals?: number | null;
+  network?: 'solana' | 'monad'; // Network type (defaults to 'solana' for backward compatibility)
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
@@ -173,6 +174,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   tokenSymbol = null,
   tokenName = null,
   tokenDecimals = null,
+  network = 'solana', // Default to solana for backward compatibility
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
@@ -261,13 +263,26 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   // Build URL for OHLC data (same as BackendOHLCChart)
   // Allow override of interval for when TradingView requests a different resolution
   const buildUrl = (overrideInterval?: BackendInterval) => {
-    const url = new URL(`${BACKEND_URL}/v1/trade/ohlc-data`);
-    if (mint) url.searchParams.set('mint', mint);
-    if (pairAddress) url.searchParams.set('pair_address', pairAddress);
-    url.searchParams.set('interval', overrideInterval || selectedInterval);
-    url.searchParams.set('timeframe', timeframe);
-    if (optimize) url.searchParams.set('optimize', 'true');
-    return url;
+    // Use different endpoints for Monad vs Solana
+    if (network === 'monad') {
+      // Monad: Use /v1/ohlc endpoint with token_address parameter
+      const url = new URL(`${BACKEND_URL}/v1/ohlc`);
+      const tokenAddress = mint || pairAddress;
+      if (tokenAddress) url.searchParams.set('token_address', tokenAddress);
+      url.searchParams.set('interval', overrideInterval || selectedInterval);
+      url.searchParams.set('timeframe', timeframe);
+      if (optimize) url.searchParams.set('optimize', 'true');
+      return url;
+    } else {
+      // Solana (default): Use /v1/trade/ohlc-data endpoint with mint/pair_address
+      const url = new URL(`${BACKEND_URL}/v1/trade/ohlc-data`);
+      if (mint) url.searchParams.set('mint', mint);
+      if (pairAddress) url.searchParams.set('pair_address', pairAddress);
+      url.searchParams.set('interval', overrideInterval || selectedInterval);
+      url.searchParams.set('timeframe', timeframe);
+      if (optimize) url.searchParams.set('optimize', 'true');
+      return url;
+    }
   };
 
   // Fetch candles function (EXACT same logic as BackendOHLCChart)

@@ -6638,7 +6638,7 @@ function PulseTable({
                                 </div>
 
                                 {/* Pump.fun Tooltip */}
-                                {token.mint.slice(-4) === "pump" && (
+                                {token.mint?.slice(-4) === "pump" && (
                                   <div
                                     className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
                                     style={{

@@ -8,6 +8,7 @@ import { FaCopy, FaExternalLinkAlt, FaRunning } from "react-icons/fa";
 import { LuPencil, LuCheck } from "react-icons/lu";
 import InterstateTooltip from "../InterstateTooltip";
 import toast from "react-hot-toast";
+import { tradeMonadBuy, tradeMonadSell } from "~/utils/api";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -261,9 +262,32 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   const buyPercentage = totalVol > 0 ? (buyVolume / totalVol) * 100 : 50;
   const sellPercentage = 100 - buyPercentage;
 
+  // Helper function to map launchpad protocol to backend format
+  const getLaunchpad = (): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
+    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || '';
+    
+    if (protocol.includes('nad.fun') || protocol.includes('nadfun')) {
+      return 'nadfun';
+    } else if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
+      // Check if it's devs portal (usually has 'dev' in the name or specific identifier)
+      if (protocol.includes('dev')) {
+        return 'flapsh-devs';
+      }
+      return 'flapsh-simple';
+    }
+    
+    // Default to nadfun if unknown
+    return 'nadfun';
+  };
+
   const handleTrade = async () => {
     if (!isConnected || !user) {
       toast.error("Please connect your wallet to trade");
+      return;
+    }
+
+    if (!user.bearerToken) {
+      toast.error("Please log in to trade");
       return;
     }
 
@@ -272,13 +296,82 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       return;
     }
 
+    if (!token?.mint) {
+      toast.error("Invalid token information");
+      return;
+    }
+
     setIsLoading(true);
+    
     try {
-      // TODO: Implement Monad trading API call
-      toast.error("Monad trading is not yet implemented");
-    } catch (error) {
+      const launchpad = getLaunchpad();
+      const tokenAddress = token.mint; // Monad uses mint address (0x format)
+      const amountValue = parseFloat(amount);
+
+      if (mode === "buy") {
+        // Buy trade
+        const result = await tradeMonadBuy(
+          {
+            tokenAddress,
+            amountMON: amountValue,
+            launchpad,
+            slippage: maxSlippage * 100, // Convert to percentage (0.15 -> 15)
+          },
+          user.bearerToken
+        );
+
+        if (result.success && result.txHash) {
+          toast.success(
+            `✅ Buy successful! Tx: ${result.txHash.slice(0, 8)}...`,
+            { duration: 5000 }
+          );
+          // Reset amount after successful trade
+          setAmount("");
+        } else {
+          toast.error("Buy failed. Please try again.");
+        }
+      } else {
+        // Sell trade - need to determine if using percentage or exact amount
+        const sellPercentage = parseFloat(amount);
+        
+        if (isNaN(sellPercentage) || sellPercentage <= 0 || sellPercentage > 100) {
+          toast.error("Please enter a valid percentage (1-100)");
+          setIsLoading(false);
+          return;
+        }
+
+        // Check if launchpad supports sells
+        if (launchpad === 'flapsh-devs') {
+          toast.error("This launchpad does not support sells");
+          setIsLoading(false);
+          return;
+        }
+
+        const result = await tradeMonadSell(
+          {
+            tokenAddress,
+            launchpad: launchpad as 'nadfun' | 'flapsh-simple',
+            percentage: sellPercentage,
+            slippage: maxSlippage * 100,
+          },
+          user.bearerToken
+        );
+
+        if (result.success && result.txHash) {
+          toast.success(
+            `✅ Sold ${sellPercentage}% successfully! Tx: ${result.txHash.slice(0, 8)}...`,
+            { duration: 5000 }
+          );
+          // Reset amount after successful trade
+          setAmount("");
+        } else {
+          toast.error("Sell failed. Please try again.");
+        }
+      }
+    } catch (error: any) {
       console.error("Trade error:", error);
-      toast.error("Trade failed. Please try again.");
+      const errorMessage = error?.message || error?.error || "Trade failed. Please try again.";
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
