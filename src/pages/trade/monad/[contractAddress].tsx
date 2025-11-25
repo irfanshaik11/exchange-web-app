@@ -12,7 +12,7 @@ import dynamic from "next/dynamic";
 import { useQuickBuyQueryParams } from "../../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../../utils/queryParams";
 import { useComponentCache } from "../../../hooks/useComponentCache";
-import { useMonadTokenMetrics, TokenMetrics } from "../../../hooks/useMonadTokenMetrics";
+import { useMonadTokenMetrics, type TokenMetrics } from "../../../hooks/useMonadTokenMetrics";
 
 // Lazy load components
 const AdvancedOHLCChart = dynamic(() => import("../../../components/AdvancedOHLCChart"), { ssr: false });
