@@ -126,9 +126,10 @@ export async function getTradeHistoryByTokenAddress(tokenAddress: string): Promi
   return Array.isArray(data) ? data : [];
 }
 
-export async function getTradeHistoryByUser(userId: string): Promise<any[]> {
+export async function getTradeHistoryByUser(userId: string, blockchain?: string): Promise<any[]> {
   if (!userId) throw new Error('userId is required');
-  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}`);
+  const blockchainParam = blockchain && blockchain !== 'all' ? `&blockchain=${blockchain}` : '';
+  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}${blockchainParam}`);
   if (!res.ok) {
     throw new Error(`Failed to fetch trade history by user: ${res.statusText}`);
   }

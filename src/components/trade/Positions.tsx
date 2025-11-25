@@ -342,8 +342,6 @@ const Positions: React.FC<PositionsProps> = ({
             remaining: positions[0].remaining,
             bought: positions[0].bought,
             sold: positions[0].sold,
-            blockchain: positions[0].blockchain,
-            launchpad: positions[0].launchpad,
           });
         } else {
           console.log(`   ⚠️  No positions found for blockchain: ${blockchain || 'all'}`);
