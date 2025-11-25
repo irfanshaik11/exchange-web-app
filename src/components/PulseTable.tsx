@@ -430,9 +430,6 @@ const SmartColor: React.FC<SmartColorProps> = ({
       className={className}
       style={{
         color: color,
-        fontFamily:
-          'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
-        fontWeight: "400",
       }}
     >
       {children}
@@ -3466,9 +3463,7 @@ function PulseTable({
         {/* Right side container for pill and filter */}
         <div className="flex items-center gap-2">
           {/* Keyword Search Box */}
-          <div
-            className="hidden items-center gap-1 overflow-hidden rounded-md border px-1.5 py-1 sm:flex border-neutral-800 border-2 max-w-32"
-          >
+          <div className="hidden max-w-32 items-center gap-1 overflow-hidden rounded-md border border-2 border-neutral-800 px-1.5 py-1 sm:flex">
             <LuSearch size={16} style={{ color: AX.muted, flexShrink: 0 }} />
             <input
               type="text"
@@ -3485,9 +3480,7 @@ function PulseTable({
           </div>
 
           {/* Thunder Icon and Amount Entry - Separate Thin Box */}
-          <div
-            className="hidden items-center justify-center gap-1 rounded-md border px-1.5 py-1 sm:flex  border-neutral-800 border-2 max-w-32"
-          >
+          <div className="hidden max-w-32 items-center justify-center gap-1 rounded-md border border-2 border-neutral-800 px-1.5 py-1 sm:flex">
             <HiLightningBolt size={12} style={{ color: AX.aiGreen }} />
             <input
               type="text"
@@ -3523,16 +3516,14 @@ function PulseTable({
           </div>
 
           {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
-          <div
-            className="relative hidden items-center justify-center rounded-md border-2 border-neutral-800 px-1.5 sm:flex"
-          >
+          <div className="relative hidden items-center justify-center rounded-md border-2 border-neutral-800 px-1.5 sm:flex">
             {["P1", "P2", "P3"].map((pill, i) => (
               <div
                 key={pill}
                 className="relative flex items-center justify-center"
               >
                 <button
-                  className={`flex cursor-pointer items-center justify-center text-xs px-1.5 font-medium text-xl transition-all duration-200 ${selectedPill == pill ? `text-emerald-300` : `text-gray-500`}`}
+                  className={`flex cursor-pointer items-center justify-center px-1.5 text-xl text-xs font-medium transition-all duration-200 ${selectedPill == pill ? `text-emerald-300` : `text-gray-500`}`}
                   onClick={() => {
                     // Update local preset selection for this column only
                     setSelectedPill(pill);
@@ -3641,7 +3632,11 @@ function PulseTable({
                     );
                   })()}
 
-                {i < 2 ? <div className="h-6 border-r-2 border-neutral-800"></div> : "" }
+                {i < 2 ? (
+                  <div className="h-6 border-r-2 border-neutral-800"></div>
+                ) : (
+                  ""
+                )}
               </div>
             ))}
           </div>
@@ -5845,7 +5840,7 @@ function PulseTable({
                 <Link
                   href={`/trade/${pairAddress}?${queryParams}`}
                   key={pairAddress}
-                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-6 transition-all duration-300 ease-out py-2"
+                  className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-6 py-2 transition-all duration-300 ease-out"
                   style={{
                     borderColor: AX.border,
                     backgroundColor: "transparent",
@@ -6667,7 +6662,7 @@ function PulseTable({
                                 "justify-right flex flex-row items-center gap-2 text-xs text-neutral-400 lg:text-xs"
                               }
                             >
-                              <span style={{ color: AX.muted }}>
+                              <div className="flex flex-row items-center gap-1" style={{ color: AX.muted }}>
                                 MC:{" "}
                                 {(() => {
                                   const isFinalStretchColumn =
@@ -6686,10 +6681,35 @@ function PulseTable({
                                     (token as any).fully_diluted_value ??
                                     (token as any).market_cap_usd ??
                                     0;
+                                  if (hasGreenWave) {
+                                    return (
+                                      <span className="number-font text-xs font-medium text-white lg:text-base">
+                                        <SmoothNumber
+                                          value={mcVal}
+                                          formatter={(val) =>
+                                            `${formatMarketCap(val)}`
+                                          }
+                                          duration={300}
+                                          className="text-xs"
+                                        />
+                                      </span>
+                                    );
+                                  }
                                   return (
-                                    <span className="number-font text-xs text-white">
-                                      {formatMarketCap(mcVal)}
-                                    </span>
+                                    <SmartColor
+                                      token={token}
+                                      metricType="marketCap"
+                                      className="number-font flex flex-row items-center text-xs font-medium text-white lg:text-base"
+                                    >
+                                      <SmoothNumber
+                                        value={mcVal}
+                                        formatter={(val) =>
+                                          `${formatMarketCap(val)}`
+                                        }
+                                        duration={300}
+                                        className="text-xs"
+                                      />
+                                    </SmartColor>
                                   );
                                   /*  if (hasGreenWave) {
                                return (
@@ -6704,8 +6724,8 @@ function PulseTable({
                                </SmartColor>
                              ); */
                                 })()}
-                              </span>
-                              <span style={{ color: AX.muted }}>
+                              </div>
+                              <div style={{ color: AX.muted }}>
                                 <span className="text-xs">V:</span>{" "}
                                 <span
                                   className="number-font text-xs"
@@ -6730,7 +6750,7 @@ function PulseTable({
                                     duration={300}
                                   />
                                 </span>
-                              </span>
+                              </div>
                               <div className="flex items-center gap-2 text-xs">
                                 <div
                                   className="flex flex-row items-center gap-1"
@@ -6804,48 +6824,7 @@ function PulseTable({
                             </div>
 
                             <button
-                              className="z-50 flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
-                              style={{
-                                backgroundColor:
-                                  title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch")
-                                    ? "#101114"
-                                    : AX.aiGreen,
-                                color:
-                                  title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch")
-                                    ? AX.aiGreen
-                                    : "#000000",
-                                border:
-                                  title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch")
-                                    ? `1px solid ${AX.aiGreen}`
-                                    : "1px solid rgba(0,0,0,0.15)",
-                              }}
-                              onMouseEnter={(e) => {
-                                const isFinal =
-                                  title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch");
-                                e.currentTarget.style.backgroundColor = isFinal
-                                  ? "#101114"
-                                  : AX.aiGreenHover;
-                                e.currentTarget.style.transform =
-                                  "translateY(-1px)";
-                                e.currentTarget.style.boxShadow = isFinal
-                                  ? `0 0 10px ${AX.glowGreen}`
-                                  : "0 4px 14px rgba(112, 224, 176, 0.25)";
-                              }}
-                              onMouseLeave={(e) => {
-                                const isFinal =
-                                  title.toLowerCase().includes("final") ||
-                                  title.toLowerCase().includes("stretch");
-                                e.currentTarget.style.backgroundColor = isFinal
-                                  ? "#101114"
-                                  : AX.aiGreen;
-                                e.currentTarget.style.transform =
-                                  "translateY(0)";
-                                e.currentTarget.style.boxShadow = "none";
-                              }}
+                              className={`mt-2 ${title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch") ? `bg-transparent border-emerald-400 text-emerald-400` : `bg-emerald-900/50 text-emerald-400 border-emerald-500`} border z-50 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 e.preventDefault(); // Prevent Link navigation
@@ -6888,7 +6867,7 @@ function PulseTable({
                                   return (
                                     <>
                                       <HiLightningBolt
-                                        className="text-black"
+                                        className="text-emerald-400"
                                         size={14}
                                       />{" "}
                                       <span className="number-font">
@@ -6953,18 +6932,7 @@ function PulseTable({
                                   return (
                                     <>
                                       <HiLightningBolt
-                                        className={"text-black"}
-                                        style={{
-                                          color:
-                                            title
-                                              .toLowerCase()
-                                              .includes("final") ||
-                                            title
-                                              .toLowerCase()
-                                              .includes("stretch")
-                                              ? AX.aiGreen
-                                              : "#000000",
-                                        }}
+                                        className={"text-emerald-400"}
                                         size={14}
                                       />
                                       <span
@@ -7197,37 +7165,58 @@ function PulseTable({
                       })()}
                     </div>
                     <div className="flex flex-row items-center gap-1">
-                      <BottomCardInfoHolder PassedIcon={FaRegUser } value={0.2} />
-                      <BottomCardInfoHolder PassedIcon={LuChefHat} value={0.2} />
-                      <BottomCardInfoHolder 
-                        PassedIcon={GiSeatedMouse} 
+                      <BottomCardInfoHolder
+                        PassedIcon={FaRegUser}
+                        value={0.2}
+                      />
+                      <BottomCardInfoHolder
+                        PassedIcon={LuChefHat}
+                        value={0.2}
+                      />
+                      <BottomCardInfoHolder
+                        PassedIcon={GiSeatedMouse}
                         value={(() => {
                           const val = (token as any).insider_held_percentage;
-                          const num = typeof val === 'string' ? parseFloat(val) : (val ?? 0);
+                          const num =
+                            typeof val === "string"
+                              ? parseFloat(val)
+                              : (val ?? 0);
                           return isNaN(num) ? 0 : num;
-                        })().toFixed(2)} 
+                        })().toFixed(2)}
                         tooltip="Insider Holdings"
                         count={(token as any).insider_count ?? undefined}
                       />
-                      <BottomCardInfoHolder 
-                        PassedIcon={GoStack} 
+                      <BottomCardInfoHolder
+                        PassedIcon={GoStack}
                         value={(() => {
                           const val = (token as any).bundler_held_percentage;
-                          const num = typeof val === 'string' ? parseFloat(val) : (val ?? 0);
+                          const num =
+                            typeof val === "string"
+                              ? parseFloat(val)
+                              : (val ?? 0);
                           return isNaN(num) ? 0 : num;
                         })().toFixed(2)}
                         tooltip="Bundler Holdings"
                         count={(token as any).bundler_count ?? undefined}
                       />
-                      <BottomCardInfoHolder PassedIcon={PiFishSimpleLight } value={0.2} />
-                      <BottomCardInfoHolder PassedIcon={PiLeafLight } value={0.2} />
-                      <BottomCardInfoHolder 
-                        PassedIcon={PiTarget} 
+                      <BottomCardInfoHolder
+                        PassedIcon={PiFishSimpleLight}
+                        value={0.2}
+                      />
+                      <BottomCardInfoHolder
+                        PassedIcon={PiLeafLight}
+                        value={0.2}
+                      />
+                      <BottomCardInfoHolder
+                        PassedIcon={PiTarget}
                         value={(() => {
                           const val = (token as any).sniper_held_percentage;
-                          const num = typeof val === 'string' ? parseFloat(val) : (val ?? 0);
+                          const num =
+                            typeof val === "string"
+                              ? parseFloat(val)
+                              : (val ?? 0);
                           return isNaN(num) ? 0 : num;
-                        })().toFixed(2)} 
+                        })().toFixed(2)}
                         green={false}
                         tooltip="Sniper Holdings"
                         count={(token as any).sniper_count ?? undefined}
