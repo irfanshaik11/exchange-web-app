@@ -46,7 +46,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         is_graduated,
         image_url,
         created_at,
-        updated_at
+        updated_at,
+        COALESCE(recent_trades, '[]'::jsonb) as recent_trades
       FROM monad_tokens
       WHERE status = 'NEW'
       ORDER BY created_at DESC
@@ -99,6 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         creator_address: r.creator_wallet || null, // Alias for consistency
         graduation_percent: toNumber(r.graduation_percent),
         bonding_curve_progress: toNumber(r.graduation_percent), // Alias for frontend
+        recent_trades: r.recent_trades || [],
       };
     }) : [];
 

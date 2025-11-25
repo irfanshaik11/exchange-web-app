@@ -34,6 +34,7 @@ export interface AdvancedOHLCChartProps {
 }
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+const MONAD_BACKEND_URL = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081';
 const VALID_INTERVALS: BackendInterval[] = ['1s', '5s', '15s', '30s', '1m', '5m', '15m', '1h', '4h', '1d', '7d'];
 
 // Map our intervals to TradingView resolution format
@@ -265,8 +266,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const buildUrl = (overrideInterval?: BackendInterval) => {
     // Use different endpoints for Monad vs Solana
     if (network === 'monad') {
-      // Monad: Use /v1/ohlc endpoint with token_address parameter
-      const url = new URL(`${BACKEND_URL}/v1/ohlc`);
+      // Monad: Use Next.js API proxy to avoid CORS issues
+      const url = new URL('/api/token-service/ohlc-monad', window.location.origin);
       const tokenAddress = mint || pairAddress;
       if (tokenAddress) url.searchParams.set('token_address', tokenAddress);
       url.searchParams.set('interval', overrideInterval || selectedInterval);

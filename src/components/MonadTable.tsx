@@ -48,6 +48,7 @@ import InterstatePopout from './InterstatePopout';
 import VerticalInput from './VerticalInput';
 import { usePulseWebSocket } from '~/hooks/usePulseWebSocket';
 import { flushSync } from 'react-dom';
+import { env } from '~/env';
 
 import { useRouter } from "next/router";
 import { fetchTokenMetadata } from "~/utils/functions";
@@ -1711,6 +1712,9 @@ function MonadTable({
     error: wsError
   } = usePulseWebSocket({
     enabled: true,
+    // Use Monad token service WebSocket (port 8081) instead of default Solana service (port 8080)
+    // Falls back to localhost:8081 if env var not set
+    url: `${(env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081').replace(/^http/, 'ws')}/v1/stream`,
     channel,
     protocols: filters.protocols.length > 0 ? filters.protocols.flatMap(mapProtocolToBackend) : undefined,
     onNewToken: useCallback((token: any) => {
@@ -2163,7 +2167,7 @@ function MonadTable({
   // Protocol filtering is now 100% server-side via HTTP API and WebSocket
   // MonadTable ONLY uses Monad token service data - NO FE filtering, IGNORE tokens prop
   const filteredAndSortedTokens = useMemo(() => {
-    console.log(`[MonadTable ${title}] 🔧 MonadTable filtering - monadTokens: ${monadTokens.length}, filteredTokens: ${filteredTokens.length}`);
+    console.log(`[MonadTable ${title}] 🔧 MonadTable filtering - monadTokens: ${monadTokens.length}, filteredTokens: ${filteredTokens.length}, wsTokens: ${wsTokens.length}`);
 
     // MonadTable ONLY uses Monad token service endpoints - IGNORE tokens prop entirely
     // Use filteredTokens if protocol filter is active, otherwise use monadTokens
@@ -2173,12 +2177,25 @@ function MonadTable({
     // Use filtered tokens if protocols are selected, otherwise use base Monad tokens
     // NEVER use tokens prop - only use Monad endpoints
     let tokensToUse = hasSpecificProtocols && filteredTokens.length > 0 ? filteredTokens : monadTokens;
-    
+
+    // MERGE WebSocket tokens (real-time) with HTTP tokens
+    // WebSocket tokens are prepended so they appear at the top (newest first)
+    // Use Map for O(1) deduplication by mint address
+    const tokenMap = new Map<string, Token>();
+    // Add WebSocket tokens first (highest priority - newest)
+    for (const t of wsTokens) {
+      if (t.mint) tokenMap.set(t.mint, t);
+    }
+    // Add HTTP tokens (fill in the rest, don't overwrite WS tokens)
+    for (const t of tokensToUse) {
+      if (t.mint && !tokenMap.has(t.mint)) tokenMap.set(t.mint, t);
+    }
+
     // NO FRONTEND FILTERING AT ALL - use tokens directly from Monad token service as-is
     // Only apply keyword search if provided (user-initiated search)
-    let filtered: Token[] = tokensToUse;
+    let filtered: Token[] = Array.from(tokenMap.values());
 
-    console.log(`[MonadTable ${title}] 🔀 Using ${hasSpecificProtocols ? 'filtered' : 'base'} Monad tokens: ${tokensToUse.length} tokens (NO FE filtering)`);
+    console.log(`[MonadTable ${title}] 🔀 Merged ${wsTokens.length} WS + ${tokensToUse.length} HTTP = ${filtered.length} total tokens`);
 
     // Only apply keyword search filters (user-initiated), NO other filtering
     if (filters.searchKeywords.trim()) {
@@ -2214,7 +2231,7 @@ function MonadTable({
     });
 
     return filtered;
-  }, [monadTokens, filteredTokens, title, filters.protocols, filters.searchKeywords, filters.excludeKeywords]);
+  }, [monadTokens, filteredTokens, wsTokens, title, filters.protocols, filters.searchKeywords, filters.excludeKeywords]);
 
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => {
@@ -4968,7 +4985,7 @@ function MonadTable({
                             }}
                           >
                             <SmoothNumber
-                              value={(token as any).volume_24h || 0}
+                              value={(token as any).volume_24h || (token as any).volume_24h_usd || 0}
                               formatter={(val) => {
                                 const rounded = Math.round(val);
                                 if (rounded >= 1e12) return `$${Math.round(rounded / 1e12)}T`;
@@ -4993,19 +5010,13 @@ function MonadTable({
                           >
                             <SmoothNumber
                               value={(() => {
-                                const buys = token.total_buys_24h ?? 0;
-                                const sells = token.total_sells_24h ?? 0;
-                                const total = buys + sells;
-                                // Debug logging
-                                if (token.symbol === 'HEAVEN' || total < 20) {
-                                  console.log(`[PulseTable TX] ${token.symbol}:`, {
-                                    total_buys_24h: token.total_buys_24h,
-                                    total_sells_24h: token.total_sells_24h,
-                                    calculated: total,
-                                    mint: token.mint
-                                  });
-                                }
-                                return total;
+                                // Use total_transactions if available, otherwise sum buys/sells
+                                // Monad API returns total_buys/total_sells, Solana uses _24h suffix
+                                const totalTxns = (token as any).total_transactions ?? 0;
+                                if (totalTxns > 0) return totalTxns;
+                                const buys = (token as any).total_buys_24h ?? (token as any).total_buys ?? 0;
+                                const sells = (token as any).total_sells_24h ?? (token as any).total_sells ?? 0;
+                                return buys + sells;
                               })()}
                               duration={0}
                             />

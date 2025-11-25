@@ -12,9 +12,11 @@ import dynamic from "next/dynamic";
 import { useQuickBuyQueryParams } from "../../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../../utils/queryParams";
 import { useComponentCache } from "../../../hooks/useComponentCache";
+import { useMonadTokenMetrics, TokenMetrics } from "../../../hooks/useMonadTokenMetrics";
 
-// Lazy load chart component
+// Lazy load components
 const AdvancedOHLCChart = dynamic(() => import("../../../components/AdvancedOHLCChart"), { ssr: false });
+const MonadTrades = dynamic(() => import("../../../components/trade/MonadTrades"), { ssr: false });
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
@@ -93,6 +95,14 @@ export default function MonadTradePage() {
 
   const { settings: quickBuySettings, side: quickBuySide } = useQuickBuyQueryParams();
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
+
+  // Real-time token metrics via WebSocket
+  const [liveMetrics, setLiveMetrics] = useState<TokenMetrics | null>(null);
+  const { metrics: wsMetrics, connected: wsMetricsConnected } = useMonadTokenMetrics({
+    tokenAddress: (contractAddress as string) || "",
+    enabled: !!contractAddress && typeof contractAddress === "string",
+    onUpdate: (metrics) => setLiveMetrics(metrics),
+  });
 
   // Optimistic token data from query params
   const optimisticToken = React.useMemo(() => {
@@ -193,40 +203,67 @@ export default function MonadTradePage() {
   }, [contractAddress, optimisticToken]);
 
   // Convert Monad token data to Token format for components
+  // Merges live WebSocket metrics when available for real-time updates
   const displayToken = React.useMemo(() => {
+    const live = liveMetrics || wsMetrics;
+
     if (!tokenData) return optimisticToken ? {
       mint: contractAddress as string,
       name: optimisticToken.name,
       symbol: optimisticToken.symbol,
-      usd_price: optimisticToken.price_usd || 0,
-      market_cap_usd: optimisticToken.market_cap_usd || 0,
+      usd_price: live?.price_usd ?? optimisticToken.price_usd ?? 0,
+      market_cap_usd: live?.market_cap_usd ?? optimisticToken.market_cap_usd ?? 0,
       pair_address: contractAddress as string,
       logo: optimisticToken.image || "",
       decimals: 18,
       creator_address: null,
       dev_address: null,
       owner: null,
+      // Live metrics
+      liquidity_usd: live?.liquidity_usd ?? 0,
+      graduation_percent: live?.graduation_percent ?? 0,
+      volume_24h: live?.volume_24h_usd ?? 0,
+      total_buys: live?.total_buys ?? 0,
+      total_sells: live?.total_sells ?? 0,
+      total_buy_volume_usd: live?.total_buy_volume_usd ?? 0,
+      total_sell_volume_usd: live?.total_sell_volume_usd ?? 0,
+      net_volume_usd: live?.net_volume_usd ?? 0,
     } : null;
 
     return {
       mint: tokenData.mint || (contractAddress as string),
       name: tokenData.name,
       symbol: tokenData.symbol,
-      usd_price: tokenData.usd_price,
-      market_cap_usd: tokenData.market_cap_usd || tokenData.fully_diluted_value,
-      fully_diluted_value: tokenData.fully_diluted_value,
+      // Price: prefer live metrics, fallback to fetched data
+      usd_price: live?.price_usd ?? tokenData.usd_price,
+      price_usd: live?.price_usd ?? tokenData.usd_price,
+      market_cap_usd: live?.market_cap_usd ?? tokenData.market_cap_usd ?? tokenData.fully_diluted_value,
+      fully_diluted_value: live?.market_cap_usd ?? tokenData.fully_diluted_value,
       pair_address: tokenData.pair_address || tokenData.mint || (contractAddress as string),
       logo: tokenData.image_url || "",
       decimals: tokenData.decimals || 18,
       created_at: tokenData.created_at || tokenData.launch_time || null,
-      total_liquidity_usd: 0, // Monad may not have this
+      // Live metrics (real-time via WebSocket, fallback to HTTP API data)
+      liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
+      total_liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
+      graduation_percent: live?.graduation_percent ?? (tokenData as any)?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? 0,
+      bonding_pct: live?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? (tokenData as any)?.graduation_percent ?? 0,
+      volume_24h: live?.volume_24h_usd ?? tokenData.volume_24h ?? 0,
+      total_buys: live?.total_buys ?? tokenData.total_buys ?? 0,
+      total_sells: live?.total_sells ?? tokenData.total_sells ?? 0,
+      total_transactions: live?.total_transactions ?? tokenData.total_transactions ?? 0,
+      unique_traders: live?.unique_traders ?? tokenData.unique_traders ?? 0,
+      // USD volumes: prefer WebSocket, fallback to calculated from MON volume (MON price ~$0.25)
+      total_buy_volume_usd: live?.total_buy_volume_usd ?? ((tokenData as any)?.total_buy_volume_mon ? (tokenData as any).total_buy_volume_mon * 0.25 : 0),
+      total_sell_volume_usd: live?.total_sell_volume_usd ?? ((tokenData as any)?.total_sell_volume_mon ? (tokenData as any).total_sell_volume_mon * 0.25 : 0),
+      net_volume_usd: live?.net_volume_usd ?? (((tokenData as any)?.total_buy_volume_mon ?? 0) - ((tokenData as any)?.total_sell_volume_mon ?? 0)) * 0.25,
       launchpad_protocol: tokenData.launchpad_protocol || "nad.fun",
       // Dev/creator address fields
       creator_address: (tokenData as any)?.creator_address || (tokenData as any)?.creator_wallet || (tokenData as any)?.dev_address || (tokenData as any)?.owner || null,
       dev_address: (tokenData as any)?.dev_address || (tokenData as any)?.creator_wallet || (tokenData as any)?.creator_address || (tokenData as any)?.owner || null,
       owner: (tokenData as any)?.owner || (tokenData as any)?.creator_wallet || (tokenData as any)?.creator_address || (tokenData as any)?.dev_address || null,
     };
-  }, [tokenData, optimisticToken, contractAddress]);
+  }, [tokenData, optimisticToken, contractAddress, liveMetrics, wsMetrics]);
 
   const tokenNameForTitle =
     (displayToken?.name && displayToken.name.trim()) ||
@@ -576,31 +613,12 @@ export default function MonadTradePage() {
                   <span>Instant Trade</span>
                 </button>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                {/* Transactions Table */}
-                <div className="w-full overflow-x-auto">
-                  <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
-                    <thead className="sticky top-0" style={{ backgroundColor: '#1E1F26', zIndex: 10 }}>
-                      <tr className="border-b" style={{ borderColor: AX.border }}>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">Time</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">Address</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">Action</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">USD</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">MON</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">$NTEST43</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">Txn</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td colSpan={7} className="px-3 py-8 text-center" style={{ color: AX.muted }}>
-                          <p className="text-sm mb-2">Transaction data not yet available for Monad tokens</p>
-                          <p className="text-xs">This feature will be available soon</p>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+              <div className="flex-1 min-h-0 overflow-hidden">
+                {/* Live Trades */}
+                <MonadTrades
+                  tokenAddress={pairAddress}
+                  cachedTrades={(tokenData as any)?.recent_trades || []}
+                />
               </div>
             </div>
           </div>
