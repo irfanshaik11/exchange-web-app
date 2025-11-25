@@ -3435,7 +3435,7 @@ function PulseTable({
   };
   return (
     <div
-      className={`num mx-1 flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl bg-[#0A0E0A] shadow-lg`}
+      className={`num mx-1 flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-2xl bg-[#0A0E0A] shadow-lg overflow-x-hidden`}
     >
       <div
         className="group relative mb-2 flex items-center justify-between border-b p-2 text-lg font-bold"
