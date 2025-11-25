@@ -84,12 +84,14 @@ const Positions: React.FC<PositionsProps> = ({
   const [selectedPosition, setSelectedPosition] = useState<PositionRow | null>(null);
   const [solPrice, setSolPrice] = useState<number>(0);
   const router = useRouter();
+  const currentChain = (router.query.chain as string) || 'sol';
+  const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
 
   // Function to refresh positions after a successful sell
   const refreshPositions = async () => {
     if (userId) {
       try {
-        const updatedPositions = await getActivePositionsByUser(userId);
+        const updatedPositions = await getActivePositionsByUser(userId, blockchain);
         setPositions(updatedPositions);
         onPositionsChange(updatedPositions);
       } catch (error) {
@@ -331,11 +333,20 @@ const Positions: React.FC<PositionsProps> = ({
         setLoading(true);
       }
       try {
-        const positions = await getActivePositionsByUser(userId);
-        console.log(`✅ Positions received:`, positions);
-        console.log(`   Count: ${positions.length}`);
+        console.log(`🔍 [Positions] Fetching with blockchain: ${blockchain || 'all'}`);
+        const positions = await getActivePositionsByUser(userId, blockchain);
+        console.log(`✅ [Positions] Received ${positions.length} positions`);
         if (positions.length > 0) {
-          console.log(`   First position:`, positions[0]);
+          console.log(`   📊 First position:`, {
+            tokenAddress: positions[0].tokenAddress,
+            remaining: positions[0].remaining,
+            bought: positions[0].bought,
+            sold: positions[0].sold,
+            blockchain: positions[0].blockchain,
+            launchpad: positions[0].launchpad,
+          });
+        } else {
+          console.log(`   ⚠️  No positions found for blockchain: ${blockchain || 'all'}`);
         }
         setPositions(positions);
         onPositionsChange(positions);
@@ -446,7 +457,7 @@ const Positions: React.FC<PositionsProps> = ({
     }, 5000);
     
     return () => clearInterval(intervalId);
-  }, [userId, onPositionsChange, skipFetch, onTokenNamesChange]);
+  }, [userId, onPositionsChange, skipFetch, onTokenNamesChange, blockchain]);
 
   return (
     <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>

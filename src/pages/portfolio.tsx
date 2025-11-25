@@ -47,18 +47,39 @@ const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
   </InterstateTooltip>
 );
 
-// SOL icon component for inline use
-const SolIcon = () => (
-  <SiSolana
-    className="h-3 w-3 inline-block -mt-0.5 mx-0.5"
-    aria-hidden="true"
-    style={{
-      color: "unset",
-      fill: "url(#solana-gradient-inline)",
-      filter: "none",
-    }}
-  />
-);
+// Dynamic chain icon component (Solana or Monad)
+const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: 'small' | 'medium' | 'large' }) => {
+  const sizeClasses = {
+    small: 'h-3 w-3',
+    medium: 'h-4 w-4',
+    large: 'h-5 w-5',
+  };
+  
+  if (chain === 'monad') {
+    return (
+      <img
+        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+        alt="Monad"
+        className={`${sizeClasses[size]} inline-block -mt-0.5 mx-0.5 rounded`}
+        style={{ objectFit: 'contain' }}
+      />
+    );
+  }
+  return (
+    <SiSolana
+      className={`${sizeClasses[size]} inline-block -mt-0.5 mx-0.5`}
+      aria-hidden="true"
+      style={{
+        color: "unset",
+        fill: "url(#solana-gradient-inline)",
+        filter: "none",
+      }}
+    />
+  );
+};
+
+// SOL icon component for inline use (kept for backward compatibility)
+const SolIcon = () => <ChainIcon chain="sol" />;
 
 const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity"];
 
@@ -133,9 +154,10 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, chainBalances } = useUser();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || "sol";
+  const monBalance = chainBalances?.monad || 0;
   const [walletChecked, setWalletChecked] = useState(false);
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [loadingTradeHistory, setLoadingTradeHistory] = useState(true);
@@ -291,7 +313,9 @@ export default function PortfolioPage() {
       if (user?.id) {
         setLoadingTradeHistory(true);
         try {
-          const history = await getTradeHistoryByUser(user.id);
+          // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
+          const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
+          const history = await getTradeHistoryByUser(user.id, blockchain);
           setTradeHistory(history);
         } catch (error) {
           console.error("Failed to fetch trade history:", error);
@@ -303,7 +327,7 @@ export default function PortfolioPage() {
     };
 
     fetchTradeHistory();
-  }, [user?.id]);
+  }, [user?.id, currentChain]);
 
   // Fetch trade activity only when on Activity tab (index 2 after History commented out)
   useEffect(() => {
@@ -316,7 +340,9 @@ export default function PortfolioPage() {
           setLoadingTradeActivity(true);
         }
         try {
-          const activity = await getTradeActivityByUser(user.id);
+          // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
+          const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
+          const activity = await getTradeActivityByUser(user.id, blockchain);
           // Reverse array so newest trades appear at the top
           setTradeActivity([...activity].reverse());
         } catch (error) {
@@ -341,7 +367,7 @@ export default function PortfolioPage() {
 
       return () => clearInterval(intervalId);
     }
-  }, [user?.id, activeSpotTab]);
+  }, [user?.id, activeSpotTab, currentChain]);
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -434,7 +460,9 @@ export default function PortfolioPage() {
       setUnrealizedPnlPercentage(
         totalBoughtValue ? (totalPnl / totalBoughtValue) * 100 : 0,
       );
-      setTotalValue(solBalance + totalRemainingValue);
+      // Use appropriate balance based on current chain
+      const currentBalance = currentChain === 'monad' ? monBalance : solBalance;
+      setTotalValue(currentBalance + totalRemainingValue);
 
       // Create top 100 positions sorted by corrected USD value
       const sortedByUsdValue = [...correctedPositions].sort((a, b) => {
@@ -442,7 +470,7 @@ export default function PortfolioPage() {
       });
       setTop100Positions(sortedByUsdValue.slice(0, 100));
     }
-  }, [positions, solBalance]);
+  }, [positions, solBalance, monBalance, currentChain]);
 
   // Search filtering effect
   useEffect(() => {
@@ -1078,17 +1106,26 @@ export default function PortfolioPage() {
             {/* Right side controls for Spot section */}
             {activeSection === "spot" && (
               <div className="flex items-center gap-4">
-                <InterstateTooltip label="SOL Balance">
+                <InterstateTooltip label={currentChain === 'monad' ? 'MON Balance' : 'SOL Balance'}>
                   <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-                    <SiSolana
-                      className="h-4 w-4 -mt-px"
-                      aria-hidden="true"
-                      style={{
-                        color: "unset",
-                        fill: "url(#solana-gradient)",
-                        filter: "none",
-                      }}
-                    />
+                    {currentChain === 'monad' ? (
+                      <img
+                        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                        alt="Monad"
+                        className="h-6 w-6 -mt-px rounded"
+                        style={{ objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <SiSolana
+                        className="h-4 w-4 -mt-px"
+                        aria-hidden="true"
+                        style={{
+                          color: "unset",
+                          fill: "url(#solana-gradient)",
+                          filter: "none",
+                        }}
+                      />
+                    )}
                     <svg className="absolute w-0 h-0">
                       <defs>
                         <linearGradient
@@ -1114,7 +1151,9 @@ export default function PortfolioPage() {
                       </defs>
                     </svg>
                     <span className="text-sm text-[#9CA3AF]">
-                      {formatSmartNumber(solBalance)}
+                      {currentChain === 'monad' 
+                        ? `${formatSmartNumber(monBalance)} MON`
+                        : `${formatSmartNumber(solBalance)} SOL`}
                     </span>
                   </div>
                 </InterstateTooltip>
@@ -1191,7 +1230,7 @@ export default function PortfolioPage() {
                       <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(totalValue / solPrice)}
                           </>
                         ) : (
@@ -1206,7 +1245,7 @@ export default function PortfolioPage() {
                       <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(unrealizedPnl / solPrice)}
                           </>
                         ) : (
@@ -1221,11 +1260,11 @@ export default function PortfolioPage() {
                       <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
-                            {formatSmartNumber(usdcBalance / solPrice)}
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber((currentChain === 'monad' ? monBalance : solBalance) / solPrice)}
                           </>
                         ) : (
-                          `$${formatSmartNumber(usdcBalance)}`
+                          `$${formatSmartNumber(currentChain === 'monad' ? monBalance : solBalance)}`
                         )}
                       </div>
                     </div>
@@ -1259,7 +1298,7 @@ export default function PortfolioPage() {
                     >
                       {sortByUSD && solPrice > 0 ? (
                         <>
-                          <SolIcon />
+                          <ChainIcon chain={currentChain} size="medium" />
                           {formatSmartNumber(
                             Math.abs(timeframeMetrics.realizedPnl) / solPrice,
                           )}
@@ -1426,7 +1465,7 @@ export default function PortfolioPage() {
                       <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(
                               timeframeMetrics.unrealizedPnl / solPrice,
                             )}
@@ -1443,7 +1482,7 @@ export default function PortfolioPage() {
                       <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(
                               timeframeMetrics.realizedPnl / solPrice,
                             )}
@@ -1642,8 +1681,8 @@ export default function PortfolioPage() {
                         userId={user.id}
                         onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
-                        preloadedPositions={filteredPositions}
-                        skipFetch={searchQuery.trim() !== ""}
+                        preloadedPositions={searchQuery.trim() !== "" ? filteredPositions : undefined}
+                        skipFetch={false}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}
@@ -1941,15 +1980,24 @@ export default function PortfolioPage() {
 
                               {/* Balance */}
                               <div className="flex items-center gap-1 justify-center">
-                                <SiSolana
-                                  className="h-3 w-3 flex-shrink-0"
-                                  aria-hidden="true"
-                                  style={{
-                                    color: "unset",
-                                    fill: "url(#solana-gradient-wallets)",
-                                    filter: "none",
-                                  }}
-                                />
+                                {currentChain === 'monad' ? (
+                                  <img
+                                    src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                                    alt="Monad"
+                                    className="h-4 w-4 flex-shrink-0 rounded"
+                                    style={{ objectFit: 'contain' }}
+                                  />
+                                ) : (
+                                  <SiSolana
+                                    className="h-3 w-3 flex-shrink-0"
+                                    aria-hidden="true"
+                                    style={{
+                                      color: "unset",
+                                      fill: "url(#solana-gradient-wallets)",
+                                      filter: "none",
+                                    }}
+                                  />
+                                )}
                                 <span className="text-xs text-white">
                                   {formatSmartNumber(
                                     walletBalances[wallet.id] ?? wallet.balance,
