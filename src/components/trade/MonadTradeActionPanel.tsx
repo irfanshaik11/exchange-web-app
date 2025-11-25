@@ -321,14 +321,31 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         );
 
         if (result.success && result.txHash) {
+          // Show toast immediately with explorer link
+          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
           toast.success(
-            `✅ Buy successful! Tx: ${result.txHash.slice(0, 8)}...`,
-            { duration: 5000 }
+            (t) => (
+              <div className="flex flex-col gap-1">
+                <span>✅ Buy successful!</span>
+                <a
+                  href={explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 underline text-sm"
+                  onClick={() => toast.dismiss(t.id)}
+                >
+                  View on MonadVision: {result.txHash.slice(0, 8)}...{result.txHash.slice(-6)}
+                </a>
+              </div>
+            ),
+            { duration: 10000 }
           );
-          // Reset amount after successful trade
+          // Reset amount and clear loading immediately after showing toast
           setAmount("");
+          setIsLoading(false);
         } else {
           toast.error("Buy failed. Please try again.");
+          setIsLoading(false);
         }
       } else {
         // Sell trade - need to determine if using percentage or exact amount
@@ -340,17 +357,10 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
           return;
         }
 
-        // Check if launchpad supports sells
-        if (launchpad === 'flapsh-devs') {
-          toast.error("This launchpad does not support sells");
-          setIsLoading(false);
-          return;
-        }
-
         const result = await tradeMonadSell(
           {
             tokenAddress,
-            launchpad: launchpad as 'nadfun' | 'flapsh-simple',
+            launchpad,
             percentage: sellPercentage,
             slippage: maxSlippage * 100,
           },
@@ -358,14 +368,31 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         );
 
         if (result.success && result.txHash) {
+          // Show toast immediately with explorer link
+          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
           toast.success(
-            `✅ Sold ${sellPercentage}% successfully! Tx: ${result.txHash.slice(0, 8)}...`,
-            { duration: 5000 }
+            (t) => (
+              <div className="flex flex-col gap-1">
+                <span>✅ Sold {sellPercentage}% successfully!</span>
+                <a
+                  href={explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 underline text-sm"
+                  onClick={() => toast.dismiss(t.id)}
+                >
+                  View on MonadVision: {result.txHash.slice(0, 8)}...{result.txHash.slice(-6)}
+                </a>
+              </div>
+            ),
+            { duration: 10000 }
           );
-          // Reset amount after successful trade
+          // Reset amount and clear loading immediately after showing toast
           setAmount("");
+          setIsLoading(false);
         } else {
           toast.error("Sell failed. Please try again.");
+          setIsLoading(false);
         }
       }
     } catch (error: any) {

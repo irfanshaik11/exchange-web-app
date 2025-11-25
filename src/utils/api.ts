@@ -607,7 +607,7 @@ export type MonadBuyParams = {
 
 export type MonadSellParams = {
   tokenAddress: string; // ERC-20 token address
-  launchpad: 'nadfun' | 'flapsh-simple'; // Launchpad identifier (flapsh-devs doesn't support sells)
+  launchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs'; // Launchpad identifier
   tokenAmount?: string; // Optional: Exact token amount to sell (mutually exclusive with percentage)
   percentage?: number; // Optional: Percentage of balance to sell (1-100, mutually exclusive with tokenAmount)
   slippage?: number; // Optional: Slippage percentage

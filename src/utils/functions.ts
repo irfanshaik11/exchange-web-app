@@ -79,7 +79,7 @@ export async function getPumpSwapPool(tokenAddress: string): Promise<any> {
   return res.json();
 }
 
-export async function getActivePositionsByUser(userId: string): Promise<PositionRow[]> {
+export async function getActivePositionsByUser(userId: string, blockchain?: string): Promise<PositionRow[]> {
   if (!userId) return [];
   if (!env.NEXT_PUBLIC_BACKEND_URL) {
     console.error('NEXT_PUBLIC_BACKEND_URL is not set');
@@ -93,8 +93,9 @@ export async function getActivePositionsByUser(userId: string): Promise<Position
     if (controller) {
       timeoutId = setTimeout(() => controller.abort(), 10000);
     }
+    const blockchainParam = blockchain && blockchain !== 'all' ? `&blockchain=${blockchain}` : '';
     const res = await fetch(
-      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}`,
+      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}${blockchainParam}`,
       controller ? { signal: controller.signal } : {},
     );
     if (!res.ok) {
@@ -125,16 +126,17 @@ export async function getTradeHistoryByTokenAddress(tokenAddress: string): Promi
   return Array.isArray(data) ? data : [];
 }
 
-export async function getTradeHistoryByUser(userId: string): Promise<any[]> {
+export async function getTradeHistoryByUser(userId: string, blockchain?: string): Promise<any[]> {
   if (!userId) throw new Error('userId is required');
-  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}`);
+  const blockchainParam = blockchain && blockchain !== 'all' ? `&blockchain=${blockchain}` : '';
+  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}${blockchainParam}`);
   if (!res.ok) {
     throw new Error(`Failed to fetch trade history by user: ${res.statusText}`);
   }
   return res.json();
 }
 
-export async function getTradeActivityByUser(userId: string): Promise<any[]> {
+export async function getTradeActivityByUser(userId: string, blockchain?: string): Promise<any[]> {
   if (!userId) throw new Error('userId is required');
   const controller =
     typeof AbortController !== 'undefined' ? new AbortController() : undefined;
@@ -143,8 +145,9 @@ export async function getTradeActivityByUser(userId: string): Promise<any[]> {
     timeoutId = setTimeout(() => controller.abort(), 10000);
   }
   try {
+    const blockchainParam = blockchain && blockchain !== 'all' ? `&blockchain=${blockchain}` : '';
     const res = await fetch(
-      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}`,
+      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}${blockchainParam}`,
       controller ? { signal: controller.signal } : {},
     );
   if (!res.ok) {
