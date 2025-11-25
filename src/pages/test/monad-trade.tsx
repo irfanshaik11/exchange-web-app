@@ -21,7 +21,7 @@ export default function MonadTradeTestPage() {
   
   // Sell parameters
   const [sellTokenAddress, setSellTokenAddress] = useState("");
-  const [sellLaunchpad, setSellLaunchpad] = useState<'nadfun' | 'flapsh-simple'>("nadfun");
+  const [sellLaunchpad, setSellLaunchpad] = useState<'nadfun' | 'flapsh-simple' | 'flapsh-devs'>("nadfun");
   const [sellPercentage, setSellPercentage] = useState("");
   const [sellTokenAmount, setSellTokenAmount] = useState("");
   const [sellSlippage, setSellSlippage] = useState("15");
@@ -118,11 +118,26 @@ export default function MonadTradeTestPage() {
       console.log("✅ Response:", JSON.stringify(result, null, 2));
 
       if (result.success && result.txHash) {
+        const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
         toast.success(
-          `✅ Buy successful! Tx: ${result.txHash}`,
+          (t) => (
+            <div className="flex flex-col gap-1">
+              <span>✅ Buy successful!</span>
+              <a
+                href={explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 underline text-sm"
+                onClick={() => toast.dismiss(t.id)}
+              >
+                View on MonadVision: {result.txHash.slice(0, 8)}...{result.txHash.slice(-6)}
+              </a>
+            </div>
+          ),
           { duration: 10000 }
         );
         console.log("✅ Buy Result:", result);
+        console.log("🔗 Explorer URL:", explorerUrl);
       } else {
         toast.error("Buy failed - check console for details");
         console.error("❌ Buy Result:", result);
@@ -237,11 +252,26 @@ export default function MonadTradeTestPage() {
       toast.dismiss(loadingToast);
 
       if (result.success && result.txHash) {
+        const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
         toast.success(
-          `✅ Sell successful! Tx: ${result.txHash}`,
+          (t) => (
+            <div className="flex flex-col gap-1">
+              <span>✅ Sell successful!</span>
+              <a
+                href={explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 underline text-sm"
+                onClick={() => toast.dismiss(t.id)}
+              >
+                View on MonadVision: {result.txHash.slice(0, 8)}...{result.txHash.slice(-6)}
+              </a>
+            </div>
+          ),
           { duration: 10000 }
         );
         console.log("✅ Sell Result:", result);
+        console.log("🔗 Explorer URL:", explorerUrl);
       } else {
         toast.error("Sell failed - check console for details");
         console.error("❌ Sell Result:", result);
@@ -502,14 +532,8 @@ export default function MonadTradeTestPage() {
                   >
                     <option value="nadfun">nad.fun</option>
                     <option value="flapsh-simple">Flap.SH Simple</option>
+                    <option value="flapsh-devs">Flap.SH Devs</option>
                   </select>
-                  <p style={{ 
-                    fontSize: "0.75rem", 
-                    color: "#9CA3AF", 
-                    marginTop: "0.25rem"
-                  }}>
-                    Note: Flap.SH Devs doesn't support sells
-                  </p>
                 </div>
 
                 <div>

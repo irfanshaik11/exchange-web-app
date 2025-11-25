@@ -2072,11 +2072,31 @@ function MonadTable({
       );
 
       if (result.success && result.txHash) {
+        const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
         updateEnhancedToast(toastId, 'success', 'Buy successful!', {
           title: 'Trade Executed',
-          description: `Tx: ${result.txHash.slice(0, 8)}...`,
+          description: `Transaction confirmed`,
+          customContent: (
+            <div className="flex flex-col gap-2">
+              <div className="text-sm text-[#E6E7EA]">
+                ✅ Buy successful!
+              </div>
+              <a
+                href={explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 underline text-xs flex items-center gap-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                View on MonadVision: {result.txHash.slice(0, 8)}...{result.txHash.slice(-6)}
+                <span>→</span>
+              </a>
+            </div>
+          ),
+          duration: 10000,
         });
         console.log('✅ Monad Quick Buy successful:', result);
+        console.log('🔗 Explorer URL:', explorerUrl);
         return { success: true, txHash: result.txHash };
       } else {
         const errorMsg = (result as any)?.error || 'Unknown error';
