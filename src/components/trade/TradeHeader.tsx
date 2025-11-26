@@ -1215,42 +1215,61 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
               </button>
 
               <div className="ml-1 flex flex-row gap-2 font-light">
-                <div className="flex items-center gap-1 text-violet-200">
-                  <PiCrownSimpleLight size={16} />
-                  <span className="text-sm text-white">0</span>
-                </div>
+                {/* Check if this is a Monad token - hide icons for Monad */}
+                {(() => {
+                  const protocol = extractProtocolRaw(token);
+                  const isMonad = protocol && (
+                    protocol.includes('nad.fun') || 
+                    protocol.includes('nadfun') || 
+                    protocol.includes('flapsh') ||
+                    protocol.includes('flap.sh')
+                  );
+                  
+                  if (isMonad) {
+                    return null; // Hide all icons for Monad tokens
+                  }
+                  
+                  return (
+                    <>
+                      <div className="flex items-center gap-1 text-violet-200">
+                        <PiCrownSimpleLight size={16} />
+                        <span className="text-sm text-white">0</span>
+                      </div>
 
-                <div className="flex items-center gap-1 text-violet-200">
-                  <CiTrophy size={16} />
-                  <span className="text-sm text-white">0</span>
-                </div>
+                      <div className="flex items-center gap-1 text-violet-200">
+                        <CiTrophy size={16} />
+                        <span className="text-sm text-white">0</span>
+                      </div>
 
-                {/* People Icon - Total Holders */}
-                <div className="relative flex items-center gap-1">
-                  <div
-                    className="flex cursor-help items-center justify-center rounded text-violet-200"
-                    title="Holders"
-                  >
-                    <GoPeople size={16} />
-                  </div>
-                  <span className="text-sm text-white">
-                    {(() => {
-                      const holders =
-                        token.total_holders || token.unique_wallets_24h || 0;
-                      if (holders >= 1e9)
-                        return `${(holders / 1e9).toFixed(1)}B`;
-                      if (holders >= 1e6)
-                        return `${(holders / 1e6).toFixed(1)}M`;
-                      if (holders >= 1e3)
-                        return `${(holders / 1e3).toFixed(1)}K`;
-                      return holders.toString();
-                    })()}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-violet-200">
-                  <PiRobotLight size={16} />
-                  <span className="text-sm text-white">0</span>
-                </div>
+                      {/* People Icon - Total Holders */}
+                      <div className="relative flex items-center gap-1">
+                        <div
+                          className="flex cursor-help items-center justify-center rounded text-violet-200"
+                          title="Holders"
+                        >
+                          <GoPeople size={16} />
+                        </div>
+                        <span className="text-sm text-white">
+                          {(() => {
+                            const holders =
+                              token.total_holders || token.unique_wallets_24h || 0;
+                            if (holders >= 1e9)
+                              return `${(holders / 1e9).toFixed(1)}B`;
+                            if (holders >= 1e6)
+                              return `${(holders / 1e6).toFixed(1)}M`;
+                            if (holders >= 1e3)
+                              return `${(holders / 1e3).toFixed(1)}K`;
+                            return holders.toString();
+                          })()}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-violet-200">
+                        <PiRobotLight size={16} />
+                        <span className="text-sm text-white">0</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Pump.fun Tooltip */}
