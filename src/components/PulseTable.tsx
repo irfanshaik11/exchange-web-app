@@ -6725,7 +6725,7 @@ function PulseTable({
                              ); */
                                 })()}
                               </div>
-                              <div style={{ color: AX.muted }}>
+                              <div style={{ color: AX.muted }} className="flex flex-row gap-1">
                                 <span className="text-xs">V:</span>{" "}
                                 <span
                                   className="number-font text-xs"
