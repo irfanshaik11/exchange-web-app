@@ -130,7 +130,7 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
       </div>
 
       {/* Trade Table */}
-      <div className="flex-1 overflow-y-auto pb-4">
+      <div className="flex-1 overflow-y-auto pb-12">
         <table className="w-full text-xs border-collapse table-fixed">
           <thead className="sticky top-0 bg-black z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
@@ -225,6 +225,12 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
                   </tr>
                 );
               })
+            )}
+            {/* Spacer row for bottom padding to ensure last item is scrollable */}
+            {!isLoading && displayTrades.length > 0 && (
+              <tr>
+                <td colSpan={6} className="h-16"></td>
+              </tr>
             )}
           </tbody>
         </table>

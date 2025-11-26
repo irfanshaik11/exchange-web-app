@@ -127,7 +127,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     setTokenBalanceError(null);
     
     // Get token accounts by owner via secure backend endpoint
-    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || '';
     
     fetch(`${backendUrl}/api/token-accounts/${encodeURIComponent(wallet.address)}?mint=${encodeURIComponent(token.pair_address)}`)
       .then(res => res.json())
@@ -151,8 +151,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     setHistoryLoading(true);
     setHistoryError(null);
     
-    const backendUrl =
-      process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || "http://localhost:8081";
+    const backendUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || '';
 
     fetch(`${backendUrl}/api/history?wallet=${wallet.address}&limit=100`)
       .then((res) => {

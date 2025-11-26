@@ -76,7 +76,7 @@ export function useMonadTradesWebSocket(
 
     try {
       setLoading(true);
-      const baseUrl = env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081';
+      const baseUrl = env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
       const response = await fetch(
         `${baseUrl}/v1/trades?token_address=${tokenAddress}&limit=${maxTrades}`
       );
@@ -113,7 +113,7 @@ export function useMonadTradesWebSocket(
     }
 
     try {
-      const baseUrl = env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081';
+      const baseUrl = env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
       const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/v1/stream`;
 
       const ws = new WebSocket(wsUrl);

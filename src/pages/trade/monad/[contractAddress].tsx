@@ -130,22 +130,32 @@ export default function MonadTradePage() {
       setError(null);
 
       try {
-        // Try to fetch from Monad token service
+        // Call Monad backend directly (bypasses proxy for Redis cache)
+        const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
         const endpoints = [
-          `/api/token-service/pulse-new-monad?limit=100`,
-          `/api/token-service/pulse-final-stretch-monad?limit=100`,
-          `/api/token-service/pulse-migrated-monad?limit=100`,
+          `${monadServiceUrl}/v1/pulse/new?limit=100`,
+          `${monadServiceUrl}/v1/pulse/final-stretch?limit=100`,
+          `${monadServiceUrl}/v1/pulse/migrated?limit=100`,
         ];
 
         let foundToken: MonadTokenData | null = null;
 
         for (const endpoint of endpoints) {
           try {
-            const response = await fetch(endpoint);
+            const response = await fetch(endpoint, {
+              headers: { 'Accept': 'application/json' }
+            });
             if (response.ok) {
-              const tokens = await response.json();
+              const result = await response.json();
+              // Backend returns { status: "success", count: N, data: [...] }
+              const rawTokens = result.data || (Array.isArray(result) ? result : []);
+              // Transform backend response: map 'address' to 'mint' for frontend compatibility
+              const tokens = rawTokens.map((t: any) => ({
+                ...t,
+                mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+              }));
               const token = tokens.find(
-                (t: any) => t.mint === contractAddress || t.pair_address === contractAddress
+                (t: any) => t.mint === contractAddress || t.pair_address === contractAddress || t.address === contractAddress
               );
               if (token) {
                 foundToken = token;
@@ -456,7 +466,7 @@ export default function MonadTradePage() {
       <Head><title>{pageTitle}</title></Head>
 
       <div
-        className="min-h-screen w-full flex flex-col"
+        className="h-screen w-full flex flex-col overflow-hidden"
         style={{
           backgroundColor: "#0f1012",
           color: AX.text,
@@ -466,14 +476,14 @@ export default function MonadTradePage() {
         <Header search={search} setSearch={setSearch} />
 
         {loading && !displayToken && (
-          <div className="text-center text-xs px-2 py-1.5"
+          <div className="text-center text-xs px-2 py-1.5 flex-shrink-0"
                style={{ color: AX.text, backgroundColor: "#2A2414", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}>
             Loading Monad token data…
           </div>
         )}
 
         <div
-          className="flex flex-1 w-full max-w-full overflow-hidden"
+          className="flex flex-1 w-full max-w-full overflow-hidden min-h-0"
           style={{
             minHeight: 0,
             flex: '1 1 auto',
@@ -593,9 +603,9 @@ export default function MonadTradePage() {
             </div>
 
             {/* BOTTOM pane (tabs + tables) */}
-            <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col overflow-y-auto">
+            <div id="tabs-pane" className="flex-1 flex flex-col overflow-hidden min-h-0">
               {/* Transactions Tab Header */}
-              <div className="flex gap-4 pt-2 px-3 text-xs items-center justify-between">
+              <div className="flex gap-4 pt-2 px-3 text-xs items-center justify-between flex-shrink-0">
                 <div className="flex gap-4 items-center">
                   <button
                     className="px-3 py-1 font-semibold border-b-4 border-[#70E0B0] text-white"
@@ -613,7 +623,7 @@ export default function MonadTradePage() {
                   <span>Instant Trade</span>
                 </button>
               </div>
-              <div className="flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingBottom: '2rem' }}>
                 {/* Live Trades */}
                 <MonadTrades
                   tokenAddress={pairAddress}

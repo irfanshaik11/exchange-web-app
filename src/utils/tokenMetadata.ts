@@ -1,5 +1,5 @@
 // Backend API URL
-const WALLET_TRACKER_API_URL = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+const WALLET_TRACKER_API_URL = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || '';
 
 // Token metadata interface
 export interface TokenMetadata {

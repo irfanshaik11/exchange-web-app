@@ -37,7 +37,7 @@ export function useMonadOHLCWebSocket({
   const connect = useCallback(() => {
     if (!enabled || !tokenAddress) return;
 
-    const wsUrl = process.env.NEXT_PUBLIC_MONAD_WS_URL || 'ws://localhost:8081/v1/stream';
+    const wsUrl = process.env.NEXT_PUBLIC_MONAD_WS_URL!;
 
     try {
       const ws = new WebSocket(wsUrl);
