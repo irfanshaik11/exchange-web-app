@@ -18,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const monadServiceUrl = process.env.MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081';
+    const monadServiceUrl = process.env.MONAD_TOKEN_SERVICE_URL!;
 
     // Map the interval to Monad's supported intervals (5m, 1h, 6h, 24h)
     const mappedInterval = INTERVAL_MAP[interval as string] || '5m';

@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Try to get token image from the backend service
-    const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+    const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL!;
     const backendUrl = `${goBase}/v1/token/${mint}/image`;
     
     console.log(`[getTokenImage] Fetching image for ${name} (${symbol}) from: ${backendUrl}`);

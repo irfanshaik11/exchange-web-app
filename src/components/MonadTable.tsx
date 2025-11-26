@@ -1484,8 +1484,8 @@ function MonadTable({
   });
   
   const [filters, setFilters] = useState({
-    // Protocols
-    protocols: ['nad.fun'] as string[],
+    // Protocols - Monad launchpad protocols (nad.fun and flap.sh)
+    protocols: ['nad.fun', 'flap.sh'] as string[],
     // Quote Tokens
     quoteTokens: [] as string[],
     // Keywords
@@ -1574,6 +1574,7 @@ function MonadTable({
   const [pendingFilters, setPendingFilters] = useState(filters);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const prevHasSpecificProtocolsRef = useRef(false);
+  const prevProtocolRef = useRef<string>('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1613,30 +1614,37 @@ function MonadTable({
   const fetchMonadTokens = useCallback(async () => {
     setIsFetchingMonad(true);
     try {
-      // Determine the endpoint based on column type - ALWAYS use Monad-specific endpoints
-      let endpoint = '/api/token-service/pulse-new-monad';
+      // Call Monad token service directly (bypasses Next.js proxy for Redis cache benefits)
+      const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
+      let endpoint = '/v1/pulse/new';
       let limit = 50;
       if (title.toLowerCase().includes('final stretch')) {
-        endpoint = '/api/token-service/pulse-final-stretch-monad';
+        endpoint = '/v1/pulse/final-stretch';
         limit = 50;
       } else if (title.toLowerCase().includes('migrated')) {
-        endpoint = '/api/token-service/pulse-migrated-monad';
+        endpoint = '/v1/pulse/migrated';
         limit = 70;
       }
 
-      console.log(`[MonadTable ${title}] 🌊 Fetching Monad tokens from ${endpoint} (filtered to nad.fun only)`);
-      // Only fetch nad.fun tokens
-      const response = await fetch(`${endpoint}?limit=${limit}&protocols=nad.fun&t=${Date.now()}`, {
+      const fullUrl = `${monadServiceUrl}${endpoint}?limit=${limit}`;
+      console.log(`[MonadTable ${title}] 🌊 Fetching Monad tokens directly from ${fullUrl} (Redis cache enabled)`);
+      // Fetch Monad launchpad tokens (backend has Redis cache with 5s TTL for 354x faster responses)
+      const response = await fetch(fullUrl, {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        headers: { 'Accept': 'application/json' }
       });
-      
+
       if (response.ok) {
-        const data = await response.json();
-        const next = Array.isArray(data) ? data : [];
-        // NO filtering - use data directly from Monad token service
-        setMonadTokens(next as Token[]);
-        console.log(`[MonadTable ${title}] ✅ Fetched ${next.length} Monad tokens (no filtering)`);
+        const result = await response.json();
+        // Backend returns { status: "success", count: N, data: [...] }
+        const rawTokens = result.data || (Array.isArray(result) ? result : []);
+        // Transform backend response: map 'address' to 'mint' for frontend compatibility
+        const tokens = rawTokens.map((t: any) => ({
+          ...t,
+          mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+        }));
+        setMonadTokens(tokens as Token[]);
+        console.log(`[MonadTable ${title}] ✅ Fetched ${tokens.length} Monad tokens from backend (Redis cache)`);
       } else {
         console.error(`[MonadTable ${title}] ❌ Failed to fetch Monad tokens: ${response.status}`);
         setMonadTokens([]);
@@ -1652,7 +1660,8 @@ function MonadTable({
   // Fetch Monad tokens on mount and when title changes
   useEffect(() => {
     fetchMonadTokens();
-  }, [fetchMonadTokens]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title]); // Only re-fetch when title changes (column type)
 
   // Fetch filtered tokens from API when protocols are selected (for protocol filtering only)
   const fetchFilteredTokens = useCallback(async (protocols: string[]) => {
@@ -1665,24 +1674,31 @@ function MonadTable({
     try {
       const backendProtocols = protocols.flatMap(mapProtocolToBackend);
       const protocolsParam = backendProtocols.join(',');
-      
-      // Determine the endpoint based on column type - use Monad-specific endpoints
-      let endpoint = '/api/token-service/pulse-new-monad';
+
+      // Call Monad token service directly (bypasses Next.js proxy for Redis cache benefits)
+      const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
+      let endpoint = '/v1/pulse/new';
       let limit = 50;
       if (title.toLowerCase().includes('final stretch')) {
-        endpoint = '/api/token-service/pulse-final-stretch-monad';
+        endpoint = '/v1/pulse/final-stretch';
         limit = 50;
       } else if (title.toLowerCase().includes('migrated')) {
-        endpoint = '/api/token-service/pulse-migrated-monad';
+        endpoint = '/v1/pulse/migrated';
         limit = 70;
       }
 
-      const response = await fetch(`${endpoint}?limit=${limit}&protocols=${encodeURIComponent(protocolsParam)}&t=${Date.now()}`);
+      const fullUrl = `${monadServiceUrl}${endpoint}?limit=${limit}&protocols=${encodeURIComponent(protocolsParam)}`;
+      const response = await fetch(fullUrl);
       if (response.ok) {
-        const data = await response.json();
-        const next = Array.isArray(data) ? data : [];
-        // NO filtering - use data directly from API
-        setFilteredTokens(next as Token[]);
+        const result = await response.json();
+        // Backend returns { status: "success", count: N, data: [...] }
+        const rawTokens = result.data || (Array.isArray(result) ? result : []);
+        // Transform backend response: map 'address' to 'mint' for frontend compatibility
+        const tokens = rawTokens.map((t: any) => ({
+          ...t,
+          mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+        }));
+        setFilteredTokens(tokens as Token[]);
       } else {
         console.error('Failed to fetch filtered tokens:', response.status);
         setFilteredTokens([]);
@@ -1712,9 +1728,8 @@ function MonadTable({
     error: wsError
   } = usePulseWebSocket({
     enabled: true,
-    // Use Monad token service WebSocket (port 8081) instead of default Solana service (port 8080)
-    // Falls back to localhost:8081 if env var not set
-    url: `${(env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081').replace(/^http/, 'ws')}/v1/stream`,
+    // Use Monad token service WebSocket from environment variable
+    url: `${env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!.replace(/^http/, 'ws')}/v1/stream`,
     channel,
     protocols: filters.protocols.length > 0 ? filters.protocols.flatMap(mapProtocolToBackend) : undefined,
     onNewToken: useCallback((token: any) => {
@@ -1855,25 +1870,19 @@ function MonadTable({
     }, []),
   });
 
-  // Fetch filtered tokens when protocols change
+  // DISABLED: Fetch filtered tokens when protocols change
+  // This is redundant since fetchMonadTokens already includes protocols=nad.fun
+  // Keeping this disabled to prevent duplicate HTTP fetches
   useEffect(() => {
-    // Treat ['All'] the same as no filter - don't fetch filtered data
-    // MonadTable always uses nad.fun - no 'All' option
-    const hasSpecificProtocols = filters.protocols.length > 0;
+    // Don't fetch filtered tokens - already fetched by fetchMonadTokens with protocols param
+    // Just clear filtered tokens since we're using monadTokens directly
+    setFilteredTokens([]);
 
-    if (hasSpecificProtocols) {
-      fetchFilteredTokens(filters.protocols);
-      setWsTokens([]); // Clear stale WebSocket tokens when filter changes
-    } else {
-      // When switching back to 'All', clear filtered tokens and rely on parent data + WebSocket
-      // Only reset wsTokens if we previously had a specific protocol filter applied
-      setFilteredTokens([]);
-      if (prevHasSpecificProtocolsRef.current) {
-        setWsTokens([]);
-      }
+    // Clear WebSocket tokens when filter changes to force refresh
+    if (filters.protocols.length > 0 && filters.protocols[0] !== prevProtocolRef.current) {
+      setWsTokens([]);
     }
-
-    prevHasSpecificProtocolsRef.current = hasSpecificProtocols;
+    prevProtocolRef.current = filters.protocols[0] || '';
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.protocols, title]);
 

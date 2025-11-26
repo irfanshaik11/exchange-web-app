@@ -72,7 +72,7 @@ export interface TrackedWallet {
 // Normalize API URL: if it's https to a raw IP, downgrade to http to avoid TLS issues in browsers
 const resolveApiUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL;
-  if (!envUrl) return 'http://localhost:8081';
+  if (!envUrl) return ''; // Optional: return empty string if not configured
   try {
     const u = new URL(envUrl);
     const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(u.hostname);
@@ -90,10 +90,7 @@ export const WALLET_TRACKER_API_URL = resolveApiUrl();
 // Normalize WS URL: allow users to provide http(s) and convert to ws(s) automatically
 const resolveWsUrl = () => {
   const envWs = process.env.NEXT_PUBLIC_WALLET_TRACKER_WS_URL;
-  if (!envWs) {
-    console.warn('⚠️ NEXT_PUBLIC_WALLET_TRACKER_WS_URL not set, using default: ws://localhost:8081');
-    return 'ws://localhost:8081';
-  }
+  if (!envWs) return ''; // Optional: return empty string if not configured
   if (envWs.startsWith('http://')) return envWs.replace(/^http:\/\//, 'ws://');
   if (envWs.startsWith('https://')) return envWs.replace(/^https:\/\//, 'wss://');
   return envWs;
