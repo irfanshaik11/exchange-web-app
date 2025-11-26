@@ -175,9 +175,9 @@ const Activity: React.FC<ActivityProps> = ({
             const trade = trades.find(t => t.tokenAddress === tokenAddress);
             const pairAddress = trade?.originalPairAddress || trade?.pairAddress || tokenAddress;
             
-            // Reduced timeout to 3s for faster failures
+            // Increased timeout to 15s to allow slow backend responses
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
             
             const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`, {
               signal: controller.signal

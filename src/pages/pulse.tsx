@@ -876,9 +876,10 @@ export default function PulsePage() {
     }
   }, [newPairsToShow, preloadImages]);
 
-  // Sync rolling trade cache with visible pulse tokens
+  // Sync rolling trade cache with visible pulse tokens (debounced to prevent excessive requests)
   useEffect(() => {
-    const syncCache = async () => {
+    // Debounce sync calls to prevent rapid-fire requests
+    const syncTimeoutId = setTimeout(async () => {
       try {
         if (
           !newPairsToShow.length &&
@@ -895,9 +896,9 @@ export default function PulsePage() {
       } catch (error) {
         console.error("[Pulse] Failed to sync rolling cache:", error);
       }
-    };
+    }, 2000); // Debounce: Wait 2 seconds after tokens change before syncing
 
-    syncCache();
+    return () => clearTimeout(syncTimeoutId);
   }, [newPairsToShow, finalStretchToShow, migratedToShow]);
 
   // Log cache stats periodically for debugging
