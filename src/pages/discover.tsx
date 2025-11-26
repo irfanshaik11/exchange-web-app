@@ -1477,6 +1477,19 @@ export default function DiscoverPage() {
       // CRITICAL: applyFilters uses filter context, so when filters change, this will re-run
       const filtered = applyFilters(safeArr);
       
+      // When no filters are active, prevent timeframe switches from collapsing the list.
+      // If the filtered list is unexpectedly tiny (e.g., Birdeye only returns 24h data),
+      // fall back to the baseline safe array so every timeframe shows a full slate.
+      const baselineThreshold = Math.max(
+        10,
+        Math.floor(Math.min(safeArr.length, 80) * 0.25)
+      );
+      const shouldUseBaseline =
+        activeFilterCount === 0 &&
+        safeArr.length > 0 &&
+        filtered.length < Math.min(baselineThreshold, safeArr.length);
+      const workingTokens = shouldUseBaseline ? safeArr : filtered;
+      
       console.log(`[Filters] Applied filters to ${safeArr.length} tokens, result: ${filtered.length} tokens`, {
         activeFilters: {
           amms: filter.amms?.length || 0,
@@ -1492,7 +1505,7 @@ export default function DiscoverPage() {
       });
       
       // Create deep copies to avoid mutation during sort
-      const sortedTokens = filtered.map(t => JSON.parse(JSON.stringify(t)));
+      const sortedTokens = workingTokens.map(t => JSON.parse(JSON.stringify(t)));
       
       sortedTokens.sort((a, b) => {
         // Final safety check in sort
@@ -1560,7 +1573,7 @@ export default function DiscoverPage() {
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter]); // Ensure filters are reapplied when they change
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount]); // Ensure filters are reapplied when they change
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) {
