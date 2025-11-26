@@ -13,7 +13,7 @@ const config = {
     position: "bottom-right",
   },
   // Transpile these packages to fix CommonJS/ESM issues
-  transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit'],
+  transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit',  '@turnkey/react-wallet-kit', '@turnkey/core'],
   // Optimize package imports for faster loading
   experimental: {
     optimizePackageImports: ['react-icons'],

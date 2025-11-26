@@ -9,6 +9,7 @@ import { toast } from 'react-hot-toast';
 import { useWallet } from "./useWallet";
 import { usePhantomWallet } from '../hooks/usePhantomWallet';
 import { useMetaMaskWallet } from '../hooks/useMetaMaskWallet';
+import { useTurnkey } from '@turnkey/react-wallet-kit'; 
 
 const ENABLE_EMAIL_AUTH = false;
 
@@ -50,7 +51,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   // Use the new wallet hooks
   const phantomWallet = usePhantomWallet();
   const metaMaskWallet = useMetaMaskWallet();
-
+  const { handleLogin } = useTurnkey();
   // Helper function to clear all loading states
   const clearAllLoadingStates = () => {
     setPhantomLoading(false);
@@ -96,7 +97,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   if (!open && !show) return null;
 
   // Login handler
-  async function handleLogin(e: React.FormEvent) {
+  async function handleLoginEmail(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -145,19 +146,22 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   }
 
   // Google Login handler
-  async function handleGoogleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setGoogleLoading(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      window.location.href = googleAuthUrl;
-    } catch (err) {
-      setError('Login failed');
-    } finally {
-      setGoogleLoading(false);
-    }
+async function handleGoogleLogin() {
+  setGoogleLoading(true);
+  setError(null);
+  setSuccess(null);
+  console.log('[Turnkey] starting handleLogin()');
+  try {
+    // This opens the Turnkey auth flow (modal) with methods you enabled
+    await handleLogin();
+  } catch (err) {
+    console.error('Turnkey login failed', err);
+    setError('Login failed');
+  } finally {
+    setGoogleLoading(false);
   }
+}
+
 
   // Phantom Wallet Login handler - Enhanced with proper connection management
   async function handlePhantomLogin() {
@@ -346,7 +350,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       {ENABLE_EMAIL_AUTH && (
         <>
         {mode === 'login' ? (
-          <form onSubmit={handleLogin}>
+          <form onSubmit={handleLoginEmail}>
             <div className="mb-3">
               <label className="block text-xs mb-1">Email</label>
               <input
@@ -432,7 +436,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
           onClick={(e) => {
             setPhantomLoading(false);
             setMetamaskLoading(false);
-            handleGoogleLogin(e);
+            handleGoogleLogin();
           }}
           disabled={googleLoading}
         >
