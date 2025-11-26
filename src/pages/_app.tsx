@@ -15,6 +15,7 @@ import dynamic from 'next/dynamic';
 import { TurnkeyRootProvider } from "../components/TurnkeyRootProvider";
 import "@turnkey/react-wallet-kit/styles.css";  
 import { useTurnkey, AuthState } from '@turnkey/react-wallet-kit';
+import { turnkeyLogin } from '../utils/api';
 
 // Dynamically import LoginModal with no SSR to prevent wagmi provider issues
 const LoginModal = dynamic(() => import('../components/LoginModal'), {
@@ -105,7 +106,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   }, true); // Use capture phase to intercept early
 }
 function TurnkeySessionBridge() {
-  const { authState, session } = useTurnkey();
+  const { authState, session, user } = useTurnkey();
   const { refreshUser } = useUser();
   const router = useRouter();
   const hasProcessedRef = useRef(false);
@@ -119,32 +120,30 @@ function TurnkeySessionBridge() {
 
     (async () => {
       try {
-        const res = await fetch('/api/auth/login-turnkey', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            turnkeySessionToken: session.token,
-            organizationId: session.organizationId,
-            userId: session.userId,
-          }),
+        const data = await turnkeyLogin({
+          turnkeySessionToken: session.token,
+          organizationId: session.organizationId,
+          userId: session.userId,
         });
 
-        if (!res.ok) {
-          console.error('Turnkey login failed', await res.text());
-          hasProcessedRef.current = false;
-          return;
-        }
-
-        const data = await res.json();
 
         // Backend should respond with your normal app JWT
         if (data.token) {
           Cookies.set('token', data.token, { expires: 7, path: '/' });
+       
           await refreshUser();
           router.push('/'); // or '/dashboard' if you prefer
+        } else {
+          console.error('Turnkey login failed: no token in response');
+          hasProcessedRef.current = false;
         }
       } catch (err) {
         console.error('Error linking Turnkey session to app user', err);
+        if ((err as any)?.message) {
+          showEnhancedToast('error', (err as any).message);
+        } else {
+          showEnhancedToast('error', 'Could not create a session from Turnkey login.');
+        }
         hasProcessedRef.current = false;
       }
     })();

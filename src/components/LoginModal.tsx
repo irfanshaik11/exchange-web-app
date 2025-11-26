@@ -51,7 +51,8 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   // Use the new wallet hooks
   const phantomWallet = usePhantomWallet();
   const metaMaskWallet = useMetaMaskWallet();
-  const { handleLogin } = useTurnkey();
+  const turnkey = useTurnkey();
+  const { handleGoogleOauth } = turnkey || {};
   // Helper function to clear all loading states
   const clearAllLoadingStates = () => {
     setPhantomLoading(false);
@@ -146,17 +147,31 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   }
 
   // Google Login handler
-async function handleGoogleLogin() {
+  async function handleGoogleLogin() {
   setGoogleLoading(true);
   setError(null);
   setSuccess(null);
-  console.log('[Turnkey] starting handleLogin()');
+  console.log('[Turnkey] starting Google OAuth', {
+    clientState: turnkey?.clientState,
+    authState: turnkey?.authState,
+    hasSessionToken: !!turnkey?.session?.token,
+  });
   try {
-    // This opens the Turnkey auth flow (modal) with methods you enabled
-    await handleLogin();
+    if (!handleGoogleOauth) {
+      throw new Error('Turnkey Google login is not available right now.');
+    }
+    if ((turnkey as any)?.clientState === 'error') {
+      throw new Error('Turnkey failed to initialize. Please refresh and check env config.');
+    }
+    // Open Google OAuth in the current page to avoid hidden popups
+    await handleGoogleOauth({ openInPage: true });
   } catch (err) {
+    const message =
+      (err as any)?.message ||
+      (err as any)?.response?.data?.message ||
+      'Login failed';
     console.error('Turnkey login failed', err);
-    setError('Login failed');
+    setError(message);
   } finally {
     setGoogleLoading(false);
   }
@@ -346,6 +361,11 @@ async function handleGoogleLogin() {
         </p>
         <h2 className="mt-2 text-2xl font-semibold text-white">Sign in to Narrative</h2>
       </div>
+      {error && (
+        <div className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+          {error}
+        </div>
+      )}
 
       {ENABLE_EMAIL_AUTH && (
         <>
