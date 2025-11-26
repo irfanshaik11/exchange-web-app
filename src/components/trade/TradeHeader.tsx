@@ -1215,42 +1215,61 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
               </button>
 
               <div className="ml-1 flex flex-row gap-2 font-light">
-                <div className="flex items-center gap-1 text-violet-200">
-                  <PiCrownSimpleLight size={16} />
-                  <span className="text-sm text-white">0</span>
-                </div>
+                {/* Check if this is a Monad token - hide icons for Monad */}
+                {(() => {
+                  const protocol = extractProtocolRaw(token);
+                  const isMonad = protocol && (
+                    protocol.includes('nad.fun') || 
+                    protocol.includes('nadfun') || 
+                    protocol.includes('flapsh') ||
+                    protocol.includes('flap.sh')
+                  );
+                  
+                  if (isMonad) {
+                    return null; // Hide all icons for Monad tokens
+                  }
+                  
+                  return (
+                    <>
+                      <div className="flex items-center gap-1 text-violet-200">
+                        <PiCrownSimpleLight size={16} />
+                        <span className="text-sm text-white">0</span>
+                      </div>
 
-                <div className="flex items-center gap-1 text-violet-200">
-                  <CiTrophy size={16} />
-                  <span className="text-sm text-white">0</span>
-                </div>
+                      <div className="flex items-center gap-1 text-violet-200">
+                        <CiTrophy size={16} />
+                        <span className="text-sm text-white">0</span>
+                      </div>
 
-                {/* People Icon - Total Holders */}
-                <div className="relative flex items-center gap-1">
-                  <div
-                    className="flex cursor-help items-center justify-center rounded text-violet-200"
-                    title="Holders"
-                  >
-                    <GoPeople size={16} />
-                  </div>
-                  <span className="text-sm text-white">
-                    {(() => {
-                      const holders =
-                        token.total_holders || token.unique_wallets_24h || 0;
-                      if (holders >= 1e9)
-                        return `${(holders / 1e9).toFixed(1)}B`;
-                      if (holders >= 1e6)
-                        return `${(holders / 1e6).toFixed(1)}M`;
-                      if (holders >= 1e3)
-                        return `${(holders / 1e3).toFixed(1)}K`;
-                      return holders.toString();
-                    })()}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-violet-200">
-                  <PiRobotLight size={16} />
-                  <span className="text-sm text-white">0</span>
-                </div>
+                      {/* People Icon - Total Holders */}
+                      <div className="relative flex items-center gap-1">
+                        <div
+                          className="flex cursor-help items-center justify-center rounded text-violet-200"
+                          title="Holders"
+                        >
+                          <GoPeople size={16} />
+                        </div>
+                        <span className="text-sm text-white">
+                          {(() => {
+                            const holders =
+                              token.total_holders || token.unique_wallets_24h || 0;
+                            if (holders >= 1e9)
+                              return `${(holders / 1e9).toFixed(1)}B`;
+                            if (holders >= 1e6)
+                              return `${(holders / 1e6).toFixed(1)}M`;
+                            if (holders >= 1e3)
+                              return `${(holders / 1e3).toFixed(1)}K`;
+                            return holders.toString();
+                          })()}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-violet-200">
+                        <PiRobotLight size={16} />
+                        <span className="text-sm text-white">0</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Pump.fun Tooltip */}
@@ -1321,48 +1340,82 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
       </div>
 
       {/* RIGHT: Trade stats (24H VOL, BUYS, SELLS, NET) */}
-      <div className="flex items-center gap-3 ml-auto mr-2">
-        <StatInline label="24H VOL">
-          ${formatSmartNumber((token as any)?.volume_24h ?? 0)}
-        </StatInline>
-        <StatInline label="BUYS" accent="green">
-          {(token as any)?.total_buys ?? 0} / ${formatSmartNumber((token as any)?.total_buy_volume_usd ?? 0)}
-        </StatInline>
-        <StatInline label="SELLS">
-          <span style={{ color: "#FF4D7F" }}>
-            {(token as any)?.total_sells ?? 0} / ${formatSmartNumber((token as any)?.total_sell_volume_usd ?? 0)}
-          </span>
-        </StatInline>
-        <StatInline label="NET">
-          <span style={{ color: ((token as any)?.net_volume_usd ?? 0) >= 0 ? AX.green : "#FF4D7F" }}>
-            {((token as any)?.net_volume_usd ?? 0) >= 0 ? "+" : ""}${formatSmartNumber((token as any)?.net_volume_usd ?? 0)}
-          </span>
-        </StatInline>
-      </div>
+      {/* Hide for Monad tokens */}
+      {(() => {
+        const protocol = extractProtocolRaw(token);
+        const isMonad = protocol && (
+          protocol.includes('nad.fun') || 
+          protocol.includes('nadfun') || 
+          protocol.includes('flapsh') ||
+          protocol.includes('flap.sh') ||
+          protocol.includes('kuru')
+        );
+        
+        if (isMonad) {
+          return null; // Hide trade stats for Monad tokens
+        }
+        
+        return (
+          <div className="flex items-center gap-3 ml-auto mr-2">
+            <StatInline label="24H VOL">
+              ${formatSmartNumber((token as any)?.volume_24h ?? 0)}
+            </StatInline>
+            <StatInline label="BUYS" accent="green">
+              {(token as any)?.total_buys ?? 0} / ${formatSmartNumber((token as any)?.total_buy_volume_usd ?? 0)}
+            </StatInline>
+            <StatInline label="SELLS">
+              <span style={{ color: "#FF4D7F" }}>
+                {(token as any)?.total_sells ?? 0} / ${formatSmartNumber((token as any)?.total_sell_volume_usd ?? 0)}
+              </span>
+            </StatInline>
+            <StatInline label="NET">
+              <span style={{ color: ((token as any)?.net_volume_usd ?? 0) >= 0 ? AX.green : "#FF4D7F" }}>
+                {((token as any)?.net_volume_usd ?? 0) >= 0 ? "+" : ""}${formatSmartNumber((token as any)?.net_volume_usd ?? 0)}
+              </span>
+            </StatInline>
+          </div>
+        );
+      })()}
 
       {/* RIGHT: actions */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={handleWatchlistClick}
-          className="cursor-pointer text-[14px]"
-          aria-label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
-          title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
-        >
-          {isWatched ? (
-            <FaStar className="text-yellow-400" />
-          ) : (
-            <FaRegStar style={{ color: AX.muted }} />
-          )}
-        </button>
+      {(() => {
+        const protocol = extractProtocolRaw(token);
+        const isMonad = protocol && (
+          protocol.includes('nad.fun') || 
+          protocol.includes('nadfun') || 
+          protocol.includes('flapsh') ||
+          protocol.includes('flap.sh') ||
+          protocol.includes('kuru')
+        );
+        
+        return (
+          <div className={`flex items-center gap-2 ${isMonad ? 'ml-auto' : ''}`}>
+            <button
+              onClick={handleWatchlistClick}
+              className="cursor-pointer text-[14px]"
+              aria-label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+              title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+            >
+              {isWatched ? (
+                <FaStar className="text-yellow-400" />
+              ) : (
+                <FaRegStar style={{ color: AX.muted }} />
+              )}
+            </button>
 
-        <button
-          title="Expand chart"
-          className="grid h-6 w-6 place-items-center"
-          style={{ color: AX.muted }}
-        >
-          <FaExpand size={12} />
-        </button>
-      </div>
+            {/* Hide expand button for Monad tokens */}
+            {!isMonad && (
+              <button
+                title="Expand chart"
+                className="grid h-6 w-6 place-items-center"
+                style={{ color: AX.muted }}
+              >
+                <FaExpand size={12} />
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* tiny toast */}
       {toastMessage && (

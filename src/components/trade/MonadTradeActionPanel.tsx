@@ -242,22 +242,36 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   const price = (token as any).usd_price || (token as any).price_usd || 0;
   const marketCap = token.market_cap_usd || (token as any).fully_diluted_value || 0;
 
-  // Get stats from token data (Monad may not have all timeframes)
+  // Get stats from token data - using same mapping as TradeHeader
   const getStatsForTimeframe = (range: TimeRange) => {
     const tokenData = token as any;
+    // Use same field mapping as TradeHeader: volume_24h, total_buys, total_sells, total_buy_volume_usd, total_sell_volume_usd, net_volume_usd
+    // For 24h timeframe, use the exact same fields as TradeHeader
+    if (range === '24h') {
+      return {
+        volume: num(tokenData?.volume_24h ?? 0),
+        buys: num(tokenData?.total_buys ?? 0),
+        sells: num(tokenData?.total_sells ?? 0),
+        buyVolume: num(tokenData?.total_buy_volume_usd ?? 0),
+        sellVolume: num(tokenData?.total_sell_volume_usd ?? 0),
+        netVolume: num(tokenData?.net_volume_usd ?? 0),
+        change: num(tokenData?.price_percent_change_24h ?? 0),
+      };
+    }
+    // For other timeframes, try timeframe-specific fields first, then fall back to 24h fields
     return {
-      volume: num(tokenData[`volume_${range}`] || tokenData[`volume_24h`] || 0),
-      buys: num(tokenData[`total_buys_${range}`] || tokenData[`total_buys`] || 0),
-      sells: num(tokenData[`total_sells_${range}`] || tokenData[`total_sells`] || 0),
-      buyVolume: num(tokenData[`total_buy_volume_${range}`] || tokenData[`total_buy_volume_24h`] || 0),
-      sellVolume: num(tokenData[`total_sell_volume_${range}`] || tokenData[`total_sell_volume_24h`] || 0),
-      change: num(tokenData[`price_percent_change_${range}`] || tokenData[`price_percent_change_24h`] || 0),
+      volume: num(tokenData[`volume_${range}`] || tokenData?.volume_24h || 0),
+      buys: num(tokenData[`total_buys_${range}`] || tokenData?.total_buys || 0),
+      sells: num(tokenData[`total_sells_${range}`] || tokenData?.total_sells || 0),
+      buyVolume: num(tokenData[`total_buy_volume_${range}`] || tokenData?.total_buy_volume_usd || 0),
+      sellVolume: num(tokenData[`total_sell_volume_${range}`] || tokenData?.total_sell_volume_usd || 0),
+      netVolume: num(tokenData[`net_volume_${range}`] || tokenData?.net_volume_usd || (num(tokenData[`total_buy_volume_${range}`] || tokenData?.total_buy_volume_usd || 0) - num(tokenData[`total_sell_volume_${range}`] || tokenData?.total_sell_volume_usd || 0))),
+      change: num(tokenData[`price_percent_change_${range}`] || tokenData?.price_percent_change_24h || 0),
     };
   };
 
   const currentStats = getStatsForTimeframe(timeRange);
-  const { volume, buys, sells, buyVolume, sellVolume, change } = currentStats;
-  const netVolume = buyVolume - sellVolume;
+  const { volume, buys, sells, buyVolume, sellVolume, netVolume, change } = currentStats;
   const totalVol = buyVolume + sellVolume;
   const buyPercentage = totalVol > 0 ? (buyVolume / totalVol) * 100 : 50;
   const sellPercentage = 100 - buyPercentage;
