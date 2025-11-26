@@ -110,7 +110,8 @@ function TurnkeySessionBridge() {
   const { refreshUser } = useUser();
   const router = useRouter();
   const hasProcessedRef = useRef(false);
-
+  const hasUpdatedEmail = useRef(false);
+  console.log("TurnkeySessionBridge authState:", authState, "session:", session, "user:", user);
   useEffect(() => {
     // Only act once when Turnkey says the user is signed in
     if (authState !== AuthState.Authenticated) return;
@@ -123,9 +124,10 @@ function TurnkeySessionBridge() {
         const data = await turnkeyLogin({
           turnkeySessionToken: session.token,
           organizationId: session.organizationId,
-          userId: session.userId,
+          userId: session.userId
         });
 
+        console.log("Turnkey login response data:", data);
 
         // Backend should respond with your normal app JWT
         if (data.token) {
@@ -149,8 +151,31 @@ function TurnkeySessionBridge() {
     })();
   }, [authState, session?.token, session?.organizationId, session?.userId, refreshUser, router]);
 
+  useEffect(() => {
+    const email = user?.userEmail;
+    const userId = session?.userId;
+    const token = Cookies.get("token");
+
+    if (authState !== AuthState.Authenticated) return;
+    if (!email || !userId || !token) return;
+    if (hasUpdatedEmail.current) return;
+
+    hasUpdatedEmail.current = true;
+
+    fetch("/api/users/user", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ userId, email }),
+    }).catch((e) => console.error("Failed to update email:", e));
+  }, [authState, session?.userId, user?.userEmail]);
+
   return null;
 }
+
+
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "YOUR_PROJECT_ID", // TODO: Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in your environment

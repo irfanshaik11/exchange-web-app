@@ -210,6 +210,13 @@ export const getUserById = (token: string) =>
     method: "GET",
   });
 
+export const updateUser = (token: string, email: string, name: string) =>
+  apiFetch<{ user: any }>("/api/users/update_user", {
+    authToken: token,
+    method: "PUT",
+    body: {email , name},
+  });
+
 export const login = (email: string, password: string) =>
   apiFetch<{ token: string }>("/api/users/login", {
     method: "POST",
@@ -252,10 +259,9 @@ export const turnkeyLogin = (
   }
 ) => {
   const endpoints = [
-    "/api/users/turnkey/login",
-    "/api/auth/login-turnkey",
+    "/api/users/turnkey/login"
   ];
-
+  console.log("Turnkey login called with params:", params);
   return (async () => {
     let lastError: unknown;
     for (const endpoint of endpoints) {
