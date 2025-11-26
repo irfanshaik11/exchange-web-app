@@ -111,6 +111,9 @@ export default function Home() {
   // Don't make API calls if we're on a different page
   const shouldMakeCalls = router.pathname === '/';
   
+  // Get current chain from query parameter, default to 'sol'
+  const currentChain = (router.query.chain as string) || 'sol';
+  
   const {
     data: allTokens,
     loading: tokensLoading,
@@ -121,6 +124,7 @@ export default function Home() {
   } = usePaginatedTokensWithFallback({
     filter: selectedTab === 'dex' ? 'new' : 'trending',
     timeframe: selectedTimeframe,
+    chain: currentChain, // Pass chain parameter
     // Disable the hook when not on home page
     limit: shouldMakeCalls ? 20 : 0
   });

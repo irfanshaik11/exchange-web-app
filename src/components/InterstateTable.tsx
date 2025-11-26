@@ -321,24 +321,29 @@ const TableHeader: React.FC<{
   sortDirection?: 'asc' | 'desc';
   onSort?: (key: string) => void;
   isDiscoverPage?: boolean;
-}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false }) => (
+  isTrending?: boolean; // New prop to indicate if showing trending/Birdeye data
+}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false, isTrending = false }) => (
   <thead>
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
-      {TABLE_HEADERS.map((header, idx) => (
-        <th
-          key={idx}
-          className={`${header.width} px-4 ${isDiscoverPage ? 'py-2' : 'py-4'} text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
-            header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
-          }`}
-          style={{ color: '#787a8d', fontWeight: '300' }}
-          onClick={header.key && onSort ? () => onSort(header.key!) : undefined}
-        >
-          {header.label}
-          {header.key && sortKey === header.key && (
-            <span className="ml-1">{sortDirection === 'asc' ? '▲' : '▼'}</span>
-          )}
-        </th>
-      ))}
+      {TABLE_HEADERS.map((header, idx) => {
+        // Use "Rank" instead of "TXNS" for trending filter
+        const label = (header.key === 'txns' && isTrending) ? 'Rank' : header.label;
+        return (
+          <th
+            key={idx}
+            className={`${header.width} px-4 ${isDiscoverPage ? 'py-2' : 'py-4'} text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
+              header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
+            }`}
+            style={{ color: '#787a8d', fontWeight: '300' }}
+            onClick={header.key && onSort ? () => onSort(header.key!) : undefined}
+          >
+            {label}
+            {header.key && sortKey === header.key && (
+              <span className="ml-1">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+            )}
+          </th>
+        );
+      })}
     </tr>
   </thead>
 );
@@ -1073,9 +1078,48 @@ const TxnsCell: React.FC<{
   selectedTimeframe: string;
   isDiscoverPage?: boolean;
 }> = ({ token, selectedTimeframe, isDiscoverPage = false }) => {
-  const { total, buys, sells } = getTxns(token, selectedTimeframe);
-
+  // Check if this is a Birdeye token (has rank)
+  const birdeyeRank = (token as any).birdeye_rank || (token as any).rank;
+  const volumeChangePercent = (token as any).volume24hChangePercent;
+  
   const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
+  
+  // For Birdeye tokens, show rank and volume change % instead of transaction counts
+  if (birdeyeRank && birdeyeRank > 0) {
+    const formatPercentChange = (val: number | null | undefined): string => {
+      if (val == null) return '';
+      const sign = val > 0 ? '+' : '';
+      return sign + formatSmartNumber(val);
+    };
+    
+    return (
+      <div className="text-right">
+        <div className={`text-sm font-medium mb-1 ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
+          color: AX.text,
+          ...(isDiscoverPage ? {} : {
+            fontFamily: monospaceFont,
+            fontWeight: '400'
+          })
+        }}>
+          #{birdeyeRank}
+        </div>
+        {volumeChangePercent != null && (
+          <div className={`text-xs font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+            color: volumeChangePercent >= 0 ? (isDiscoverPage ? '#85d99f' : '#10b981') : (isDiscoverPage ? '#f26681' : '#ef4444'),
+            ...(isDiscoverPage ? {} : {
+              fontFamily: monospaceFont,
+              fontWeight: '400'
+            })
+          }}>
+            {formatPercentChange(volumeChangePercent)}% vol
+          </div>
+        )}
+      </div>
+    );
+  }
+  
+  // Default: show transaction counts for non-Birdeye tokens
+  const { total, buys, sells } = getTxns(token, selectedTimeframe);
   
   // For discover page (xStocks), show "0" instead of "-" when value is 0
   const formatTxnValue = (value: number) => {
@@ -1414,6 +1458,12 @@ export default function InterstateTable({
 
   const isDiscoverPage = isDiscoverPageProp !== undefined ? isDiscoverPageProp : router.pathname === '/discover';
   
+  // Check if we're showing trending/Birdeye data (any token has birdeye_rank)
+  const isTrending = rows.length > 0 && rows.some(({ token }) => {
+    const birdeyeRank = (token as any).birdeye_rank || (token as any).rank;
+    return birdeyeRank && birdeyeRank > 0;
+  });
+  
   return (
     <div className="overflow-x-auto shadow-lg" style={{ 
       backgroundColor: isDiscoverPage ? '#111214' : 'rgba(30, 31, 38, 0.3)', 
@@ -1469,6 +1519,7 @@ export default function InterstateTable({
           sortDirection={sortDirection} 
           onSort={setSort}
           isDiscoverPage={isDiscoverPage}
+          isTrending={isTrending}
         />
         
         <tbody>
