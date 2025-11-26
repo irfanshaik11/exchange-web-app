@@ -8,9 +8,9 @@ import { env } from '../env';
 // Get wallet tracker backend URL
 const getWalletTrackerUrl = () => {
   if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+    return process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || '';
   }
-  return env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+  return env.NEXT_PUBLIC_WALLET_TRACKER_URL || '';
 };
 
 const WALLET_TRACKER_API_URL = getWalletTrackerUrl();

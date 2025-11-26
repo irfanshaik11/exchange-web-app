@@ -520,7 +520,7 @@ export default function TradePage() {
       <Head><title>{pageTitle}</title></Head>
 
       <div 
-        className="min-h-screen w-full flex flex-col"
+        className="h-screen w-full flex flex-col overflow-hidden"
         style={{ 
           backgroundColor: "#0f1012", 
           color: AX.text, 
@@ -531,14 +531,14 @@ export default function TradePage() {
         <Header search={search} setSearch={setSearch} />
 
         {isHydrating && (
-          <div className="text-center text-xs px-2 py-1.5"
+          <div className="text-center text-xs px-2 py-1.5 flex-shrink-0"
                style={{ color: AX.text, backgroundColor: "#2A2414", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}>
             Finding trading pair for this token…
           </div>
         )}
 
         <div 
-          className="flex flex-1 w-full max-w-full overflow-hidden" 
+          className="flex flex-1 w-full max-w-full overflow-hidden min-h-0" 
           style={{ 
             minHeight: 0,
             flex: '1 1 auto',
@@ -692,14 +692,16 @@ export default function TradePage() {
             </div>
 
             {/* BOTTOM pane (tabs + tables) */}
-            <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col overflow-y-auto">
-              <TradeTabs 
-                selectedTab={selectedTab} 
-                setSelectedTab={setSelectedTab} 
-                onInstantTradeClick={() => setIsInstantTradeOpen(true)}
-                isInstantTradeOpen={isInstantTradeOpen}
-              />
-              <div className="flex-1 min-h-0 overflow-y-auto">
+            <div id="tabs-pane" className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="flex-shrink-0">
+                <TradeTabs 
+                  selectedTab={selectedTab} 
+                  setSelectedTab={setSelectedTab} 
+                  onInstantTradeClick={() => setIsInstantTradeOpen(true)}
+                  isInstantTradeOpen={isInstantTradeOpen}
+                />
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingBottom: '2rem' }}>
                 <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
                   <CodexTrades 
                     token={correctTokenData || displayToken} 

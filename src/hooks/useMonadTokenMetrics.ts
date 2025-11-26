@@ -58,7 +58,7 @@ export function useMonadTokenMetrics({
     if (!enabled || !tokenAddress) return;
 
     // Use indexer WebSocket (port 8083) for real-time metrics
-    const wsUrl = process.env.NEXT_PUBLIC_MONAD_INDEXER_WS_URL || 'ws://localhost:8083/ws';
+    const wsUrl = process.env.NEXT_PUBLIC_MONAD_INDEXER_WS_URL!;
 
     try {
       const ws = new WebSocket(wsUrl);
