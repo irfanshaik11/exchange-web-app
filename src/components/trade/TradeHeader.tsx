@@ -1320,8 +1320,28 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
         </div>
       </div>
 
+      {/* RIGHT: Trade stats (24H VOL, BUYS, SELLS, NET) */}
+      <div className="flex items-center gap-3 ml-auto mr-2">
+        <StatInline label="24H VOL">
+          ${formatSmartNumber((token as any)?.volume_24h ?? 0)}
+        </StatInline>
+        <StatInline label="BUYS" accent="green">
+          {(token as any)?.total_buys ?? 0} / ${formatSmartNumber((token as any)?.total_buy_volume_usd ?? 0)}
+        </StatInline>
+        <StatInline label="SELLS">
+          <span style={{ color: "#FF4D7F" }}>
+            {(token as any)?.total_sells ?? 0} / ${formatSmartNumber((token as any)?.total_sell_volume_usd ?? 0)}
+          </span>
+        </StatInline>
+        <StatInline label="NET">
+          <span style={{ color: ((token as any)?.net_volume_usd ?? 0) >= 0 ? AX.green : "#FF4D7F" }}>
+            {((token as any)?.net_volume_usd ?? 0) >= 0 ? "+" : ""}${formatSmartNumber((token as any)?.net_volume_usd ?? 0)}
+          </span>
+        </StatInline>
+      </div>
+
       {/* RIGHT: actions */}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <button
           onClick={handleWatchlistClick}
           className="cursor-pointer text-[14px]"
