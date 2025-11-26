@@ -645,7 +645,7 @@ const Activity: React.FC<ActivityProps> = ({
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="font-medium text-sm text-neutral-100 truncate">
-                          {metadata?.name || 'Loading...'}
+                          {trade.tokenName || metadata?.name || 'Loading...'}
                         </div>
                         <div className="text-xs text-neutral-400 font-mono truncate" title={trade.tokenAddress}>
                           {shortAddr(trade.tokenAddress)}

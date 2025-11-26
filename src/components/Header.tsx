@@ -1614,7 +1614,27 @@ export default function Header({
           }
 
           // Otherwise treat as name search and stay on Discover
-          if (setSearch) setSearch(trimmed);
+          if (setSearch) {
+            setSearch(trimmed);
+            if (router.pathname.startsWith("/trade/")) {
+              router.push({ pathname: "/", query: trimmed ? { search: trimmed } : {} });
+              return;
+            }
+
+            const nextQuery = { ...router.query };
+            if (trimmed) {
+              nextQuery.search = trimmed;
+            } else {
+              delete nextQuery.search;
+            }
+            router.replace(
+              { pathname: router.pathname, query: nextQuery },
+              undefined,
+              { shallow: true },
+            );
+            return;
+          }
+
           if (
             router.pathname !== "/" &&
             !router.pathname.startsWith("/trade/")
@@ -1633,17 +1653,45 @@ export default function Header({
 
           // Skip routing updates for short queries (<3 chars)
           if (trimmed.length < 3) {
-            if (
+            if (setSearch) {
+              setSearch(trimmed);
+              if (!router.pathname.startsWith("/trade/")) {
+                const { search: _qSearch, ...restQuery } = router.query;
+                router.replace(
+                  { pathname: router.pathname, query: restQuery },
+                  undefined,
+                  { shallow: true },
+                );
+              }
+            } else if (
               router.pathname === "/" &&
               Object.keys(router.query).includes("search")
             ) {
               router.replace({ pathname: "/" }, undefined, { shallow: true });
             }
-            if (setSearch) setSearch(trimmed);
             return;
           }
 
           // Live updates for longer queries - only redirect to home if not on a trade page
+          if (setSearch) {
+            setSearch(trimmed);
+            if (router.pathname.startsWith("/trade/")) {
+              router.push(
+                { pathname: "/", query: { search: trimmed } },
+                undefined,
+                { shallow: true },
+              );
+            } else {
+              const nextQuery = { ...router.query, search: trimmed };
+              router.replace(
+                { pathname: router.pathname, query: nextQuery },
+                undefined,
+                { shallow: true },
+              );
+            }
+            return;
+          }
+
           if (
             router.pathname !== "/" &&
             !router.pathname.startsWith("/trade/")
@@ -1660,7 +1708,6 @@ export default function Header({
               { shallow: true },
             );
           }
-          if (setSearch) setSearch(trimmed);
         }}
       />
       {/* Updates Modal */}

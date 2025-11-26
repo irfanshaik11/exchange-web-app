@@ -31,13 +31,81 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
 export default function DiscoverPage() {
   const router = useRouter();
+  
+  // CRITICAL: Use state to track chain and sync with router.query.chain
+  // This ensures we react to shallow routing changes immediately
+  const [currentChain, setCurrentChain] = useState<string>('sol');
+  
+  // Sync chain state with router query - this handles both initial load and shallow routing updates
+  useEffect(() => {
+    const chainFromQuery = (router.query.chain as string) || 'sol';
+    if (chainFromQuery !== currentChain) {
+      console.log('[Discover] Chain changed from router:', currentChain, '->', chainFromQuery);
+      setCurrentChain(chainFromQuery);
+    }
+  }, [router.query.chain, router.isReady]);
+  
+  // Also watch router.asPath as a fallback for shallow routing
+  useEffect(() => {
+    if (!router.isReady) return;
+    const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
+    const chainFromUrl = urlParams.get('chain') || 'sol';
+    if (chainFromUrl !== currentChain) {
+      console.log('[Discover] Chain changed from URL:', currentChain, '->', chainFromUrl);
+      setCurrentChain(chainFromUrl);
+    }
+  }, [router.asPath, router.isReady, currentChain]);
+  
+  // Debug: Log chain changes
+  useEffect(() => {
+    console.log('[Discover] Current chain state:', currentChain, 'router.query.chain:', router.query.chain);
+  }, [currentChain, router.query.chain]);
+  
+  // For Monad, only allow 'trending' and 'newPairs' tabs
   const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>('newPairs');
+  
+  // When chain changes to monad, switch to trending if current tab is not allowed
+  useEffect(() => {
+    if (currentChain === 'monad' && activeTab !== 'trending' && activeTab !== 'newPairs') {
+      setActiveTab('trending');
+    }
+  }, [currentChain, activeTab]);
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1h");
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isFilterPopoutOpen, setIsFilterPopoutOpen] = useState(false);
   const { filter } = useFilter();
-  const [localFilters, setLocalFilters] = useState(filter);
+  
+  // Debug: Log when filter context changes to track filter application
+  useEffect(() => {
+    console.log('[Filters] Filter context changed:', {
+      amms: filter.amms,
+      searchKeywords: filter.searchKeywords,
+      excludeKeywords: filter.excludeKeywords,
+      marketCapMin: filter.marketCapMin,
+      marketCapMax: filter.marketCapMax,
+      volumeMin: filter.volumeMin,
+      volumeMax: filter.volumeMax,
+      liquidityMin: filter.liquidityMin,
+      liquidityMax: filter.liquidityMax,
+    });
+  }, [filter]);
+  
+  const normalizedSearch = useMemo(
+    () => search.trim().toLowerCase(),
+    [search]
+  );
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    const searchFromQuery = router.query.search;
+    if (typeof searchFromQuery === "string") {
+      setSearch(searchFromQuery);
+    } else if (!searchFromQuery) {
+      setSearch("");
+    }
+  }, [router.isReady, router.query.search]);
+
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   const { user, solBalance } = useUser();
 
@@ -67,7 +135,9 @@ export default function DiscoverPage() {
     // Initialize with cached data if available (no loading state)
     if (typeof window !== 'undefined') {
       try {
-        const cached = localStorage.getItem('discover_new_pairs_cache');
+        // Use default 'sol' for initial load, will be updated when chain changes
+        const initialChain = (router.query.chain as string) || 'sol';
+        const cached = localStorage.getItem(`discover_new_pairs_cache_${initialChain}`);
         if (cached) {
           const parsed = JSON.parse(cached);
           const age = Date.now() - parsed.timestamp;
@@ -288,7 +358,17 @@ export default function DiscoverPage() {
     }
   }, [displayed]);
 
-  // WebSocket token service – keep as-is for dex/trending
+  // CRITICAL: Clear ALL data when chain changes to prevent stale data from showing
+  useEffect(() => {
+    console.log('[Discover] 🔄 Chain changed to:', currentChain, '- Clearing all data and refetching');
+    // Clear token map
+    tokenMapRef.current.clear();
+    // Clear filtered and displayed tokens
+    setFilteredTokens([]);
+    setDisplayed([]);
+    // Force a small delay to ensure state is cleared before hook re-runs
+  }, [currentChain]);
+  
   const {
     data: allTokens,
     loading: tokensLoading,
@@ -300,8 +380,19 @@ export default function DiscoverPage() {
     // Always use trending endpoint
     filter: 'trending',
     timeframe: selectedTimeframe,
+    chain: currentChain, // Use state value - this will trigger re-fetch when chain changes
     limit: 200 // Fetch 200 tokens for trending tab
   });
+  
+  // CRITICAL: Log when hook data changes to track chain switching
+  useEffect(() => {
+    console.log('[Discover] Hook data updated:', {
+      chain: currentChain,
+      tokenCount: allTokens?.length || 0,
+      loading: tokensLoading,
+      usingFallback: usingFallback
+    });
+  }, [allTokens, tokensLoading, currentChain, usingFallback]);
 
   // PumpPortal WebSocket for live pump section
   const {
@@ -312,11 +403,20 @@ export default function DiscoverPage() {
     enabled: activeTab === 'live', // Only connect when on live tab
   });
 
+  // Clear new pairs data when chain changes
+  useEffect(() => {
+    setNewPairsRaw([]);
+    setNewPairsLoading(false);
+    setNewPairsError(null);
+  }, [currentChain]);
+
   useEffect(() => {
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    const CACHE_KEY = 'discover_new_pairs_cache';
+    // Include chain in cache key so Monad and Solana have separate caches
+    const currentChain = (router.query.chain as string) || 'sol';
+    const CACHE_KEY = `discover_new_pairs_cache_${currentChain}`;
     const CACHE_TTL = 30 * 1000; // 30 seconds
     const STALE_THRESHOLD = 60 * 1000; // 60 seconds - use stale cache if available
 
@@ -341,17 +441,31 @@ export default function DiscoverPage() {
                 // Only refresh if cache is stale (will be handled by fetchNewPairs below)
                 if (age > CACHE_TTL) {
                   // Trigger a silent background refresh
-                  fetch(`/api/token-service/pulse-new?limit=200`, {
+                  // Use appropriate endpoint based on chain
+                  const refreshChain = (router.query.chain as string) || 'sol';
+                  const apiUrl = refreshChain === 'monad' 
+                    ? `/api/token-service/pulse-new-monad?limit=200`
+                    : `/api/token-service/pulse-new?limit=200`;
+                  fetch(apiUrl, {
                     headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
                   })
                     .then(res => res.json())
                     .then(data => {
-                      if (!cancelled && Array.isArray(data) && data.length > 0) {
-                        // Process and save to cache (simplified - just update cache)
-                        localStorage.setItem(CACHE_KEY, JSON.stringify({
-                          data,
-                          timestamp: Date.now(),
-                        }));
+                      if (!cancelled) {
+                        // Handle both array and Birdeye format
+                        let tokensArray: any[] = [];
+                        if (Array.isArray(data)) {
+                          tokensArray = data;
+                        } else if (data?.data?.tokens && Array.isArray(data.data.tokens)) {
+                          tokensArray = data.data.tokens;
+                        }
+                        if (tokensArray.length > 0) {
+                          // Process and save to cache (simplified - just update cache)
+                          localStorage.setItem(CACHE_KEY, JSON.stringify({
+                            data: tokensArray,
+                            timestamp: Date.now(),
+                          }));
+                        }
                       }
                     })
                     .catch(err => console.error('[Discover] Background refresh failed:', err));
@@ -450,8 +564,17 @@ export default function DiscoverPage() {
       }
 
       try {
-        // Use Next.js API proxy with fresh=1 to bypass cache and get latest data with correct image mapping
-        const response = await fetch(`/api/token-service/pulse-new?limit=200&fresh=1`, {
+        // For Monad chain, use dedicated Monad new pairs endpoint
+        // For Solana, use the regular pulse-new endpoint
+        const currentChain = (router.query.chain as string) || 'sol';
+        let apiUrl = `/api/token-service/pulse-new?limit=200&fresh=1`;
+        
+        if (currentChain === 'monad') {
+          // Use dedicated Monad new pairs endpoint (uses Birdeye API with x-chain: monad)
+          apiUrl = `/api/token-service/pulse-new-monad?limit=200&fresh=1`;
+        }
+        
+        const response = await fetch(apiUrl, {
           headers: {
             'Cache-Control': 'no-cache',
             Pragma: 'no-cache',
@@ -467,7 +590,18 @@ export default function DiscoverPage() {
           return;
         }
 
+        // Handle both formats: pulse-new returns array, Birdeye returns {data: {tokens: [...]}}
+        let tokensArray: any[] = [];
         if (Array.isArray(payload)) {
+          tokensArray = payload;
+        } else if (payload?.data?.tokens && Array.isArray(payload.data.tokens)) {
+          // Birdeye format - extract tokens array
+          tokensArray = payload.data.tokens;
+        } else {
+          throw new Error('Unexpected response format');
+        }
+
+        if (tokensArray.length > 0) {
           const normalizePulseToken = (token: any): TokenWithDexPaid => {
             const toNumber = (value: any): number => {
               if (typeof value === 'number') {
@@ -498,8 +632,20 @@ export default function DiscoverPage() {
               ...token,
             };
 
-            const marketCap = toNumber(token.market_cap_usd ?? token.marketCapUsd ?? token.fully_diluted_value);
-            const liquidity = toNumber(token.liquidity_usd ?? token.total_liquidity_usd ?? token.total_liquidityUsd);
+            // Handle both standard format and Birdeye format
+            const marketCap = toNumber(
+              token.market_cap_usd ?? 
+              token.marketCapUsd ?? 
+              token.marketcap ?? // Birdeye format
+              token.fully_diluted_value ??
+              token.fdv // Birdeye format
+            );
+            const liquidity = toNumber(
+              token.liquidity_usd ?? 
+              token.total_liquidity_usd ?? 
+              token.total_liquidityUsd ??
+              token.liquidity // Birdeye format
+            );
 
             normalized.market_cap_usd = marketCap;
             normalized.fully_diluted_value = marketCap;
@@ -510,7 +656,7 @@ export default function DiscoverPage() {
             // Volume fields - prefer buy/sell volume sum if available, otherwise use provided value
             // This ensures we get accurate volume even if the direct volume field is 0 or missing
             const sum24h = sumVolumes(token.total_buy_volume_24h, token.total_sell_volume_24h);
-            const vol24h = token.volume_24h ?? token.volume24h;
+            const vol24h = token.volume_24h ?? token.volume24h ?? token.volume24hUSD; // Birdeye format
             normalized.volume_24h = sum24h > 0 ? sum24h : (vol24h !== undefined && vol24h !== null ? toNumber(vol24h) : 0);
             
             const sum6h = sumVolumes(token.total_buy_volume_6h, token.total_sell_volume_6h);
@@ -531,7 +677,10 @@ export default function DiscoverPage() {
             };
 
             normalized.price_percent_change_24h = normalizePercent(
-              token.price_percent_change_24h ?? token.price_change_24h ?? token.priceChange24h
+              token.price_percent_change_24h ?? 
+              token.price_change_24h ?? 
+              token.priceChange24h ??
+              token.price24hChangePercent // Birdeye format
             );
             normalized.price_percent_change_6h = normalizePercent(
               token.price_percent_change_6h ?? token.price_change_6h ?? token.priceChange6h
@@ -643,17 +792,48 @@ export default function DiscoverPage() {
             return normalized as TokenWithDexPaid;
           };
 
-          const filtered = payload.filter((token: any) => {
+          // Transform Birdeye format tokens to match expected format before filtering
+          const transformedTokens = tokensArray.map((token: any) => {
+            // If this is a Birdeye token (has 'address' field), transform it
+            if (token.address && !token.mint) {
+              return {
+                ...token,
+                mint: token.address, // Map address to mint
+                pair_address: token.address, // Use address as pair_address
+                logo: token.logoURI || token.logo,
+                image: token.logoURI || token.image,
+                uri: token.logoURI || token.uri,
+                imageUrl: token.logoURI || token.imageUrl,
+                market_cap_usd: token.marketcap,
+                fully_diluted_value: token.fdv,
+                total_liquidity_usd: token.liquidity,
+                volume_24h: token.volume24hUSD,
+                price_percent_change_24h: token.price24hChangePercent,
+                // Birdeye doesn't provide transaction data, so set defaults
+                total_buys_24h: 0,
+                total_sells_24h: 0,
+                total_buy_volume_24h: 0,
+                total_sell_volume_24h: 0,
+                unique_wallets_24h: 0,
+              };
+            }
+            return token;
+          });
+
+          const filtered = transformedTokens.filter((token: any) => {
             if (isZeroLiquidityToken(token)) {
               return false;
             }
             if (!token || !token.mint || isWrappedSol(token)) {
               return false;
             }
-            // Filter out Meteora tokens from new pairs
-            const protocol = (token.launchpad_protocol || token.launchpadProtocol || token.protocol || '').toLowerCase();
-            if (protocol.includes('meteora')) {
-              return false;
+            // For Monad, don't filter out by protocol (Birdeye doesn't provide protocol info)
+            // Only filter Meteora for Solana tokens
+            if (currentChain !== 'monad') {
+              const protocol = (token.launchpad_protocol || token.launchpadProtocol || token.protocol || '').toLowerCase();
+              if (protocol.includes('meteora')) {
+                return false;
+              }
             }
             return true;
           }) as TokenWithDexPaid[];
@@ -725,7 +905,7 @@ export default function DiscoverPage() {
         clearInterval(intervalId);
       }
     };
-  }, []); // Empty deps - only run once on mount, cache prevents re-fetching
+  }, [currentChain, activeTab]); // Re-run when chain or tab changes
 
   // Fetch xStocks data
   useEffect(() => {
@@ -1131,9 +1311,16 @@ export default function DiscoverPage() {
   const applyFilters = useCallback((tokens: TokenWithDexPaid[]) => {
     let filtered = [...tokens];
 
+    if (normalizedSearch) {
+      filtered = filtered.filter((token) => {
+        const tokenText = `${token.name || ""} ${token.symbol || ""}`.toLowerCase();
+        return tokenText.includes(normalizedSearch);
+      });
+    }
+
     // Protocol/AMM filter - filter by launchpad_protocol (same as PulseTable)
-    if (localFilters.amms && localFilters.amms.length > 0) {
-      const protocolPatterns = localFilters.amms.flatMap(ammId => mapAmmToProtocolPatterns(ammId));
+    if (filter.amms && filter.amms.length > 0) {
+      const protocolPatterns = filter.amms.flatMap(ammId => mapAmmToProtocolPatterns(ammId));
       filtered = filtered.filter(token => {
         const launchpadProtocol = ((token as any).launchpad_protocol || '').toLowerCase();
         if (!launchpadProtocol) return false;
@@ -1151,8 +1338,8 @@ export default function DiscoverPage() {
     }
 
     // Search keywords
-    if (localFilters.searchKeywords.trim()) {
-      const searchTerms = localFilters.searchKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
+    if (filter.searchKeywords.trim()) {
+      const searchTerms = filter.searchKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
       if (searchTerms.length > 0) {
         filtered = filtered.filter(token => {
           const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
@@ -1162,8 +1349,8 @@ export default function DiscoverPage() {
     }
 
     // Exclude keywords
-    if (localFilters.excludeKeywords.trim()) {
-      const excludeTerms = localFilters.excludeKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
+    if (filter.excludeKeywords.trim()) {
+      const excludeTerms = filter.excludeKeywords.toLowerCase().split(',').map(term => term.trim()).filter(term => term);
       if (excludeTerms.length > 0) {
         filtered = filtered.filter(token => {
           const tokenText = `${token.name || ''} ${token.symbol || ''}`.toLowerCase();
@@ -1173,50 +1360,50 @@ export default function DiscoverPage() {
     }
 
     // Market cap filter
-    if (localFilters.marketCapMin || localFilters.marketCapMax) {
+    if (filter.marketCapMin || filter.marketCapMax) {
       filtered = filtered.filter(token => {
         const marketCap = Number(token.fully_diluted_value) || 0;
-        const min = localFilters.marketCapMin ? Number(localFilters.marketCapMin) : 0;
-        const max = localFilters.marketCapMax ? Number(localFilters.marketCapMax) : Infinity;
+        const min = filter.marketCapMin ? Number(filter.marketCapMin) : 0;
+        const max = filter.marketCapMax ? Number(filter.marketCapMax) : Infinity;
         return marketCap >= min && marketCap <= max;
       });
     }
 
     // Volume filter
-    if (localFilters.volumeMin || localFilters.volumeMax) {
+    if (filter.volumeMin || filter.volumeMax) {
       filtered = filtered.filter(token => {
         const volume = getVolumeForTimeframe(token, selectedTimeframe);
-        const min = localFilters.volumeMin ? Number(localFilters.volumeMin) : 0;
-        const max = localFilters.volumeMax ? Number(localFilters.volumeMax) : Infinity;
+        const min = filter.volumeMin ? Number(filter.volumeMin) : 0;
+        const max = filter.volumeMax ? Number(filter.volumeMax) : Infinity;
         return volume >= min && volume <= max;
       });
     }
 
     // Liquidity filter
-    if (localFilters.liquidityMin || localFilters.liquidityMax) {
+    if (filter.liquidityMin || filter.liquidityMax) {
       filtered = filtered.filter(token => {
         const liquidity = Number(token.total_liquidity_usd) || 0;
-        const min = localFilters.liquidityMin ? Number(localFilters.liquidityMin) : 0;
-        const max = localFilters.liquidityMax ? Number(localFilters.liquidityMax) : Infinity;
+        const min = filter.liquidityMin ? Number(filter.liquidityMin) : 0;
+        const max = filter.liquidityMax ? Number(filter.liquidityMax) : Infinity;
         return liquidity >= min && liquidity <= max;
       });
     }
 
     return filtered;
-  }, [localFilters, selectedTimeframe, getVolumeForTimeframe, mapAmmToProtocolPatterns]);
+  }, [filter, selectedTimeframe, getVolumeForTimeframe, mapAmmToProtocolPatterns, normalizedSearch]);
 
   // Count active filters for badge
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (localFilters.amms && localFilters.amms.length > 0) count += localFilters.amms.length;
-    if (localFilters.searchKeywords?.trim()) count++;
-    if (localFilters.excludeKeywords?.trim()) count++;
-    if (localFilters.dexPaid) count++;
-    if (localFilters.marketCapMin || localFilters.marketCapMax) count++;
-    if (localFilters.volumeMin || localFilters.volumeMax) count++;
-    if (localFilters.liquidityMin || localFilters.liquidityMax) count++;
+    if (filter.amms && filter.amms.length > 0) count += filter.amms.length;
+    if (filter.searchKeywords?.trim()) count++;
+    if (filter.excludeKeywords?.trim()) count++;
+    if (filter.dexPaid) count++;
+    if (filter.marketCapMin || filter.marketCapMax) count++;
+    if (filter.volumeMin || filter.volumeMax) count++;
+    if (filter.liquidityMin || filter.liquidityMax) count++;
     return count;
-  }, [localFilters]);
+  }, [filter]);
 
   // Sorting handler
   const handleSort = (key: typeof sortKey) => {
@@ -1277,6 +1464,8 @@ export default function DiscoverPage() {
   }, [allTokens, isWrappedSol]);
 
   // Update displayed tokens
+  // CRITICAL: This effect applies filters and updates displayed tokens
+  // It depends on filteredTokens (which comes from allTokens) and filter context
   useEffect(() => {
     if (activeTab === "trending") {
       const arr = Array.from(tokenMapRef.current.values());
@@ -1284,7 +1473,23 @@ export default function DiscoverPage() {
       // Safety check: filter out wrapped SOL before processing
       const safeArr = arr.filter(t => t && t.mint && !isWrappedSol(t));
       
+      // Apply filters - this will re-run when filter context changes
+      // CRITICAL: applyFilters uses filter context, so when filters change, this will re-run
       const filtered = applyFilters(safeArr);
+      
+      console.log(`[Filters] Applied filters to ${safeArr.length} tokens, result: ${filtered.length} tokens`, {
+        activeFilters: {
+          amms: filter.amms?.length || 0,
+          searchKeywords: filter.searchKeywords || '',
+          excludeKeywords: filter.excludeKeywords || '',
+          marketCapMin: filter.marketCapMin,
+          marketCapMax: filter.marketCapMax,
+          volumeMin: filter.volumeMin,
+          volumeMax: filter.volumeMax,
+          liquidityMin: filter.liquidityMin,
+          liquidityMax: filter.liquidityMax,
+        }
+      });
       
       // Create deep copies to avoid mutation during sort
       const sortedTokens = filtered.map(t => JSON.parse(JSON.stringify(t)));
@@ -1355,7 +1560,7 @@ export default function DiscoverPage() {
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol]);
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter]); // Ensure filters are reapplied when they change
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) {
@@ -1733,24 +1938,29 @@ export default function DiscoverPage() {
             >
               New Pairs
             </button>
-            <button
-              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
-              onClick={() => setActiveTab("xStocks")}
-            >
-              xStocks
-            </button>
-            <button
-              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
-              onClick={() => setActiveTab("surge")}
-            >
-              Surge
-            </button>
-            <button
-              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "live" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
-              onClick={() => setActiveTab("live")}
-            >
-              Pump Live
-            </button>
+            {/* Hide xStocks, surge, and live tabs when Monad is selected */}
+            {currentChain !== 'monad' && (
+              <>
+                <button
+                  className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+                  onClick={() => setActiveTab("xStocks")}
+                >
+                  xStocks
+                </button>
+                <button
+                  className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+                  onClick={() => setActiveTab("surge")}
+                >
+                  Surge
+                </button>
+                <button
+                  className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "live" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+                  onClick={() => setActiveTab("live")}
+                >
+                  Pump Live
+                </button>
+              </>
+            )}
             {/* <button
               className={`text-lg font-light transition-colors ${activeTab === "dex" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("dex")}
@@ -1974,8 +2184,6 @@ export default function DiscoverPage() {
           <FilterPopout 
             open={isFilterPopoutOpen} 
             onClose={() => setIsFilterPopoutOpen(false)}
-            onApplyFilters={(filters) => setLocalFilters(filters)}
-            currentFilters={localFilters}
           />
         )}
 
