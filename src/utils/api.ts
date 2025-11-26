@@ -210,11 +210,16 @@ export const getUserById = (token: string) =>
     method: "GET",
   });
 
-export const updateUser = (token: string, email: string, name: string) =>
-  apiFetch<{ user: any }>("/api/users/update_user", {
+export const updateUser = (
+  token: string,
+  email: string,
+  name: string,
+  userId: string | number
+) =>
+  apiFetch<{ user: any }>("/api/users/userDetails", {
     authToken: token,
     method: "PUT",
-    body: {email , name},
+    body: { email, name, userId },
   });
 
 export const login = (email: string, password: string) =>
@@ -523,6 +528,12 @@ export const getWaitlistStatus = (params: { userId?: number; walletId?: string }
     updatedAt: string;
   } }>(`/api/waitlist/status?${qs.toString()}`, {
     method: "GET",
+  }).catch((err) => {
+    // If the user isn't on the waitlist yet, treat as no waitlist instead of throwing
+    if (err instanceof ApiError && err.status === 404) {
+      return { waitlist: null as any };
+    }
+    throw err;
   });
 };
 

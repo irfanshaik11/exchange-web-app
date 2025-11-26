@@ -146,7 +146,7 @@ export function ReferralAccessGate({
   const requireReferralAccess =
     env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS !== undefined
       ? env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS
-      : true;
+      : false; // default to false to bypass referral gate for now
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
     if (!requireReferralAccess) return "granted";
@@ -312,6 +312,8 @@ export function ReferralAccessGate({
   useEffect(() => {
     if (!requireReferralAccess) return;
     if (userLoading || !user) return;
+    // Only check once per user session
+    if (status === "granted" || status === "checking" || status === "validated") return;
     let cancelled = false;
     (async () => {
       try {
@@ -324,6 +326,9 @@ export function ReferralAccessGate({
           persistAccess(user.id);
           setStatus("granted");
           setInfo("Access restored.");
+        } else if (!wl) {
+          // Not on waitlist; avoid retry loop
+          setStatus("prompt");
         }
       } catch {
         // ignore
@@ -871,7 +876,14 @@ export function ReferralAccessGate({
 
   // Don't show referral overlay if Twitter OAuth just completed (twitter_success in URL)
   const hasTwitterSuccess = router.isReady && router.query.twitter_success === 'true';
-  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist && !hasTwitterSuccess;
+  // Show referral overlay after the user has signed in and referral access is not yet granted
+  const showOverlay =
+    !!user &&
+    !userLoading &&
+    (status === "prompt" || status === "validating") &&
+    !showQuests &&
+    !showWaitlist &&
+    !hasTwitterSuccess;
 
   return (
     <ReferralAccessContext.Provider value={contextValue}>

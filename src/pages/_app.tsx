@@ -110,6 +110,7 @@ function TurnkeySessionBridge() {
   const { refreshUser } = useUser();
   const router = useRouter();
   const hasProcessedRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
   const hasUpdatedEmail = useRef(false);
   console.log("TurnkeySessionBridge authState:", authState, "session:", session, "user:", user);
   useEffect(() => {
@@ -132,8 +133,12 @@ function TurnkeySessionBridge() {
         // Backend should respond with your normal app JWT
         if (data.token) {
           Cookies.set('token', data.token, { expires: 7, path: '/' });
-       
-          await refreshUser();
+          // Only call refreshUser after Turnkey has provided a user object
+          pendingRefreshRef.current = true;
+          if (user?.userEmail || user?.userName) {
+            await refreshUser();
+            pendingRefreshRef.current = false;
+          }
           router.push('/'); // or '/dashboard' if you prefer
         } else {
           console.error('Turnkey login failed: no token in response');
@@ -149,7 +154,20 @@ function TurnkeySessionBridge() {
         hasProcessedRef.current = false;
       }
     })();
-  }, [authState, session?.token, session?.organizationId, session?.userId, refreshUser, router]);
+  }, [authState, session?.token, session?.organizationId, session?.userId, refreshUser, router, user?.userEmail, user?.userName]);
+
+  useEffect(() => {
+    if (!pendingRefreshRef.current) return;
+    if (!user?.userEmail && !user?.userName) return;
+    const token = Cookies.get("token");
+    if (!token) {
+      pendingRefreshRef.current = false;
+      return;
+    }
+    refreshUser().finally(() => {
+      pendingRefreshRef.current = false;
+    });
+  }, [user?.userEmail, user?.userName, refreshUser]);
 
   useEffect(() => {
     const email = user?.userEmail;
@@ -162,7 +180,7 @@ function TurnkeySessionBridge() {
 
     hasUpdatedEmail.current = true;
 
-    fetch("/api/users/user", {
+    fetch("/api/users/userDetails", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",

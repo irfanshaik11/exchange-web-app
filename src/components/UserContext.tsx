@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useState,
   useCallback,
+  useRef,
 } from "react";
 import type { ReactNode } from "react";
 import Cookies from "js-cookie";
@@ -14,6 +15,7 @@ const USER_CACHE_KEY = "codex_user_info_cache";
 import { clearStoredReferralAccess, getStoredReferralCodeHint, clearStoredReferralCodeHint } from "../utils/referralStorage";
 import { recordReferralUsage } from "~/utils/referrals";
 import { useTurnkey } from "@turnkey/react-wallet-kit";
+import next from "next";
 
 export interface UserInfo {
   id: string;
@@ -79,6 +81,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     sol: 0,
   });
   const balanceCheckInProgressRef = useRef<Record<string, boolean>>({});
+  const hasSyncedProfileRef = useRef(false);
 
   const persistUser = useCallback((value: UserInfo | null) => {
     if (typeof window === "undefined") return;
@@ -405,11 +408,46 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       console.log("Fetched user from API:", fetchedUser);
       if (fetchedUser) {
-        setUser({ bearerToken: token, ...fetchedUser });
-        const referralCode = getStoredReferralCodeHint();
-        if (referralCode && fetchedUser?.id) {
+        let nextUser = fetchedUser;
+
+        // If Turnkey provided user info differs, update backend once
+        const desiredEmail = turnkeyUser?.userEmail;
+        const desiredName = turnkeyUser?.userName;
+        const needsEmailUpdate =
+          desiredEmail &&
+          typeof desiredEmail === "string" &&
+          desiredEmail.trim().length > 0 &&
+          desiredEmail !== fetchedUser.email;
+        const needsNameUpdate =
+          desiredName &&
+          typeof desiredName === "string" &&
+          desiredName.trim().length > 0 &&
+          desiredName !== fetchedUser.name;
+        console.log("UPDATED USER --- >", nextUser);
+        if (!hasSyncedProfileRef.current && (needsEmailUpdate || needsNameUpdate) && token) {
           try {
-            await recordReferralUsage(String(fetchedUser.id), referralCode);
+            const { user: updatedUser } = await updateUser(
+              token,
+              needsEmailUpdate ? desiredEmail! : fetchedUser.email,
+              needsNameUpdate ? desiredName! : fetchedUser.name,
+              session?.userId || fetchedUser.userId || fetchedUser.id
+            );
+            if (updatedUser) {
+              nextUser = updatedUser;
+            }
+            hasSyncedProfileRef.current = true;
+          } catch (syncErr) {
+            console.warn("Failed to sync Turnkey user profile to backend", syncErr);
+            // Avoid tight retry loops; only retry on next app session
+            hasSyncedProfileRef.current = true;
+          }
+        }
+
+        setUser({ bearerToken: token, ...nextUser });
+        const referralCode = getStoredReferralCodeHint();
+        if (referralCode && nextUser?.id) {
+          try {
+            await recordReferralUsage(String(nextUser.id), referralCode);
             clearStoredReferralCodeHint();
           } catch (error) {
             console.warn("Failed to record referral usage", error);
@@ -445,7 +483,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [setUser, turnkeyUser, session, user]);
+  }, [setUser, turnkeyUser?.userEmail, turnkeyUser?.userName, session?.userId]);
 
   const logout = () => {
     Cookies.remove("token");
@@ -460,6 +498,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    if (hasSyncedProfileRef.current) return;
     // initial refresh when provider mounts (and when turnkey data changes)
     refreshUser();
   }, [refreshUser]);
