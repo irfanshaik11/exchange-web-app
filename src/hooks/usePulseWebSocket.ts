@@ -64,9 +64,13 @@ export function usePulseWebSocket(
     onPriceUpdate,
   } = options;
 
+  // Extract custom url from options
+  const { url: customUrl } = options;
+
   // Build WebSocket URL with query parameters for filtering
   const buildWebSocketUrl = () => {
-    const baseUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/stream`;
+    // Use custom URL if provided, otherwise fall back to default
+    const baseUrl = customUrl || `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/stream`;
     const params = new URLSearchParams();
     if (channel) params.append('channel', channel);
 
@@ -80,6 +84,10 @@ export function usePulseWebSocket(
     }
 
     const queryString = params.toString();
+    // If custom URL already includes query params, append with &, otherwise with ?
+    if (customUrl && queryString) {
+      return customUrl.includes('?') ? `${baseUrl}&${queryString}` : `${baseUrl}?${queryString}`;
+    }
     return queryString ? `${baseUrl}?${queryString}` : baseUrl;
   };
 

@@ -2058,9 +2058,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       style={{ backgroundColor: '#0f1012', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
     >
       {/* ===== A. Time buttons ===== */}
-      <div className="px-3 pt-2 pb-2 border-b border-[#2A2B33]">
+      <div className="px-3 pt-2 pb-2 border-neutral-800">
         <div className="mx-auto w-full max-w-xl overflow-hidden">
-          <div className="flex gap-1 rounded-xl bg-[#1E1F26] border border-[#2A2B33] p-1">
+          <div className="flex rounded-xl border border-neutral-700">
             {(["5m", "1h", "12h", "24h"] as TimeRange[]).map((rng) => {
               // Get change from WebSocket data if available, otherwise fallback to token properties
               let ch = 0;
@@ -2093,8 +2093,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   onClick={() => setTimeRange(rng)}
                   aria-pressed={timeRange === rng}
                   className={cx(
-                    "flex-1 h-9 rounded-lg px-2 text-left flex flex-col items-start justify-center cursor-pointer",
-                    timeRange === rng ? "bg-[#17191E] ring-1 ring-white/10" : "hover:bg-[#1E1F26]"
+                    "flex-1 text-left flex flex-col items-start justify-center cursor-pointer px-2 py-1 border-neutral-700",
+                    timeRange === rng ? "bg-neutral-700 ring-1 ring-white/10" : "hover:bg-neutral-700",
+                    rng == "5m" ? `rounded-tl-xl rounded-bl-xl` : ``,
+                    rng == "24h" ? `rounded-tr-xl rounded-br-xl` : `border-r`
                   )}
                 >
                   <span
