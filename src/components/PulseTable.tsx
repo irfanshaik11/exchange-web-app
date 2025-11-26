@@ -7164,7 +7164,7 @@ function PulseTable({
                         return null;
                       })()}
                     </div>
-                    <div className="flex flex-row items-center gap-1">
+                    <div className="flex flex-row items-center gap-1 overflow-x-scroll max-w-full">
                       <BottomCardInfoHolder
                         PassedIcon={FaRegUser}
                         value={0.2}
