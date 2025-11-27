@@ -66,6 +66,7 @@ const config = {
       { protocol: "https", hostname: "bronze-manual-jaguar-516.mypinata.cloud" },
       { protocol: "https", hostname: "pub-392e3698ab10439a9bf254db45b52c0b.r2.dev" },
       { protocol: "https", hostname: "dweb.link" },
+      { protocol: "https", hostname: "metadata.rapidlaunch.io" },
     ],
   },
 

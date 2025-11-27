@@ -403,11 +403,15 @@ export default function DiscoverPage() {
     enabled: activeTab === 'live', // Only connect when on live tab
   });
 
-  // Clear new pairs data when chain changes
+  // Clear new pairs data only when chain actually changes (avoid nuking cache on remount)
+  const prevChainRef = useRef<string>(currentChain);
   useEffect(() => {
-    setNewPairsRaw([]);
-    setNewPairsLoading(false);
-    setNewPairsError(null);
+    if (prevChainRef.current !== currentChain) {
+      setNewPairsRaw([]);
+      setNewPairsLoading(false);
+      setNewPairsError(null);
+      prevChainRef.current = currentChain;
+    }
   }, [currentChain]);
 
   useEffect(() => {
@@ -417,8 +421,8 @@ export default function DiscoverPage() {
     // Include chain in cache key so Monad and Solana have separate caches
     const currentChain = (router.query.chain as string) || 'sol';
     const CACHE_KEY = `discover_new_pairs_cache_${currentChain}`;
-    const CACHE_TTL = 30 * 1000; // 30 seconds
-    const STALE_THRESHOLD = 60 * 1000; // 60 seconds - use stale cache if available
+    const CACHE_TTL = 30 * 1000; // Trigger background refresh after 30s
+    const STALE_THRESHOLD = 5 * 60 * 1000; // Treat cache as stale after 5 minutes (but still usable)
 
     // Check if we already have valid cached data in state - if so, skip fetching
     // This prevents re-fetching when navigating back to the page
@@ -494,13 +498,13 @@ export default function DiscoverPage() {
         if (cached) {
           const parsed = JSON.parse(cached);
           const age = Date.now() - parsed.timestamp;
-          if (age < STALE_THRESHOLD) {
-            console.log(`[Discover] Loaded ${parsed.data.length} new pairs from cache (age: ${Math.round(age / 1000)}s)`);
+          if (parsed.data && parsed.data.length > 0) {
+            const isStale = age > STALE_THRESHOLD;
+            console.log(`[Discover] Loaded ${parsed.data.length} new pairs from cache (age: ${Math.round(age / 1000)}s${isStale ? ', stale' : ''})`);
             return parsed.data;
-          } else {
-            // Cache expired, remove it
-            localStorage.removeItem(CACHE_KEY);
           }
+          // Cache exists but empty data - drop it
+          localStorage.removeItem(CACHE_KEY);
         }
       } catch (err) {
         console.warn('[Discover] Failed to load cache:', err);
@@ -862,17 +866,30 @@ export default function DiscoverPage() {
           return;
         }
         const message = err instanceof Error ? err.message : 'Failed to fetch new pairs';
-        setNewPairsError(message);
         console.error('[Discover] Failed to fetch new pairs:', err);
-        
-        // If fetch failed and we have cached data, use it (silently)
+
+        let handled = false;
+
+        // If we requested to use cache, try to recover silently
         if (useCache) {
           const cached = loadFromCache();
           if (cached && cached.length > 0) {
             console.log('[Discover] Using cached data after fetch failure');
             setNewPairsRaw(cached);
             setNewPairsError(null);
+            handled = true;
           }
+        }
+
+        // If we already have data in memory, keep showing it instead of an error
+        if (!handled && newPairsRaw.length > 0) {
+          console.warn('[Discover] Fetch failed but existing data is available. Keeping previous list.');
+          setNewPairsError(null);
+          handled = true;
+        }
+
+        if (!handled) {
+          setNewPairsError(message);
         }
       } finally {
         if (!cancelled && showLoading) {
@@ -1119,10 +1136,10 @@ export default function DiscoverPage() {
         const payload = await response.json();
         if (cancelled) return;
 
-        // COMMENTED OUT: filterTokens processing temporarily disabled
-        /*
-        if (payload?.filterTokens?.results) {
-          const results = payload.filterTokens.results || [];
+        // Process filterTokens response from Codex
+        if (payload?.data?.filterTokens?.results || payload?.filterTokens?.results) {
+          // Handle both nested (payload.data.filterTokens) and direct (payload.filterTokens) formats
+          const results = payload?.data?.filterTokens?.results || payload.filterTokens.results || [];
           
           const normalized = results
             .filter((result: any) => {
@@ -1149,11 +1166,11 @@ export default function DiscoverPage() {
           setXStocksRaw(deduped);
           setXStocksError(null);
           saveToCache(deduped);
+        } else {
+          // No results found
+          setXStocksRaw([]);
+          setXStocksError(null);
         }
-        */
-        // Empty response while filterTokens is disabled
-        setXStocksRaw([]);
-        setXStocksError(null);
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Failed to fetch xStocks';
@@ -1533,10 +1550,21 @@ export default function DiscoverPage() {
       // Final filter before setting displayed - also deduplicate by mint/address
       const finalSafe = sortedTokens.filter(t => t && t.mint && !isWrappedSol(t));
       
-      // Filter out tokens with no image on trending tab
-      const withImages = finalSafe.filter((t: any) => {
+      // Ensure every token has some kind of image to display (fallback to initials if missing)
+      const normalizedTokens = finalSafe.map((t: any) => {
         const hasImage = t?.uri || t?.logo || t?.image || t?.imageUrl;
-        return hasImage && hasImage !== '' && hasImage !== 'null' && hasImage !== null;
+        if (hasImage && hasImage !== '' && hasImage !== 'null' && hasImage !== null) {
+          return t;
+        }
+
+        const initials = t?.symbol || t?.name || 'T';
+        const fallbackImage = `https://ui-avatars.com/api/?name=${encodeURIComponent(initials)}&background=0f1012&color=E6E7EA&size=64`;
+        return {
+          ...t,
+          image: fallbackImage,
+          logo: fallbackImage,
+          uri: fallbackImage,
+        };
       });
       
       // CRITICAL: Deduplicate using Set to track seen mints AND addresses
@@ -1545,7 +1573,7 @@ export default function DiscoverPage() {
       const seenMints = new Set<string>();
       const uniqueSafe: TokenWithDexPaid[] = [];
       
-      for (const token of withImages) {
+      for (const token of normalizedTokens) {
         const mint = token.mint;
         const address = token.pair_address;
         

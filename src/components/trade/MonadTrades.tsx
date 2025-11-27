@@ -212,7 +212,7 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
                           {shortAddr(trade.trader_address)}
                         </span>
                         <a
-                          href={`https://testnet.monadexplorer.com/address/${trade.trader_address}`}
+                          href={`https://monadvision.com/address/${trade.trader_address}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-neutral-500 hover:text-neutral-300 transition-colors"

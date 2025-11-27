@@ -5,6 +5,8 @@ import { ethers } from 'ethers';
 export interface PositionRow {
   tokenAddress: string;
   pairAddress?: string; // Pool/pair address (contains originalPairAddress from backend)
+  blockchain?: string;
+  launchpad?: string | null;
   bought: number;
   boughtUsdValue: number;
   sold: number;
@@ -21,6 +23,8 @@ export interface TradeRow {
   tokenAddress: string;
   pairAddress?: string; // Pool/pair address
   originalPairAddress?: string; // Original pair address from backend
+  blockchain?: string;
+  launchpad?: string | null;
   tradeTime: string;
   type: 'Buy' | 'Sell';
   marketCap: string | number;

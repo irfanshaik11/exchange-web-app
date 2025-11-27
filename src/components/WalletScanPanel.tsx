@@ -9,7 +9,7 @@ import type { Token } from '~/utils/db';
 import { AiOutlineCalendar } from 'react-icons/ai';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { batchFetchTokenMetadata } from '~/utils/tokenMetadata';
+import { batchFetchChainTokenMetadata } from '~/utils/tokenMetadata';
 import { getWalletSolBalance, getWalletTransactions, getWalletHistory } from '~/utils/walletTracking';
 import Activity from './trade/Activity';
 
@@ -217,7 +217,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({ wallet, onClose }) =>
     
     console.log('[History] Fetching metadata for', mintsToFetch.length, 'tokens');
     
-    batchFetchTokenMetadata(mintsToFetch)
+    batchFetchChainTokenMetadata(mintsToFetch)
       .then(metadata => {
         console.log('[History] Fetched token metadata:', metadata);
         setTokenMetadata(metadata);

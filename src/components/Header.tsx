@@ -185,6 +185,14 @@ export default function Header({
   const [chainBalance, setChainBalance] = useState<number>(
     chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0),
   );
+
+  const chainAwareHref = useCallback(
+    (href: string) => ({
+      pathname: href,
+      query: { ...router.query, chain: currentChain },
+    }),
+    [router.query, currentChain],
+  );
   const formatBalance = (value: number, digits = 3) => {
     if (value === 0) return "0";
     const fixed = value.toFixed(digits);
@@ -642,7 +650,7 @@ export default function Header({
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden md:gap-3">
             <Link
-              href="/pulse"
+              href={chainAwareHref("/pulse")}
               className="flex flex-shrink-0 items-center text-xl tracking-tight select-none"
               style={{ color: AX.text }}
               title="Go to Trenches"
@@ -690,18 +698,7 @@ export default function Header({
                   return (
                     <Link
                       key={link.name}
-                      href={link.href}
-                      onClick={(e) => {
-                        // Use router.push for client-side navigation with fallback
-                        router.push(link.href).catch((err: any) => {
-                          // Fallback to full page navigation if router.push fails
-                          console.error(
-                            "Router.push failed, using fallback:",
-                            err,
-                          );
-                          window.location.href = link.href;
-                        });
-                      }}
+                      href={chainAwareHref(link.href)}
                       className={`flex-shrink-0 rounded px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out sm:px-3 xl:px-4`}
                       style={{
                         color: isActive ? AX.mint : AX.text,
