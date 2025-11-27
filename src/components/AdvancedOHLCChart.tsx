@@ -149,12 +149,28 @@ const resolveTradeSymbol = (
 
 function waitForVisibleContainer(el: HTMLElement): Promise<void> {
   return new Promise(resolve => {
+    // Fast path: check immediately
+    const r = el.getBoundingClientRect();
+    const visible = r.width > 40 && r.height > 40 && el.isConnected && getComputedStyle(el).display !== 'none';
+    if (visible) {
+      resolve();
+      return;
+    }
+    
+    // Fallback: poll with requestAnimationFrame (but limit iterations)
+    let iterations = 0;
+    const maxIterations = 10; // Max ~160ms wait time
     const tick = () => {
+      iterations++;
       const r = el.getBoundingClientRect();
       const visible = r.width > 40 && r.height > 40 && el.isConnected && getComputedStyle(el).display !== 'none';
-      if (visible) resolve(); else requestAnimationFrame(tick);
+      if (visible || iterations >= maxIterations) {
+        resolve();
+      } else {
+        requestAnimationFrame(tick);
+      }
     };
-    tick();
+    requestAnimationFrame(tick);
   });
 }
 
@@ -388,12 +404,53 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       return;
     }
 
+    // Check if script is already in the DOM (preloaded by _app.tsx)
+    const existingScript = document.querySelector('script[src="/charting_library/charting_library/charting_library.standalone.js"]');
+    
+    if (existingScript) {
+      // Script already exists, check if it's loaded
+      if ((window as any).TradingView) {
+        console.log('[AdvancedOHLCChart] TradingView already loaded from preloaded script');
+        setLibraryLoaded(true);
+        return;
+      }
+      // Script exists but not loaded yet, wait for it
+      let timeoutId: NodeJS.Timeout | null = null;
+      const checkInterval = setInterval(() => {
+        if ((window as any).TradingView) {
+          console.log('[AdvancedOHLCChart] ✅ TradingView library found from preloaded script!');
+          setLibraryLoaded(true);
+          clearInterval(checkInterval);
+          if (timeoutId) clearTimeout(timeoutId);
+        }
+      }, 10); // Check every 10ms instead of waiting 100ms
+      
+      // Fallback timeout after 2 seconds
+      timeoutId = setTimeout(() => {
+        clearInterval(checkInterval);
+        if (!(window as any).TradingView) {
+          console.error('[AdvancedOHLCChart] ❌ TradingView not found after waiting for preloaded script');
+          setError('Failed to load TradingView library - TradingView object not found');
+          setIsLoading(false);
+        }
+      }, 2000);
+      
+      // Cleanup on unmount
+      return () => {
+        clearInterval(checkInterval);
+        if (timeoutId) clearTimeout(timeoutId);
+      };
+    }
+    
+    // Script doesn't exist, create it
     console.log('[AdvancedOHLCChart] Loading TradingView library from /charting_library/charting_library/charting_library.standalone.js');
     const script = document.createElement('script');
     script.src = '/charting_library/charting_library/charting_library.standalone.js';
+    script.async = true;
     script.onload = () => {
       console.log('[AdvancedOHLCChart] Script loaded, checking for TradingView...');
-      setTimeout(() => {
+      // Reduced timeout - check immediately and then with a small delay if needed
+      const checkTradingView = () => {
         if ((window as any).TradingView) {
           console.log('[AdvancedOHLCChart] ✅ TradingView library found!', {
             hasWidget: !!(window as any).TradingView.widget,
@@ -401,11 +458,20 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           });
           setLibraryLoaded(true);
         } else {
-          console.error('[AdvancedOHLCChart] ❌ TradingView not found after script load');
-          setError('Failed to load TradingView library - TradingView object not found');
-          setIsLoading(false);
+          // If not ready immediately, check again after a shorter delay
+          setTimeout(() => {
+            if ((window as any).TradingView) {
+              console.log('[AdvancedOHLCChart] ✅ TradingView library found after short delay!');
+              setLibraryLoaded(true);
+            } else {
+              console.error('[AdvancedOHLCChart] ❌ TradingView not found after script load');
+              setError('Failed to load TradingView library - TradingView object not found');
+              setIsLoading(false);
+            }
+          }, 50); // Reduced from 100ms to 50ms
         }
-      }, 100);
+      };
+      checkTradingView();
     };
     script.onerror = (e) => {
       console.error('[AdvancedOHLCChart] ❌ Script load error:', e);

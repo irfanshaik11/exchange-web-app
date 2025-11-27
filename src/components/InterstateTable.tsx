@@ -64,6 +64,7 @@ interface InterstateTableProps {
   quickBuyAmount?: number | string;
   skeletonRowCount?: number;
   isDiscoverPage?: boolean;
+  chain?: string; // 'sol' | 'monad' - chain identifier
 }
 
 interface HeaderConfig {
@@ -348,13 +349,26 @@ const TableHeader: React.FC<{
   </thead>
 );
 
+// Monad Icon Component - uses Monad favicon
+const MonadIcon = ({ size = 16 }: { size?: number }) => (
+  <img
+    src="https://monad.xyz/favicon.ico"
+    alt="Monad"
+    width={size}
+    height={size}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+    className="rounded-full"
+  />
+);
+
 // Token Avatar Component
 const TokenAvatar: React.FC<{
   token: Token;
   meta: any;
   loading: boolean;
   showInitial: boolean;
-}> = ({ token, meta, loading, showInitial }) => {
+  chain?: string; // 'sol' | 'monad' - chain identifier
+}> = ({ token, meta, loading, showInitial, chain = 'sol' }) => {
   const initial = token.name?.charAt(0)?.toUpperCase() || '?';
   
   // Protocol color mapping - matches PulseTable
@@ -446,15 +460,25 @@ const TokenAvatar: React.FC<{
         )}
       </div>
       
-      {/* Solana logo bubble - positioned at bottom right */}
-      <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
-           style={{ 
-             width: 14, 
-             height: 14,
-             padding: '1px'
-           }}>
-        <SolanaIcon size={12} />
-      </div>
+      {/* Chain logo bubble - positioned at bottom right (Solana or Monad) */}
+      {chain === 'monad' ? (
+        <div className="absolute bottom-0 right-0 flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
+             style={{ 
+               width: 20, 
+               height: 20
+             }}>
+          <MonadIcon size={20} />
+        </div>
+      ) : (
+        <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
+             style={{ 
+               width: 14, 
+               height: 14,
+               padding: '1px'
+             }}>
+          <SolanaIcon size={12} />
+        </div>
+      )}
     </div>
   );
 };
@@ -465,7 +489,8 @@ const TokenInfo: React.FC<{
   i: number; 
   sortedRows: InterstateTableRow[];
   isDiscoverPage?: boolean;
-}> = ({ token, i, sortedRows, isDiscoverPage = false }) => {
+  chain?: string; // 'sol' | 'monad' - chain identifier
+}> = ({ token, i, sortedRows, isDiscoverPage = false, chain = 'sol' }) => {
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
@@ -570,7 +595,7 @@ const TokenInfo: React.FC<{
   const tooltipContent = (
     <div className="p-3 min-w-[240px]">
       <div className="mb-3 flex justify-center">
-        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} />
+        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
       </div>
       <div className="mb-3 text-center">
         <div className="text-lg font-bold mb-1" style={{ color: AX.text }}>{token.name}</div>
@@ -630,7 +655,7 @@ const TokenInfo: React.FC<{
         label={tooltipContent}
         className="bg-neutral-900/100"
       >
-        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} />
+        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
       </InterstateTooltip>
       
       <div className="flex flex-col min-w-0 flex-1">
@@ -1203,6 +1228,7 @@ const TableRow: React.FC<{
   sortedRows: InterstateTableRow[];
   onClick: () => void;
   isDiscoverPage?: boolean;
+  chain?: string; // 'sol' | 'monad' - chain identifier
 }> = React.memo(({ 
   token, 
   i, 
@@ -1212,7 +1238,8 @@ const TableRow: React.FC<{
   animationState, 
   sortedRows, 
   onClick,
-  isDiscoverPage = false
+  isDiscoverPage = false,
+  chain = 'sol'
 }) => {
   const handleQuickBuy = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1263,7 +1290,7 @@ const TableRow: React.FC<{
       onClick={onClick}
     >
       <td className="w-80 px-4 py-4 align-middle">
-        <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} />
+        <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
       
       <td className="w-32 px-4 py-4 align-middle">
@@ -1350,7 +1377,7 @@ const TableRow: React.FC<{
             }}
           >
             <HiLightningBolt size={14} style={{ color: '#85d99f' }} />
-            <span style={{ color: '#85d99f' }}>{quickBuyAmount} SOL</span>
+            <span style={{ color: '#85d99f' }}>{quickBuyAmount} {chain === 'monad' ? 'MON' : 'SOL'}</span>
           </button>
         ) : (
           <InterstateButton
@@ -1359,7 +1386,7 @@ const TableRow: React.FC<{
             className="!px-3 !py-2 text-xs font-medium w-full"
             onClick={handleQuickBuy}
           >
-            Buy {quickBuyAmount} SOL
+            Buy {quickBuyAmount} {chain === 'monad' ? 'MON' : 'SOL'}
           </InterstateButton>
         )}
       </td>
@@ -1379,7 +1406,8 @@ export default function InterstateTable({
   selectedTimeframe, 
   quickBuyAmount = 0.44, 
   skeletonRowCount = 6,
-  isDiscoverPage: isDiscoverPageProp
+  isDiscoverPage: isDiscoverPageProp,
+  chain = 'sol'
 }: InterstateTableProps) {
   const router = useRouter();
   const { filter } = useFilter();
@@ -1579,6 +1607,7 @@ export default function InterstateTable({
                   sortedRows={sortedRows}
                   onClick={handleTokenClick}
                   isDiscoverPage={isDiscoverPage}
+                  chain={chain}
                 />
               );
             })

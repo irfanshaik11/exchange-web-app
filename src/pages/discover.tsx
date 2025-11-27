@@ -12,9 +12,9 @@ import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { useFilter } from '../components/FilterContext';
 import FilterPopout from '../components/FilterPopout';
-import { SOL_MINT_ADDRESS } from "~/utils/api";
+import { SOL_MINT_ADDRESS, tradeMonadBuy } from "~/utils/api";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
-import { showEnhancedToast } from "~/utils/enhancedToast";
+import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
 import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
@@ -32,18 +32,30 @@ type TokenWithDexPaid = Token & { dexPaid?: boolean };
 export default function DiscoverPage() {
   const router = useRouter();
   
-  // CRITICAL: Use state to track chain and sync with router.query.chain
+  // CRITICAL: Initialize chain from router query immediately to avoid race conditions
   // This ensures we react to shallow routing changes immediately
-  const [currentChain, setCurrentChain] = useState<string>('sol');
+  const [currentChain, setCurrentChain] = useState<string>(() => {
+    // Initialize from router query if available, otherwise default to 'sol'
+    if (typeof window !== 'undefined' && router.isReady) {
+      return (router.query.chain as string) || 'sol';
+    }
+    // Also check URL params directly for immediate access
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('chain') || 'sol';
+    }
+    return 'sol';
+  });
   
   // Sync chain state with router query - this handles both initial load and shallow routing updates
   useEffect(() => {
+    if (!router.isReady) return;
     const chainFromQuery = (router.query.chain as string) || 'sol';
     if (chainFromQuery !== currentChain) {
       console.log('[Discover] Chain changed from router:', currentChain, '->', chainFromQuery);
       setCurrentChain(chainFromQuery);
     }
-  }, [router.query.chain, router.isReady]);
+  }, [router.query.chain, router.isReady, currentChain]);
   
   // Also watch router.asPath as a fallback for shallow routing
   useEffect(() => {
@@ -419,7 +431,7 @@ export default function DiscoverPage() {
     let intervalId: ReturnType<typeof setInterval> | null = null;
 
     // Include chain in cache key so Monad and Solana have separate caches
-    const currentChain = (router.query.chain as string) || 'sol';
+    // Use currentChain state variable (not router.query.chain) to ensure we react to state changes
     const CACHE_KEY = `discover_new_pairs_cache_${currentChain}`;
     const CACHE_TTL = 30 * 1000; // Trigger background refresh after 30s
     const STALE_THRESHOLD = 5 * 60 * 1000; // Treat cache as stale after 5 minutes (but still usable)
@@ -446,22 +458,33 @@ export default function DiscoverPage() {
                 if (age > CACHE_TTL) {
                   // Trigger a silent background refresh
                   // Use appropriate endpoint based on chain
-                  const refreshChain = (router.query.chain as string) || 'sol';
-                  const apiUrl = refreshChain === 'monad' 
+                  const chainToUse = currentChain || (router.query.chain as string) || 'sol';
+                  const apiUrl = chainToUse === 'monad'
                     ? `/api/token-service/pulse-new-monad?limit=200`
                     : `/api/token-service/pulse-new?limit=200`;
                   fetch(apiUrl, {
-                    headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
+                    headers: { 
+                      'Cache-Control': 'no-cache', 
+                      Pragma: 'no-cache',
+                      'Accept': 'application/json'
+                    },
                   })
-                    .then(res => res.json())
+                    .then(res => res.ok ? res.json() : null)
                     .then(data => {
-                      if (!cancelled) {
-                        // Handle both array and Birdeye format
+                      if (!cancelled && data) {
+                        // Handle multiple formats:
+                        // 1. Direct array
+                        // 2. Monad format: {status, count, data: [...]}
+                        // 3. Birdeye format: {data: {tokens: [...]}}
                         let tokensArray: any[] = [];
                         if (Array.isArray(data)) {
                           tokensArray = data;
-                        } else if (data?.data?.tokens && Array.isArray(data.data.tokens)) {
-                          tokensArray = data.data.tokens;
+                        } else if (data?.data) {
+                          if (Array.isArray(data.data)) {
+                            tokensArray = data.data;
+                          } else if (data.data?.tokens && Array.isArray(data.data.tokens)) {
+                            tokensArray = data.data.tokens;
+                          }
                         }
                         if (tokensArray.length > 0) {
                           // Process and save to cache (simplified - just update cache)
@@ -568,41 +591,88 @@ export default function DiscoverPage() {
       }
 
       try {
-        // For Monad chain, use dedicated Monad new pairs endpoint
+        // For Monad chain, use the Next.js API route (which proxies to Monad service server-side, avoiding CORS)
         // For Solana, use the regular pulse-new endpoint
-        const currentChain = (router.query.chain as string) || 'sol';
-        let apiUrl = `/api/token-service/pulse-new?limit=200&fresh=1`;
+        // Check both currentChain state and router query to ensure we have the right chain
+        const chainToUse = currentChain || (router.query.chain as string) || 'sol';
+        let apiUrl: string;
         
-        if (currentChain === 'monad') {
-          // Use dedicated Monad new pairs endpoint (uses Birdeye API with x-chain: monad)
+        if (chainToUse === 'monad') {
+          // Use Next.js API route which proxies to Monad service server-side (avoids CORS)
           apiUrl = `/api/token-service/pulse-new-monad?limit=200&fresh=1`;
+          console.log('[Discover] Fetching Monad new pairs via API route:', apiUrl);
+        } else {
+          // Use Next.js API route for Solana (which proxies to exchange-token-service)
+          apiUrl = `/api/token-service/pulse-new?limit=200&fresh=1`;
+          console.log('[Discover] Fetching Solana new pairs from:', apiUrl);
         }
         
         const response = await fetch(apiUrl, {
           headers: {
             'Cache-Control': 'no-cache',
             Pragma: 'no-cache',
+            'Accept': 'application/json',
           },
         });
 
         if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
+          const errorText = await response.text();
+          console.error(`[Discover] API error for ${currentChain} new pairs:`, {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText
+          });
+          throw new Error(`Request failed with status ${response.status}: ${errorText.substring(0, 100)}`);
         }
 
         const payload = await response.json();
+        
+        // Check if response is an error object
+        if (payload?.error) {
+          console.error(`[Discover] API returned error object for ${currentChain} new pairs:`, payload.error);
+          throw new Error(payload.error);
+        }
         if (cancelled) {
           return;
         }
 
-        // Handle both formats: pulse-new returns array, Birdeye returns {data: {tokens: [...]}}
+        // Handle multiple response formats:
+        // 1. Direct array (Solana pulse-new)
+        // 2. Birdeye format: {data: {tokens: [...]}}
+        // 3. Monad format: {status, count, data: [...]} or just array
         let tokensArray: any[] = [];
         if (Array.isArray(payload)) {
           tokensArray = payload;
-        } else if (payload?.data?.tokens && Array.isArray(payload.data.tokens)) {
-          // Birdeye format - extract tokens array
-          tokensArray = payload.data.tokens;
-        } else {
-          throw new Error('Unexpected response format');
+        } else if (payload?.data) {
+          // Handle both Birdeye format and Monad format
+          if (Array.isArray(payload.data)) {
+            // Monad format: {status, count, data: [...]}
+            tokensArray = payload.data;
+          } else if (payload.data?.tokens && Array.isArray(payload.data.tokens)) {
+            // Birdeye format: {data: {tokens: [...]}}
+            tokensArray = payload.data.tokens;
+          }
+        }
+        
+        // Log response for debugging
+        if (!tokensArray || tokensArray.length === 0) {
+          console.warn('[Discover] No tokens found in response:', {
+            chain: currentChain,
+            payloadType: Array.isArray(payload) ? 'array' : typeof payload,
+            payloadKeys: Array.isArray(payload) ? 'N/A' : Object.keys(payload || {}),
+            hasData: !!(payload as any)?.data,
+            dataType: Array.isArray((payload as any)?.data) ? 'array' : typeof (payload as any)?.data,
+            dataKeys: (payload as any)?.data && !Array.isArray((payload as any)?.data) ? Object.keys((payload as any).data || {}) : 'N/A'
+          });
+        }
+        
+        if (!tokensArray || tokensArray.length === 0) {
+          // Don't throw error, just log and continue with empty array
+          console.log('[Discover] Empty tokens array, this might be expected if no new pairs available');
+          setNewPairsRaw([]);
+          setNewPairsError(null);
+          setNewPairsLoading(false);
+          return;
         }
 
         if (tokensArray.length > 0) {
@@ -659,20 +729,21 @@ export default function DiscoverPage() {
 
             // Volume fields - prefer buy/sell volume sum if available, otherwise use provided value
             // This ensures we get accurate volume even if the direct volume field is 0 or missing
+            // For Monad tokens, check volume_*_usd fields first, then fallback to volume_* fields
+            const vol24h = token.volume_24h_usd ?? token.volume_24h ?? token.volume24h ?? token.volume24hUSD; // Monad uses volume_24h_usd, Birdeye format
             const sum24h = sumVolumes(token.total_buy_volume_24h, token.total_sell_volume_24h);
-            const vol24h = token.volume_24h ?? token.volume24h ?? token.volume24hUSD; // Birdeye format
             normalized.volume_24h = sum24h > 0 ? sum24h : (vol24h !== undefined && vol24h !== null ? toNumber(vol24h) : 0);
             
+            const vol6h = token.volume_6h_usd ?? token.volume_6h ?? token.volume6h;
             const sum6h = sumVolumes(token.total_buy_volume_6h, token.total_sell_volume_6h);
-            const vol6h = token.volume_6h ?? token.volume6h;
             normalized.volume_6h = sum6h > 0 ? sum6h : (vol6h !== undefined && vol6h !== null ? toNumber(vol6h) : 0);
             
+            const vol1h = token.volume_1h_usd ?? token.volume_1h ?? token.volume1h;
             const sum1h = sumVolumes(token.total_buy_volume_1h, token.total_sell_volume_1h);
-            const vol1h = token.volume_1h ?? token.volume1h;
             normalized.volume_1h = sum1h > 0 ? sum1h : (vol1h !== undefined && vol1h !== null ? toNumber(vol1h) : 0);
             
+            const vol5m = token.volume_5m_usd ?? token.volume_5m ?? token.volume5m;
             const sum5m = sumVolumes(token.total_buy_volume_5m, token.total_sell_volume_5m);
-            const vol5m = token.volume_5m ?? token.volume5m;
             normalized.volume_5m = sum5m > 0 ? sum5m : (vol5m !== undefined && vol5m !== null ? toNumber(vol5m) : 0);
 
             const normalizePercent = (value: any) => {
@@ -702,6 +773,13 @@ export default function DiscoverPage() {
 
             // CRITICAL: Preserve image fields from API response
             // The pulse-new endpoint already maps these using extractTokenImage
+            // For Monad tokens, also check image_url field
+            if (token.image_url) {
+              normalized.image = token.image_url;
+              normalized.logo = token.image_url;
+              normalized.uri = token.image_url;
+              normalized.imageUrl = token.image_url;
+            }
             if (token.logo) {
               normalized.logo = token.logo;
             }
@@ -796,10 +874,53 @@ export default function DiscoverPage() {
             return normalized as TokenWithDexPaid;
           };
 
-          // Transform Birdeye format tokens to match expected format before filtering
+          // Transform tokens to match expected format before filtering
           const transformedTokens = tokensArray.map((token: any) => {
+            // Handle Monad tokens (have 'address' field and 'launchpad_protocol')
+            if (currentChain === 'monad' && token.address && !token.mint) {
+              return {
+                ...token,
+                mint: token.address, // Map address to mint
+                // Map Monad image fields
+                image: token.image_url || token.image || token.logo || token.logoURI || token.uri,
+                logo: token.image_url || token.logo || token.logoURI || token.image,
+                uri: token.image_url || token.uri,
+                imageUrl: token.image_url || token.imageUrl || token.logoURI,
+                // Map Monad volume fields (Monad uses volume_24h_usd, volume_1h_usd, etc.)
+                volume_24h: token.volume_24h_usd || token.volume_24h || 0,
+                volume_6h: token.volume_6h_usd || token.volume_6h || 0,
+                volume_1h: token.volume_1h_usd || token.volume_1h || 0,
+                volume_5m: token.volume_5m_usd || token.volume_5m || 0,
+                // Monad uses total_buy_volume_mon and total_sell_volume_mon (total, not timeframe-specific)
+                // For 24h volume calculation, we can sum buy/sell if available, otherwise use volume_24h_usd
+                total_buy_volume_24h: token.total_buy_volume_mon || 0,
+                total_sell_volume_24h: token.total_sell_volume_mon || 0,
+                // Map transaction fields
+                // Monad provides total counts (not timeframe-specific), map them to 24h fields
+                // InterstateTable expects timeframe-specific fields like total_buys_24h, total_sells_24h
+                total_transactions: token.total_transactions || 0,
+                unique_traders: token.unique_traders || 0,
+                total_buys: token.total_buys || 0,
+                total_sells: token.total_sells || 0,
+                // Map total counts to 24h fields (InterstateTable looks for total_buys_24h, total_sells_24h)
+                total_buys_24h: token.total_buys || 0,
+                total_sells_24h: token.total_sells || 0,
+                total_buys_6h: token.total_buys || 0, // Use total as fallback
+                total_sells_6h: token.total_sells || 0,
+                total_buys_1h: token.total_buys || 0, // Use total as fallback
+                total_sells_1h: token.total_sells || 0,
+                total_buys_5m: token.total_buys || 0, // Use total as fallback
+                total_sells_5m: token.total_sells || 0,
+                // Also map to txnCount fields as fallback
+                txnCount24h: token.total_transactions || 0,
+                txnCount24: token.total_transactions || 0,
+                // Preserve launchpad_protocol (Monad uses this field)
+                launchpad_protocol: token.launchpad_protocol || token.protocol,
+              };
+            }
+            
             // If this is a Birdeye token (has 'address' field), transform it
-            if (token.address && !token.mint) {
+            if (token.address && !token.mint && currentChain !== 'monad') {
               return {
                 ...token,
                 mint: token.address, // Map address to mint
@@ -828,9 +949,20 @@ export default function DiscoverPage() {
             if (isZeroLiquidityToken(token)) {
               return false;
             }
-            if (!token || !token.mint || isWrappedSol(token)) {
+            // For Monad, tokens use 'address' which we map to 'mint', but check both as fallback
+            const tokenId = token.mint || token.address;
+            if (!token || !tokenId || isWrappedSol(token)) {
               return false;
             }
+            
+            // Filter out tokens with 0 market cap (for Monad chain)
+            if (currentChain === 'monad') {
+              const marketCap = token.market_cap_usd || token.marketCapUsd || token.fully_diluted_value || 0;
+              if (!marketCap || marketCap === 0) {
+                return false;
+              }
+            }
+            
             // For Monad, don't filter out by protocol (Birdeye doesn't provide protocol info)
             // Only filter Meteora for Solana tokens
             if (currentChain !== 'monad') {
@@ -1217,9 +1349,27 @@ export default function DiscoverPage() {
   //   console.log('🔍 Discover: selectedTimeframe changed to:', selectedTimeframe);
   // }, [selectedTimeframe]);
 
-  // QUICK BUY handler – using enhanced trade flow (same as PulseTable)
+  // Helper to determine Monad launchpad (same logic as MonadTable)
+  const getMonadLaunchpad = useCallback((token: Token): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
+    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || '';
+    
+    if (protocol.includes('nad.fun') || protocol.includes('nadfun')) {
+      return 'nadfun';
+    } else if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
+      // Check if it's devs portal (usually has 'dev' in the name or specific identifier)
+      if (protocol.includes('dev')) {
+        return 'flapsh-devs';
+      }
+      return 'flapsh-simple';
+    }
+    
+    // Default to nadfun if unknown
+    return 'nadfun';
+  }, []);
+
+  // QUICK BUY handler – using enhanced trade flow for Solana, Monad logic for Monad chain
   const handleQuickBuy = async (token: Token) => {
-    console.log("🎯 Enhanced Quick Buy called for token:", token.symbol);
+    console.log("🎯 Quick Buy called for token:", token.symbol, "on chain:", currentChain);
     
     if (!user?.bearerToken || !user?.id) {
       console.log("❌ User not logged in");
@@ -1232,7 +1382,8 @@ export default function DiscoverPage() {
     const buyAmount = parseFloat(quickBuyAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
       console.log("❌ Invalid buy amount:", quickBuyAmount);
-      showEnhancedToast('warning', 'Please enter a valid SOL amount (minimum 0.001 SOL)', {
+      const currency = currentChain === 'monad' ? 'MON' : 'SOL';
+      showEnhancedToast('warning', `Please enter a valid ${currency} amount (minimum 0.001 ${currency})`, {
         title: 'Invalid Amount',
       });
       return;
@@ -1250,6 +1401,90 @@ export default function DiscoverPage() {
       return;
     }
 
+    // For Monad chain, use Monad-specific quick buy logic (same as MonadTable)
+    if (currentChain === 'monad') {
+      if (!token.mint) {
+        console.log("❌ Invalid token - missing mint address");
+        showEnhancedToast('error', 'Invalid token information', {
+          title: 'Token Error',
+        });
+        return;
+      }
+
+      const settings = (preset.quickBuySettings || {}) as any;
+      const launchpad = getMonadLaunchpad(token);
+      const tokenAddress = token.mint; // Monad uses mint address (0x format)
+      const slippage = settings?.maxSlippage ? (settings.maxSlippage * 100) : 15;
+
+      console.log("📤 Monad Quick Buy params:", {
+        tokenAddress,
+        amountMON: buyAmount,
+        launchpad,
+        slippage,
+      });
+
+      const toastId = showEnhancedToast('loading', 'Executing Monad buy...', {
+        title: 'Processing Trade',
+        description: `${buyAmount} MON → ${token.symbol}`,
+      });
+
+      try {
+        const result = await tradeMonadBuy(
+          {
+            tokenAddress,
+            amountMON: buyAmount,
+            launchpad,
+            slippage,
+          },
+          user.bearerToken
+        );
+
+        if (result.success && result.txHash) {
+          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+          updateEnhancedToast(toastId, 'success', 'Buy successful!', {
+            title: 'Trade Executed',
+            description: `Transaction confirmed`,
+            customContent: (
+              <div className="flex flex-col gap-2">
+                <div className="text-sm text-[#E6E7EA]">
+                  ✅ Buy successful!
+                </div>
+                <a
+                  href={explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:text-blue-300 underline text-xs flex items-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  View on MonadVision: {result.txHash.slice(0, 8)}...{result.txHash.slice(-6)}
+                  <span>→</span>
+                </a>
+              </div>
+            ),
+            duration: 10000,
+          });
+          console.log('✅ Monad Quick Buy successful:', result);
+          return { success: true, txHash: result.txHash };
+        } else {
+          const errorMsg = (result as any)?.error || 'Unknown error';
+          updateEnhancedToast(toastId, 'error', 'Buy failed', {
+            title: 'Trade Failed',
+            description: errorMsg,
+          });
+          return { success: false, error: errorMsg };
+        }
+      } catch (error: any) {
+        console.error('❌ Monad Quick Buy failed:', error);
+        const errorMessage = error?.message || error?.error || 'Trade failed. Please try again.';
+        updateEnhancedToast(toastId, 'error', 'Buy failed', {
+          title: 'Trade Failed',
+          description: errorMessage,
+        });
+        return { success: false, error: errorMessage };
+      }
+    }
+
+    // For Solana chain, use enhanced trade flow
     const settings = preset.quickBuySettings;
 
     // Execute enhanced trade with all features
@@ -1605,38 +1840,53 @@ export default function DiscoverPage() {
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) {
+      console.log('[Discover] processedNewPairs: newPairsRaw is empty', { currentChain });
       return [] as TokenWithDexPaid[];
     }
 
+    console.log(`[Discover] Processing ${newPairsRaw.length} new pairs for ${currentChain}`);
+    
     const base = newPairsRaw.filter((token) => {
       if (!token || !token.mint || isWrappedSol(token)) {
         return false;
       }
-      // Filter out Meteora tokens from new pairs
-      const protocol = ((token as any).launchpad_protocol || (token as any).launchpadProtocol || (token as any).protocol || '').toLowerCase();
-      if (protocol.includes('meteora')) {
-        return false;
+      // Filter out Meteora tokens from new pairs (only for Solana, not Monad)
+      if (currentChain !== 'monad') {
+        const protocol = ((token as any).launchpad_protocol || (token as any).launchpadProtocol || (token as any).protocol || '').toLowerCase();
+        if (protocol.includes('meteora')) {
+          return false;
+        }
       }
       // Filter out tokens with 0 liquidity
       const liquidity = Number((token as any).total_liquidity_usd || (token as any).liquidity_usd || 0);
       if (liquidity <= 0) {
         return false;
       }
-      // Filter out tokens with 0 volume - check all timeframes
-      const hasVolume = ['1h', '6h', '24h', '5m'].some(tf => {
-        const vol = getVolumeForTimeframe(token, tf as Timeframe);
-        return vol > 0;
-      });
-      if (!hasVolume) {
-        return false;
+      // For Monad, be more lenient with volume requirements (new tokens might not have volume yet)
+      if (currentChain === 'monad') {
+        // For Monad, only require liquidity, volume is optional
+      } else {
+        // Filter out tokens with 0 volume - check all timeframes (Solana only)
+        const hasVolume = ['1h', '6h', '24h', '5m'].some(tf => {
+          const vol = getVolumeForTimeframe(token, tf as Timeframe);
+          return vol > 0;
+        });
+        if (!hasVolume) {
+          return false;
+        }
       }
-      // Filter out tokens with no image
-      const hasImage = (token as any)?.uri || (token as any)?.logo || (token as any)?.image || (token as any)?.imageUrl;
-      if (!hasImage || hasImage === '' || hasImage === 'null' || hasImage === null) {
-        return false;
+      // For Monad, don't require image (new tokens might not have images yet)
+      if (currentChain !== 'monad') {
+        // Filter out tokens with no image (Solana only)
+        const hasImage = (token as any)?.uri || (token as any)?.logo || (token as any)?.image || (token as any)?.imageUrl;
+        if (!hasImage || hasImage === '' || hasImage === 'null' || hasImage === null) {
+          return false;
+        }
       }
       return true;
     });
+    
+    console.log(`[Discover] After filtering: ${base.length} tokens remain for ${currentChain}`);
     const filtered = applyFilters(base);
     const sortedTokens = filtered.map((token) => JSON.parse(JSON.stringify(token)) as TokenWithDexPaid);
 
@@ -1780,6 +2030,7 @@ export default function DiscoverPage() {
           setSort={handleSort}
           selectedTimeframe={selectedTimeframe}
           quickBuyAmount={Number(quickBuyAmount) || 0}
+          chain={currentChain}
         />
       );
     }
@@ -1797,6 +2048,7 @@ export default function DiscoverPage() {
           setSort={handleSort}
           selectedTimeframe={selectedTimeframe}
           quickBuyAmount={Number(quickBuyAmount) || 0}
+          chain={currentChain}
         />
       );
     }
@@ -2324,6 +2576,7 @@ export default function DiscoverPage() {
                   setSort={handleSort}
                   selectedTimeframe={selectedTimeframe}
                   quickBuyAmount={Number(quickBuyAmount) || 0}
+                  chain={currentChain}
                 />
               ) : (
                 <div className="py-10 text-center text-[#9CA3AF]">
@@ -2393,3 +2646,4 @@ export default function DiscoverPage() {
     </>
   );
 }
+
