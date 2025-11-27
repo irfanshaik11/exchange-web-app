@@ -1,9 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 // Map chart intervals to Monad service intervals
+// TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
 const INTERVAL_MAP: Record<string, string> = {
-  '1s': '5m', '5s': '5m', '15s': '5m', '30s': '5m', '1m': '5m',
-  '5m': '5m', '15m': '1h', '1h': '1h', '4h': '6h', '1d': '24h', '7d': '24h',
+  '1s': '1s',   // Direct 1-second candles from TimescaleDB
+  '5s': '1s',   // Use 1s for sub-minute resolution
+  '15s': '1s',
+  '30s': '1s',
+  '1m': '1m',   // Direct 1-minute candles
+  '5m': '5m',   // Direct 5-minute candles
+  '15m': '15m', // Direct 15-minute candles
+  '30m': '30m', // Direct 30-minute candles
+  '1h': '1h',   // Direct 1-hour candles
+  '4h': '4h',   // Direct 4-hour candles
+  '1d': '1d',   // Direct 1-day candles
+  '7d': '1w',   // Map to weekly candles
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
