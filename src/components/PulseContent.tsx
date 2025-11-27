@@ -464,7 +464,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
 
   const realtimeAddrs = useMemo(() => {
     const src: any[] = [
-      ...(displayedNewPairs as any[] || []),
+      ...(newPairsToShow as any[] || []),
       ...(finalStretchToShow as any[] || []),
       ...(migratedToShow as any[] || []),
     ];
@@ -477,7 +477,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       if (uniq.size >= 200) break;
     }
     return Array.from(uniq);
-  }, [displayedNewPairs, finalStretchToShow, migratedToShow]);
+  }, [newPairsToShow, finalStretchToShow, migratedToShow]);
 
   const { marketData, connected: wsConnected, error: wsError } = useRealtimeWebSocket(realtimeAddrs, {
     url: `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/ws/market-data`,
