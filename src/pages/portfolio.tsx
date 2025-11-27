@@ -875,6 +875,7 @@ export default function PortfolioPage() {
       // - create Turnkey sub-org / wallet for this user
       // - persist wallet to DB
       // - return the new wallet with balance = 0 (or computed)
+      console.log("Creating new wallet for user:", user.id);
       const res = await fetch(
   `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
   {
