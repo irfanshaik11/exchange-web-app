@@ -489,7 +489,11 @@ export default function MonadTradePage() {
     };
   }, [showMobileTradeModal, handleDragMove, handleDragEnd]);
 
-  const pairAddress = displayToken?.pair_address || (contractAddress as string);
+  // Memoize pairAddress to prevent unnecessary changes that cause component remounts
+  // Only recalculate when the actual pair_address changes, not on every displayToken update
+  const pairAddress = React.useMemo(() => {
+    return displayToken?.pair_address || (contractAddress as string);
+  }, [displayToken?.pair_address, contractAddress]);
 
   return (
     <>
@@ -559,7 +563,7 @@ export default function MonadTradePage() {
               >
                 {pairAddress && pairAddress.length >= 20 ? (
                   <AdvancedOHLCChart
-                    key={`chart-monad-${pairAddress}`}
+                    key={`chart-monad-${contractAddress}`}
                     mint={typeof _mint === "string" ? _mint : displayToken?.mint}
                     pairAddress={pairAddress}
                     interval={currentOHLCParams.interval}

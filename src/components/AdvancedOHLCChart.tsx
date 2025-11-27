@@ -1351,15 +1351,43 @@ Maker: ${walletAddress}`;
   // via the getMarks() method in the datafeed. No manual marker creation needed.
 
   // Initialize TradingView widget
+  // Track the token identifier to prevent recreation when pairAddress just refines
+  const widgetTokenRef = useRef<string | null>(null);
+  
   useEffect(() => {
     if (!libraryLoaded || !containerRef.current) return;
+    
+    // Determine the token identifier (use mint if available, otherwise pairAddress)
+    const tokenId = mint || pairAddress;
+    if (!tokenId) return;
 
     const container = containerRef.current;
     let disposed = false;
 
     const setup = async () => {
       await waitForVisibleContainer(container);
-      if (disposed || widgetRef.current) return;
+      if (disposed) return;
+      
+      // If widget already exists for this token, don't recreate
+      // The datafeed will handle pairAddress updates via its closure
+      if (widgetRef.current && widgetTokenRef.current === tokenId) {
+        console.log('[AdvancedOHLCChart] Widget already exists for token, datafeed will handle updates');
+        return;
+      }
+      
+      // If widget exists but for a different token, remove it first
+      if (widgetRef.current && widgetTokenRef.current !== tokenId) {
+        console.log('[AdvancedOHLCChart] Token changed, removing old widget');
+        try {
+          widgetRef.current.remove();
+        } catch (e) {
+          console.error('[AdvancedOHLCChart] Error removing old widget:', e);
+        }
+        widgetRef.current = null;
+        if (container) {
+          container.innerHTML = '';
+        }
+      }
 
       const datafeed = createDatafeed();
       if (!datafeed) {
@@ -1496,6 +1524,7 @@ Maker: ${walletAddress}`;
         });
 
         widgetRef.current = widget;
+        widgetTokenRef.current = tokenId; // Track which token this widget is for
         setIsLoading(false);
         setError(null);
 
@@ -1578,17 +1607,8 @@ Maker: ${walletAddress}`;
 
     return () => {
       disposed = true;
-      if (widgetRef.current) {
-        try {
-          widgetRef.current.remove();
-        } catch (e) {
-          console.error('[AdvancedOHLCChart] Error removing widget:', e);
-        }
-        widgetRef.current = null;
-      }
-      if (container) {
-        container.innerHTML = '';
-      }
+      // Only cleanup on unmount or when switching tokens (handled in setup)
+      // Don't cleanup when pairAddress just refines
     };
   }, [libraryLoaded, mint, pairAddress, selectedInterval, timeframe, optimize, createDatafeed]);
 
