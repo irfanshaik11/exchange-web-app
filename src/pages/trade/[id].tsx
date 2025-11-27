@@ -22,10 +22,11 @@ import dynamic from "next/dynamic";
 import SimilarTokensPanel from "../../components/trade/SimilarTokensPanel";
 import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPanel";
 import TokenLimitOrders from "../../components/trade/TokenLimitOrders";
+// Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
+import AdvancedOHLCChart from "../../components/AdvancedOHLCChart";
 
-// Lazy load heavy components to reduce initial bundle size
+// Lazy load other heavy components to reduce initial bundle size
 //const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
-const AdvancedOHLCChart = dynamic(() => import("../../components/AdvancedOHLCChart"), { ssr: false });
 const CodexTrades = dynamic(() => import("../../components/trade/CodexTrades"), { ssr: false });
 const CodexTopTraders = dynamic(() => import("../../components/trade/CodexTopTraders"), { ssr: false });
 const CodexDevTokens = dynamic(() => import("../../components/trade/CodexDevTokens"), { ssr: false });

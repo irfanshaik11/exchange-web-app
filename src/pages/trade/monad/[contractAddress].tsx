@@ -13,9 +13,10 @@ import { useQuickBuyQueryParams } from "../../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../../utils/queryParams";
 import { useComponentCache } from "../../../hooks/useComponentCache";
 import { useMonadTokenMetrics, type TokenMetrics } from "../../../hooks/useMonadTokenMetrics";
+// Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
+import AdvancedOHLCChart from "../../../components/AdvancedOHLCChart";
 
-// Lazy load components
-const AdvancedOHLCChart = dynamic(() => import("../../../components/AdvancedOHLCChart"), { ssr: false });
+// Lazy load other components
 const MonadTrades = dynamic(() => import("../../../components/trade/MonadTrades"), { ssr: false });
 
 /* ---------- AXIOM palette ---------- */
