@@ -62,7 +62,7 @@ export default function DiscoverPage() {
   }, [currentChain, router.query.chain]);
   
   // For Monad, only allow 'trending' and 'newPairs' tabs
-  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>('newPairs');
+  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>('trending');
   
   // When chain changes to monad, switch to trending if current tab is not allowed
   useEffect(() => {
