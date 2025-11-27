@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { login as apiLogin, register as apiRegister, phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, googleAuthUrl } from '../utils/api';
+import React, { useEffect, useRef, useState } from 'react';
+import { login as apiLogin, register as apiRegister, phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin } from '../utils/api';
 import Cookies from 'js-cookie';
 import { useUser } from "./UserContext";
 import InterstatePopout from './InterstatePopout';
@@ -9,7 +9,10 @@ import { toast } from 'react-hot-toast';
 import { useWallet } from "./useWallet";
 import { usePhantomWallet } from '../hooks/usePhantomWallet';
 import { useMetaMaskWallet } from '../hooks/useMetaMaskWallet';
-import { useTurnkey } from '@turnkey/react-wallet-kit'; 
+import { useTurnkey, ClientState, AuthState } from '@turnkey/react-wallet-kit';
+import { GoogleOAuthProvider, GoogleLogin, CredentialResponse } from '@react-oauth/google';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex } from '@noble/hashes/utils';
 
 const ENABLE_EMAIL_AUTH = false;
 
@@ -39,6 +42,10 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const [phantomLoading, setPhantomLoading] = useState(false);
   const [metamaskLoading, setMetamaskLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleNonce, setGoogleNonce] = useState<string | null>(null);
+  const pubKeyRef = useRef<string | null>(null);
+  const createdNonceRef = useRef(false);
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   
   const [error, setError] = useState<string | null>(null);
   const [walletError, setWalletError] = useState<string | null>(null);
@@ -52,7 +59,8 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   const phantomWallet = usePhantomWallet();
   const metaMaskWallet = useMetaMaskWallet();
   const turnkey = useTurnkey();
-  const { handleGoogleOauth } = turnkey || {};
+  const authState = turnkey?.authState;
+  const clientState = turnkey?.clientState;
   // Helper function to clear all loading states
   const clearAllLoadingStates = () => {
     setPhantomLoading(false);
@@ -94,6 +102,28 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       return () => clearTimeout(timeout);
     }
   }, [open, phantomWallet, metaMaskWallet, refreshUser, user, userLoading]);
+
+  useEffect(() => {
+    if (!turnkey) return;
+    if (clientState !== ClientState.Ready) return;
+    if (createdNonceRef.current) return;
+
+    (async () => {
+      try {
+        const pubKey = await turnkey.createApiKeyPair?.({ storeOverride: true });
+        if (!pubKey) {
+          throw new Error('Failed to create API keypair for Google login.');
+        }
+        pubKeyRef.current = pubKey;
+        setGoogleNonce(bytesToHex(sha256(pubKey)));
+        createdNonceRef.current = true;
+      } catch (err: any) {
+        createdNonceRef.current = false;
+        console.error('Failed to prepare Google login', err);
+        setError(err?.message || 'Unable to prepare Google login.');
+      }
+    })();
+  }, [clientState, turnkey]);
 
   if (!open && !show) return null;
 
@@ -147,35 +177,47 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
   }
 
   // Google Login handler
-  async function handleGoogleLogin() {
-  setGoogleLoading(true);
-  setError(null);
-  setSuccess(null);
-  console.log('[Turnkey] starting Google OAuth', {
-    clientState: turnkey?.clientState,
-    authState: turnkey?.authState,
-    hasSessionToken: !!turnkey?.session?.token,
-  });
-  try {
-    if (!handleGoogleOauth) {
-      throw new Error('Turnkey Google login is not available right now.');
+  async function handleGoogleSuccess(resp: CredentialResponse) {
+    setGoogleLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const publicKey = pubKeyRef.current;
+      if (!publicKey) {
+        throw new Error('Google login is not ready yet. Please try again.');
+      }
+      if (!resp?.credential) {
+        throw new Error('Google login did not return a credential.');
+      }
+      if (!turnkey?.loginWithOauth) {
+        throw new Error('Turnkey Google login is not available right now.');
+      }
+
+      await turnkey.loginWithOauth({
+        providerName: 'google',
+        oidcToken: resp.credential,
+        publicKey,
+      });
+      setSuccess('Google sign-in complete!');
+    } catch (err) {
+      const message =
+        (err as any)?.message ||
+        (err as any)?.response?.data?.message ||
+        'Login failed';
+      console.error('Turnkey Google login failed', err);
+      setError(message);
+      createdNonceRef.current = false;
+      setGoogleNonce(null);
+    } finally {
+      setGoogleLoading(false);
     }
-    if ((turnkey as any)?.clientState === 'error') {
-      throw new Error('Turnkey failed to initialize. Please refresh and check env config.');
-    }
-    // Open Google OAuth in the current page to avoid hidden popups
-    await handleGoogleOauth({ openInPage: true });
-  } catch (err) {
-    const message =
-      (err as any)?.message ||
-      (err as any)?.response?.data?.message ||
-      'Login failed';
-    console.error('Turnkey login failed', err);
-    setError(message);
-  } finally {
-    setGoogleLoading(false);
   }
-}
+
+  const handleGoogleError = () => {
+    setGoogleLoading(false);
+    setError('Google login was cancelled. Please try again.');
+  };
 
 
   // Phantom Wallet Login handler - Enhanced with proper connection management
@@ -448,23 +490,55 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       )}
       <hr  className="mt-4 border-neutral-600"/>
       <div className="flex flex-col gap-2 mt-4">
-        <InterstateButton
-          type="button"
-          fullWidth
-          variant="secondary"
-          className="mb-1"
-          onClick={(e) => {
-            setPhantomLoading(false);
-            setMetamaskLoading(false);
-            handleGoogleLogin();
-          }}
-          disabled={googleLoading}
-        >
-          <span className="flex items-center justify-center gap-2 font-normal text-sm">
-            <img src="https://img.icons8.com/color/512/google-logo.png" alt="Google" className="w-6 h-6" />
-            Continue with Google
-          </span>
-        </InterstateButton>
+        {googleClientId ? (
+          <GoogleOAuthProvider clientId={googleClientId}>
+            <div className="mb-1 flex w-full flex-col items-center">
+              {authState === AuthState.Authenticated ? (
+                <div className="w-full rounded-3xl border border-neutral-700/60 bg-neutral-800/40 px-3 py-3 text-center text-sm text-neutral-200">
+                  Finishing sign-in…
+                </div>
+              ) : clientState !== ClientState.Ready ? (
+                <InterstateButton type="button" fullWidth variant="secondary" disabled>
+                  <span className="flex items-center justify-center gap-2 font-normal text-sm">
+                    Preparing login…
+                  </span>
+                </InterstateButton>
+              ) : !googleNonce ? (
+                <InterstateButton type="button" fullWidth variant="secondary" disabled>
+                  <span className="flex items-center justify-center gap-2 font-normal text-sm">
+                    {googleLoading ? 'Finishing sign-in…' : 'Generating nonce…'}
+                  </span>
+                </InterstateButton>
+              ) : googleLoading ? (
+                <InterstateButton type="button" fullWidth variant="secondary" disabled>
+                  <span className="flex items-center justify-center gap-2 font-normal text-sm">
+                    Signing in with Google…
+                  </span>
+                </InterstateButton>
+              ) : (
+                <div className="w-full flex justify-center">
+                  <GoogleLogin
+                    nonce={googleNonce}
+                    onSuccess={handleGoogleSuccess}
+                    onError={handleGoogleError}
+                    useOneTap={false}
+                    theme="outline"
+                    shape="pill"
+                    text="continue_with"
+                    size="large"
+                    width="320"
+                  />
+                </div>
+              )}
+            </div>
+          </GoogleOAuthProvider>
+        ) : (
+          <InterstateButton type="button" fullWidth variant="secondary" disabled>
+            <span className="flex items-center justify-center gap-2 font-normal text-sm">
+              Google login not configured
+            </span>
+          </InterstateButton>
+        )}
 
         <InterstateButton
           type="button"

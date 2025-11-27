@@ -6,65 +6,60 @@ import {
   TurnkeyProvider,
   type TurnkeyProviderConfig,
 } from "@turnkey/react-wallet-kit";
-import "@turnkey/react-wallet-kit/styles.css"; 
-
+import "@turnkey/react-wallet-kit/styles.css";
 
 export function TurnkeyRootProvider({ children }: { children: React.ReactNode }) {
   const turnkeyConfig: TurnkeyProviderConfig = useMemo(() => {
-    const orgId = "7347a74c-36c1-4a5a-adf6-0b3ea84be204";
-    const proxyConfigId = "2091f6a1-1a1e-4730-be7a-b03d7c8d3561";
+    // Prefer env vars so you don't hardcode secrets for prod
+    const orgId =
+      process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID ||
+      "7347a74c-36c1-4a5a-adf6-0b3ea84be204";
 
-    // Always redirect back to the current origin so the OAuth flow completes in-place,
-    // instead of bouncing to localhost in non-local environments.
-    const redirectUri =
-      typeof window !== "undefined"
-        ? window.location.origin
-        : process.env.NEXT_PUBLIC_REDIRECT_URI || "http://localhost:3000";
+    const proxyConfigId =
+      process.env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID ||
+      "2091f6a1-1a1e-4730-be7a-b03d7c8d3561";
 
-    return {
+    const config: TurnkeyProviderConfig = {
       apiBaseUrl: "https://api.turnkey.com",
       organizationId: orgId,
       authProxyConfigId: proxyConfigId,
+
       auth: {
         oauthConfig: {
+          // Let Turnkey handle the redirect details; config lives in dashboard
           openOauthInPage: true,
-          oauthRedirectUri: redirectUri,
-          googleClientId:
-            "314070775906-k3p0s4bnvf6mlim2a26pit5i2m3dodm4.apps.googleusercontent.com",
         },
+        methods: {
+          googleOauthEnabled: true,
+          // Toggle any others you actually want:
+          emailOtpAuthEnabled: false,
+          smsOtpAuthEnabled: false,
+          passkeyAuthEnabled: false,
+          walletAuthEnabled: false,
+        },
+        // Optional, but keeps UI ordering nice if you ever show their modal:
+        methodOrder: ["socials", "email", "sms", "passkey", "wallet"],
+        verifyWalletOnSignup: true,
       },
+
       ui: {
         renderModalInProvider: true,
-        zIndex: 9999,
       },
     };
+
+    return config;
   }, []);
 
   useEffect(() => {
     console.log("[Turnkey] client env", {
       orgId: turnkeyConfig.organizationId,
       authProxyConfigId: turnkeyConfig.authProxyConfigId,
-      googleClientId: turnkeyConfig.auth?.oauthConfig?.googleClientId,
-      redirectUri: turnkeyConfig.auth?.oauthConfig?.oauthRedirectUri,
-      apiBaseUrl: turnkeyConfig.apiBaseUrl,
-      authProxyUrl: turnkeyConfig.authProxyUrl,
-      missing:
-        !turnkeyConfig.organizationId ||
-        !turnkeyConfig.authProxyConfigId ||
-        !turnkeyConfig.auth?.oauthConfig?.googleClientId ||
-        !turnkeyConfig.auth?.oauthConfig?.oauthRedirectUri ||
-        !turnkeyConfig.authProxyUrl,
+      methods: turnkeyConfig.auth?.methods,
     });
 
-    if (
-      !turnkeyConfig.organizationId ||
-      !turnkeyConfig.authProxyConfigId ||
-      !turnkeyConfig.auth?.oauthConfig?.googleClientId ||
-      !turnkeyConfig.auth?.oauthConfig?.oauthRedirectUri ||
-      !turnkeyConfig.authProxyUrl
-    ) {
+    if (!turnkeyConfig.organizationId || !turnkeyConfig.authProxyConfigId) {
       console.warn(
-        "[Turnkey] Missing required config. Check NEXT_PUBLIC_ORGANIZATION_ID, NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID, NEXT_PUBLIC_GOOGLE_CLIENT_ID, NEXT_PUBLIC_REDIRECT_URI"
+        "[Turnkey] Missing required config. Check NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID and NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID"
       );
     }
   }, [turnkeyConfig]);

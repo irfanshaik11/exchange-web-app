@@ -113,10 +113,17 @@ function TurnkeySessionBridge() {
   const pendingRefreshRef = useRef(false);
   const hasUpdatedEmail = useRef(false);
   console.log("TurnkeySessionBridge authState:", authState, "session:", session, "user:", user);
+  // Reset processed flag if user signs out of Turnkey
+  useEffect(() => {
+    if (authState !== AuthState.Authenticated) {
+      hasProcessedRef.current = false;
+    }
+  }, [authState]);
+
   useEffect(() => {
     // Only act once when Turnkey says the user is signed in
     if (authState !== AuthState.Authenticated) return;
-    if (!session?.token) return;
+    if (!session?.token || !session?.organizationId || !session?.userId) return;
     if (hasProcessedRef.current) return;
     hasProcessedRef.current = true;
 
@@ -131,14 +138,16 @@ function TurnkeySessionBridge() {
         console.log("Turnkey login response data:", data);
 
         // Backend should respond with your normal app JWT
-        if (data.token) {
-          Cookies.set('token', data.token, { expires: 7, path: '/' });
+        const appToken = data.token || (data as any)?.fetchedUserToken;
+        if (appToken) {
+          Cookies.set('token', appToken, { expires: 7, path: '/' });
           // Only call refreshUser after Turnkey has provided a user object
           pendingRefreshRef.current = true;
           if (user?.userEmail || user?.userName) {
             await refreshUser();
             pendingRefreshRef.current = false;
           }
+
           router.push('/'); // or '/dashboard' if you prefer
         } else {
           console.error('Turnkey login failed: no token in response');
@@ -180,7 +189,7 @@ function TurnkeySessionBridge() {
 
     hasUpdatedEmail.current = true;
 
-    fetch("/api/users/userDetails", {
+    fetch("/api/users/user", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
