@@ -337,9 +337,8 @@ export default function usePaginatedTokensWithFallback({
           const birdeyeLimit = 20; // Max allowed by Birdeye
           
           // Fetch multiple pages to get enough tokens for filtering
-          // OPTIMIZATION: Reduced to 3 pages (60 tokens) for faster loading
-          // With cache, parallel requests are fast, and 60 tokens is usually enough after filtering
-          const pagesToFetch = 3; // 3 pages * 20 = 60 tokens (usually enough after filtering)
+          // Increase to 5 pages (100 tokens) so aggressive filters still leave plenty of results
+          const pagesToFetch = 5; // 5 pages * 20 = 100 tokens
           
           // OPTIMIZATION: Fetch first page immediately, then fetch remaining pages in parallel
           // currentChain is already defined above (line 303)
@@ -779,24 +778,17 @@ export default function usePaginatedTokensWithFallback({
                 const volume24h = token.volume_24h || 0;
                 const liquidity = token.total_liquidity_usd || 0;
                 
-                // CLIENT-SIDE FILTER: Filter out tokens with BOTH > $1M volume AND > $1M liquidity
-                // This is less aggressive - only excludes tokens that are both high volume AND high liquidity
-                if (volume24h > 1_000_000 && liquidity > 1_000_000) {
-                  return false;
-                }
-                
-                // Filter out mega-caps (too large, likely established tokens)
-                // Focus on "small cap degen zone": $100k to $200M
+                // Filter out extreme mega-caps (leave plenty of room for larger names)
                 const marketCap = token.market_cap_usd || 0;
-                if (marketCap > 200_000_000) { // > $200M
+                if (marketCap > 1_000_000_000) { // > $1B
                   return false;
                 }
-                if (marketCap < 100_000) { // < $100k (too small, might be noise)
+                if (marketCap < 20_000) { // < $20k (too small, likely noise)
                   return false;
                 }
                 
-                // Filter out tokens with zero or very low volume
-                if (volume24h < 10_000) { // < $10k volume
+                // Filter out tokens with effectively no trading activity
+                if (volume24h < 5_000) { // < $5k 24h volume
                   return false;
                 }
                 

@@ -503,10 +503,10 @@ export default function DiscoverContent() {
         const payload = await response.json();
         if (cancelled) return;
 
-        // COMMENTED OUT: filterTokens processing temporarily disabled
-        /*
-        if (payload?.filterTokens?.results) {
-          const results = payload.filterTokens.results || [];
+        // Process filterTokens response from Codex
+        if (payload?.data?.filterTokens?.results || payload?.filterTokens?.results) {
+          // Handle both nested (payload.data.filterTokens) and direct (payload.filterTokens) formats
+          const results = payload?.data?.filterTokens?.results || payload.filterTokens.results || [];
           
           const normalized = results
             .filter((result: any) => {
@@ -531,11 +531,11 @@ export default function DiscoverContent() {
           setXStocksRaw(deduped);
           setXStocksError(null);
           saveToCache(deduped);
+        } else {
+          // No results found
+          setXStocksRaw([]);
+          setXStocksError(null);
         }
-        */
-        // Empty response while filterTokens is disabled
-        setXStocksRaw([]);
-        setXStocksError(null);
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Failed to fetch xStocks';

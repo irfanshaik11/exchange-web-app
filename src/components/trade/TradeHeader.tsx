@@ -6,6 +6,8 @@ import { useWatchlist } from "../WatchlistContext";
 import { SubscriptNumber } from "../InterstateTable";
 import FastImage from "../FastImage";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
+import { useRouter } from "next/router";
+import { getProtocolBranding } from "~/utils/protocolBranding";
 
 import { IoShareSocialOutline } from "react-icons/io5";
 import {
@@ -29,6 +31,12 @@ import {
   PiRobotLight,
 } from "react-icons/pi";
 import ColorFillBar from "../ColorFillBar";
+
+const MONAD_PROTOCOL_KEYWORDS = ["nad.fun", "nadfun", "flap.sh", "flapsh", "kuru"];
+const MONAD_BRAND = {
+  color: "#9B59B6",
+  icon: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+};
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
@@ -55,6 +63,39 @@ const DEFAULT_PROTOCOL_ICON =
 
 const normalizeKey = (s?: string) =>
   (s || "").toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
+
+const rawProtocolColorMap: Record<string, string> = {
+  pump: DEFAULT_PROTOCOL_COLOR,
+  "pump.fun": DEFAULT_PROTOCOL_COLOR,
+  bonk: "#ff6b35",
+  bags: DEFAULT_PROTOCOL_COLOR,
+  moonshot: "#eab308",
+  moonshoot: "#eab308",
+  moonit: "#eab308",
+  heaven: "#8b5cf6",
+  "daos.fun": "#06b6d4",
+  candle: "#f59e0b",
+  sugar: "#ec4899",
+  believe: "#10b981",
+  jupiter: "#8b5cf6",
+  boop: "#134577",
+  boopfun: "#134577",
+  launchlab: "#3b82f6",
+  dynamic: "#526fff",
+  raydium: "#5c51f7",
+  raydiumlaunchpad: "#5c51f7",
+  meteora: "#ff4662",
+  meteora_v2: "#ff4662",
+  pump_amm: "#e9ba14",
+  orca: "#0ea5e9",
+};
+
+const normalizedProtocolColorMap: Record<string, string> = Object.fromEntries(
+  Object.entries(rawProtocolColorMap).map(([key, value]) => [
+    normalizeKey(key),
+    value,
+  ]),
+);
 
 const formatMarketCap = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined) return "-";
@@ -94,39 +135,6 @@ const formatMarketCap = (value: string | number | null | undefined): string => {
 
   return numericValue.toFixed(2);
 };
-
-const rawProtocolColorMap: Record<string, string> = {
-  pump: DEFAULT_PROTOCOL_COLOR,
-  "pump.fun": DEFAULT_PROTOCOL_COLOR,
-  bonk: "#ff6b35",
-  bags: DEFAULT_PROTOCOL_COLOR,
-  moonshot: "#eab308",
-  moonshoot: "#eab308",
-  moonit: "#eab308",
-  heaven: "#8b5cf6",
-  "daos.fun": "#06b6d4",
-  candle: "#f59e0b",
-  sugar: "#ec4899",
-  believe: "#10b981",
-  jupiter: "#8b5cf6",
-  boop: "#134577",
-  boopfun: "#134577",
-  launchlab: "#3b82f6",
-  dynamic: "#526fff",
-  raydium: "#5c51f7",
-  raydiumlaunchpad: "#5c51f7",
-  meteora: "#ff4662",
-  meteora_v2: "#ff4662",
-  pump_amm: "#e9ba14",
-  orca: "#0ea5e9",
-};
-
-const normalizedProtocolColorMap: Record<string, string> = Object.fromEntries(
-  Object.entries(rawProtocolColorMap).map(([key, value]) => [
-    normalizeKey(key),
-    value,
-  ]),
-);
 
 function extractProtocolRaw(token: Token | null): string | null {
   if (!token) return null;
@@ -398,6 +406,7 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
     );
   }
 
+  const router = useRouter();
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
   const isWatched = isInWatchlist(token.pair_address || "");
   const [showPreview, setShowPreview] = useState(false);
@@ -471,9 +480,45 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
 
   /* ---------- canonical protocol resolution ---------- */
   const columnType = getColumnType(token);
-  const protocolColor = resolveProtocolColor(token, columnType);
-  const tokenIcon = resolveProtocolIcon(token);
-  const fillProtocolBadge = shouldFillProtocolBadge(token);
+  const protocolSource =
+    (token as any).launchpad_protocol ||
+    (token as any).protocol ||
+    (token as any).launchpadName ||
+    (token as any).amm ||
+    extractProtocolRaw(token) ||
+    undefined;
+
+  const tokenChain =
+    ((token as any).blockchain ||
+      (token as any).network ||
+      (token as any).chain ||
+      "") as string;
+  const normalizedChain = tokenChain.toLowerCase();
+  const normalizedProtocol = (protocolSource || "").toLowerCase();
+  const isMonadProtocol = normalizedProtocol
+    ? MONAD_PROTOCOL_KEYWORDS.some((keyword) =>
+        normalizedProtocol.includes(keyword),
+      )
+    : false;
+  const isMonadContext =
+    normalizedChain === "monad" ||
+    router?.pathname?.includes("/trade/monad") ||
+    isMonadProtocol;
+
+  let protocolColor: string;
+  let tokenIcon: string;
+  let fillProtocolBadge: boolean;
+
+  if (isMonadContext) {
+    const protocolBranding = getProtocolBranding(protocolSource || undefined);
+    protocolColor = MONAD_BRAND.color;
+    tokenIcon = protocolBranding.iconUrl || MONAD_BRAND.icon;
+    fillProtocolBadge = protocolBranding.isFullCircle;
+  } else {
+    protocolColor = resolveProtocolColor(token, columnType);
+    tokenIcon = resolveProtocolIcon(token);
+    fillProtocolBadge = shouldFillProtocolBadge(token);
+  }
 
   // token image (ipfs/http)
   const rawImg =

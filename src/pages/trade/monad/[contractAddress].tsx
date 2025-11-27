@@ -150,10 +150,26 @@ export default function MonadTradePage() {
               // Backend returns { status: "success", count: N, data: [...] }
               const rawTokens = result.data || (Array.isArray(result) ? result : []);
               // Transform backend response: map 'address' to 'mint' for frontend compatibility
-              const tokens = rawTokens.map((t: any) => ({
-                ...t,
-                mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
-              }));
+              const tokens = rawTokens.map((t: any) => {
+                const normalizedPrice =
+                  typeof t.usd_price === 'number' ? t.usd_price :
+                  typeof t.price_usd === 'number' ? t.price_usd :
+                  typeof t.priceUsd === 'number' ? t.priceUsd :
+                  0;
+                const normalizedMarketCap =
+                  typeof t.market_cap_usd === 'number' ? t.market_cap_usd :
+                  typeof t.marketCapUSD === 'number' ? t.marketCapUSD :
+                  typeof t.fully_diluted_value === 'number' ? t.fully_diluted_value :
+                  0;
+                return {
+                  ...t,
+                  mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+                  usd_price: t.usd_price ?? t.price_usd ?? t.priceUsd ?? normalizedPrice,
+                  price_usd: t.price_usd ?? t.usd_price ?? t.priceUsd ?? normalizedPrice,
+                  market_cap_usd: t.market_cap_usd ?? t.marketCapUSD ?? normalizedMarketCap,
+                  fully_diluted_value: t.fully_diluted_value ?? t.market_cap_usd ?? t.marketCapUSD ?? normalizedMarketCap,
+                };
+              });
               const token = tokens.find(
                 (t: any) => t.mint === contractAddress || t.pair_address === contractAddress || t.address === contractAddress
               );
@@ -216,16 +232,28 @@ export default function MonadTradePage() {
   // Merges live WebSocket metrics when available for real-time updates
   const displayToken = React.useMemo(() => {
     const live = liveMetrics || wsMetrics;
+    const tokenPriceUsd = (tokenData as any)?.usd_price ?? (tokenData as any)?.price_usd ?? (tokenData as any)?.priceUsd ?? 0;
+    const tokenMarketCap =
+      (tokenData as any)?.market_cap_usd ??
+      (tokenData as any)?.marketCapUSD ??
+      (tokenData as any)?.fully_diluted_value ??
+      0;
+    const tokenSupply =
+      (tokenData as any)?.total_supply ??
+      (tokenData as any)?.supply ??
+      1_000_000_000;
 
     if (!tokenData) return optimisticToken ? {
       mint: contractAddress as string,
       name: optimisticToken.name,
       symbol: optimisticToken.symbol,
       usd_price: live?.price_usd ?? optimisticToken.price_usd ?? 0,
+      price_usd: live?.price_usd ?? optimisticToken.price_usd ?? 0,
       market_cap_usd: live?.market_cap_usd ?? optimisticToken.market_cap_usd ?? 0,
       pair_address: contractAddress as string,
       logo: optimisticToken.image || "",
       decimals: 18,
+      total_supply: 1_000_000_000,
       creator_address: null,
       dev_address: null,
       owner: null,
@@ -245,13 +273,14 @@ export default function MonadTradePage() {
       name: tokenData.name,
       symbol: tokenData.symbol,
       // Price: prefer live metrics, fallback to fetched data
-      usd_price: live?.price_usd ?? tokenData.usd_price,
-      price_usd: live?.price_usd ?? tokenData.usd_price,
-      market_cap_usd: live?.market_cap_usd ?? tokenData.market_cap_usd ?? tokenData.fully_diluted_value,
-      fully_diluted_value: live?.market_cap_usd ?? tokenData.fully_diluted_value,
+      usd_price: live?.price_usd ?? tokenPriceUsd,
+      price_usd: live?.price_usd ?? tokenPriceUsd,
+      market_cap_usd: live?.market_cap_usd ?? tokenMarketCap,
+      fully_diluted_value: live?.market_cap_usd ?? tokenData.fully_diluted_value ?? tokenMarketCap,
       pair_address: tokenData.pair_address || tokenData.mint || (contractAddress as string),
       logo: tokenData.image_url || "",
       decimals: tokenData.decimals || 18,
+      total_supply: tokenSupply,
       created_at: tokenData.created_at || tokenData.launch_time || null,
       // Live metrics (real-time via WebSocket, fallback to HTTP API data)
       liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
