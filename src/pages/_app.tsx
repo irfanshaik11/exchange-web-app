@@ -105,25 +105,45 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     }
   }, true); // Use capture phase to intercept early
 }
+
 function TurnkeySessionBridge() {
   const { authState, session, user } = useTurnkey();
   const { refreshUser } = useUser();
   const router = useRouter();
+
   const hasProcessedRef = useRef(false);
   const pendingRefreshRef = useRef(false);
   const hasUpdatedEmail = useRef(false);
-  console.log("TurnkeySessionBridge authState:", authState, "session:", session, "user:", user);
-  // Reset processed flag if user signs out of Turnkey
+
+  console.log(
+    "TurnkeySessionBridge authState:",
+    authState,
+    "session:",
+    session,
+    "user:",
+    user
+  );
+
+  // Reset flags when user signs out / authState changes away from Authenticated
   useEffect(() => {
     if (authState !== AuthState.Authenticated) {
       hasProcessedRef.current = false;
+      pendingRefreshRef.current = false;
+      hasUpdatedEmail.current = false;
     }
   }, [authState]);
 
+  // 1) When Turnkey session is fully ready, link it to your backend (create app JWT)
   useEffect(() => {
-    // Only act once when Turnkey says the user is signed in
+    // Only act when Turnkey says the user is signed in
     if (authState !== AuthState.Authenticated) return;
-    if (!session?.token || !session?.organizationId || !session?.userId) return;
+
+    // Make sure Turnkey session is fully hydrated
+    if (!session?.token || !session?.organizationId || !session?.userId) {
+      return;
+    }
+
+    // Prevent duplicate processing
     if (hasProcessedRef.current) return;
     hasProcessedRef.current = true;
 
@@ -132,76 +152,97 @@ function TurnkeySessionBridge() {
         const data = await turnkeyLogin({
           turnkeySessionToken: session.token,
           organizationId: session.organizationId,
-          userId: session.userId
+          userId: session.userId,
         });
 
         console.log("Turnkey login response data:", data);
 
         // Backend should respond with your normal app JWT
-        const appToken = data.token || (data as any)?.fetchedUserToken;
-        if (appToken) {
-          Cookies.set('token', appToken, { expires: 7, path: '/' });
-          // Only call refreshUser after Turnkey has provided a user object
-          pendingRefreshRef.current = true;
-          if (user?.userEmail || user?.userName) {
-            await refreshUser();
-            pendingRefreshRef.current = false;
-          }
-
-          router.push('/'); // or '/dashboard' if you prefer
-        } else {
-          console.error('Turnkey login failed: no token in response');
+        const appToken = (data as any)?.token || (data as any)?.fetchedUserToken;
+        if (!appToken) {
+          console.error("Turnkey login failed: no token in response");
           hasProcessedRef.current = false;
+          return;
         }
-      } catch (err) {
-        console.error('Error linking Turnkey session to app user', err);
-        if ((err as any)?.message) {
-          showEnhancedToast('error', (err as any).message);
+
+        Cookies.set("token", appToken, { expires: 7, path: "/" });
+
+        // Mark that once user info is ready we should refresh our app user
+        pendingRefreshRef.current = true;
+        if (user?.userEmail || user?.userName) {
+          await refreshUser();
+          pendingRefreshRef.current = false;
+        }
+
+        // redirect to your main app page
+        router.push("/");
+      } catch (err: any) {
+        console.error("Error linking Turnkey session to app user", err);
+        if (err?.message) {
+          showEnhancedToast("error", err.message);
         } else {
-          showEnhancedToast('error', 'Could not create a session from Turnkey login.');
+          showEnhancedToast(
+            "error",
+            "Could not create a session from Turnkey login."
+          );
         }
         hasProcessedRef.current = false;
       }
     })();
-  }, [authState, session?.token, session?.organizationId, session?.userId, refreshUser, router, user?.userEmail, user?.userName]);
+  }, [
+    authState,
+    session?.token,
+    session?.organizationId,
+    session?.userId,
+    refreshUser,
+    router,
+    user?.userEmail,
+    user?.userName,
+  ]);
 
+  // 2) If we set pendingRefreshRef before we had user details, refresh once they arrive
   useEffect(() => {
     if (!pendingRefreshRef.current) return;
+
     if (!user?.userEmail && !user?.userName) return;
+
     const token = Cookies.get("token");
     if (!token) {
       pendingRefreshRef.current = false;
       return;
     }
+
     refreshUser().finally(() => {
       pendingRefreshRef.current = false;
     });
   }, [user?.userEmail, user?.userName, refreshUser]);
 
+  // 3) Once we have Turnkey email + app token, sync email to backend (one-shot)
   useEffect(() => {
+    if (authState !== AuthState.Authenticated) return;
+
     const email = user?.userEmail;
+    
     const userId = session?.userId;
     const token = Cookies.get("token");
 
-    if (authState !== AuthState.Authenticated) return;
     if (!email || !userId || !token) return;
     if (hasUpdatedEmail.current) return;
 
     hasUpdatedEmail.current = true;
 
-    fetch("/api/users/user", {
+    fetch("/api/users/updateDetails", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ userId, email }),
+      body: JSON.stringify({ userId, email}),
     }).catch((e) => console.error("Failed to update email:", e));
   }, [authState, session?.userId, user?.userEmail]);
 
   return null;
 }
-
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
