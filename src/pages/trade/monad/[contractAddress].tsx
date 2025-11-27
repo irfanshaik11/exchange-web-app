@@ -315,13 +315,15 @@ export default function MonadTradePage() {
     ? `${tokenNameForTitle} | Monad Trade`
     : "Monad Trade";
 
-  // OHLC params based on token age
+  // OHLC params - Monad uses 1s as default for real-time granularity
+  // TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
   const getOHLCParams = useComponentCache(
     "ohlc-params-monad",
     [tokenData, displayToken],
     () => {
       const createdAt = tokenData?.created_at || tokenData?.launch_time;
-      if (!createdAt) return { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+      // Default to 1s interval for Monad for real-time trading view
+      if (!createdAt) return { interval: "1s" as const, timeframe: "1h" as const, optimize: false };
 
       let timestamp = createdAt as any;
       if (typeof createdAt === "number" && createdAt < 10000000000) timestamp = createdAt * 1000;
@@ -331,20 +333,21 @@ export default function MonadTradePage() {
       const ageInHours = diffMs / (1000 * 60 * 60);
       const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-      if (ageInHours < 1) return { interval: "1m", timeframe: "1h", optimize: false } as const;
-      if (ageInHours < 6) return { interval: "1h", timeframe: "4h", optimize: false } as const;
-      if (ageInDays < 1) return { interval: "1h", timeframe: "24h", optimize: false } as const;
-      if (ageInDays < 7) return { interval: "1h", timeframe: "7d", optimize: false } as const;
-      if (ageInDays < 30) return { interval: "1h", timeframe: "30d", optimize: false } as const;
-      if (ageInDays < 90) return { interval: "1d", timeframe: "90d", optimize: true } as const;
-      if (ageInDays < 180) return { interval: "1d", timeframe: "180d", optimize: true } as const;
+      // Use 1s candles for recent tokens, scale up as token ages
+      if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
+      if (ageInHours < 6) return { interval: "1s", timeframe: "4h", optimize: false } as const;
+      if (ageInDays < 1) return { interval: "1m", timeframe: "24h", optimize: false } as const;
+      if (ageInDays < 7) return { interval: "5m", timeframe: "7d", optimize: false } as const;
+      if (ageInDays < 30) return { interval: "15m", timeframe: "30d", optimize: false } as const;
+      if (ageInDays < 90) return { interval: "1h", timeframe: "90d", optimize: true } as const;
+      if (ageInDays < 180) return { interval: "4h", timeframe: "180d", optimize: true } as const;
       if (ageInDays < 365) return { interval: "1d", timeframe: "365d", optimize: true } as const;
-      return { interval: "7d", timeframe: "365d", optimize: true } as const;
+      return { interval: "1d", timeframe: "365d", optimize: true } as const;
     }
   );
 
   const ohlcParams = getOHLCParams;
-  const defaultOHLCParams = { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+  const defaultOHLCParams = { interval: "1s" as const, timeframe: "1h" as const, optimize: false };
   const currentOHLCParams = React.useMemo(
     () => ohlcParams || defaultOHLCParams,
     [ohlcParams?.interval, ohlcParams?.timeframe, ohlcParams?.optimize]
@@ -563,6 +566,7 @@ export default function MonadTradePage() {
               >
                 {pairAddress && pairAddress.length >= 20 ? (
                   <AdvancedOHLCChart
+                    key={`monad-chart-${pairAddress}`} // Force remount when token changes during client-side navigation
                     mint={typeof _mint === "string" ? _mint : displayToken?.mint}
                     pairAddress={pairAddress}
                     interval={currentOHLCParams.interval}
