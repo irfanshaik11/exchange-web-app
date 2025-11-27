@@ -16,6 +16,7 @@ export const env = createEnv({
     X_CLIENT_SECRET: z.string().optional(),
     X_REDIRECT_URI: z.string().url().optional(),
     MONAD_RPC_URL: z.string().url().optional(),
+    MONAD_TOKEN_SERVICE_URL: z.string().url().optional(),
   },
 
   /**
@@ -61,6 +62,7 @@ export const env = createEnv({
     X_CLIENT_SECRET: process.env.X_CLIENT_SECRET,
     X_REDIRECT_URI: process.env.X_REDIRECT_URI,
     MONAD_RPC_URL: process.env.MONAD_RPC_URL,
+    MONAD_TOKEN_SERVICE_URL: process.env.MONAD_TOKEN_SERVICE_URL,
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
     NEXT_PUBLIC_GO_SERVICE_URL: process.env.NEXT_PUBLIC_GO_SERVICE_URL,
     NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL: process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL,

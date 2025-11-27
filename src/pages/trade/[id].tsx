@@ -71,7 +71,10 @@ type ReusedTokenLite = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint, chain } = router.query;
+
+  // Determine network from chain parameter (defaults to 'solana')
+  const network = chain === 'monad' ? 'monad' : 'solana';
 
   const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload();
 
@@ -214,7 +217,7 @@ export default function TradePage() {
       const diffMs = Date.now() - createdDate.getTime();
       const ageInHours = diffMs / (1000 * 60 * 60);
       const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
+      // if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
       if (ageInHours < 1) return { interval: "1m", timeframe: "1h", optimize: false } as const;
       if (ageInHours < 6) return { interval: "1h", timeframe: "4h", optimize: false } as const;
       if (ageInDays < 1) return { interval: "1h", timeframe: "24h", optimize: false } as const;
@@ -600,6 +603,7 @@ export default function TradePage() {
                     tokenSymbol={displayToken?.symbol || null}
                     tokenName={displayToken?.name || null}
                     tokenDecimals={typeof displayToken?.decimals === 'number' ? displayToken.decimals : null}
+                    network={network}
                   />
                   // <BackendOHLCChart
                   //   key={`chart-${resolvedPairAddress || _mint}`}

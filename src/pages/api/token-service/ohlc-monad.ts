@@ -29,10 +29,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const monadServiceUrl = process.env.MONAD_TOKEN_SERVICE_URL!;
+    // Use server-side env var first, fall back to NEXT_PUBLIC_ for local dev
+    const monadServiceUrl = process.env.MONAD_TOKEN_SERVICE_URL || 
+                            process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL;
 
-    // Map the interval to Monad's supported intervals (5m, 1h, 6h, 24h)
-    const mappedInterval = INTERVAL_MAP[interval as string] || '5m';
+    if (!monadServiceUrl) {
+      console.error('Monad OHLC API error: MONAD_TOKEN_SERVICE_URL is not configured');
+      return res.status(503).json({
+        error: 'Service unavailable',
+        details: 'Monad token service URL is not configured'
+      });
+    }
+
+    // Map the interval to Monad's supported intervals
+    const mappedInterval = INTERVAL_MAP[interval as string] || '1s';
 
     const params = new URLSearchParams({
       token_address: token_address,
@@ -42,19 +52,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (timeframe) params.append('timeframe', timeframe as string);
     if (limit) params.append('limit', limit as string);
 
-    const response = await fetch(`${monadServiceUrl}/v1/ohlc?${params.toString()}`, {
+    const fetchUrl = `${monadServiceUrl}/v1/ohlc?${params.toString()}`;
+    console.log(`[Monad OHLC] Fetching: ${fetchUrl}`);
+
+    const response = await fetch(fetchUrl, {
       signal: AbortSignal.timeout(10000),
+      headers: {
+        'Accept': 'application/json',
+      },
     });
 
     if (!response.ok) {
-      throw new Error(`Monad service responded with ${response.status}`);
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error(`[Monad OHLC] Service error: ${response.status} - ${errorText}`);
+      throw new Error(`Monad service responded with ${response.status}: ${errorText}`);
     }
 
     const monadData = await response.json();
+    console.log(`[Monad OHLC] Received ${monadData.count || 0} candles for ${token_address}`);
 
     // Transform Monad format to chart format
-    // Monad returns: { time, open, high, low, close, volume_usd }
-    // Chart expects: { unix_time, o, h, l, c, v_usd }
+    // Monad returns: { status, count, interval, data: [{ time, open, high, low, close, volume_usd, ... }] }
+    // Chart expects: { success, data: { items: [{ unix_time, o, h, l, c, v_usd }] } }
     const transformedData = (monadData.data || []).map((candle: any) => ({
       unix_time: candle.time,
       o: candle.open,
@@ -65,7 +84,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }));
 
     // Return in format expected by AdvancedOHLCChart: { success, data: { items } }
-    res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=10');
+    res.setHeader('Cache-Control', 'public, max-age=1, stale-while-revalidate=5');
     res.status(200).json({
       success: true,
       data: {
