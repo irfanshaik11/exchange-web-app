@@ -586,7 +586,6 @@ export default function TradePage() {
               >
                 {canStartOHLC || (typeof resolvedPairAddress === "string" && resolvedPairAddress.length >= 32) ? (
                   <AdvancedOHLCChart
-                    key={`chart-${resolvedPairAddress || _mint}`}
                     mint={typeof _mint === "string" ? _mint : undefined}
                     pairAddress={resolvedPairAddress}
                     interval={currentOHLCParams.interval}

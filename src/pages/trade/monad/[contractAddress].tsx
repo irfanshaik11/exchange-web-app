@@ -563,7 +563,6 @@ export default function MonadTradePage() {
               >
                 {pairAddress && pairAddress.length >= 20 ? (
                   <AdvancedOHLCChart
-                    key={`chart-monad-${contractAddress}`}
                     mint={typeof _mint === "string" ? _mint : displayToken?.mint}
                     pairAddress={pairAddress}
                     interval={currentOHLCParams.interval}
