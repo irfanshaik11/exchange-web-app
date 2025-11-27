@@ -203,6 +203,32 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const [retryCount, setRetryCount] = useState(0);
 
   const selectedInterval = VALID_INTERVALS.includes(interval) ? interval : '1m';
+  const [initialTokenId, setInitialTokenId] = useState<string | null>(() => (mint || pairAddress) ?? null);
+  const latestParamsRef = useRef({
+    mint,
+    pairAddress,
+    interval: selectedInterval,
+    timeframe,
+    optimize,
+    network,
+  });
+
+  useEffect(() => {
+    if (!initialTokenId && (mint || pairAddress)) {
+      setInitialTokenId((mint || pairAddress) ?? null);
+    }
+  }, [initialTokenId, mint, pairAddress]);
+
+  useEffect(() => {
+    latestParamsRef.current = {
+      mint,
+      pairAddress,
+      interval: VALID_INTERVALS.includes(interval) ? interval : '1m',
+      timeframe,
+      optimize,
+      network,
+    };
+  }, [mint, pairAddress, interval, timeframe, optimize, network]);
 
   // Refs for data management (same as BackendOHLCChart)
   const lastGoodCandlesRef = useRef<BackendOHLCData[]>(preloadedData || []);
@@ -279,38 +305,47 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   // Build URL for OHLC data (same as BackendOHLCChart)
   // Allow override of interval for when TradingView requests a different resolution
-  const buildUrl = (overrideInterval?: BackendInterval) => {
-    // Use different endpoints for Monad vs Solana
-    if (network === 'monad') {
-      // Monad: Use Next.js API proxy to avoid CORS issues
-      const url = new URL('/api/token-service/ohlc-monad', window.location.origin);
-      const tokenAddress = mint || pairAddress;
-      if (tokenAddress) url.searchParams.set('token_address', tokenAddress);
-      url.searchParams.set('interval', overrideInterval || selectedInterval);
-      url.searchParams.set('timeframe', timeframe);
-      if (optimize) url.searchParams.set('optimize', 'true');
-      return url;
-    } else {
-      // Solana (default): Use /v1/trade/ohlc-data endpoint with mint/pair_address
+  const buildUrl = useCallback(
+    (overrideInterval?: BackendInterval) => {
+      const { network: currentNetwork, mint: currentMint, pairAddress: currentPairAddress, interval: currentInterval, timeframe: currentTimeframe, optimize: currentOptimize } =
+        latestParamsRef.current;
+
+      const effectiveInterval = overrideInterval || currentInterval;
+
+      if (currentNetwork === 'monad') {
+        if (typeof window === 'undefined') {
+          throw new Error('Cannot build Monad OHLC URL on the server');
+        }
+        const url = new URL('/api/token-service/ohlc-monad', window.location.origin);
+        const tokenAddress = currentMint || currentPairAddress;
+        if (tokenAddress) url.searchParams.set('token_address', tokenAddress);
+        url.searchParams.set('interval', effectiveInterval);
+        url.searchParams.set('timeframe', currentTimeframe);
+        if (currentOptimize) url.searchParams.set('optimize', 'true');
+        return url;
+      }
+
       const url = new URL(`${BACKEND_URL}/v1/trade/ohlc-data`);
-      if (mint) url.searchParams.set('mint', mint);
-      if (pairAddress) url.searchParams.set('pair_address', pairAddress);
-      url.searchParams.set('interval', overrideInterval || selectedInterval);
-      url.searchParams.set('timeframe', timeframe);
-      if (optimize) url.searchParams.set('optimize', 'true');
+      if (currentMint) url.searchParams.set('mint', currentMint);
+      if (currentPairAddress) url.searchParams.set('pair_address', currentPairAddress);
+      url.searchParams.set('interval', effectiveInterval);
+      url.searchParams.set('timeframe', currentTimeframe);
+      if (currentOptimize) url.searchParams.set('optimize', 'true');
       return url;
-    }
-  };
+    },
+    []
+  );
 
   // Fetch candles function (EXACT same logic as BackendOHLCChart)
   const fetchCandles = useCallback(async () => {
-    if (!mint && !pairAddress) {
+    const { mint: currentMint, pairAddress: currentPairAddress } = latestParamsRef.current;
+
+    if (!currentMint && !currentPairAddress) {
       setError('No mint or pair address provided');
       setIsLoading(false);
       return;
     }
 
-    // AGGRESSIVELY skip fetching if we have preloaded data
     if (preloadedData && preloadedData.length > 0) {
       console.log('[AdvancedOHLCChart] BLOCKING fetch - preloaded data available:', preloadedData.length, 'candles');
       setIsLoading(false);
@@ -318,7 +353,6 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       return;
     }
 
-    // Skip if we've already made an initial request
     if (hasInitializedRef.current && firstLoadRef.current) {
       console.log('[AdvancedOHLCChart] Skipping fetch - already initialized');
       return;
@@ -326,19 +360,17 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
     const url = buildUrl();
     const key = url.toString();
-    
-    // Prevent concurrent requests with the same key
+
     if (inFlightRef.current === key) {
       console.log('[AdvancedOHLCChart] Request already in flight for:', key);
       return;
     }
-    
+
     console.log('[AdvancedOHLCChart] Starting fetch for:', key);
     inFlightRef.current = key;
 
     const now = Date.now();
     const since = now - lastFetchAtRef.current;
-    // Skip throttling for initial load to maximize speed
     if (!firstLoadRef.current && since < 1000) {
       await new Promise(r => setTimeout(r, 1000 - since));
     }
@@ -351,7 +383,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         headers: { accept: 'application/json', 'X-API-Key': process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key' },
       });
       let body: any = null;
-      try { body = await r.clone().json(); } catch {}
+      try {
+        body = await r.clone().json();
+      } catch {}
       if (!r.ok) throw new Error(body?.message || body?.error || `${r.status} ${r.statusText}`);
       if (!body?.success) throw new Error(body?.message || body?.error || 'API returned unsuccessful response');
       console.log('[AdvancedOHLCChart] Received OHLC data:', body?.data?.items?.length || 0, 'candles');
@@ -385,8 +419,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       hasInitializedRef.current = true;
       inFlightRef.current = null;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mint, pairAddress, selectedInterval, timeframe, optimize, onDataUpdate, preloadedData]);
+  }, [buildUrl, onDataUpdate, preloadedData]);
 
   // Load TradingView library
   useEffect(() => {
@@ -574,11 +607,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   // Create custom datafeed that uses our fetched candles
   const createDatafeed = useCallback(() => {
-    if (!mint && !pairAddress) {
+    const { mint: dfMint, pairAddress: dfPairAddress, interval: dfInterval } = latestParamsRef.current;
+
+    if (!dfMint && !dfPairAddress) {
       return null;
     }
 
-    const resolution = INTERVAL_TO_RESOLUTION[selectedInterval];
+    const resolution = INTERVAL_TO_RESOLUTION[dfInterval];
 
     // Create a custom datafeed that implements TradingView's datafeed interface
     const computeTradeDisplayValues = (trade: any) => {
@@ -700,7 +735,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
         const symbolInfo = {
           name: symbolName,
-          description: `${mint || pairAddress || 'Token'} Price Chart`,
+          description: `${dfMint || dfPairAddress || 'Token'} Price Chart`,
           type: 'crypto',
           session: '24x7',
           timezone: 'Etc/UTC',
@@ -751,11 +786,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           // Convert TradingView resolution to our interval format
           // When user clicks timeframe buttons (like "1d"), TradingView passes resolution="1D"
           // We need to use that resolution, not the component's interval prop
-          const requestedInterval = RESOLUTION_TO_INTERVAL[resolution] || selectedInterval;
+          const requestedInterval = RESOLUTION_TO_INTERVAL[resolution] || dfInterval;
           console.log('[AdvancedOHLCChart] Resolution conversion:', {
             tradingViewResolution: resolution,
             convertedInterval: requestedInterval,
-            fallbackInterval: selectedInterval,
+            fallbackInterval: dfInterval,
           });
 
           // ALWAYS fetch from OUR endpoint (same as BackendOHLCChart)
@@ -1345,7 +1380,53 @@ Maker: ${walletAddress}`;
 
     datafeedRef.current = customDatafeed;
     return customDatafeed;
-  }, [mint, pairAddress, selectedInterval, timeframe, optimize, onDataUpdate]);
+  }, [buildUrl, onDataUpdate]);
+
+  const syncWidgetWithParams = useCallback(() => {
+    const widget = widgetRef.current;
+    if (!widget) return;
+
+    const params = latestParamsRef.current;
+    const tokenId = params.mint || params.pairAddress;
+    if (!tokenId) return;
+
+    const nextResolution = INTERVAL_TO_RESOLUTION[params.interval];
+
+    const applyUpdate = () => {
+      try {
+        const chart = widget.chart?.();
+        if (!chart) return;
+
+        if (widgetTokenRef.current !== tokenId) {
+          widget.setSymbol(tokenId, nextResolution, () => {
+            widgetTokenRef.current = tokenId;
+            chart.resetData?.();
+          });
+          return;
+        }
+
+        chart.setResolution(nextResolution, () => {
+          chart.resetData?.();
+        });
+      } catch (error) {
+        console.error('[AdvancedOHLCChart] Failed to sync widget with params', error);
+      }
+    };
+
+    try {
+      const chart = widget.chart?.();
+      if (chart) {
+        applyUpdate();
+        return;
+      }
+    } catch (err) {
+      console.error('[AdvancedOHLCChart] Chart not ready for sync yet', err);
+    }
+
+    widget.onChartReady?.(() => {
+      applyUpdate();
+    });
+  }, []);
 
   // Note: Dev trade markers are now handled by TradingView's native marks system
   // via the getMarks() method in the datafeed. No manual marker creation needed.
@@ -1355,39 +1436,14 @@ Maker: ${walletAddress}`;
   const widgetTokenRef = useRef<string | null>(null);
   
   useEffect(() => {
-    if (!libraryLoaded || !containerRef.current) return;
-    
-    // Determine the token identifier (use mint if available, otherwise pairAddress)
-    const tokenId = mint || pairAddress;
-    if (!tokenId) return;
+    if (!libraryLoaded || !containerRef.current || !initialTokenId) return;
 
     const container = containerRef.current;
     let disposed = false;
 
     const setup = async () => {
       await waitForVisibleContainer(container);
-      if (disposed) return;
-      
-      // If widget already exists for this token, don't recreate
-      // The datafeed will handle pairAddress updates via its closure
-      if (widgetRef.current && widgetTokenRef.current === tokenId) {
-        console.log('[AdvancedOHLCChart] Widget already exists for token, datafeed will handle updates');
-        return;
-      }
-      
-      // If widget exists but for a different token, remove it first
-      if (widgetRef.current && widgetTokenRef.current !== tokenId) {
-        console.log('[AdvancedOHLCChart] Token changed, removing old widget');
-        try {
-          widgetRef.current.remove();
-        } catch (e) {
-          console.error('[AdvancedOHLCChart] Error removing old widget:', e);
-        }
-        widgetRef.current = null;
-        if (container) {
-          container.innerHTML = '';
-        }
-      }
+      if (disposed || widgetRef.current) return;
 
       const datafeed = createDatafeed();
       if (!datafeed) {
@@ -1397,7 +1453,6 @@ Maker: ${walletAddress}`;
       }
 
       try {
-        // Get TradingView widget from global scope
         const TradingView = (window as any).TradingView;
         console.log('[AdvancedOHLCChart] Attempting to create widget...', {
           hasTradingView: !!TradingView,
@@ -1412,20 +1467,20 @@ Maker: ${walletAddress}`;
           throw new Error('TradingView.widget not found - library may not be fully loaded');
         }
 
-        // Use actual container dimensions only for logging
         const containerWidth = container.clientWidth || 800;
         const containerHeight = container.clientHeight || 400;
-        
+
         console.log('[AdvancedOHLCChart] Initializing widget with container size:', containerWidth, 'x', containerHeight);
-        
+
+        const initialInterval = INTERVAL_TO_RESOLUTION[latestParamsRef.current.interval];
         console.log('[AdvancedOHLCChart] Creating TradingView widget with datafeed...');
         const widget = new TradingView.widget({
-          debug: true, // Enable debug to see what's happening
+          debug: true,
           fullscreen: false,
-          symbol: `${mint || pairAddress || 'TOKEN'}`,
+          symbol: `${initialTokenId}`,
           datafeed: datafeed,
-          interval: INTERVAL_TO_RESOLUTION[selectedInterval],
-          container: container, // ✅ Pass HTMLElement, not string ID
+          interval: initialInterval,
+          container: container,
           library_path: '/charting_library/charting_library/',
           locale: 'en',
           autosize: true, // ✅ Let TV size to the container
@@ -1524,7 +1579,7 @@ Maker: ${walletAddress}`;
         });
 
         widgetRef.current = widget;
-        widgetTokenRef.current = tokenId; // Track which token this widget is for
+        widgetTokenRef.current = initialTokenId;
         setIsLoading(false);
         setError(null);
 
@@ -1595,6 +1650,7 @@ Maker: ${walletAddress}`;
           } catch (e) {
             console.error('[AdvancedOHLCChart] Error in onChartReady callback:', e);
           }
+          syncWidgetWithParams();
         });
       } catch (error: any) {
         console.error('[AdvancedOHLCChart] Failed to initialize widget:', error);
@@ -1607,10 +1663,23 @@ Maker: ${walletAddress}`;
 
     return () => {
       disposed = true;
-      // Only cleanup on unmount or when switching tokens (handled in setup)
-      // Don't cleanup when pairAddress just refines
+      if (widgetRef.current) {
+        try {
+          widgetRef.current.remove?.();
+        } catch (e) {
+          console.error('[AdvancedOHLCChart] Error removing widget on cleanup', e);
+        }
+        widgetRef.current = null;
+        widgetTokenRef.current = null;
+      }
     };
-  }, [libraryLoaded, mint, pairAddress, selectedInterval, timeframe, optimize, createDatafeed]);
+  }, [libraryLoaded, createDatafeed, initialTokenId, syncWidgetWithParams]);
+
+  useEffect(() => {
+    if (!libraryLoaded) return;
+    if (!widgetRef.current) return;
+    syncWidgetWithParams();
+  }, [libraryLoaded, syncWidgetWithParams, mint, pairAddress, selectedInterval, timeframe, optimize, network]);
 
   // Force widget to load data on initialization if we have preloaded data
   useEffect(() => {
