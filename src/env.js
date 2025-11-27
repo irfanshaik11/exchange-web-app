@@ -43,6 +43,7 @@ export const env = createEnv({
       .optional(),
     NEXT_PUBLIC_DEFAULT_REFERRAL_CODE: z.string().optional(),
     NEXT_PUBLIC_MONAD_RPC_URL: z.string().url().optional(),
+    NEXT_PUBLIC_ONRAMPER_API_KEY: z.string(),
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
   },
 
@@ -75,6 +76,7 @@ export const env = createEnv({
 		NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS: process.env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS,
     NEXT_PUBLIC_DEFAULT_REFERRAL_CODE: process.env.NEXT_PUBLIC_DEFAULT_REFERRAL_CODE,
     NEXT_PUBLIC_MONAD_RPC_URL: process.env.NEXT_PUBLIC_MONAD_RPC_URL,
+    NEXT_PUBLIC_ONRAMPER_API_KEY: process.env.NEXT_PUBLIC_ONRAMPER_API_KEY,
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },
   /**
