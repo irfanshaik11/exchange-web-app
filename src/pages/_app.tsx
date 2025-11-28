@@ -277,47 +277,6 @@ function TurnkeySessionBridge() {
     user?.userName,
   ]);
 
-  // 2) If we set pendingRefreshRef before we had user details, refresh once they arrive
-  useEffect(() => {
-    if (!pendingRefreshRef.current) return;
-
-    if (!user?.userEmail && !user?.userName) return;
-
-    const token = Cookies.get("token");
-    if (!token) {
-      pendingRefreshRef.current = false;
-      return;
-    }
-
-    refreshUser().finally(() => {
-      pendingRefreshRef.current = false;
-    });
-  }, [user?.userEmail, user?.userName, refreshUser]);
-
-  // 3) Once we have Turnkey email + app token, sync email to backend (one-shot)
-  useEffect(() => {
-    if (authState !== AuthState.Authenticated) return;
-
-    const email = user?.userEmail;
-    
-    const userId = session?.userId;
-    const token = Cookies.get("token");
-
-    if (!email || !userId || !token) return;
-    if (hasUpdatedEmail.current) return;
-
-    hasUpdatedEmail.current = true;
-
-    fetch("/api/users/updateDetails", {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ userId, email}),
-    }).catch((e) => console.error("Failed to update email:", e));
-  }, [authState, session?.userId, user?.userEmail]);
-
   return null;
 }
 

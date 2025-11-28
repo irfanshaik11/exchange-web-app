@@ -176,7 +176,7 @@ const WithdrawModal: React.FC<WithdrawModalProps> = ({ isOpen, onClose }) => {
       toast.success("Withdrawal complete!");
       
       // Refresh balance after successful withdrawal
-      refreshBalance();
+      refreshBalance({ force: true });
       
       // Don't close modal - show success message and history button
       

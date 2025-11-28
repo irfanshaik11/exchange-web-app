@@ -35,6 +35,7 @@ interface UserContextType {
   refreshBalance: (opts?: {
     chain?: string;
     address?: string;
+    force?: boolean;
   }) => Promise<{ balance: number; usdBalance: number } | null>;
   setUser: (user: UserInfo | null) => void;
   logout: () => void;
@@ -82,8 +83,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [chainBalances, setChainBalances] = useState<Record<string, number>>({
     sol: 0,
   });
+  const chainBalancesRef = useRef<Record<string, number>>({ sol: 0 });
+  const solUsdBalanceRef = useRef(0);
+  const solBalanceRef = useRef(0);
+  const lastNotifiedBalanceRef = useRef<Record<string, number>>({});
+  const lastBalanceFetchRef = useRef<Record<string, number>>({});
   const balanceCheckInProgressRef = useRef<Record<string, boolean>>({});
   const hasSyncedProfileRef = useRef(false);
+  const BALANCE_REFRESH_COOLDOWN_MS = 20000; // prevent hammering the balance endpoint
 
   const persistUser = useCallback((value: UserInfo | null) => {
     if (typeof window === "undefined") return;
@@ -107,6 +114,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return () =>
       window.removeEventListener("wallets-updated", handleWalletsUpdated);
   }, []);
+
+  useEffect(() => {
+    chainBalancesRef.current = chainBalances;
+  }, [chainBalances]);
+
+  useEffect(() => {
+    solUsdBalanceRef.current = usdcBalance;
+  }, [usdcBalance]);
+
+  useEffect(() => {
+    solBalanceRef.current = solBalance;
+  }, [solBalance]);
+
+  useEffect(() => {
+    lastNotifiedBalanceRef.current = lastNotifiedBalance;
+  }, [lastNotifiedBalance]);
 
   useEffect(() => {
     const deriveWalletsFromTurnkey = () => {
@@ -204,7 +227,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const refreshBalance = useCallback(
     async (
-      options?: { chain?: string; address?: string }
+      options?: { chain?: string; address?: string; force?: boolean }
     ): Promise<{ balance: number; usdBalance: number } | null> => {
       const chain = options?.chain || "sol";
       const overrideAddress = options?.address;
@@ -217,14 +240,29 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       if (!targetAddress) return null;
 
-      // Prevent multiple simultaneous balance checks for the same address
       const checkKey = `${chain}:${targetAddress}`;
+
+      if (!options?.force) {
+        const lastFetch = lastBalanceFetchRef.current[checkKey];
+        if (lastFetch && Date.now() - lastFetch < BALANCE_REFRESH_COOLDOWN_MS) {
+          const cachedBalance = chainBalancesRef.current[chain];
+          const cachedUsdBalance =
+            chain === "sol" ? solUsdBalanceRef.current : 0;
+          if (typeof cachedBalance === "number") {
+            return { balance: cachedBalance, usdBalance: cachedUsdBalance };
+          }
+          return null;
+        }
+      }
+
+      // Prevent multiple simultaneous balance checks for the same address
       if (balanceCheckInProgressRef.current[checkKey]) {
         console.log(`⏸️ Balance check already in progress for ${checkKey}`);
         return null;
       }
 
       balanceCheckInProgressRef.current[checkKey] = true;
+      lastBalanceFetchRef.current[checkKey] = Date.now();
 
       try {
         const response = await fetch(
@@ -259,10 +297,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }));
 
         if (chain === "sol") {
-          const lastNotified = lastNotifiedBalance[targetAddress] ?? newBalance;
+          const lastNotified =
+            lastNotifiedBalanceRef.current[targetAddress] ?? newBalance;
 
           console.log(
-            `Balance check for ${targetAddress}: current=${solBalance.toFixed(
+            `Balance check for ${targetAddress}: current=${solBalanceRef.current.toFixed(
               4
             )}, new=${newBalance.toFixed(
               4
@@ -345,6 +384,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         return null;
       } finally {
         delete balanceCheckInProgressRef.current[checkKey];
+        lastBalanceFetchRef.current[checkKey] = Date.now();
       }
     },
     [
@@ -352,8 +392,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       primaryWalletAddresses.ethereum,
       user?.publicKey,
       notificationsEnabled,
-      solBalance,
-      lastNotifiedBalance,
     ]
   );
 
@@ -578,6 +616,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       let intervalId: NodeJS.Timeout;
       const timeoutId = setTimeout(() => {
         intervalId = setInterval(() => {
+          if (typeof document !== "undefined" && document.hidden) {
+            return;
+          }
           const address = primaryWalletAddresses.solana || user.publicKey;
           if (!address) return;
           refreshBalance({ chain: "sol", address });

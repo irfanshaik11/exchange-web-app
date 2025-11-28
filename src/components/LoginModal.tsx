@@ -10,7 +10,7 @@ import { useWallet } from "./useWallet";
 import { usePhantomWallet } from '../hooks/usePhantomWallet';
 import { useMetaMaskWallet } from '../hooks/useMetaMaskWallet';
 import { useTurnkey, ClientState, AuthState } from '@turnkey/react-wallet-kit';
-import { GoogleOAuthProvider, GoogleLogin, CredentialResponse } from '@react-oauth/google';
+import { GoogleOAuthProvider, GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 
