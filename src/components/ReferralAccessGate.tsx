@@ -313,7 +313,7 @@ export function ReferralAccessGate({
     if (!requireReferralAccess) return;
     if (userLoading || !user) return;
     // Only check once per user session
-    if (status === "granted" || status === "checking" || status === "validated") return;
+    if (status === "granted" || status === "checking") return;
     let cancelled = false;
     (async () => {
       try {

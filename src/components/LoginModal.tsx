@@ -195,7 +195,6 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       }
 
       await turnkey.loginWithOauth({
-        providerName: 'google',
         oidcToken: resp.credential,
         publicKey,
       });
