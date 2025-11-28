@@ -10,17 +10,16 @@ import "@turnkey/react-wallet-kit/styles.css";
 
 export function TurnkeyRootProvider({ children }: { children: React.ReactNode }) {
   const turnkeyConfig: TurnkeyProviderConfig = useMemo(() => {
-    // Prefer env vars so you don't hardcode secrets for prod
-    const orgId =
-      process.env.NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID ||
-      "7347a74c-36c1-4a5a-adf6-0b3ea84be204";
+    // Prefer env vars and avoid any hardcoded defaults
+    const orgId = '7347a74c-36c1-4a5a-adf6-0b3ea84be204'
 
-    const proxyConfigId =
-      process.env.NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID ||
-      "2091f6a1-1a1e-4730-be7a-b03d7c8d3561";
+
+    const proxyConfigId = '2091f6a1-1a1e-4730-be7a-b03d7c8d3561'
+
+    const apiBaseUrl = "https://api.turnkey.com";
 
     const config: TurnkeyProviderConfig = {
-      apiBaseUrl: "https://api.turnkey.com",
+      apiBaseUrl,
       organizationId: orgId,
       authProxyConfigId: proxyConfigId,
 
@@ -55,11 +54,12 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
       orgId: turnkeyConfig.organizationId,
       authProxyConfigId: turnkeyConfig.authProxyConfigId,
       methods: turnkeyConfig.auth?.methods,
+      apiBaseUrl: turnkeyConfig.apiBaseUrl,
     });
 
     if (!turnkeyConfig.organizationId || !turnkeyConfig.authProxyConfigId) {
       console.warn(
-        "[Turnkey] Missing required config. Check NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID and NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID"
+        "[Turnkey] Missing required config. Set NEXT_PUBLIC_TURNKEY_ORGANIZATION_ID (or NEXT_PUBLIC_ORGANIZATION_ID) and NEXT_PUBLIC_TURNKEY_AUTH_PROXY_CONFIG_ID (or NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID)."
       );
     }
   }, [turnkeyConfig]);

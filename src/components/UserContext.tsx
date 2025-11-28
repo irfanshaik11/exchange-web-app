@@ -488,32 +488,45 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, [setUser, turnkeyUser?.userEmail, turnkeyUser?.userName, session?.userId]);
 
   const logout = () => {
-    // Clear Turnkey auth/session so authState flips to unauthenticated
-    (async () => {
+    const doLogout = async () => {
+      if (typeof window !== "undefined") {
+        (window as any).__turnkeyLoggingOut = true;
+      }
+
       try {
+        const sessionKey = (turnkey as any)?.session?.sessionKey;
+        if (turnkey?.clearSession && sessionKey) {
+          await turnkey.clearSession({ sessionKey });
+        } else {
+          await turnkey?.clearAllSessions?.();
+        }
         await turnkey?.logout?.();
-        await turnkey?.clearAllSessions?.();
       } catch (err) {
         console.warn("[logout] Failed to clear Turnkey session", err);
+      } finally {
+        if (typeof window !== "undefined") {
+          delete (window as any).__turnkeyLoggingOut;
+        }
       }
-    })();
 
-    Cookies.remove("token");
-    setUser(null);
-    setPrimaryWalletAddresses({ solana: null, ethereum: null });
-    setSolBalance(0);
-    setUsdcBalance(0);
-    setLastNotifiedBalance({});
-    balanceCheckInProgressRef.current = {};
-    if (typeof window !== "undefined") {
-      clearStoredReferralAccess();
-      window.dispatchEvent(new Event("referral-access-reset"));
-    }
+      Cookies.remove("token");
+      setUser(null);
+      setPrimaryWalletAddresses({ solana: null, ethereum: null });
+      setSolBalance(0);
+      setUsdcBalance(0);
+      setLastNotifiedBalance({});
+      balanceCheckInProgressRef.current = {};
+      if (typeof window !== "undefined") {
+        clearStoredReferralAccess();
+        window.dispatchEvent(new Event("referral-access-reset"));
+      }
 
-    // Route back to login entry point
-    router.push("/login").catch((err) =>
-      console.warn("[logout] Failed to navigate to login", err)
-    );
+      router.push("/login").catch((err) =>
+        console.warn("[logout] Failed to navigate to login", err)
+      );
+    };
+
+    void doLogout();
   };
 
   useEffect(() => {
