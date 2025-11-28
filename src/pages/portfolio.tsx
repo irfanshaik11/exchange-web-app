@@ -1005,6 +1005,10 @@ export default function PortfolioPage() {
     setRenamingWalletId(null);
   };
 
+  const handleExportWallet = (walletId: string) => {
+    router.push(`/turnkey/export?walletId=${encodeURIComponent(walletId)}`);
+  };
+
   const handleRenameWallet = async () => {
     if (!editingWalletId || !user?.bearerToken) {
       toast.error("Please log in first");
@@ -2098,7 +2102,13 @@ export default function PortfolioPage() {
 
                               {/* Actions */}
                               <div className="text-center">
-                                <span className="text-xs text-[#9CA3AF]">-</span>
+                                <button
+                                  className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                                  onClick={() => handleExportWallet(wallet.id)}
+                                  title="Export wallet"
+                                >
+                                  Export wallet
+                                </button>
                               </div>
                             </div>
                           </div>
