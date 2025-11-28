@@ -1,11 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { extractTokenImage } from '~/utils/images';
-import { Pool } from 'pg';
 
-// Connect to Monad indexer database
-const pool = new Pool({
-  connectionString: process.env.MONAD_DB_URL || 'postgresql://postgres:postgres@localhost:5432/monad_db?sslmode=disable',
-});
+// Fetch with timeout helper
+const fetchWithTimeout = async (url: string, timeoutMs = 10000) => {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const resp = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+      signal: ctrl.signal as any,
+    });
+    return resp;
+  } finally {
+    clearTimeout(t);
+  }
+};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set appropriate cache headers
@@ -20,95 +29,97 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const limit = parseInt(req.query.limit as string) || 50;
+    // Build query parameters
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(req.query)) {
+      if (Array.isArray(v)) v.forEach((x) => params.append(k, x));
+      else if (v !== undefined) params.append(k, String(v));
+    }
+    if (!params.get('limit')) params.set('limit', '200');
 
-    // Query Monad database for NEW status tokens
-    const result = await pool.query(`
-      SELECT
-        address,
-        name,
-        symbol,
-        decimals,
-        status,
-        launchpad_protocol,
-        price_usd,
-        price_monad as price_mon,
-        market_cap_usd,
-        volume_24h_usd,
-        volume_5m_usd,
-        volume_1h_usd,
-        volume_6h_usd,
-        total_transactions,
-        total_buys,
-        total_sells,
-        unique_traders,
-        graduation_percent,
-        is_graduated,
-        image_url,
-        created_at,
-        updated_at,
-        COALESCE(recent_trades, '[]'::jsonb) as recent_trades
-      FROM monad_tokens
-      WHERE status = 'NEW'
-      ORDER BY created_at DESC
-      LIMIT $1
-    `, [limit]);
-
-    const tokens = result.rows || [];
+    // Option 1: Try Monad token service if configured
+    const monadServiceUrl = process.env.MONAD_TOKEN_SERVICE_URL || process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL;
     
-    // Map Monad token service format to expected frontend format
-    // Only map fields that the database actually returns
-    const mapped = Array.isArray(tokens) ? tokens.map((r: any) => {
-      const toNumber = (value: any): number => {
-        if (typeof value === 'number') {
-          return Number.isFinite(value) ? value : 0;
-        }
-        if (typeof value === 'string') {
-          const cleaned = value.trim();
-          if (!cleaned) return 0;
-          const parsed = Number(cleaned);
-          return Number.isFinite(parsed) ? parsed : 0;
-        }
-        return 0;
-      };
+    // Option 2: Use exchange-token-service backend's Birdeye endpoint for Monad
+    const goServiceUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
+    
+    let fetchUrl: string | null = null;
+    let source = '';
 
-      // Only use fields that exist in the database response
-      return {
-        mint: r.address || null,
-        pair_address: r.address || null,
-        name: r.name || '',
-        symbol: r.symbol || '',
-        usd_price: toNumber(r.price_usd),
-        fully_diluted_value: toNumber(r.market_cap_usd),
-        volume_24h: toNumber(r.volume_24h_usd),
-        volume_5m: toNumber(r.volume_5m_usd) || 0,
-        volume_1h: toNumber(r.volume_1h_usd) || 0,
-        volume_6h: toNumber(r.volume_6h_usd) || 0,
-        created_at: r.created_at || null,
-        launch_time: r.created_at || null,
-        launchpad_protocol: r.launchpad_protocol || null,
-        image_url: r.image_url || null,
-        status: r.status || 'NEW',
-        decimals: r.decimals || 18,
-        total_transactions: toNumber(r.total_transactions) || 0,
-        total_buys: toNumber(r.total_buys) || 0,
-        total_sells: toNumber(r.total_sells) || 0,
-        unique_traders: toNumber(r.unique_traders) || 0,
-        is_graduated: r.is_graduated || false,
-        updated_at: r.updated_at || null,
-        creator_wallet: r.creator_wallet || null,
-        creator_address: r.creator_wallet || null, // Alias for consistency
-        graduation_percent: toNumber(r.graduation_percent),
-        bonding_curve_progress: toNumber(r.graduation_percent), // Alias for frontend
-        recent_trades: r.recent_trades || [],
-      };
-    }) : [];
+    // Prefer Monad token service if configured, otherwise use exchange-token-service Birdeye endpoint
+    if (monadServiceUrl) {
+      fetchUrl = `${monadServiceUrl}/v1/pulse/new?${params.toString()}`;
+      source = 'monad-service';
+      console.log('[pulse-new-monad] Attempting Monad token service:', fetchUrl);
+    } else if (goServiceUrl) {
+      // Use exchange-token-service backend's Birdeye endpoint for Monad
+      fetchUrl = `${goServiceUrl}/v1/pulse/new/monad?${params.toString()}`;
+      source = 'exchange-service-birdeye';
+      console.log('[pulse-new-monad] Using exchange-token-service Birdeye endpoint:', fetchUrl);
+    } else {
+      throw new Error('Neither MONAD_TOKEN_SERVICE_URL nor NEXT_PUBLIC_GO_SERVICE_URL is configured');
+    }
+
+    // Fetch data
+    const upstream = await fetchWithTimeout(fetchUrl, 10000);
+    const text = await upstream.text();
+
+    if (!upstream.ok) {
+      console.error(`[pulse-new-monad] ${source} error:`, upstream.status, text.substring(0, 200));
+      
+      // If Monad service failed and we have exchange-service as fallback, try it
+      if (source === 'monad-service' && goServiceUrl) {
+        console.log('[pulse-new-monad] Monad service failed, trying exchange-service Birdeye endpoint as fallback');
+        const fallbackUrl = `${goServiceUrl}/v1/pulse/new/monad?${params.toString()}`;
+        const fallbackResp = await fetchWithTimeout(fallbackUrl, 10000);
+        const fallbackText = await fallbackResp.text();
+        
+        if (!fallbackResp.ok) {
+          throw new Error(`Both Monad service (${upstream.status}) and exchange-service (${fallbackResp.status}) failed`);
+        }
+        
+        const fallbackData = JSON.parse(fallbackText);
+        // Handle Birdeye format response
+        const data = fallbackData?.data?.tokens || fallbackData?.data || fallbackData;
+        res.setHeader('X-Cache', 'MISS');
+        res.setHeader('X-Source', 'exchange-service-birdeye-fallback');
+        return res.json(data);
+      }
+      
+      throw new Error(`Upstream error from ${source}: ${upstream.status} - ${text.substring(0, 100)}`);
+    }
+
+    const response = JSON.parse(text);
+    
+    // Handle different response formats:
+    // 1. Direct array
+    // 2. { status, count, data: [...] }
+    // 3. Birdeye format: { data: { tokens: [...] } }
+    let data;
+    if (Array.isArray(response)) {
+      data = response;
+    } else if (response?.data) {
+      if (Array.isArray(response.data)) {
+        data = response.data;
+      } else if (response.data?.tokens && Array.isArray(response.data.tokens)) {
+        data = response.data.tokens;
+      } else {
+        data = response;
+      }
+    } else {
+      data = response;
+    }
 
     res.setHeader('X-Cache', 'MISS');
-    return res.json(mapped);
+    res.setHeader('X-Source', source);
+    return res.json(data);
   } catch (err: any) {
-    console.error('[pulse-new-monad] Error fetching data:', err);
-    res.status(502).json({ error: 'Bad gateway to Monad token service' });
+    console.error('[pulse-new-monad] Error fetching data:', err.message || err);
+    const errorMessage = err.message || 'Bad gateway to Monad token service';
+    res.status(502).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 }
 

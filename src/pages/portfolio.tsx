@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import Header from "../components/Header";
@@ -15,6 +15,7 @@ import {
 } from "~/utils/functions";
 import { formatSmartNumber } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
+import type { UnifiedTokenMetadata } from "~/utils/tokenMetadata";
 import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
 import toast from "react-hot-toast";
@@ -84,11 +85,7 @@ const SolIcon = () => <ChainIcon chain="sol" />;
 const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity"];
 
 // Token metadata cache interface
-interface TokenMetadataCache {
-  imageUrl?: string;
-  protocol?: string;
-  name?: string;
-  symbol?: string;
+interface TokenMetadataCache extends UnifiedTokenMetadata {
   timestamp: number; // When it was cached
 }
 
@@ -195,6 +192,7 @@ export default function PortfolioPage() {
   // Shared token metadata cache across all tabs
   const [tokenMetadataCache, setTokenMetadataCache] =
     useState<Record<string, TokenMetadataCache>>({});
+  const tokenMetadataCacheRef = useRef<Record<string, TokenMetadataCache>>({});
 
   // Load cache from localStorage on mount
   useEffect(() => {
@@ -212,6 +210,7 @@ export default function PortfolioPage() {
         });
         if (Object.keys(validCache).length > 0) {
           setTokenMetadataCache(validCache);
+          tokenMetadataCacheRef.current = validCache;
           console.log(
             `📦 Loaded ${Object.keys(validCache).length} cached tokens from localStorage`,
           );
@@ -221,6 +220,10 @@ export default function PortfolioPage() {
       console.error("Error loading token cache:", error);
     }
   }, []);
+
+  useEffect(() => {
+    tokenMetadataCacheRef.current = tokenMetadataCache;
+  }, [tokenMetadataCache]);
 
   // Save cache to localStorage when it changes (debounced)
   useEffect(() => {
@@ -239,25 +242,94 @@ export default function PortfolioPage() {
   }, [tokenMetadataCache]);
 
   // Helper function to update cache
-  const updateTokenMetadataCache = (
-    tokenAddress: string,
-    metadata: Omit<TokenMetadataCache, "timestamp">,
-  ) => {
-    setTokenMetadataCache((prev) => ({
-      ...prev,
-      [tokenAddress]: {
-        ...metadata,
-        timestamp: Date.now(),
-      },
-    }));
-  };
+  const updateTokenMetadataCache = useCallback(
+    (
+      tokenAddress: string,
+      metadata: Omit<TokenMetadataCache, "timestamp">,
+    ) => {
+      setTokenMetadataCache((prev) => ({
+        ...prev,
+        [tokenAddress]: {
+          ...metadata,
+          timestamp: Date.now(),
+        },
+      }));
+    },
+    [],
+  );
 
   // Helper function to check if cache entry is valid
-  const isCacheValid = (tokenAddress: string): boolean => {
-    const cached = tokenMetadataCache[tokenAddress];
+  const isCacheValid = useCallback((tokenAddress: string): boolean => {
+    const cached = tokenMetadataCacheRef.current[tokenAddress];
     if (!cached) return false;
     return Date.now() - cached.timestamp < CACHE_TTL;
+  }, []);
+
+  const normalizeBlockchainValue = (value?: string | null) => {
+    if (!value) return "solana";
+    const normalized = value.toLowerCase();
+    if (normalized === "sol") return "solana";
+    return normalized;
   };
+
+  const isTradeOnCurrentChain = useCallback(
+    (trade: TradeRow) => {
+      const normalized = normalizeBlockchainValue(trade.blockchain);
+      if (currentChain === "monad") {
+        return normalized === "monad";
+      }
+      // Default to Solana for undefined/other values
+      return normalized === "solana";
+    },
+    [currentChain],
+  );
+
+  const fallbackPositions = useMemo(() => {
+    const map: Record<string, PositionRow> = {};
+
+    tradeHistory.forEach((trade) => {
+      const tokenKey = trade.tokenAddress?.toLowerCase();
+      if (!tokenKey) return;
+
+      if (!map[tokenKey]) {
+        map[tokenKey] = {
+          tokenAddress: trade.tokenAddress,
+          pairAddress: trade.originalPairAddress || trade.pairAddress,
+          bought: 0,
+          boughtUsdValue: 0,
+          sold: 0,
+          soldUsdValue: 0,
+          remaining: 0,
+          remainingUsdValue: 0,
+          pnl: 0,
+          pnlPercentage: 0,
+          actions: "sell",
+          blockchain: trade.blockchain,
+          launchpad: trade.launchpad || null,
+        };
+      }
+
+      const entry = map[tokenKey];
+      const tokenAmount = Number(trade.tokenAmount) || 0;
+      const usdValue = Number(trade.usdValue) || 0;
+
+      if (trade.type === "Buy") {
+        entry.bought += tokenAmount;
+        entry.boughtUsdValue += usdValue;
+      } else if (trade.type === "Sell") {
+        entry.sold += tokenAmount;
+        entry.soldUsdValue += usdValue;
+      }
+
+      entry.remaining = entry.bought - entry.sold;
+      entry.remainingUsdValue = entry.boughtUsdValue - entry.soldUsdValue;
+      entry.pnl = entry.soldUsdValue + entry.remainingUsdValue - entry.boughtUsdValue;
+      entry.pnlPercentage =
+        entry.boughtUsdValue > 0 ? (entry.pnl / entry.boughtUsdValue) * 100 : 0;
+    });
+
+    return map;
+  }, [tradeHistory]);
 
   // Fetch SOL price using Pyth Network
   useEffect(() => {
@@ -316,7 +388,10 @@ export default function PortfolioPage() {
           // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
           const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
           const history = await getTradeHistoryByUser(user.id, blockchain);
-          setTradeHistory(history);
+          const filteredHistory = Array.isArray(history)
+            ? history.filter(isTradeOnCurrentChain)
+            : [];
+          setTradeHistory(filteredHistory);
         } catch (error) {
           console.error("Failed to fetch trade history:", error);
           setTradeHistory([]);
@@ -327,7 +402,7 @@ export default function PortfolioPage() {
     };
 
     fetchTradeHistory();
-  }, [user?.id, currentChain]);
+  }, [user?.id, currentChain, isTradeOnCurrentChain]);
 
   // Fetch trade activity only when on Activity tab (index 2 after History commented out)
   useEffect(() => {
@@ -343,8 +418,11 @@ export default function PortfolioPage() {
           // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
           const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
           const activity = await getTradeActivityByUser(user.id, blockchain);
+          const filteredActivity = Array.isArray(activity)
+            ? activity.filter(isTradeOnCurrentChain)
+            : [];
           // Reverse array so newest trades appear at the top
-          setTradeActivity([...activity].reverse());
+          setTradeActivity(filteredActivity.reverse());
         } catch (error) {
           console.error("Failed to fetch trade activity:", error);
           setTradeActivity([]);
@@ -367,7 +445,7 @@ export default function PortfolioPage() {
 
       return () => clearInterval(intervalId);
     }
-  }, [user?.id, activeSpotTab, currentChain]);
+  }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain]);
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -1689,6 +1767,7 @@ export default function PortfolioPage() {
                         tokenMetadataCache={tokenMetadataCache}
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}
+                        fallbackPositions={fallbackPositions}
                       />
                     ))}
                   {/* History tab commented out */}
@@ -1732,6 +1811,7 @@ export default function PortfolioPage() {
                         tokenMetadataCache={tokenMetadataCache}
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}
+                        fallbackPositions={fallbackPositions}
                       />
                     ))}
                   {activeSpotTab === 2 &&

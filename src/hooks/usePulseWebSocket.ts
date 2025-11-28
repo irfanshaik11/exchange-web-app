@@ -174,7 +174,12 @@ export function usePulseWebSocket(
               const message: WebSocketMessage = JSON.parse(msgStr);
 
               if (message.type === 'new_token' && message.data && !Array.isArray(message.data)) {
-                const token = message.data as PulseToken;
+                // Transform backend response: map 'address' to 'mint' for frontend compatibility
+                const rawToken = message.data as any;
+                const token: PulseToken = {
+                  ...rawToken,
+                  mint: rawToken.address || rawToken.mint,  // Backend uses 'address', frontend expects 'mint'
+                };
 
                 // Use flushSync to combine callback + state update in one synchronous render
                 // This ensures tokens appear instantly without any delay
@@ -196,7 +201,12 @@ export function usePulseWebSocket(
                   });
                 });
               } else if (message.type === 'final_stretch_token' && message.data && !Array.isArray(message.data)) {
-                const token = message.data as PulseToken;
+                // Transform backend response: map 'address' to 'mint' for frontend compatibility
+                const rawToken = message.data as any;
+                const token: PulseToken = {
+                  ...rawToken,
+                  mint: rawToken.address || rawToken.mint,  // Backend uses 'address', frontend expects 'mint'
+                };
 
                 flushSync(() => {
                   onFinalStretchTokenRef.current?.(token);
@@ -213,7 +223,12 @@ export function usePulseWebSocket(
                   });
                 });
               } else if (message.type === 'migrated_token' && message.data && !Array.isArray(message.data)) {
-                const token = message.data as PulseToken;
+                // Transform backend response: map 'address' to 'mint' for frontend compatibility
+                const rawToken = message.data as any;
+                const token: PulseToken = {
+                  ...rawToken,
+                  mint: rawToken.address || rawToken.mint,  // Backend uses 'address', frontend expects 'mint'
+                };
 
                 flushSync(() => {
                   onMigratedTokenRef.current?.(token);
@@ -232,7 +247,12 @@ export function usePulseWebSocket(
               } else if (message.type === 'price_update' && message.data) {
                 // Price updates can be batched, so don't use flushSync (less critical)
                 if (onPriceUpdateRef.current) {
-                  const updates = Array.isArray(message.data) ? message.data : [message.data];
+                  const rawUpdates = Array.isArray(message.data) ? message.data : [message.data];
+                  // Transform backend response: map 'address' to 'mint' for frontend compatibility
+                  const updates = rawUpdates.map((u: any) => ({
+                    ...u,
+                    mint: u.address || u.mint,  // Backend uses 'address', frontend expects 'mint'
+                  }));
                   onPriceUpdateRef.current(updates);
                 }
               }

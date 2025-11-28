@@ -253,8 +253,8 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
           // Fallback: try fetchTokenMetadata utility (only if Go service failed)
           if (!tokenName || tokenName === normalizedEvent.mint.slice(0, 8) + '...') {
             try {
-              const { fetchTokenMetadata } = await import('~/utils/tokenMetadata');
-              const meta = await fetchTokenMetadata(normalizedEvent.mint);
+              const { fetchChainTokenMetadata } = await import('~/utils/tokenMetadata');
+              const meta = await fetchChainTokenMetadata(normalizedEvent.mint);
               if (meta?.symbol || meta?.name) {
                 tokenName = meta.symbol || meta.name;
                 // Update the event object

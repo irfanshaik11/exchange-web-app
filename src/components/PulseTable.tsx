@@ -6725,7 +6725,7 @@ function PulseTable({
                              ); */
                                 })()}
                               </div>
-                              <div style={{ color: AX.muted }}>
+                              <div style={{ color: AX.muted }} className="flex flex-row gap-1">
                                 <span className="text-xs">V:</span>{" "}
                                 <span
                                   className="number-font text-xs"
@@ -7164,7 +7164,7 @@ function PulseTable({
                         return null;
                       })()}
                     </div>
-                    <div className="flex flex-row items-center gap-1">
+                    <div className="flex flex-row items-center gap-1 overflow-x-scroll max-w-full">
                       <BottomCardInfoHolder
                         PassedIcon={FaRegUser}
                         value={0.2}

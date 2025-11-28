@@ -18,9 +18,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL!;
+  // Set defaults if not provided
+  if (!params.get('sort_by')) params.set('sort_by', 'volume24hUSD');
+  if (!params.get('sort_type')) params.set('sort_type', 'asc');
+  if (!params.get('offset')) params.set('offset', '0');
+  if (!params.get('limit')) params.set('limit', '20');
+  if (!params.get('ui_amount_mode')) params.set('ui_amount_mode', 'scaled');
+  // Default chain to 'sol' if not provided (will be normalized to 'solana' in backend)
+  if (!params.get('chain')) params.set('chain', 'sol');
 
-  const fetchWithTimeout = async (url: string, timeoutMs = 5000) => {
+  const goBase = process.env.NEXT_PUBLIC_GO_SERVICE_URL || 'http://localhost:8080';
+
+  const fetchWithTimeout = async (url: string, timeoutMs = 10000) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -48,23 +57,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   try {
-    const goURL = `${goBase}/v1/search?${params.toString()}`;
-    console.log('[Proxy:search] Using Go service search endpoint:', goURL);
-    const upstream = await fetchWithTimeout(goURL, 5000);
+    const goURL = `${goBase}/v1/tokens/trending/birdeye?${params.toString()}`;
+    console.log('[Proxy:birdeye-trending] Using Go service Birdeye trending endpoint:', goURL);
+    const upstream = await fetchWithTimeout(goURL, 10000);
     
     if (upstream.ok) {
       return await tryParseAndSend(upstream);
     } else {
-      console.error('[Proxy:search] Go service returned error:', upstream.status);
-      return res.status(upstream.status).json({ error: 'Go service error' });
+      // Get the error message from the upstream response
+      const errorText = await upstream.text();
+      console.error('[Proxy:birdeye-trending] Go service returned error:', upstream.status, errorText);
+      try {
+        const errorData = JSON.parse(errorText);
+        return res.status(upstream.status).json(errorData);
+      } catch {
+        return res.status(upstream.status).json({ error: errorText || 'Go service error' });
+      }
     }
   } catch (err: any) {
-    console.error('[Proxy:search] Go service fetch failed:', err?.message || err);
+    console.error('[Proxy:birdeye-trending] Go service fetch failed:', err?.message || err);
     return res.status(502).json({ error: 'Bad gateway to Go token service' });
   }
 }
-
-
-
-
 

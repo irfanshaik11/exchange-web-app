@@ -119,14 +119,42 @@ export default function TableRow({
         </div>
       </td>
 
-      {/* TXNS */}
+      {/* TXNS / Rank */}
       <td className="px-3 py-2">
-        <div className="font-medium text-white">
-          {formatSmartNumber(((token as any)[`total_buys_${selectedTimeframe}`] || 0) + ((token as any)[`total_sells_${selectedTimeframe}`] || 0))}
-        </div>
-        <div className="text-sm text-neutral-400">
-          {formatSmartNumber((token as any)[`unique_wallets_${selectedTimeframe}`] || token.unique_wallets_24h || 0)} buyers
-        </div>
+        {(() => {
+          // For Birdeye tokens, show rank and volume change % instead of txns
+          const birdeyeRank = (token as any).birdeye_rank || (token as any).rank;
+          const volumeChangePercent = (token as any).volume24hChangePercent;
+          
+          if (birdeyeRank && birdeyeRank > 0) {
+            // Show Birdeye rank and volume change %
+            return (
+              <>
+                <div className="font-medium text-white">
+                  #{birdeyeRank}
+                </div>
+                {volumeChangePercent != null && (
+                  <div className={`text-sm ${volumeChangePercent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {formatPercentChange(volumeChangePercent)}% vol
+                  </div>
+                )}
+              </>
+            );
+          }
+          
+          // Default: show transaction count (for non-Birdeye tokens)
+          const txCount = ((token as any)[`total_buys_${selectedTimeframe}`] || 0) + ((token as any)[`total_sells_${selectedTimeframe}`] || 0);
+          return (
+            <>
+              <div className="font-medium text-white">
+                {formatSmartNumber(txCount)}
+              </div>
+              <div className="text-sm text-neutral-400">
+                {formatSmartNumber((token as any)[`unique_wallets_${selectedTimeframe}`] || token.unique_wallets_24h || 0)} buyers
+              </div>
+            </>
+          );
+        })()}
       </td>
 
       {/* Audit Log */}

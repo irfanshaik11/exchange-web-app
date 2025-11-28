@@ -13,9 +13,10 @@ import { useQuickBuyQueryParams } from "../../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../../utils/queryParams";
 import { useComponentCache } from "../../../hooks/useComponentCache";
 import { useMonadTokenMetrics, type TokenMetrics } from "../../../hooks/useMonadTokenMetrics";
+// Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
+import AdvancedOHLCChart from "../../../components/AdvancedOHLCChart";
 
-// Lazy load components
-const AdvancedOHLCChart = dynamic(() => import("../../../components/AdvancedOHLCChart"), { ssr: false });
+// Lazy load other components
 const MonadTrades = dynamic(() => import("../../../components/trade/MonadTrades"), { ssr: false });
 
 /* ---------- AXIOM palette ---------- */
@@ -130,22 +131,48 @@ export default function MonadTradePage() {
       setError(null);
 
       try {
-        // Try to fetch from Monad token service
+        // Call Monad backend directly (bypasses proxy for Redis cache)
+        const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
         const endpoints = [
-          `/api/token-service/pulse-new-monad?limit=100`,
-          `/api/token-service/pulse-final-stretch-monad?limit=100`,
-          `/api/token-service/pulse-migrated-monad?limit=100`,
+          `${monadServiceUrl}/v1/pulse/new?limit=100`,
+          `${monadServiceUrl}/v1/pulse/final-stretch?limit=100`,
+          `${monadServiceUrl}/v1/pulse/migrated?limit=100`,
         ];
 
         let foundToken: MonadTokenData | null = null;
 
         for (const endpoint of endpoints) {
           try {
-            const response = await fetch(endpoint);
+            const response = await fetch(endpoint, {
+              headers: { 'Accept': 'application/json' }
+            });
             if (response.ok) {
-              const tokens = await response.json();
+              const result = await response.json();
+              // Backend returns { status: "success", count: N, data: [...] }
+              const rawTokens = result.data || (Array.isArray(result) ? result : []);
+              // Transform backend response: map 'address' to 'mint' for frontend compatibility
+              const tokens = rawTokens.map((t: any) => {
+                const normalizedPrice =
+                  typeof t.usd_price === 'number' ? t.usd_price :
+                  typeof t.price_usd === 'number' ? t.price_usd :
+                  typeof t.priceUsd === 'number' ? t.priceUsd :
+                  0;
+                const normalizedMarketCap =
+                  typeof t.market_cap_usd === 'number' ? t.market_cap_usd :
+                  typeof t.marketCapUSD === 'number' ? t.marketCapUSD :
+                  typeof t.fully_diluted_value === 'number' ? t.fully_diluted_value :
+                  0;
+                return {
+                  ...t,
+                  mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+                  usd_price: t.usd_price ?? t.price_usd ?? t.priceUsd ?? normalizedPrice,
+                  price_usd: t.price_usd ?? t.usd_price ?? t.priceUsd ?? normalizedPrice,
+                  market_cap_usd: t.market_cap_usd ?? t.marketCapUSD ?? normalizedMarketCap,
+                  fully_diluted_value: t.fully_diluted_value ?? t.market_cap_usd ?? t.marketCapUSD ?? normalizedMarketCap,
+                };
+              });
               const token = tokens.find(
-                (t: any) => t.mint === contractAddress || t.pair_address === contractAddress
+                (t: any) => t.mint === contractAddress || t.pair_address === contractAddress || t.address === contractAddress
               );
               if (token) {
                 foundToken = token;
@@ -206,16 +233,28 @@ export default function MonadTradePage() {
   // Merges live WebSocket metrics when available for real-time updates
   const displayToken = React.useMemo(() => {
     const live = liveMetrics || wsMetrics;
+    const tokenPriceUsd = (tokenData as any)?.usd_price ?? (tokenData as any)?.price_usd ?? (tokenData as any)?.priceUsd ?? 0;
+    const tokenMarketCap =
+      (tokenData as any)?.market_cap_usd ??
+      (tokenData as any)?.marketCapUSD ??
+      (tokenData as any)?.fully_diluted_value ??
+      0;
+    const tokenSupply =
+      (tokenData as any)?.total_supply ??
+      (tokenData as any)?.supply ??
+      1_000_000_000;
 
     if (!tokenData) return optimisticToken ? {
       mint: contractAddress as string,
       name: optimisticToken.name,
       symbol: optimisticToken.symbol,
       usd_price: live?.price_usd ?? optimisticToken.price_usd ?? 0,
+      price_usd: live?.price_usd ?? optimisticToken.price_usd ?? 0,
       market_cap_usd: live?.market_cap_usd ?? optimisticToken.market_cap_usd ?? 0,
       pair_address: contractAddress as string,
       logo: optimisticToken.image || "",
       decimals: 18,
+      total_supply: 1_000_000_000,
       creator_address: null,
       dev_address: null,
       owner: null,
@@ -235,13 +274,14 @@ export default function MonadTradePage() {
       name: tokenData.name,
       symbol: tokenData.symbol,
       // Price: prefer live metrics, fallback to fetched data
-      usd_price: live?.price_usd ?? tokenData.usd_price,
-      price_usd: live?.price_usd ?? tokenData.usd_price,
-      market_cap_usd: live?.market_cap_usd ?? tokenData.market_cap_usd ?? tokenData.fully_diluted_value,
-      fully_diluted_value: live?.market_cap_usd ?? tokenData.fully_diluted_value,
+      usd_price: live?.price_usd ?? tokenPriceUsd,
+      price_usd: live?.price_usd ?? tokenPriceUsd,
+      market_cap_usd: live?.market_cap_usd ?? tokenMarketCap,
+      fully_diluted_value: live?.market_cap_usd ?? tokenData.fully_diluted_value ?? tokenMarketCap,
       pair_address: tokenData.pair_address || tokenData.mint || (contractAddress as string),
       logo: tokenData.image_url || "",
       decimals: tokenData.decimals || 18,
+      total_supply: tokenSupply,
       created_at: tokenData.created_at || tokenData.launch_time || null,
       // Live metrics (real-time via WebSocket, fallback to HTTP API data)
       liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
@@ -275,13 +315,15 @@ export default function MonadTradePage() {
     ? `${tokenNameForTitle} | Monad Trade`
     : "Monad Trade";
 
-  // OHLC params based on token age
+  // OHLC params - Monad uses 1s as default for real-time granularity
+  // TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
   const getOHLCParams = useComponentCache(
     "ohlc-params-monad",
     [tokenData, displayToken],
     () => {
       const createdAt = tokenData?.created_at || tokenData?.launch_time;
-      if (!createdAt) return { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+      // Default to 1s interval for Monad for real-time trading view
+      if (!createdAt) return { interval: "1s" as const, timeframe: "1h" as const, optimize: false };
 
       let timestamp = createdAt as any;
       if (typeof createdAt === "number" && createdAt < 10000000000) timestamp = createdAt * 1000;
@@ -291,20 +333,21 @@ export default function MonadTradePage() {
       const ageInHours = diffMs / (1000 * 60 * 60);
       const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-      if (ageInHours < 1) return { interval: "1m", timeframe: "1h", optimize: false } as const;
-      if (ageInHours < 6) return { interval: "1h", timeframe: "4h", optimize: false } as const;
-      if (ageInDays < 1) return { interval: "1h", timeframe: "24h", optimize: false } as const;
-      if (ageInDays < 7) return { interval: "1h", timeframe: "7d", optimize: false } as const;
-      if (ageInDays < 30) return { interval: "1h", timeframe: "30d", optimize: false } as const;
-      if (ageInDays < 90) return { interval: "1d", timeframe: "90d", optimize: true } as const;
-      if (ageInDays < 180) return { interval: "1d", timeframe: "180d", optimize: true } as const;
+      // Use 1s candles for recent tokens, scale up as token ages
+      if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
+      if (ageInHours < 6) return { interval: "1s", timeframe: "4h", optimize: false } as const;
+      if (ageInDays < 1) return { interval: "1m", timeframe: "24h", optimize: false } as const;
+      if (ageInDays < 7) return { interval: "5m", timeframe: "7d", optimize: false } as const;
+      if (ageInDays < 30) return { interval: "15m", timeframe: "30d", optimize: false } as const;
+      if (ageInDays < 90) return { interval: "1h", timeframe: "90d", optimize: true } as const;
+      if (ageInDays < 180) return { interval: "4h", timeframe: "180d", optimize: true } as const;
       if (ageInDays < 365) return { interval: "1d", timeframe: "365d", optimize: true } as const;
-      return { interval: "7d", timeframe: "365d", optimize: true } as const;
+      return { interval: "1d", timeframe: "365d", optimize: true } as const;
     }
   );
 
   const ohlcParams = getOHLCParams;
-  const defaultOHLCParams = { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+  const defaultOHLCParams = { interval: "1s" as const, timeframe: "1h" as const, optimize: false };
   const currentOHLCParams = React.useMemo(
     () => ohlcParams || defaultOHLCParams,
     [ohlcParams?.interval, ohlcParams?.timeframe, ohlcParams?.optimize]
@@ -449,14 +492,18 @@ export default function MonadTradePage() {
     };
   }, [showMobileTradeModal, handleDragMove, handleDragEnd]);
 
-  const pairAddress = displayToken?.pair_address || (contractAddress as string);
+  // Memoize pairAddress to prevent unnecessary changes that cause component remounts
+  // Only recalculate when the actual pair_address changes, not on every displayToken update
+  const pairAddress = React.useMemo(() => {
+    return displayToken?.pair_address || (contractAddress as string);
+  }, [displayToken?.pair_address, contractAddress]);
 
   return (
     <>
       <Head><title>{pageTitle}</title></Head>
 
       <div
-        className="min-h-screen w-full flex flex-col"
+        className="h-screen w-full flex flex-col overflow-hidden"
         style={{
           backgroundColor: "#0f1012",
           color: AX.text,
@@ -466,14 +513,14 @@ export default function MonadTradePage() {
         <Header search={search} setSearch={setSearch} />
 
         {loading && !displayToken && (
-          <div className="text-center text-xs px-2 py-1.5"
+          <div className="text-center text-xs px-2 py-1.5 flex-shrink-0"
                style={{ color: AX.text, backgroundColor: "#2A2414", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}>
             Loading Monad token data…
           </div>
         )}
 
         <div
-          className="flex flex-1 w-full max-w-full overflow-hidden"
+          className="flex flex-1 w-full max-w-full overflow-hidden min-h-0"
           style={{
             minHeight: 0,
             flex: '1 1 auto',
@@ -519,7 +566,7 @@ export default function MonadTradePage() {
               >
                 {pairAddress && pairAddress.length >= 20 ? (
                   <AdvancedOHLCChart
-                    key={`chart-monad-${pairAddress}`}
+                    key={`monad-chart-${pairAddress}`} // Force remount when token changes during client-side navigation
                     mint={typeof _mint === "string" ? _mint : displayToken?.mint}
                     pairAddress={pairAddress}
                     interval={currentOHLCParams.interval}
@@ -593,9 +640,9 @@ export default function MonadTradePage() {
             </div>
 
             {/* BOTTOM pane (tabs + tables) */}
-            <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col overflow-y-auto">
+            <div id="tabs-pane" className="flex-1 flex flex-col overflow-hidden min-h-0">
               {/* Transactions Tab Header */}
-              <div className="flex gap-4 pt-2 px-3 text-xs items-center justify-between">
+              <div className="flex gap-4 pt-2 px-3 text-xs items-center justify-between flex-shrink-0">
                 <div className="flex gap-4 items-center">
                   <button
                     className="px-3 py-1 font-semibold border-b-4 border-[#70E0B0] text-white"
@@ -613,7 +660,7 @@ export default function MonadTradePage() {
                   <span>Instant Trade</span>
                 </button>
               </div>
-              <div className="flex-1 min-h-0 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingBottom: '2rem' }}>
                 {/* Live Trades */}
                 <MonadTrades
                   tokenAddress={pairAddress}

@@ -143,6 +143,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
 
   const [httpNew, setHttpNew] = useState<any[]>([]);
   const [httpNewTick, setHttpNewTick] = useState(0);
+  const [cachedNewPairs, setCachedNewPairs] = useState<any[]>([]);
   const [httpMigrated, setHttpMigrated] = useState<any[]>([]);
   const [httpMigratedTick, setHttpMigratedTick] = useState(0);
   const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
@@ -296,7 +297,6 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
     return !tokens.length && !launchpadData?.new?.length && !httpNew.length;
   }, [tokens.length, launchpadData?.new?.length, httpNew.length]);
   
-  const newPairsLoading = isLoading;
   
   const hasError = useMemo(() => {
     return launchpadError && !(launchpadData?.new?.length || 0) && !(launchpadData?.completing?.length || 0) && !(launchpadData?.completed?.length || 0);
@@ -513,14 +513,36 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   }, [marketData]);
 
   const enrichedNewPairsToShow = newPairsToShow;
+
+  useEffect(() => {
+    if (enrichedNewPairsToShow && enrichedNewPairsToShow.length > 0) {
+      setCachedNewPairs(enrichedNewPairsToShow);
+    }
+  }, [enrichedNewPairsToShow]);
+
+  useEffect(() => {
+    if (!isSolanaRoute) {
+      setCachedNewPairs([]);
+    }
+  }, [isSolanaRoute]);
+
+  const displayedNewPairs = useMemo(
+    () =>
+      enrichedNewPairsToShow && enrichedNewPairsToShow.length > 0
+        ? enrichedNewPairsToShow
+        : cachedNewPairs,
+    [enrichedNewPairsToShow, cachedNewPairs],
+  );
+
+  const newPairsLoading = isLoading && displayedNewPairs.length === 0;
   const enrichedFinalStretch = finalStretchToShow;
   const enrichedMigrated = migratedToShow;
 
   const { preloadImages } = useImagePreloader();
   
   useEffect(() => {
-    if (newPairsToShow && newPairsToShow.length > 0) {
-      const imageSources = newPairsToShow
+    if (displayedNewPairs && displayedNewPairs.length > 0) {
+      const imageSources = displayedNewPairs
         .slice(0, 20)
         .map((token: any) => extractTokenImage(token))
         .filter(Boolean);
@@ -528,14 +550,14 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
         preloadImages(imageSources, { priority: true, timeout: 2000 });
       }
     }
-  }, [newPairsToShow, preloadImages]);
+  }, [displayedNewPairs, preloadImages]);
 
   useEffect(() => {
     const syncCache = async () => {
       try {
-        if (!newPairsToShow.length && !finalStretchToShow.length && !migratedToShow.length) return;
+        if (!displayedNewPairs.length && !finalStretchToShow.length && !migratedToShow.length) return;
         await rollingTradeCache.syncWithPulseTokens(
-          newPairsToShow.slice(0, 30),
+          displayedNewPairs.slice(0, 30),
           finalStretchToShow.slice(0, 30),
           migratedToShow.slice(0, 30)
         );
@@ -544,7 +566,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       }
     };
     syncCache();
-  }, [newPairsToShow, finalStretchToShow, migratedToShow]);
+  }, [displayedNewPairs, finalStretchToShow, migratedToShow]);
 
   useEffect(() => {
     const fetchInitialMigratedTokens = async () => {
@@ -839,7 +861,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
                 {activeTab === 'new' && (
                   <PulseTable 
                     title="New Pairs" 
-                    tokens={enrichedNewPairsToShow as any} 
+                    tokens={displayedNewPairs as any} 
                     loading={newPairsLoading} 
                     isFirstOrLast="only" 
                     showBubbleMetrics={false} 
@@ -866,7 +888,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
             <div className={`${forceMobileView ? 'hidden' : 'hidden lg:flex'} flex-row w-full flex-1 min-h-0 overflow-hidden`}>
               <PulseTable 
                 title="New Pairs" 
-                tokens={enrichedNewPairsToShow as any} 
+                tokens={displayedNewPairs as any} 
                 loading={newPairsLoading} 
                 isFirstOrLast="first" 
                 showBubbleMetrics={false} 

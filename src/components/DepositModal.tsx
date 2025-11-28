@@ -7,11 +7,11 @@ import QRCode from "qrcode";
 import { useUser } from "./UserContext";
 import toast from "react-hot-toast";
 import { withdrawSOL, getWithdrawalHistory, getWithdrawalFee } from "~/utils/api";
+import { env } from "~/env";
 
-// Extend Window interface to include MoonPay and Jupiter
+// Extend Window interface to include Onramper and Jupiter
 declare global {
   interface Window {
-    MoonPayWebSdk?: any;
     Jupiter?: {
       init: (config: {
         displayMode: string;
@@ -101,7 +101,6 @@ const DepositModal: React.FC<DepositModalProps> = ({
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
-  const [moonPayLoaded, setMoonPayLoaded] = useState(false);
   const [jupiterLoaded, setJupiterLoaded] = useState(false);
   const [primaryWalletAddresses, setPrimaryWalletAddresses] = useState<{
     solana: string | null;
@@ -237,26 +236,8 @@ const DepositModal: React.FC<DepositModalProps> = ({
     }
   };
 
-  // Load MoonPay SDK
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !window.MoonPayWebSdk) {
-      const script = document.createElement('script');
-      script.src = 'https://static.moonpay.com/web-sdk/v1/moonpay-web-sdk.min.js';
-      script.async = true;
-      script.onload = () => {
-        setMoonPayLoaded(true);
-      };
-      document.body.appendChild(script);
-
-      return () => {
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-      };
-    } else if (window.MoonPayWebSdk) {
-      setMoonPayLoaded(true);
-    }
-  }, []);
+  // Onramper configuration
+  const ONRAMPER_API_KEY = env.NEXT_PUBLIC_ONRAMPER_API_KEY;
 
   // Load Jupiter Plugin SDK
   useEffect(() => {
@@ -633,8 +614,8 @@ const DepositModal: React.FC<DepositModalProps> = ({
     }
   };
 
-  // Function to show MoonPay widget
-  const showMoonPay = async () => {
+  // Function to show Onramper widget
+  const showOnramper = () => {
     if (!depositAddress) {
       toast.error(`Add a primary wallet before buying ${tokenSymbol}.`, {
         duration: 2000,
@@ -647,37 +628,35 @@ const DepositModal: React.FC<DepositModalProps> = ({
       return;
     }
 
-    if (!moonPayLoaded || !window.MoonPayWebSdk) {
-      toast.error("MoonPay is loading, please try again in a moment", {
-        duration: 2000,
-        style: {
-          background: '#1E1F26',
-          color: '#E6E7EA',
-          border: '1px solid #ff6b6b',
-        }
-      });
-      return;
-    }
-
     try {
-      const moonPaySdk = window.MoonPayWebSdk.init({
-        flow: 'buy',
-        environment: 'sandbox',
-        variant: 'overlay',
-        params: {
-          apiKey: 'pk_test_YHWJ7oKvmbrFCK6Ddt1KF5KJr7lT1oU2',
-          theme: 'dark',
-          baseCurrencyCode: 'usd',
-          baseCurrencyAmount: '100',
-          defaultCurrencyCode: 'sol',
-          walletAddress: depositAddress,
-        }
-      });
-
-      moonPaySdk.show();
+      // Construct Onramper widget URL
+      const onramperUrl = new URL('https://widget.onramper.com');
+      onramperUrl.searchParams.set('apiKey', ONRAMPER_API_KEY);
+      onramperUrl.searchParams.set('wallets', `SOL:${depositAddress}`);
+      onramperUrl.searchParams.set('defaultCrypto', 'SOL');
+      onramperUrl.searchParams.set('defaultAmount', '100');
+      onramperUrl.searchParams.set('themeName', 'dark');
+      onramperUrl.searchParams.set('containerColor', '1a1b20');
+      onramperUrl.searchParams.set('primaryColor', '18c48c');
+      onramperUrl.searchParams.set('secondaryColor', '2A2D35');
+      onramperUrl.searchParams.set('cardColor', '0a0b0f');
+      onramperUrl.searchParams.set('primaryTextColor', 'ffffff');
+      onramperUrl.searchParams.set('secondaryTextColor', 'E6E7EA');
+      
+      // Open in new window
+      const width = 500;
+      const height = 700;
+      const left = (window.screen.width - width) / 2;
+      const top = (window.screen.height - height) / 2;
+      
+      window.open(
+        onramperUrl.toString(),
+        'Onramper',
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+      );
     } catch (error) {
-      console.error("Error showing MoonPay:", error);
-      toast.error("Failed to load MoonPay widget", {
+      console.error("Error showing Onramper:", error);
+      toast.error("Failed to load Onramper widget", {
         duration: 2000,
         style: {
           background: '#1E1F26',
@@ -954,15 +933,17 @@ const DepositModal: React.FC<DepositModalProps> = ({
                   <div className="mb-6">
                     <div className="flex items-center gap-3 mb-3">
                       <h3 className="text-lg font-semibold text-white">Buy {tokenSymbol} with Card</h3>
-                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ backgroundColor: "#7D00FF" }}>
-                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="white">
-                          <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
-                        </svg>
-                        <span className="text-xs font-semibold text-white">MoonPay</span>
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ backgroundColor: "rgba(24, 196, 140, 0.15)" }}>
+                        <img 
+                          src="/onramper.svg" 
+                          alt="Onramper" 
+                          className="h-3 opacity-90"
+                          style={{ filter: 'brightness(0) invert(1)' }}
+                        />
                       </div>
                     </div>
                     <p className="text-sm text-neutral-400">
-                      Purchase {tokenSymbol} using your credit or debit card through MoonPay
+                      Purchase {tokenSymbol} using your credit or debit card through Onramper
                     </p>
                   </div>
 
@@ -976,21 +957,16 @@ const DepositModal: React.FC<DepositModalProps> = ({
                       </div>
 
                       <button
-                        onClick={showMoonPay}
-                        disabled={!moonPayLoaded}
-                        className="w-full py-4 rounded-3xl font-semibold text-base transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                        style={{ backgroundColor: "#7D00FF", color: "#ffffff" }}
+                        onClick={showOnramper}
+                        className="w-full py-4 rounded-3xl font-semibold text-base transition-all duration-200 hover:opacity-90 flex items-center justify-center gap-2"
+                        style={{ backgroundColor: "#18c48c", color: "#000000" }}
                       >
-                        {moonPayLoaded ? (
-                          <>
-                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="white">
-                              <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
-                            </svg>
-                            <span>Buy {tokenSymbol} with MoonPay</span>
-                          </>
-                        ) : (
-                          'Loading MoonPay...'
-                        )}
+                        <img 
+                          src="/onramper.svg" 
+                          alt="Onramper" 
+                          className="h-4"
+                        />
+                        <span>Buy {tokenSymbol}</span>
                       </button>
 
                       <div className="flex gap-3 p-4 rounded-3xl" style={{ backgroundColor: "rgba(59, 130, 246, 0.1)", borderColor: "#3b82f6", border: "1px solid" }}>
@@ -1002,7 +978,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                         </div>
                         <div className="text-sm leading-relaxed" style={{ color: "#60a5fa" }}>
                           <span className="font-semibold">Note: </span>
-                          You will be redirected to MoonPay to complete your purchase. {tokenSymbol} will be sent directly to your Narrative wallet address.
+                          You will be redirected to Onramper to complete your purchase. {tokenSymbol} will be sent directly to your Narrative wallet address.
                         </div>
                       </div>
                     </div>
@@ -1014,13 +990,21 @@ const DepositModal: React.FC<DepositModalProps> = ({
                 </div>
 
                 <div className="flex items-center justify-center gap-2 text-xs text-neutral-500">
-                  <span>Powered by MoonPay • Secure payment processing</span>
+                  <span className="flex items-center gap-1.5">
+                    Powered by 
+                    <img 
+                      src="/onramper.svg" 
+                      alt="Onramper" 
+                      className="h-2.5 opacity-60"
+                    />
+                    • Secure payment processing
+                  </span>
                   <a
-                    href="https://www.moonpay.com/contact-us"
+                    href="https://onramper.com/help/"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-neutral-400 hover:text-neutral-300 transition-colors"
-                    title="Need help? Contact MoonPay support"
+                    title="Need help? Contact Onramper support"
                   >
                     <FaQuestionCircle size={14} />
                   </a>

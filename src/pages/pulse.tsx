@@ -280,12 +280,57 @@ export default function PulsePage() {
   const [httpFinalStretch, setHttpFinalStretch] = useState<any[]>([]);
   const [httpFinalStretchTick, setHttpFinalStretchTick] = useState(0);
 
-  // Monad-specific state for all three tabs
-  const [monadNew, setMonadNew] = useState<any[]>([]);
+  // Monad-specific state for all three tabs (with localStorage caching)
+  const [monadNew, setMonadNew] = useState<any[]>(() => {
+    // Initialize with cached data immediately to prevent flash
+    try {
+      const cached = localStorage.getItem('cached_monad_new_tokens');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (now < parsed.expiresAt) {
+          return parsed.data || [];
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load cached Monad new tokens on init:', error);
+    }
+    return [];
+  });
   const [monadNewTick, setMonadNewTick] = useState(0);
-  const [monadFinalStretch, setMonadFinalStretch] = useState<any[]>([]);
+  const [monadFinalStretch, setMonadFinalStretch] = useState<any[]>(() => {
+    // Initialize with cached data immediately to prevent flash
+    try {
+      const cached = localStorage.getItem('cached_monad_final_stretch_tokens');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (now < parsed.expiresAt) {
+          return parsed.data || [];
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load cached Monad final stretch tokens on init:', error);
+    }
+    return [];
+  });
   const [monadFinalStretchTick, setMonadFinalStretchTick] = useState(0);
-  const [monadMigrated, setMonadMigrated] = useState<any[]>([]);
+  const [monadMigrated, setMonadMigrated] = useState<any[]>(() => {
+    // Initialize with cached data immediately to prevent flash
+    try {
+      const cached = localStorage.getItem('cached_monad_migrated_tokens');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        if (now < parsed.expiresAt) {
+          return parsed.data || [];
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load cached Monad migrated tokens on init:', error);
+    }
+    return [];
+  });
   const [monadMigratedTick, setMonadMigratedTick] = useState(0);
 
   // Function to fetch token image from backend
@@ -336,20 +381,27 @@ export default function PulsePage() {
   useEffect(() => {
     const immediatePoll = async () => {
       try {
-        // Use Monad endpoints when chain is monad, otherwise use Solana endpoints
-        const apiUrl = isMonadRoute
-          ? `/api/token-service/pulse-final-stretch-monad?limit=50&t=${Date.now()}`
-          : `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+        // Call backend directly (bypasses proxy for Redis cache benefits)
+        let apiUrl: string;
+        if (isMonadRoute) {
+          const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
+          apiUrl = `${monadServiceUrl}/v1/pulse/final-stretch?limit=50`;
+        } else {
+          apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+        }
 
         const res = await fetch(apiUrl, {
           cache: "no-store",
           headers: {
             "Cache-Control": "no-cache",
             Pragma: "no-cache",
+            "Accept": "application/json"
           },
         });
         if (res.ok) {
-          const data = await res.json();
+          const result = await res.json();
+          // Backend returns { status: "success", count: N, data: [...] }
+          const data = result.data || (Array.isArray(result) ? result : []);
           if (Array.isArray(data) && data.length > 0) {
             const filteredData = (data as any[]).filter((token) => {
               if (isZeroLiquidityToken(token)) {
@@ -394,65 +446,164 @@ export default function PulsePage() {
     immediatePoll();
   }, [isMonadRoute]);
 
-  // Fetch Monad data when chain is monad
+  // Fetch Monad data when chain is monad (with localStorage caching)
   useEffect(() => {
     if (!isMonadRoute) {
-      // Clear Monad data when switching away from Monad
-      setMonadNew([]);
-      setMonadFinalStretch([]);
-      setMonadMigrated([]);
+      // Don't clear Monad data when switching away - keep it cached for faster return
+      // Only clear ticks to indicate data might be stale
       setMonadNewTick(0);
       setMonadFinalStretchTick(0);
       setMonadMigratedTick(0);
       return;
     }
 
-    console.log('[Pulse] 🌊 Fetching Monad data for chain=monad');
+    // Load from cache first (already done in useState initializer, but check if we need to fetch)
+    const loadFromCache = () => {
+      let hasValidCache = false;
+      
+      try {
+        const newCached = localStorage.getItem('cached_monad_new_tokens');
+        const finalStretchCached = localStorage.getItem('cached_monad_final_stretch_tokens');
+        const migratedCached = localStorage.getItem('cached_monad_migrated_tokens');
+        
+        const now = Date.now();
+        
+        if (newCached) {
+          const parsed = JSON.parse(newCached);
+          if (now < parsed.expiresAt && parsed.data && parsed.data.length > 0) {
+            setMonadNew(parsed.data);
+            hasValidCache = true;
+          }
+        }
+        
+        if (finalStretchCached) {
+          const parsed = JSON.parse(finalStretchCached);
+          if (now < parsed.expiresAt && parsed.data && parsed.data.length > 0) {
+            setMonadFinalStretch(parsed.data);
+            hasValidCache = true;
+          }
+        }
+        
+        if (migratedCached) {
+          const parsed = JSON.parse(migratedCached);
+          if (now < parsed.expiresAt && parsed.data && parsed.data.length > 0) {
+            setMonadMigrated(parsed.data);
+            hasValidCache = true;
+          }
+        }
+      } catch (error) {
+        console.warn('[Monad] Failed to load from cache:', error);
+      }
+      
+      return hasValidCache;
+    };
+
+    const cacheValid = loadFromCache();
+    
+    console.log('[Pulse] 🌊 Fetching Monad data for chain=monad', cacheValid ? '(cache valid, refreshing in background)' : '(no cache, fetching now)');
 
     const fetchMonadData = async () => {
       try {
-        // Fetch new pairs
-        console.log('[Monad] Fetching new pairs...');
-        const newRes = await fetch(`/api/token-service/pulse-new-monad?limit=50&t=${Date.now()}`, {
+        const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
+        const now = Date.now();
+        const cacheTTL = 5 * 60 * 1000; // 5 minutes
+
+        // Fetch new pairs - call backend directly (Redis cache enabled)
+        console.log('[Monad] Fetching new pairs directly from backend...');
+        const newRes = await fetch(`${monadServiceUrl}/v1/pulse/new?limit=50`, {
           cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+          headers: { 'Accept': 'application/json' }
         });
         if (newRes.ok) {
-          const newData = await newRes.json();
-          const filteredNew = Array.isArray(newData) ? newData.filter((t: any) => !isZeroLiquidityToken(t)) : [];
+          const result = await newRes.json();
+          const newData = result.data || (Array.isArray(result) ? result : []);
+          // Transform backend response: map 'address' to 'mint' for frontend compatibility
+          const transformed = Array.isArray(newData) ? newData.map((t: any) => ({
+            ...t,
+            mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+          })) : [];
+          const filteredNew = transformed.filter((t: any) => !isZeroLiquidityToken(t));
           setMonadNew(filteredNew);
           setMonadNewTick(prev => prev + 1);
-          console.log(`[Monad] ✅ Fetched ${filteredNew.length} new tokens`);
+          
+          // Cache the fresh data
+          try {
+            localStorage.setItem('cached_monad_new_tokens', JSON.stringify({
+              data: filteredNew,
+              timestamp: now,
+              expiresAt: now + cacheTTL,
+            }));
+          } catch (error) {
+            console.warn('[Monad] Failed to cache new tokens:', error);
+          }
+          
+          console.log(`[Monad] ✅ Fetched ${filteredNew.length} new tokens from backend (Redis cache)`);
         } else {
           console.error(`[Monad] ❌ Failed to fetch new pairs: ${newRes.status}`);
         }
 
-        // Fetch final stretch tokens (already handled in immediatePoll, but fetch here too for consistency)
-        console.log('[Monad] Fetching final stretch tokens...');
-        const finalStretchRes = await fetch(`/api/token-service/pulse-final-stretch-monad?limit=50&t=${Date.now()}`, {
+        // Fetch final stretch tokens - call backend directly (Redis cache enabled)
+        console.log('[Monad] Fetching final stretch tokens directly from backend...');
+        const finalStretchRes = await fetch(`${monadServiceUrl}/v1/pulse/final-stretch?limit=50`, {
           cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+          headers: { 'Accept': 'application/json' }
         });
         if (finalStretchRes.ok) {
-          const finalStretchData = await finalStretchRes.json();
-          const filteredFinalStretch = Array.isArray(finalStretchData) ? finalStretchData.filter((t: any) => !isZeroLiquidityToken(t)) : [];
+          const result = await finalStretchRes.json();
+          const finalStretchData = result.data || (Array.isArray(result) ? result : []);
+          // Transform backend response: map 'address' to 'mint' for frontend compatibility
+          const transformed = Array.isArray(finalStretchData) ? finalStretchData.map((t: any) => ({
+            ...t,
+            mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+          })) : [];
+          const filteredFinalStretch = transformed.filter((t: any) => !isZeroLiquidityToken(t));
           setMonadFinalStretch(filteredFinalStretch);
           setMonadFinalStretchTick(prev => prev + 1);
-          console.log(`[Monad] ✅ Fetched ${filteredFinalStretch.length} final stretch tokens`);
+          
+          // Cache the fresh data
+          try {
+            localStorage.setItem('cached_monad_final_stretch_tokens', JSON.stringify({
+              data: filteredFinalStretch,
+              timestamp: now,
+              expiresAt: now + cacheTTL,
+            }));
+          } catch (error) {
+            console.warn('[Monad] Failed to cache final stretch tokens:', error);
+          }
+          
+          console.log(`[Monad] ✅ Fetched ${filteredFinalStretch.length} final stretch tokens from backend (Redis cache)`);
         }
 
-        // Fetch migrated tokens
-        console.log('[Monad] Fetching migrated tokens...');
-        const migratedRes = await fetch(`/api/token-service/pulse-migrated-monad?limit=70&t=${Date.now()}`, {
+        // Fetch migrated tokens - call backend directly (Redis cache enabled)
+        console.log('[Monad] Fetching migrated tokens directly from backend...');
+        const migratedRes = await fetch(`${monadServiceUrl}/v1/pulse/migrated?limit=70`, {
           cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+          headers: { 'Accept': 'application/json' }
         });
         if (migratedRes.ok) {
-          const migratedData = await migratedRes.json();
-          const filteredMigrated = Array.isArray(migratedData) ? migratedData.filter((t: any) => !isZeroLiquidityToken(t)) : [];
+          const result = await migratedRes.json();
+          const migratedData = result.data || (Array.isArray(result) ? result : []);
+          // Transform backend response: map 'address' to 'mint' for frontend compatibility
+          const transformed = Array.isArray(migratedData) ? migratedData.map((t: any) => ({
+            ...t,
+            mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+          })) : [];
+          const filteredMigrated = transformed.filter((t: any) => !isZeroLiquidityToken(t));
           setMonadMigrated(filteredMigrated);
           setMonadMigratedTick(prev => prev + 1);
-          console.log(`[Monad] ✅ Fetched ${filteredMigrated.length} migrated tokens`);
+          
+          // Cache the fresh data
+          try {
+            localStorage.setItem('cached_monad_migrated_tokens', JSON.stringify({
+              data: filteredMigrated,
+              timestamp: now,
+              expiresAt: now + cacheTTL,
+            }));
+          } catch (error) {
+            console.warn('[Monad] Failed to cache migrated tokens:', error);
+          }
+          
+          console.log(`[Monad] ✅ Fetched ${filteredMigrated.length} migrated tokens from backend (Redis cache)`);
         } else {
           console.error(`[Monad] ❌ Failed to fetch migrated tokens: ${migratedRes.status}`);
         }
@@ -461,6 +612,7 @@ export default function PulsePage() {
       }
     };
 
+    // Always fetch fresh data, but cache will show immediately if available
     fetchMonadData();
   }, [isMonadRoute, isZeroLiquidityToken, chain]);
 
@@ -876,9 +1028,10 @@ export default function PulsePage() {
     }
   }, [newPairsToShow, preloadImages]);
 
-  // Sync rolling trade cache with visible pulse tokens
+  // Sync rolling trade cache with visible pulse tokens (debounced to prevent excessive requests)
   useEffect(() => {
-    const syncCache = async () => {
+    // Debounce sync calls to prevent rapid-fire requests
+    const syncTimeoutId = setTimeout(async () => {
       try {
         if (
           !newPairsToShow.length &&
@@ -895,9 +1048,9 @@ export default function PulsePage() {
       } catch (error) {
         console.error("[Pulse] Failed to sync rolling cache:", error);
       }
-    };
+    }, 2000); // Debounce: Wait 2 seconds after tokens change before syncing
 
-    syncCache();
+    return () => clearTimeout(syncTimeoutId);
   }, [newPairsToShow, finalStretchToShow, migratedToShow]);
 
   // Log cache stats periodically for debugging
@@ -1336,48 +1489,48 @@ export default function PulsePage() {
               </div>
             </div>
           ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
-            <div className="w-full">
+            <div className="w-full flex-1 min-h-0 flex flex-col">
               {/* Mobile: Single table based on active tab */}
-              <div className="lg:hidden">
+              <div className="lg:hidden flex-1 min-h-0">
                 <div className="transition-all duration-300 ease-in-out">
                   {activeTab === 'new' && (
-                    <MonadTable 
-                      title="New Pairs" 
-                      tokens={[] as any} 
-                      loading={false} 
-                      isFirstOrLast="only" 
-                      showBubbleMetrics={false} 
+                    <MonadTable
+                      title="New Pairs"
+                      tokens={enrichedNewPairsToShow}
+                      loading={false}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
                     />
                   )}
                   {activeTab === 'final-stretch' && (
-                    <MonadTable 
-                      title="Final Stretch" 
-                      tokens={[] as any} 
-                      isFirstOrLast="only" 
-                      showBubbleMetrics={false} 
+                    <MonadTable
+                      title="Final Stretch"
+                      tokens={enrichedFinalStretch}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
                     />
                   )}
                   {activeTab === 'migrated' && (
-                    <MonadTable 
-                      title="Migrated" 
-                      tokens={[] as any} 
-                      isFirstOrLast="only" 
-                      showBubbleMetrics={false} 
+                    <MonadTable
+                      title="Migrated"
+                      tokens={enrichedMigrated}
+                      isFirstOrLast="only"
+                      showBubbleMetrics={false}
                     />
                   )}
                 </div>
               </div>
               {/* Desktop: All tables horizontally */}
-              <div className="hidden lg:flex flex-row w-full overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
-                <MonadTable 
-                  title="New Pairs" 
-                  tokens={[] as any} 
-                  loading={false} 
-                  isFirstOrLast="first" 
-                  showBubbleMetrics={false} 
+              <div className="hidden lg:flex flex-row w-full flex-1 min-h-0 overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+                <MonadTable
+                  title="New Pairs"
+                  tokens={enrichedNewPairsToShow}
+                  loading={false}
+                  isFirstOrLast="first"
+                  showBubbleMetrics={false}
                 />
-                <MonadTable title="Final Stretch" tokens={[] as any} showBubbleMetrics={false} />
-                <MonadTable title="Migrated" tokens={[] as any} isFirstOrLast="last" showBubbleMetrics={false} />
+                <MonadTable title="Final Stretch" tokens={enrichedFinalStretch} showBubbleMetrics={false} />
+                <MonadTable title="Migrated" tokens={enrichedMigrated} isFirstOrLast="last" showBubbleMetrics={false} />
               </div>
             </div>
           ) : isLoading ? (
