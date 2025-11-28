@@ -552,7 +552,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setPrimaryWalletAddresses({ solana: null, ethereum: null });
       setSolBalance(0);
       setUsdcBalance(0);
+      setChainBalances({ sol: 0 });
       setLastNotifiedBalance({});
+      chainBalancesRef.current = { sol: 0 };
+      solUsdBalanceRef.current = 0;
+      solBalanceRef.current = 0;
+      lastNotifiedBalanceRef.current = {};
+      lastBalanceFetchRef.current = {};
       balanceCheckInProgressRef.current = {};
       if (typeof window !== "undefined") {
         clearStoredReferralAccess();

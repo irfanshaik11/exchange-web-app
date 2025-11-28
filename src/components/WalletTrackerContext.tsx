@@ -109,6 +109,22 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     }
   };
 
+  // Clear tracker state when user logs out
+  useEffect(() => {
+    if (!user?.id) {
+      setWatchedWallets([]);
+      setLatestTrades([]);
+      watchedWalletsRef.current = [];
+      subscribedWalletsRef.current = [];
+      initialHistoryFetchedRef.current = false;
+      if (wsConnection) {
+        wsConnection.close();
+        setWsConnection(null);
+        setWsConnected(false);
+      }
+    }
+  }, [user?.id, wsConnection]);
+
   // Initial load of watched wallets
   useEffect(() => {
     if (user?.id) {
@@ -644,4 +660,3 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     </WalletTrackerContext.Provider>
   );
 }
-

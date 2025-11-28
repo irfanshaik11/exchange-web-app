@@ -133,9 +133,11 @@ export async function getTrackedWallets(userId?: string): Promise<WatchWallet[]>
       }
       throw fetchError;
     }
-  } catch (error) {
-    console.error('Error fetching tracked wallets:', error);
-    throw error; // Throw instead of returning empty array
+  } catch (error: any) {
+    // During logout / missing service we don't want to surface a runtime error
+    const message = error?.message || 'Failed to fetch wallets';
+    console.warn('Error fetching tracked wallets:', message);
+    return [];
   }
 }
 

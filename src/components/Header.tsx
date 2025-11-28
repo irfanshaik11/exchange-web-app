@@ -146,6 +146,7 @@ export default function Header({
     refreshBalance,
     primaryWalletAddresses,
     chainBalances,
+    logout,
   } = useUser();
   const currentChain = (router.query.chain as string) || "sol";
   const [profileOpen, setProfileOpen] = useState(false);
@@ -1389,18 +1390,7 @@ export default function Header({
                         <button
                           onClick={() => {
                             setProfileMenuOpen(false);
-                            if (typeof window !== "undefined") {
-                              document.cookie = "token=; Max-Age=0; path=/;";
-                            }
-                            if (
-                              typeof window !== "undefined" &&
-                              window.localStorage
-                            ) {
-                              window.localStorage.removeItem("token");
-                            }
-                            if (typeof window !== "undefined") {
-                              window.location.reload();
-                            }
+                            logout();
                           }}
                           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
                           style={{
