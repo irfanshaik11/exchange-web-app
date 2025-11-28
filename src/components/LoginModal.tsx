@@ -15,6 +15,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 
 const ENABLE_EMAIL_AUTH = false;
+const AUTH_BUTTON_WIDTH_CLASS = 'w-full max-w-[400px] mx-auto';
 
 interface LoginModalProps {
   open: boolean;
@@ -488,10 +489,10 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
         </>
       )}
       <hr  className="mt-4 border-neutral-600"/>
-      <div className="flex flex-col gap-2 mt-4">
+      <div className="flex flex-col items-center gap-2 mt-4">
         {googleClientId ? (
           <GoogleOAuthProvider clientId={googleClientId}>
-            <div className="mb-1 flex w-full flex-col items-center">
+            <div className={`mb-1 flex flex-col items-center ${AUTH_BUTTON_WIDTH_CLASS}`}>
               {authState === AuthState.Authenticated ? (
                 <div className="w-full rounded-3xl border border-neutral-700/60 bg-neutral-800/40 px-3 py-3 text-center text-sm text-neutral-200">
                   Finishing sign-in…
@@ -525,14 +526,14 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
                     shape="pill"
                     text="continue_with"
                     size="large"
-                    width="320"
+                    width="400"
                   />
                 </div>
               )}
             </div>
           </GoogleOAuthProvider>
         ) : (
-          <InterstateButton type="button" fullWidth variant="secondary" disabled>
+          <InterstateButton type="button" fullWidth variant="secondary" disabled className={AUTH_BUTTON_WIDTH_CLASS}>
             <span className="flex items-center justify-center gap-2 font-normal text-sm">
               Google login not configured
             </span>
@@ -548,7 +549,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
             setShowWalletOptions(!showWalletOptions);
           }}
           disabled={phantomLoading || metamaskLoading}
-          className="flex items-center justify-between hover:bg-neutral-800 transition-colors"
+          className={`flex items-center justify-between hover:bg-neutral-800 transition-colors ${AUTH_BUTTON_WIDTH_CLASS}`}
         >
           <span className="flex items-center gap-2 font-normal text-sm">
             <img src="/Phantom-Wallet-300x300.png" alt="Phantom" className="w-6 h-6 rounded-[100px]" />
@@ -567,7 +568,7 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
 
       {/* Wallet Options with Better Design */}
       {showWalletOptions && (
-        <div className="mt-4 overflow-hidden transition-all duration-300 ease-in-out">
+        <div className={`mt-4 overflow-hidden transition-all duration-300 ease-in-out ${AUTH_BUTTON_WIDTH_CLASS}`}>
           <div className="bg-neutral-800/50 rounded-xl p-4 border border-neutral-700/50">
             <div className="text-xs text-neutral-400 mb-3 font-medium">Choose your wallet</div>
             <div className="space-y-2">
