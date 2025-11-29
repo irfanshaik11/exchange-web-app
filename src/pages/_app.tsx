@@ -114,9 +114,11 @@ function TurnkeySessionBridge() {
     user,
     fetchOrCreateP256ApiKeyUser,
   } = turnkeyCtx;
+
   const fetchOrCreatePolicies = turnkeyCtx?.fetchOrCreatePolicies as
     | ((params: { policies: any[] }) => Promise<any>)
     | undefined;
+
   const { refreshUser } = useUser();
   const router = useRouter();
 
@@ -126,6 +128,7 @@ function TurnkeySessionBridge() {
   const hasCreatedDelegatedUserRef = useRef(false);
   const delegatedUserIdRef = useRef<string | null>(null);
   const hasCreatedDelegatedPolicyRef = useRef(false);
+  const isRunningRef = useRef(false);
 
   console.log(
     "TurnkeySessionBridge authState:",
@@ -145,69 +148,15 @@ function TurnkeySessionBridge() {
       hasCreatedDelegatedUserRef.current = false;
       delegatedUserIdRef.current = null;
       hasCreatedDelegatedPolicyRef.current = false;
+      isRunningRef.current = false;
     }
   }, [authState]);
 
-  // Auto-create a Delegated Access API key user once Turnkey session is ready
+  // Orchestrated pipeline:
+  // 1) Ensure delegated user exists
+  // 2) Ensure delegated policy exists
+  // 3) Link Turnkey session to backend (JWT)
   useEffect(() => {
-    if (authState !== AuthState.Authenticated) return;
-    if (!fetchOrCreateP256ApiKeyUser) return;
-
-    const daPublicKey = process.env.NEXT_PUBLIC_DA_PUBLIC_KEY;
-    if (!daPublicKey) return;
-    if (hasCreatedDelegatedUserRef.current) return;
-
-    hasCreatedDelegatedUserRef.current = true;
-
-    fetchOrCreateP256ApiKeyUser({
-      publicKey: daPublicKey,
-      createParams: {
-        userName: "Delegated Access",
-        apiKeyName: "Delegated User API Key",
-      },
-    }).catch((err: any) => {
-      console.error("Failed to create delegated Turnkey user", err);
-    }).then((res: any) => {
-      const uid = res?.userId || res?.id;
-      if (uid) {
-        delegatedUserIdRef.current = uid;
-        hasCreatedDelegatedPolicyRef.current = false; // allow policy creation flow
-      }
-    });
-  }, [authState, fetchOrCreateP256ApiKeyUser]);
-
-  // Auto-create a restrictive policy for the delegated user (allow only specific recipient)
-  useEffect(() => {
-    if (authState !== AuthState.Authenticated) return;
-    if (!fetchOrCreatePolicies) return;
-    if (hasCreatedDelegatedPolicyRef.current) return;
-
-    const delegatedUserId = delegatedUserIdRef.current;
-    if (!delegatedUserId) return;
-
-
-    hasCreatedDelegatedPolicyRef.current = true;
-
-    const policies = [
-      {
-        policyName: `Allow user ${delegatedUserId} to sign`,
-        effect: "EFFECT_ALLOW",
-        consensus: `approvers.any(user, user.id == '${delegatedUserId}')`,
-        notes:
-          "Allow Delegated Access user to sign transactions",
-      },
-    ];
-
-    fetchOrCreatePolicies({ policies }).catch((err: any) => {
-      console.error("Failed to create delegated policy", err);
-      // allow retry on next render if configuration gets fixed
-      hasCreatedDelegatedPolicyRef.current = false;
-    });
-  }, [authState, fetchOrCreatePolicies]);
-
-  // 1) When Turnkey session is fully ready, link it to your backend (create app JWT)
-  useEffect(() => {
-    // Only act when Turnkey says the user is signed in
     if (authState !== AuthState.Authenticated) return;
 
     // Skip if a logout is in progress
@@ -215,55 +164,133 @@ function TurnkeySessionBridge() {
       return;
     }
 
-    // Make sure Turnkey session is fully hydrated
-    if (!session?.token || !session?.organizationId || !session?.userId) {
-      return;
-    }
-
-    // Prevent duplicate processing
-    if (hasProcessedRef.current) return;
-    hasProcessedRef.current = true;
+    if (isRunningRef.current) return;
+    isRunningRef.current = true;
 
     (async () => {
       try {
-        const data = await turnkeyLogin({
-          turnkeySessionToken: session.token,
-          organizationId: session.organizationId,
-          userId: session.userId,
-        });
+        const daPublicKey = process.env.NEXT_PUBLIC_DA_PUBLIC_KEY;
 
-        console.log("Turnkey login response data:", data);
+        //
+        // 1) Delegated user
+        //
+        if (
+          fetchOrCreateP256ApiKeyUser &&
+          daPublicKey &&
+          !hasCreatedDelegatedUserRef.current
+        ) {
+          try {
+            const res = await fetchOrCreateP256ApiKeyUser({
+              publicKey: daPublicKey,
+              createParams: {
+                userName: "Delegated Access",
+                apiKeyName: "Delegated User API Key",
+              },
+            });
 
-        // Backend should respond with your normal app JWT
-        const appToken = (data as any)?.token || (data as any)?.fetchedUserToken;
-        if (!appToken) {
-          console.error("Turnkey login failed: no token in response");
-          hasProcessedRef.current = false;
-          return;
+            const uid = res?.userId || res?.id;
+            if (uid) {
+              delegatedUserIdRef.current = uid;
+              hasCreatedDelegatedUserRef.current = true;
+              hasCreatedDelegatedPolicyRef.current = false; // allow policy creation
+              console.log("Delegated user ready:", uid);
+            } else {
+              console.error(
+                "fetchOrCreateP256ApiKeyUser succeeded but no userId returned"
+              );
+            }
+          } catch (err) {
+            console.error("Failed to create delegated Turnkey user", err);
+            // We don't throw here so other parts of the pipeline can still proceed
+          }
         }
 
-        Cookies.set("token", appToken, { expires: 7, path: "/" });
+        const delegatedUserId = delegatedUserIdRef.current;
 
-        // Mark that once user info is ready we should refresh our app user
-        pendingRefreshRef.current = true;
-        if (user?.userEmail || user?.userName) {
-          await refreshUser();
-          pendingRefreshRef.current = false;
+        //
+        // 2) Delegated policy
+        //
+        if (
+          fetchOrCreatePolicies &&
+          delegatedUserId &&
+          !hasCreatedDelegatedPolicyRef.current
+        ) {
+          hasCreatedDelegatedPolicyRef.current = true;
+
+          const policies = [
+            {
+              policyName: `Allow user ${delegatedUserId} to sign`,
+              effect: "EFFECT_ALLOW",
+              consensus: `approvers.any(user, user.id == '${delegatedUserId}')`,
+              notes: "Allow Delegated Access user to sign transactions",
+            },
+          ];
+
+          try {
+            await fetchOrCreatePolicies({ policies });
+            console.log("Delegated policy ensured for user:", delegatedUserId);
+          } catch (err) {
+            console.error("Failed to create delegated policy", err);
+            // Allow retry next time
+            hasCreatedDelegatedPolicyRef.current = false;
+          }
         }
 
-        // redirect to your main app page
-        router.push("/");
-      } catch (err: any) {
-        console.error("Error linking Turnkey session to app user", err);
-        if (err?.message) {
-          showEnhancedToast("error", err.message);
-        } else {
-          showEnhancedToast(
-            "error",
-            "Could not create a session from Turnkey login."
-          );
+        //
+        // 3) Backend login / JWT
+        //
+        if (
+          session?.token &&
+          session.organizationId &&
+          session.userId &&
+          !hasProcessedRef.current
+        ) {
+          hasProcessedRef.current = true;
+
+          try {
+            const data = await turnkeyLogin({
+              turnkeySessionToken: session.token,
+              organizationId: session.organizationId,
+              userId: session.userId,
+            });
+
+            console.log("Turnkey login response data:", data);
+
+            const appToken =
+              (data as any)?.token || (data as any)?.fetchedUserToken;
+
+            if (!appToken) {
+              console.error("Turnkey login failed: no token in response");
+              hasProcessedRef.current = false;
+              return;
+            }
+
+            Cookies.set("token", appToken, { expires: 7, path: "/" });
+
+            // Mark that once user info is ready we should refresh our app user
+            pendingRefreshRef.current = true;
+            if (user?.userEmail || user?.userName) {
+              await refreshUser();
+              pendingRefreshRef.current = false;
+            }
+
+            // redirect to your main app page
+            router.push("/");
+          } catch (err: any) {
+            console.error("Error linking Turnkey session to app user", err);
+            if (err?.message) {
+              showEnhancedToast("error", err.message);
+            } else {
+              showEnhancedToast(
+                "error",
+                "Could not create a session from Turnkey login."
+              );
+            }
+            hasProcessedRef.current = false;
+          }
         }
-        hasProcessedRef.current = false;
+      } finally {
+        isRunningRef.current = false;
       }
     })();
   }, [
@@ -271,14 +298,17 @@ function TurnkeySessionBridge() {
     session?.token,
     session?.organizationId,
     session?.userId,
-    refreshUser,
-    router,
+    fetchOrCreateP256ApiKeyUser,
+    fetchOrCreatePolicies,
     user?.userEmail,
     user?.userName,
+    refreshUser,
+    router,
   ]);
 
   return null;
 }
+
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",

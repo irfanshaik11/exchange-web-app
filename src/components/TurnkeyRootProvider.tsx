@@ -16,11 +16,14 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
     const orgId = env.NEXT_PUBLIC_ORGANIZATION_ID || ''
     const proxyConfigId = env.NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID || '';
     const apiBaseUrl = env.NEXT_PUBLIC_TURNKEY_API_BASE_URL || ''
+    const authProxyUrl = 'https://authproxy.turnkey.com';
+      
 
     const config: TurnkeyProviderConfig = {
       apiBaseUrl,
       organizationId: orgId,
       authProxyConfigId: proxyConfigId,
+      authProxyUrl,
 
       auth: {
         oauthConfig: {
@@ -53,6 +56,7 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
     console.log("[Turnkey] client env", {
       orgId: turnkeyConfig.organizationId,
       authProxyConfigId: turnkeyConfig.authProxyConfigId,
+      authProxyUrl: turnkeyConfig.authProxyUrl,
       methods: turnkeyConfig.auth?.methods,
       apiBaseUrl: turnkeyConfig.apiBaseUrl,
     });
