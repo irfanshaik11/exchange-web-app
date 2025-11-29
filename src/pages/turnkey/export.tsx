@@ -64,6 +64,8 @@ export default function TurnkeyExportPage() {
   const [iframeVisible, setIframeVisible] = useState(false);
   const [targetPublicKey, setTargetPublicKey] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
+  const [fetchedWallets, setFetchedWallets] = useState<any[]>([]);
+  const walletsRequestRef = useRef(false);
 
   const iframeContainerRef = useRef<HTMLDivElement | null>(null);
   const iframeStamperRef = useRef<IframeStamper | null>(null);
@@ -75,8 +77,14 @@ export default function TurnkeyExportPage() {
     };
   }, []);
 
+  const walletsSource = useMemo(() => {
+    const contextualWallets = Array.isArray(wallets) ? wallets : [];
+    if (contextualWallets.length) return contextualWallets;
+    return Array.isArray(fetchedWallets) ? fetchedWallets : [];
+  }, [wallets, fetchedWallets]);
+
   const walletOptions = useMemo(() => {
-    return (wallets as any[]).reduce<
+    return (walletsSource as any[]).reduce<
       { id: string; name: string; source?: string }[]
     >((acc, wallet) => {
       const id = wallet?.walletId || wallet?.id;
@@ -92,7 +100,52 @@ export default function TurnkeyExportPage() {
       });
       return acc;
     }, []);
-  }, [wallets]);
+  }, [walletsSource]);
+
+  useEffect(() => {
+    if (
+      walletOptions.length ||
+      walletsRequestRef.current ||
+      authState !== AuthState.Authenticated ||
+      clientState !== ClientState.Ready ||
+      !session?.organizationId
+    ) {
+      return;
+    }
+
+    walletsRequestRef.current = true;
+    (async () => {
+      try {
+        if (typeof turnkey?.refreshWallets === "function") {
+          const refreshed = await turnkey.refreshWallets({
+            organizationId: session.organizationId,
+            userId: session.userId,
+          });
+          if (Array.isArray(refreshed)) {
+            setFetchedWallets(refreshed);
+          }
+        } else if (typeof turnkey?.fetchWallets === "function") {
+          const result = await turnkey.fetchWallets({
+            organizationId: session.organizationId,
+            userId: session.userId,
+          });
+          if (Array.isArray(result)) {
+            setFetchedWallets(result);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load Turnkey wallets for export", err);
+        walletsRequestRef.current = false; // allow retry if state changes
+      }
+    })();
+  }, [
+    authState,
+    clientState,
+    session?.organizationId,
+    session?.userId,
+    turnkey,
+    walletOptions.length,
+  ]);
 
   useEffect(() => {
     if (selectedWalletId || !walletOptions.length) return;

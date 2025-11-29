@@ -7,7 +7,7 @@ import { queryClient } from '../lib/queryClient';
 import { WagmiProviderWrapper } from '../components/WagmiProviderWrapper';
 import { UserProvider, useUser } from "../components/UserContext";
 import { Toaster } from 'react-hot-toast';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
@@ -107,17 +107,14 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
 }
 
 function TurnkeySessionBridge() {
-  const turnkeyCtx = useTurnkey() as any; // cast to access beta methods
+  const turnkeyCtx = useTurnkey() as any;
   const {
     authState,
     session,
     user,
     fetchOrCreateP256ApiKeyUser,
+    fetchOrCreatePolicies,
   } = turnkeyCtx;
-
-  const fetchOrCreatePolicies = turnkeyCtx?.fetchOrCreatePolicies as
-    | ((params: { policies: any[] }) => Promise<any>)
-    | undefined;
 
   const { refreshUser } = useUser();
   const router = useRouter();
@@ -125,9 +122,11 @@ function TurnkeySessionBridge() {
   const hasProcessedRef = useRef(false);
   const pendingRefreshRef = useRef(false);
   const hasUpdatedEmail = useRef(false);
+
   const hasCreatedDelegatedUserRef = useRef(false);
   const delegatedUserIdRef = useRef<string | null>(null);
   const hasCreatedDelegatedPolicyRef = useRef(false);
+
   const isRunningRef = useRef(false);
 
   console.log(
@@ -139,7 +138,7 @@ function TurnkeySessionBridge() {
     user
   );
 
-  // Reset flags when user signs out / authState changes away from Authenticated
+  // Reset all flags when auth state changes
   useEffect(() => {
     if (authState !== AuthState.Authenticated) {
       hasProcessedRef.current = false;
@@ -152,27 +151,23 @@ function TurnkeySessionBridge() {
     }
   }, [authState]);
 
-  // Orchestrated pipeline:
-  // 1) Ensure delegated user exists
-  // 2) Ensure delegated policy exists
-  // 3) Link Turnkey session to backend (JWT)
+  //
+  // Main Pipeline
+  //
   useEffect(() => {
     if (authState !== AuthState.Authenticated) return;
 
-    // Skip if a logout is in progress
-    if (typeof window !== "undefined" && (window as any).__turnkeyLoggingOut) {
-      return;
-    }
-
+    // avoid double runs
     if (isRunningRef.current) return;
     isRunningRef.current = true;
 
     (async () => {
       try {
-        const daPublicKey = process.env.NEXT_PUBLIC_DA_PUBLIC_KEY;
+        const daPublicKey =
+          "02f63059aa8658dcbbfb5f8efe20ee552d9e901d46be9109142d424d8f4292284e";
 
         //
-        // 1) Delegated user
+        // 1) Ensure delegated user exists (NO IndexedDB check)
         //
         if (
           fetchOrCreateP256ApiKeyUser &&
@@ -192,24 +187,25 @@ function TurnkeySessionBridge() {
             if (uid) {
               delegatedUserIdRef.current = uid;
               hasCreatedDelegatedUserRef.current = true;
-              hasCreatedDelegatedPolicyRef.current = false; // allow policy creation
+              hasCreatedDelegatedPolicyRef.current = false;
               console.log("Delegated user ready:", uid);
             } else {
               console.error(
                 "fetchOrCreateP256ApiKeyUser succeeded but no userId returned"
               );
+              hasCreatedDelegatedUserRef.current = true; // prevent infinite loop
             }
           } catch (err) {
             console.error("Failed to create delegated Turnkey user", err);
-            // We don't throw here so other parts of the pipeline can still proceed
+            hasCreatedDelegatedUserRef.current = true; // still continue pipeline
           }
         }
 
+        //
+        // 2) Ensure delegated policy exists
+        //
         const delegatedUserId = delegatedUserIdRef.current;
 
-        //
-        // 2) Delegated policy
-        //
         if (
           fetchOrCreatePolicies &&
           delegatedUserId &&
@@ -228,16 +224,15 @@ function TurnkeySessionBridge() {
 
           try {
             await fetchOrCreatePolicies({ policies });
-            console.log("Delegated policy ensured for user:", delegatedUserId);
+            console.log("Delegated policy ensured:", delegatedUserId);
           } catch (err) {
             console.error("Failed to create delegated policy", err);
-            // Allow retry next time
-            hasCreatedDelegatedPolicyRef.current = false;
+            hasCreatedDelegatedPolicyRef.current = false; // retry next render
           }
         }
 
         //
-        // 3) Backend login / JWT
+        // 3) Backend login → Get App JWT
         //
         if (
           session?.token &&
@@ -254,10 +249,9 @@ function TurnkeySessionBridge() {
               userId: session.userId,
             });
 
-            console.log("Turnkey login response data:", data);
-
+            console.log("Turnkey login response:", data);
             const appToken =
-              (data as any)?.token || (data as any)?.fetchedUserToken;
+              data?.token || data?.fetchedUserToken || undefined;
 
             if (!appToken) {
               console.error("Turnkey login failed: no token in response");
@@ -267,25 +261,15 @@ function TurnkeySessionBridge() {
 
             Cookies.set("token", appToken, { expires: 7, path: "/" });
 
-            // Mark that once user info is ready we should refresh our app user
             pendingRefreshRef.current = true;
             if (user?.userEmail || user?.userName) {
               await refreshUser();
               pendingRefreshRef.current = false;
             }
 
-            // redirect to your main app page
             router.push("/");
-          } catch (err: any) {
+          } catch (err) {
             console.error("Error linking Turnkey session to app user", err);
-            if (err?.message) {
-              showEnhancedToast("error", err.message);
-            } else {
-              showEnhancedToast(
-                "error",
-                "Could not create a session from Turnkey login."
-              );
-            }
             hasProcessedRef.current = false;
           }
         }
@@ -298,16 +282,17 @@ function TurnkeySessionBridge() {
     session?.token,
     session?.organizationId,
     session?.userId,
-    fetchOrCreateP256ApiKeyUser,
-    fetchOrCreatePolicies,
     user?.userEmail,
     user?.userName,
+    fetchOrCreateP256ApiKeyUser,
+    fetchOrCreatePolicies,
     refreshUser,
     router,
   ]);
 
   return null;
 }
+
 
 
 const config = getDefaultConfig({

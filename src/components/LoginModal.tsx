@@ -179,7 +179,96 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
 
 
 
-  async function handleGoogleSuccess(resp: CredentialResponse) {
+//   async function handleGoogleSuccess(resp: CredentialResponse) {
+//   setGoogleLoading(true);
+//   setError(null);
+//   setSuccess(null);
+
+//   try {
+//     const publicKey = pubKeyRef.current;
+//     if (!publicKey) {
+//       throw new Error("Google login is not ready yet. Please try again.");
+//     }
+
+//     if (!resp?.credential) {
+//       throw new Error("Google login did not return a credential.");
+//     }
+
+//     if (!turnkey?.completeOauth) {
+//       throw new Error("Turnkey OAuth is not available right now.");
+//     }
+
+//     // -------- Decode Google ID token to extract optional metadata ----------
+//     console.log("Google credential:", resp.credential);
+//     const createSubOrgParams = (() => {
+//       try {
+//         const [, payloadSegment] = resp.credential.split(".");
+//         if (!payloadSegment) return undefined;
+
+//         const payloadJson = atob(
+//           payloadSegment.replace(/-/g, "+").replace(/_/g, "/")
+//         );
+//         const payload = JSON.parse(payloadJson);
+//         console.log("Decoded Google token payload:", payload);
+//         const email =
+//           typeof payload?.email === "string" ? payload.email : undefined;
+//         const name =
+//           typeof payload?.name === "string"
+//             ? payload.name
+//             : typeof payload?.given_name === "string"
+//             ? payload.given_name
+//             : undefined;
+
+//         if (!email && !name) return undefined;
+
+//         return {
+//           ...(name && { userName: name }),
+//           ...(email && { userEmail: email }),
+//         };
+//       } catch (err) {
+//         console.warn("Could not decode Google token for signup metadata", err);
+//         return undefined;
+//       }
+//     })();
+
+//     console.log("createSubOrgParams:", createSubOrgParams);
+
+//     // -------- Build OAuth parameters for Turnkey --------
+//     const oauthParams: any = {
+//       oidcToken: resp.credential,
+//       publicKey,
+//       providerName: "Google"
+//     };
+//     console.log("OAuth params before sub-org:", oauthParams);
+//     if (createSubOrgParams) {
+//     oauthParams.createSubOrgParams = createSubOrgParams;
+//     }
+//     console.log("Final OAuth params:", oauthParams);
+
+//     // -------- SUPER IMPORTANT: Use completeWithOauth --------
+//     const sessionResult = await turnkey.completeOauth(oauthParams);
+
+//     console.log("Turnkey OAuth result:", sessionResult);
+//     setSuccess("Google sign-in complete!");
+
+//   } catch (err: any) {
+//     console.error("Turnkey Google OAuth failed:", err);
+
+//     const message =
+//       err?.message ||
+//       err?.response?.data?.message ||
+//       "Google OAuth login failed";
+
+//     setError(message);
+//     createdNonceRef.current = false;
+//     setGoogleNonce(null);
+
+//   } finally {
+//     setGoogleLoading(false);
+//   }
+// }
+
+async function handleGoogleSuccess(resp: CredentialResponse) {
   setGoogleLoading(true);
   setError(null);
   setSuccess(null);
@@ -198,65 +287,89 @@ export default function LoginModal({ open, onClose, forceLogin = false }: LoginM
       throw new Error("Turnkey OAuth is not available right now.");
     }
 
-    // -------- Decode Google ID token to extract optional metadata ----------
-    const createSubOrgParams = (() => {
+    // -------- Decode Google token ----------
+    console.log("Google credential:", resp.credential);
+    const decoded = (() => {
       try {
         const [, payloadSegment] = resp.credential.split(".");
-        if (!payloadSegment) return undefined;
+        if (!payloadSegment) return {};
 
         const payloadJson = atob(
           payloadSegment.replace(/-/g, "+").replace(/_/g, "/")
         );
-        const payload = JSON.parse(payloadJson);
-
-        const email =
-          typeof payload?.email === "string" ? payload.email : undefined;
-        const name =
-          typeof payload?.name === "string"
-            ? payload.name
-            : typeof payload?.given_name === "string"
-            ? payload.given_name
-            : undefined;
-
-        if (!email && !name) return undefined;
-
-        return {
-          ...(name && { userName: name }),
-          ...(email && { userEmail: email }),
-        };
-      } catch (err) {
-        console.warn("Could not decode Google token for signup metadata", err);
-        return undefined;
+        return JSON.parse(payloadJson);
+      } catch {
+        return {};
       }
     })();
 
+    console.log("Decoded Google payload:", decoded);
+
+    const email =
+      typeof decoded?.email === "string" ? decoded.email : undefined;
+    const name =
+      typeof decoded?.name === "string"
+        ? decoded.name
+        : typeof decoded?.given_name === "string"
+        ? decoded.given_name
+        : undefined;
+
+    // -------- Build minimal sub-org params ----------
+    let createSubOrgParams: any = undefined;
+
+    if (email || name) {
+      const label = (email || name || "google-user")
+        .toLowerCase()
+        .replace(/\s+/g, "-");
+
+      createSubOrgParams = {
+        // REQUIRED:
+        subOrgName: `narrative-${label}`,
+        oauthProviders: [
+          {
+            providerName: "Google",
+          },
+        ],
+
+        // OPTIONAL but recommended metadata:
+        ...(name && { userName: name }),
+        ...(email && { userEmail: email }),
+      };
+    }
+
     console.log("createSubOrgParams:", createSubOrgParams);
 
-    // -------- Build OAuth parameters for Turnkey --------
+    // -------- Build OAuth params ----------
     const oauthParams: any = {
       oidcToken: resp.credential,
       publicKey,
-      providerName: "Google"
+      providerName: "Google",
+      createSubOrgParams : {
+        userName: name
+      }
     };
 
-    // -------- SUPER IMPORTANT: Use completeWithOauth --------
-    const sessionResult = await turnkey.completeOauth(oauthParams);
 
+
+    console.log("Final OAuth params:", oauthParams);
+
+    // -------- Complete OAuth login via Turnkey ----------
+    const sessionResult = await turnkey.completeOauth(oauthParams);
     console.log("Turnkey OAuth result:", sessionResult);
+
     setSuccess("Google sign-in complete!");
 
   } catch (err: any) {
     console.error("Turnkey Google OAuth failed:", err);
 
-    const message =
+    const msg =
       err?.message ||
       err?.response?.data?.message ||
       "Google OAuth login failed";
 
-    setError(message);
+    setError(msg);
     createdNonceRef.current = false;
     setGoogleNonce(null);
-
   } finally {
     setGoogleLoading(false);
   }
