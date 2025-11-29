@@ -251,7 +251,7 @@ function TurnkeySessionBridge() {
 
             console.log("Turnkey login response:", data);
             const appToken =
-              data?.token || data?.fetchedUserToken || undefined;
+              data?.token || undefined;
 
             if (!appToken) {
               console.error("Turnkey login failed: no token in response");
