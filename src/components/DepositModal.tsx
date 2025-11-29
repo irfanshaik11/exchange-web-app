@@ -165,7 +165,11 @@ const DepositModal: React.FC<DepositModalProps> = ({
   useEffect(() => {
     if (!open) return;
     if (!depositAddress) return;
-    refreshBalance({ chain: selectedChain, address: depositAddress });
+    refreshBalance({
+      chain: selectedChain,
+      address: depositAddress,
+      force: true,
+    });
   }, [open, depositAddress, selectedChain, refreshBalance]);
 
   useEffect(() => {
@@ -287,7 +291,15 @@ const DepositModal: React.FC<DepositModalProps> = ({
             });
             // Refresh balance after successful swap
             if (refreshBalance) {
-              setTimeout(() => refreshBalance(), 2000);
+              setTimeout(
+                () =>
+                  refreshBalance({
+                    chain: selectedChain,
+                    address: depositAddress,
+                    force: true,
+                  }),
+                2000
+              );
             }
           },
           onSwapError: (error: Error) => {
@@ -564,7 +576,11 @@ const DepositModal: React.FC<DepositModalProps> = ({
           },
         });
         setTimeout(() => {
-          refreshBalance({ chain: selectedChain, address: sourceAddress });
+          refreshBalance({
+            chain: selectedChain,
+            address: sourceAddress,
+            force: true,
+          });
         }, 2000);
       } else {
         setWithdrawMessage({

@@ -7,11 +7,15 @@ import { queryClient } from '../lib/queryClient';
 import { WagmiProviderWrapper } from '../components/WagmiProviderWrapper';
 import { UserProvider, useUser } from "../components/UserContext";
 import { Toaster } from 'react-hot-toast';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
 import dynamic from 'next/dynamic';
+import { TurnkeyRootProvider } from "../components/TurnkeyRootProvider";
+import "@turnkey/react-wallet-kit/styles.css";  
+import { useTurnkey, AuthState } from '@turnkey/react-wallet-kit';
+import { turnkeyLogin } from '../utils/api';
 
 // Dynamically import LoginModal with no SSR to prevent wagmi provider issues
 const LoginModal = dynamic(() => import('../components/LoginModal'), {
@@ -101,6 +105,195 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     }
   }, true); // Use capture phase to intercept early
 }
+
+function TurnkeySessionBridge() {
+  const turnkeyCtx = useTurnkey() as any;
+  const {
+    authState,
+    session,
+    user,
+    fetchOrCreateP256ApiKeyUser,
+    fetchOrCreatePolicies,
+  } = turnkeyCtx;
+
+  const { refreshUser } = useUser();
+  const router = useRouter();
+
+  const hasProcessedRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
+  const hasUpdatedEmail = useRef(false);
+
+  const hasCreatedDelegatedUserRef = useRef(false);
+  const delegatedUserIdRef = useRef<string | null>(null);
+  const hasCreatedDelegatedPolicyRef = useRef(false);
+
+  const isRunningRef = useRef(false);
+
+  console.log(
+    "TurnkeySessionBridge authState:",
+    authState,
+    "session:",
+    session,
+    "user:",
+    user
+  );
+
+  // Reset all flags when auth state changes
+  useEffect(() => {
+    if (authState !== AuthState.Authenticated) {
+      hasProcessedRef.current = false;
+      pendingRefreshRef.current = false;
+      hasUpdatedEmail.current = false;
+      hasCreatedDelegatedUserRef.current = false;
+      delegatedUserIdRef.current = null;
+      hasCreatedDelegatedPolicyRef.current = false;
+      isRunningRef.current = false;
+    }
+  }, [authState]);
+
+  //
+  // Main Pipeline
+  //
+  useEffect(() => {
+    if (authState !== AuthState.Authenticated) return;
+
+    // avoid double runs
+    if (isRunningRef.current) return;
+    isRunningRef.current = true;
+
+    (async () => {
+      try {
+        const daPublicKey =
+          "02f63059aa8658dcbbfb5f8efe20ee552d9e901d46be9109142d424d8f4292284e";
+
+        //
+        // 1) Ensure delegated user exists (NO IndexedDB check)
+        //
+        if (
+          fetchOrCreateP256ApiKeyUser &&
+          daPublicKey &&
+          !hasCreatedDelegatedUserRef.current
+        ) {
+          try {
+            const res = await fetchOrCreateP256ApiKeyUser({
+              publicKey: daPublicKey,
+              createParams: {
+                userName: "Delegated Access",
+                apiKeyName: "Delegated User API Key",
+              },
+            });
+
+            const uid = res?.userId || res?.id;
+            if (uid) {
+              delegatedUserIdRef.current = uid;
+              hasCreatedDelegatedUserRef.current = true;
+              hasCreatedDelegatedPolicyRef.current = false;
+              console.log("Delegated user ready:", uid);
+            } else {
+              console.error(
+                "fetchOrCreateP256ApiKeyUser succeeded but no userId returned"
+              );
+              hasCreatedDelegatedUserRef.current = true; // prevent infinite loop
+            }
+          } catch (err) {
+            console.error("Failed to create delegated Turnkey user", err);
+            hasCreatedDelegatedUserRef.current = true; // still continue pipeline
+          }
+        }
+
+        //
+        // 2) Ensure delegated policy exists
+        //
+        const delegatedUserId = delegatedUserIdRef.current;
+
+        if (
+          fetchOrCreatePolicies &&
+          delegatedUserId &&
+          !hasCreatedDelegatedPolicyRef.current
+        ) {
+          hasCreatedDelegatedPolicyRef.current = true;
+
+          const policies = [
+            {
+              policyName: `Allow user ${delegatedUserId} to sign`,
+              effect: "EFFECT_ALLOW",
+              consensus: `approvers.any(user, user.id == '${delegatedUserId}')`,
+              notes: "Allow Delegated Access user to sign transactions",
+            },
+          ];
+
+          try {
+            await fetchOrCreatePolicies({ policies });
+            console.log("Delegated policy ensured:", delegatedUserId);
+          } catch (err) {
+            console.error("Failed to create delegated policy", err);
+            hasCreatedDelegatedPolicyRef.current = false; // retry next render
+          }
+        }
+
+        //
+        // 3) Backend login → Get App JWT
+        //
+        if (
+          session?.token &&
+          session.organizationId &&
+          session.userId &&
+          !hasProcessedRef.current
+        ) {
+          hasProcessedRef.current = true;
+
+          try {
+            const data = await turnkeyLogin({
+              turnkeySessionToken: session.token,
+              organizationId: session.organizationId,
+              userId: session.userId,
+            });
+
+            console.log("Turnkey login response:", data);
+            const appToken =
+              data?.token || undefined;
+
+            if (!appToken) {
+              console.error("Turnkey login failed: no token in response");
+              hasProcessedRef.current = false;
+              return;
+            }
+
+            Cookies.set("token", appToken, { expires: 7, path: "/" });
+
+            pendingRefreshRef.current = true;
+            if (user?.userEmail || user?.userName) {
+              await refreshUser();
+              pendingRefreshRef.current = false;
+            }
+
+            router.push("/");
+          } catch (err) {
+            console.error("Error linking Turnkey session to app user", err);
+            hasProcessedRef.current = false;
+          }
+        }
+      } finally {
+        isRunningRef.current = false;
+      }
+    })();
+  }, [
+    authState,
+    session?.token,
+    session?.organizationId,
+    session?.userId,
+    user?.userEmail,
+    user?.userName,
+    fetchOrCreateP256ApiKeyUser,
+    fetchOrCreatePolicies,
+    refreshUser,
+    router,
+  ]);
+
+  return null;
+}
+
+
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
@@ -353,9 +546,11 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       </Head>
       <div className={inter.className}>
         <MobileBlocker>
+        <TurnkeyRootProvider>
           <MonadTradeBanner />
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
             <UserProvider>
+              <TurnkeySessionBridge />
               <TokenHandler />
               <ReferralTracker />
               <SolPriceProvider>
@@ -404,6 +599,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
               },
             }}
           />
+          </TurnkeyRootProvider>
         </MobileBlocker>
       </div>
     </>
