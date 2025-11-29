@@ -2,6 +2,8 @@
 "use client";
 
 import React, { useEffect, useMemo } from "react";
+import { env } from '../env';
+
 import {
   TurnkeyProvider,
   type TurnkeyProviderConfig,
@@ -11,12 +13,9 @@ import "@turnkey/react-wallet-kit/styles.css";
 export function TurnkeyRootProvider({ children }: { children: React.ReactNode }) {
   const turnkeyConfig: TurnkeyProviderConfig = useMemo(() => {
     // Prefer env vars and avoid any hardcoded defaults
-    const orgId = '7347a74c-36c1-4a5a-adf6-0b3ea84be204'
-
-
-    const proxyConfigId = '2091f6a1-1a1e-4730-be7a-b03d7c8d3561'
-
-    const apiBaseUrl = "https://api.turnkey.com";
+    const orgId = env.NEXT_PUBLIC_ORGANIZATION_ID || ''
+    const proxyConfigId = env.NEXT_PUBLIC_AUTH_PROXY_CONFIG_ID || '';
+    const apiBaseUrl = env.NEXT_PUBLIC_TURNKEY_API_BASE_URL || ''
 
     const config: TurnkeyProviderConfig = {
       apiBaseUrl,
@@ -27,6 +26,7 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
         oauthConfig: {
           // Let Turnkey handle the redirect details; config lives in dashboard
           openOauthInPage: true,
+          oauthRedirectUri: "http://localhost:3000"
         },
         methods: {
           googleOauthEnabled: true,
