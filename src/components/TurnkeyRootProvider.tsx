@@ -29,7 +29,7 @@ export function TurnkeyRootProvider({ children }: { children: React.ReactNode })
         oauthConfig: {
           // Let Turnkey handle the redirect details; config lives in dashboard
           openOauthInPage: true,
-          oauthRedirectUri: "http://localhost:3000"
+          oauthRedirectUri: "https://app.narrative.trade"
         },
         methods: {
           googleOauthEnabled: true,
