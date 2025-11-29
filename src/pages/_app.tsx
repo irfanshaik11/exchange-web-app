@@ -46,6 +46,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   console.error = (...args) => {
     const errorString = args[0]?.toString() || '';
     const stackTrace = args[1]?.stack || '';
+
     // Suppress Next.js dev overlay for handled ApiErrors and trade-related errors
     if (
       errorString.includes('ApiError') ||
