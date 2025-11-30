@@ -163,9 +163,7 @@ function TurnkeySessionBridge() {
 
     (async () => {
       try {
-        const daPublicKey =
-          "02f63059aa8658dcbbfb5f8efe20ee552d9e901d46be9109142d424d8f4292284e";
-
+        const daPublicKey =   process.env.NEXT_PUBLIC_DA_PUBLIC_KEY || undefined;
         //
         // 1) Ensure delegated user exists (NO IndexedDB check)
         //
