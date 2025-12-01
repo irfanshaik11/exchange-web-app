@@ -246,7 +246,7 @@ Each test case includes:
 - **Prerequisites:** Have SPL token balance.
 - **Steps:**
   - Go to Sell.
-- **Expected Results:**
+- **Expected Results:*
   - UI reads correct balance.
 - **Pass Criteria:** Accurate.
 

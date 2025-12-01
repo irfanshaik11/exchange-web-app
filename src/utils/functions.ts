@@ -1,9 +1,12 @@
 import { env } from '../env';
 import { Connection, PublicKey, clusterApiUrl } from '@solana/web3.js';
+import { ethers } from 'ethers';
 
 export interface PositionRow {
   tokenAddress: string;
   pairAddress?: string; // Pool/pair address (contains originalPairAddress from backend)
+  blockchain?: string;
+  launchpad?: string | null;
   bought: number;
   boughtUsdValue: number;
   sold: number;
@@ -20,6 +23,8 @@ export interface TradeRow {
   tokenAddress: string;
   pairAddress?: string; // Pool/pair address
   originalPairAddress?: string; // Original pair address from backend
+  blockchain?: string;
+  launchpad?: string | null;
   tradeTime: string;
   type: 'Buy' | 'Sell';
   marketCap: string | number;
@@ -28,6 +33,7 @@ export interface TradeRow {
   usdValue: string | number;
   transactionHash: string;
   createdAt: string;
+  tokenName?: string; // Token name from API
 }
 
 // New: Wallet Interface
@@ -78,7 +84,7 @@ export async function getPumpSwapPool(tokenAddress: string): Promise<any> {
   return res.json();
 }
 
-export async function getActivePositionsByUser(userId: string): Promise<PositionRow[]> {
+export async function getActivePositionsByUser(userId: string, blockchain?: string): Promise<PositionRow[]> {
   if (!userId) return [];
   if (!env.NEXT_PUBLIC_BACKEND_URL) {
     console.error('NEXT_PUBLIC_BACKEND_URL is not set');
@@ -92,8 +98,9 @@ export async function getActivePositionsByUser(userId: string): Promise<Position
     if (controller) {
       timeoutId = setTimeout(() => controller.abort(), 10000);
     }
+    const blockchainParam = blockchain && blockchain !== 'all' ? `&blockchain=${blockchain}` : '';
     const res = await fetch(
-      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}`,
+      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_active_positions_by_user?userId=${userId}${blockchainParam}`,
       controller ? { signal: controller.signal } : {},
     );
     if (!res.ok) {
@@ -124,16 +131,17 @@ export async function getTradeHistoryByTokenAddress(tokenAddress: string): Promi
   return Array.isArray(data) ? data : [];
 }
 
-export async function getTradeHistoryByUser(userId: string): Promise<any[]> {
+export async function getTradeHistoryByUser(userId: string, blockchain?: string): Promise<any[]> {
   if (!userId) throw new Error('userId is required');
-  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}`);
+  const blockchainParam = blockchain && blockchain !== 'all' ? `&blockchain=${blockchain}` : '';
+  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_history_by_user?userId=${userId}${blockchainParam}`);
   if (!res.ok) {
     throw new Error(`Failed to fetch trade history by user: ${res.statusText}`);
   }
   return res.json();
 }
 
-export async function getTradeActivityByUser(userId: string): Promise<any[]> {
+export async function getTradeActivityByUser(userId: string, blockchain?: string): Promise<any[]> {
   if (!userId) throw new Error('userId is required');
   const controller =
     typeof AbortController !== 'undefined' ? new AbortController() : undefined;
@@ -142,8 +150,9 @@ export async function getTradeActivityByUser(userId: string): Promise<any[]> {
     timeoutId = setTimeout(() => controller.abort(), 10000);
   }
   try {
+    const blockchainParam = blockchain && blockchain !== 'all' ? `&blockchain=${blockchain}` : '';
     const res = await fetch(
-      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}`,
+      `${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/get_trade_activity_by_user?userId=${userId}${blockchainParam}`,
       controller ? { signal: controller.signal } : {},
     );
   if (!res.ok) {
@@ -161,6 +170,81 @@ export async function getTradeActivityByUser(userId: string): Promise<any[]> {
       clearTimeout(timeoutId);
     }
   }
+}
+
+export interface WalletScanResponse {
+  wallet: string;
+  updatedAt: string;
+  balance: {
+    sol: number;
+    usd: number;
+    usdFormatted: string | null;
+  };
+  tokenActivity: Array<{
+    type: 'Buy' | 'Sell';
+    token: string;
+    tokenAddress: string;
+    amount: number;
+    marketcap: number | null;
+    age: string;
+    solscanUrl: string;
+  }>;
+}
+
+export async function scanWallet(walletAddress: string, limit?: number): Promise<WalletScanResponse> {
+  if (!walletAddress) throw new Error('walletAddress is required');
+  if (!env.NEXT_PUBLIC_BACKEND_URL) {
+    throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured');
+  }
+
+  const params = new URLSearchParams({ walletAddress });
+  if (limit) params.append('limit', limit.toString());
+  
+  const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/trade/scan_wallet?${params.toString()}`);
+  
+  if (!res.ok) {
+    throw new Error(`Failed to scan wallet: ${res.statusText}`);
+  }
+  
+  return res.json();
+}
+
+// Transform wallet scan response to TradeRow format for Activity component
+export function transformWalletScanToTradeRows(scanData: WalletScanResponse): TradeRow[] {
+  return scanData.tokenActivity.map((activity, index) => {
+    // Extract transaction hash from solscanUrl
+    const txHash = activity.solscanUrl.split('/tx/')[1] || '';
+    
+    // Parse age to get approximate timestamp (current time - age)
+    const now = Date.now();
+    let timestamp = now;
+    const age = activity.age;
+    if (age.endsWith('s')) {
+      timestamp = now - parseInt(age) * 1000;
+    } else if (age.endsWith('m')) {
+      timestamp = now - parseInt(age) * 60 * 1000;
+    } else if (age.endsWith('h')) {
+      timestamp = now - parseInt(age) * 60 * 60 * 1000;
+    } else if (age.endsWith('d')) {
+      timestamp = now - parseInt(age) * 24 * 60 * 60 * 1000;
+    } else if (age.endsWith('w')) {
+      timestamp = now - parseInt(age) * 7 * 24 * 60 * 60 * 1000;
+    }
+
+    return {
+      id: index,
+      tokenAddress: activity.tokenAddress,
+      type: activity.type,
+      tradeTime: new Date(timestamp).toTimeString().split(' ')[0],
+      marketCap: activity.marketcap || 0,
+      solAmount: activity.amount,
+      tokenAmount: 0, // Not available from scan
+      usdValue: activity.amount, // Using SOL amount as USD value approximation
+      transactionHash: txHash,
+      createdAt: new Date(timestamp).toISOString(),
+      tokenName: activity.token, // Use token name from API
+    };
+  });
 }
 
 export function formatSmartNumber(num: number): string {
@@ -228,6 +312,23 @@ export async function getSolBalance(address: string, isDevnet = false) {
     return sol;
   } catch (error) {
     console.error('Failed to fetch balance:', error);
+    return null;
+  }
+}
+
+export async function getMonadBalance(address: string) {
+  const rpcUrl = env.NEXT_PUBLIC_MONAD_RPC_URL || env.MONAD_RPC_URL;
+  if (!rpcUrl) {
+    console.warn('Monad RPC URL not configured');
+    return null;
+  }
+  try {
+    const provider = new ethers.JsonRpcProvider(rpcUrl);
+    const weiBalance = await provider.getBalance(address);
+    const mon = Number(weiBalance) / 1e18;
+    return mon;
+  } catch (error) {
+    console.error('Failed to fetch Monad balance:', error);
     return null;
   }
 }

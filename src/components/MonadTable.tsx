@@ -48,6 +48,7 @@ import InterstatePopout from './InterstatePopout';
 import VerticalInput from './VerticalInput';
 import { usePulseWebSocket } from '~/hooks/usePulseWebSocket';
 import { flushSync } from 'react-dom';
+import { env } from '~/env';
 
 import { useRouter } from "next/router";
 import { fetchTokenMetadata } from "~/utils/functions";
@@ -61,7 +62,7 @@ import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { extractTokenImage } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
-import { tradeBuy, createLimitOrder, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
+import { tradeBuy, tradeMonadBuy, createLimitOrder, SOL_MINT_ADDRESS, ApiError } from "~/utils/api";
 import { getPoolTypeFromToken } from "~/utils/poolTypeDetection";
 import { TokenAge } from "./TokenAge";
 import { prefetchTradeData } from "~/utils/tokenCache";
@@ -75,7 +76,7 @@ import {
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 
-/* ---- Enhanced Monad Purple Palette ---- */
+/* ---- Enhanced Monad Green Palette (matching PulseTable) ---- */
 const AX = {
   bg: "#0b0c0e",
   surface: "#16171C",
@@ -83,18 +84,18 @@ const AX = {
   border: "#24252C",
   text: "#f0f5f5",
   muted: "#9CA3AF",
-  mint: "#9B59B6",  // Purple - Monad brand color
-  mintHover: "#8e44ad",  // Darker purple for hover
+  mint: "#31e3ac",  // Green - Monad brand color (matching PulseTable)
+  mintHover: "#28c896",  // Darker green for hover (matching PulseTable)
   sell: "#ed3a7a",
-  aiBlue: "#8b5cf6",  // Purple variant
-  aiBlueHover: "#7c3aed",  // Darker purple variant
-  aiGreen: "#9B59B6",  // Purple for primary actions
-  aiGreenHover: "#8e44ad",  // Darker purple for hover
-  aiCyan: "#a78bfa",  // Light purple variant
-  aiCyanHover: "#8b5cf6",  // Purple hover
-  glowBlue: "rgba(155, 89, 182, 0.3)",  // Purple glow
-  glowGreen: "rgba(155, 89, 182, 0.3)",  // Purple glow
-  glowCyan: "rgba(139, 92, 246, 0.3)",  // Purple variant glow
+  aiBlue: "#526fff",  // Blue variant (matching PulseTable)
+  aiBlueHover: "#3f56d9",  // Darker blue variant (matching PulseTable)
+  aiGreen: "#31e3ac",  // Green for primary actions (matching PulseTable)
+  aiGreenHover: "#28c896",  // Darker green for hover (matching PulseTable)
+  aiCyan: "#06B6D4",  // Cyan variant (matching PulseTable)
+  aiCyanHover: "#0891B2",  // Cyan hover (matching PulseTable)
+  glowBlue: "rgba(82, 111, 255, 0.3)",  // Blue glow (matching PulseTable)
+  glowGreen: "rgba(49, 227, 172, 0.3)",  // Green glow (matching PulseTable)
+  glowCyan: "rgba(6, 182, 212, 0.3)",  // Cyan glow (matching PulseTable)
 };
 
 interface MonadTableProps {
@@ -297,10 +298,10 @@ const SmartColor: React.FC<SmartColorProps> = ({ children, className = "", token
     // Restrict MarketCap metric to approved palette only
     if (metricType === 'marketCap') {
       // User-defined tiers (in thousands):
-      // 0–20k: blue, 20k–30k: purple, 30k–100k: yellow, 100k+: green
-      if (mc >= 100_000) return '#9B59B6';  // Purple: 100k+
+      // 0–20k: blue, 20k–30k: green, 30k–100k: yellow, 100k+: green
+      if (mc >= 100_000) return '#31e3ac';  // Green: 100k+ (matching PulseTable)
       if (mc >= 30_000) return '#ddc13d';   // Yellow: 30k–100k
-      if (mc >= 20_000) return '#526ffe';   // Purple: 20k–30k
+      if (mc >= 20_000) return '#31e3ac';   // Green: 20k–30k (matching PulseTable)
       return '#52c6ff';                     // Blue: <20k
     }
     
@@ -321,7 +322,7 @@ const SmartColor: React.FC<SmartColorProps> = ({ children, className = "", token
     if (symbol.includes('defi') || symbol.includes('swap') || symbol.includes('dex') || 
         symbol.includes('farm') || symbol.includes('yield') || symbol.includes('liquidity') ||
         name.includes('finance') || name.includes('exchange') || name.includes('protocol')) {
-      return '#9B59B6'; // Purple
+      return '#31e3ac'; // Green (matching PulseTable)
     }
     
     // High volume tokens - map to allowed palette (use blue)
@@ -330,10 +331,10 @@ const SmartColor: React.FC<SmartColorProps> = ({ children, className = "", token
       return '#52c6ff'; // Blue
     }
     
-    // For non-marketCap metrics, prefer purple for notable tokens using approved purple
+    // For non-marketCap metrics, prefer green for notable tokens using approved green
     const marketCap = token.fully_diluted_value || token.market_cap_usd || 0;
     if (marketCap > 10000000) { // > $10M market cap
-      return '#526ffe'; // Purple
+      return '#31e3ac'; // Green (matching PulseTable)
     }
     
     // New/trending tokens - map to approved palette (use yellow)
@@ -347,7 +348,7 @@ const SmartColor: React.FC<SmartColorProps> = ({ children, className = "", token
       return a & a;
     }, 0);
     
-    const defaultColors = ['#52c6ff', '#9B59B6', '#ddc13d', '#526ffe'];
+    const defaultColors = ['#52c6ff', '#31e3ac', '#ddc13d', '#06B6D4'];
     return defaultColors[Math.abs(hash) % defaultColors.length];
   };
   
@@ -607,12 +608,12 @@ function TokenImage({
 
   // Get border color based on migration progress (loading bar style)
   const getProgressBorderColor = (progress: number): string => {
-    if (!isNewPairs) return '#9B59B6'; // Default purple for non-New Pairs
+    if (!isNewPairs) return '#31e3ac'; // Default green for non-New Pairs (matching PulseTable)
     
-    // Loading bar style: purple = good progress, red = bad/slow progress
+    // Loading bar style: green = good progress, red = bad/slow progress
     if (progress >= 0.7) {
-      // Good progress - bright purple
-      return '#9B59B6'; // purple-500
+      // Good progress - bright green
+      return '#31e3ac'; // green (matching PulseTable)
     } else if (progress >= 0.4) {
       // Medium progress - yellow
       return '#eab308'; // yellow-500
@@ -629,25 +630,28 @@ function TokenImage({
   const protocolColorMap: Record<string, string> = {
     'nad.fun': '#eab308',     // Yellow for nad.fun
     'nadfun': '#eab308',      // Yellow for nadfun
-    'pump': '#9B59B6',        // Purple for pump.fun
-    'pump.fun': '#9B59B6',    // Purple for pump.fun
+    'flap.sh': '#31e3ac',     // Green for flap.sh (matching PulseTable)
+    'flapsh': '#31e3ac',      // Green for flapsh (matching PulseTable)
+    'kuru': '#31e3ac',        // Green for Kuru (matching PulseTable)
+    'pump': '#31e3ac',        // Green for pump.fun (matching PulseTable)
+    'pump.fun': '#31e3ac',    // Green for pump.fun (matching PulseTable)
     'bonk': '#ff6b35',        // Orange for bonk
-    'bags': '#9B59B6',        // Purple for bags
+    'bags': '#31e3ac',        // Green for bags (matching PulseTable)
     'moonshot': '#eab308',    // Yellow for moonshot
     'moonshoot': '#eab308',   // Yellow for moonshoot
     'moonit': '#eab308',      // Yellow for moonit
-    'heaven': '#8b5cf6',
+    'heaven': '#31e3ac',
     'daos.fun': '#06b6d4',
     'candle': '#f59e0b',
     'sugar': '#ec4899',
-    'believe': '#9B59B6',
-    'jupiter': '#8b5cf6',
+    'believe': '#31e3ac',
+    'jupiter': '#31e3ac',
     'boop': '#134577',        // Dark blue for boopfun
     'boopfun': '#134577',     // Dark blue for boopfun
     'launchlab': '#3b82f6',   // Blue for launchlab (default)
     'dynamic': '#526fff',
-    'raydium': '#5c51f7',     // Purple for raydium
-    'raydiumlaunchpad': '#5c51f7',  // Purple for raydiumlaunchpad
+    'raydium': '#31e3ac',     // Green for raydium (matching PulseTable)
+    'raydiumlaunchpad': '#31e3ac',  // Green for raydiumlaunchpad (matching PulseTable)
     'meteora': '#d11f3a',     // Pink-red for meteora
     'meteora_v2': '#d11f3a',  // Pink-red for meteora
     'pump_amm': '#e9ba14',    // Gold for meteora amm
@@ -667,6 +671,16 @@ function TokenImage({
       return '#eab308'; // Yellow for nad.fun
     }
     
+    // Special handling for flap.sh - green color
+    if (launchpadProtocol.includes('flap.sh') || launchpadProtocol.includes('flapsh')) {
+      return '#31e3ac'; // Green for flap.sh (matching PulseTable)
+    }
+    
+    // Special handling for Kuru - green color
+    if (launchpadProtocol.includes('kuru')) {
+      return '#31e3ac'; // Green for Kuru (matching PulseTable)
+    }
+    
     // Special handling for Meteora - use column type since Meteora doesn't have bonding scores
     if (launchpadProtocol.includes('meteora')) {
       // Meteora tokens: red in new pairs and final stretch, yellow in migrated
@@ -679,12 +693,12 @@ function TokenImage({
     
     // Special handling for Pump - use column type to determine color
     if (launchpadProtocol.includes('pump')) {
-      // Pump tokens: purple in new pairs and final stretch, yellow in migrated
+      // Pump tokens: green in new pairs and final stretch, yellow in migrated
       if (columnType === 'migrated') {
         return '#eab308'; // Yellow for migrated
       } else {
-        return '#9B59B6'; // Purple for new pairs and final stretch
-        return '#9B59B6'; // Purple for new pairs and final stretch
+        return '#31e3ac'; // Green for new pairs and final stretch (matching PulseTable)
+        return '#31e3ac'; // Green for new pairs and final stretch (matching PulseTable)
       }
     }
     
@@ -703,7 +717,7 @@ function TokenImage({
     }
     
     if (launchpadProtocol.includes('raydium')) {
-      return '#5c51f7'; // Purple for raydium
+      return '#31e3ac'; // Green for raydium (matching PulseTable)
     }
     
     if (launchpadProtocol.includes('moonit') || launchpadProtocol.includes('moonshot') || launchpadProtocol.includes('moonshoot')) {
@@ -719,7 +733,7 @@ function TokenImage({
     }
     
     if (launchpadProtocol.includes('bags')) {
-      return '#9B59B6'; // Purple for bags
+      return '#31e3ac'; // Green for bags (matching PulseTable)
     }
     
     if (launchpadProtocol.includes('orca')) {
@@ -745,6 +759,16 @@ function TokenImage({
     // Map nad.fun to GitHub avatar
     if (launchpadProtocol.includes('nad.fun') || launchpadProtocol === 'nadfun') {
       return 'https://avatars.githubusercontent.com/u/173274001?s=200&v=4';
+    }
+    
+    // Map flap.sh to LinkedIn logo
+    if (launchpadProtocol.includes('flap.sh') || launchpadProtocol === 'flapsh') {
+      return 'https://media.licdn.com/dms/image/v2/D4D0BAQFG5I0EDOrmJQ/company-logo_200_200/company-logo_200_200/0/1714693191952/flap_sh_logo?e=2147483647&v=beta&t=2kcdij2YPOFjLdPYzAhQxKgbGcuyh7Cdyp0AkGR8V6A';
+    }
+    
+    // Map Kuru to Twitter profile image
+    if (launchpadProtocol.includes('kuru')) {
+      return 'https://pbs.twimg.com/profile_images/1950962142917619714/R7Cj_qk7_400x400.jpg';
     }
     
     // Map launchpad_protocol to external logo URLs
@@ -901,12 +925,8 @@ function TokenImage({
             className="relative rounded-sm"
             style={{
               border: `0.5px solid ${(() => {
-                const isNewColumn = columnType === 'new';
-                if (isNewColumn && typeof protocolColor === 'string' && protocolColor.startsWith('#') && (protocolColor.length === 7 || protocolColor.length === 4)) {
-                  // Slightly more transparent (~70%) for New Pairs color border
-                  return protocolColor.length === 7 ? `${protocolColor}B3` : `${protocolColor}B`;
-                }
-                return protocolColor;
+                // Use grey border for images instead of protocol color
+                return '#6b7280'; // grey-500
               })()}`,
               padding: '2px',
               backgroundColor: '#06070b',
@@ -919,7 +939,7 @@ function TokenImage({
             }}
           >
             {/* Image container */}
-            <div className="relative rounded-sm overflow-hidden" style={{ width: '75px', height: '75px', minWidth: '75px', minHeight: '75px', maxWidth: '75px', maxHeight: '75px' }}>
+            <div className="relative rounded-sm overflow-hidden" style={{ width: '75px', height: '75px', minWidth: '75px', minHeight: '75px', maxWidth: '75px', maxHeight: '75px', border: '1px solid #9333ea' }}>
               <FastImage
                 src={imageUrl}
                 alt={token.name || token.symbol || ""}
@@ -957,8 +977,8 @@ function TokenImage({
               <path
                 d="M 79 79 L 8 79 Q 2 79 2 73 L 2 8 Q 2 2 8 2 L 73 2 Q 79 2 79 8 L 79 73 Q 79 79 73 79"
                 fill="none"
-                stroke={protocolColor}
-                strokeWidth="1"
+                stroke="#c084fc"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeDasharray={`${4 * 77}`} // Total perimeter
@@ -972,16 +992,16 @@ function TokenImage({
         {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
         <div className="absolute bottom-0 right-0 rounded-full flex items-center justify-center transform translate-x-1/5 translate-y-1/4 z-10 pointer-events-none"
              style={{ 
-               width: 16, 
-               height: 16,
+               width: 20, 
+               height: 20,
                backgroundColor: '#000000',
-               border: `1px solid ${protocolColor}`,
-               boxShadow: `0 0 4px ${protocolColor}60`
+               border: 'none',
+               boxShadow: 'none'
              }}>
           <img
             src={tokenIcon}
             alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || 'Protocol'} logo`}
-            className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-3/4 h-3/4 object-contain'} rounded-full`}
+            className={`${isFullCircleImage ? 'w-full h-full object-cover' : 'w-4/5 h-4/5 object-contain'} rounded-full`}
             style={{
               filter: 'none' // Keep original logo colors - don't apply yellow filter
             }}
@@ -1007,7 +1027,7 @@ function TokenImage({
              style={{ opacity: showPreview ? 1 : 0 }}>
           <div className="absolute inset-0 rounded-lg"
                style={{
-                 border: '1px solid rgba(107, 114, 128, 0.3)',
+                 border: '1px solid #9333ea',
                  boxShadow: 'none'
                }}></div>
         </div>
@@ -1029,7 +1049,7 @@ function TokenImage({
                 width: '225px',
                 height: '225px',
                 backgroundColor: AX.surface,
-                borderColor: 'rgba(107, 114, 128, 0.3)',
+                borderColor: '#9333ea',
                 borderWidth: '1px',
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
               }}
@@ -1483,8 +1503,8 @@ function MonadTable({
   });
   
   const [filters, setFilters] = useState({
-    // Protocols
-    protocols: ['nad.fun'] as string[],
+    // Protocols - Monad launchpad protocols (nad.fun and flap.sh)
+    protocols: ['nad.fun', 'flap.sh'] as string[],
     // Quote Tokens
     quoteTokens: [] as string[],
     // Keywords
@@ -1573,6 +1593,7 @@ function MonadTable({
   const [pendingFilters, setPendingFilters] = useState(filters);
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const prevHasSpecificProtocolsRef = useRef(false);
+  const prevProtocolRef = useRef<string>('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1601,6 +1622,10 @@ function MonadTable({
     switch (protocol) {
       case 'nad.fun':
         return ['nad.fun'];
+      case 'flap.sh':
+        return ['flap.sh'];
+      case 'Kuru':
+        return ['kuru'];
       case 'All':
         return ['all'];
       default:
@@ -1609,33 +1634,47 @@ function MonadTable({
   }, []);
 
   // Fetch Monad tokens directly from Monad token service on mount and when title changes
-  const fetchMonadTokens = useCallback(async () => {
+  const fetchMonadTokens = useCallback(async (protocols?: string[]) => {
     setIsFetchingMonad(true);
     try {
-      // Determine the endpoint based on column type - ALWAYS use Monad-specific endpoints
-      let endpoint = '/api/token-service/pulse-new-monad';
+      // Call Monad token service directly (bypasses Next.js proxy for Redis cache benefits)
+      const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
+      let endpoint = '/v1/pulse/new';
       let limit = 50;
       if (title.toLowerCase().includes('final stretch')) {
-        endpoint = '/api/token-service/pulse-final-stretch-monad';
+        endpoint = '/v1/pulse/final-stretch';
         limit = 50;
       } else if (title.toLowerCase().includes('migrated')) {
-        endpoint = '/api/token-service/pulse-migrated-monad';
+        endpoint = '/v1/pulse/migrated';
         limit = 70;
       }
 
-      console.log(`[MonadTable ${title}] 🌊 Fetching Monad tokens from ${endpoint} (filtered to nad.fun only)`);
-      // Only fetch nad.fun tokens
-      const response = await fetch(`${endpoint}?limit=${limit}&protocols=nad.fun&t=${Date.now()}`, {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-      });
+      // Add protocols parameter if provided
+      let fullUrl = `${monadServiceUrl}${endpoint}?limit=${limit}`;
+      if (protocols && protocols.length > 0) {
+        const backendProtocols = protocols.flatMap(mapProtocolToBackend);
+        const protocolsParam = backendProtocols.join(',');
+        fullUrl += `&protocols=${encodeURIComponent(protocolsParam)}`;
+      }
       
+      console.log(`[MonadTable ${title}] 🌊 Fetching Monad tokens directly from ${fullUrl} (Redis cache enabled)`);
+      // Fetch Monad launchpad tokens (backend has Redis cache with 5s TTL for 354x faster responses)
+      const response = await fetch(fullUrl, {
+        cache: 'no-store',
+        headers: { 'Accept': 'application/json' }
+      });
+
       if (response.ok) {
-        const data = await response.json();
-        const next = Array.isArray(data) ? data : [];
-        // NO filtering - use data directly from Monad token service
-        setMonadTokens(next as Token[]);
-        console.log(`[MonadTable ${title}] ✅ Fetched ${next.length} Monad tokens (no filtering)`);
+        const result = await response.json();
+        // Backend returns { status: "success", count: N, data: [...] }
+        const rawTokens = result.data || (Array.isArray(result) ? result : []);
+        // Transform backend response: map 'address' to 'mint' for frontend compatibility
+        const tokens = rawTokens.map((t: any) => ({
+          ...t,
+          mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+        }));
+        setMonadTokens(tokens as Token[]);
+        console.log(`[MonadTable ${title}] ✅ Fetched ${tokens.length} Monad tokens from backend (Redis cache)`);
       } else {
         console.error(`[MonadTable ${title}] ❌ Failed to fetch Monad tokens: ${response.status}`);
         setMonadTokens([]);
@@ -1646,12 +1685,13 @@ function MonadTable({
     } finally {
       setIsFetchingMonad(false);
     }
-  }, [title]);
+  }, [title, mapProtocolToBackend]);
 
-  // Fetch Monad tokens on mount and when title changes
+  // Fetch Monad tokens on mount, when title changes, or when protocols change
   useEffect(() => {
-    fetchMonadTokens();
-  }, [fetchMonadTokens]);
+    fetchMonadTokens(filters.protocols);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, filters.protocols]); // Re-fetch when title or protocols change
 
   // Fetch filtered tokens from API when protocols are selected (for protocol filtering only)
   const fetchFilteredTokens = useCallback(async (protocols: string[]) => {
@@ -1664,24 +1704,31 @@ function MonadTable({
     try {
       const backendProtocols = protocols.flatMap(mapProtocolToBackend);
       const protocolsParam = backendProtocols.join(',');
-      
-      // Determine the endpoint based on column type - use Monad-specific endpoints
-      let endpoint = '/api/token-service/pulse-new-monad';
+
+      // Call Monad token service directly (bypasses Next.js proxy for Redis cache benefits)
+      const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
+      let endpoint = '/v1/pulse/new';
       let limit = 50;
       if (title.toLowerCase().includes('final stretch')) {
-        endpoint = '/api/token-service/pulse-final-stretch-monad';
+        endpoint = '/v1/pulse/final-stretch';
         limit = 50;
       } else if (title.toLowerCase().includes('migrated')) {
-        endpoint = '/api/token-service/pulse-migrated-monad';
+        endpoint = '/v1/pulse/migrated';
         limit = 70;
       }
 
-      const response = await fetch(`${endpoint}?limit=${limit}&protocols=${encodeURIComponent(protocolsParam)}&t=${Date.now()}`);
+      const fullUrl = `${monadServiceUrl}${endpoint}?limit=${limit}&protocols=${encodeURIComponent(protocolsParam)}`;
+      const response = await fetch(fullUrl);
       if (response.ok) {
-        const data = await response.json();
-        const next = Array.isArray(data) ? data : [];
-        // NO filtering - use data directly from API
-        setFilteredTokens(next as Token[]);
+        const result = await response.json();
+        // Backend returns { status: "success", count: N, data: [...] }
+        const rawTokens = result.data || (Array.isArray(result) ? result : []);
+        // Transform backend response: map 'address' to 'mint' for frontend compatibility
+        const tokens = rawTokens.map((t: any) => ({
+          ...t,
+          mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+        }));
+        setFilteredTokens(tokens as Token[]);
       } else {
         console.error('Failed to fetch filtered tokens:', response.status);
         setFilteredTokens([]);
@@ -1711,6 +1758,8 @@ function MonadTable({
     error: wsError
   } = usePulseWebSocket({
     enabled: true,
+    // Use Monad token service WebSocket from environment variable
+    url: `${env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!.replace(/^http/, 'ws')}/v1/stream`,
     channel,
     protocols: filters.protocols.length > 0 ? filters.protocols.flatMap(mapProtocolToBackend) : undefined,
     onNewToken: useCallback((token: any) => {
@@ -1851,25 +1900,13 @@ function MonadTable({
     }, []),
   });
 
-  // Fetch filtered tokens when protocols change
+  // Clear WebSocket tokens when filter changes to force refresh
   useEffect(() => {
-    // Treat ['All'] the same as no filter - don't fetch filtered data
-    // MonadTable always uses nad.fun - no 'All' option
-    const hasSpecificProtocols = filters.protocols.length > 0;
-
-    if (hasSpecificProtocols) {
-      fetchFilteredTokens(filters.protocols);
-      setWsTokens([]); // Clear stale WebSocket tokens when filter changes
-    } else {
-      // When switching back to 'All', clear filtered tokens and rely on parent data + WebSocket
-      // Only reset wsTokens if we previously had a specific protocol filter applied
-      setFilteredTokens([]);
-      if (prevHasSpecificProtocolsRef.current) {
-        setWsTokens([]);
-      }
+    // Clear WebSocket tokens when filter changes to force refresh
+    if (filters.protocols.length > 0 && filters.protocols.join(',') !== prevProtocolRef.current) {
+      setWsTokens([]);
     }
-
-    prevHasSpecificProtocolsRef.current = hasSpecificProtocols;
+    prevProtocolRef.current = filters.protocols.join(',') || '';
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.protocols, title]);
 
@@ -1987,8 +2024,26 @@ function MonadTable({
     return parseInt(selectedPill.replace('P', '')) - 1;
   };
   // QUICK BUY handler – with detailed logging
+  // Helper function to map launchpad protocol to backend format
+  const getMonadLaunchpad = (token: Token): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
+    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || '';
+    
+    if (protocol.includes('nad.fun') || protocol.includes('nadfun')) {
+      return 'nadfun';
+    } else if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
+      // Check if it's devs portal (usually has 'dev' in the name or specific identifier)
+      if (protocol.includes('dev')) {
+        return 'flapsh-devs';
+      }
+      return 'flapsh-simple';
+    }
+    
+    // Default to nadfun if unknown
+    return 'nadfun';
+  };
+
   const handleQuickBuy = async (token: Token) => {
-    console.log("🎯 Enhanced Quick Buy called for token:", token.symbol);
+    console.log("🎯 Monad Quick Buy called for token:", token.symbol);
     
     if (!user?.bearerToken || !user?.id) {
       console.log("❌ User not logged in");
@@ -2001,51 +2056,104 @@ function MonadTable({
     const buyAmount = parseFloat(thunderAmount);
     if (isNaN(buyAmount) || buyAmount <= 0) {
       console.log("❌ Invalid buy amount:", thunderAmount);
-      showEnhancedToast('warning', 'Please enter a valid SOL amount (minimum 0.001 SOL)', {
+      showEnhancedToast('warning', 'Please enter a valid MON amount (minimum 0.001 MON)', {
         title: 'Invalid Amount',
       });
       return;
     }
 
-    const presetIndex = getPresetIndex(); // Use local preset selection based on selectedPill
-    const preset = presets[presetIndex];
-    if (!preset) {
-      console.log("❌ Quick buy preset missing for index", presetIndex);
-      showEnhancedToast('error', 'Quick buy preset not configured', {
-        title: 'Configuration Error',
-        suggestions: ['Update your presets in settings'],
+    if (!token.mint) {
+      console.log("❌ Invalid token - missing mint address");
+      showEnhancedToast('error', 'Invalid token information', {
+        title: 'Token Error',
       });
       return;
     }
 
-    const settings = preset.quickBuySettings;
+    const presetIndex = getPresetIndex();
+    const preset = presets[presetIndex];
+    const settings = (preset?.quickBuySettings || {}) as any;
+    
+    // Get launchpad from token
+    const launchpad = getMonadLaunchpad(token);
+    const tokenAddress = token.mint; // Monad uses mint address (0x format)
+    
+    // Get slippage from preset or use default (15%)
+    const slippage = settings?.maxSlippage ? (settings.maxSlippage * 100) : 15;
 
-    // Execute enhanced trade with all features
-    const result = await executeEnhancedTrade({
-      token,
-      amount: buyAmount,
-      side: 'buy',
-      settings,
-      user: { bearerToken: user.bearerToken, id: user.id },
-      solBalance: Number(solBalance || 0),
-      solPriceUsd: 150, // TODO: Get real SOL price
-      onSuccess: (txHash, stats) => {
-        console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });
-      },
-      onError: (error) => {
-        console.error('❌ Enhanced Quick Buy failed:', error);
-      },
-      onWarning: (warnings) => {
-        console.warn('⚠️ Pre-transaction warnings:', warnings);
-      },
+    console.log("📤 Monad Quick Buy params:", {
+      tokenAddress,
+      amountMON: buyAmount,
+      launchpad,
+      slippage,
     });
 
-    return result;
+    const toastId = showEnhancedToast('loading', 'Executing Monad buy...', {
+      title: 'Processing Trade',
+      description: `${buyAmount} MON → ${token.symbol}`,
+    });
+
+    try {
+      const result = await tradeMonadBuy(
+        {
+          tokenAddress,
+          amountMON: buyAmount,
+          launchpad,
+          slippage,
+        },
+        user.bearerToken
+      );
+
+      if (result.success && result.txHash) {
+        const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+        updateEnhancedToast(toastId, 'success', 'Buy successful!', {
+          title: 'Trade Executed',
+          description: `Transaction confirmed`,
+          customContent: (
+            <div className="flex flex-col gap-2">
+              <div className="text-sm text-[#E6E7EA]">
+                ✅ Buy successful!
+              </div>
+              <a
+                href={explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 underline text-xs flex items-center gap-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                View on MonadVision: {result.txHash.slice(0, 8)}...{result.txHash.slice(-6)}
+                <span>→</span>
+              </a>
+            </div>
+          ),
+          duration: 10000,
+        });
+        console.log('✅ Monad Quick Buy successful:', result);
+        console.log('🔗 Explorer URL:', explorerUrl);
+        return { success: true, txHash: result.txHash };
+      } else {
+        const errorMsg = (result as any)?.error || 'Unknown error';
+        updateEnhancedToast(toastId, 'error', 'Buy failed', {
+          title: 'Trade Failed',
+          description: errorMsg,
+        });
+        return { success: false, error: errorMsg };
+      }
+    } catch (error: any) {
+      console.error('❌ Monad Quick Buy failed:', error);
+      const errorMessage = error?.message || error?.error || 'Trade failed. Please try again.';
+      updateEnhancedToast(toastId, 'error', errorMessage, {
+        title: 'Trade Failed',
+      });
+      return { success: false, error: errorMessage };
+    }
   };
 
   // Protocol and quote token data with official icons from web3icons
   const protocols = [
     { name: 'nad.fun', icon: <Image src="https://avatars.githubusercontent.com/u/173274001?s=200&v=4" alt="nad.fun" width={16} height={16} className="rounded-full" />, color: '#eab308' },
+    { name: 'flap.sh', icon: <Image src="https://media.licdn.com/dms/image/v2/D4D0BAQFG5I0EDOrmJQ/company-logo_200_200/company-logo_200_200/0/1714693191952/flap_sh_logo?e=2147483647&v=beta&t=2kcdij2YPOFjLdPYzAhQxKgbGcuyh7Cdyp0AkGR8V6A" alt="flap.sh" width={16} height={16} className="rounded-full" />, color: '#31e3ac' },
+    { name: 'Kuru', icon: <Image src="https://pbs.twimg.com/profile_images/1950962142917619714/R7Cj_qk7_400x400.jpg" alt="Kuru" width={16} height={16} className="rounded-full" />, color: '#31e3ac' },
     // { name: 'Moonshot', icon: <Image src="https://play-lh.googleusercontent.com/bmv_OqsfmlR2Tfd7-4I2HS1twZdiJmmyX0warik6UxhUdSfegPMegeIRxxj9LGUBAQM" alt="Moonshot" width={16} height={16} className="rounded-full" />, color: '#a855f7' },
     // { name: 'Heaven', icon: <Image src="data:image/png;base64,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" alt="Heaven" width={16} height={16} className="rounded-full" />, color: '#8b5cf6' },
     // { name: 'Daos.fun', icon: <TokenDAO variant="branded" size={16} className="rounded-full" />, color: '#06b6d4' },
@@ -2114,22 +2222,73 @@ function MonadTable({
   // Protocol filtering is now 100% server-side via HTTP API and WebSocket
   // MonadTable ONLY uses Monad token service data - NO FE filtering, IGNORE tokens prop
   const filteredAndSortedTokens = useMemo(() => {
-    console.log(`[MonadTable ${title}] 🔧 MonadTable filtering - monadTokens: ${monadTokens.length}, filteredTokens: ${filteredTokens.length}`);
+    console.log(`[MonadTable ${title}] 🔧 MonadTable filtering - monadTokens: ${monadTokens.length}, filteredTokens: ${filteredTokens.length}, wsTokens: ${wsTokens.length}`);
 
     // MonadTable ONLY uses Monad token service endpoints - IGNORE tokens prop entirely
     // Use filteredTokens if protocol filter is active, otherwise use monadTokens
     // MonadTable always uses nad.fun - no 'All' option
     const hasSpecificProtocols = filters.protocols.length > 0;
 
-    // Use filtered tokens if protocols are selected, otherwise use base Monad tokens
+    // Use monadTokens (which are already filtered by protocol when protocols change)
     // NEVER use tokens prop - only use Monad endpoints
-    let tokensToUse = hasSpecificProtocols && filteredTokens.length > 0 ? filteredTokens : monadTokens;
-    
-    // NO FRONTEND FILTERING AT ALL - use tokens directly from Monad token service as-is
-    // Only apply keyword search if provided (user-initiated search)
-    let filtered: Token[] = tokensToUse;
+    let tokensToUse = monadTokens;
 
-    console.log(`[MonadTable ${title}] 🔀 Using ${hasSpecificProtocols ? 'filtered' : 'base'} Monad tokens: ${tokensToUse.length} tokens (NO FE filtering)`);
+    // MERGE WebSocket tokens (real-time) with HTTP tokens
+    // WebSocket tokens are prepended so they appear at the top (newest first)
+    // Use Map for O(1) deduplication by mint address
+    const tokenMap = new Map<string, Token>();
+    
+    // Filter WebSocket tokens by selected protocols if protocols are specified
+    const filteredWsTokens = hasSpecificProtocols ? wsTokens.filter(t => {
+      const tokenProtocol = ((t as any).launchpad_protocol || '').toLowerCase();
+      return filters.protocols.some(selectedProtocol => {
+        const selectedLower = selectedProtocol.toLowerCase();
+        if (selectedLower === 'nad.fun' || selectedLower === 'nadfun') {
+          return tokenProtocol.includes('nad.fun') || tokenProtocol.includes('nadfun');
+        }
+        if (selectedLower === 'flap.sh' || selectedLower === 'flapsh') {
+          return tokenProtocol.includes('flap.sh') || tokenProtocol.includes('flapsh');
+        }
+        if (selectedLower === 'kuru') {
+          return tokenProtocol.includes('kuru');
+        }
+        return tokenProtocol.includes(selectedLower);
+      });
+    }) : wsTokens;
+    
+    // Add filtered WebSocket tokens first (highest priority - newest)
+    for (const t of filteredWsTokens) {
+      if (t.mint) tokenMap.set(t.mint, t);
+    }
+    // Add HTTP tokens (fill in the rest, don't overwrite WS tokens)
+    for (const t of tokensToUse) {
+      if (t.mint && !tokenMap.has(t.mint)) tokenMap.set(t.mint, t);
+    }
+
+    // Apply protocol filtering as a safeguard (backend should already filter, but this ensures correctness)
+    let filtered: Token[] = Array.from(tokenMap.values());
+    
+    // Filter by selected protocols if protocols are specified
+    if (hasSpecificProtocols) {
+      filtered = filtered.filter(token => {
+        const tokenProtocol = ((token as any).launchpad_protocol || '').toLowerCase();
+        return filters.protocols.some(selectedProtocol => {
+          const selectedLower = selectedProtocol.toLowerCase();
+          if (selectedLower === 'nad.fun' || selectedLower === 'nadfun') {
+            return tokenProtocol.includes('nad.fun') || tokenProtocol.includes('nadfun');
+          }
+          if (selectedLower === 'flap.sh' || selectedLower === 'flapsh') {
+            return tokenProtocol.includes('flap.sh') || tokenProtocol.includes('flapsh');
+          }
+          if (selectedLower === 'kuru') {
+            return tokenProtocol.includes('kuru');
+          }
+          return tokenProtocol.includes(selectedLower);
+        });
+      });
+    }
+
+    console.log(`[MonadTable ${title}] 🔀 Merged ${filteredWsTokens.length} WS (filtered from ${wsTokens.length}) + ${tokensToUse.length} HTTP = ${filtered.length} total tokens after protocol filter, protocols: ${filters.protocols.join(',')}`);
 
     // Only apply keyword search filters (user-initiated), NO other filtering
     if (filters.searchKeywords.trim()) {
@@ -2165,7 +2324,7 @@ function MonadTable({
     });
 
     return filtered;
-  }, [monadTokens, filteredTokens, title, filters.protocols, filters.searchKeywords, filters.excludeKeywords]);
+  }, [monadTokens, filteredTokens, wsTokens, title, filters.protocols, filters.searchKeywords, filters.excludeKeywords]);
 
   // Memoize token rendering to prevent unnecessary re-renders
   const memoizedTokens = useMemo(() => {
@@ -2610,7 +2769,7 @@ function MonadTable({
             {filters.protocols.length > 0 && (
               <span 
                 className="absolute -top-1 -right-1 text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
-                style={{ backgroundColor: '#9B59B6', color: '#f0f5f5', fontSize: '10px' }}
+                style={{ backgroundColor: '#31e3ac', color: '#f0f5f5', fontSize: '10px' }}
               >
                 {filters.protocols.length}
               </span>
@@ -2831,10 +2990,10 @@ function MonadTable({
                             if (currentProtocols.includes(clickedProtocol)) {
                               // Deselecting a protocol
                               const remaining = currentProtocols.filter(p => p !== clickedProtocol);
-                              // If no protocols left, keep nad.fun (always required)
+                              // If no protocols left, default to nad.fun
                               return { ...prev, protocols: remaining.length === 0 ? ['nad.fun'] : remaining };
                             } else {
-                              // Selecting a new protocol - add it (nad.fun is always included)
+                              // Selecting a new protocol - add it to the list
                               return { ...prev, protocols: [...currentProtocols, clickedProtocol] };
                             }
                           });
@@ -4285,7 +4444,7 @@ function MonadTable({
 
               return (
                 <Link
-                  href={`/trade/${pairAddress}?${queryParams}`}
+                  href={`/trade/monad/${pairAddress}?${queryParams}`}
                   key={pairAddress}
                 className="group relative flex w-full cursor-pointer flex-row items-start gap-2 border-b px-2 pt-1 transition-all duration-300 ease-out"
                 style={{ 
@@ -4295,8 +4454,8 @@ function MonadTable({
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = 'rgba(107, 114, 128, 0.1)';
                   
-                  // Prefetch trade page for instant navigation
-                  router.prefetch(`/trade/${pairAddress}?${queryParams}`);
+                  // Prefetch Monad trade page for instant navigation
+                  router.prefetch(`/trade/monad/${pairAddress}?${queryParams}`);
                   
                   // Cache token metadata for instant display
                   try {
@@ -4898,7 +5057,7 @@ function MonadTable({
                              const mcVal = (token as any).fully_diluted_value ?? (token as any).market_cap_usd ?? 0;
                              if (hasGreenWave) {
                                return (
-                                 <span className="text-sm lg:text-base font-medium number-font" style={{ color: '#526ffe' }}>
+                                 <span className="text-sm lg:text-base font-medium number-font" style={{ color: '#31e3ac' }}>
                                    <SmoothNumber value={mcVal} formatter={(val) => `$${formatMarketCap(val)}`} duration={300} />
                                  </span>
                                );
@@ -4919,7 +5078,7 @@ function MonadTable({
                             }}
                           >
                             <SmoothNumber
-                              value={(token as any).volume_24h || 0}
+                              value={(token as any).volume_24h || (token as any).volume_24h_usd || 0}
                               formatter={(val) => {
                                 const rounded = Math.round(val);
                                 if (rounded >= 1e12) return `$${Math.round(rounded / 1e12)}T`;
@@ -4944,19 +5103,13 @@ function MonadTable({
                           >
                             <SmoothNumber
                               value={(() => {
-                                const buys = token.total_buys_24h ?? 0;
-                                const sells = token.total_sells_24h ?? 0;
-                                const total = buys + sells;
-                                // Debug logging
-                                if (token.symbol === 'HEAVEN' || total < 20) {
-                                  console.log(`[PulseTable TX] ${token.symbol}:`, {
-                                    total_buys_24h: token.total_buys_24h,
-                                    total_sells_24h: token.total_sells_24h,
-                                    calculated: total,
-                                    mint: token.mint
-                                  });
-                                }
-                                return total;
+                                // Use total_transactions if available, otherwise sum buys/sells
+                                // Monad API returns total_buys/total_sells, Solana uses _24h suffix
+                                const totalTxns = (token as any).total_transactions ?? 0;
+                                if (totalTxns > 0) return totalTxns;
+                                const buys = (token as any).total_buys_24h ?? (token as any).total_buys ?? 0;
+                                const sells = (token as any).total_sells_24h ?? (token as any).total_sells ?? 0;
+                                return buys + sells;
                               })()}
                               duration={0}
                             />
@@ -4998,6 +5151,7 @@ function MonadTable({
                           color: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? AX.aiGreen : '#000000',
                           border: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? `1px solid ${AX.aiGreen}` : '1px solid rgba(0,0,0,0.15)'
                         }}
+                        title={`Quick Buy ${thunderAmount || '0'} MON`}
                         onMouseEnter={(e) => {
                           const isFinal = title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch');
                           e.currentTarget.style.backgroundColor = isFinal ? '#101114' : AX.aiGreenHover;
@@ -5042,7 +5196,7 @@ function MonadTable({
                             return (
                               <>
                                 <HiLightningBolt className="text-black" size={14} /> <span className="number-font">{thunderAmount || '0'}</span>
-                                <span className="number-font"> SOL</span>
+                                <span className="number-font"> MON</span>
                               </>
                             );
                           }
@@ -5067,7 +5221,7 @@ function MonadTable({
                                   <circle cx="12" cy="12" r="2.2" />
                                 </svg>
                                 <span className="number-font" style={{ color: isFinal ? AX.aiGreen : undefined }}>
-                                  {thunderAmount || '0'} SOL
+                                  {thunderAmount || '0'} MON
                                 </span>
                               </>
                             );
@@ -5077,7 +5231,7 @@ function MonadTable({
                               <>
                                 <HiLightningBolt className={"text-black"} style={{ color: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? AX.aiGreen : '#000000' }} size={14} />
                                 <span className="number-font" style={{ color: (title.toLowerCase().includes('final') || title.toLowerCase().includes('stretch')) ? AX.aiGreen : undefined }}>
-                                  {thunderAmount || '0'} SOL
+                                  {thunderAmount || '0'} MON
                                 </span>
                               </>
                             );
@@ -5405,9 +5559,9 @@ function MonadTable({
               }}
               disabled={sniperSubmitting}
               className="w-full disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
-              style={{ backgroundColor: '#9B59B6' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#8e44ad'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#9B59B6'}
+              style={{ backgroundColor: '#31e3ac' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#28c896'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#31e3ac'}
             >
               {sniperSubmitting
                 ? "Arming…"
@@ -5463,7 +5617,7 @@ function MonadTable({
               type="text"
               value="https://api.mainnet-beta.solana.com"
               className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2"
-              style={{ '--tw-ring-color': '#9B59B6', color: '#f0f5f5' } as React.CSSProperties}
+              style={{ '--tw-ring-color': '#31e3ac', color: '#f0f5f5' } as React.CSSProperties}
               readOnly
             />
           </div>

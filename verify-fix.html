@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulse WebSocket Fix Verification</title>
+    <style>
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            background: #0f1012;
+            color: #E6E7EA;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .connected { background: #22C55E; color: white; }
+        .disconnected { background: #EF4444; color: white; }
+        .message {
+            background: #1E1F26;
+            border: 1px solid #2A2B33;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        .message-header {
+            color: #70E0B0;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .token-info {
+            color: #9CA3AF;
+            font-size: 12px;
+        }
+        .stats {
+            background: #17191E;
+            border: 1px solid #2A2B33;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+        }
+        .stat-label { color: #9CA3AF; }
+        .stat-value { color: #70E0B0; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Pulse WebSocket Fix Verification</h1>
+        
+        <div id="status" class="status disconnected">
+            🔌 Connecting to WebSocket...
+        </div>
+        
+        <div class="stats">
+            <h3>📊 Connection Stats</h3>
+            <div class="stat-item">
+                <span class="stat-label">Status:</span>
+                <span class="stat-value" id="connection-status">Disconnected</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Messages Received:</span>
+                <span class="stat-value" id="message-count">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Connection Time:</span>
+                <span class="stat-value" id="connection-time">0s</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Last Message:</span>
+                <span class="stat-value" id="last-message-time">Never</span>
+            </div>
+        </div>
+        
+        <h3>📨 Recent Messages</h3>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const connectionStatus = document.getElementById('connection-status');
+        const messageCount = document.getElementById('message-count');
+        const connectionTime = document.getElementById('connection-time');
+        const lastMessageTime = document.getElementById('last-message-time');
+        
+        let messageCounter = 0;
+        let startTime = Date.now();
+        let lastMessageTimestamp = null;
+        
+        const ws = new WebSocket('ws://localhost:8080/v1/stream');
+        
+        ws.onopen = () => {
+            statusDiv.textContent = '✅ Connected to WebSocket';
+            statusDiv.className = 'status connected';
+            connectionStatus.textContent = 'Connected';
+            startTime = Date.now();
+            
+            // Update connection time every second
+            setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                connectionTime.textContent = `${elapsed}s`;
+            }, 1000);
+        };
+        
+        ws.onmessage = (event) => {
+            messageCounter++;
+            const message = JSON.parse(event.data);
+            const now = new Date();
+            lastMessageTimestamp = now;
+            
+            // Update stats
+            messageCount.textContent = messageCounter;
+            lastMessageTime.textContent = now.toLocaleTimeString();
+            
+            // Create message display
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'message-header';
+            headerDiv.textContent = `📨 Message ${messageCounter} - ${message.type}`;
+            
+            const tokenDiv = document.createElement('div');
+            tokenDiv.className = 'token-info';
+            tokenDiv.innerHTML = `
+                <strong>Token:</strong> ${message.data?.name || 'Unknown'} (${message.data?.symbol || 'N/A'})<br>
+                <strong>Mint:</strong> ${message.data?.mint?.substring(0, 12)}...<br>
+                <strong>Status:</strong> ${message.data?.status || 'N/A'}<br>
+                <strong>Time:</strong> ${now.toLocaleTimeString()}
+            `;
+            
+            messageDiv.appendChild(headerDiv);
+            messageDiv.appendChild(tokenDiv);
+            messagesDiv.appendChild(messageDiv);
+            
+            // Keep only last 10 messages
+            while (messagesDiv.children.length > 10) {
+                messagesDiv.removeChild(messagesDiv.firstChild);
+            }
+            
+            // Scroll to bottom
+            messageDiv.scrollIntoView({ behavior: 'smooth' });
+        };
+        
+        ws.onerror = (error) => {
+            statusDiv.textContent = '❌ WebSocket Error';
+            statusDiv.className = 'status disconnected';
+            connectionStatus.textContent = 'Error';
+            console.error('WebSocket error:', error);
+        };
+        
+        ws.onclose = () => {
+            statusDiv.textContent = '🔌 WebSocket Closed';
+            statusDiv.className = 'status disconnected';
+            connectionStatus.textContent = 'Disconnected';
+        };
+        
+        // Test completion check
+        setTimeout(() => {
+            if (messageCounter >= 3) {
+                console.log('✅ WebSocket test completed successfully!');
+                console.log(`📊 Received ${messageCounter} messages`);
+            } else {
+                console.log('⚠️ WebSocket test completed with limited data');
+                console.log(`📊 Received ${messageCounter} messages`);
+            }
+        }, 10000);
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

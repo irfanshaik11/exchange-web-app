@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { formatSmartNumber, formatMarketCap } from '~/utils/db';
 import type { TradeRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
@@ -6,20 +7,19 @@ import FastImage from '../FastImage';
 import { FaExternalLinkAlt } from 'react-icons/fa';
 import Image from 'next/image';
 import { useSolPrice } from '~/components/SolPriceContext';
+import { fetchChainTokenMetadata, toNumber, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
+import { getProtocolBranding } from '~/utils/protocolBranding';
 
-interface TokenMetadata {
-  imageUrl?: string;
-  protocol?: string;
-  name?: string;
-  symbol?: string;
-  createdAt?: number; // Token creation timestamp
+const DEFAULT_MON_PRICE = 0.1;
+
+type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
-}
+};
 
 interface ActivityProps {
   trades: TradeRow[];
   loading: boolean;
-  onTokenNamesChange?: (tokenNames: Record<string, string>) => void; // Optional: callback to pass token names to parent
+  onTokenNamesChange?: Dispatch<SetStateAction<Record<string, string>>>; // Optional: callback to pass token names to parent
   tokenMetadataCache?: Record<string, TokenMetadata>; // Optional: shared cache
   onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
   isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
@@ -129,7 +129,9 @@ const Activity: React.FC<ActivityProps> = ({
 }) => {
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const [monPriceUsd, setMonPriceUsd] = useState(0);
   const router = useRouter();
+  const currentChain = (router.query.chain as string) || 'sol';
   const { solPrice } = useSolPrice();
   
   // Update current time every minute to refresh age calculations
@@ -140,6 +142,49 @@ const Activity: React.FC<ActivityProps> = ({
     
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchMonPrice = async () => {
+      const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timeoutId = controller ? setTimeout(() => controller.abort(), 8000) : null;
+
+      try {
+        const response = await fetch(
+          "https://api.coingecko.com/api/v3/simple/price?ids=monad&vs_currencies=usd",
+          controller ? { signal: controller.signal } : undefined,
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        const price = data?.monad?.usd;
+
+        if (isMounted && typeof price === "number" && price > 0) {
+          setMonPriceUsd(price);
+        }
+      } catch (error) {
+        if (isMounted) {
+          console.warn("Failed to fetch MON price:", error);
+        }
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      }
+    };
+
+    fetchMonPrice();
+    const intervalId = setInterval(fetchMonPrice, 60000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, []);
   
   // Initialize local metadata from cache if available
   useEffect(() => {
@@ -148,96 +193,93 @@ const Activity: React.FC<ActivityProps> = ({
     }
   }, [tokenMetadataCache]);
 
-  useEffect(() => {
-    if (!trades || trades.length === 0) return;
-    
-    // Fetch token data for each unique token in trades in parallel
-    const fetchAllMetadata = async () => {
-      const uniqueTokens = Array.from(new Set(trades.map(t => t.tokenAddress)));
-      
-      // Filter out tokens that are already cached and valid
-      const tokensToFetch = uniqueTokens.filter(token => 
-        !isCacheValid || !isCacheValid(token)
-      );
-      
+  const requestMetadataForTrades = useCallback(
+    async (tradesSource: TradeRow[]) => {
+      if (!tradesSource || tradesSource.length === 0) return;
+
+      const uniqueTokens = Array.from(new Set(tradesSource.map((trade) => trade.tokenAddress))).filter(Boolean);
+      const tokensToFetch = uniqueTokens.filter((token) => !isCacheValid || !isCacheValid(token));
+
       if (tokensToFetch.length === 0) {
-        console.log('✅ All tokens loaded from cache (Activity)');
+        console.log("✅ All activity tokens loaded from cache");
         return;
       }
-      
-      console.log(`🔄 Fetching ${tokensToFetch.length} tokens for Activity (${uniqueTokens.length - tokensToFetch.length} from cache)`);
-      
-      // Fetch all tokens in parallel using Promise.all for maximum speed
+
+      console.log(`🔄 [Activity] Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
+
       await Promise.allSettled(
         tokensToFetch.map(async (tokenAddress) => {
+          const trade = tradesSource.find((t) => t.tokenAddress === tokenAddress);
+          if (!trade) return;
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+
           try {
-            // Find the trade to get originalPairAddress (backend stores this for token-service lookups)
-            const trade = trades.find(t => t.tokenAddress === tokenAddress);
-            const pairAddress = trade?.originalPairAddress || trade?.pairAddress || tokenAddress;
-            
-            // Reduced timeout to 3s for faster failures
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-            
-            const response = await fetch(`/api/token-service/trade-view?pair_address=${pairAddress}`, {
-              signal: controller.signal
+            const metadata = await fetchChainTokenMetadata(tokenAddress, {
+              signal: controller.signal,
+              pairAddress: trade.originalPairAddress || trade.pairAddress,
             });
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
+
+            if (!metadata) {
+              throw new Error("Metadata unavailable");
             }
-            
-            const data = await response.json();
-            const tokenData = data?.token;
-            
-            if (tokenData) {
-              const metadata = {
-                imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
-                protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
-                name: tokenData.name || '',
-                symbol: tokenData.symbol || '',
-                createdAt: tokenData.created_timestamp || tokenData.createdAt,
-              };
-              
-              // Update local state
-              setTokenMetadata(prev => ({
+
+            const enriched: TokenMetadata = {
+              ...metadata,
+              protocol: metadata.protocol || metadata.launchpad || trade.launchpad || "",
+              launchpad: metadata.launchpad || metadata.protocol || trade.launchpad || "",
+            };
+
+            setTokenMetadata((prev) => ({
+              ...prev,
+              [tokenAddress]: enriched,
+            }));
+
+            if (onUpdateCache) {
+              onUpdateCache(tokenAddress, enriched);
+            }
+
+            if (onTokenNamesChange) {
+              onTokenNamesChange((prev) => ({
                 ...prev,
-                [tokenAddress]: metadata
+                [tokenAddress]: enriched.name || shortAddr(tokenAddress),
               }));
-              
-              // Update shared cache
-              if (onUpdateCache) {
-                onUpdateCache(tokenAddress, metadata);
-              }
-              
-              // Pass token names to parent if callback is provided
-              if (onTokenNamesChange) {
-                const tokenNames: Record<string, string> = { [tokenAddress]: metadata.name || '' };
-                onTokenNamesChange(tokenNames);
-              }
             }
           } catch (error) {
-            // Set fallback metadata immediately so token doesn't stay at "Loading..."
-            const fallback = {
-              imageUrl: '',
-              protocol: '',
-              name: `Token ${tokenAddress.slice(0, 6)}...`,
-              symbol: '???',
+            console.warn(`Failed to fetch metadata for ${tokenAddress}:`, error);
+            const fallback: TokenMetadata = {
+              imageUrl: "",
+              protocol: trade.launchpad || "",
+              launchpad: trade.launchpad || "",
+              name: trade.tokenName || shortAddr(tokenAddress),
+              symbol: "???",
             };
-            setTokenMetadata(prev => ({
+
+            setTokenMetadata((prev) => ({
               ...prev,
-              [tokenAddress]: fallback
+              [tokenAddress]: fallback,
             }));
-            // Don't cache failed fetches
+
+            if (onTokenNamesChange) {
+              onTokenNamesChange((prev) => ({
+                ...prev,
+                [tokenAddress]: fallback.name || shortAddr(tokenAddress),
+              }));
+            }
+          } finally {
+            clearTimeout(timeoutId);
           }
-        })
+        }),
       );
-    };
-    
-    // Don't await - let it load in background
-    fetchAllMetadata();
-  }, [trades, onTokenNamesChange]);
+    },
+    [isCacheValid, onTokenNamesChange, onUpdateCache],
+  );
+
+  useEffect(() => {
+    if (!trades || trades.length === 0) return;
+    requestMetadataForTrades(trades);
+  }, [trades, requestMetadataForTrades]);
 
   return (
     <div className="w-full">
@@ -270,79 +312,26 @@ const Activity: React.FC<ActivityProps> = ({
             {
               trades.map((trade, idx) => {
               const handleRowClick = () => {
-                // Navigate to token trade page using originalPairAddress (same as Positions)
                 const navigateAddress = trade.originalPairAddress || trade.pairAddress || trade.tokenAddress;
+                const isMonadTrade =
+                  (trade.blockchain || '').toLowerCase() === 'monad' || currentChain === 'monad';
+
+                if (isMonadTrade && trade.tokenAddress) {
+                  router.push(`/trade/monad/${trade.tokenAddress}`);
+                  return;
+                }
+
                 if (navigateAddress) {
                   router.push(`/trade/${navigateAddress}`);
                 }
               };
               
               const metadata = tokenMetadata[trade.tokenAddress];
-              
-              // Protocol color mapping - matches PulseTable
-              const getProtocolColor = (protocol?: string) => {
-                const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '#22c55e'; // Green for Pump.fun
-                if (p.includes('raydium')) return '#5c51f7'; // Purple for Raydium
-                if (p.includes('meteora')) return '#ff4662'; // Pink-red for Meteora
-                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) return '#eab308'; // Yellow for Moonit/Moonshot
-                if (p.includes('boop')) return '#134577'; // Dark blue for Boop
-                if (p.includes('bonk')) return '#ff6b35'; // Orange for Bonk
-                if (p.includes('bags')) return '#22c55e'; // Green for Bags
-                if (p.includes('launch')) return '#3b82f6'; // Blue for LaunchLab (portfolio doesn't have column type, use default blue)
-                return '#22c55e'; // Default to green
-              };
-
-              const protocolColor = getProtocolColor(metadata?.protocol);
-              
-              // Protocol icon mapping - returns image URL
-              const getProtocolIcon = (protocol?: string): string => {
-                const p = protocol?.toLowerCase() || '';
-                
-                if (p.includes('pump')) {
-                  return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
-                }
-                
-                if (p.includes('meteora')) {
-                  return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
-                }
-                
-                if (p.includes('raydium')) {
-                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
-                }
-                
-                if (p.includes('boop')) {
-                  return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
-                }
-                
-                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) {
-                  return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
-                }
-                
-                if (p.includes('bonk')) {
-                  return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
-                }
-                
-                if (p.includes('bags')) {
-                  return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
-                }
-                
-                if (p.includes('launch')) {
-                  // LaunchLab uses Raydium icon
-                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
-                }
-                
-                // Default to pump.fun icon for unknown protocols
-                return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
-              };
-
-              const tokenIcon = getProtocolIcon(metadata?.protocol);
-              const p = metadata?.protocol?.toLowerCase() || '';
-              const isMeteora = p.includes('meteora');
-              const isBonk = p.includes('bonk');
-              const isBags = p.includes('bags');
-              const isMoonit = p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot');
-              const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
+              const protocolSource = metadata?.protocol || metadata?.launchpad || trade.launchpad || '';
+              const branding = getProtocolBranding(protocolSource);
+              const protocolColor = branding.color;
+              const tokenIcon = branding.iconUrl;
+              const isFullCircleImage = branding.isFullCircle;
               
               // Calculate age based on trade time
               // Since tradeTime only contains time (e.g., "15:04:16") without date,
@@ -374,9 +363,7 @@ const Activity: React.FC<ActivityProps> = ({
               
               // Format market cap
               // Handle inconsistent market cap units from backend
-              let marketCapValue = typeof trade.marketCap === 'string' 
-                ? parseFloat(trade.marketCap) 
-                : trade.marketCap;
+              let marketCapValue = toNumber(trade.marketCap);
               
               // TEMPORARY FIX: For same token, use the highest market cap value
               // This addresses backend inconsistency where same token has different market caps for buy/sell
@@ -410,24 +397,36 @@ const Activity: React.FC<ActivityProps> = ({
                 
                 marketCapValue = null;
               }
+
+              if ((!marketCapValue || marketCapValue < 1) && metadata?.marketCapUsd) {
+                marketCapValue = metadata.marketCapUsd;
+              }
               
               const formattedMarketCap = marketCapValue ? `$${formatMarketCap(marketCapValue)}` : 'N/A';
               
               // Format amount (USD value)
               // ⚠️ VALIDATION: Detect if usdValue is suspiciously high (likely marketCap or wrong units)
-              let amountValue = typeof trade.usdValue === 'string' 
-                ? parseFloat(trade.usdValue) 
-                : trade.usdValue;
+              let amountValue = toNumber(trade.usdValue);
+              const solAmountNum = toNumber(trade.solAmount);
+              
+              // Format token amount with unit correction
+              let tokenAmountValue = toNumber(trade.tokenAmount);
+              
+              // Apply same unit correction as in Positions component
+              if (tokenAmountValue && tokenAmountValue > 1000000) {
+                tokenAmountValue = tokenAmountValue / 1000000; // Scale down by 1 million
+                console.log('Token amount unit correction applied:', {
+                  tokenAddress: trade.tokenAddress,
+                  type: trade.type,
+                  originalAmount: trade.tokenAmount,
+                  correctedAmount: tokenAmountValue
+                });
+              }
               
               // For Sell trades, validate usdValue is reasonable
               // If usdValue > $10,000 and tokenAmount exists, check if it's actually marketCap
               if (trade.type === 'Sell' && amountValue && amountValue > 10000) {
-                const marketCapNum = typeof trade.marketCap === 'string' 
-                  ? parseFloat(trade.marketCap) 
-                  : trade.marketCap;
-                const solAmountNum = typeof trade.solAmount === 'string'
-                  ? parseFloat(trade.solAmount)
-                  : trade.solAmount;
+                const marketCapNum = toNumber(trade.marketCap);
                 
                 // If usdValue matches marketCap, it's definitely wrong - recalculate from solAmount
                 if (marketCapNum && Math.abs(amountValue - marketCapNum) < 1000) {
@@ -509,7 +508,7 @@ const Activity: React.FC<ActivityProps> = ({
                   let corrected = false;
                   const currentSolPrice = solPrice > 0 ? solPrice : 200;
 
-                  if (solAmountNum && solAmountNum > 0 && solAmountNum < 100) {
+                if (solAmountNum && solAmountNum > 0 && solAmountNum < 100) {
                     const expectedUsdValue = solAmountNum * currentSolPrice;
                     if (amountValue > expectedUsdValue * 5) {
                       amountValue = expectedUsdValue;
@@ -554,24 +553,27 @@ const Activity: React.FC<ActivityProps> = ({
                 }
               }
               
+              if ((!amountValue || amountValue <= 0) && tokenAmountValue > 0 && metadata?.priceUsd) {
+                amountValue = tokenAmountValue * metadata.priceUsd;
+              }
+
+              if ((!amountValue || amountValue <= 0) && solAmountNum > 0) {
+                if ((trade.blockchain || '').toLowerCase() === 'monad') {
+                  const effectiveMonPrice = monPriceUsd > 0 ? monPriceUsd : DEFAULT_MON_PRICE;
+                  amountValue = solAmountNum * effectiveMonPrice;
+                } else if (solPrice > 0) {
+                  amountValue = solAmountNum * solPrice;
+                }
+              }
+
               const formattedAmount = amountValue && amountValue > 0 ? `$${formatSmartNumber(amountValue)}` : 'N/A';
               
-              // Format token amount with unit correction
-              let tokenAmountValue = typeof trade.tokenAmount === 'string' 
-                ? parseFloat(trade.tokenAmount) 
-                : trade.tokenAmount;
-              
-              // Apply same unit correction as in Positions component
-              if (tokenAmountValue && tokenAmountValue > 1000000) {
-                tokenAmountValue = tokenAmountValue / 1000000; // Scale down by 1 million
-                console.log('Token amount unit correction applied:', {
-                  tokenAddress: trade.tokenAddress,
-                  type: trade.type,
-                  originalAmount: trade.tokenAmount,
-                  correctedAmount: tokenAmountValue
-                });
-              }
-              
+              const explorerUrl = trade.transactionHash
+                ? ((trade.blockchain || '').toLowerCase() === 'monad'
+                    ? `https://monadvision.com/tx/${trade.transactionHash}`
+                    : `https://solscan.io/tx/${trade.transactionHash}`)
+                : undefined;
+
               const formattedTokenAmount = tokenAmountValue ? formatSmartNumber(tokenAmountValue) : 'N/A';
               
               return (
@@ -645,7 +647,7 @@ const Activity: React.FC<ActivityProps> = ({
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="font-medium text-sm text-neutral-100 truncate">
-                          {metadata?.name || 'Loading...'}
+                          {metadata?.name || trade.tokenName || shortAddr(trade.tokenAddress)}
                         </div>
                         <div className="text-xs text-neutral-400 font-mono truncate" title={trade.tokenAddress}>
                           {shortAddr(trade.tokenAddress)}
@@ -666,16 +668,20 @@ const Activity: React.FC<ActivityProps> = ({
                     {age}
                   </div>
                   <div className="flex items-center">
-                    <a
-                      href={`https://solscan.io/tx/${trade.transactionHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()} // Prevent row click
-                      className="flex items-center gap-1 text-[#70E0B0] hover:text-[#58B890] transition-colors text-xs"
-                    >
-                      <span>View</span>
-                      <FaExternalLinkAlt className="text-xs" />
-                    </a>
+                    {explorerUrl ? (
+                      <a
+                        href={explorerUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()} // Prevent row click
+                        className="flex items-center gap-1 text-[#70E0B0] hover:text-[#58B890] transition-colors text-xs"
+                      >
+                        <span>View</span>
+                        <FaExternalLinkAlt className="text-xs" />
+                      </a>
+                    ) : (
+                      <span className="text-xs text-neutral-500">N/A</span>
+                    )}
                   </div>
                 </div>
               );

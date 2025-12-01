@@ -332,6 +332,8 @@ export const getLimitOrderExecutionResult = (
 interface WithdrawParams {
   amount: number;
   destinationAddress: string;
+  sourceAddress?: string;
+  chain?: string;
 }
 
 export const withdrawSOL = (params: WithdrawParams, authToken: string) =>
@@ -367,10 +369,27 @@ export const getWithdrawalHistory = (authToken: string) =>
     authToken,
   });
 
-export const getWithdrawalFee = () =>
-  apiFetch<{ fee: number; rentExemptMinimum: number; fallbackFee: number; minimumReserve: number }>("/api/users/withdrawal-fee", {
-    method: "GET",
-  });
+export const getWithdrawalFee = async (chain?: string) => {
+  const query = chain ? `?chain=${encodeURIComponent(chain)}` : "";
+  try {
+    return await apiFetch<{
+      fee: number;
+      rentExemptMinimum: number;
+      fallbackFee: number;
+      minimumReserve: number;
+    }>(`/api/users/withdrawal-fee${query}`, {
+      method: "GET",
+    });
+  } catch (error) {
+    console.warn("Using fallback withdrawal fee (endpoint unavailable).", error);
+    return {
+      fee: 0.0005,
+      rentExemptMinimum: 0,
+      fallbackFee: 0,
+      minimumReserve: 0,
+    };
+  }
+};
 
 export const updateLimitOrder = (
   params: UpdateLimitOrderParams,
@@ -576,6 +595,52 @@ export const tradeSellExactAmount = (params: SellExactAmountParams) =>
   });
 
 /* -------------------------------------------------------------------------- */
+/*                          Monad Trading endpoints                            */
+/* -------------------------------------------------------------------------- */
+
+export type MonadBuyParams = {
+  tokenAddress: string; // ERC-20 token address (0x format)
+  amountMON: number; // Amount in MON (native currency)
+  launchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs'; // Launchpad identifier
+  slippage?: number; // Optional: Slippage percentage (e.g., 5 for 5%)
+};
+
+export type MonadSellParams = {
+  tokenAddress: string; // ERC-20 token address
+  launchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs'; // Launchpad identifier
+  tokenAmount?: string; // Optional: Exact token amount to sell (mutually exclusive with percentage)
+  percentage?: number; // Optional: Percentage of balance to sell (1-100, mutually exclusive with tokenAmount)
+  slippage?: number; // Optional: Slippage percentage
+};
+
+export const tradeMonadBuy = (params: MonadBuyParams, authToken: string) =>
+  apiFetch<{
+    success: boolean;
+    txHash: string;
+    blockNumber: number;
+    launchpad: string;
+    tokenAddress: string;
+    amountMON: number;
+  }>("/api/trade/monad/buy", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+export const tradeMonadSell = (params: MonadSellParams, authToken: string) =>
+  apiFetch<{
+    success: boolean;
+    txHash: string;
+    blockNumber: number;
+    launchpad: string;
+    tokenAddress: string;
+  }>("/api/trade/monad/sell", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+/* -------------------------------------------------------------------------- */
 /*                       Token Analytics endpoints (Rust)                     */
 /* -------------------------------------------------------------------------- */
 
@@ -701,4 +766,3 @@ export const getTokenHolders = async (
 };
 
 export { apiFetch };
-

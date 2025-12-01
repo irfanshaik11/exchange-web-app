@@ -503,8 +503,10 @@ export default function DiscoverContent() {
         const payload = await response.json();
         if (cancelled) return;
 
-        if (payload?.filterTokens?.results) {
-          const results = payload.filterTokens.results || [];
+        // Process filterTokens response from Codex
+        if (payload?.data?.filterTokens?.results || payload?.filterTokens?.results) {
+          // Handle both nested (payload.data.filterTokens) and direct (payload.filterTokens) formats
+          const results = payload?.data?.filterTokens?.results || payload.filterTokens.results || [];
           
           const normalized = results
             .filter((result: any) => {
@@ -529,6 +531,10 @@ export default function DiscoverContent() {
           setXStocksRaw(deduped);
           setXStocksError(null);
           saveToCache(deduped);
+        } else {
+          // No results found
+          setXStocksRaw([]);
+          setXStocksError(null);
         }
       } catch (err) {
         if (cancelled) return;
@@ -771,7 +777,16 @@ export default function DiscoverContent() {
       const arr = Array.from(tokenMapRef.current.values());
       const safeArr = arr.filter(t => t && t.mint && !isWrappedSol(t));
       const filtered = applyFilters(safeArr);
-      const sortedTokens = filtered.map(t => JSON.parse(JSON.stringify(t)));
+      const baselineThreshold = Math.max(
+        10,
+        Math.floor(Math.min(safeArr.length, 80) * 0.25)
+      );
+      const shouldUseBaseline =
+        activeFilterCount === 0 &&
+        safeArr.length > 0 &&
+        filtered.length < Math.min(baselineThreshold, safeArr.length);
+      const workingTokens = shouldUseBaseline ? safeArr : filtered;
+      const sortedTokens = workingTokens.map(t => JSON.parse(JSON.stringify(t)));
       sortedTokens.sort((a, b) => {
         if (!a || !b || isWrappedSol(a) || isWrappedSol(b)) return 0;
         let aVal = 0, bVal = 0;
@@ -814,7 +829,7 @@ export default function DiscoverContent() {
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol]);
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, activeFilterCount]);
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) return [] as TokenWithDexPaid[];
@@ -943,8 +958,10 @@ export default function DiscoverContent() {
   );
 
   const renderPrimaryTable = () => {
+    let content: React.ReactNode;
+
     if (displayed.length > 0) {
-      return (
+      content = (
         <InterstateTable
           rows={displayed.map((token, i) => ({ token: token as Token, i }))}
           onQuickBuy={handleQuickBuy}
@@ -955,9 +972,8 @@ export default function DiscoverContent() {
           quickBuyAmount={Number(quickBuyAmount) || 0}
         />
       );
-    }
-    if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
-      return (
+    } else if (allTokens && Array.isArray(allTokens) && allTokens.length > 0) {
+      content = (
         <InterstateTable
           rows={allTokens.map((token, i) => ({ token: token as Token, i }))}
           onQuickBuy={handleQuickBuy}
@@ -968,20 +984,33 @@ export default function DiscoverContent() {
           quickBuyAmount={Number(quickBuyAmount) || 0}
         />
       );
-    }
-    if (tokensLoading) {
-      return (
+    } else if (tokensLoading) {
+      content = (
         <div className="space-y-4">
           {Array.from({ length: 10 }).map((_, i) => (
             <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
           ))}
         </div>
       );
+    } else if (tokenError) {
+      content = (
+        <div className="py-10 text-center" style={{ color: '#f26681' }}>
+          {tokenError}
+        </div>
+      );
+    } else {
+      content = (
+        <div className="py-10 text-center text-[#9CA3AF]">
+          No tokens found.
+        </div>
+      );
     }
-    if (tokenError) {
-      return <div className="py-10 text-center" style={{ color: '#f26681' }}>{tokenError}</div>;
-    }
-    return <div className="py-10 text-center text-[#9CA3AF]">No tokens found.</div>;
+
+    return (
+      <section aria-label="Trending Tokens" className="pb-8">
+        {content}
+      </section>
+    );
   };
 
   const toPumpPortalItem = (t: any): PumpItem => {

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
+import { useRouter } from "next/router";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import Positions from "../components/trade/Positions";
@@ -14,8 +15,11 @@ import {
 } from "~/utils/functions";
 import { formatSmartNumber } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
+import type { UnifiedTokenMetadata } from "~/utils/tokenMetadata";
 import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
+import toast from "react-hot-toast";
+import { FiEdit2, FiCheck, FiX } from "react-icons/fi";
 
 // Stacked Token Boxes Component
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
@@ -44,29 +48,101 @@ const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
   </InterstateTooltip>
 );
 
-// SOL icon component for inline use
-const SolIcon = () => (
-  <SiSolana
-    className="h-3 w-3 inline-block -mt-0.5 mx-0.5"
-    aria-hidden="true"
-    style={{
-      color: "unset",
-      fill: "url(#solana-gradient-inline)",
-      filter: "none",
-    }}
-  />
-);
+// Dynamic chain icon component (Solana or Monad)
+const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: 'small' | 'medium' | 'large' }) => {
+  const sizeClasses = {
+    small: 'h-3 w-3',
+    medium: 'h-4 w-4',
+    large: 'h-5 w-5',
+  };
+  
+  if (chain === 'monad') {
+    return (
+      <img
+        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+        alt="Monad"
+        className={`${sizeClasses[size]} inline-block -mt-0.5 mx-0.5 rounded`}
+        style={{ objectFit: 'contain' }}
+      />
+    );
+  }
+  return (
+    <SiSolana
+      className={`${sizeClasses[size]} inline-block -mt-0.5 mx-0.5`}
+      aria-hidden="true"
+      style={{
+        color: "unset",
+        fill: "url(#solana-gradient-inline)",
+        filter: "none",
+      }}
+    />
+  );
+};
+
+// SOL icon component for inline use (kept for backward compatibility)
+const SolIcon = () => <ChainIcon chain="sol" />;
 
 const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity"];
 
 // Token metadata cache interface
-interface TokenMetadataCache {
-  imageUrl?: string;
-  protocol?: string;
-  name?: string;
-  symbol?: string;
+interface TokenMetadataCache extends UnifiedTokenMetadata {
   timestamp: number; // When it was cached
 }
+
+interface UserWallet {
+  id: string;
+  label: string;
+  address: string;
+  solanaAddress: string;
+  ethereumAddress: string;
+  balance: number;
+  holdingsCount: number;
+  isArchived?: boolean;
+  isPrimary?: boolean;
+}
+
+const normalizeWalletFromApi = (
+  wallet: any,
+  fallbackIndex?: number
+): UserWallet => {
+  const solanaAddress =
+    typeof wallet?.solanaAddress === "string" && wallet.solanaAddress.length > 0
+      ? wallet.solanaAddress
+      : typeof wallet?.address === "string"
+      ? wallet.address
+      : "";
+  const ethereumAddress =
+    typeof wallet?.ethereumAddress === "string" && wallet.ethereumAddress.length > 0
+      ? wallet.ethereumAddress
+      : "";
+  const resolvedAddress = solanaAddress || ethereumAddress || "";
+  let label = typeof wallet?.label === "string" ? wallet.label : undefined;
+  if (!label) {
+    if (typeof fallbackIndex === "number") {
+      label = fallbackIndex === 0 ? "Narrative Main" : `Wallet ${fallbackIndex + 1}`;
+    } else {
+      label = "Wallet";
+    }
+  }
+  return {
+    id: wallet?.id ?? "",
+    label,
+    address: resolvedAddress,
+    solanaAddress: solanaAddress,
+    ethereumAddress,
+    balance: typeof wallet?.balance === "number" ? wallet.balance : 0,
+    holdingsCount: typeof wallet?.holdingsCount === "number" ? wallet.holdingsCount : 0,
+    isArchived: Boolean(wallet?.isArchived),
+    isPrimary: Boolean(wallet?.isPrimary),
+  };
+};
+
+const getAddressForChain = (wallet: UserWallet, chain: string) => {
+  if (chain === "sol") {
+    return wallet.solanaAddress || wallet.address || "";
+  }
+  return wallet.ethereumAddress || wallet.solanaAddress || wallet.address || "";
+};
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
 const CACHE_KEY = "tokenMetadataCache";
@@ -75,7 +151,10 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, chainBalances } = useUser();
+  const router = useRouter();
+  const currentChain = (router.query.chain as string) || "sol";
+  const monBalance = chainBalances?.monad || 0;
   const [walletChecked, setWalletChecked] = useState(false);
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [loadingTradeHistory, setLoadingTradeHistory] = useState(true);
@@ -95,10 +174,25 @@ export default function PortfolioPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
   const [solPrice, setSolPrice] = useState(0);
+  const [wallets, setWallets] = useState<UserWallet[]>([]);
+  const [loadingWallets, setLoadingWallets] = useState(false);
+  const [creatingWallet, setCreatingWallet] = useState(false);
+  const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
+  const [walletRenameValue, setWalletRenameValue] = useState("");
+  const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+
+  const notifyWalletsUpdated = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("wallets-updated"));
+    }
+  };
+
 
   // Shared token metadata cache across all tabs
   const [tokenMetadataCache, setTokenMetadataCache] =
     useState<Record<string, TokenMetadataCache>>({});
+  const tokenMetadataCacheRef = useRef<Record<string, TokenMetadataCache>>({});
 
   // Load cache from localStorage on mount
   useEffect(() => {
@@ -116,6 +210,7 @@ export default function PortfolioPage() {
         });
         if (Object.keys(validCache).length > 0) {
           setTokenMetadataCache(validCache);
+          tokenMetadataCacheRef.current = validCache;
           console.log(
             `📦 Loaded ${Object.keys(validCache).length} cached tokens from localStorage`,
           );
@@ -125,6 +220,10 @@ export default function PortfolioPage() {
       console.error("Error loading token cache:", error);
     }
   }, []);
+
+  useEffect(() => {
+    tokenMetadataCacheRef.current = tokenMetadataCache;
+  }, [tokenMetadataCache]);
 
   // Save cache to localStorage when it changes (debounced)
   useEffect(() => {
@@ -143,25 +242,94 @@ export default function PortfolioPage() {
   }, [tokenMetadataCache]);
 
   // Helper function to update cache
-  const updateTokenMetadataCache = (
-    tokenAddress: string,
-    metadata: Omit<TokenMetadataCache, "timestamp">,
-  ) => {
-    setTokenMetadataCache((prev) => ({
-      ...prev,
-      [tokenAddress]: {
-        ...metadata,
-        timestamp: Date.now(),
-      },
-    }));
-  };
+  const updateTokenMetadataCache = useCallback(
+    (
+      tokenAddress: string,
+      metadata: Omit<TokenMetadataCache, "timestamp">,
+    ) => {
+      setTokenMetadataCache((prev) => ({
+        ...prev,
+        [tokenAddress]: {
+          ...metadata,
+          timestamp: Date.now(),
+        },
+      }));
+    },
+    [],
+  );
 
   // Helper function to check if cache entry is valid
-  const isCacheValid = (tokenAddress: string): boolean => {
-    const cached = tokenMetadataCache[tokenAddress];
+  const isCacheValid = useCallback((tokenAddress: string): boolean => {
+    const cached = tokenMetadataCacheRef.current[tokenAddress];
     if (!cached) return false;
     return Date.now() - cached.timestamp < CACHE_TTL;
+  }, []);
+
+  const normalizeBlockchainValue = (value?: string | null) => {
+    if (!value) return "solana";
+    const normalized = value.toLowerCase();
+    if (normalized === "sol") return "solana";
+    return normalized;
   };
+
+  const isTradeOnCurrentChain = useCallback(
+    (trade: TradeRow) => {
+      const normalized = normalizeBlockchainValue(trade.blockchain);
+      if (currentChain === "monad") {
+        return normalized === "monad";
+      }
+      // Default to Solana for undefined/other values
+      return normalized === "solana";
+    },
+    [currentChain],
+  );
+
+  const fallbackPositions = useMemo(() => {
+    const map: Record<string, PositionRow> = {};
+
+    tradeHistory.forEach((trade) => {
+      const tokenKey = trade.tokenAddress?.toLowerCase();
+      if (!tokenKey) return;
+
+      if (!map[tokenKey]) {
+        map[tokenKey] = {
+          tokenAddress: trade.tokenAddress,
+          pairAddress: trade.originalPairAddress || trade.pairAddress,
+          bought: 0,
+          boughtUsdValue: 0,
+          sold: 0,
+          soldUsdValue: 0,
+          remaining: 0,
+          remainingUsdValue: 0,
+          pnl: 0,
+          pnlPercentage: 0,
+          actions: "sell",
+          blockchain: trade.blockchain,
+          launchpad: trade.launchpad || null,
+        };
+      }
+
+      const entry = map[tokenKey];
+      const tokenAmount = Number(trade.tokenAmount) || 0;
+      const usdValue = Number(trade.usdValue) || 0;
+
+      if (trade.type === "Buy") {
+        entry.bought += tokenAmount;
+        entry.boughtUsdValue += usdValue;
+      } else if (trade.type === "Sell") {
+        entry.sold += tokenAmount;
+        entry.soldUsdValue += usdValue;
+      }
+
+      entry.remaining = entry.bought - entry.sold;
+      entry.remainingUsdValue = entry.boughtUsdValue - entry.soldUsdValue;
+      entry.pnl = entry.soldUsdValue + entry.remainingUsdValue - entry.boughtUsdValue;
+      entry.pnlPercentage =
+        entry.boughtUsdValue > 0 ? (entry.pnl / entry.boughtUsdValue) * 100 : 0;
+    });
+
+    return map;
+  }, [tradeHistory]);
 
   // Fetch SOL price using Pyth Network
   useEffect(() => {
@@ -217,8 +385,13 @@ export default function PortfolioPage() {
       if (user?.id) {
         setLoadingTradeHistory(true);
         try {
-          const history = await getTradeHistoryByUser(user.id);
-          setTradeHistory(history);
+          // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
+          const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
+          const history = await getTradeHistoryByUser(user.id, blockchain);
+          const filteredHistory = Array.isArray(history)
+            ? history.filter(isTradeOnCurrentChain)
+            : [];
+          setTradeHistory(filteredHistory);
         } catch (error) {
           console.error("Failed to fetch trade history:", error);
           setTradeHistory([]);
@@ -229,7 +402,7 @@ export default function PortfolioPage() {
     };
 
     fetchTradeHistory();
-  }, [user?.id]);
+  }, [user?.id, currentChain, isTradeOnCurrentChain]);
 
   // Fetch trade activity only when on Activity tab (index 2 after History commented out)
   useEffect(() => {
@@ -242,9 +415,14 @@ export default function PortfolioPage() {
           setLoadingTradeActivity(true);
         }
         try {
-          const activity = await getTradeActivityByUser(user.id);
+          // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
+          const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
+          const activity = await getTradeActivityByUser(user.id, blockchain);
+          const filteredActivity = Array.isArray(activity)
+            ? activity.filter(isTradeOnCurrentChain)
+            : [];
           // Reverse array so newest trades appear at the top
-          setTradeActivity([...activity].reverse());
+          setTradeActivity(filteredActivity.reverse());
         } catch (error) {
           console.error("Failed to fetch trade activity:", error);
           setTradeActivity([]);
@@ -267,7 +445,7 @@ export default function PortfolioPage() {
 
       return () => clearInterval(intervalId);
     }
-  }, [user?.id, activeSpotTab]);
+  }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain]);
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -360,7 +538,9 @@ export default function PortfolioPage() {
       setUnrealizedPnlPercentage(
         totalBoughtValue ? (totalPnl / totalBoughtValue) * 100 : 0,
       );
-      setTotalValue(solBalance + totalRemainingValue);
+      // Use appropriate balance based on current chain
+      const currentBalance = currentChain === 'monad' ? monBalance : solBalance;
+      setTotalValue(currentBalance + totalRemainingValue);
 
       // Create top 100 positions sorted by corrected USD value
       const sortedByUsdValue = [...correctedPositions].sort((a, b) => {
@@ -368,7 +548,7 @@ export default function PortfolioPage() {
       });
       setTop100Positions(sortedByUsdValue.slice(0, 100));
     }
-  }, [positions, solBalance]);
+  }, [positions, solBalance, monBalance, currentChain]);
 
   // Search filtering effect
   useEffect(() => {
@@ -681,6 +861,282 @@ export default function PortfolioPage() {
     document.body.removeChild(link);
   };
 
+  const fetchWallets = useCallback(async () => {
+    if (!user?.id) {
+      setWallets([]);
+      return;
+    }
+
+    setLoadingWallets(true);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch wallets: ${res.status}`);
+      }
+
+      const data = await res.json();
+      const mappedWallets: UserWallet[] = Array.isArray(data.wallets)
+        ? data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
+        : [];
+
+      setWallets(mappedWallets);
+      setWalletBalances(Object.fromEntries(mappedWallets.map((w) => [w.id, w.balance])));
+      notifyWalletsUpdated();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load wallets");
+    } finally {
+      setLoadingWallets(false);
+    }
+  }, [user?.id, user?.bearerToken]);
+
+  // Refresh only the selected primary wallet balance for the current chain
+  useEffect(() => {
+    if (!user || wallets.length === 0) {
+      return;
+    }
+
+    const primaryWallet =
+      wallets.find((w) => w.isPrimary) ?? wallets[0] ?? null;
+    if (!primaryWallet) return;
+
+    const address =
+      currentChain === "sol"
+        ? primaryWallet.solanaAddress || primaryWallet.address
+        : primaryWallet.ethereumAddress || null;
+    if (!address) return;
+
+    let cancelled = false;
+    const refreshPrimary = async () => {
+      const result = await refreshBalance({
+        chain: currentChain,
+        address,
+      });
+      if (!cancelled && result?.balance !== undefined) {
+        setWalletBalances((prev) => ({
+          ...prev,
+          [primaryWallet.id]: result.balance,
+        }));
+      }
+    };
+
+    refreshPrimary();
+    const interval = setInterval(refreshPrimary, 12000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user?.id, wallets, currentChain, refreshBalance]);
+
+  useEffect(() => {
+    fetchWallets();
+  }, [fetchWallets]);
+
+    const handleCreateWallet = async () => {
+    if (!user?.id) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    setCreatingWallet(true);
+    try {
+      // POST to your backend which does:
+      // - create Turnkey sub-org / wallet for this user
+      // - persist wallet to DB
+      // - return the new wallet with balance = 0 (or computed)
+      const res = await fetch(
+  `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${user.bearerToken}`,
+    },
+    body: JSON.stringify({
+      userId: user.id,
+      // you can optionally send: label, chain, etc.
+    }),
+  }
+);
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        throw new Error(`Failed to create wallet: ${res.status} ${errorText}`);
+      }
+
+      const createdRaw = await res.json();
+      const newWalletData = createdRaw?.wallet ?? createdRaw;
+
+      setWallets((prev) => {
+        const nextIndex = prev.length;
+        const newWallet = normalizeWalletFromApi(newWalletData, nextIndex);
+        return [...prev, newWallet];
+      });
+      notifyWalletsUpdated();
+      await fetchWallets();
+
+      toast.success("New wallet created");
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not create wallet");
+    } finally {
+      setCreatingWallet(false);
+    }
+  };
+
+  const handleBeginRenameWallet = (wallet: UserWallet) => {
+    setEditingWalletId(wallet.id);
+    setWalletRenameValue(wallet.label || "");
+  };
+
+  const handleCancelRenameWallet = () => {
+    setEditingWalletId(null);
+    setWalletRenameValue("");
+    setRenamingWalletId(null);
+  };
+
+  const handleRenameWallet = async () => {
+    if (!editingWalletId || !user?.bearerToken) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    const trimmed = walletRenameValue.trim();
+    if (!trimmed) {
+      toast.error("Wallet name cannot be empty");
+      return;
+    }
+
+    const currentLabel =
+      wallets.find((wallet) => wallet.id === editingWalletId)?.label ?? "";
+    if (trimmed === currentLabel.trim()) {
+      handleCancelRenameWallet();
+      return;
+    }
+
+    try {
+      setRenamingWalletId(editingWalletId);
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet/${editingWalletId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+          body: JSON.stringify({
+            label: trimmed,
+            userId: user.id,
+            walletId: editingWalletId,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        throw new Error(
+          errorText || `Failed to rename wallet (${res.status})`
+        );
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.wallets)) {
+        setWallets(
+          data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
+        );
+      } else if (data?.wallet) {
+        setWallets((prev) => {
+          const currentIndex = prev.findIndex((wallet) => wallet.id === editingWalletId);
+          const normalized = normalizeWalletFromApi(
+            data.wallet,
+            currentIndex >= 0 ? currentIndex : undefined
+          );
+          return prev.map((wallet) =>
+            wallet.id === editingWalletId ? normalized : wallet
+          );
+        });
+      } else {
+        setWallets((prev) =>
+          prev.map((wallet) =>
+            wallet.id === editingWalletId
+              ? { ...wallet, label: trimmed }
+              : wallet
+          )
+        );
+      }
+      notifyWalletsUpdated();
+
+      toast.success("Wallet name updated");
+      setEditingWalletId(null);
+      setWalletRenameValue("");
+    } catch (err) {
+      console.error("Failed to rename wallet:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to rename wallet"
+      );
+    } finally {
+      setRenamingWalletId(null);
+    }
+  };
+
+    const handleSetPrimaryWallet = async (walletId: string) => {
+    if (!user?.id) {
+      toast.error("Please log in first");
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet/${walletId}/primary`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+        }
+      );
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "");
+        console.error("Failed to set primary wallet:", res.status, errorText);
+        toast.error("Failed to set primary wallet");
+        return;
+      }
+
+      const data = await res.json();
+
+      // backend setPrimaryWallet returns: { success, message, wallets }
+      if (!data.wallets) {
+        toast.success("Primary wallet updated");
+        return;
+      }
+
+      const mappedWallets: UserWallet[] = Array.isArray(data.wallets)
+        ? data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
+        : [];
+
+      setWallets(mappedWallets);
+      notifyWalletsUpdated();
+      toast.success("Primary wallet updated");
+    } catch (err) {
+      console.error("Error setting primary wallet:", err);
+      toast.error("Failed to set primary wallet");
+    }
+  };
+
+
+
+
   return (
     <>
       <Head>
@@ -728,17 +1184,26 @@ export default function PortfolioPage() {
             {/* Right side controls for Spot section */}
             {activeSection === "spot" && (
               <div className="flex items-center gap-4">
-                <InterstateTooltip label="SOL Balance">
+                <InterstateTooltip label={currentChain === 'monad' ? 'MON Balance' : 'SOL Balance'}>
                   <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-                    <SiSolana
-                      className="h-4 w-4 -mt-px"
-                      aria-hidden="true"
-                      style={{
-                        color: "unset",
-                        fill: "url(#solana-gradient)",
-                        filter: "none",
-                      }}
-                    />
+                    {currentChain === 'monad' ? (
+                      <img
+                        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                        alt="Monad"
+                        className="h-6 w-6 -mt-px rounded"
+                        style={{ objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <SiSolana
+                        className="h-4 w-4 -mt-px"
+                        aria-hidden="true"
+                        style={{
+                          color: "unset",
+                          fill: "url(#solana-gradient)",
+                          filter: "none",
+                        }}
+                      />
+                    )}
                     <svg className="absolute w-0 h-0">
                       <defs>
                         <linearGradient
@@ -764,7 +1229,9 @@ export default function PortfolioPage() {
                       </defs>
                     </svg>
                     <span className="text-sm text-[#9CA3AF]">
-                      {formatSmartNumber(solBalance)}
+                      {currentChain === 'monad' 
+                        ? `${formatSmartNumber(monBalance)} MON`
+                        : `${formatSmartNumber(solBalance)} SOL`}
                     </span>
                   </div>
                 </InterstateTooltip>
@@ -841,7 +1308,7 @@ export default function PortfolioPage() {
                       <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(totalValue / solPrice)}
                           </>
                         ) : (
@@ -856,7 +1323,7 @@ export default function PortfolioPage() {
                       <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(unrealizedPnl / solPrice)}
                           </>
                         ) : (
@@ -871,11 +1338,11 @@ export default function PortfolioPage() {
                       <div className="text-2xl font-light text-[#f0f5f5]">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
-                            {formatSmartNumber(usdcBalance / solPrice)}
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber((currentChain === 'monad' ? monBalance : solBalance) / solPrice)}
                           </>
                         ) : (
-                          `$${formatSmartNumber(usdcBalance)}`
+                          `$${formatSmartNumber(currentChain === 'monad' ? monBalance : solBalance)}`
                         )}
                       </div>
                     </div>
@@ -909,7 +1376,7 @@ export default function PortfolioPage() {
                     >
                       {sortByUSD && solPrice > 0 ? (
                         <>
-                          <SolIcon />
+                          <ChainIcon chain={currentChain} size="medium" />
                           {formatSmartNumber(
                             Math.abs(timeframeMetrics.realizedPnl) / solPrice,
                           )}
@@ -1076,7 +1543,7 @@ export default function PortfolioPage() {
                       <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(
                               timeframeMetrics.unrealizedPnl / solPrice,
                             )}
@@ -1093,7 +1560,7 @@ export default function PortfolioPage() {
                       <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(
                               timeframeMetrics.realizedPnl / solPrice,
                             )}
@@ -1292,13 +1759,14 @@ export default function PortfolioPage() {
                         userId={user.id}
                         onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
-                        preloadedPositions={filteredPositions}
-                        skipFetch={searchQuery.trim() !== ""}
+                        preloadedPositions={searchQuery.trim() !== "" ? filteredPositions : undefined}
+                        skipFetch={false}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}
+                        fallbackPositions={fallbackPositions}
                       />
                     ))}
                   {/* History tab commented out */}
@@ -1342,6 +1810,7 @@ export default function PortfolioPage() {
                         tokenMetadataCache={tokenMetadataCache}
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}
+                        fallbackPositions={fallbackPositions}
                       />
                     ))}
                   {activeSpotTab === 2 &&
@@ -1420,9 +1889,17 @@ export default function PortfolioPage() {
                     <button className="px-3  py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap">
                       Import
                     </button>
-                    <button className="px-2 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:bg-[#58B890] transition-colors cursor-pointer whitespace-nowrap">
-                      Create Wallet
-                    </button>
+                    <button
+                    onClick={handleCreateWallet}
+                    disabled={creatingWallet || !user}
+                    className={`px-2 py-1 rounded-full text-xs whitespace-nowrap transition-colors cursor-pointer
+                      ${creatingWallet || !user
+                        ? "bg-[#374151] text-[#9CA3AF] cursor-not-allowed" : "bg-[#70E0B0] text-[#1A1A1A] hover:bg-[#58B890]"
+}`}
+          >
+                  {creatingWallet ? "Creating..." : "Create Wallet"}
+                </button>
+
                   </div>
                 </div>
 
@@ -1457,83 +1934,177 @@ export default function PortfolioPage() {
                 {/* Left Panel Content */}
                 <div className="px-4 py-3 ">
                   <div className="min-h-[300px]">
-                    {user ? (
-                      <div className="border-b border-[#2A2B33] hover:bg-[#17191E] transition">
-                        <div className="grid grid-cols-4 gap-2 items-center py-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-3 h-3 rounded bg-[#FF6B35] flex-shrink-0"></div>
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium text-[#f0f5f5] text-sm truncate">
-                                Narrative Main
-                              </div>
-                              <div className="text-xs text-[#9CA3AF] font-mono truncate">
-                                {user.publicKey.slice(0, 4)}...
-                                {user.publicKey.slice(-4)}
-                              </div>
-                            </div>
-                            <button className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0">
-                              <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
-                                <rect
-                                  x="9"
-                                  y="9"
-                                  width="13"
-                                  height="13"
-                                  rx="2"
-                                  ry="2"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                />
-                                <path
-                                  d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                />
-                              </svg>
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-1 justify-center">
-                            <SiSolana
-                              className="h-3 w-3 flex-shrink-0"
-                              aria-hidden="true"
-                              style={{
-                                color: "unset",
-                                fill: "url(#solana-gradient-wallets)",
-                                filter: "none",
-                              }}
-                            />
-                            <svg className="absolute w-0 h-0">
-                              <defs>
-                                <linearGradient
-                                  id="solana-gradient-wallets"
-                                  x1="0%"
-                                  y1="0%"
-                                  x2="100%"
-                                  y2="0%"
-                                >
-                                  <stop offset="0%" stopColor="#9945FF" />
-                                  <stop offset="100%" stopColor="#14F195" />
-                                </linearGradient>
-                              </defs>
-                            </svg>
-                            <span className="text-xs text:white">0</span>
-                          </div>
-                          <div className="flex items-center gap-1 justify-center">
-                            <div className="w-5 h-2.5 bg-[#374151] rounded-sm relative">
-                              <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-[#70E0B0] rounded-sm"></div>
-                            </div>
-                            <span className="text-xs text-[#9CA3AF]">0</span>
-                          </div>
-                          <div className="text-center">
-                            <span className="text-xs text-[#9CA3AF]">-</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
+                    {!user ? (
                       <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
                         Please log in to view your wallets.
                       </div>
-                    )}
-                  </div>
+                    ) : loadingWallets ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        Loading wallets...
+                      </div>
+                    ) : wallets.length === 0 ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        No wallets yet. Click &quot;Create Wallet&quot; to get started.
+                      </div>
+                    ) : (
+                      wallets
+                        .filter((w) => (showHidden ? true : !w.isArchived))
+                        .map((wallet) => {
+                          const displayAddress = getAddressForChain(wallet, currentChain);
+                          const truncated =
+                            displayAddress.length > 8
+                              ? `${displayAddress.slice(0, 4)}...${displayAddress.slice(-4)}`
+                              : displayAddress;
+                          return (
+                          <div
+                            key={wallet.id}
+                            className="border-b border-[#2A2B33] hover:bg-[#17191E] transition"
+                          >
+                            <div className="grid grid-cols-4 gap-2 items-center py-3">
+                              {/* Wallet + address */}
+                              <div className="flex items-center gap-2 min-w-0">
+                                <button
+                                  className={`w-3 h-3 rounded flex-shrink-0 transition ${
+                                    wallet.isPrimary ? "bg-[#FF6B35]" : "bg-[#374151]"
+                                  }`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSetPrimaryWallet(wallet.id);
+                                  }}
+                                  title={
+                                    wallet.isPrimary ? "Primary wallet" : "Set as primary wallet"
+                                  }
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium text-[#f0f5f5] text-sm flex items-center gap-2">
+                                    {editingWalletId === wallet.id ? (
+                                      <>
+                                        <input
+                                          className="bg-[#0f1014] border border-[#2A2B33] rounded px-2 py-1 text-xs text-[#f0f5f5] focus:outline-none focus:ring-1 focus:ring-[#70E0B0]"
+                                          value={walletRenameValue}
+                                          onChange={(e) => setWalletRenameValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              handleRenameWallet();
+                                            } else if (e.key === "Escape") {
+                                              handleCancelRenameWallet();
+                                            }
+                                          }}
+                                          autoFocus
+                                        />
+                                        <button
+                                          type="button"
+                                          className="text-[#70E0B0] hover:text-[#58B890]"
+                                          onClick={handleRenameWallet}
+                                          disabled={renamingWalletId === wallet.id}
+                                        >
+                                          <FiCheck size={14} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="text-[#9CA3AF] hover:text-[#f0f5f5]"
+                                          onClick={handleCancelRenameWallet}
+                                          disabled={renamingWalletId === wallet.id}
+                                        >
+                                          <FiX size={14} />
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>{wallet.label}</span>
+                                        <button
+                                          type="button"
+                                          className="text-[#9CA3AF] hover:text-[#f0f5f5]"
+                                          onClick={() => handleBeginRenameWallet(wallet)}
+                                          title="Rename wallet"
+                                        >
+                                          <FiEdit2 size={14} />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-[#9CA3AF] font-mono truncate">
+                                    {truncated || "—"}
+                                  </div>
+                                </div>
+                                <button
+                                  className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0"
+                                  onClick={() => {
+                                    if (displayAddress) {
+                                      navigator.clipboard.writeText(displayAddress).then(
+                                        () => toast.success("Address copied"),
+                                        () => toast.error("Failed to copy address")
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                    <rect
+                                      x="9"
+                                      y="9"
+                                      width="13"
+                                      height="13"
+                                      rx="2"
+                                      ry="2"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    />
+                                    <path
+                                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+
+                              {/* Balance */}
+                              <div className="flex items-center gap-1 justify-center">
+                                {currentChain === 'monad' ? (
+                                  <img
+                                    src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                                    alt="Monad"
+                                    className="h-4 w-4 flex-shrink-0 rounded"
+                                    style={{ objectFit: 'contain' }}
+                                  />
+                                ) : (
+                                  <SiSolana
+                                    className="h-3 w-3 flex-shrink-0"
+                                    aria-hidden="true"
+                                    style={{
+                                      color: "unset",
+                                      fill: "url(#solana-gradient-wallets)",
+                                      filter: "none",
+                                    }}
+                                  />
+                                )}
+                                <span className="text-xs text-white">
+                                  {formatSmartNumber(
+                                    walletBalances[wallet.id] ?? wallet.balance,
+                                  )}
+                                </span>
+                              </div>
+
+                              {/* Holdings */}
+                              <div className="flex items-center justify-center">
+                                <StackedTokenBoxes count={
+                                  // Use API value if available and > 0, otherwise fallback to positions.length for primary wallet
+                                  wallet.holdingsCount > 0 
+                                    ? wallet.holdingsCount 
+                                    : (wallet.isPrimary && positions.length > 0 ? positions.length : wallet.holdingsCount)
+                                } />
+                              </div>
+
+                              {/* Actions */}
+                              <div className="text-center">
+                                <span className="text-xs text-[#9CA3AF]">-</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                        })
+                  )}
+                </div>
                 </div>
 
                 {/* Right Panel Content */}

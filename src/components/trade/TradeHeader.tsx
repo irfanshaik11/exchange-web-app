@@ -6,11 +6,37 @@ import { useWatchlist } from "../WatchlistContext";
 import { SubscriptNumber } from "../InterstateTable";
 import FastImage from "../FastImage";
 import useMarketDataWebSocket from "~/hooks/useMarketDataWebSocket";
+import { useRouter } from "next/router";
+import { getProtocolBranding } from "~/utils/protocolBranding";
 
 import { IoShareSocialOutline } from "react-icons/io5";
-import { FaRegStar, FaStar, FaSearch, FaExpand, FaCamera, FaRegCopy, FaUser } from "react-icons/fa";
-import { LuPill, LuDroplet } from "react-icons/lu";
+import {
+  FaRegStar,
+  FaStar,
+  FaSearch,
+  FaExpand,
+  FaCamera,
+  FaRegCopy,
+  FaUser,
+} from "react-icons/fa";
+import { LuPill, LuDroplet, LuSearch } from "react-icons/lu";
 import Link from "next/link";
+import { CiTrophy } from "react-icons/ci";
+import { FaXTwitter } from "react-icons/fa6";
+import { FiGlobe } from "react-icons/fi";
+import { GoPeople } from "react-icons/go";
+import {
+  PiTelegramLogo,
+  PiCrownSimpleLight,
+  PiRobotLight,
+} from "react-icons/pi";
+import ColorFillBar from "../ColorFillBar";
+
+const MONAD_PROTOCOL_KEYWORDS = ["nad.fun", "nadfun", "flap.sh", "flapsh", "kuru"];
+const MONAD_BRAND = {
+  color: "#9B59B6",
+  icon: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+};
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
@@ -32,16 +58,52 @@ const AX = {
 };
 
 const DEFAULT_PROTOCOL_COLOR = "#22c55e";
-const DEFAULT_PROTOCOL_ICON = "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
+const DEFAULT_PROTOCOL_ICON =
+  "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
 
 const normalizeKey = (s?: string) =>
   (s || "").toLowerCase().replace(/\s+/g, "").replace(/_/g, "");
+
+const rawProtocolColorMap: Record<string, string> = {
+  pump: DEFAULT_PROTOCOL_COLOR,
+  "pump.fun": DEFAULT_PROTOCOL_COLOR,
+  bonk: "#ff6b35",
+  bags: DEFAULT_PROTOCOL_COLOR,
+  moonshot: "#eab308",
+  moonshoot: "#eab308",
+  moonit: "#eab308",
+  heaven: "#8b5cf6",
+  "daos.fun": "#06b6d4",
+  candle: "#f59e0b",
+  sugar: "#ec4899",
+  believe: "#10b981",
+  jupiter: "#8b5cf6",
+  boop: "#134577",
+  boopfun: "#134577",
+  launchlab: "#3b82f6",
+  dynamic: "#526fff",
+  raydium: "#5c51f7",
+  raydiumlaunchpad: "#5c51f7",
+  meteora: "#ff4662",
+  meteora_v2: "#ff4662",
+  pump_amm: "#e9ba14",
+  orca: "#0ea5e9",
+};
+
+const normalizedProtocolColorMap: Record<string, string> = Object.fromEntries(
+  Object.entries(rawProtocolColorMap).map(([key, value]) => [
+    normalizeKey(key),
+    value,
+  ]),
+);
 
 const formatMarketCap = (value: string | number | null | undefined): string => {
   if (value === null || value === undefined) return "-";
 
   const numericValue =
-    typeof value === "string" ? parseFloat(value.replace(/,/g, "")) : Number(value);
+    typeof value === "string"
+      ? parseFloat(value.replace(/,/g, ""))
+      : Number(value);
 
   if (!Number.isFinite(numericValue)) return "-";
 
@@ -74,36 +136,6 @@ const formatMarketCap = (value: string | number | null | undefined): string => {
   return numericValue.toFixed(2);
 };
 
-const rawProtocolColorMap: Record<string, string> = {
-  pump: DEFAULT_PROTOCOL_COLOR,
-  "pump.fun": DEFAULT_PROTOCOL_COLOR,
-  bonk: "#ff6b35",
-  bags: DEFAULT_PROTOCOL_COLOR,
-  moonshot: "#eab308",
-  moonshoot: "#eab308",
-  moonit: "#eab308",
-  heaven: "#8b5cf6",
-  "daos.fun": "#06b6d4",
-  candle: "#f59e0b",
-  sugar: "#ec4899",
-  believe: "#10b981",
-  jupiter: "#8b5cf6",
-  boop: "#134577",
-  boopfun: "#134577",
-  launchlab: "#3b82f6",
-  dynamic: "#526fff",
-  raydium: "#5c51f7",
-  raydiumlaunchpad: "#5c51f7",
-  meteora: "#ff4662",
-  "meteora_v2": "#ff4662",
-  pump_amm: "#e9ba14",
-  orca: "#0ea5e9",
-};
-
-const normalizedProtocolColorMap: Record<string, string> = Object.fromEntries(
-  Object.entries(rawProtocolColorMap).map(([key, value]) => [normalizeKey(key), value])
-);
-
 function extractProtocolRaw(token: Token | null): string | null {
   if (!token) return null;
   const candidates = [
@@ -120,7 +152,10 @@ function extractProtocolRaw(token: Token | null): string | null {
   return null;
 }
 
-function resolveProtocolColor(token: Token, columnType: "new" | "final-stretch" | "migrated"): string {
+function resolveProtocolColor(
+  token: Token,
+  columnType: "new" | "final-stretch" | "migrated",
+): string {
   const raw = extractProtocolRaw(token);
   if (!raw) return DEFAULT_PROTOCOL_COLOR;
 
@@ -139,10 +174,16 @@ function resolveProtocolColor(token: Token, columnType: "new" | "final-stretch" 
   const normalized = normalizeKey(raw);
 
   if (rawProtocolColorMap[raw]) return rawProtocolColorMap[raw];
-  if (normalizedProtocolColorMap[normalized]) return normalizedProtocolColorMap[normalized];
+  if (normalizedProtocolColorMap[normalized])
+    return normalizedProtocolColorMap[normalized];
 
   if (raw.includes("raydium")) return "#5c51f7";
-  if (raw.includes("moonit") || raw.includes("moonshot") || raw.includes("moonshoot")) return "#eab308";
+  if (
+    raw.includes("moonit") ||
+    raw.includes("moonshot") ||
+    raw.includes("moonshoot")
+  )
+    return "#eab308";
   if (raw.includes("boop")) return "#134577";
   if (raw.includes("bonk")) return "#ff6b35";
   if (raw.includes("bags")) return DEFAULT_PROTOCOL_COLOR;
@@ -168,7 +209,11 @@ function resolveProtocolIcon(token: Token): string {
     return "https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true";
   }
 
-  if (raw.includes("moonit") || raw.includes("moonshot") || raw.includes("moonshoot")) {
+  if (
+    raw.includes("moonit") ||
+    raw.includes("moonshot") ||
+    raw.includes("moonshoot")
+  ) {
     return "https://avatars.githubusercontent.com/u/174132191?s=280&v=4";
   }
 
@@ -189,14 +234,17 @@ function resolveProtocolIcon(token: Token): string {
 
 function shouldFillProtocolBadge(token: Token): boolean {
   const raw = extractProtocolRaw(token) || "";
-  return ["meteora", "bonk", "bags", "moonit", "moonshot", "moonshoot"].some((needle) => raw.includes(needle));
+  return ["meteora", "bonk", "bags", "moonit", "moonshot", "moonshoot"].some(
+    (needle) => raw.includes(needle),
+  );
 }
 
 /* ---------- helpers ---------- */
 function getTokenAge(createdAt: string | number) {
   if (!createdAt && createdAt !== 0) return "Unknown";
   let timestamp = createdAt as any;
-  if (typeof timestamp === "number" && timestamp < 10000000000) timestamp *= 1000;
+  if (typeof timestamp === "number" && timestamp < 10000000000)
+    timestamp *= 1000;
   const d = new Date(timestamp);
   if (isNaN(d.getTime())) return "Unknown";
   const ms = Date.now() - d.getTime();
@@ -220,13 +268,17 @@ function normalizeAssetUrl(raw?: string): string | null {
     const cid = s.replace(/^ipfs[/:]/i, "");
     return `https://cloudflare-ipfs.com/ipfs/${cid}`;
   }
-  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s)) return `https://arweave.net/${s}`;
+  if (/^[a-z0-9_-]{40,}$/i.test(s) && !/^https?:\/\//i.test(s))
+    return `https://arweave.net/${s}`;
   if (s.startsWith("http://")) return s.replace(/^http:\/\//i, "https://");
   if (s.startsWith("https://")) return s;
   return null;
 }
 
-function resolveTwitterInfo(token: Token | null): { url: string | null; handle: string | null } {
+function resolveTwitterInfo(token: Token | null): {
+  url: string | null;
+  handle: string | null;
+} {
   if (!token) return { url: null, handle: null };
 
   const candidates = [
@@ -255,7 +307,9 @@ function resolveTwitterInfo(token: Token | null): { url: string | null; handle: 
     };
   }
 
-  const fallback = (token.symbol || token.name || "").toLowerCase().replace(/[^a-z0-9_]/gi, "");
+  const fallback = (token.symbol || token.name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/gi, "");
   if (fallback) {
     return {
       handle: fallback,
@@ -278,12 +332,22 @@ function StatInline({
 }) {
   return (
     <div className="flex flex-col items-start gap-0.5">
-      <span className="text-[10px] uppercase tracking-wider" style={{ color: AX.muted }}>
+      <span
+        className="text-[10px] tracking-wider uppercase"
+        style={{ color: AX.muted }}
+      >
         {label}
       </span>
       <span
         className="text-[12px] tabular-nums"
-        style={{ color: accent === "green" ? AX.green : accent === "blue" ? AX.blue : AX.text }}
+        style={{
+          color:
+            accent === "green"
+              ? AX.green
+              : accent === "blue"
+                ? AX.blue
+                : AX.text,
+        }}
       >
         {children}
       </span>
@@ -313,7 +377,8 @@ function getColumnType(token: Token): "new" | "final-stretch" | "migrated" {
 
   let progress = 0;
   if (typeof pct === "number" && pct >= 0) progress = pct;
-  else if (marketCap > 0) progress = Math.min((marketCap / 69000000) * 100, 100);
+  else if (marketCap > 0)
+    progress = Math.min((marketCap / 69000000) * 100, 100);
 
   return progress >= 60 ? "final-stretch" : "new";
 }
@@ -326,18 +391,22 @@ interface TradeHeaderProps {
 const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
   if (!token || (!token.name && !token.symbol)) {
     return (
-      <div className="px-2 flex-shrink-0">
-        <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: AX.surface }}>
-          <div className="h-10 w-10 rounded-md bg-neutral-800 animate-pulse" />
+      <div className="flex-shrink-0 px-2">
+        <div
+          className="flex items-center gap-3 rounded-lg p-3"
+          style={{ backgroundColor: AX.surface }}
+        >
+          <div className="h-10 w-10 animate-pulse rounded-md bg-neutral-800" />
           <div className="flex flex-col gap-1">
-            <div className="h-4 w-24 bg-neutral-800 animate-pulse rounded" />
-            <div className="h-3 w-16 bg-neutral-800 animate-pulse rounded" />
+            <div className="h-4 w-24 animate-pulse rounded bg-neutral-800" />
+            <div className="h-3 w-16 animate-pulse rounded bg-neutral-800" />
           </div>
         </div>
       </div>
     );
   }
 
+  const router = useRouter();
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlist();
   const isWatched = isInWatchlist(token.pair_address || "");
   const [showPreview, setShowPreview] = useState(false);
@@ -358,17 +427,30 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
       (token as any).CreatedAt;
     return getTokenAge(createdAt);
   }, [token]);
+  const [showXPreview, setShowXPreview] = useState<boolean>(false);
+  const [buttonPosition, setButtonPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
 
-  const { isConnected: wsConnected, loading: wsLoading, error: wsError, getMarketData } =
-    useMarketDataWebSocket({
-      pairAddress: token.pair_address || "",
-      tokenAddress: token.mint || "",
-      enabled: true,
-    });
+  const {
+    isConnected: wsConnected,
+    loading: wsLoading,
+    error: wsError,
+    getMarketData,
+  } = useMarketDataWebSocket({
+    pairAddress: token.pair_address || "",
+    tokenAddress: token.mint || "",
+    enabled: true,
+  });
 
   const marketData = getMarketData();
   const mcap = marketData?.market_cap_usd || token.market_cap_usd || 0;
-  const price = marketData?.price_usd || (token as any).usd_price || (token as any).price_usd || 0;
+  const price =
+    marketData?.price_usd ||
+    (token as any).usd_price ||
+    (token as any).price_usd ||
+    0;
   const liq =
     marketData?.liquidity_usd ??
     marketData?.volume_usd ??
@@ -398,24 +480,64 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
 
   /* ---------- canonical protocol resolution ---------- */
   const columnType = getColumnType(token);
-  const protocolColor = resolveProtocolColor(token, columnType);
-  const tokenIcon = resolveProtocolIcon(token);
-  const fillProtocolBadge = shouldFillProtocolBadge(token);
+  const protocolSource =
+    (token as any).launchpad_protocol ||
+    (token as any).protocol ||
+    (token as any).launchpadName ||
+    (token as any).amm ||
+    extractProtocolRaw(token) ||
+    undefined;
+
+  const tokenChain =
+    ((token as any).blockchain ||
+      (token as any).network ||
+      (token as any).chain ||
+      "") as string;
+  const normalizedChain = tokenChain.toLowerCase();
+  const normalizedProtocol = (protocolSource || "").toLowerCase();
+  const isMonadProtocol = normalizedProtocol
+    ? MONAD_PROTOCOL_KEYWORDS.some((keyword) =>
+        normalizedProtocol.includes(keyword),
+      )
+    : false;
+  const isMonadContext =
+    normalizedChain === "monad" ||
+    router?.pathname?.includes("/trade/monad") ||
+    isMonadProtocol;
+
+  let protocolColor: string;
+  let tokenIcon: string;
+  let fillProtocolBadge: boolean;
+
+  if (isMonadContext) {
+    const protocolBranding = getProtocolBranding(protocolSource || undefined);
+    protocolColor = MONAD_BRAND.color;
+    tokenIcon = protocolBranding.iconUrl || MONAD_BRAND.icon;
+    fillProtocolBadge = protocolBranding.isFullCircle;
+  } else {
+    protocolColor = resolveProtocolColor(token, columnType);
+    tokenIcon = resolveProtocolIcon(token);
+    fillProtocolBadge = shouldFillProtocolBadge(token);
+  }
 
   // token image (ipfs/http)
-  const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
+  const rawImg =
+    (token as any).uri || (token as any).image || (token as any).logo;
   const imgSrc = normalizeAssetUrl(rawImg);
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    token.symbol || token.name || "T"
+    token.symbol || token.name || "T",
   )}&background=0f1012&color=E6E7EA&size=36`;
 
-  const twitterSearchQuery = useMemo(() => `${token.symbol || ""} ${token.name || ""}`.trim(), [token.symbol, token.name]);
+  const twitterSearchQuery = useMemo(
+    () => `${token.symbol || ""} ${token.name || ""}`.trim(),
+    [token.symbol, token.name],
+  );
   const twitterSearchUrl = useMemo(
     () =>
       twitterSearchQuery
         ? `https://twitter.com/search?q=${encodeURIComponent(twitterSearchQuery)}`
         : `https://twitter.com/search?q=${encodeURIComponent(token.symbol || token.name || "")}`,
-    [twitterSearchQuery, token.symbol, token.name]
+    [twitterSearchQuery, token.symbol, token.name],
   );
   const twitterBio = useMemo(() => {
     const candidates = [
@@ -433,17 +555,17 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
     return `Official ${base} community. Join the conversation!`;
   }, [token]);
 
-useEffect(() => {
-  return () => {
-    if (typeof window === "undefined") return;
-    if (xPreviewTimeoutRef.current != null) {
-      window.clearTimeout(xPreviewTimeoutRef.current);
-    }
-    if (toastTimeoutRef.current != null) {
-      window.clearTimeout(toastTimeoutRef.current);
-    }
-  };
-}, []);
+  useEffect(() => {
+    return () => {
+      if (typeof window === "undefined") return;
+      if (xPreviewTimeoutRef.current != null) {
+        window.clearTimeout(xPreviewTimeoutRef.current);
+      }
+      if (toastTimeoutRef.current != null) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleWatchlistClick = () => {
     if (isWatched) {
@@ -473,23 +595,23 @@ useEffect(() => {
     const rect = e.currentTarget.getBoundingClientRect();
     const popupWidth = 150;
     const popupHeight = 150;
-    
+
     // Default position to the right of the image
     let x = rect.right + 10;
-    let y = rect.top + (rect.height / 2) - (popupHeight / 2);
-    
+    let y = rect.top + rect.height / 2 - popupHeight / 2;
+
     // Check if popup would go off the right edge of the screen
     if (x + popupWidth > window.innerWidth) {
       x = rect.left - popupWidth - 10; // Position to the left instead
     }
-    
+
     // Check if popup would go off the top or bottom of the screen
     if (y < 10) {
       y = 10; // Keep some margin from top
     } else if (y + popupHeight > window.innerHeight - 10) {
       y = window.innerHeight - popupHeight - 10; // Keep some margin from bottom
     }
-    
+
     setPopupPosition({ x, y });
     setShowPreview(true);
     setShowZoomPopup(true);
@@ -500,7 +622,10 @@ useEffect(() => {
     setShowZoomPopup(false);
   };
 
-  const isPumpToken = useMemo(() => (token.mint || "").slice(-4) === "pump", [token.mint]);
+  const isPumpToken = useMemo(
+    () => (token.mint || "").slice(-4) === "pump",
+    [token.mint],
+  );
 
   const openLinkInNewTab = (url: string) => {
     if (!url) return;
@@ -521,7 +646,9 @@ useEffect(() => {
     }, 120);
   };
 
-  const handleTwitterProfileMouseEnter = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleTwitterProfileMouseEnter = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
     if (!twitterProfileUrl) return;
     if (typeof window === "undefined") return;
     if (xPreviewTimeoutRef.current != null) {
@@ -552,7 +679,9 @@ useEffect(() => {
     scheduleHideTwitterPreview();
   };
 
-  const handleTwitterProfileClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+  const handleTwitterProfileClick = (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     if (twitterProfileUrl) {
@@ -563,16 +692,23 @@ useEffect(() => {
   };
 
   return (
-    <div className="flex w-full items-center gap-6 px-2 py-2" style={{ color: AX.text }}>
+    <div
+      className="flex w-full items-center gap-6 px-2 py-2"
+      style={{ color: AX.text }}
+    >
       {/* WS banner(s) */}
       {wsError && (
-        <div className="absolute top-0 left-0 right-0 px-3 py-1 bg-red-900/20 border-b border-red-500/30 z-10">
-          <div className="text-[10px] text-red-400 text-center">Market Data Error: {wsError}</div>
+        <div className="absolute top-0 right-0 left-0 z-10 border-b border-red-500/30 bg-red-900/20 px-3 py-1">
+          <div className="text-center text-[10px] text-red-400">
+            Market Data Error: {wsError}
+          </div>
         </div>
       )}
       {!wsConnected && !wsLoading && (
-        <div className="absolute top-0 left-0 right-0 px-3 py-1 bg-yellow-900/20 border-b border-yellow-500/30 z-10">
-          <div className="text-[10px] text-yellow-400 text-center">Using static market data</div>
+        <div className="absolute top-0 right-0 left-0 z-10 border-b border-yellow-500/30 bg-yellow-900/20 px-3 py-1">
+          <div className="text-center text-[10px] text-yellow-400">
+            Using static market data
+          </div>
         </div>
       )}
 
@@ -580,18 +716,23 @@ useEffect(() => {
       <div className="flex items-center gap-3">
         {/* Avatar with PulseTable-style border + protocol badge */}
         <div
-          className="relative flex items-center justify-center rounded-sm transition-all duration-300 ease-out cursor-pointer"
+          className="relative flex cursor-pointer items-center justify-center rounded-sm transition-all duration-300 ease-out"
           onMouseEnter={handleImageHover}
           onMouseLeave={handleImageLeave}
           style={{
             width: 44,
             height: 44,
             overflow: "visible",
-            boxShadow: showPreview ? `0 0 5px ${AX.glowCyan}, 0 0 10px ${AX.glowCyan}` : "none",
+            boxShadow: showPreview
+              ? `0 0 5px ${AX.glowCyan}, 0 0 10px ${AX.glowCyan}`
+              : "none",
             transform: showPreview ? "scale(1.02)" : "scale(1)",
           }}
         >
-          <div className="relative rounded-sm" style={{ border: "none", padding: 0 }}>
+          <div
+            className="relative rounded-sm"
+            style={{ border: "none", padding: 0 }}
+          >
             <div
               className="relative rounded-sm"
               style={{
@@ -601,7 +742,7 @@ useEffect(() => {
               }}
             >
               <div
-                className="relative rounded-sm overflow-hidden"
+                className="relative overflow-hidden rounded-sm"
                 style={{ width: 36, height: 36 }}
               >
                 <FastImage
@@ -610,7 +751,7 @@ useEffect(() => {
                   alt={token.name || token.symbol || ""}
                   width={36}
                   height={36}
-                  className="w-full h-full object-cover transition-all duration-300"
+                  className="h-full w-full object-cover transition-all duration-300"
                   symbol={token.symbol}
                   name={token.name}
                   showBubble={false}
@@ -620,7 +761,7 @@ useEffect(() => {
           </div>
 
           <div
-            className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/5 translate-y-1/4 z-10"
+            className="absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full bg-white"
             style={{
               width: 12,
               height: 12,
@@ -632,9 +773,12 @@ useEffect(() => {
             <img
               src={tokenIcon}
               alt={`${(token as any).launchpad_protocol || (token as any).protocol || (token as any).launchpadName || "Protocol"} logo`}
-              className={`${fillProtocolBadge ? "w-full h-full object-cover" : "w-3/4 h-3/4 object-contain"} rounded-full`}
+              className={`${fillProtocolBadge ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
               style={{
-                filter: protocolColor === "#eab308" ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)" : "none",
+                filter:
+                  protocolColor === "#eab308"
+                    ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
+                    : "none",
               }}
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = "none";
@@ -643,7 +787,7 @@ useEffect(() => {
           </div>
 
           <div
-            className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300 pointer-events-none"
+            className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 transition-all duration-300"
             style={{ opacity: showPreview ? 1 : 0 }}
           >
             <div
@@ -653,7 +797,11 @@ useEffect(() => {
                 boxShadow: `0 0 8px ${AX.glowCyan}`,
               }}
             >
-              <FaCamera size={16} style={{ color: "#000000" }} className="drop-shadow-lg" />
+              <FaCamera
+                size={16}
+                style={{ color: "#000000" }}
+                className="drop-shadow-lg"
+              />
             </div>
           </div>
         </div>
@@ -714,55 +862,482 @@ useEffect(() => {
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-sm" style={{ color: AX.green }}>
+          <div className="mt-1 flex items-center gap-1 text-xs lg:gap-2">
             <span>{tokenAgeLabel}</span>
+            {/* Socials */}
+            <div className="relative flex items-center gap-1 text-neutral-400 lg:gap-1">
+              {/* Pump.fun Link - only show for pump tokens */}
+              {/* {token.mint.slice(-4) === "pump" && (
+                              <Link
+                                target="_blank"
+                                href={`https://pump.fun/coin/${token.mint}`}
+                                className="transition-colors duration-200"
+                                style={{ color: "#ec397a" }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.color = "#ec397a";
+                                  const tooltip = e.currentTarget
+                                    .nextElementSibling as HTMLElement;
+                                  if (tooltip) tooltip.style.opacity = "1";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.color = "#ec397a";
+                                  const tooltip = e.currentTarget
+                                    .nextElementSibling as HTMLElement;
+                                  if (tooltip) tooltip.style.opacity = "0";
+                                }}
+                              >
+                                <LuPill
+                                  size={10}
+                                  className="lg:h-3 lg:w-3"
+                                  style={{ strokeWidth: "3" }}
+                                />
+                              </Link>
+                            )} */}
 
-            {isPumpToken && (
-              <Link
-                target="_blank"
-                href={`https://pump.fun/coin/${token.mint}`}
-                title="View on pump.fun"
-                className="transition-colors duration-200"
+              {/* X Profile Preview Button */}
+              <div className="relative">
+                <button
+                  className="flex items-center justify-center rounded transition-colors duration-200"
+                  onMouseEnter={(e) => {
+                    const tooltip = document.getElementById(
+                      `profile-tooltip`,
+                    ) as HTMLElement;
+                    if (tooltip) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                      tooltip.style.top = `${rect.top - 10}px`;
+                      tooltip.style.opacity = "1";
+                    }
+                    // Show X profile preview
+                    setShowXPreview(true);
+                    // Store button position for popup positioning
+                    const buttonRect = e.currentTarget.getBoundingClientRect();
+                    setButtonPosition({
+                      left: buttonRect.left + buttonRect.width / 2,
+                      top: buttonRect.top - 20,
+                    });
+                  }}
+                  onMouseLeave={(e) => {
+                    const tooltip = document.getElementById(
+                      `profile-tooltip`,
+                    ) as HTMLElement;
+                    if (tooltip) tooltip.style.opacity = "0";
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault(); // Prevent Link navigation
+                    // Open X profile in new tab
+                    const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                    window.open(profileUrl, "_blank");
+                  }}
+                >
+                  <FaXTwitter size={16} className="text-neutral-400" />
+                </button>
+
+                <div
+                  key={`search-tooltip`}
+                  id={`search-tooltip`}
+                  className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                  style={{
+                    zIndex: 99999,
+                    backgroundColor: AX.surface,
+                    color: AX.text,
+                    border: `1px solid ${AX.border}`,
+                    boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+                    transform: "translate(-50%, -100%)",
+                  }}
+                >
+                  Search on Twitter
+                  {/* Tooltip arrow */}
+                  <div
+                    className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                    style={{ borderTopColor: AX.surface }}
+                  ></div>
+                </div>
+
+                <div
+                  key={`profile-tooltip`}
+                  id={`profile-tooltip`}
+                  className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                  style={{
+                    zIndex: 99999,
+                    backgroundColor: AX.surface,
+                    color: AX.text,
+                    border: `1px solid ${AX.border}`,
+                    boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowBlue}`,
+                    transform: "translate(-50%, -100%)",
+                  }}
+                >
+                  View X Profile
+                  {/* Tooltip arrow */}
+                  <div
+                    className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                    style={{ borderTopColor: AX.surface }}
+                  ></div>
+                </div>
+
+                {/* Small X Profile Preview - positioned near token */}
+                {showXPreview && buttonPosition && (
+                  <div
+                    className="fixed"
+                    style={{
+                      left: `${buttonPosition.left}px`,
+                      top: `${buttonPosition.top - 300}px`,
+                      transform: "translate(-50%, 0)",
+                      width: "280px",
+                      zIndex: 999999,
+                    }}
+                    onMouseEnter={() => {
+                      // Keep popup open when hovering over it
+                    }}
+                    onMouseLeave={() => {
+                      // Hide popup when leaving the popup area
+                      setShowXPreview(false);
+                    }}
+                  >
+                    <div
+                      className="overflow-hidden rounded-xl"
+                      style={{
+                        backgroundColor: AX.surface,
+                        border: `1px solid ${AX.border}`,
+                        boxShadow: `0 12px 48px rgba(0, 0, 0, 0.5), 0 0 24px ${AX.glowBlue}`,
+                        backdropFilter: "blur(10px)",
+                      }}
+                    >
+                      {/* X Icon Header */}
+                      <div
+                        className="flex items-center justify-between border-b px-4 py-3"
+                        style={{ borderColor: "#2f3336" }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="flex h-7 w-7 items-center justify-center rounded-full"
+                            style={{
+                              backgroundColor: "#1d9bf0",
+                            }}
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              style={{ color: "#f0f5f5" }}
+                            >
+                              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div
+                              className="text-sm font-bold"
+                              style={{ color: "#f0f5f5" }}
+                            >
+                              X Profile
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              Live Preview
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div
+                            className="h-2 w-2 rounded-full"
+                            style={{
+                              backgroundColor: "#31e3ac",
+                            }}
+                          ></div>
+                          <span className="text-xs text-gray-400">Live</span>
+                        </div>
+                      </div>
+
+                      {/* Official X Profile Layout */}
+                      <div className="px-4 py-4">
+                        {/* Profile Picture */}
+                        <div className="mb-4 flex justify-center">
+                          <div
+                            className="h-20 w-20 overflow-hidden rounded-full"
+                            style={{
+                              backgroundColor: "#1a1a1a",
+                              border: `3px solid #2f3336`,
+                            }}
+                          >
+                            <img
+                              src={`https://ui-avatars.com/api/?name=${token.symbol || "Token"}&size=80&background=1a1a1a&color=ffffff&bold=true`}
+                              alt={`${token.symbol} profile`}
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = "none";
+                                const fallback =
+                                  target.nextElementSibling as HTMLElement;
+                                if (fallback) fallback.style.display = "flex";
+                              }}
+                            />
+                            <div
+                              className="flex h-full w-full items-center justify-center text-xl font-bold"
+                              style={{
+                                backgroundColor: "#1a1a1a",
+                                color: "#f0f5f5",
+                                display: "none",
+                              }}
+                            >
+                              {token.symbol?.slice(0, 2) || "??"}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Profile Info */}
+                        <div className="mb-4 text-center">
+                          <div className="mb-1 flex items-center justify-center gap-2">
+                            <h3
+                              className="text-xl font-bold"
+                              style={{ color: "#f0f5f5" }}
+                            >
+                              {token.symbol || "Unknown"}
+                            </h3>
+                            {/* Verified Badge */}
+                            <div
+                              className="flex h-6 w-6 items-center justify-center rounded-full"
+                              style={{
+                                backgroundColor: "#1d9bf0",
+                              }}
+                            >
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="#f0f5f5"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M9 12l2 2 4-4" />
+                                <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
+                              </svg>
+                            </div>
+                          </div>
+                          <p className="mb-3 text-sm text-gray-400">
+                            @{token.symbol?.toLowerCase() || "unknown"}
+                          </p>
+                          <p
+                            className="px-2 text-sm leading-relaxed"
+                            style={{ color: "#f0f5f5" }}
+                          >
+                            {token.description ||
+                              `Official ${token.symbol || "token"} community. Join the conversation!`}
+                          </p>
+                        </div>
+
+                        {/* Follow Button */}
+                        <div className="mb-4 flex justify-center">
+                          <button
+                            className="rounded-full px-6 py-2 text-sm font-semibold transition-all duration-200"
+                            style={{
+                              backgroundColor: "#f0f5f5",
+                              color: "#000000",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = "#e7e9ea";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = "#f0f5f5";
+                            }}
+                          >
+                            Follow
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Join Date Section */}
+                      <div className="px-4 pb-3">
+                        <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <rect
+                              x="3"
+                              y="4"
+                              width="18"
+                              height="18"
+                              rx="2"
+                              ry="2"
+                            />
+                            <line x1="16" y1="2" x2="16" y2="6" />
+                            <line x1="8" y1="2" x2="8" y2="6" />
+                            <line x1="3" y1="10" x2="21" y2="10" />
+                          </svg>
+                          <span>
+                            Joined{" "}
+                            {new Date().toLocaleDateString("en-US", {
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                      {/* Action Button */}
+                      <div className="px-4 pb-4">
+                        <button
+                          className="w-full rounded-full px-4 py-3 text-sm font-semibold transition-all duration-200"
+                          style={{
+                            backgroundColor: "#1d9bf0",
+                            color: "#ffffff",
+                            border: "1px solid #1d9bf0",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = "#1a8cd8";
+                            e.currentTarget.style.borderColor = "#1a8cd8";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = "#1d9bf0";
+                            e.currentTarget.style.borderColor = "#1d9bf0";
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const profileUrl = `https://twitter.com/${token.symbol?.toLowerCase() || "search"}`;
+                            window.open(profileUrl, "_blank");
+                          }}
+                        >
+                          See profile on X
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {token.links && (
+                <button>
+                  <PiTelegramLogo size={16} />
+                </button>
+              )}
+
+              {token.links && (
+                <button>
+                  <FiGlobe size={16} />
+                </button>
+              )}
+
+              {/* Search on Twitter Button - show for all tokens */}
+              <button
+                className="cursor-pointer transition-colors duration-200"
                 style={{ color: AX.muted }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.color = AX.aiCyan;
+                  const tooltip = document.getElementById(
+                    `search-tooltip`,
+                  ) as HTMLElement;
+                  if (tooltip) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    tooltip.style.left = `${rect.left + rect.width / 2}px`;
+                    tooltip.style.top = `${rect.top - 10}px`;
+                    tooltip.style.opacity = "1";
+                  }
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.color = AX.muted;
+                  const tooltip = document.getElementById(
+                    `search-tooltip`,
+                  ) as HTMLElement;
+                  if (tooltip) tooltip.style.opacity = "0";
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault(); // Prevent Link navigation
+                  const searchQuery = `${token.symbol} ${token.name}`.trim();
+                  const twitterUrl = `https://twitter.com/search?q=${encodeURIComponent(searchQuery)}`;
+                  window.open(twitterUrl, "_blank");
                 }}
               >
-                <LuPill size={12} />
-              </Link>
-            )}
+                <LuSearch size={16} />
+              </button>
 
-            <button
-              title="Search on X"
-              onClick={(e) => {
-                e.stopPropagation();
-                openLinkInNewTab(twitterSearchUrl);
-              }}
-              className="transition-colors duration-200 cursor-pointer"
-              style={{ color: AX.muted }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = AX.aiCyan;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = AX.muted;
-              }}
-            >
-              <FaSearch size={12} />
-            </button>
+              <div className="ml-1 flex flex-row gap-2 font-light">
+                {/* Check if this is a Monad token - hide icons for Monad */}
+                {(() => {
+                  const protocol = extractProtocolRaw(token);
+                  const isMonad = protocol && (
+                    protocol.includes('nad.fun') || 
+                    protocol.includes('nadfun') || 
+                    protocol.includes('flapsh') ||
+                    protocol.includes('flap.sh')
+                  );
+                  
+                  if (isMonad) {
+                    return null; // Hide all icons for Monad tokens
+                  }
+                  
+                  return (
+                    <>
+                      <div className="flex items-center gap-1 text-violet-200">
+                        <PiCrownSimpleLight size={16} />
+                        <span className="text-sm text-white">0</span>
+                      </div>
 
-            <button
-              title="View X profile"
-              className="transition-colors duration-200 cursor-pointer"
-              style={{ color: AX.muted }}
-              onMouseEnter={handleTwitterProfileMouseEnter}
-              onMouseLeave={handleTwitterProfileMouseLeave}
-              onClick={handleTwitterProfileClick}
-            >
-              <FaUser size={12} />
-            </button>
+                      <div className="flex items-center gap-1 text-violet-200">
+                        <CiTrophy size={16} />
+                        <span className="text-sm text-white">0</span>
+                      </div>
+
+                      {/* People Icon - Total Holders */}
+                      <div className="relative flex items-center gap-1">
+                        <div
+                          className="flex cursor-help items-center justify-center rounded text-violet-200"
+                          title="Holders"
+                        >
+                          <GoPeople size={16} />
+                        </div>
+                        <span className="text-sm text-white">
+                          {(() => {
+                            const holders =
+                              token.total_holders || token.unique_wallets_24h || 0;
+                            if (holders >= 1e9)
+                              return `${(holders / 1e9).toFixed(1)}B`;
+                            if (holders >= 1e6)
+                              return `${(holders / 1e6).toFixed(1)}M`;
+                            if (holders >= 1e3)
+                              return `${(holders / 1e3).toFixed(1)}K`;
+                            return holders.toString();
+                          })()}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-violet-200">
+                        <PiRobotLight size={16} />
+                        <span className="text-sm text-white">0</span>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Pump.fun Tooltip */}
+              {token.mint?.slice(-4) === "pump" && (
+                <div
+                  className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
+                  style={{
+                    zIndex: 99999,
+                    backgroundColor: AX.surface,
+                    color: AX.text,
+                    border: `1px solid ${AX.border}`,
+                    boxShadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 0 8px ${AX.glowCyan}`,
+                  }}
+                >
+                  View on Pump.fun
+                  {/* Tooltip arrow */}
+                  <div
+                    className="absolute top-full left-1/2 h-0 w-0 -translate-x-1/2 transform border-t-4 border-r-4 border-l-4 border-transparent"
+                    style={{ borderTopColor: AX.surface }}
+                  ></div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -770,20 +1345,22 @@ useEffect(() => {
       {/* CENTER: compact stats */}
       <div className="flex items-center gap-6">
         <div className="text-left">
-          <div className="text-[18px] tabular-nums flex items-center gap-1">
+          <div className="flex items-center gap-1 text-[18px] tabular-nums">
             {formattedMarketCap === "-" ? "-" : `$${formattedMarketCap}`}
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <StatInline label="Price">${<SubscriptNumber value={price} />}</StatInline>
+          <StatInline label="Price">
+            ${<SubscriptNumber value={price} />}
+          </StatInline>
           <StatInline label="Liquidity">
             <span className="inline-flex items-center gap-1">
               <span style={{ color: isLowLiquidity ? AX.warning : AX.text }}>
                 ${formatSmartNumber(liq)}
               </span>
               {isLowLiquidity && (
-                <span className="relative group inline-flex items-center">
+                <span className="group relative inline-flex items-center">
                   <LuDroplet size={16} color={AX.warning} />
                   <span
                     className="absolute bottom-full left-1/2 z-50 mb-1.5 w-max -translate-x-1/2 rounded bg-black px-2 py-1 text-[10px] font-medium text-yellow-200 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
@@ -796,38 +1373,105 @@ useEffect(() => {
             </span>
           </StatInline>
           <StatInline label="Supply">{formatSmartNumber(supply)}</StatInline>
-          <StatInline label="B.Curve" accent="green">
-            {Number.isFinite(Number(curvePct)) ? `${Number(curvePct).toFixed(1)}%` : "—"}
+          <StatInline label="B. Curve">
+            <div className="flex flex-row items-center gap-2 text-xs">
+              {Number.isFinite(Number(curvePct))
+                ? `${Number(curvePct).toFixed(1)}%`
+                : "—"}
+              <ColorFillBar value={curvePct * 100} />
+            </div>
           </StatInline>
         </div>
       </div>
 
-      {/* RIGHT: actions */}
-      <div className="flex items-center gap-2 ml-auto">
-        <button
-          onClick={handleWatchlistClick}
-          className="cursor-pointer text-[14px]"
-          aria-label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
-          title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
-        >
-          {isWatched ? <FaStar className="text-yellow-400" /> : <FaRegStar style={{ color: AX.muted }} />}
-        </button>
+      {/* RIGHT: Trade stats (24H VOL, BUYS, SELLS, NET) */}
+      {/* Hide for Monad tokens */}
+      {(() => {
+        const protocol = extractProtocolRaw(token);
+        const isMonad = protocol && (
+          protocol.includes('nad.fun') || 
+          protocol.includes('nadfun') || 
+          protocol.includes('flapsh') ||
+          protocol.includes('flap.sh') ||
+          protocol.includes('kuru')
+        );
+        
+        if (isMonad) {
+          return null; // Hide trade stats for Monad tokens
+        }
+        
+        return (
+          <div className="flex items-center gap-3 ml-auto mr-2">
+            <StatInline label="24H VOL">
+              ${formatSmartNumber((token as any)?.volume_24h ?? 0)}
+            </StatInline>
+            <StatInline label="BUYS" accent="green">
+              {(token as any)?.total_buys ?? 0} / ${formatSmartNumber((token as any)?.total_buy_volume_usd ?? 0)}
+            </StatInline>
+            <StatInline label="SELLS">
+              <span style={{ color: "#FF4D7F" }}>
+                {(token as any)?.total_sells ?? 0} / ${formatSmartNumber((token as any)?.total_sell_volume_usd ?? 0)}
+              </span>
+            </StatInline>
+            <StatInline label="NET">
+              <span style={{ color: ((token as any)?.net_volume_usd ?? 0) >= 0 ? AX.green : "#FF4D7F" }}>
+                {((token as any)?.net_volume_usd ?? 0) >= 0 ? "+" : ""}${formatSmartNumber((token as any)?.net_volume_usd ?? 0)}
+              </span>
+            </StatInline>
+          </div>
+        );
+      })()}
 
-        <button title="Expand chart" className="w-6 h-6 grid place-items-center" style={{ color: AX.muted }}>
-          <FaExpand size={12} />
-        </button>
-      </div>
+      {/* RIGHT: actions */}
+      {(() => {
+        const protocol = extractProtocolRaw(token);
+        const isMonad = protocol && (
+          protocol.includes('nad.fun') || 
+          protocol.includes('nadfun') || 
+          protocol.includes('flapsh') ||
+          protocol.includes('flap.sh') ||
+          protocol.includes('kuru')
+        );
+        
+        return (
+          <div className={`flex items-center gap-2 ${isMonad ? 'ml-auto' : ''}`}>
+            <button
+              onClick={handleWatchlistClick}
+              className="cursor-pointer text-[14px]"
+              aria-label={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+              title={isWatched ? "Remove from Watchlist" : "Add to Watchlist"}
+            >
+              {isWatched ? (
+                <FaStar className="text-yellow-400" />
+              ) : (
+                <FaRegStar style={{ color: AX.muted }} />
+              )}
+            </button>
+
+            {/* Hide expand button for Monad tokens */}
+            {!isMonad && (
+              <button
+                title="Expand chart"
+                className="grid h-6 w-6 place-items-center"
+                style={{ color: AX.muted }}
+              >
+                <FaExpand size={12} />
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* tiny toast */}
       {toastMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999] px-3 py-1.5 bg-emerald-600 text-white rounded-md text-sm">
+        <div className="fixed top-4 left-1/2 z-[99999] -translate-x-1/2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
           {toastMessage}
         </div>
       )}
 
       {showXProfilePreview && twitterProfileUrl && (
         <div
-          className="fixed z-[99998] pointer-events-auto"
+          className="pointer-events-auto fixed z-[99998]"
           style={{
             left: `${xPreviewPosition.x}px`,
             top: `${xPreviewPosition.y}px`,
@@ -837,7 +1481,7 @@ useEffect(() => {
           onMouseLeave={handleTwitterPreviewMouseLeave}
         >
           <div
-            className="rounded-xl overflow-hidden"
+            className="overflow-hidden rounded-xl"
             style={{
               width: 260,
               backgroundColor: AX.surface,
@@ -845,20 +1489,29 @@ useEffect(() => {
             }}
           >
             <div
-              className="flex items-center justify-between px-4 py-3 border-b"
+              className="flex items-center justify-between border-b px-4 py-3"
               style={{ borderColor: "#2f3336" }}
             >
               <div className="flex items-center gap-3">
                 <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center"
+                  className="flex h-7 w-7 items-center justify-center rounded-full"
                   style={{ backgroundColor: "#1d9bf0" }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#ffffff" }}>
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    style={{ color: "#ffffff" }}
+                  >
                     <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                   </svg>
                 </div>
                 <div>
-                  <div className="text-sm font-semibold" style={{ color: AX.text }}>
+                  <div
+                    className="text-sm font-semibold"
+                    style={{ color: AX.text }}
+                  >
                     @{twitterHandle || "unknown"}
                   </div>
                   <div className="text-xs" style={{ color: AX.muted }}>
@@ -867,9 +1520,9 @@ useEffect(() => {
                 </div>
               </div>
             </div>
-            <div className="px-4 py-4 flex gap-3 items-start">
+            <div className="flex items-start gap-3 px-4 py-4">
               <div
-                className="w-14 h-14 rounded-full overflow-hidden flex-shrink-0"
+                className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-full"
                 style={{
                   border: "2px solid #2f3336",
                   backgroundColor: "#101114",
@@ -881,27 +1534,33 @@ useEffect(() => {
                   alt={`${token.name || token.symbol || ""} avatar`}
                   width={56}
                   height={56}
-                  className="w-full h-full object-cover"
+                  className="h-full w-full object-cover"
                   symbol={token.symbol}
                   name={token.name}
                   showBubble={false}
                 />
               </div>
-              <div className="flex-1 flex flex-col gap-1">
-                <div className="text-sm font-semibold" style={{ color: AX.text }}>
+              <div className="flex flex-1 flex-col gap-1">
+                <div
+                  className="text-sm font-semibold"
+                  style={{ color: AX.text }}
+                >
                   {token.symbol}
                 </div>
                 <div className="text-xs" style={{ color: AX.muted }}>
                   {token.name}
                 </div>
-                <div className="text-[11px] leading-relaxed" style={{ color: AX.text }}>
+                <div
+                  className="text-[11px] leading-relaxed"
+                  style={{ color: AX.text }}
+                >
                   {twitterBio}
                 </div>
               </div>
             </div>
-            <div className="px-4 pb-4 flex items-center gap-2">
+            <div className="flex items-center gap-2 px-4 pb-4">
               <button
-                className="flex-1 px-3 py-2 rounded-full text-xs font-semibold transition-colors duration-200"
+                className="flex-1 rounded-full px-3 py-2 text-xs font-semibold transition-colors duration-200"
                 style={{
                   backgroundColor: "#ffffff",
                   color: "#000000",
@@ -921,7 +1580,7 @@ useEffect(() => {
                 View on X
               </button>
               <button
-                className="px-3 py-2 rounded-full text-xs font-semibold transition-colors duration-200"
+                className="rounded-full px-3 py-2 text-xs font-semibold transition-colors duration-200"
                 style={{
                   backgroundColor: "transparent",
                   color: AX.muted,
@@ -951,16 +1610,18 @@ useEffect(() => {
       {/* Zoom popup */}
       {showZoomPopup && (
         <div
-          className="fixed z-[99998] pointer-events-none transition-all duration-300 ease-out"
+          className="pointer-events-none fixed z-[99998] transition-all duration-300 ease-out"
           style={{
             left: `${popupPosition.x}px`,
             top: `${popupPosition.y}px`,
             opacity: showZoomPopup ? 1 : 0,
-            transform: showZoomPopup ? 'scale(1) translateY(0)' : 'scale(0.9) translateY(-10px)',
+            transform: showZoomPopup
+              ? "scale(1) translateY(0)"
+              : "scale(0.9) translateY(-10px)",
           }}
         >
           <div
-            className="relative rounded-lg overflow-hidden shadow-2xl"
+            className="relative overflow-hidden rounded-lg shadow-2xl"
             style={{
               width: 150,
               height: 150,
@@ -975,23 +1636,23 @@ useEffect(() => {
               alt={`${token.name || token.symbol || ""} - Zoomed`}
               width={150}
               height={150}
-              className="w-full h-full object-cover"
+              className="h-full w-full object-cover"
               symbol={token.symbol}
               name={token.name}
               showBubble={false}
             />
-            
+
             {/* Overlay with token info */}
             <div
-              className="absolute bottom-0 left-0 right-0 px-2 py-1"
+              className="absolute right-0 bottom-0 left-0 px-2 py-1"
               style={{
-                background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+                background: "linear-gradient(transparent, rgba(0,0,0,0.8))",
               }}
             >
-              <div className="text-white text-xs font-medium truncate">
+              <div className="truncate text-xs font-medium text-white">
                 {token.symbol}
               </div>
-              <div className="text-gray-300 text-[10px] truncate">
+              <div className="truncate text-[10px] text-gray-300">
                 {token.name}
               </div>
             </div>

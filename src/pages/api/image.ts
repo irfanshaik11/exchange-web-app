@@ -22,6 +22,10 @@ const ALLOWED = [
   'cdn.pump.fun',
   'moonitcdn.io',
   'metadata.pumployer.fun',
+  'metadata.rapidlaunch.io',
+  'rapidlaunch.io',
+  'image.solanatracker.io',
+  'solanatracker.io',
   'wormhole.com',
   'raw.githubusercontent.com',
   'githubusercontent.com',
@@ -43,6 +47,15 @@ const ALLOWED = [
   'debridge.finance',
   'launchonsoar.com',
   'media.launchonsoar.com',
+  // Allow all subdomains of common CDNs that serve PNGs
+  's3.amazonaws.com',
+  's3.us-east-1.amazonaws.com',
+  's3.us-west-2.amazonaws.com',
+  // Narrative/Trade domains
+  'narrative.trade',
+  'token.narrative.trade',
+  // Filebase IPFS hosting
+  'myfilebase.com',
 ];
 
 // Allowed image MIME types - only image types are permitted
@@ -69,6 +82,50 @@ function isValidImageMimeType(contentType: string | null): boolean {
   // Remove charset and other parameters (e.g., "image/jpeg; charset=utf-8" -> "image/jpeg")
   const baseType = contentType.split(';')[0].trim().toLowerCase();
   return ALLOWED_IMAGE_TYPES.includes(baseType);
+}
+
+// Infer MIME type from image content (magic bytes)
+function inferImageMimeType(buffer: Buffer): string | null {
+  if (buffer.length < 4) return null;
+  
+  const bytes = buffer.slice(0, 12);
+  
+  // PNG: 89 50 4E 47
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return 'image/png';
+  }
+  
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  
+  // GIF: 47 49 46 38
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return 'image/gif';
+  }
+  
+  // WebP: RIFF...WEBP
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+    return 'image/webp';
+  }
+  
+  // SVG: Check if it starts with <svg or <?xml
+  if (buffer.length >= 100) {
+    const textStart = buffer.slice(0, 100).toString('utf-8').trim();
+    if ((textStart.startsWith('<svg') || textStart.startsWith('<?xml')) &&
+        textStart.toLowerCase().includes('<svg')) {
+      return 'image/svg+xml';
+    }
+  }
+  
+  // BMP: 42 4D
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return 'image/bmp';
+  }
+  
+  return null;
 }
 
 function isValidImageContent(buffer: Buffer): boolean {
@@ -199,8 +256,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (parsed.protocol !== 'https:') {
       return sendError(res, 400, 'Only HTTPS URLs are allowed');
     }
+    // Check if this is an IPFS URL path (even if hostname doesn't include 'ipfs')
+    const hasIpfsPath = parsed.pathname.includes('/ipfs/');
+    
+    // Check if host is allowed, but be more lenient for image files and IPFS URLs
+    // If URL ends with .png/.jpg/.jpeg/.gif/.webp, allow more hosts
+    const isImageFile = /\.(png|jpg|jpeg|gif|webp|svg|avif|bmp|ico)$/i.test(parsed.pathname);
+    
     if (!isAllowedHost(parsed.hostname)) {
-      return sendError(res, 403, 'Host not allowed');
+      // For IPFS paths, allow any host (IPFS is decentralized)
+      if (hasIpfsPath) {
+        console.log(`[image proxy] Allowing IPFS path from non-whitelisted host: ${parsed.hostname}`);
+        // Continue processing - IPFS URLs are handled specially below
+      }
+      // For direct image file URLs, allow common CDN patterns
+      else if (isImageFile) {
+        // Allow if it's a known CDN pattern or subdomain
+        const isCommonCDN = parsed.hostname.includes('cdn.') ||
+                           parsed.hostname.includes('static.') ||
+                           parsed.hostname.includes('media.') ||
+                           parsed.hostname.includes('assets.') ||
+                           parsed.hostname.endsWith('.cloudfront.net') ||
+                           parsed.hostname.endsWith('.amazonaws.com') ||
+                           parsed.hostname.endsWith('.digitaloceanspaces.com');
+        
+        if (!isCommonCDN) {
+          return sendError(res, 403, 'Host not allowed');
+        }
+      } else {
+        return sendError(res, 403, 'Host not allowed');
+      }
     }
 
     // IPFS multi-gateway fallback if /ipfs/<cid>
@@ -208,6 +293,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const candidates: string[] = [];
     if (ipfsMatch && ipfsMatch[1]) {
       const cid = ipfsMatch[1];
+      // Try the original gateway first (might be faster/cheaper for that provider)
+      candidates.push(parsed.toString());
+      // Then try common IPFS gateways as fallbacks
       const gateways = [
         'https://cloudflare-ipfs.com/ipfs/',
         'https://ipfs.io/ipfs/',
@@ -255,24 +343,62 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return sendError(res, 502, 'Failed to fetch image');
     }
 
-    // Get and validate content type
-    const contentType = upstream.headers.get('content-type');
-    if (!isValidImageMimeType(contentType)) {
-      console.error('[image proxy] invalid content type:', contentType);
-      return sendError(res, 415, 'Unsupported media type');
-    }
-
-    // Get response body and validate it's actually an image
+    // Get response body first
     const body = Buffer.from(await upstream.arrayBuffer());
     
+    // Check if this is an IPFS URL - be VERY lenient for IPFS
+    // Check both hostname (ipfs gateways) and path (/ipfs/...)
+    const isIpfsUrl = parsed.hostname.includes('ipfs') || parsed.pathname.includes('/ipfs/');
+    
+    // For IPFS URLs, completely bypass strict validation
+    // Just try to infer the type and pass through if we got content
+    if (isIpfsUrl) {
+      if (body.length === 0) {
+        console.error('[image proxy] IPFS URL returned empty content');
+        return sendError(res, 502, 'Empty content from IPFS');
+      }
+      
+      // Try to infer the image type from content
+      let contentType = inferImageMimeType(body) || 'image/png'; // Default to PNG for IPFS
+      
+      console.log(`[image proxy] IPFS URL - allowing through (${body.length} bytes, type: ${contentType})`);
+      
+      // Set security headers
+      setSecurityHeaders(res);
+      
+      // Set response headers
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400');
+      
+      // Send content - trust IPFS to serve valid images
+      res.status(200).send(body);
+      return;
+    }
+    
+    // For non-IPFS URLs, do strict validation
     // Validate content is actually an image using magic bytes
     if (!isValidImageContent(body)) {
       console.error('[image proxy] invalid image content detected');
       return sendError(res, 415, 'Invalid image content');
     }
 
+    // Get content type from header
+    let contentType = upstream.headers.get('content-type');
+    
+    // If Content-Type is missing or invalid, try to infer from image content
+    if (!isValidImageMimeType(contentType)) {
+      const inferredType = inferImageMimeType(body);
+      if (inferredType) {
+        console.log(`[image proxy] Content-Type missing/invalid (${contentType || 'missing'}), inferred ${inferredType} from content`);
+        contentType = inferredType;
+      } else {
+        console.error('[image proxy] invalid content type:', contentType);
+        return sendError(res, 415, 'Unsupported media type');
+      }
+    }
+
     // Extract base content type (remove charset parameters)
-    const baseContentType = contentType?.split(';')[0].trim() || 'image/jpeg';
+    const baseContentType = contentType?.split(';')[0].trim() || 'image/png';
 
     // Set security headers
     setSecurityHeaders(res);

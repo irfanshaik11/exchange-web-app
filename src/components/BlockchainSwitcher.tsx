@@ -123,20 +123,9 @@ export default function BlockchainSwitcher() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 h-8 rounded-md px-3 transition-all duration-300 ease-out"
+        className="flex items-center gap-2 h-10 rounded-3xl px-3 w-40 transition-all duration-300 ease-out border border-neutral-700/70 hover:bg-neutral-700/70"
         style={{
-          backgroundColor: '#000000',
           color: AX.text,
-        }}
-        onMouseEnter={(e) => {
-          if (!isOpen) {
-            e.currentTarget.style.backgroundColor = "rgba(24, 196, 140, 0.08)";
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isOpen) {
-            e.currentTarget.style.backgroundColor = '#000000';
-          }
         }}
       >
         <BlockchainLogo
@@ -147,7 +136,7 @@ export default function BlockchainSwitcher() {
         <span className="text-sm font-medium">{selectedBlockchain.name}</span>
         <FaChevronDown
           size={10}
-          className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`transition-transform mr-0 ml-auto duration-200 ${isOpen ? 'rotate-180' : ''}`}
           style={{ color: AX.muted }}
         />
       </button>

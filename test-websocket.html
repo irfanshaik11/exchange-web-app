@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Test for Pulse Page</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+    
+    <script>
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        const ws = new WebSocket('ws://localhost:8080/v1/stream');
+        
+        ws.onopen = () => {
+            statusDiv.textContent = '✅ Connected to WebSocket';
+            statusDiv.style.color = 'green';
+        };
+        
+        ws.onmessage = (event) => {
+            console.log('Message received:', event.data);
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = `📨 ${new Date().toLocaleTimeString()}: ${event.data}`;
+            messageDiv.style.margin = '5px 0';
+            messageDiv.style.padding = '5px';
+            messageDiv.style.border = '1px solid #ccc';
+            messageDiv.style.borderRadius = '3px';
+            messagesDiv.appendChild(messageDiv);
+            
+            // Keep only last 10 messages
+            while (messagesDiv.children.length > 10) {
+                messagesDiv.removeChild(messagesDiv.firstChild);
+            }
+        };
+        
+        ws.onerror = (error) => {
+            statusDiv.textContent = '❌ WebSocket Error';
+            statusDiv.style.color = 'red';
+            console.error('WebSocket error:', error);
+        };
+        
+        ws.onclose = () => {
+            statusDiv.textContent = '🔌 WebSocket Closed';
+            statusDiv.style.color = 'orange';
+        };
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

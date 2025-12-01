@@ -17,6 +17,11 @@ import dynamic from 'next/dynamic';
 const LoginModal = dynamic(() => import('../components/LoginModal'), {
   ssr: false,
 });
+
+// Dynamically import MonadTradeBanner with no SSR for animations
+const MonadTradeBanner = dynamic(() => import('../components/MonadTradeBanner'), {
+  ssr: false,
+});
 import { env } from '../env';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
@@ -269,9 +274,36 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     };
   }, []);
 
+  // Preload TradingView library script early for faster chart loading
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // Check if already loaded or loading
+    if ((window as any).TradingView) return;
+    
+    // Check if script tag already exists
+    const existingScript = document.querySelector('script[src="/charting_library/charting_library/charting_library.standalone.js"]');
+    if (existingScript) return;
+    
+    // Preload the script in the background
+    const script = document.createElement('script');
+    script.src = '/charting_library/charting_library/charting_library.standalone.js';
+    script.async = true;
+    script.defer = true;
+    // Don't set onload - let AdvancedOHLCChart handle it
+    document.head.appendChild(script);
+  }, []);
+
   return (
     <>
       <Head>
+        {/* Preload TradingView library for faster chart loading */}
+        <link
+          rel="preload"
+          href="/charting_library/charting_library/charting_library.standalone.js"
+          as="script"
+          crossOrigin="anonymous"
+        />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
         <style jsx global>{`
@@ -321,6 +353,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       </Head>
       <div className={inter.className}>
         <MobileBlocker>
+          <MonadTradeBanner />
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
             <UserProvider>
               <TokenHandler />

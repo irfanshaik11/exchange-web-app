@@ -20,7 +20,9 @@ export function useImagePreloader() {
       src.startsWith('ipfs://') ||
       src.includes('tokens.debridge.finance') ||
       src.includes('debridge.finance') ||
-      src.includes('launchonsoar.com');
+      src.includes('launchonsoar.com') ||
+      src.includes('metadata.rapidlaunch.io') ||
+      src.includes('rapidlaunch.io');
 
     const imageUrl = needsProxy 
       ? `/api/image?url=${encodeURIComponent(src)}`
