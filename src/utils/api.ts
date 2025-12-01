@@ -67,6 +67,34 @@ export class ApiError extends Error {
  *  – Adds `Authorization` header when `authToken` provided
  *  – Parses JSON response and throws for non-2xx statuses
  */
+
+// Normalize/upgrade backend URL to avoid mixed-content fetch failures when the app is served over HTTPS.
+function resolveBackendBaseUrl(): string {
+  const envUrl = env.NEXT_PUBLIC_BACKEND_URL || "";
+
+  // Helper to strip a trailing slash for clean concatenation
+  const stripTrailingSlash = (url: string) =>
+    url.endsWith("/") ? url.slice(0, -1) : url;
+
+  if (typeof window === "undefined") {
+    return stripTrailingSlash(envUrl);
+  }
+
+  try {
+    const url = new URL(envUrl || window.location.origin);
+
+    // If the app is running on https and the env is http, upgrade to https to avoid mixed-content blocks.
+    if (window.location.protocol === "https:" && url.protocol === "http:") {
+      url.protocol = "https:";
+    }
+
+    return stripTrailingSlash(url.toString());
+  } catch {
+    // Fallback to current origin if env value is malformed
+    return stripTrailingSlash(window.location.origin);
+  }
+}
+
 async function apiFetch<T = unknown>(
   endpoint: string,
   options: RequestOptions = {},
@@ -107,7 +135,7 @@ async function apiFetch<T = unknown>(
 
     // Critical Fix #10: Use fetchWithTimeout instead of fetch (45s timeout for trade operations)
     const res = await fetchWithTimeout(
-      `${env.NEXT_PUBLIC_BACKEND_URL}${endpoint}`,
+      `${resolveBackendBaseUrl()}${endpoint}`,
       {
         headers: finalHeaders,
         body: body ? JSON.stringify(body) : undefined,
@@ -182,6 +210,18 @@ export const getUserById = (token: string) =>
     method: "GET",
   });
 
+export const updateUser = (
+  token: string,
+  email: string,
+  name: string,
+  userId: string | number
+) =>
+  apiFetch<{ user: any }>("/api/users/userDetails", {
+    authToken: token,
+    method: "PUT",
+    body: { email, name, userId },
+  });
+
 export const login = (email: string, password: string) =>
   apiFetch<{ token: string }>("/api/users/login", {
     method: "POST",
@@ -214,6 +254,33 @@ export const metamaskLogin = (
     method: "POST",
     body: { address, signature, message },
   });
+};
+
+export const turnkeyLogin = (
+  params: {
+    turnkeySessionToken: string;
+    organizationId: string;
+    userId: string;
+  }
+) => {
+  const endpoints = [
+    "/api/users/turnkey/login"
+  ];
+  console.log("Turnkey login called with params:", params);
+  return (async () => {
+    let lastError: unknown;
+    for (const endpoint of endpoints) {
+      try {
+        return await apiFetch<{ token: string }>(endpoint, {
+          method: "POST",
+          body: params,
+        });
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError;
+  })();
 };
 
 /** Returns the Google OAuth redirect URL (client will navigate to it) */
@@ -461,6 +528,12 @@ export const getWaitlistStatus = (params: { userId?: number; walletId?: string }
     updatedAt: string;
   } }>(`/api/waitlist/status?${qs.toString()}`, {
     method: "GET",
+  }).catch((err) => {
+    // If the user isn't on the waitlist yet, treat as no waitlist instead of throwing
+    if (err instanceof ApiError && err.status === 404) {
+      return { waitlist: null as any };
+    }
+    throw err;
   });
 };
 

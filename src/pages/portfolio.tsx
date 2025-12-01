@@ -953,6 +953,7 @@ export default function PortfolioPage() {
       // - create Turnkey sub-org / wallet for this user
       // - persist wallet to DB
       // - return the new wallet with balance = 0 (or computed)
+      console.log("Creating new wallet for user:", user.id);
       const res = await fetch(
   `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
   {
@@ -1002,6 +1003,10 @@ export default function PortfolioPage() {
     setEditingWalletId(null);
     setWalletRenameValue("");
     setRenamingWalletId(null);
+  };
+
+  const handleExportWallet = (walletId: string) => {
+    router.push(`/turnkey/export?walletId=${encodeURIComponent(walletId)}`);
   };
 
   const handleRenameWallet = async () => {
@@ -2097,7 +2102,13 @@ export default function PortfolioPage() {
 
                               {/* Actions */}
                               <div className="text-center">
-                                <span className="text-xs text-[#9CA3AF]">-</span>
+                                <button
+                                  className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                                  onClick={() => handleExportWallet(wallet.id)}
+                                  title="Export wallet"
+                                >
+                                  Export wallet
+                                </button>
                               </div>
                             </div>
                           </div>
