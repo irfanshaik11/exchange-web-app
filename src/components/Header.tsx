@@ -12,6 +12,7 @@ import {
 } from "react-icons/fa";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { useUser } from "./UserContext";
+import { useSolPrice } from "./SolPriceContext";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
@@ -149,6 +150,8 @@ export default function Header({
     logout,
   } = useUser();
   const currentChain = (router.query.chain as string) || "sol";
+  const { solPrice, monPrice } = useSolPrice();
+  const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositInitialTab, setDepositInitialTab] = useState<
@@ -183,6 +186,15 @@ export default function Header({
     bnb: "BNB",
     base: "BASE",
   };
+  
+  const chainLogos: Record<string, string> = {
+    sol: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+    monad: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+    eth: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+    bnb: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+    base: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+  };
+  
   const [chainBalance, setChainBalance] = useState<number>(
     chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0),
   );
@@ -1145,7 +1157,7 @@ export default function Header({
                           Total Value
                         </div>
                         <div className="text-2xl font-bold text-white">
-                          ${formatCurrency(chainBalance * 100)}
+                          ${formatCurrency(chainBalance * chainPrice)}
                         </div>
                       </div>
 
@@ -1156,9 +1168,10 @@ export default function Header({
                       >
                         <div className="flex items-center gap-2">
                           <img
-                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                            alt="SOL"
-                            className="h-4 w-4 rounded-md"
+                            src={chainLogos[currentChain] ?? chainLogos.sol}
+                            alt={chainSymbols[currentChain] ?? "SOL"}
+                            className={currentChain === 'monad' ? "w-8 h-10 rounded-md object-contain" : "h-4 w-4 rounded-md object-contain"}
+                            style={currentChain === 'monad' ? { minWidth: '32px', minHeight: '40px' } : { minWidth: '16px', minHeight: '16px' }}
                           />
                           <span className="text-sm text-[#f0f5f5]">
                             ≈ {formatBalance(chainBalance)} {chainSymbols[currentChain] ?? "SOL"}
@@ -1179,9 +1192,10 @@ export default function Header({
                             />
                           </svg>
                           <img
-                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                            alt="SOL"
-                            className="h-4 w-4 rounded-md"
+                            src={chainLogos[currentChain] ?? chainLogos.sol}
+                            alt={chainSymbols[currentChain] ?? "SOL"}
+                            className={currentChain === 'monad' ? "w-8 h-10 rounded-md object-contain" : "h-4 w-4 rounded-md object-contain"}
+                            style={currentChain === 'monad' ? { minWidth: '32px', minHeight: '40px' } : { minWidth: '16px', minHeight: '16px' }}
                           />
                           <span className="text-sm text-[#f0f5f5]">
                             {formatMultiDigitBalance(chainBalance)}

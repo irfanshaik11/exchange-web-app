@@ -167,6 +167,7 @@ const AX = {
 
 export default function Footer() {
   const router = useRouter();
+  const currentChain = (router.query.chain as string) || 'sol';
   
   // Load popup states from localStorage on mount
   const getInitialPopupState = (key: string, defaultValue: boolean = false): boolean => {
@@ -219,8 +220,20 @@ export default function Footer() {
     }
   }, [headerBarVisible]);
   const { activePreset } = useQuickBuy();
-  const { solPrice } = useSolPrice(); // Use shared SOL price from context
-  const { solBalance } = useUser();
+  const { solPrice, monPrice } = useSolPrice(); // Use shared price from context
+  const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
+  const { solBalance, chainBalances } = useUser();
+  const chainBalance = currentChain === 'monad' ? (chainBalances?.monad ?? 0) : solBalance;
+  
+  const chainLogos: Record<string, string> = {
+    sol: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+    monad: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+  };
+  
+  const chainSymbols: Record<string, string> = {
+    sol: "SOL",
+    monad: "MON",
+  };
 
   // Save popup states to localStorage whenever they change
   useEffect(() => {
@@ -456,8 +469,17 @@ export default function Footer() {
                 }}
               >
                 <FaWallet size={11} className="sm:w-3 sm:h-3" />
-                <SolanaIcon size={12} />
-                <span className="text-[11px] sm:text-xs font-medium leading-none">{Number.isFinite(solBalance) ? solBalance.toFixed(4) : '0.0000'}</span>
+                {currentChain === 'monad' ? (
+                  <img
+                    src={chainLogos.monad}
+                    alt="MON"
+                    className="h-4 w-4 rounded object-contain"
+                    style={{ minWidth: '16px', minHeight: '16px' }}
+                  />
+                ) : (
+                  <SolanaIcon size={12} />
+                )}
+                <span className="text-[11px] sm:text-xs font-medium leading-none">{Number.isFinite(chainBalance) ? chainBalance.toFixed(4) : '0.0000'}</span>
               </button>
           </div>
         </div>
@@ -646,11 +668,20 @@ export default function Footer() {
 
           <div className="w-px h-3 sm:h-4" style={{ backgroundColor: AX.border }} />
 
-          {/* Solana Price */}
+          {/* Chain Price (Solana or Monad) */}
           <div className="flex items-center gap-1 px-2 py-1 rounded-full border" style={{ borderColor: AX.border }}>
-            <SolanaIcon size={12} />
+            {currentChain === 'monad' ? (
+              <img
+                src={chainLogos.monad}
+                alt="MON"
+                className="h-4 w-4 rounded object-contain"
+                style={{ minWidth: '16px', minHeight: '16px' }}
+              />
+            ) : (
+              <SolanaIcon size={12} />
+            )}
             <span className="text-[11px] sm:text-xs font-medium" style={{ color: AX.green }}>
-              {solPrice > 0 ? `$${solPrice.toFixed(2)}` : '...'}
+              {chainPrice > 0 ? `$${chainPrice.toFixed(currentChain === 'monad' ? 4 : 2)}` : '...'}
             </span>
           </div>
 
