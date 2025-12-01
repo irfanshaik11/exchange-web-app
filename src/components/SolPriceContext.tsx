@@ -46,27 +46,32 @@ export function SolPriceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const fetchMonPrice = async () => {
       try {
-        // CoinGecko API for MON/USD
-        const response = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=monad&vs_currencies=usd',
-          { signal: AbortSignal.timeout(5000) }
-        );
+        // Use Next.js API route to proxy CoinGecko request (avoids CORS issues)
+        const response = await fetch('/api/monad-price', {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache',
+          },
+        });
         
         if (response.ok) {
           const data = await response.json();
-          const price = data?.monad?.usd;
+          const price = data?.price;
           if (typeof price === 'number' && price > 0) {
             setMonPrice(price);
             return;
           }
         }
       } catch (error) {
-        console.error('Error fetching MON price from CoinGecko:', error);
+        console.error('Error fetching MON price:', error);
       }
       
-      // Fallback to static price if CoinGecko fails
+      // Fallback to static price if fetch fails
       setMonPrice(0.025);
     };
+    
+    // Set initial fallback price immediately
+    setMonPrice(0.025);
     
     fetchMonPrice();
     const interval = setInterval(fetchMonPrice, 60000); // Update every minute
