@@ -390,53 +390,53 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   );
 }
 
-function MobileBlocker({ children }: { children: React.ReactNode }) {
-  // Mobile blocker disabled - commented out but kept for future use
-  // const [isMobile, setIsMobile] = useState(false);
-  // const [isClient, setIsClient] = useState(false);
+// function MobileBlocker({ children }: { children: React.ReactNode }) {
+//   // Mobile blocker disabled - commented out but kept for future use
+//   // const [isMobile, setIsMobile] = useState(false);
+//   // const [isClient, setIsClient] = useState(false);
 
-  // useEffect(() => {
-  //   setIsClient(true);
-  //   
-  //   const checkMobile = () => {
-  //     setIsMobile(window.innerWidth < 500);
-  //   };
+//   // useEffect(() => {
+//   //   setIsClient(true);
+//   //   
+//   //   const checkMobile = () => {
+//   //     setIsMobile(window.innerWidth < 500);
+//   //   };
 
-  //   checkMobile();
-  //   window.addEventListener('resize', checkMobile);
-  //   return () => window.removeEventListener('resize', checkMobile);
-  // }, []);
+//   //   checkMobile();
+//   //   window.addEventListener('resize', checkMobile);
+//   //   return () => window.removeEventListener('resize', checkMobile);
+//   // }, []);
 
-  // // Show nothing during SSR/initial load to prevent hydration issues
-  // if (!isClient) {
-  //   return null;
-  // }
+//   // // Show nothing during SSR/initial load to prevent hydration issues
+//   // if (!isClient) {
+//   //   return null;
+//   // }
 
-  // if (isMobile) {
-  //   return (
-  //     <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
-  //       <div className="text-center">
-  //         <div className="mb-6">
-  //           <img 
-  //             src="/logo.png" 
-  //             alt="Logo" 
-  //             className="w-24 h-24 mx-auto mb-6 object-contain"
-  //           />
-  //         </div>
-  //         <h1 className="text-2xl font-bold mb-2">We're Coming Soon on Mobile!</h1>
-  //         <p className="text-gray-400 mb-4">
-  //           Our mobile experience is currently in development.
-  //         </p>
-  //         <p className="text-sm text-gray-500">
-  //           Please visit us on desktop for the full experience.
-  //         </p>
-  //       </div>
-  //     </div>
-  //   );
-  // }
+//   // if (isMobile) {
+//   //   return (
+//   //     <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
+//   //       <div className="text-center">
+//   //         <div className="mb-6">
+//   //           <img 
+//   //             src="/logo.png" 
+//   //             alt="Logo" 
+//   //             className="w-24 h-24 mx-auto mb-6 object-contain"
+//   //           />
+//   //         </div>
+//   //         <h1 className="text-2xl font-bold mb-2">We're Coming Soon on Mobile!</h1>
+//   //         <p className="text-gray-400 mb-4">
+//   //           Our mobile experience is currently in development.
+//   //         </p>
+//   //         <p className="text-sm text-gray-500">
+//   //           Please visit us on desktop for the full experience.
+//   //         </p>
+//   //       </div>
+//   //     </div>
+//   //   );
+//   // }
 
-  return <>{children}</>;
-}
+//   return <>{children}</>;
+// }
 
 const MyApp: AppType = ({ Component, pageProps }) => {
   const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('bottom-center');
@@ -488,6 +488,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
   return (
     <>
       <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
         {/* Preload TradingView library for faster chart loading */}
         <link
           rel="preload"

@@ -1262,7 +1262,38 @@ export default function DiscoverPage() {
         });
 
         if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
+          // Try to extract error message from response body
+          let errorMessage = `Request failed with status ${response.status}`;
+          try {
+            // Clone response to read body without consuming the original
+            const clonedResponse = response.clone();
+            const errorText = await clonedResponse.text();
+            if (errorText) {
+              // Try to parse as JSON first
+              try {
+                const errorData = JSON.parse(errorText);
+                if (errorData?.message) {
+                  errorMessage = errorData.message;
+                } else if (errorData?.error) {
+                  errorMessage = errorData.error;
+                } else if (errorData?.details) {
+                  errorMessage = errorData.details;
+                }
+              } catch {
+                // If not JSON, use the text directly (limited length)
+                errorMessage = errorText.substring(0, 200);
+              }
+            }
+          } catch {
+            // If we can't read the body, use default message
+          }
+          
+          // For 500 errors, provide a more user-friendly message
+          if (response.status === 500) {
+            errorMessage = 'Service temporarily unavailable. Please try again later.';
+          }
+          
+          throw new Error(errorMessage);
         }
 
         const payload = await response.json();
@@ -1305,20 +1336,40 @@ export default function DiscoverPage() {
         }
       } catch (err) {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : 'Failed to fetch xStocks';
-        setXStocksError(message);
-        console.error('[Discover] Failed to fetch xStocks:', err);
         
+        // Extract error message
+        let message = 'Failed to fetch xStocks';
+        if (err instanceof Error) {
+          message = err.message;
+        } else if (typeof err === 'string') {
+          message = err;
+        }
+        
+        // Log error with full details for debugging
+        console.error('[Discover] Failed to fetch xStocks:', {
+          error: err,
+          message,
+          useCache,
+        });
+        
+        // Try to use cached data if available
         if (useCache) {
           const cached = loadFromCache();
           if (cached && cached.length > 0) {
             setXStocksRaw(cached);
             setXStocksError(null);
+            // Don't show error if we have cached data
+            return;
           }
         }
+        
+        // Only set error if we don't have cached data to fall back to
+        setXStocksError(message);
       } finally {
-        if (!cancelled && showLoading) {
-          setXStocksLoading(false);
+        if (!cancelled) {
+          if (showLoading) {
+            setXStocksLoading(false);
+          }
         }
       }
     };
