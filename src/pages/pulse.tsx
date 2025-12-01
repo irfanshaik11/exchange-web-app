@@ -93,10 +93,10 @@ const PLATFORM_UPDATES = [
 ];
 
 export default function PulsePage() {
-  // Tab navigation state
-  const [activeTab, setActiveTab] = useState<
-    "new" | "final-stretch" | "migrated"
-  >("new");
+  // Tab navigation state - MOBILE VIEW DISABLED
+  // const [activeTab, setActiveTab] = useState<
+  //   "new" | "final-stretch" | "migrated"
+  // >("new");
 
   // Updates modal state
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
@@ -169,31 +169,31 @@ export default function PulsePage() {
     }
   }, [user]); // Re-run when user changes (login/logout)
 
-  // Keyboard navigation for tabs (mobile only)
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Only enable keyboard navigation on mobile devices (when tabs are visible)
-      if (window.innerWidth < 1024 && (event.ctrlKey || event.metaKey)) {
-        switch (event.key) {
-          case "1":
-            event.preventDefault();
-            setActiveTab("new");
-            break;
-          case "2":
-            event.preventDefault();
-            setActiveTab("final-stretch");
-            break;
-          case "3":
-            event.preventDefault();
-            setActiveTab("migrated");
-            break;
-        }
-      }
-    };
+  // Keyboard navigation for tabs (mobile only) - MOBILE VIEW DISABLED
+  // useEffect(() => {
+  //   const handleKeyDown = (event: KeyboardEvent) => {
+  //     // Only enable keyboard navigation on mobile devices (when tabs are visible)
+  //     if (window.innerWidth < 1024 && (event.ctrlKey || event.metaKey)) {
+  //       switch (event.key) {
+  //         case "1":
+  //           event.preventDefault();
+  //           setActiveTab("new");
+  //           break;
+  //         case "2":
+  //           event.preventDefault();
+  //           setActiveTab("final-stretch");
+  //           break;
+  //         case "3":
+  //           event.preventDefault();
+  //           setActiveTab("migrated");
+  //           break;
+  //       }
+  //     }
+  //   };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  //   window.addEventListener("keydown", handleKeyDown);
+  //   return () => window.removeEventListener("keydown", handleKeyDown);
+  // }, []);
 
   // React Query client for manual cache updates from WebSocket
   const queryClient = useQueryClient();
@@ -1376,7 +1376,7 @@ export default function PulsePage() {
               {/* <PulseControlBar className="mb-0.5" /> */}
             </div>
 
-            {/* Tab Navigation - Mobile Only */}
+            {/* Tab Navigation - Mobile Only - MOBILE VIEW DISABLED
             <div className="mt-4 mb-8 lg:hidden">
               <div className="flex space-x-1 rounded-xl border border-neutral-700/50 bg-neutral-800/30 p-1.5 shadow-lg backdrop-blur-sm">
                 <button
@@ -1432,11 +1432,12 @@ export default function PulsePage() {
                 </button>
               </div>
             </div>
+            */}
           </div>
 
           {false ? ( // isBnbRoute commented out
-            <div className="w-full">
-              {/* Mobile: Single table based on active tab */}
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
               <div className="lg:hidden">
                 <div className="transition-all duration-300 ease-in-out">
                   {activeTab === "new" && (
@@ -1466,8 +1467,9 @@ export default function PulsePage() {
                   )}
                 </div>
               </div>
-              {/* Desktop: All tables horizontally */}
-              <div className="scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50 hidden w-full flex-row overflow-x-auto lg:flex">
+              */}
+              {/* All tables horizontally - always visible */}
+              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <BnbTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow as any}
@@ -1489,8 +1491,8 @@ export default function PulsePage() {
               </div>
             </div>
           ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
-            <div className="w-full flex-1 min-h-0 flex flex-col">
-              {/* Mobile: Single table based on active tab */}
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
               <div className="lg:hidden flex-1 min-h-0">
                 <div className="transition-all duration-300 ease-in-out">
                   {activeTab === 'new' && (
@@ -1520,8 +1522,9 @@ export default function PulsePage() {
                   )}
                 </div>
               </div>
-              {/* Desktop: All tables horizontally */}
-              <div className="hidden lg:flex flex-row w-full flex-1 min-h-0 overflow-x-auto scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50">
+              */}
+              {/* All tables horizontally - always visible */}
+              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <MonadTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow}
@@ -1534,8 +1537,8 @@ export default function PulsePage() {
               </div>
             </div>
           ) : isLoading ? (
-            <div className="w-full">
-              {/* Mobile: Single table based on active tab */}
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
               <div className="lg:hidden">
                 <PulseTable
                   title={
@@ -1552,8 +1555,9 @@ export default function PulsePage() {
                   showBubbleMetrics={false}
                 />
               </div>
-              {/* Desktop: All tables horizontally */}
-              <div className="scrollbar-thin scrollbar-track-neutral-900/50 scrollbar-thumb-neutral-700/50 hidden w-full flex-row gap-4 overflow-x-auto lg:flex">
+              */}
+              {/* All tables horizontally - always visible */}
+              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <PulseTable
                   title="New Pairs"
                   tokens={[]}
@@ -1594,7 +1598,7 @@ export default function PulsePage() {
             </div>
           ) : (
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              {/* Mobile: Single table based on active tab */}
+              {/* Mobile: Single table based on active tab - MOBILE VIEW DISABLED
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:hidden">
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden transition-all duration-300 ease-in-out">
                   {activeTab === "new" && (
@@ -1624,8 +1628,9 @@ export default function PulsePage() {
                   )}
                 </div>
               </div>
-              {/* Desktop: All tables horizontally */}
-              <div className="hidden min-h-0 w-full flex-1 flex-row overflow-hidden lg:flex">
+              */}
+              {/* All tables horizontally - always visible */}
+              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <PulseTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow as any}

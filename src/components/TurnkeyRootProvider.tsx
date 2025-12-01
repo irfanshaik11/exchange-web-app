@@ -8,7 +8,6 @@ import {
   TurnkeyProvider,
   type TurnkeyProviderConfig,
 } from "@turnkey/react-wallet-kit";
-import "@turnkey/react-wallet-kit/styles.css";
 
 export function TurnkeyRootProvider({ children }: { children: React.ReactNode }) {
   const turnkeyConfig: TurnkeyProviderConfig = useMemo(() => {

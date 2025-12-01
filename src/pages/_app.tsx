@@ -13,7 +13,7 @@ import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
 import dynamic from 'next/dynamic';
 import { TurnkeyRootProvider } from "../components/TurnkeyRootProvider";
-import "@turnkey/react-wallet-kit/styles.css";  
+
 import { useTurnkey, AuthState } from '@turnkey/react-wallet-kit';
 import { turnkeyLogin } from '../utils/api';
 
@@ -543,7 +543,9 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         }} />
       </Head>
       <div className={inter.className}>
+        {/* MobileBlocker disabled - MOBILE VIEW DISABLED
         <MobileBlocker>
+        */}
         <TurnkeyRootProvider>
           <MonadTradeBanner />
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
@@ -598,7 +600,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
             }}
           />
           </TurnkeyRootProvider>
-        </MobileBlocker>
+        {/* </MobileBlocker> */}
       </div>
     </>
   );
