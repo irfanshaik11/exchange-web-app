@@ -2240,7 +2240,7 @@ export default function DiscoverPage() {
                 >
                   xStocks
                 </button>
-                <button
+                {/* <button
                   className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "surge" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
                   onClick={() => setActiveTab("surge")}
                 >
@@ -2251,7 +2251,7 @@ export default function DiscoverPage() {
                   onClick={() => setActiveTab("live")}
                 >
                   Pump Live
-                </button>
+                </button> */}
               </>
             )}
             {/* <button
@@ -2482,7 +2482,7 @@ export default function DiscoverPage() {
 
         {/* Main Content */}
         <main className="w-full">
-          {activeTab === 'live' ? (
+          {/* {activeTab === 'live' ? (
             pumpPortalTokens.length > 0 ? (
               <PumpLive
                 leftItems={liveLeftItems}
@@ -2547,7 +2547,7 @@ export default function DiscoverPage() {
                 ))}
               </div>
             )
-          ) : activeTab === 'newPairs' ? (
+          ) : */} {activeTab === 'newPairs' ? (
             <section aria-label="New Pairs">
               {/* <div className="mb-4 flex items-center justify-between">
                 {newPairsLoading && (
@@ -2612,18 +2612,18 @@ export default function DiscoverPage() {
                 </div>
               )}
             </section>
-          ) : activeTab === 'surge' ? (
+          ) : /* activeTab === 'surge' ? (
             <section aria-label="Surge">
-              {/* <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-[#f0f5f5]">Surge</h2>
-              </div> */}
+              </div>
               
-              {/* Placeholder for Surge data - replace with actual data source */}
+              Placeholder for Surge data - replace with actual data source
               <div className="py-10 text-center text-[#9CA3AF]">
                 Surge data coming soon. Connect your data source here.
               </div>
               
-              {/* When you have Surge data, use InterstateTable like this:
+              When you have Surge data, use InterstateTable like this:
               <InterstateTable
                 rows={surgeRows}
                 onQuickBuy={handleQuickBuy}
@@ -2633,9 +2633,8 @@ export default function DiscoverPage() {
                 selectedTimeframe={selectedTimeframe}
                 quickBuyAmount={Number(quickBuyAmount) || 0}
               />
-              */}
             </section>
-          ) : (
+          ) : */ (
             renderPrimaryTable()
           )}
         </main>

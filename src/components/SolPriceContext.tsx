@@ -2,12 +2,14 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface SolPriceContextType {
   solPrice: number;
+  monPrice: number;
 }
 
-const SolPriceContext = createContext<SolPriceContextType>({ solPrice: 0 });
+const SolPriceContext = createContext<SolPriceContextType>({ solPrice: 0, monPrice: 0 });
 
 export function SolPriceProvider({ children }: { children: React.ReactNode }) {
   const [solPrice, setSolPrice] = useState<number>(0);
+  const [monPrice, setMonPrice] = useState<number>(0);
 
   useEffect(() => {
     const fetchSolPrice = async () => {
@@ -41,8 +43,38 @@ export function SolPriceProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const fetchMonPrice = async () => {
+      try {
+        // CoinGecko API for MON/USD
+        const response = await fetch(
+          'https://api.coingecko.com/api/v3/simple/price?ids=monad&vs_currencies=usd',
+          { signal: AbortSignal.timeout(5000) }
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          const price = data?.monad?.usd;
+          if (typeof price === 'number' && price > 0) {
+            setMonPrice(price);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching MON price from CoinGecko:', error);
+      }
+      
+      // Fallback to static price if CoinGecko fails
+      setMonPrice(0.025);
+    };
+    
+    fetchMonPrice();
+    const interval = setInterval(fetchMonPrice, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <SolPriceContext.Provider value={{ solPrice }}>
+    <SolPriceContext.Provider value={{ solPrice, monPrice }}>
       {children}
     </SolPriceContext.Provider>
   );
