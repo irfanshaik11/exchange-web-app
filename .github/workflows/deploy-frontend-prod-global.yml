@@ -12,7 +12,7 @@ env:
   PROJECT_ID: "interstate-dev"
   WORKLOAD_IDENTITY_PROVIDER: "projects/486942555299/locations/global/workloadIdentityPools/github-cicd-pool/providers/github"
   SERVICE_ACCOUNT: "github-cicd@interstate-dev.iam.gserviceaccount.com"
-  STARTUP_SCRIPT: "deployment/startup-script/gcp_frontend_startup.sh"
+  STARTUP_SCRIPT: "deployment/startup-script/interstate-narrative-frontend-prod-startup.sh"
 
   # List of MIGs with their zones (MIG:ZONE)
   MIG_LIST: >
