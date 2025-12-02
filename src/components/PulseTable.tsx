@@ -5896,9 +5896,10 @@ function PulseTable({
                       popup.style.transform = "translateX(-50%)";
                     }
                     // Prefetch trade data on hover for instant navigation
-                    if (pairAddress) {
-                      prefetchTradeData(pairAddress, pairAddress);
-                    }
+                    // COMMENTED OUT: Testing without prefetch
+                    // if (pairAddress) {
+                    //   prefetchTradeData(pairAddress, pairAddress);
+                    // }
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = "transparent";

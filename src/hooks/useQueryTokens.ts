@@ -63,10 +63,11 @@ async function fetchLaunchpadData(): Promise<LaunchpadData> {
   return await response.json();
 }
 
-export function useQueryNewPairs(): UseQueryResult<Token[], Error> {
+export function useQueryNewPairs(enabled: boolean = true): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.newPairs(),
     queryFn: fetchNewPairs,
+    enabled,                        // Conditionally enable/disable the query
     staleTime: Infinity,           // Never mark as stale - WebSocket provides updates
     gcTime: 10 * 60 * 1000,        // Keep in cache for 10 min for instant display
     refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
@@ -77,10 +78,11 @@ export function useQueryNewPairs(): UseQueryResult<Token[], Error> {
   });
 }
 
-export function useQueryFinalStretch(): UseQueryResult<Token[], Error> {
+export function useQueryFinalStretch(enabled: boolean = true): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.finalStretch(),
     queryFn: fetchFinalStretch,
+    enabled,                        // Conditionally enable/disable the query
     staleTime: 30 * 1000,          // Consider fresh for 30 seconds (WebSocket provides real-time updates)
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
@@ -91,10 +93,11 @@ export function useQueryFinalStretch(): UseQueryResult<Token[], Error> {
   });
 }
 
-export function useQueryMigrated(): UseQueryResult<Token[], Error> {
+export function useQueryMigrated(enabled: boolean = true): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.migrated(),
     queryFn: fetchMigrated,
+    enabled,                        // Conditionally enable/disable the query
     staleTime: 30 * 1000,          // Consider fresh for 30 seconds (WebSocket provides real-time updates)
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
@@ -105,10 +108,11 @@ export function useQueryMigrated(): UseQueryResult<Token[], Error> {
   });
 }
 
-export function useQueryLaunchpadData(): UseQueryResult<LaunchpadData, Error> {
+export function useQueryLaunchpadData(enabled: boolean = true): UseQueryResult<LaunchpadData, Error> {
   return useQuery({
     queryKey: tokenKeys.launchpad.data(),
     queryFn: fetchLaunchpadData,
+    enabled,                        // Conditionally enable/disable the query
     staleTime: 0,                  // Always stale - always refetch
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
