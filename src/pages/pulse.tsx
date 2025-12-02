@@ -26,7 +26,7 @@ import {
 } from "../hooks/useQueryTokens";
 import { useQueryClient } from "@tanstack/react-query";
 import { env } from "~/env";
-import { rollingTradeCache } from "../utils/rollingTradeCache";
+// import { rollingTradeCache } from "../utils/rollingTradeCache";
 import { SiBinance, SiSolana } from "react-icons/si";
 import { FaDiscord } from "react-icons/fa";
 import { extractTokenImage } from "../utils/images";
@@ -103,7 +103,44 @@ export default function PulsePage() {
 
   const { user } = useUser();
   const router = useRouter();
-  const chain = router.query.chain as string | undefined;
+  
+  // CRITICAL: Initialize chain from URL immediately to avoid race conditions
+  // This ensures we react to the correct chain before router.query is ready
+  const [currentChain, setCurrentChain] = useState<string>(() => {
+    // Initialize from router query if available, otherwise check URL directly
+    if (typeof window !== 'undefined' && router.isReady) {
+      return (router.query.chain as string) || 'sol';
+    }
+    // Also check URL params directly for immediate access
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('chain') || 'sol';
+    }
+    return 'sol';
+  });
+  
+  // Sync chain state with router query - this handles both initial load and shallow routing updates
+  useEffect(() => {
+    if (!router.isReady) return;
+    const chainFromQuery = (router.query.chain as string) || 'sol';
+    if (chainFromQuery !== currentChain) {
+      console.log('[Pulse] Chain changed from router:', currentChain, '->', chainFromQuery);
+      setCurrentChain(chainFromQuery);
+    }
+  }, [router.query.chain, router.isReady, currentChain]);
+  
+  // Also watch router.asPath as a fallback for shallow routing
+  useEffect(() => {
+    if (!router.isReady) return;
+    const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
+    const chainFromUrl = urlParams.get('chain') || 'sol';
+    if (chainFromUrl !== currentChain) {
+      console.log('[Pulse] Chain changed from URL:', currentChain, '->', chainFromUrl);
+      setCurrentChain(chainFromUrl);
+    }
+  }, [router.asPath, router.isReady, currentChain]);
+  
+  const chain = currentChain;
   // const isBnbRoute = chain === 'bnb';
   const isMonadRoute = chain === 'monad';
   // const isBaseRoute = chain === 'base';
@@ -139,10 +176,11 @@ export default function PulsePage() {
 
   // Redirect to /pulse?chain=sol if no chain parameter is present
   useEffect(() => {
-    if (router.isReady && !chain) {
+    if (router.isReady && !router.query.chain) {
       router.replace("/pulse?chain=sol", undefined, { shallow: true });
+      setCurrentChain('sol');
     }
-  }, [router.isReady, chain, router]);
+  }, [router.isReady, router.query.chain, router]);
 
   // Check if updates modal should be shown - only once after login
   useEffect(() => {
@@ -199,6 +237,11 @@ export default function PulsePage() {
   const queryClient = useQueryClient();
 
   // React Query hooks - instant cache
+  // CRITICAL: Only enable Solana data fetching when NOT on Monad route
+  // This prevents Solana data from loading when on Monad chain
+  // Wait for router to be ready before determining which chain we're on
+  const shouldFetchSolanaData = router.isReady && !isMonadRoute;
+  
   const {
     data: tokens = [],
     isLoading: tokensLoading,
@@ -207,7 +250,7 @@ export default function PulsePage() {
     refetch: refreshTokens,
     dataUpdatedAt,
     isFetching,
-  } = useQueryNewPairs();
+  } = useQueryNewPairs(shouldFetchSolanaData);
 
   const {
     data: launchpadData = { new: [], completing: [], completed: [] },
@@ -215,15 +258,16 @@ export default function PulsePage() {
     error: launchpadError,
     isStale: launchpadStale,
     refetch: refreshLaunchpadData,
-  } = useQueryLaunchpadData();
+  } = useQueryLaunchpadData(shouldFetchSolanaData);
 
-  const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch();
+  const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
 
-  const { data: migratedTokensQuery = [] } = useQueryMigrated();
+  const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
 
   // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
+  // Only enable WebSocket for Solana route, not Monad
   const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
-    enabled: true, // Enable WebSocket for instant updates
+    enabled: shouldFetchSolanaData, // Only enable WebSocket for Solana route
     onNewToken: useCallback((token) => {
       console.log('[Pulse] 🔥 WebSocket: New token received, adding to cache!', token.mint);
 
@@ -1029,41 +1073,49 @@ export default function PulsePage() {
   }, [newPairsToShow, preloadImages]);
 
   // Sync rolling trade cache with visible pulse tokens (debounced to prevent excessive requests)
-  useEffect(() => {
-    // Debounce sync calls to prevent rapid-fire requests
-    const syncTimeoutId = setTimeout(async () => {
-      try {
-        if (
-          !newPairsToShow.length &&
-          !finalStretchToShow.length &&
-          !migratedToShow.length
-        )
-          return;
+  // CRITICAL: Only sync cache for Solana route - Monad tokens use different service
+  // COMMENTED OUT: Testing without rolling cache
+  // useEffect(() => {
+  //   // Skip cache sync for Monad route - Monad tokens use different trade service
+  //   if (isMonadRoute) {
+  //     return;
+  //   }
 
-        await rollingTradeCache.syncWithPulseTokens(
-          newPairsToShow.slice(0, 30),
-          finalStretchToShow.slice(0, 30),
-          migratedToShow.slice(0, 30),
-        );
-      } catch (error) {
-        console.error("[Pulse] Failed to sync rolling cache:", error);
-      }
-    }, 2000); // Debounce: Wait 2 seconds after tokens change before syncing
+  //   // Debounce sync calls to prevent rapid-fire requests
+  //   const syncTimeoutId = setTimeout(async () => {
+  //     try {
+  //       if (
+  //         !newPairsToShow.length &&
+  //         !finalStretchToShow.length &&
+  //         !migratedToShow.length
+  //       )
+  //         return;
 
-    return () => clearTimeout(syncTimeoutId);
-  }, [newPairsToShow, finalStretchToShow, migratedToShow]);
+  //       await rollingTradeCache.syncWithPulseTokens(
+  //         newPairsToShow.slice(0, 30),
+  //         finalStretchToShow.slice(0, 30),
+  //         migratedToShow.slice(0, 30),
+  //       );
+  //     } catch (error) {
+  //       console.error("[Pulse] Failed to sync rolling cache:", error);
+  //     }
+  //   }, 2000); // Debounce: Wait 2 seconds after tokens change before syncing
+
+  //   return () => clearTimeout(syncTimeoutId);
+  // }, [newPairsToShow, finalStretchToShow, migratedToShow, isMonadRoute]);
 
   // Log cache stats periodically for debugging
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const stats = rollingTradeCache.getStats();
-      console.log(
-        `[RollingCache Stats] ${stats.size}/${stats.maxSize} tokens (${stats.utilization.toFixed(1)}% full)`,
-      );
-    }, 60000); // Every 60 seconds
+  // COMMENTED OUT: Testing without rolling cache
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     const stats = rollingTradeCache.getStats();
+  //     console.log(
+  //       `[RollingCache Stats] ${stats.size}/${stats.maxSize} tokens (${stats.utilization.toFixed(1)}% full)`,
+  //     );
+  //   }, 60000); // Every 60 seconds
 
-    return () => clearInterval(interval);
-  }, []);
+  //   return () => clearInterval(interval);
+  // }, []);
 
   // Alias for debug / legacy variables
   const newPairsData = newPairsToShow;
