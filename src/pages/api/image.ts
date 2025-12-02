@@ -56,6 +56,9 @@ const ALLOWED = [
   'token.narrative.trade',
   // Filebase IPFS hosting
   'myfilebase.com',
+  // Monad token image storage
+  'storage.nadapp.net',
+  'nadapp.net',
 ];
 
 // Allowed image MIME types - only image types are permitted
