@@ -7,6 +7,7 @@ import Positions from "../components/trade/Positions";
 import TradeTable from "../components/trade/TradeTable";
 import Activity from "../components/trade/Activity";
 import { useUser } from "../components/UserContext";
+import { useSolPrice } from "../components/SolPriceContext";
 import InterstateTooltip from "~/components/InterstateTooltip";
 import CustomCheckbox from "../components/CustomCheckbox";
 import {
@@ -152,6 +153,7 @@ export default function PortfolioPage() {
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
   const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, chainBalances } = useUser();
+  const { monPrice } = useSolPrice();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || "sol";
   const monBalance = chainBalances?.monad || 0;
@@ -539,8 +541,11 @@ export default function PortfolioPage() {
         totalBoughtValue ? (totalPnl / totalBoughtValue) * 100 : 0,
       );
       // Use appropriate balance based on current chain
-      const currentBalance = currentChain === 'monad' ? monBalance : solBalance;
-      setTotalValue(currentBalance + totalRemainingValue);
+      // For Monad: convert MON to USD, for Solana: solBalance is already in USD
+      const currentBalanceUsd = currentChain === 'monad' 
+        ? monBalance * (monPrice || 0.025) // Convert MON to USD using MON price
+        : solBalance; // solBalance is already in USD
+      setTotalValue(currentBalanceUsd + totalRemainingValue);
 
       // Create top 100 positions sorted by corrected USD value
       const sortedByUsdValue = [...correctedPositions].sort((a, b) => {
@@ -548,7 +553,7 @@ export default function PortfolioPage() {
       });
       setTop100Positions(sortedByUsdValue.slice(0, 100));
     }
-  }, [positions, solBalance, monBalance, currentChain]);
+  }, [positions, solBalance, monBalance, currentChain, monPrice]);
 
   // Search filtering effect
   useEffect(() => {
@@ -1311,14 +1316,7 @@ export default function PortfolioPage() {
                         Total Value
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
-                        {sortByUSD && solPrice > 0 ? (
-                          <>
-                            <ChainIcon chain={currentChain} size="medium" />
-                            {formatSmartNumber(totalValue / solPrice)}
-                          </>
-                        ) : (
-                          `$${totalValue.toFixed(2)}`
-                        )}
+                        ${formatSmartNumber(totalValue)}
                       </div>
                     </div>
                     <div>
@@ -1326,14 +1324,7 @@ export default function PortfolioPage() {
                         Unrealized PNL
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
-                        {sortByUSD && solPrice > 0 ? (
-                          <>
-                            <ChainIcon chain={currentChain} size="medium" />
-                            {formatSmartNumber(unrealizedPnl / solPrice)}
-                          </>
-                        ) : (
-                          `$${unrealizedPnl.toFixed(2)}`
-                        )}
+                        ${formatSmartNumber(unrealizedPnl)}
                       </div>
                     </div>
                     <div>
@@ -1341,13 +1332,18 @@ export default function PortfolioPage() {
                         Available Balance
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
-                        {sortByUSD && solPrice > 0 ? (
+                        {currentChain === 'monad' ? (
                           <>
                             <ChainIcon chain={currentChain} size="medium" />
-                            {formatSmartNumber((currentChain === 'monad' ? monBalance : solBalance) / solPrice)}
+                            {formatSmartNumber(monBalance)} MON
+                          </>
+                        ) : sortByUSD && solPrice > 0 ? (
+                          <>
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber(solBalance / solPrice)}
                           </>
                         ) : (
-                          `$${formatSmartNumber(currentChain === 'monad' ? monBalance : solBalance)}`
+                          `$${formatSmartNumber(solBalance)}`
                         )}
                       </div>
                     </div>

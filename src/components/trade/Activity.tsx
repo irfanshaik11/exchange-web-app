@@ -216,7 +216,13 @@ const Activity: React.FC<ActivityProps> = ({
           const timeoutId = setTimeout(() => controller.abort(), 10000);
 
           try {
-            const metadata = await fetchChainTokenMetadata(tokenAddress, {
+            // Normalize Monad addresses to lowercase for consistency
+            const isMonadToken = trade.blockchain === 'monad' || tokenAddress.toLowerCase().startsWith('0x');
+            const normalizedAddress = isMonadToken 
+              ? tokenAddress.toLowerCase() 
+              : tokenAddress;
+            
+            const metadata = await fetchChainTokenMetadata(normalizedAddress, {
               signal: controller.signal,
               pairAddress: trade.originalPairAddress || trade.pairAddress,
             });
@@ -229,7 +235,16 @@ const Activity: React.FC<ActivityProps> = ({
               ...metadata,
               protocol: metadata.protocol || metadata.launchpad || trade.launchpad || "",
               launchpad: metadata.launchpad || metadata.protocol || trade.launchpad || "",
+              marketCapUsd: metadata.marketCapUsd, // Preserve market cap from metadata
+              priceUsd: metadata.priceUsd, // Preserve price from metadata
             };
+            
+            console.log(`📊 [Activity] Metadata for ${normalizedAddress}:`, {
+              name: enriched.name,
+              symbol: enriched.symbol,
+              marketCapUsd: enriched.marketCapUsd,
+              priceUsd: enriched.priceUsd,
+            });
 
             setTokenMetadata((prev) => ({
               ...prev,
@@ -362,7 +377,7 @@ const Activity: React.FC<ActivityProps> = ({
               });
               
               // Format market cap
-              // Handle inconsistent market cap units from backend
+              // Use the market cap saved in the database at the time of trade (historical value)
               let marketCapValue = toNumber(trade.marketCap);
               
               // TEMPORARY FIX: For same token, use the highest market cap value
@@ -385,24 +400,19 @@ const Activity: React.FC<ActivityProps> = ({
                 }
               }
               
-              // If market cap is still suspiciously low (< $1), show "N/A"
-              if (marketCapValue && marketCapValue < 1) {
-                console.warn('Suspiciously low market cap detected:', {
-                  tokenAddress: trade.tokenAddress,
-                  type: trade.type,
-                  marketCap: trade.marketCap,
-                  marketCapValue: marketCapValue,
-                  usdValue: trade.usdValue
-                });
-                
-                marketCapValue = null;
-              }
-
-              if ((!marketCapValue || marketCapValue < 1) && metadata?.marketCapUsd) {
+              // Only use metadata as fallback if database value is missing or 0
+              // This ensures we show the historical market cap at time of trade, not current
+              if ((!marketCapValue || marketCapValue < 1) && metadata?.marketCapUsd && metadata.marketCapUsd > 0) {
+                console.log(`⚠️ [Activity] Market cap missing in DB for ${trade.tokenAddress}, using metadata as fallback:`, metadata.marketCapUsd);
                 marketCapValue = metadata.marketCapUsd;
               }
               
-              const formattedMarketCap = marketCapValue ? `$${formatMarketCap(marketCapValue)}` : 'N/A';
+              // Final check: if still missing or suspiciously low, show N/A
+              if (!marketCapValue || marketCapValue < 1) {
+                marketCapValue = null;
+              }
+              
+              const formattedMarketCap = marketCapValue && marketCapValue > 0 ? `$${formatMarketCap(marketCapValue)}` : 'N/A';
               
               // Format amount (USD value)
               // ⚠️ VALIDATION: Detect if usdValue is suspiciously high (likely marketCap or wrong units)
