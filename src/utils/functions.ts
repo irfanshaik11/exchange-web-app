@@ -7,6 +7,7 @@ export interface PositionRow {
   pairAddress?: string; // Pool/pair address (contains originalPairAddress from backend)
   blockchain?: string;
   launchpad?: string | null;
+  imageUrl?: string | null; // Token image URL saved during buy
   bought: number;
   boughtUsdValue: number;
   sold: number;

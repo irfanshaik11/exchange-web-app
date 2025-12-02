@@ -303,24 +303,76 @@ const Positions: React.FC<PositionsProps> = ({
           if (!position) return;
 
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3000);
+          // Increase timeout for Monad tokens (they may need more time)
+          const isMonadToken = position.blockchain === 'monad' || tokenAddress.toLowerCase().startsWith('0x');
+          const timeoutMs = isMonadToken ? 10000 : 3000;
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
           try {
-            const metadata = await fetchChainTokenMetadata(tokenAddress, {
+            // Normalize Monad addresses to lowercase for consistency
+            const normalizedAddress = isMonadToken 
+              ? tokenAddress.toLowerCase() 
+              : tokenAddress;
+            
+            console.log(`🔍 [Positions] Fetching metadata for ${isMonadToken ? 'Monad' : 'Solana'} token:`, {
+              original: tokenAddress,
+              normalized: normalizedAddress,
+              blockchain: position.blockchain,
+            });
+            
+            const metadata = await fetchChainTokenMetadata(normalizedAddress, {
               signal: controller.signal,
               pairAddress: position.pairAddress,
             });
 
             if (!metadata) {
-              throw new Error("Metadata unavailable");
+              console.log(`ℹ️ [Positions] No metadata returned for ${normalizedAddress} - using fallback`, {
+                positionImageUrl: position.imageUrl ? 'present' : 'missing',
+              });
+              // Don't throw - create fallback metadata instead
+              // Use imageUrl from position if available (saved during buy)
+              const fallbackMetadata: TokenMetadata = {
+                address: normalizedAddress,
+                name: `Token ${shortAddr(normalizedAddress)}`, // Better than just address
+                symbol: position.blockchain === "monad" ? "MON" : "???",
+                protocol: position.launchpad || "",
+                launchpad: position.launchpad || "",
+                imageUrl: position.imageUrl || undefined, // Use saved imageUrl from position
+              };
+              
+              console.log(`📸 [Positions] Fallback imageUrl for ${normalizedAddress}:`, fallbackMetadata.imageUrl || 'NONE');
+              
+              setTokenMetadata((prev) => ({
+                ...prev,
+                [tokenAddress]: fallbackMetadata,
+              }));
+
+              if (onTokenNamesChange) {
+                onTokenNamesChange((prev) => ({
+                  ...prev,
+                  [tokenAddress]: fallbackMetadata.name || shortAddr(tokenAddress),
+                }));
+              }
+              return; // Exit early, don't process as success
             }
+            
+            console.log(`✅ [Positions] Metadata fetched for ${normalizedAddress}:`, {
+              name: metadata.name,
+              symbol: metadata.symbol,
+              imageUrl: metadata.imageUrl ? 'present' : 'missing',
+              positionImageUrl: position.imageUrl ? 'present' : 'missing',
+            });
 
             const enriched: TokenMetadata = {
               ...metadata,
               protocol: metadata.protocol || metadata.launchpad || position.launchpad || "",
               launchpad: metadata.launchpad || metadata.protocol || position.launchpad || "",
               migrated_pool_address: metadata.migrated_pool_address,
+              // Prefer saved imageUrl from position (saved during buy) over fetched metadata
+              imageUrl: position.imageUrl || metadata.imageUrl,
             };
+            
+            console.log(`📸 [Positions] Final imageUrl for ${normalizedAddress}:`, enriched.imageUrl || 'NONE');
 
             setTokenMetadata((prev) => ({
               ...prev,
@@ -337,13 +389,22 @@ const Positions: React.FC<PositionsProps> = ({
                 [tokenAddress]: enriched.name || shortAddr(tokenAddress),
               }));
             }
-          } catch (error) {
-            console.warn(`Failed to fetch metadata for ${tokenAddress}:`, error);
+          } catch (error: any) {
+            console.warn(`❌ [Positions] Failed to fetch metadata for ${tokenAddress}:`, error?.message || error);
+            console.warn(`   Error details:`, {
+              tokenAddress,
+              normalized: isMonadToken ? tokenAddress.toLowerCase() : tokenAddress,
+              blockchain: position.blockchain,
+              error: error?.message,
+            });
+            
+            // Create a better fallback with a more descriptive name
+            // Use imageUrl from position if available (saved during buy)
             const fallback: TokenMetadata = {
-              imageUrl: "",
+              imageUrl: position.imageUrl || "", // Use saved imageUrl from position
               protocol: position.launchpad || "",
               launchpad: position.launchpad || "",
-              name: shortAddr(tokenAddress),
+              name: `Token ${shortAddr(tokenAddress)}`, // Shows as "Token 0xc4...7777" instead of just address
               symbol: position.blockchain === "monad" ? "MON" : "???",
             };
 
@@ -592,6 +653,19 @@ const Positions: React.FC<PositionsProps> = ({
               const isFullCircleImage = branding.isFullCircle;
               const isHidden = hiddenTokens.has(pos.tokenAddress);
               
+              // Use position.imageUrl as final fallback if metadata doesn't have it
+              const finalImageUrl = metadata?.imageUrl || sourcePosition.imageUrl || '';
+              
+              // Debug logging for missing images
+              if (!finalImageUrl && (metadata?.symbol || sourcePosition.tokenAddress)) {
+                console.log(`⚠️ [Positions Render] No imageUrl for token:`, {
+                  tokenAddress: pos.tokenAddress,
+                  symbol: metadata?.symbol,
+                  metadataImageUrl: metadata?.imageUrl,
+                  positionImageUrl: sourcePosition.imageUrl,
+                });
+              }
+              
               return (
               <tr 
                 key={pos.tokenAddress || idx} 
@@ -621,7 +695,7 @@ const Positions: React.FC<PositionsProps> = ({
                         >
                           <div className="relative rounded-lg overflow-hidden w-10 h-10">
                             <FastImage
-                              src={metadata?.imageUrl || ''}
+                              src={finalImageUrl}
                               alt={metadata?.name || metadata?.symbol || "Token"}
                               symbol={metadata?.symbol}
                               name={metadata?.name}
@@ -667,7 +741,7 @@ const Positions: React.FC<PositionsProps> = ({
                     <span className="text-neutral-400">
                       {showInSOL && solPrice > 0
                         ? <>(<SolIcon />{formatSmartNumber(sourcePosition.boughtUsdValue / solPrice)})</>
-                        : `($${formatSmartNumber(sourcePosition.boughtUsdValue)})`
+                        : `($${formatSmartNumber(Math.max(0, sourcePosition.boughtUsdValue || 0))})`
                       }
                     </span>
                   </div>
