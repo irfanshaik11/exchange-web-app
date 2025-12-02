@@ -109,20 +109,20 @@ export default function PulsePage() {
   const [currentChain, setCurrentChain] = useState<string>(() => {
     // Initialize from router query if available, otherwise check URL directly
     if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'sol';
+      return (router.query.chain as string) || 'monad';
     }
     // Also check URL params directly for immediate access
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'sol';
+      return urlParams.get('chain') || 'monad';
     }
-    return 'sol';
+    return 'monad';
   });
   
   // Sync chain state with router query - this handles both initial load and shallow routing updates
   useEffect(() => {
     if (!router.isReady) return;
-    const chainFromQuery = (router.query.chain as string) || 'sol';
+    const chainFromQuery = (router.query.chain as string) || 'monad';
     if (chainFromQuery !== currentChain) {
       console.log('[Pulse] Chain changed from router:', currentChain, '->', chainFromQuery);
       setCurrentChain(chainFromQuery);
@@ -133,7 +133,7 @@ export default function PulsePage() {
   useEffect(() => {
     if (!router.isReady) return;
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'sol';
+    const chainFromUrl = urlParams.get('chain') || 'monad';
     if (chainFromUrl !== currentChain) {
       console.log('[Pulse] Chain changed from URL:', currentChain, '->', chainFromUrl);
       setCurrentChain(chainFromUrl);
@@ -145,7 +145,7 @@ export default function PulsePage() {
   const isMonadRoute = chain === 'monad';
   // const isBaseRoute = chain === 'base';
   // const isEthereumRoute = chain === 'eth';
-  const isSolanaRoute = chain === 'sol' || !chain; // Default to Solana if no chain specified
+  const isSolanaRoute = chain === 'sol'; // Only Solana if explicitly set
   const chainButtonBase =
     "relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b]";
   const solanaButtonClasses = `${chainButtonBase} ${
@@ -174,11 +174,11 @@ export default function PulsePage() {
   //     : 'bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100'
   // }`;
 
-  // Redirect to /pulse?chain=sol if no chain parameter is present
+  // Redirect to /pulse?chain=monad if no chain parameter is present
   useEffect(() => {
     if (router.isReady && !router.query.chain) {
-      router.replace("/pulse?chain=sol", undefined, { shallow: true });
-      setCurrentChain('sol');
+      router.replace("/pulse?chain=monad", undefined, { shallow: true });
+      setCurrentChain('monad');
     }
   }, [router.isReady, router.query.chain, router]);
 
@@ -1362,6 +1362,17 @@ export default function PulsePage() {
                 <h1 className="text-xl font-bold">Trenches</h1>
                 <div className="flex items-center gap-3">
                   <Link
+                    href="/pulse?chain=monad"
+                    aria-label="View Monad tokens"
+                    className={monadButtonClasses}
+                  >
+                    <img
+                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                      alt="Monad"
+                      className="h-7 w-7 rounded-full object-cover"
+                    />
+                  </Link>
+                  <Link
                     href="/pulse?chain=sol"
                     aria-label="View Solana tokens"
                     className={solanaButtonClasses}
@@ -1374,17 +1385,6 @@ export default function PulsePage() {
                         mixBlendMode: 'screen',
                         filter: 'contrast(1.2)'
                       }}
-                    />
-                  </Link>
-                  <Link
-                    href="/pulse?chain=monad"
-                    aria-label="View Monad tokens"
-                    className={monadButtonClasses}
-                  >
-                    <img
-                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                      alt="Monad"
-                      className="h-7 w-7 rounded-full object-cover"
                     />
                   </Link>
                   {/* <Link

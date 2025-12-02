@@ -149,7 +149,7 @@ export default function Header({
     chainBalances,
     logout,
   } = useUser();
-  const currentChain = (router.query.chain as string) || "sol";
+  const currentChain = (router.query.chain as string) || "monad";
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
   const [profileOpen, setProfileOpen] = useState(false);

@@ -73,8 +73,9 @@ export default function TradePage() {
   const router = useRouter();
   const { id, _name, _symbol, _price, _mcap, _image, _mint, chain } = router.query;
 
-  // Determine network from chain parameter (defaults to 'solana')
-  const network = chain === 'monad' ? 'monad' : 'solana';
+  // Determine network from chain parameter (defaults to 'monad')
+  // If chain is explicitly 'sol', use 'solana', otherwise default to 'monad'
+  const network = chain === 'sol' ? 'solana' : 'monad';
 
   const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload();
 
