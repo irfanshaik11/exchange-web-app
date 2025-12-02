@@ -450,7 +450,6 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       }
     }
   }, []);
-
   // Listen for toast position changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
