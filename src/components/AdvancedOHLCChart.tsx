@@ -156,6 +156,37 @@ const truncateAddress = (address?: string | null): string => {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 };
 
+// Helper function to calculate window start time for any interval (for aggregating 1s candles)
+const getWindowStartTime = (unixTime: number, interval: BackendInterval): number => {
+  const seconds = unixTime;
+  
+  switch (interval) {
+    case '1s':
+    case '5s':
+    case '15s':
+    case '30s':
+      // For second intervals, floor to the interval
+      const secondInterval = interval === '1s' ? 1 : interval === '5s' ? 5 : interval === '15s' ? 15 : 30;
+      return Math.floor(seconds / secondInterval) * secondInterval;
+    case '1m':
+      return Math.floor(seconds / 60) * 60; // Floor to minute
+    case '5m':
+      return Math.floor(seconds / 300) * 300; // Floor to 5 minutes
+    case '15m':
+      return Math.floor(seconds / 900) * 900; // Floor to 15 minutes
+    case '1h':
+      return Math.floor(seconds / 3600) * 3600; // Floor to hour
+    case '4h':
+      return Math.floor(seconds / 14400) * 14400; // Floor to 4 hours
+    case '1d':
+      return Math.floor(seconds / 86400) * 86400; // Floor to day (UTC)
+    case '7d':
+      return Math.floor(seconds / 604800) * 604800; // Floor to week (UTC)
+    default:
+      return seconds;
+  }
+};
+
 const resolveTradeSymbol = (
   tradeSymbol: string | null | undefined,
   tokenSymbol?: string | null,
@@ -289,6 +320,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   );
   const marksInitializedRef = useRef(false);
   const prevTradeDataLengthRef = useRef<number>(tradeData?.length || 0);
+  
+  // For Monad aggregation: track 1s candles within current timeframe window (1m, 5m, 15m, 1h, etc.)
+  const currentAggregatedCandleRef = useRef<BackendOHLCData | null>(null);
+  const oneSecondCandlesRef = useRef<BackendOHLCData[]>([]);
+  const currentAggregatingIntervalRef = useRef<string | null>(null);
 
   useEffect(() => {
     latestTradeDataRef.current = tradeData || [];
@@ -652,11 +688,23 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     }
 
     // Build WebSocket URL
+    // For Monad: Always use 1s interval (backend supports it) and aggregate into 1m if needed
     const wsBaseUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081';
-    const requestedInterval = selectedInterval || '1s';
-    const wsUrl = wsBaseUrl.replace(/^http/, 'ws') + `/v1/ohlc/stream?token_address=${tokenAddress}&interval=${requestedInterval}`;
+    const wsInterval = '1s'; // Always use 1s for Monad to get real-time updates
+    const wsUrl = wsBaseUrl.replace(/^http/, 'ws') + `/v1/ohlc/stream?token_address=${tokenAddress}&interval=${wsInterval}`;
+    
+    // Check if we need to aggregate 1s -> 1m when viewing 1m candles
+    const needsAggregation = selectedInterval === '1m';
+    
+    // Reset aggregation state if interval changed
+    if (currentAggregatingIntervalRef.current !== selectedInterval) {
+      currentAggregatedCandleRef.current = null;
+      oneSecondCandlesRef.current = [];
+      currentAggregatingIntervalRef.current = selectedInterval;
+    }
 
     console.log('[AdvancedOHLCChart] 🔌 Monad WebSocket connecting (via useEffect):', wsUrl);
+    console.log('[AdvancedOHLCChart] 📊 Selected interval:', selectedInterval, '| WS interval:', wsInterval, '| Aggregating 1s->1m:', needsAggregation);
 
     // Close existing WebSocket if any
     if (wsRef.current) {
@@ -826,9 +874,137 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
           const ohlcData = message.data;
 
+          // For Monad: Aggregate 1s candles into the current viewing timeframe (1m, 5m, 15m, 1h, etc.)
+          const currentSelectedInterval = latestParamsRef.current.interval;
+          
+          // Only aggregate if viewing a timeframe that's longer than 1s (we always receive 1s candles)
+          const needsAggregation = network === 'monad' && 
+            currentSelectedInterval !== '1s' && 
+            currentSelectedInterval !== '5s' && 
+            currentSelectedInterval !== '15s' && 
+            currentSelectedInterval !== '30s';
+          
+          if (needsAggregation) {
+            // This is a 1s candle - aggregate into current 1m candle
+            const oneSecCandle: BackendOHLCData = {
+              unix_time: ohlcData.time,
+              o: ohlcData.o,
+              h: ohlcData.h,
+              l: ohlcData.l,
+              c: ohlcData.c,
+              v_usd: ohlcData.v || 0,
+            };
+            
+            // Get the current window start time for the viewing interval
+            const windowStart = getWindowStartTime(oneSecCandle.unix_time, currentSelectedInterval);
+            
+            // Check if this 1s candle belongs to current timeframe window
+            if (!currentAggregatedCandleRef.current || currentAggregatedCandleRef.current.unix_time !== windowStart) {
+              // New timeframe window - finalize previous candle if it exists
+              if (currentAggregatedCandleRef.current) {
+                const finalizedCandle = currentAggregatedCandleRef.current;
+                console.log(`[AdvancedOHLCChart] 📊 Finalized previous ${currentSelectedInterval} candle:`, {
+                  windowStart: new Date(finalizedCandle.unix_time * 1000).toISOString(),
+                  o: finalizedCandle.o,
+                  h: finalizedCandle.h,
+                  l: finalizedCandle.l,
+                  c: finalizedCandle.c,
+                  v: finalizedCandle.v_usd,
+                });
+                
+                // Update cache with finalized candle (it's complete now)
+                const cachedData = lastGoodCandlesRef.current;
+                const existingIdx = cachedData.findIndex(c => c.unix_time === finalizedCandle.unix_time);
+                if (existingIdx >= 0) {
+                  cachedData[existingIdx] = finalizedCandle;
+                } else {
+                  cachedData.push(finalizedCandle);
+                  cachedData.sort((a, b) => a.unix_time - b.unix_time);
+                }
+              }
+              
+              // Create new aggregated candle for new timeframe window
+              currentAggregatedCandleRef.current = {
+                unix_time: windowStart,
+                o: oneSecCandle.o,
+                h: oneSecCandle.h,
+                l: oneSecCandle.l,
+                c: oneSecCandle.c,
+                v_usd: oneSecCandle.v_usd,
+              };
+              oneSecondCandlesRef.current = [oneSecCandle];
+              
+              console.log(`[AdvancedOHLCChart] 📊 New ${currentSelectedInterval} candle window started:`, {
+                windowStart: new Date(windowStart * 1000).toISOString(),
+                open: currentAggregatedCandleRef.current.o,
+              });
+            } else {
+              // Update existing aggregated candle with this 1s candle
+              const currentCandle = currentAggregatedCandleRef.current;
+              currentCandle.h = Math.max(currentCandle.h, oneSecCandle.h);
+              currentCandle.l = Math.min(currentCandle.l, oneSecCandle.l);
+              currentCandle.c = oneSecCandle.c; // Close = latest price
+              currentCandle.v_usd += oneSecCandle.v_usd;
+              
+              oneSecondCandlesRef.current.push(oneSecCandle);
+              
+              // Keep only a reasonable number of 1s candles in memory (e.g., enough for the current timeframe)
+              // For 1m: 60, for 5m: 300, for 15m: 900, etc.
+              const maxCandlesToKeep = currentSelectedInterval === '1m' ? 60 :
+                                       currentSelectedInterval === '5m' ? 300 :
+                                       currentSelectedInterval === '15m' ? 900 :
+                                       currentSelectedInterval === '1h' ? 3600 : 100;
+              
+              if (oneSecondCandlesRef.current.length > maxCandlesToKeep) {
+                oneSecondCandlesRef.current = oneSecondCandlesRef.current.slice(-maxCandlesToKeep);
+              }
+            }
+            
+            // Use the aggregated candle for chart update
+            const aggregatedCandle = currentAggregatedCandleRef.current;
+            
+            console.log(`[AdvancedOHLCChart] 📊 Aggregated 1s -> ${currentSelectedInterval} candle:`, {
+              windowStart: new Date(aggregatedCandle.unix_time * 1000).toISOString(),
+              o: aggregatedCandle.o,
+              h: aggregatedCandle.h,
+              l: aggregatedCandle.l,
+              c: aggregatedCandle.c,
+              v: aggregatedCandle.v_usd,
+              oneSecCount: oneSecondCandlesRef.current.length,
+            });
+            
+            // Convert aggregated candle to TradingView bar format
+            let bar = {
+              time: aggregatedCandle.unix_time * 1000, // Convert to ms
+              open: aggregatedCandle.o,
+              high: aggregatedCandle.h,
+              low: aggregatedCandle.l,
+              close: aggregatedCandle.c,
+              volume: aggregatedCandle.v_usd,
+            };
+            
+            // Update cache with aggregated 1m candle
+            const cachedData = lastGoodCandlesRef.current;
+            const existingIdx = cachedData.findIndex(c => c.unix_time === aggregatedCandle.unix_time);
+            if (existingIdx >= 0) {
+              cachedData[existingIdx] = aggregatedCandle;
+            } else {
+              cachedData.push(aggregatedCandle);
+              cachedData.sort((a, b) => a.unix_time - b.unix_time);
+            }
+            
+            // Update chart via callback
+            if (subscribedCallbackRef.current && bar.time > 0) {
+              subscribedCallbackRef.current(bar);
+            }
+            
+            return; // Don't process as 1s candle
+          }
+
           console.log('[AdvancedOHLCChart] 📊 WebSocket OHLC update:', {
             time: new Date(ohlcData.time * 1000).toISOString(),
             close: ohlcData.c,
+            interval: selectedInterval,
           });
 
           // Convert to TradingView bar format
@@ -939,7 +1115,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         wsRef.current = null;
       }
     };
-  }, [network, mint, pairAddress, selectedInterval]); // Re-connect when token or interval changes
+  }, [network, mint, pairAddress, selectedInterval]); // Re-connect when token or interval changes (always use 1s WS, aggregate if needed)
 
   // Create custom datafeed that uses our fetched candles
   const createDatafeed = useCallback(() => {
@@ -1024,7 +1200,15 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       onReady: (callback: any) => {
         console.log('[AdvancedOHLCChart] ========== onReady CALLED ==========');
         // For Monad, ensure seconds are prominently listed to show in dropdown
-        const isMonad = network === 'monad';
+        // Use latestParamsRef to get the current network value (not closure value)
+        const currentNetwork = latestParamsRef.current.network;
+        const isMonad = currentNetwork === 'monad';
+        console.log('[AdvancedOHLCChart] 🔍 onReady - network check:', { 
+          network, 
+          currentNetwork, 
+          isMonad,
+          latestParamsNetwork: latestParamsRef.current.network 
+        });
         const config = {
           // For Monad: Put seconds FIRST in the array - TradingView shows them in order
           // CRITICAL: Seconds must be in supported_resolutions AND supports_seconds must be true
@@ -1091,7 +1275,15 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         
         console.log('[AdvancedOHLCChart] resolveSymbol: samplePrice=', samplePrice, 'pricescale=', pricescale);
 
-        const isMonad = network === 'monad';
+        // Use latestParamsRef to get the current network value (not closure value)
+        const currentNetwork = latestParamsRef.current.network;
+        const isMonad = currentNetwork === 'monad';
+        console.log('[AdvancedOHLCChart] 🔍 resolveSymbol - network check:', { 
+          network, 
+          currentNetwork, 
+          isMonad,
+          latestParamsNetwork: latestParamsRef.current.network 
+        });
         const symbolInfo = {
           name: symbolName,
           description: `${dfMint || dfPairAddress || 'Token'} Price Chart`,
@@ -1121,7 +1313,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           has_seconds: symbolInfo.has_seconds,
           supported_resolutions: symbolInfo.supported_resolutions,
           secondsInList: symbolInfo.supported_resolutions.filter(r => r.includes('S')),
-          network,
+          network: network,
+          currentNetwork: currentNetwork,
           isMonad,
         });
 
@@ -2270,7 +2463,12 @@ Maker: ${walletAddress}`;
         // For Monad, use the standard resolution mapping (our datafeed handles fetching 1m data)
         const isMonad = network === 'monad';
         const initialInterval = INTERVAL_TO_RESOLUTION[latestParamsRef.current.interval];
-        console.log('[AdvancedOHLCChart] Creating TradingView widget with datafeed...', { isMonad, initialInterval });
+        console.log('[AdvancedOHLCChart] Creating TradingView widget with datafeed...', { 
+          isMonad, 
+          network,
+          initialInterval,
+          willEnableSeconds: isMonad,
+        });
         const widget = new TradingView.widget({
           debug: true,
           fullscreen: false,
@@ -2296,6 +2494,7 @@ Maker: ${walletAddress}`;
             // 'show_interval_dialog_on_key_press',
           ],
           enabled_features: [
+            ...(isMonad ? ['seconds_resolution'] : []), // ✅ Enable seconds resolution for Monad tokens
             'study_templates',
             'side_toolbar_in_fullscreen_mode',
             'header_widget',
@@ -2311,13 +2510,9 @@ Maker: ${walletAddress}`;
             'timeframes_toolbar',
             'left_toolbar',
             'control_bar',
-            'timeframes_toolbar',
             'edit_buttons_in_legend',
             'context_menus',
             'display_market_status',
-            'header_saveload',
-            'header_screenshot',
-            'header_widget',
             'two_character_bar_marks_labels', // ✅ Enable two-character labels for marks
           ],
           charts_storage_url: 'https://saveload.tradingview.com',
