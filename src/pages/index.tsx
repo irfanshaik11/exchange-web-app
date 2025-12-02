@@ -69,6 +69,14 @@ export type Timeframe = "5m" | "1h" | "6h" | "24h";
 export default function Home() {
   const router = useRouter();
 
+  // Redirect to /pulse if we're on the root path without any query params
+  useEffect(() => {
+    if (router.isReady && router.pathname === '/' && !router.query.search && !router.query.chain) {
+      router.replace('/pulse?chain=sol', undefined, { shallow: false });
+      return;
+    }
+  }, [router.isReady, router.pathname, router.query.search, router.query.chain, router]);
+
   const [search, setSearch] = useState("");
   // Populate search state if we arrived with ?search= in the URL
   useEffect(() => {
