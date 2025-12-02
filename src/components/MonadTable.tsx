@@ -567,6 +567,7 @@ function TokenImage({
     } else {
       console.warn(`[TokenImage] ${token.symbol || 'Unknown'}: No image URL found. Token data:`, {
         image: (token as any).image,
+        image_url: (token as any).image_url,
         uri: (token as any).uri,
         logo: token.logo,
         imageUrl: (token as any).imageUrl,
@@ -1617,6 +1618,17 @@ function MonadTable({
     setShowFilters(false);
   };
 
+  // Helper function to normalize tokens from Monad API (maps address to mint and ensures image_url is properly handled)
+  const normalizeMonadToken = useCallback((t: any): Token => {
+    return {
+      ...t,
+      mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+      // Map image_url to image field (highest priority) and preserve image_url as fallback
+      image: t.image_url || t.image || t.uri || t.logo,
+      image_url: t.image_url, // Preserve original image_url field for extractTokenImage
+    } as Token;
+  }, []);
+
   // Map frontend protocol names to backend protocol names
   const mapProtocolToBackend = useCallback((protocol: string): string[] => {
     switch (protocol) {
@@ -1668,12 +1680,9 @@ function MonadTable({
         const result = await response.json();
         // Backend returns { status: "success", count: N, data: [...] }
         const rawTokens = result.data || (Array.isArray(result) ? result : []);
-        // Transform backend response: map 'address' to 'mint' for frontend compatibility
-        const tokens = rawTokens.map((t: any) => ({
-          ...t,
-          mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
-        }));
-        setMonadTokens(tokens as Token[]);
+        // Transform backend response using normalizeMonadToken helper
+        const tokens = rawTokens.map(normalizeMonadToken);
+        setMonadTokens(tokens);
         console.log(`[MonadTable ${title}] ✅ Fetched ${tokens.length} Monad tokens from backend (Redis cache)`);
       } else {
         console.error(`[MonadTable ${title}] ❌ Failed to fetch Monad tokens: ${response.status}`);
@@ -1723,12 +1732,9 @@ function MonadTable({
         const result = await response.json();
         // Backend returns { status: "success", count: N, data: [...] }
         const rawTokens = result.data || (Array.isArray(result) ? result : []);
-        // Transform backend response: map 'address' to 'mint' for frontend compatibility
-        const tokens = rawTokens.map((t: any) => ({
-          ...t,
-          mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
-        }));
-        setFilteredTokens(tokens as Token[]);
+        // Transform backend response using normalizeMonadToken helper
+        const tokens = rawTokens.map(normalizeMonadToken);
+        setFilteredTokens(tokens);
       } else {
         console.error('Failed to fetch filtered tokens:', response.status);
         setFilteredTokens([]);
@@ -1773,22 +1779,24 @@ function MonadTable({
           setWsTokens(prev => {
             // Fast path: Just prepend new token, remove if duplicate
             // Don't filter existing tokens here - let them through for speed
-            const filtered = prev.filter(t => t.mint !== token.mint);
-            return [token as Token, ...filtered].slice(0, 50);
+            const normalizedToken = normalizeMonadToken(token);
+            const filtered = prev.filter(t => t.mint !== normalizedToken.mint);
+            return [normalizedToken, ...filtered].slice(0, 50);
           });
         });
       }
-    }, [channel]),
+    }, [channel, normalizeMonadToken]),
     onFinalStretchToken: useCallback((token: any) => {
       if (channel === 'final_stretch' && !hasZeroLiquidity(token)) {
         // Use flushSync to force immediate update, bypassing React 18's automatic batching
         // Optimized with Map-based deduplication (O(1) instead of O(n))
         flushSync(() => {
           setWsTokens(prev => {
+            const normalizedToken = normalizeMonadToken(token);
             const map = new Map<string, Token>();
-            map.set(token.mint, token as Token);
+            map.set(normalizedToken.mint, normalizedToken);
             for (const t of prev) {
-              if (t.mint !== token.mint && !hasZeroLiquidity(t) && map.size < 50) {
+              if (t.mint !== normalizedToken.mint && !hasZeroLiquidity(t) && map.size < 50) {
                 map.set(t.mint, t);
               }
             }
@@ -1796,17 +1804,18 @@ function MonadTable({
           });
         });
       }
-    }, [channel]),
+    }, [channel, normalizeMonadToken]),
     onMigratedToken: useCallback((token: any) => {
       if (channel === 'migrated' && !hasZeroLiquidity(token)) {
         // Use flushSync to force immediate update, bypassing React 18's automatic batching
         // Optimized with Map-based deduplication (O(1) instead of O(n))
         flushSync(() => {
           setWsTokens(prev => {
+            const normalizedToken = normalizeMonadToken(token);
             const map = new Map<string, Token>();
-            map.set(token.mint, token as Token);
+            map.set(normalizedToken.mint, normalizedToken);
             for (const t of prev) {
-              if (t.mint !== token.mint && !hasZeroLiquidity(t) && map.size < 50) {
+              if (t.mint !== normalizedToken.mint && !hasZeroLiquidity(t) && map.size < 50) {
                 map.set(t.mint, t);
               }
             }
@@ -1814,7 +1823,7 @@ function MonadTable({
           });
         });
       }
-    }, [channel]),
+    }, [channel, normalizeMonadToken]),
     onPriceUpdate: useCallback((updates: any[]) => {
 
       // Merge price updates into filteredTokens (base HTTP data)

@@ -145,7 +145,8 @@ function isValidImageUrl(url: string): boolean {
       'ipfs.io', 'cloudflare-ipfs.com', 'gateway.pinata.cloud',
       'token-media.defined.fi', 'images.pump.fun', 'pump.fun',
       'pbs.twimg.com', 'twimg.com', 'cdn.pump.fun',
-      'bluey.tv', 'www.bluey.tv' // Add Bluey image host
+      'bluey.tv', 'www.bluey.tv', // Add Bluey image host
+      'storage.nadapp.net', 'nadapp.net' // Monad token image storage
     ];
     
     if (knownImageHosts.some(host => url.includes(host))) {
