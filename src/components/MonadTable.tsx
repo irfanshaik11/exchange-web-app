@@ -1652,13 +1652,13 @@ function MonadTable({
       // Call Monad token service directly (bypasses Next.js proxy for Redis cache benefits)
       const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
       let endpoint = '/v1/pulse/new';
-      let limit = 50;
+      let limit = 35;
       if (title.toLowerCase().includes('final stretch')) {
         endpoint = '/v1/pulse/final-stretch';
-        limit = 50;
+        limit = 35;
       } else if (title.toLowerCase().includes('migrated')) {
         endpoint = '/v1/pulse/migrated';
-        limit = 70;
+        limit = 35;
       }
 
       // Add protocols parameter if provided
@@ -1717,13 +1717,13 @@ function MonadTable({
       // Call Monad token service directly (bypasses Next.js proxy for Redis cache benefits)
       const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
       let endpoint = '/v1/pulse/new';
-      let limit = 50;
+      let limit = 35;
       if (title.toLowerCase().includes('final stretch')) {
         endpoint = '/v1/pulse/final-stretch';
-        limit = 50;
+        limit = 35;
       } else if (title.toLowerCase().includes('migrated')) {
         endpoint = '/v1/pulse/migrated';
-        limit = 70;
+        limit = 35;
       }
 
       const fullUrl = `${monadServiceUrl}${endpoint}?limit=${limit}&protocols=${encodeURIComponent(protocolsParam)}`;

@@ -429,7 +429,7 @@ export default function PulsePage() {
         let apiUrl: string;
         if (isMonadRoute) {
           const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
-          apiUrl = `${monadServiceUrl}/v1/pulse/final-stretch?limit=50`;
+          apiUrl = `${monadServiceUrl}/v1/pulse/final-stretch?limit=35`;
         } else {
           apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
         }
@@ -554,7 +554,7 @@ export default function PulsePage() {
 
         // Fetch new pairs - call backend directly (Redis cache enabled)
         console.log('[Monad] Fetching new pairs directly from backend...');
-        const newRes = await fetch(`${monadServiceUrl}/v1/pulse/new?limit=50`, {
+        const newRes = await fetch(`${monadServiceUrl}/v1/pulse/new?limit=35`, {
           cache: 'no-store',
           headers: { 'Accept': 'application/json' }
         });
@@ -588,7 +588,7 @@ export default function PulsePage() {
 
         // Fetch final stretch tokens - call backend directly (Redis cache enabled)
         console.log('[Monad] Fetching final stretch tokens directly from backend...');
-        const finalStretchRes = await fetch(`${monadServiceUrl}/v1/pulse/final-stretch?limit=50`, {
+        const finalStretchRes = await fetch(`${monadServiceUrl}/v1/pulse/final-stretch?limit=35`, {
           cache: 'no-store',
           headers: { 'Accept': 'application/json' }
         });
@@ -620,7 +620,7 @@ export default function PulsePage() {
 
         // Fetch migrated tokens - call backend directly (Redis cache enabled)
         console.log('[Monad] Fetching migrated tokens directly from backend...');
-        const migratedRes = await fetch(`${monadServiceUrl}/v1/pulse/migrated?limit=70`, {
+        const migratedRes = await fetch(`${monadServiceUrl}/v1/pulse/migrated?limit=35`, {
           cache: 'no-store',
           headers: { 'Accept': 'application/json' }
         });
@@ -913,7 +913,7 @@ export default function PulsePage() {
       (token) => !isZeroLiquidityToken(token),
     );
     if (vals.length === 0)
-      return combinedNewPairs.filter((token) => !isZeroLiquidityToken(token));
+      return combinedNewPairs.filter((token) => !isZeroLiquidityToken(token)).slice(0, 35);
 
     // Cache timestamps to avoid repeated Date parsing
     const tsCache = new Map<any, number>();
@@ -941,7 +941,9 @@ export default function PulsePage() {
       });
     }
 
-    return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    const result = withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
+    // Limit to 35 tokens to match Monad table limit
+    return result.slice(0, 35);
   };
 
   const buildMigrated = (): any[] => {

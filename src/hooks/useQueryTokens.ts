@@ -16,7 +16,7 @@ export const tokenKeys = {
 
 async function fetchNewPairs(): Promise<Token[]> {
   // Use Next.js API proxy to ensure proper field mapping (mint_address, etc.)
-  const apiUrl = `/api/token-service/pulse-new?limit=200&fresh=1&t=${Date.now()}`;
+  const apiUrl = `/api/token-service/pulse-new?limit=35&fresh=1&t=${Date.now()}`;
   const response = await fetch(apiUrl, {
     cache: 'no-store',
     headers: {
