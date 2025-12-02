@@ -5821,6 +5821,8 @@ function PulseTable({
                 (token as any)?.pair_address || (token as any)?.mint;
 
               // Build query params for optimistic UI + cache lookup
+              // Include chain parameter to preserve chain selection
+              const currentChain = (router.query.chain as string) || 'monad';
               const queryParams = new URLSearchParams({
                 _name: (token as any)?.name || (token as any)?.symbol || "",
                 _symbol: (token as any)?.symbol || "",
@@ -5834,6 +5836,7 @@ function PulseTable({
                 ),
                 _image: extractTokenImage(token as any) || "",
                 _mint: (token as any)?.mint || "", // CRITICAL: Required for cache lookup
+                chain: currentChain, // Preserve chain selection
               }).toString();
 
               return (
