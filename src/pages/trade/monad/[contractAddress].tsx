@@ -17,6 +17,7 @@ import { useMonadTokenMetrics, type TokenMetrics } from "../../../hooks/useMonad
 import AdvancedOHLCChart from "../../../components/AdvancedOHLCChart";
 import MonadTopTradersTable from "../../../components/trade/MonadTopTradersTable";
 import MonadHoldersTable from "../../../components/trade/MonadHoldersTable";
+import MonadDevTokensTable from "../../../components/trade/MonadDevTokensTable";
 
 // Lazy load other components
 const MonadTrades = dynamic(() => import("../../../components/trade/MonadTrades"), { ssr: false });
@@ -676,6 +677,16 @@ export default function MonadTradePage() {
                   >
                     Holders
                   </button>
+                  <button
+                    onClick={() => setSelectedTab("Dev Tokens")}
+                    className={`px-3 py-1 font-semibold transition-colors ${
+                      selectedTab === "Dev Tokens"
+                        ? "border-b-4 border-[#70E0B0] text-white"
+                        : "text-neutral-400 hover:text-neutral-300"
+                    }`}
+                  >
+                    Dev Tokens
+                  </button>
                 </div>
                 <button
                   className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full bg-[#101114] text-[#70E0B0] ml-auto"
@@ -698,8 +709,13 @@ export default function MonadTradePage() {
                     tokenAddress={contractAddress as string}
                     enabled={true}
                   />
-                ) : (
+                ) : selectedTab === "Holders" ? (
                   <MonadHoldersTable 
+                    tokenAddress={contractAddress as string}
+                    enabled={true}
+                  />
+                ) : (
+                  <MonadDevTokensTable 
                     tokenAddress={contractAddress as string}
                     enabled={true}
                   />
