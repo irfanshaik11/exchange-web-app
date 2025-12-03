@@ -616,6 +616,169 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     return openTransactions.sort((a, b) => b.trade.at - a.trade.at);
   }, [history]);
 
+  // Calculate aggregated active positions (grouped by token)
+  interface AggregatedPosition {
+    mint: string;
+    tokenName: string | null;
+    tokenSymbol: string | null;
+    boughtAmount: number; // Total tokens bought
+    boughtValue: number; // Total USD value bought
+    soldAmount: number; // Total tokens sold
+    soldValue: number; // Total USD value sold
+    remainingAmount: number; // Remaining tokens
+    remainingValue: number; // Cost basis of remaining (for unrealized PnL)
+    realizedPnl: number; // PnL from sold portion
+    unrealizedPnl: number; // Estimated PnL from remaining (0 for now, could fetch current price)
+    totalPnl: number; // Realized + Unrealized
+    pnlPercentage: number; // PnL as percentage of cost basis
+  }
+
+  const aggregatedPositions = useMemo((): AggregatedPosition[] => {
+    if (!history || history.length === 0) return [];
+
+    // Group trades by mint (token) to calculate aggregated positions
+    const positions = new Map<
+      string,
+      {
+        buys: Array<{ amount: number; cost: number; timestamp: number }>;
+        sells: Array<{ amount: number; revenue: number; timestamp: number }>;
+        tokenName: string | null;
+        tokenSymbol: string | null;
+      }
+    >();
+
+    // Process all trades
+    history.forEach((trade) => {
+      if (!trade.mint) return;
+
+      const amount = typeof trade.amount === "number" ? trade.amount : 0;
+      const priceUsd = trade.price_usd ?? null;
+      const solSpent = trade.sol_spent ?? null;
+
+      // Calculate USD value
+      let usdValue: number | null = null;
+      if (priceUsd !== null && Number.isFinite(amount) && Number.isFinite(priceUsd)) {
+        usdValue = amount * priceUsd;
+      } else if (solSpent !== null && Number.isFinite(solSpent)) {
+        // Approximate: 1 SOL ≈ $150 (fallback, but ideally we'd have price_usd)
+        usdValue = solSpent * 150;
+      }
+
+      if (usdValue === null || !Number.isFinite(usdValue) || usdValue <= 0) return;
+
+      if (!positions.has(trade.mint)) {
+        positions.set(trade.mint, { 
+          buys: [], 
+          sells: [],
+          tokenName: trade.name || null,
+          tokenSymbol: trade.symbol || null,
+        });
+      }
+
+      const position = positions.get(trade.mint)!;
+
+      // Update token name/symbol if we have better data
+      if (trade.name && !position.tokenName) {
+        position.tokenName = trade.name;
+      }
+      if (trade.symbol && !position.tokenSymbol) {
+        position.tokenSymbol = trade.symbol;
+      }
+
+      if (trade.side === "buy") {
+        position.buys.push({
+          amount,
+          cost: usdValue,
+          timestamp: trade.at,
+        });
+      } else if (trade.side === "sell") {
+        position.sells.push({
+          amount,
+          revenue: usdValue,
+          timestamp: trade.at,
+        });
+      }
+    });
+
+    // Calculate aggregated positions using FIFO matching
+    const aggregated: AggregatedPosition[] = [];
+
+    positions.forEach((position, mint) => {
+      // Sort buys and sells by timestamp (FIFO)
+      position.buys.sort((a, b) => a.timestamp - b.timestamp);
+      position.sells.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Calculate totals
+      const totalBoughtAmount = position.buys.reduce((sum, b) => sum + b.amount, 0);
+      const totalBoughtValue = position.buys.reduce((sum, b) => sum + b.cost, 0);
+      const totalSoldAmount = position.sells.reduce((sum, s) => sum + s.amount, 0);
+      const totalSoldValue = position.sells.reduce((sum, s) => sum + s.revenue, 0);
+
+      // Calculate remaining using FIFO matching
+      let remainingBuys = [...position.buys];
+      let remainingAmount = totalBoughtAmount;
+      let remainingCost = totalBoughtValue;
+      let realizedCost = 0; // Cost basis of sold tokens
+
+      // Match sells to buys using FIFO
+      for (const sell of position.sells) {
+        let remainingSellAmount = sell.amount;
+
+        while (remainingSellAmount > 0 && remainingBuys.length > 0) {
+          const buy = remainingBuys[0];
+          const matchedAmount = Math.min(remainingSellAmount, buy.amount);
+          const costPerUnit = buy.cost / buy.amount;
+          const matchedCost = matchedAmount * costPerUnit;
+
+          buy.amount -= matchedAmount;
+          remainingSellAmount -= matchedAmount;
+          remainingAmount -= matchedAmount;
+          remainingCost -= matchedCost;
+          realizedCost += matchedCost;
+
+          if (buy.amount <= 0) {
+            remainingBuys.shift();
+          }
+        }
+      }
+
+      // Only include positions with remaining amount > 0 (active positions)
+      if (remainingAmount > 0 && remainingCost > 0) {
+        // Calculate realized PnL (from sold portion)
+        const realizedPnl = totalSoldValue - realizedCost;
+        
+        // Unrealized PnL (for now, assume 0 - could fetch current price later)
+        const unrealizedPnl = 0; // remainingValue - remainingCost (if we had current price)
+        
+        // Total PnL = realized + unrealized
+        const totalPnl = realizedPnl + unrealizedPnl;
+        
+        // PnL percentage based on cost basis
+        const costBasis = totalBoughtValue;
+        const pnlPercentage = costBasis > 0 ? (totalPnl / costBasis) * 100 : 0;
+
+        aggregated.push({
+          mint,
+          tokenName: position.tokenName,
+          tokenSymbol: position.tokenSymbol,
+          boughtAmount: totalBoughtAmount,
+          boughtValue: totalBoughtValue,
+          soldAmount: totalSoldAmount,
+          soldValue: totalSoldValue,
+          remainingAmount,
+          remainingValue: remainingCost, // Cost basis of remaining
+          realizedPnl,
+          unrealizedPnl,
+          totalPnl,
+          pnlPercentage,
+        });
+      }
+    });
+
+    // Sort by total PnL (highest first)
+    return aggregated.sort((a, b) => b.totalPnl - a.totalPnl);
+  }, [history]);
+
   // Fetch activity data when Activity tab is selected - show individual open position transactions (both buys and sells)
   useEffect(() => {
     if (tab !== 'Activity' || !wallet?.address) return;
@@ -744,7 +907,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         await new Promise(resolve => setTimeout(resolve, 50));
         
         const historicalTrades = await getWalletTradeHistory([wallet.address], {
-          limit: 100,
+          limit: 200,
           windowMs: 7 * 24 * 60 * 60 * 1000, // 7 days, same as Live Trades
         });
 
@@ -799,37 +962,45 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     void fetchHistory();
   }, [tab, wallet?.address, latestTrades]);
 
-  // Fetch token metadata for all mints in closed orders
+  // Fetch token metadata for all mints in closed orders and active positions
   useEffect(() => {
-    if (closedOrders.length === 0) return;
+    // Combine mints from both closed orders and active positions
+    const allMints = new Set<string>();
+    
+    closedOrders.forEach((order) => {
+      if (order.mint) allMints.add(order.mint);
+    });
+    
+    aggregatedPositions.forEach((position) => {
+      if (position.mint) allMints.add(position.mint);
+    });
+
+    if (allMints.size === 0) return;
 
     // Extract unique mints that don't have symbol/name
-    const mintsToFetch = closedOrders
-      .map((order) => order.mint)
-      .filter((mint, idx, arr) => arr.indexOf(mint) === idx) // unique
-      .filter((mint) => {
-        // Check if we already have metadata for this mint
-        const metadata = tokenMetadata.get(mint);
-        return !metadata?.symbol || !metadata?.name;
-      });
+    const mintsToFetch = Array.from(allMints).filter((mint) => {
+      // Check if we already have metadata for this mint
+      const metadata = tokenMetadata.get(mint);
+      return !metadata?.symbol || !metadata?.name;
+    });
 
     if (mintsToFetch.length === 0) return;
 
     console.log(
-      "[History] Fetching metadata for",
+      "[WalletScan] Fetching metadata for",
       mintsToFetch.length,
       "tokens",
     );
 
     batchFetchChainTokenMetadata(mintsToFetch)
       .then((metadata) => {
-        console.log("[History] Fetched token metadata:", metadata);
+        console.log("[WalletScan] Fetched token metadata:", metadata);
         setTokenMetadata(metadata);
       })
       .catch((err) => {
-        console.error("[History] Error fetching token metadata:", err);
+        console.error("[WalletScan] Error fetching token metadata:", err);
       });
-  }, [closedOrders, tokenMetadata]);
+  }, [closedOrders, aggregatedPositions, tokenMetadata]);
 
   const handleCopy = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -1352,8 +1523,182 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               </div>
             )}
             {tab === "Active Positions" && (
-              <div className="flex h-full items-center justify-center text-neutral-500">
-                Active Positions - Coming Soon
+              <div className="h-full w-full overflow-auto">
+                {historyLoading ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="animate-pulse text-neutral-400">
+                      Loading positions...
+                    </div>
+                  </div>
+                ) : aggregatedPositions.length === 0 ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="text-neutral-500">No active positions found</div>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 border-b border-neutral-800 bg-black">
+                      <tr className="text-xs text-neutral-400 uppercase">
+                        <th className="px-4 py-3 text-left font-semibold">
+                          Token
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Bought
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Sold
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Remaining
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          PnL
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-800">
+                      {aggregatedPositions
+                        .filter((position) => {
+                          if (!searchTerm) return true;
+                          const term = searchTerm.toLowerCase();
+                          return (
+                            position.tokenSymbol?.toLowerCase().includes(term) ||
+                            position.tokenName?.toLowerCase().includes(term) ||
+                            position.mint?.toLowerCase().includes(term)
+                          );
+                        })
+                        .map((position, idx) => {
+                          const metadata = tokenMetadata.get(position.mint);
+                          const displayName =
+                            position.tokenName ||
+                            metadata?.name ||
+                            position.tokenSymbol ||
+                            metadata?.symbol ||
+                            null;
+                          const displaySymbol =
+                            position.tokenSymbol ||
+                            metadata?.symbol ||
+                            position.tokenName ||
+                            metadata?.name ||
+                            position.mint?.slice(0, 8) + "..." ||
+                            "Unknown";
+
+                          // Format bought
+                          const boughtDisplay = (
+                            <div className="flex flex-col items-end">
+                              <span className="text-emerald-400 font-semibold">
+                                ${formatSmartNumber(position.boughtValue)}
+                              </span>
+                              <span className="text-xs text-neutral-500">
+                                {formatSmartNumber(position.boughtAmount)} {displaySymbol}
+                              </span>
+                            </div>
+                          );
+
+                          // Format sold
+                          const soldDisplay = (
+                            <div className="flex flex-col items-end">
+                              <span className="text-red-400 font-semibold">
+                                ${formatSmartNumber(position.soldValue)}
+                              </span>
+                              <span className="text-xs text-neutral-500">
+                                {formatSmartNumber(position.soldAmount)} {displaySymbol}
+                              </span>
+                            </div>
+                          );
+
+                          // Format remaining
+                          const remainingDisplay = (
+                            <div className="flex flex-col items-end">
+                              <span className="text-white font-semibold">
+                                ${formatSmartNumber(position.remainingValue)}
+                              </span>
+                              <span className="text-xs text-neutral-500">
+                                {formatSmartNumber(position.remainingAmount)} {displaySymbol}
+                              </span>
+                            </div>
+                          );
+
+                          // Format PnL
+                          const pnlDisplay = (
+                            <div className="flex flex-col items-end">
+                              <span
+                                className={`font-semibold ${
+                                  position.totalPnl >= 0
+                                    ? "text-emerald-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {position.totalPnl >= 0 ? "+" : ""}
+                                ${formatSmartNumber(Math.abs(position.totalPnl))}
+                              </span>
+                              <span
+                                className={`text-xs ${
+                                  position.pnlPercentage >= 0
+                                    ? "text-emerald-400/70"
+                                    : "text-red-400/70"
+                                }`}
+                              >
+                                {position.pnlPercentage >= 0 ? "+" : ""}
+                                {position.pnlPercentage.toFixed(2)}%
+                              </span>
+                            </div>
+                          );
+
+                          return (
+                            <tr
+                              key={position.mint || idx}
+                              className="transition-colors hover:bg-neutral-800"
+                              onClick={() => {
+                                // Navigate to token page if pair_address is available
+                                const trade = history.find(t => t.mint === position.mint);
+                                if (trade?.pair_address) {
+                                  window.open(`/trade/${trade.pair_address}`, '_blank');
+                                }
+                              }}
+                            >
+                              <td className="px-4 py-3">
+                                <div className="flex flex-col">
+                                  <span
+                                    className="font-semibold text-white"
+                                    title={position.mint || undefined}
+                                  >
+                                    {displayName || displaySymbol}
+                                  </span>
+                                  {displayName &&
+                                    displaySymbol &&
+                                    displayName !== displaySymbol && (
+                                      <span className="text-[10px] text-neutral-500">
+                                        {displaySymbol}
+                                      </span>
+                                    )}
+                                  {!displayName &&
+                                    !displaySymbol &&
+                                    position.mint && (
+                                      <span className="font-mono text-[10px] text-neutral-500">
+                                        {position.mint.slice(0, 4)}...
+                                        {position.mint.slice(-4)}
+                                      </span>
+                                    )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {boughtDisplay}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {soldDisplay}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {remainingDisplay}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {pnlDisplay}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
             {tab === "Top 100" && (
