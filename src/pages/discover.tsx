@@ -74,7 +74,40 @@ export default function DiscoverPage() {
   }, [currentChain, router.query.chain]);
   
   // For Monad, only allow 'trending' and 'newPairs' tabs
-  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>('trending');
+  // Initialize activeTab from localStorage to persist across navigation
+  // Also respect chain restrictions during initialization
+  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('discover_active_tab');
+        if (saved && ['trending', 'newPairs', 'xStocks', 'surge', 'dex', 'live'].includes(saved)) {
+          const savedTab = saved as 'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live';
+          // Check if we're on monad chain - if so, only allow trending or newPairs
+          // Check URL params directly for immediate access (same pattern as currentChain)
+          const urlParams = new URLSearchParams(window.location.search);
+          const initialChain = urlParams.get('chain') || 'sol';
+          if (initialChain === 'monad' && savedTab !== 'trending' && savedTab !== 'newPairs') {
+            return 'trending';
+          }
+          return savedTab;
+        }
+      } catch {
+        // Ignore localStorage errors
+      }
+    }
+    return 'trending';
+  });
+  
+  // Save activeTab to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('discover_active_tab', activeTab);
+      } catch {
+        // Ignore localStorage errors
+      }
+    }
+  }, [activeTab]);
   
   // When chain changes to monad, switch to trending if current tab is not allowed
   useEffect(() => {

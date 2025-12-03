@@ -146,8 +146,14 @@ function shouldFillProtocolBadge(token: Partial<Token> & Record<string, any>): b
   return ["meteora", "bonk", "bags", "moonit", "moonshot", "moonshoot"].some((needle) => raw.includes(needle));
 }
 
-function resolveProtocolColor(token: Partial<Token> & Record<string, any>): string {
+function resolveProtocolColor(token: Partial<Token> & Record<string, any>, chain?: string): string {
   const raw = extractProtocolRaw(token);
+  
+  // For Monad tokens, use purple border
+  if (chain === 'monad' || (token.mint && typeof token.mint === 'string' && token.mint.startsWith('0x'))) {
+    return '#c084fc'; // Purple color for Monad tokens
+  }
+  
   if (!raw) return DEFAULT_PROTOCOL_COLOR;
   if (raw.includes("meteora")) return "#ff4662";
   if (raw.includes("pump")) return DEFAULT_PROTOCOL_COLOR;
@@ -165,7 +171,30 @@ function resolveProtocolColor(token: Partial<Token> & Record<string, any>): stri
   return DEFAULT_PROTOCOL_COLOR;
 }
 
-function resolveProtocolIcon(token: Partial<Token> & Record<string, any>): string {
+function resolveProtocolIcon(token: Partial<Token> & Record<string, any>, chain?: string): string {
+  // For Monad tokens, use MonadTable's protocol mapping
+  if (chain === 'monad' || (token.mint && typeof token.mint === 'string' && token.mint.startsWith('0x'))) {
+    const launchpadProtocol = (token.launchpad_protocol || token.launchpad_name || token.protocol || '').toLowerCase();
+    
+    // Map nad.fun to GitHub avatar (from MonadTable)
+    if (launchpadProtocol.includes('nad.fun') || launchpadProtocol === 'nadfun') {
+      return 'https://avatars.githubusercontent.com/u/173274001?s=200&v=4';
+    }
+    
+    // Map flap.sh to LinkedIn logo (from MonadTable)
+    if (launchpadProtocol.includes('flap.sh') || launchpadProtocol.includes('flapsh')) {
+      return 'https://media.licdn.com/dms/image/v2/D4D0BAQFG5I0EDOrmJQ/company-logo_200_200/company-logo_200_200/0/1714693191952/flap_sh_logo?e=2147483647&v=beta&t=2kcdij2YPOFjLdPYzAhQxKgbGcuyh7Cdyp0AkGR8V6A';
+    }
+    
+    // Map Kuru to Twitter profile image (from MonadTable)
+    if (launchpadProtocol.includes('kuru')) {
+      return 'https://pbs.twimg.com/profile_images/1950962142917619714/R7Cj_qk7_400x400.jpg';
+    }
+    
+    // Default to nad.fun icon for Monad tokens
+    return 'https://avatars.githubusercontent.com/u/173274001?s=200&v=4';
+  }
+  
   const raw = extractProtocolRaw(token);
   if (!raw) return DEFAULT_PROTOCOL_ICON;
   if (raw.includes("meteora")) {
@@ -250,6 +279,7 @@ interface SearchModalProps {
   onSubmit?: (query: string) => void;
   onQueryChange?: (query: string) => void;
   selectedTimeframe?: Timeframe;
+  chain?: string;
 }
 
 // The new inner component that contains the actual modal content and logic
@@ -259,6 +289,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
   onSubmit,
   onQueryChange,
   selectedTimeframe,
+  chain = 'sol',
 }: SearchModalProps) {
   const [query, setQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("time");
@@ -372,8 +403,13 @@ const SearchModalContent = React.memo(function SearchModalContent({
     try {
       console.log('🔍 Searching:', { query: searchQuery.trim() });
       
-      // Use backend search endpoint instead of local filtering
-      const response = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(searchQuery.trim())}&limit=50`);
+      // Use different endpoint based on chain
+      const isMonad = chain === 'monad';
+      const endpoint = isMonad 
+        ? `/api/token-service/search-monad?q=${encodeURIComponent(searchQuery.trim())}&limit=50`
+        : `/api/token-service/search?phrase=${encodeURIComponent(searchQuery.trim())}&limit=50`;
+      
+      const response = await fetch(endpoint);
       
       if (!response.ok) {
         console.error('❌ Search API error:', response.status);
@@ -382,10 +418,12 @@ const SearchModalContent = React.memo(function SearchModalContent({
       }
       
       const searchData = await response.json();
-      const filteredTokens = searchData.tokens || [];
+      // Monad uses 'data' field, Solana uses 'tokens' field
+      const filteredTokens = isMonad ? (searchData.data || []) : (searchData.tokens || []);
       
       console.log('🔍 Found results:', {
         query: searchQuery,
+        chain,
         matchedTokens: filteredTokens.length
       });
       
@@ -413,29 +451,38 @@ const SearchModalContent = React.memo(function SearchModalContent({
           // Handle Unix timestamp (seconds) or date string
           if (typeof token.created_at === 'number') {
             // Convert Unix timestamp to ISO string
-            createdAt = new Date(token.created_at * 1000).toISOString();
+            // Check if it's in seconds or milliseconds
+            const timestamp = token.created_at < 10000000000 
+              ? token.created_at * 1000 
+              : token.created_at;
+            createdAt = new Date(timestamp).toISOString();
           } else {
             createdAt = new Date(token.created_at).toISOString();
           }
         }
         
+        // For Monad tokens, use 'address' instead of 'mint'
+        const tokenAddress = isMonad ? (token.address || token.mint) : (token.mint || token.address);
+        
         return {
           id: 0,
-          mint: token.mint,
+          mint: tokenAddress,
           name: token.name || "",
           symbol: token.symbol || "",
-          logo: token.logo || token.image || token.uri,
+          logo: token.logo || token.image || token.image_url || token.uri,
           fully_diluted_value: token.market_cap_usd || token.marketCapUSD || token.fully_diluted_value || 0,
           total_liquidity_usd: token.liquidity_usd || 0,
           total_buy_volume_1h: token.total_buy_volume_1h || 0,
           total_sell_volume_1h: token.total_sell_volume_1h || 0,
-          volume_1h: token.volume_24h || token.volume24h || 0,
+          volume_1h: token.volume_24h || token.volume24h || token.volume_24h_usd || 0,
           created_at: createdAt,
           bonding_curve_progress: token.bonding_pct ? `${token.bonding_pct}%` : "0%",
           amm: amm,
-          uri: token.uri || token.logo || token.image,
-          pair_address: token.pair_address || token.mint
-        };
+          uri: token.uri || token.logo || token.image || token.image_url,
+          pair_address: token.pair_address || tokenAddress,
+          // Preserve launchpad_protocol for Monad tokens
+          launchpad_protocol: token.launchpad_protocol || token.launchpad_name || token.protocol
+        } as Token & { launchpad_protocol?: string };
       });
       
       setSearchResults(tokens);
@@ -445,7 +492,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
     } finally {
       setSearchLoading(false);
     }
-  }, [fetchTokens]);
+  }, [chain]);
 
   const handleSelectToken = useCallback(
     async (token: Token) => {
@@ -670,6 +717,7 @@ const SearchModalContent = React.memo(function SearchModalContent({
                   vol={vol}
                   liq={liq}
                   onSelect={handleSelectToken}
+                  chain={chain}
                 />
               );
             })}
@@ -716,12 +764,14 @@ const TokenListItem = React.memo(
     vol,
     liq,
     onSelect,
+    chain = 'sol',
   }: {
     token: Token;
     mc: string;
     vol: string;
     liq: string;
     onSelect: (token: Token) => void;
+    chain?: string;
   }) => {
     const [logoUrl, setLogoUrl] = useState<string | null>(token.uri || token.logo || null);
     const [showXPreview, setShowXPreview] = useState(false);
@@ -760,8 +810,8 @@ const TokenListItem = React.memo(
       onSelect(token);
     }, [onSelect, token]);
 
-    const protocolColor = useMemo(() => resolveProtocolColor(token), [token]);
-    const tokenIcon = useMemo(() => resolveProtocolIcon(token), [token]);
+    const protocolColor = useMemo(() => resolveProtocolColor(token, chain), [token, chain]);
+    const tokenIcon = useMemo(() => resolveProtocolIcon(token, chain), [token, chain]);
     const fillProtocolBadge = useMemo(() => shouldFillProtocolBadge(token), [token]);
     const normalizedLogo = useMemo(() => normalizeAssetUrl(logoUrl || token.logo || token.uri), [logoUrl, token.logo, token.uri]);
     const fallbackAvatar = useMemo(

@@ -1605,11 +1605,23 @@ export default function Header({
         open={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
         selectedTimeframe={selectedTimeframe}
+        chain={currentChain}
         onSubmit={(q) => {
           const trimmed = q.trim();
           // If it's likely a token address navigate directly to trade page
           if (trimmed.length >= 10) {
-            router.push(`/trade/${trimmed}`);
+            // Check if it's a Monad address (starts with 0x)
+            const isMonadAddress = trimmed.startsWith('0x') || trimmed.startsWith('0X');
+            // For Monad tokens, use the Monad trade page route
+            if (isMonadAddress) {
+              router.push(`/trade/monad/${trimmed}`);
+            } else {
+              // For Solana or other chains, use the regular trade page with chain query param
+              router.push({
+                pathname: `/trade/${trimmed}`,
+                query: currentChain && currentChain !== 'sol' ? { chain: currentChain } : {}
+              });
+            }
             setSearch?.("");
             return;
           }
