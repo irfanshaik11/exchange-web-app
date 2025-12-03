@@ -1116,7 +1116,6 @@ export default function Header({
                   </div>
                   <FiChevronDown className="text-neutral-500 hover:text-neutral-200" size={16} />
                 </button>
-
                 {/* Combined Dropdown */}
                 {profileMenuOpen && (
                   <div
