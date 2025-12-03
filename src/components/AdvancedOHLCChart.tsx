@@ -2356,49 +2356,58 @@ Maker: ${walletAddress}`;
   }, [buildUrl, onDataUpdate, network]); // Include network so datafeed updates when network changes
 
   const syncWidgetWithParams = useCallback(() => {
-    const widget = widgetRef.current;
-    if (!widget) return;
+    try {
+      const widget = widgetRef.current;
+      if (!widget) return;
 
-    const params = latestParamsRef.current;
-    const tokenId = params.mint || params.pairAddress;
-    if (!tokenId) return;
+      const params = latestParamsRef.current;
+      const tokenId = params.mint || params.pairAddress;
+      if (!tokenId) return;
 
-    const nextResolution = INTERVAL_TO_RESOLUTION[params.interval];
+      const nextResolution = INTERVAL_TO_RESOLUTION[params.interval];
 
-    const applyUpdate = () => {
-      try {
-        const chart = widget.chart?.();
-        if (!chart) return;
+      const applyUpdate = () => {
+        try {
+          const currentWidget = widgetRef.current;
+          if (!currentWidget) return;
+          const chart = currentWidget.chart?.();
+          if (!chart) return;
 
-        if (widgetTokenRef.current !== tokenId) {
-          widget.setSymbol(tokenId, nextResolution, () => {
-            widgetTokenRef.current = tokenId;
+          if (widgetTokenRef.current !== tokenId) {
+            currentWidget.setSymbol?.(tokenId, nextResolution, () => {
+              widgetTokenRef.current = tokenId;
+              chart.resetData?.();
+            });
+            return;
+          }
+
+          chart.setResolution?.(nextResolution, () => {
             chart.resetData?.();
           });
+        } catch (error) {
+          // Silently ignore during widget initialization/cleanup
+        }
+      };
+
+      try {
+        const chart = widget.chart?.();
+        if (chart) {
+          applyUpdate();
           return;
         }
+      } catch {
+        // Chart not ready yet, will try onChartReady
+      }
 
-        chart.setResolution(nextResolution, () => {
-          chart.resetData?.();
+      // Widget might have been cleaned up, check before accessing
+      if (widget && typeof widget.onChartReady === 'function') {
+        widget.onChartReady(() => {
+          applyUpdate();
         });
-      } catch (error) {
-        console.error('[AdvancedOHLCChart] Failed to sync widget with params', error);
       }
-    };
-
-    try {
-      const chart = widget.chart?.();
-      if (chart) {
-        applyUpdate();
-        return;
-      }
-    } catch (err) {
-      console.error('[AdvancedOHLCChart] Chart not ready for sync yet', err);
+    } catch {
+      // Silently ignore all errors - widget may be in an inconsistent state during hot reload
     }
-
-    widget.onChartReady?.(() => {
-      applyUpdate();
-    });
   }, []);
 
   // Note: Dev trade markers are now handled by TradingView's native marks system

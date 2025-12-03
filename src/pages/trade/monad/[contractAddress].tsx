@@ -326,7 +326,8 @@ export default function MonadTradePage() {
     () => {
       const createdAt = tokenData?.created_at || tokenData?.launch_time;
       // Default to 1s interval for Monad for real-time trading view
-      if (!createdAt) return { interval: "1s" as const, timeframe: "1h" as const, optimize: false };
+      // Use 24h timeframe as default to capture sparse early trading data
+      if (!createdAt) return { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
 
       let timestamp = createdAt as any;
       if (typeof createdAt === "number" && createdAt < 10000000000) timestamp = createdAt * 1000;
@@ -350,7 +351,7 @@ export default function MonadTradePage() {
   );
 
   const ohlcParams = getOHLCParams;
-  const defaultOHLCParams = { interval: "1s" as const, timeframe: "1h" as const, optimize: false };
+  const defaultOHLCParams = { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
   const currentOHLCParams = React.useMemo(
     () => ohlcParams || defaultOHLCParams,
     [ohlcParams?.interval, ohlcParams?.timeframe, ohlcParams?.optimize]
