@@ -5147,10 +5147,12 @@ function MonadTable({
                             <div 
                               className="h-full"
                               style={{
-                                backgroundColor: '#31e3ac',
+                                backgroundColor: '#31e3ac', // Green for buys
                                 width: `${(() => {
-                                  const buys = token.total_buys_24h ?? 0;
-                                  const sells = token.total_sells_24h ?? 0;
+                                  // Monad API returns total_buys/total_sells (not timeframe-specific)
+                                  // Prioritize total_buys/total_sells over _24h suffixed versions
+                                  const buys = (token as any).total_buys ?? (token as any).total_buys_24h ?? 0;
+                                  const sells = (token as any).total_sells ?? (token as any).total_sells_24h ?? 0;
                                   const total = Math.max(1, buys + sells);
                                   const percent = (buys / total) * 100;
                                   return Math.min(100, Math.max(0, percent));
@@ -5160,10 +5162,12 @@ function MonadTable({
                             <div 
                               className="h-full"
                               style={{
-                                backgroundColor: '#d11f3a',
+                                backgroundColor: '#d11f3a', // Red for sells
                                 width: `${(() => {
-                                  const buys = token.total_buys_24h ?? 0;
-                                  const sells = token.total_sells_24h ?? 0;
+                                  // Monad API returns total_buys/total_sells (not timeframe-specific)
+                                  // Prioritize total_buys/total_sells over _24h suffixed versions
+                                  const buys = (token as any).total_buys ?? (token as any).total_buys_24h ?? 0;
+                                  const sells = (token as any).total_sells ?? (token as any).total_sells_24h ?? 0;
                                   const total = Math.max(1, buys + sells);
                                   const percent = (sells / total) * 100;
                                   return Math.min(100, Math.max(0, percent));
