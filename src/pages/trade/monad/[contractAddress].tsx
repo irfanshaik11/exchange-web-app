@@ -643,7 +643,7 @@ export default function MonadTradePage() {
             </div>
 
             {/* BOTTOM pane (tabs + tables) */}
-            <div id="tabs-pane" className="flex-1 flex flex-col overflow-hidden min-h-0">
+            <div id="tabs-pane" className="flex-1 flex flex-col min-h-0" style={{ overflow: 'hidden' }}>
               {/* Tab Header */}
               <div className="flex gap-4 pt-2 px-3 text-xs items-center justify-between flex-shrink-0">
                 <div className="flex gap-4 items-center">
@@ -698,7 +698,7 @@ export default function MonadTradePage() {
                   <span>Instant Trade</span>
                 </button>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingBottom: '2rem' }}>
+              <div className="flex-1 min-h-0" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: '2rem' }}>
                 {selectedTab === "Transactions" ? (
                   <MonadTrades
                     tokenAddress={pairAddress}
