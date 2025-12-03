@@ -9,31 +9,7 @@ import toast from "react-hot-toast";
 import { withdrawSOL, getWithdrawalHistory, getWithdrawalFee } from "~/utils/api";
 import { env } from "~/env";
 
-// Extend Window interface to include Onramper and Jupiter
-declare global {
-  interface Window {
-    Jupiter?: {
-      init: (config: {
-        displayMode: string;
-        integratedTargetId?: string;
-        endpoint?: string;
-        strictTokenList?: boolean;
-        defaultExplorer?: string;
-        formProps?: {
-          initialInputMint?: string;
-          initialOutputMint?: string;
-          fixedInputMint?: boolean;
-          fixedOutputMint?: boolean;
-        };
-        enableWalletPassthrough?: boolean;
-        onSuccess?: (txid: string) => void;
-        onSwapError?: (error: Error) => void;
-      }) => void;
-      close: () => void;
-      resume: () => void;
-    };
-  }
-}
+// No additional window interfaces needed
 
 interface DepositModalProps {
   open: boolean;
@@ -101,7 +77,6 @@ const DepositModal: React.FC<DepositModalProps> = ({
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
-  const [jupiterLoaded, setJupiterLoaded] = useState(false);
   const [primaryWalletAddresses, setPrimaryWalletAddresses] = useState<{
     solana: string | null;
     ethereum: string | null;
@@ -165,11 +140,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
   useEffect(() => {
     if (!open) return;
     if (!depositAddress) return;
-    refreshBalance({
-      chain: selectedChain,
-      address: depositAddress,
-      force: true,
-    });
+    refreshBalance({ chain: selectedChain, address: depositAddress });
   }, [open, depositAddress, selectedChain, refreshBalance]);
 
   useEffect(() => {
@@ -235,90 +206,6 @@ const DepositModal: React.FC<DepositModalProps> = ({
       console.warn("Clipboard API not available.");
     }
   };
-
-  // Onramper configuration
-  const ONRAMPER_API_KEY = env.NEXT_PUBLIC_ONRAMPER_API_KEY;
-
-  // Load Jupiter Plugin SDK
-  useEffect(() => {
-    if (typeof window !== 'undefined' && !window.Jupiter) {
-      const script = document.createElement('script');
-      script.src = 'https://terminal.jup.ag/main-v3.js';
-      script.async = true;
-      script.onload = () => {
-        setJupiterLoaded(true);
-      };
-      script.onerror = () => {
-        console.error('Failed to load Jupiter Plugin');
-      };
-      document.head.appendChild(script);
-
-      return () => {
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-      };
-    } else if (window.Jupiter) {
-      setJupiterLoaded(true);
-    }
-  }, []);
-
-  // Initialize Jupiter Plugin when Convert tab is active
-  useEffect(() => {
-    if (activeTab === 'convert' && jupiterLoaded && window.Jupiter && open) {
-      try {
-        window.Jupiter.init({
-          displayMode: 'integrated',
-          integratedTargetId: 'jupiter-swap-container',
-          endpoint: 'https://api.mainnet-beta.solana.com',
-          strictTokenList: false,
-          defaultExplorer: 'Solscan',
-          formProps: {
-            // SOL mint address
-            initialOutputMint: 'So11111111111111111111111111111111111111112',
-            // Fixed to output SOL
-            fixedOutputMint: true,
-          },
-          enableWalletPassthrough: false,
-          onSuccess: (txid: string) => {
-            toast.success(`Swap successful! Transaction: ${txid.slice(0, 8)}...`, {
-              duration: 5000,
-              style: {
-                background: '#1E1F26',
-                color: '#E6E7EA',
-                border: '1px solid #18c48c',
-              }
-            });
-            // Refresh balance after successful swap
-            if (refreshBalance) {
-              setTimeout(
-                () =>
-                  refreshBalance({
-                    chain: selectedChain,
-                    address: depositAddress,
-                    force: true,
-                  }),
-                2000
-              );
-            }
-          },
-          onSwapError: (error: Error) => {
-            console.error('Swap error:', error);
-            toast.error(`Swap failed: ${error.message}`, {
-              duration: 4000,
-              style: {
-                background: '#1E1F26',
-                color: '#E6E7EA',
-                border: '1px solid #ff6b6b',
-              }
-            });
-          },
-        });
-      } catch (error) {
-        console.error('Error initializing Jupiter:', error);
-      }
-    }
-  }, [activeTab, jupiterLoaded, open, refreshBalance]);
 
   // Fetch withdrawal fee when withdraw tab is active
   useEffect(() => {
@@ -576,11 +463,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
           },
         });
         setTimeout(() => {
-          refreshBalance({
-            chain: selectedChain,
-            address: sourceAddress,
-            force: true,
-          });
+          refreshBalance({ chain: selectedChain, address: sourceAddress });
         }, 2000);
       } else {
         setWithdrawMessage({
@@ -630,18 +513,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
 
     try {
       // Construct Onramper widget URL
-      const onramperUrl = new URL('https://widget.onramper.com');
-      onramperUrl.searchParams.set('apiKey', ONRAMPER_API_KEY);
-      onramperUrl.searchParams.set('wallets', `SOL:${depositAddress}`);
-      onramperUrl.searchParams.set('defaultCrypto', 'SOL');
-      onramperUrl.searchParams.set('defaultAmount', '100');
-      onramperUrl.searchParams.set('themeName', 'dark');
-      onramperUrl.searchParams.set('containerColor', '1a1b20');
-      onramperUrl.searchParams.set('primaryColor', '18c48c');
-      onramperUrl.searchParams.set('secondaryColor', '2A2D35');
-      onramperUrl.searchParams.set('cardColor', '0a0b0f');
-      onramperUrl.searchParams.set('primaryTextColor', 'ffffff');
-      onramperUrl.searchParams.set('secondaryTextColor', 'E6E7EA');
+      const onramperUrl = "https://buy.onramper.com/?apiKey=pk_prod_01KB0GV0SYGKAC64C5QRJPD5DZ&wallets=sol:Hq6QEefod4MwtyZk13im7AVa4YrCkNLNzr6GpKBG9RUd&defaultCrypto=sol&defaultAmount=100&themeName=dark&containerColor=1a1b20&primaryColor=18c48c&secondaryColor=2A2D35&cardColor=0a0b0f&primaryTextColor=ffffff&secondaryTextColor=E6E7EA"
       
       // Open in new window
       const width = 500;
@@ -763,7 +635,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
 
           {/* Subtitle */}
           <div className="px-6 pb-3 text-neutral-400 text-sm">
-            {activeTab === 'convert' && 'Convert your crypto to SOL'}
+            {activeTab === 'convert' && 'Swap between cryptocurrencies'}
             {activeTab === 'deposit' &&
               `Deposit ${tokenSymbol} to your Narrative wallet`}
             {activeTab === 'buy' && `Buy ${tokenSymbol} with fiat currency`}
@@ -775,43 +647,46 @@ const DepositModal: React.FC<DepositModalProps> = ({
             {/* Convert Tab */}
             {activeTab === 'convert' && (
               <div className="space-y-4">
-                {/* Jupiter Swap Container */}
-                {jupiterLoaded ? (
-                  <div 
-                    id="jupiter-swap-container" 
-                    className="rounded-3xl overflow-hidden"
-                    style={{ 
-                      minHeight: '500px',
+                {/* Onramper Swap Widget */}
+                <div className="rounded-3xl overflow-hidden border" style={{ borderColor: "#2A2B33" }}>
+                  <iframe
+                    src={`https://buy.onramper.com/?apiKey=pk_prod_01KB0GV0SYGKAC64C5QRJPD5DZ&wallets=sol:Hq6QEefod4MwtyZk13im7AVa4YrCkNLNzr6GpKBG9RUd&defaultCrypto=sol&defaultAmount=100&themeName=dark&containerColor=1a1b20&primaryColor=18c48c&secondaryColor=2A2D35&cardColor=0a0b0f&primaryTextColor=ffffff&secondaryTextColor=E6E7EA`}
+                    title="Onramper Swap"
+                    className="w-full"
+                    style={{
+                      height: '600px',
+                      border: 'none',
                       backgroundColor: '#0a0b0f'
                     }}
+                    allow="payment"
                   />
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-64">
-                    <div className="text-neutral-400 text-center">
-                      <div className="mb-4">
-                        <div className="mx-auto w-16 h-16 border-4 border-neutral-700 border-t-[#18c48c] rounded-full animate-spin" />
-                      </div>
-                      <p className="text-lg">Loading Jupiter Swap...</p>
-                      <p className="text-sm mt-2">Please wait a moment</p>
-                    </div>
-                  </div>
-                )}
+                </div>
                 
                 {/* Info Box */}
-                {jupiterLoaded && (
-                  <div className="flex gap-3 p-4 rounded-3xl" style={{ backgroundColor: "rgba(59, 130, 246, 0.1)", borderColor: "#3b82f6", border: "1px solid" }}>
-                    <div className="flex-shrink-0 mt-0.5">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#3b82f6" }}>
-                        <circle cx="12" cy="12" r="10" fill="currentColor" />
-                        <path d="M12 8v4m0 4h.01" stroke="#1a1b20" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </div>
-                    <div className="text-sm leading-relaxed" style={{ color: "#60a5fa" }}>
-                      <span className="font-semibold">Note: </span>
-                      Convert any Solana token to SOL. The output will be automatically delivered to your Narrative wallet.
-                    </div>
+                <div className="flex gap-3 p-4 rounded-3xl" style={{ backgroundColor: "rgba(59, 130, 246, 0.1)", borderColor: "#3b82f6", border: "1px solid" }}>
+                  <div className="flex-shrink-0 mt-0.5">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ color: "#3b82f6" }}>
+                      <circle cx="12" cy="12" r="10" fill="currentColor" />
+                      <path d="M12 8v4m0 4h.01" stroke="#1a1b20" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
                   </div>
-                )}
+                  <div className="text-sm leading-relaxed" style={{ color: "#60a5fa" }}>
+                    <span className="font-semibold">Note: </span>
+                    Swap between cryptocurrencies using Onramper. The output will be delivered directly to your wallet.
+                  </div>
+                </div>
+
+                {/* Powered by Onramper */}
+                <div className="flex items-center justify-center gap-2 text-xs text-neutral-500">
+                  <span className="flex items-center gap-1.5">
+                    Powered by 
+                    <img 
+                      src="/onramper.svg" 
+                      alt="Onramper" 
+                      className="h-2.5 opacity-60"
+                    />
+                  </span>
+                </div>
               </div>
             )}
 
