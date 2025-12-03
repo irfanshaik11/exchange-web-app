@@ -779,11 +779,22 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     return aggregated.sort((a, b) => b.totalPnl - a.totalPnl);
   }, [history]);
 
-  // Fetch activity data when Activity tab is selected - show individual open position transactions (both buys and sells)
+  // Calculate top 100 positions by PnL
+  const top100Positions = useMemo((): AggregatedPosition[] => {
+    // aggregatedPositions is already sorted by PnL (highest first)
+    // Just take the top 100
+    return aggregatedPositions.slice(0, 100);
+  }, [aggregatedPositions]);
+
+  // Update activity data when openPositionTransactions changes (depends on history)
+  // Activity tab shows each individual transaction (buy or sell) that is part of an open position
   useEffect(() => {
-    if (tab !== 'Activity' || !wallet?.address) return;
+    if (!wallet?.address) {
+      setActivityData([]);
+      return;
+    }
     
-    // If history is still loading, wait for it
+    // If history is still loading, show loading state
     if (historyLoading) {
       setActivityLoading(true);
       setActivityError(null);
@@ -793,13 +804,12 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     setActivityLoading(true);
     setActivityError(null);
     
-    // Activity tab shows each individual transaction (buy or sell) that is part of an open position
-    const fetchActivity = async () => {
+    // Convert each open position transaction to TradeRow format
+    const updateActivity = async () => {
       try {
-        // Add a small delay to ensure loading state is visible and prevent race conditions
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Add a small delay to ensure loading state is visible
+        await new Promise(resolve => setTimeout(resolve, 50));
         
-        // Convert each open position transaction to TradeRow format
         const activityRows: TradeRow[] = openPositionTransactions.map((openTx, idx) => {
           const trade = openTx.trade;
           
@@ -820,7 +830,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           };
         });
         
-        console.log("[Activity] Showing individual open position transactions (buys and sells):", {
+        console.log("[Activity] Updated activity data:", {
           openTransactions: openPositionTransactions.length,
           buys: openPositionTransactions.filter(t => t.side === 'buy').length,
           sells: openPositionTransactions.filter(t => t.side === 'sell').length,
@@ -844,8 +854,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     };
     
     // Use void to explicitly mark promise as intentionally not awaited
-    void fetchActivity();
-  }, [tab, wallet?.address, openPositionTransactions, historyLoading]);
+    void updateActivity();
+  }, [wallet?.address, openPositionTransactions, historyLoading]); // Removed tab dependency - update when data changes
 
   useEffect(() => {
     if (!wallet.address) return;
@@ -888,9 +898,17 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       .finally(() => setTokenBalanceLoading(false));
   }, [wallet.address, token && token.pair_address]);
 
-  // Fetch history when History tab is selected - using same data source as Live Trades
+  // Fetch history when wallet changes - this data is used by all tabs
+  // History tab: shows closed orders
+  // Active Positions tab: shows aggregated positions
+  // Top 100 tab: shows top 100 positions
+  // Activity tab: shows open position transactions
   useEffect(() => {
-    if (tab !== "History" || !wallet?.address) return;
+    if (!wallet?.address) {
+      setHistory([]);
+      setHistoryLoading(false);
+      return;
+    }
 
     setHistoryLoading(true);
     setHistoryError(null);
@@ -932,7 +950,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           (a, b) => b.at - a.at,
         );
 
-        console.log("[History] Merged trades:", {
+        console.log("[WalletScan] Fetched history for all tabs:", {
           realTime: realTimeTrades.length,
           historical: historicalTrades.length,
           merged: mergedTrades.length,
@@ -942,7 +960,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         setHistoryError(null); // Clear any previous errors
       } catch (err) {
         // Silently handle errors - don't show runtime errors
-        console.warn("[History] Error (handled gracefully):", err);
+        console.warn("[WalletScan] Error fetching history (handled gracefully):", err);
         setHistoryError(
           typeof err === "object" &&
             err !== null &&
@@ -960,7 +978,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     // Use void to explicitly mark promise as intentionally not awaited
     void fetchHistory();
-  }, [tab, wallet?.address, latestTrades]);
+  }, [wallet?.address, latestTrades]); // Removed tab dependency - fetch when wallet changes
 
   // Fetch token metadata for all mints in closed orders and active positions
   useEffect(() => {
@@ -1702,13 +1720,201 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
               </div>
             )}
             {tab === "Top 100" && (
-              <div className="flex h-full items-center justify-center text-neutral-500">
-                Top 100 - Coming Soon
+              <div className="h-full w-full overflow-auto">
+                {historyLoading ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="animate-pulse text-neutral-400">
+                      Loading top positions...
+                    </div>
+                  </div>
+                ) : top100Positions.length === 0 ? (
+                  <div className="flex h-full items-center justify-center">
+                    <div className="text-neutral-500">No positions found</div>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 border-b border-neutral-800 bg-black">
+                      <tr className="text-xs text-neutral-400 uppercase">
+                        <th className="px-4 py-3 text-left font-semibold">
+                          Rank
+                        </th>
+                        <th className="px-4 py-3 text-left font-semibold">
+                          Token
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Bought
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Sold
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          Remaining
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold">
+                          PnL
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-800">
+                      {top100Positions
+                        .filter((position) => {
+                          if (!searchTerm) return true;
+                          const term = searchTerm.toLowerCase();
+                          const metadata = tokenMetadata.get(position.mint);
+                          return (
+                            position.tokenSymbol?.toLowerCase().includes(term) ||
+                            position.tokenName?.toLowerCase().includes(term) ||
+                            metadata?.symbol?.toLowerCase().includes(term) ||
+                            metadata?.name?.toLowerCase().includes(term) ||
+                            position.mint?.toLowerCase().includes(term)
+                          );
+                        })
+                        .map((position, idx) => {
+                          const metadata = tokenMetadata.get(position.mint);
+                          const displayName =
+                            position.tokenName ||
+                            metadata?.name ||
+                            position.tokenSymbol ||
+                            metadata?.symbol ||
+                            null;
+                          const displaySymbol =
+                            position.tokenSymbol ||
+                            metadata?.symbol ||
+                            position.tokenName ||
+                            metadata?.name ||
+                            position.mint?.slice(0, 8) + "..." ||
+                            "Unknown";
+
+                          // Format bought
+                          const boughtDisplay = (
+                            <div className="flex flex-col items-end">
+                              <span className="text-emerald-400 font-semibold">
+                                ${formatSmartNumber(position.boughtValue)}
+                              </span>
+                              <span className="text-xs text-neutral-500">
+                                {formatSmartNumber(position.boughtAmount)} {displaySymbol}
+                              </span>
+                            </div>
+                          );
+
+                          // Format sold
+                          const soldDisplay = (
+                            <div className="flex flex-col items-end">
+                              <span className="text-red-400 font-semibold">
+                                ${formatSmartNumber(position.soldValue)}
+                              </span>
+                              <span className="text-xs text-neutral-500">
+                                {formatSmartNumber(position.soldAmount)} {displaySymbol}
+                              </span>
+                            </div>
+                          );
+
+                          // Format remaining
+                          const remainingDisplay = (
+                            <div className="flex flex-col items-end">
+                              <span className="text-white font-semibold">
+                                ${formatSmartNumber(position.remainingValue)}
+                              </span>
+                              <span className="text-xs text-neutral-500">
+                                {formatSmartNumber(position.remainingAmount)} {displaySymbol}
+                              </span>
+                            </div>
+                          );
+
+                          // Format PnL
+                          const pnlDisplay = (
+                            <div className="flex flex-col items-end">
+                              <span
+                                className={`font-semibold ${
+                                  position.totalPnl >= 0
+                                    ? "text-emerald-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {position.totalPnl >= 0 ? "+" : ""}
+                                ${formatSmartNumber(Math.abs(position.totalPnl))}
+                              </span>
+                              <span
+                                className={`text-xs ${
+                                  position.pnlPercentage >= 0
+                                    ? "text-emerald-400/70"
+                                    : "text-red-400/70"
+                                }`}
+                              >
+                                {position.pnlPercentage >= 0 ? "+" : ""}
+                                {position.pnlPercentage.toFixed(2)}%
+                              </span>
+                            </div>
+                          );
+
+                          // Calculate rank (1-indexed)
+                          const rank = idx + 1;
+
+                          return (
+                            <tr
+                              key={position.mint || idx}
+                              className="transition-colors hover:bg-neutral-800 cursor-pointer"
+                              onClick={() => {
+                                // Navigate to token page if pair_address is available
+                                const trade = history.find(t => t.mint === position.mint);
+                                if (trade?.pair_address) {
+                                  window.open(`/trade/${trade.pair_address}`, '_blank');
+                                }
+                              }}
+                            >
+                              <td className="px-4 py-3 text-neutral-400">
+                                <div className="font-mono text-sm">
+                                  #{rank}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex flex-col">
+                                  <span
+                                    className="font-semibold text-white"
+                                    title={position.mint || undefined}
+                                  >
+                                    {displayName || displaySymbol}
+                                  </span>
+                                  {displayName &&
+                                    displaySymbol &&
+                                    displayName !== displaySymbol && (
+                                      <span className="text-[10px] text-neutral-500">
+                                        {displaySymbol}
+                                      </span>
+                                    )}
+                                  {!displayName &&
+                                    !displaySymbol &&
+                                    position.mint && (
+                                      <span className="font-mono text-[10px] text-neutral-500">
+                                        {position.mint.slice(0, 4)}...
+                                        {position.mint.slice(-4)}
+                                      </span>
+                                    )}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {boughtDisplay}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {soldDisplay}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {remainingDisplay}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                {pnlDisplay}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
             {tab === "Activity" && (
               <div className="h-full w-full">
-                {activityLoading ? (
+                {activityLoading || historyLoading ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="animate-pulse text-neutral-400">
                       Loading activity...
