@@ -1787,8 +1787,15 @@ function MonadTable({
     protocols: filters.protocols.length > 0 ? filters.protocols.flatMap(mapProtocolToBackend) : undefined,
     onNewToken: useCallback((token: any) => {
       if (channel === 'new') {
-        // FAST PATH: New pairs bypass zero liquidity check for maximum speed
-        // Zero liquidity tokens will be filtered during merge, but new pairs get instant priority
+        // Filter out tokens with liquidity_usd === 0 (for all columns)
+        const liquidityUsd = token?.liquidity_usd;
+        const hasZeroLiquidityUsd = liquidityUsd === 0 || liquidityUsd === '0';
+        // Skip tokens with liquidity_usd === 0, but still use fast path for others
+        if (hasZeroLiquidityUsd) {
+          return; // Don't add token with zero liquidity_usd
+        }
+        // FAST PATH: New pairs bypass other zero liquidity checks for maximum speed
+        // Zero liquidity_usd tokens are filtered above, but new pairs get instant priority
         // Use flushSync to force immediate update, bypassing React 18's automatic batching
         // Optimized with Map-based deduplication (O(1) instead of O(n))
         // Skip filtering existing tokens - just prepend new token instantly
@@ -1804,7 +1811,10 @@ function MonadTable({
       }
     }, [channel, normalizeMonadToken]),
     onFinalStretchToken: useCallback((token: any) => {
-      if (channel === 'final_stretch' && !hasZeroLiquidity(token)) {
+      // Filter out tokens with liquidity_usd === 0 (for all columns)
+      const liquidityUsd = token?.liquidity_usd;
+      const hasZeroLiquidityUsd = liquidityUsd === 0 || liquidityUsd === '0';
+      if (channel === 'final_stretch' && !hasZeroLiquidity(token) && !hasZeroLiquidityUsd) {
         // Use flushSync to force immediate update, bypassing React 18's automatic batching
         // Optimized with Map-based deduplication (O(1) instead of O(n))
         flushSync(() => {
@@ -1823,7 +1833,10 @@ function MonadTable({
       }
     }, [channel, normalizeMonadToken]),
     onMigratedToken: useCallback((token: any) => {
-      if (channel === 'migrated' && !hasZeroLiquidity(token)) {
+      // Filter out tokens with liquidity_usd === 0 (for all columns)
+      const liquidityUsd = token?.liquidity_usd;
+      const hasZeroLiquidityUsd = liquidityUsd === 0 || liquidityUsd === '0';
+      if (channel === 'migrated' && !hasZeroLiquidity(token) && !hasZeroLiquidityUsd) {
         // Use flushSync to force immediate update, bypassing React 18's automatic batching
         // Optimized with Map-based deduplication (O(1) instead of O(n))
         flushSync(() => {
@@ -2337,8 +2350,18 @@ function MonadTable({
       }
     }
 
-    // NO FE filtering at all - skip all other filters (quote tokens, dexPaid, caEndsInPump, age, market cap, volume, liquidity, etc.)
-    // Return tokens exactly as received from Monad token service (only keyword search applied if user initiated)
+    // Filter out tokens with liquidity_usd === 0 (for all columns)
+    filtered = filtered.filter(token => {
+      const liquidityUsd = (token as any).liquidity_usd;
+      // Only filter out if liquidity_usd is explicitly 0 (not null/undefined)
+      if (liquidityUsd === 0 || liquidityUsd === '0') {
+        return false;
+      }
+      return true;
+    });
+
+    // NO FE filtering at all - skip all other filters (quote tokens, dexPaid, caEndsInPump, age, market cap, volume, etc.)
+    // Return tokens exactly as received from Monad token service (only keyword search and liquidity_usd filter applied)
 
     // Simple sort by created_at (newest first) - NO other sorting or filtering
     filtered.sort((a, b) => {
