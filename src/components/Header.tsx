@@ -366,6 +366,7 @@ export default function Header({
     return () => clearInterval(interval);
   }, [checkClipboard]);
 
+  
   useEffect(() => {
     if (typeof document === "undefined") return;
 
@@ -1081,7 +1082,6 @@ export default function Header({
                 </div>
               )}
             </div>
-
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
               <div ref={profileMenuRef} className="relative">
@@ -1116,7 +1116,6 @@ export default function Header({
                   </div>
                   <FiChevronDown className="text-neutral-500 hover:text-neutral-200" size={16} />
                 </button>
-
                 {/* Combined Dropdown */}
                 {profileMenuOpen && (
                   <div

@@ -50,7 +50,6 @@ export const env = createEnv({
     NEXT_PUBLIC_GOOGLE_CLIENT_ID:z.string().optional(),
     NEXT_PUBLIC_REDIRECT_URI:z.string().optional(),
     NEXT_PUBLIC_TURNKEY_API_BASE_URL:z.string().url().optional(),
-    NEXT_PUBLIC_ONRAMPER_API_KEY: z.string()
     // NEXT_PUBLIC_CLIENTVAR: z.string(),
 
   },
@@ -91,7 +90,6 @@ export const env = createEnv({
     NEXT_PUBLIC_GOOGLE_CLIENT_ID:process.env. NEXT_PUBLIC_GOOGLE_CLIENT_ID,
     NEXT_PUBLIC_REDIRECT_URI:process.env.NEXT_PUBLIC_REDIRECT_URI,
     NEXT_PUBLIC_TURNKEY_API_BASE_URL:process.env.NEXT_PUBLIC_TURNKEY_API_BASE_URL,
-    NEXT_PUBLIC_ONRAMPER_API_KEY: process.env.NEXT_PUBLIC_ONRAMPER_API_KEY,
 
     // NEXT_PUBLIC_CLIENTVAR: process.env.NEXT_PUBLIC_CLIENTVAR,
   },

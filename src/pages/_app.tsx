@@ -266,7 +266,7 @@ function TurnkeySessionBridge() {
               pendingRefreshRef.current = false;
             }
 
-            router.push("/");
+            router.push("/pulse?chain=monad");
           } catch (err) {
             console.error("Error linking Turnkey session to app user", err);
             hasProcessedRef.current = false;
@@ -451,7 +451,6 @@ const MyApp: AppType = ({ Component, pageProps }) => {
       }
     }
   }, []);
-
   // Listen for toast position changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
