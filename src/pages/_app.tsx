@@ -265,7 +265,7 @@ function TurnkeySessionBridge() {
               pendingRefreshRef.current = false;
             }
 
-            router.push("/");
+            router.push("/pulse?chain=monad");
           } catch (err) {
             console.error("Error linking Turnkey session to app user", err);
             hasProcessedRef.current = false;
