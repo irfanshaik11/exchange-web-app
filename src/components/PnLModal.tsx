@@ -66,25 +66,25 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
         const response = await fetch(
           `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
           { signal: AbortSignal.timeout(5000) }
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          const priceData = data.parsed?.[0]?.price;
+        ).catch(() => null);
+
+        if (response?.ok) {
+          const data = await response.json().catch(() => null);
+          const priceData = data?.parsed?.[0]?.price;
           if (priceData?.price && priceData?.expo) {
             const price = Number(priceData.price) * Math.pow(10, priceData.expo);
             setSolPrice(price);
             return;
           }
         }
-      } catch (error) {
-        console.error('Error fetching SOL price from Pyth:', error);
+      } catch {
+        // Silently ignore network errors - fallback below
       }
-      
+
       // Fallback to static price if Pyth fails
       setSolPrice(150);
     };
-    fetchSolPrice();
+    fetchSolPrice().catch(() => setSolPrice(150));
   }, []);
 
   // Drag handlers
