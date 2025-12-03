@@ -366,6 +366,7 @@ export default function Header({
     return () => clearInterval(interval);
   }, [checkClipboard]);
 
+  
   useEffect(() => {
     if (typeof document === "undefined") return;
 
