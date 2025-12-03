@@ -83,6 +83,7 @@ import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { extractTokenImage } from "~/utils/images";
 import { useSolPrice } from "~/components/SolPriceContext";
+import { preloadTokenImages } from "~/utils/imagePreloader";
 import {
   tradeBuy,
   createLimitOrder,
@@ -1583,6 +1584,22 @@ function PulseTable({
       `[PulseTable ${title}] 🎯 Received tokens prop, count: ${tokens?.length || 0}`,
     );
   }, [tokens, title]);
+
+  // Preload images for visible tokens (first 20 for instant loading)
+  // This runs in background and doesn't block rendering or new token updates
+  useEffect(() => {
+    if (tokens && tokens.length > 0) {
+      // Fire-and-forget: preload in background without blocking
+      // This doesn't interfere with WebSocket updates or new tokens coming in
+      preloadTokenImages(tokens, {
+        limit: 20,
+        priority: 'high',
+        maxConcurrent: 10,
+      }).catch(() => {
+        // Silently fail - don't log to avoid console spam
+      });
+    }
+  }, [tokens]);
 
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [showToast, setShowToast] = useState(false);
