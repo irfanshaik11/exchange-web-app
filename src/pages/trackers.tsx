@@ -567,13 +567,8 @@ export default function TrackersPage() {
 
       const allWallets = tracked;
 
-      // Only update state and cache if we actually got wallets
-      // This prevents empty arrays from overwriting cache on errors
-      if (allWallets.length === 0) {
-        console.log("No wallets returned from backend - keeping cached data");
-        return;
-      }
-
+      // Always update state with backend response (even if empty)
+      // This ensures removed wallets disappear from the UI
       setWatchedWallets(allWallets);
 
       // Convert backend wallets to frontend format
@@ -585,6 +580,18 @@ export default function TrackersPage() {
       }));
 
       setWallets(frontendWallets);
+
+      // Clear balances for wallets that are no longer tracked
+      setWalletBalances((prev) => {
+        const validAddresses = new Set(allWallets.map((w) => w.address));
+        const filtered: Record<string, number> = {};
+        Object.keys(prev).forEach((address) => {
+          if (validAddresses.has(address)) {
+            filtered[address] = prev[address];
+          }
+        });
+        return filtered;
+      });
 
       // Cache wallets to localStorage
       if (typeof window !== "undefined") {
