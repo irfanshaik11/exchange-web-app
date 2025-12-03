@@ -60,7 +60,7 @@ const MonadTopTradersTable: React.FC<MonadTopTradersTableProps> = ({
 
   return (
     <div className="w-full h-full flex flex-col bg-black">
-      <div className="flex-1 overflow-y-auto pb-18 bg-black">
+      <div className="flex-1 min-h-0 bg-black">
         <table className="w-full text-xs border-collapse bg-black">
           <thead className="sticky top-0 bg-black z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">

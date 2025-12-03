@@ -114,7 +114,7 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
   return (
     <div className="w-full h-full flex flex-col bg-black">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800 flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-white">Live Trades</span>
           {connected && (
@@ -130,7 +130,7 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
       </div>
 
       {/* Trade Table */}
-      <div className="flex-1 overflow-y-auto pb-12">
+      <div className="flex-1 min-h-0">
         <table className="w-full text-xs border-collapse table-fixed">
           <thead className="sticky top-0 bg-black z-10">
             <tr className="text-neutral-400 border-b border-neutral-800">
