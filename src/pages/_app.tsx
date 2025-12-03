@@ -38,6 +38,7 @@ import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
 import { storeReferralCodeHint } from '~/utils/referralStorage';
+import PagePreloader from '../components/PagePreloader';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -560,6 +561,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                       <FilterProvider>
                         <WalletTrackerProvider>
                           <ReferralAccessGate>
+                            <PagePreloader />
                             <Component {...pageProps} />
                           </ReferralAccessGate>
                         </WalletTrackerProvider>

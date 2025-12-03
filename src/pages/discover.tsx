@@ -74,7 +74,40 @@ export default function DiscoverPage() {
   }, [currentChain, router.query.chain]);
   
   // For Monad, only allow 'trending' and 'newPairs' tabs
-  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>('trending');
+  // Initialize activeTab from localStorage to persist across navigation
+  // Also respect chain restrictions during initialization
+  const [activeTab, setActiveTab] = useState<'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live'>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('discover_active_tab');
+        if (saved && ['trending', 'newPairs', 'xStocks', 'surge', 'dex', 'live'].includes(saved)) {
+          const savedTab = saved as 'trending' | 'newPairs' | 'xStocks' | 'surge' | 'dex' | 'live';
+          // Check if we're on monad chain - if so, only allow trending or newPairs
+          // Check URL params directly for immediate access (same pattern as currentChain)
+          const urlParams = new URLSearchParams(window.location.search);
+          const initialChain = urlParams.get('chain') || 'sol';
+          if (initialChain === 'monad' && savedTab !== 'trending' && savedTab !== 'newPairs') {
+            return 'trending';
+          }
+          return savedTab;
+        }
+      } catch {
+        // Ignore localStorage errors
+      }
+    }
+    return 'trending';
+  });
+  
+  // Save activeTab to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('discover_active_tab', activeTab);
+      } catch {
+        // Ignore localStorage errors
+      }
+    }
+  }, [activeTab]);
   
   // When chain changes to monad, switch to trending if current tab is not allowed
   useEffect(() => {
@@ -143,26 +176,46 @@ export default function DiscoverPage() {
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name" | "total_liquidity_usd" | "fully_diluted_value">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-  const [newPairsRaw, setNewPairsRaw] = useState<TokenWithDexPaid[]>(() => {
-    // Initialize with cached data if available (no loading state)
+  // Store new pairs data per chain to preserve data when switching chains
+  const [newPairsRawByChain, setNewPairsRawByChain] = useState<Record<string, TokenWithDexPaid[]>>(() => {
+    // Initialize with cached data for all chains if available
+    const data: Record<string, TokenWithDexPaid[]> = {};
     if (typeof window !== 'undefined') {
       try {
-        // Use default 'sol' for initial load, will be updated when chain changes
-        const initialChain = (router.query.chain as string) || 'sol';
-        const cached = localStorage.getItem(`discover_new_pairs_cache_${initialChain}`);
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          const age = Date.now() - parsed.timestamp;
-          if (age < 60 * 1000 && parsed.data && parsed.data.length > 0) {
-            return parsed.data;
+        // Load cached data for both chains
+        ['sol', 'monad'].forEach((chain) => {
+          const cached = localStorage.getItem(`discover_new_pairs_cache_${chain}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            const age = Date.now() - parsed.timestamp;
+            if (age < 60 * 1000 && parsed.data && parsed.data.length > 0) {
+              data[chain] = parsed.data;
+            }
           }
-        }
+        });
       } catch {
         // Ignore cache errors on init
       }
     }
-    return [];
+    return data;
   });
+  
+  // Get current chain's data
+  const newPairsRaw = newPairsRawByChain[currentChain] || [];
+  
+  // Ref to track current state for use in callbacks/intervals
+  const newPairsRawByChainRef = useRef(newPairsRawByChain);
+  useEffect(() => {
+    newPairsRawByChainRef.current = newPairsRawByChain;
+  }, [newPairsRawByChain]);
+  
+  // Helper to update data for a specific chain
+  const setNewPairsRawForChain = useCallback((chain: string, data: TokenWithDexPaid[]) => {
+    setNewPairsRawByChain((prev) => ({
+      ...prev,
+      [chain]: data,
+    }));
+  }, []);
   const [newPairsLoading, setNewPairsLoading] = useState(false);
   const [newPairsError, setNewPairsError] = useState<string | null>(null);
 
@@ -415,16 +468,32 @@ export default function DiscoverPage() {
     enabled: activeTab === 'live', // Only connect when on live tab
   });
 
-  // Clear new pairs data only when chain actually changes (avoid nuking cache on remount)
+  // When chain changes, load cached data for that chain if available
+  // Don't clear data - preserve it per chain
   const prevChainRef = useRef<string>(currentChain);
   useEffect(() => {
     if (prevChainRef.current !== currentChain) {
-      setNewPairsRaw([]);
+      // Chain changed - check if we have cached data for this chain
+      const cached = localStorage.getItem(`discover_new_pairs_cache_${currentChain}`);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          const age = Date.now() - parsed.timestamp;
+          if (age < 60 * 1000 && parsed.data && parsed.data.length > 0) {
+            // Load cached data for this chain
+            setNewPairsRawForChain(currentChain, parsed.data);
+            console.log(`[Discover] Loaded cached data for chain ${currentChain}: ${parsed.data.length} tokens`);
+          }
+        } catch (err) {
+          console.warn(`[Discover] Failed to load cache for chain ${currentChain}:`, err);
+        }
+      }
+      // Reset loading/error state for chain switch
       setNewPairsLoading(false);
       setNewPairsError(null);
       prevChainRef.current = currentChain;
     }
-  }, [currentChain]);
+  }, [currentChain, setNewPairsRawForChain]);
 
   useEffect(() => {
     let cancelled = false;
@@ -436,9 +505,11 @@ export default function DiscoverPage() {
     const CACHE_TTL = 30 * 1000; // Trigger background refresh after 30s
     const STALE_THRESHOLD = 5 * 60 * 1000; // Treat cache as stale after 5 minutes (but still usable)
 
-    // Check if we already have valid cached data in state - if so, skip fetching
+    // Check if we already have valid cached data in state for current chain - if so, skip fetching
     // This prevents re-fetching when navigating back to the page
-    if (newPairsRaw.length > 0) {
+    // Use ref to get current value (updated via useEffect above)
+    const currentChainData = newPairsRawByChainRef.current[currentChain] || [];
+    if (currentChainData.length > 0) {
       try {
         const cached = localStorage.getItem(CACHE_KEY);
         if (cached) {
@@ -554,13 +625,15 @@ export default function DiscoverPage() {
       if (cancelled) {
         return;
       }
+      
+      // Ref is updated via useEffect above, no need to update here
 
       // Try to load from cache first
       if (useCache) {
         const cached = loadFromCache();
         if (cached && cached.length > 0) {
-          // Update data silently (no loading state)
-          setNewPairsRaw(cached);
+          // Update data silently (no loading state) for current chain
+          setNewPairsRawForChain(currentChain, cached);
           setNewPairsError(null);
           setNewPairsLoading(false);
           
@@ -667,11 +740,20 @@ export default function DiscoverPage() {
         }
         
         if (!tokensArray || tokensArray.length === 0) {
-          // Don't throw error, just log and continue with empty array
-          console.log('[Discover] Empty tokens array, this might be expected if no new pairs available');
-          setNewPairsRaw([]);
+          // Don't clear existing data if refresh returns empty - preserve what we have
+          console.log('[Discover] Empty tokens array in response, preserving existing data if available');
           setNewPairsError(null);
           setNewPairsLoading(false);
+          // Use functional update to preserve existing data - never clear once we have data
+          setNewPairsRawByChain((prev) => {
+            const currentData = prev[currentChain] || [];
+            // Only clear if this is truly the initial load (no existing data)
+            if (currentData.length === 0) {
+              return { ...prev, [currentChain]: [] };
+            }
+            // Preserve existing data if we have any
+            return prev;
+          });
           return;
         }
 
@@ -875,12 +957,20 @@ export default function DiscoverPage() {
           };
 
           // Transform tokens to match expected format before filtering
+          // CRITICAL: Ensure Monad tokens always have 'mint' field set from 'address'
+          // This matches pulse.tsx transformation logic
           const transformedTokens = tokensArray.map((token: any) => {
-            // Handle Monad tokens (have 'address' field and 'launchpad_protocol')
-            if (currentChain === 'monad' && token.address && !token.mint) {
+            // Handle Monad tokens (have 'address' field) - always map address to mint
+            if (currentChain === 'monad') {
+              // Ensure mint is set from address if not already present
+              const mint = token.mint || token.address;
+              if (!mint) {
+                return token; // Skip if no mint or address
+              }
+              
               return {
                 ...token,
-                mint: token.address, // Map address to mint
+                mint: mint, // Always set mint from address for Monad tokens
                 // Map Monad image fields
                 image: token.image_url || token.image || token.logo || token.logoURI || token.uri,
                 logo: token.image_url || token.logo || token.logoURI || token.image,
@@ -945,32 +1035,26 @@ export default function DiscoverPage() {
             return token;
           });
 
+          // Match pulse.tsx filtering - only filter by zero liquidity and wrapped SOL
+          // This ensures we show the same tokens as pulse table
           const filtered = transformedTokens.filter((token: any) => {
+            // Filter out wrapped SOL
+            if (isWrappedSol(token)) {
+              return false;
+            }
+            
+            // Filter out zero liquidity tokens (same as pulse.tsx)
             if (isZeroLiquidityToken(token)) {
               return false;
             }
+            
             // For Monad, tokens use 'address' which we map to 'mint', but check both as fallback
-            const tokenId = token.mint || token.address;
-            if (!token || !tokenId || isWrappedSol(token)) {
+            // For Solana, ensure we have a mint
+            const tokenId = token.mint || (currentChain === 'monad' ? token.address : null);
+            if (!token || !tokenId) {
               return false;
             }
             
-            // Filter out tokens with 0 market cap (for Monad chain)
-            if (currentChain === 'monad') {
-              const marketCap = token.market_cap_usd || token.marketCapUsd || token.fully_diluted_value || 0;
-              if (!marketCap || marketCap === 0) {
-                return false;
-              }
-            }
-            
-            // For Monad, don't filter out by protocol (Birdeye doesn't provide protocol info)
-            // Only filter Meteora for Solana tokens
-            if (currentChain !== 'monad') {
-              const protocol = (token.launchpad_protocol || token.launchpadProtocol || token.protocol || '').toLowerCase();
-              if (protocol.includes('meteora')) {
-                return false;
-              }
-            }
             return true;
           }) as TokenWithDexPaid[];
 
@@ -986,12 +1070,26 @@ export default function DiscoverPage() {
             deduped.push(normalizePulseToken(token));
           }
 
-          // Update data silently (no loading animation)
-          setNewPairsRaw(deduped);
-          setNewPairsError(null);
-          
-          // Save to cache
-          saveToCache(deduped);
+          // Only update if we have valid data - this ensures data persists once loaded
+          if (deduped && deduped.length > 0) {
+            // Update data silently (no loading animation) for current chain
+            setNewPairsRawForChain(currentChain, deduped);
+            setNewPairsError(null);
+            
+            // Save to cache
+            saveToCache(deduped);
+            console.log(`[Discover] ✅ Updated new pairs: ${deduped.length} tokens for ${currentChain}`);
+          } else {
+            // If transformation resulted in empty array, preserve existing data for current chain
+            console.log('[Discover] Transformation resulted in empty array, preserving existing data');
+            setNewPairsRawByChain((prev) => {
+              const currentData = prev[currentChain] || [];
+              if (currentData.length === 0) {
+                return { ...prev, [currentChain]: [] };
+              }
+              return prev; // Preserve existing data
+            });
+          }
         }
       } catch (err) {
         if (cancelled) {
@@ -1007,21 +1105,27 @@ export default function DiscoverPage() {
           const cached = loadFromCache();
           if (cached && cached.length > 0) {
             console.log('[Discover] Using cached data after fetch failure');
-            setNewPairsRaw(cached);
+            setNewPairsRawForChain(currentChain, cached);
             setNewPairsError(null);
             handled = true;
           }
         }
 
         // If we already have data in memory, keep showing it instead of an error
-        if (!handled && newPairsRaw.length > 0) {
-          console.warn('[Discover] Fetch failed but existing data is available. Keeping previous list.');
-          setNewPairsError(null);
-          handled = true;
-        }
-
+        // Use functional update to access current state value and preserve existing data for current chain
         if (!handled) {
-          setNewPairsError(message);
+          setNewPairsRawByChain((prev) => {
+            const currentData = prev[currentChain] || [];
+            if (currentData.length > 0) {
+              console.warn('[Discover] Fetch failed but existing data is available. Keeping previous list.');
+              setNewPairsError(null);
+              return prev; // Preserve existing data
+            } else {
+              // Only set error if we don't have existing data
+              setNewPairsError(message);
+              return prev; // Keep as is if empty
+            }
+          });
         }
       } finally {
         if (!cancelled && showLoading) {
@@ -1030,8 +1134,9 @@ export default function DiscoverPage() {
       }
     };
 
-    // Check if we already have data from initial state (cached)
-    const hasInitialData = newPairsRaw.length > 0;
+    // Check if we already have data from initial state (cached) for current chain
+    // Use ref to get current value
+    const hasInitialData = (newPairsRawByChainRef.current[currentChain] || []).length > 0;
     
     if (hasInitialData) {
       // We have cached data from initial state, don't show loading, just refresh in background silently
@@ -1046,7 +1151,13 @@ export default function DiscoverPage() {
     }
     
     // Refresh every 60 seconds (silently, no loading state)
-    intervalId = setInterval(() => fetchNewPairs(true, false), 60_000);
+    // Use functional setState to preserve existing data if refresh fails or returns empty
+    intervalId = setInterval(() => {
+      fetchNewPairs(true, false).catch(err => {
+        console.error('[Discover] Background refresh failed:', err);
+        // Don't clear data on error - preserve what we have
+      });
+    }, 60_000);
 
     return () => {
       cancelled = true;
@@ -1054,7 +1165,7 @@ export default function DiscoverPage() {
         clearInterval(intervalId);
       }
     };
-  }, [currentChain, activeTab]); // Re-run when chain or tab changes
+  }, [currentChain, activeTab, setNewPairsRawForChain]); // Re-run when chain or tab changes
 
   // Fetch xStocks data
   useEffect(() => {
@@ -1897,43 +2008,26 @@ export default function DiscoverPage() {
 
     console.log(`[Discover] Processing ${newPairsRaw.length} new pairs for ${currentChain}`);
     
+    // Match pulse.tsx filtering logic - only filter by zero liquidity and wrapped SOL
+    // This ensures we show the same tokens as pulse table
     const base = newPairsRaw.filter((token) => {
-      if (!token || !token.mint || isWrappedSol(token)) {
+      // Filter out wrapped SOL
+      if (isWrappedSol(token)) {
         return false;
       }
-      // Filter out Meteora tokens from new pairs (only for Solana, not Monad)
-      if (currentChain !== 'monad') {
-        const protocol = ((token as any).launchpad_protocol || (token as any).launchpadProtocol || (token as any).protocol || '').toLowerCase();
-        if (protocol.includes('meteora')) {
-          return false;
-        }
-      }
-      // Filter out tokens with 0 liquidity
-      const liquidity = Number((token as any).total_liquidity_usd || (token as any).liquidity_usd || 0);
-      if (liquidity <= 0) {
+      
+      // Filter out zero liquidity tokens (same as pulse.tsx)
+      if (isZeroLiquidityToken(token)) {
         return false;
       }
-      // For Monad, be more lenient with volume requirements (new tokens might not have volume yet)
-      if (currentChain === 'monad') {
-        // For Monad, only require liquidity, volume is optional
-      } else {
-        // Filter out tokens with 0 volume - check all timeframes (Solana only)
-        const hasVolume = ['1h', '6h', '24h', '5m'].some(tf => {
-          const vol = getVolumeForTimeframe(token, tf as Timeframe);
-          return vol > 0;
-        });
-        if (!hasVolume) {
-          return false;
-        }
+      
+      // For Monad, ensure we have a mint (from address transformation)
+      // For Solana, ensure we have a mint
+      const tokenId = token.mint || (currentChain === 'monad' ? (token as any).address : null);
+      if (!token || !tokenId) {
+        return false;
       }
-      // For Monad, don't require image (new tokens might not have images yet)
-      if (currentChain !== 'monad') {
-        // Filter out tokens with no image (Solana only)
-        const hasImage = (token as any)?.uri || (token as any)?.logo || (token as any)?.image || (token as any)?.imageUrl;
-        if (!hasImage || hasImage === '' || hasImage === 'null' || hasImage === null) {
-          return false;
-        }
-      }
+      
       return true;
     });
     
@@ -1987,7 +2081,7 @@ export default function DiscoverPage() {
     }
 
     return unique;
-  }, [newPairsRaw, applyFilters, getVolumeForTimeframe, getNewPairTimestamp, isWrappedSol, sortDirection, sortKey, selectedTimeframe]);
+  }, [newPairsRaw, applyFilters, getVolumeForTimeframe, getNewPairTimestamp, isWrappedSol, isZeroLiquidityToken, currentChain, sortDirection, sortKey, selectedTimeframe]);
 
   const newPairsRows = useMemo(
     () =>
@@ -2323,8 +2417,9 @@ export default function DiscoverPage() {
               </span>
             </div> */}
 
-            {/* Timeframes - hide when on live tab, new pairs, xStocks, or surge */}
-            {activeTab !== 'live' && activeTab !== 'newPairs' && activeTab !== 'xStocks' && activeTab !== 'surge' && (
+            {/* Timeframes - hide when on live tab, new pairs, xStocks, surge, or trending (for both Solana and Monad) */}
+            {/* COMMENTED OUT: Timeframe selector hidden for trending section */}
+            {activeTab !== 'live' && activeTab !== 'newPairs' && activeTab !== 'xStocks' && activeTab !== 'surge' && activeTab !== 'trending' && (
               <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border relative"
                    style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '130px', width: '130px', height: '28px' }}>
                 {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (

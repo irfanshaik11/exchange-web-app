@@ -146,6 +146,7 @@ export default function FastImage({
         onError={handleError}
         loading={priority ? 'eager' : 'lazy'} // Eager loading for priority images
         decoding="async"
+        fetchPriority={priority ? 'high' : 'auto'} // High priority for important images
       />
       
       {/* Pump logo bubble */}
