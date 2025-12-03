@@ -3,6 +3,11 @@
  * for Docker builds.
  */
 import "./src/env.js";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** @type {import("next").NextConfig} */
 const config = {
@@ -22,16 +27,39 @@ const config = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
-  // Turbopack configuration
-  turbopack: {
-    // Turbopack settings
-  },
-  webpack: (config) => {
+  // Turbopack configuration (empty - using webpack for builds)
+  turbopack: {},
+  webpack: (config, { isServer, webpack }) => {
     // Handle @react-native-async-storage warning (optional dependency for MetaMask SDK)
     config.resolve.fallback = {
       ...config.resolve.fallback,
       '@react-native-async-storage/async-storage': false,
     };
+
+    // Ignore test files from node_modules (fixes Next.js 16 bundling issues)
+    // Use NormalModuleReplacementPlugin to replace test file imports with empty modules
+    const emptyModulePath = path.resolve(__dirname, './src/utils/empty-module.js');
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules\/thread-stream\/test\/.*$/,
+        emptyModulePath
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules\/@turnkey\/core\/node_modules\/thread-stream\/test\/.*$/,
+        emptyModulePath
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules\/thread-stream\/bench\.js$/,
+        emptyModulePath
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules\/@turnkey\/core\/node_modules\/thread-stream\/bench\.js$/,
+        emptyModulePath
+      ),
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^(tap|desm|fastbench|pino-elasticsearch|why-is-node-running|tape)$/,
+      })
+    );
 
     return config;
   },
