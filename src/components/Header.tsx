@@ -1081,7 +1081,6 @@ export default function Header({
                 </div>
               )}
             </div>
-
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
               <div ref={profileMenuRef} className="relative">
