@@ -116,6 +116,20 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [history, setHistory] = useState<TradeEvent[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  
+  // Closed orders (completed positions with PnL)
+  interface ClosedOrder {
+    mint: string;
+    buyTrade: TradeEvent;
+    sellTrade: TradeEvent;
+    boughtAmount: number;
+    soldAmount: number;
+    boughtValue: number;
+    soldValue: number;
+    pnl: number;
+    pnlPercentage: number;
+    closedAt: number; // Timestamp of the sell (when position was closed)
+  }
   const [tokenMetadata, setTokenMetadata] = useState<
     Map<string, { symbol?: string | null; name?: string | null }>
   >(new Map());
@@ -137,49 +151,21 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Calculate performance metrics from history
-  const performanceMetrics = useMemo(() => {
-    if (!history || history.length === 0) {
-      return {
-        totalPnl: 0,
-        totalTransactions: 0,
-        completedTransactions: 0,
-        categoryCounts: {
-          over500: 0,
-          twoHundredTo500: 0,
-          zeroTo200: 0,
-          zeroToNeg50: 0,
-          underNeg50: 0,
-        },
-        progressPercentage: 0,
-      };
-    }
+  // Calculate closed orders from history (only completed positions)
+  const closedOrders = useMemo((): ClosedOrder[] => {
+    if (!history || history.length === 0) return [];
 
-    // Filter by selectedRange
-    const now = Date.now();
-    let filteredHistory = history;
-    if (selectedRange !== "Max") {
-      const windowMs =
-        selectedRange === "1d"
-          ? 24 * 60 * 60 * 1000
-          : selectedRange === "7d"
-            ? 7 * 24 * 60 * 60 * 1000
-            : 30 * 24 * 60 * 60 * 1000;
-      const cutoff = now - windowMs;
-      filteredHistory = history.filter((trade) => trade.at >= cutoff);
-    }
-
-    // Group trades by mint (token) to calculate position PNL
+    // Group trades by mint (token) to match buys with sells
     const positions = new Map<
       string,
       {
-        buys: Array<{ amount: number; cost: number; timestamp: number }>;
-        sells: Array<{ amount: number; revenue: number; timestamp: number }>;
+        buys: Array<{ trade: TradeEvent; amount: number; cost: number; timestamp: number }>;
+        sells: Array<{ trade: TradeEvent; amount: number; revenue: number; timestamp: number }>;
       }
     >();
 
     // Process all trades
-    filteredHistory.forEach((trade) => {
+    history.forEach((trade) => {
       if (!trade.mint) return;
 
       const amount = typeof trade.amount === "number" ? trade.amount : 0;
@@ -205,12 +191,14 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
       if (trade.side === "buy") {
         position.buys.push({
+          trade,
           amount,
           cost: usdValue,
           timestamp: trade.at,
         });
       } else if (trade.side === "sell") {
         position.sells.push({
+          trade,
           amount,
           revenue: usdValue,
           timestamp: trade.at,
@@ -218,60 +206,109 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       }
     });
 
-    // Calculate PNL for each position using FIFO
-    const positionPnls: Array<{ pnl: number; pnlPercentage: number }> = [];
+    // Match sells with buys using FIFO to create closed orders
+    const closedOrdersList: ClosedOrder[] = [];
 
     positions.forEach((position, mint) => {
-      // Sort buys and sells by timestamp
+      // Sort buys and sells by timestamp (FIFO)
       position.buys.sort((a, b) => a.timestamp - b.timestamp);
       position.sells.sort((a, b) => a.timestamp - b.timestamp);
 
-      // FIFO matching: match sells with buys
-      let totalCost = 0;
-      let totalRevenue = 0;
       let remainingBuys = [...position.buys];
-      let totalBoughtAmount = position.buys.reduce((sum, b) => sum + b.amount, 0);
-      let totalSoldAmount = position.sells.reduce((sum, s) => sum + s.amount, 0);
 
-      // Only calculate PNL for completed positions (where we have both buys and sells)
-      if (totalBoughtAmount > 0 && totalSoldAmount > 0) {
-        // Match sells to buys using FIFO
-        for (const sell of position.sells) {
-          let remainingSellAmount = sell.amount;
-          let sellCost = 0;
+      // Match each sell with buys using FIFO
+      for (const sell of position.sells) {
+        let remainingSellAmount = sell.amount;
+        let matchedBuys: Array<{ buy: typeof position.buys[0]; matchedAmount: number }> = [];
+        let totalCost = 0;
 
-          while (remainingSellAmount > 0 && remainingBuys.length > 0) {
-            const buy = remainingBuys[0];
-            const matchedAmount = Math.min(remainingSellAmount, buy.amount);
-            const costPerUnit = buy.cost / buy.amount;
-            sellCost += matchedAmount * costPerUnit;
+        // Match this sell with buys in FIFO order
+        while (remainingSellAmount > 0 && remainingBuys.length > 0) {
+          const buy = remainingBuys[0];
+          const matchedAmount = Math.min(remainingSellAmount, buy.amount);
+          const costPerUnit = buy.cost / buy.amount;
+          const matchedCost = matchedAmount * costPerUnit;
 
-            buy.amount -= matchedAmount;
-            remainingSellAmount -= matchedAmount;
+          matchedBuys.push({ buy, matchedAmount });
+          totalCost += matchedCost;
 
-            if (buy.amount <= 0) {
-              remainingBuys.shift();
-            }
+          buy.amount -= matchedAmount;
+          remainingSellAmount -= matchedAmount;
+
+          if (buy.amount <= 0) {
+            remainingBuys.shift();
           }
-
-          totalCost += sellCost;
-          totalRevenue += sell.revenue;
         }
 
-        // Calculate PNL
-        const pnl = totalRevenue - totalCost;
-        const pnlPercentage = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
+        // If we matched the entire sell, create a closed order
+        if (remainingSellAmount === 0 && matchedBuys.length > 0) {
+          // Use the first buy as the representative buy trade
+          const buyTrade = matchedBuys[0].buy.trade;
+          const boughtAmount = matchedBuys.reduce((sum, m) => sum + m.matchedAmount, 0);
+          const soldAmount = sell.amount;
+          const boughtValue = totalCost;
+          const soldValue = sell.revenue;
+          const pnl = soldValue - boughtValue;
+          const pnlPercentage = boughtValue > 0 ? (pnl / boughtValue) * 100 : 0;
 
-        if (Number.isFinite(pnl) && Number.isFinite(pnlPercentage)) {
-          positionPnls.push({ pnl, pnlPercentage });
+          if (Number.isFinite(pnl) && Number.isFinite(pnlPercentage)) {
+            closedOrdersList.push({
+              mint,
+              buyTrade,
+              sellTrade: sell.trade,
+              boughtAmount,
+              soldAmount,
+              boughtValue,
+              soldValue,
+              pnl,
+              pnlPercentage,
+              closedAt: sell.timestamp, // When the position was closed
+            });
+          }
         }
       }
     });
 
-    // Calculate totals
-    const totalPnl = positionPnls.reduce((sum, p) => sum + p.pnl, 0);
-    const totalTransactions = filteredHistory.length;
-    const completedTransactions = positionPnls.length;
+    // Sort by closed time (newest first)
+    return closedOrdersList.sort((a, b) => b.closedAt - a.closedAt);
+  }, [history]);
+
+  // Calculate performance metrics from closed orders
+  const performanceMetrics = useMemo(() => {
+    if (!closedOrders || closedOrders.length === 0) {
+      return {
+        totalPnl: 0,
+        totalTransactions: 0,
+        completedTransactions: 0,
+        categoryCounts: {
+          over500: 0,
+          twoHundredTo500: 0,
+          zeroTo200: 0,
+          zeroToNeg50: 0,
+          underNeg50: 0,
+        },
+        progressPercentage: 0,
+      };
+    }
+
+    // Filter by selectedRange
+    const now = Date.now();
+    let filteredOrders = closedOrders;
+    if (selectedRange !== "Max") {
+      const windowMs =
+        selectedRange === "1d"
+          ? 24 * 60 * 60 * 1000
+          : selectedRange === "7d"
+            ? 7 * 24 * 60 * 60 * 1000
+            : 30 * 24 * 60 * 60 * 1000;
+      const cutoff = now - windowMs;
+      filteredOrders = closedOrders.filter((order) => order.closedAt >= cutoff);
+    }
+
+    // Calculate totals from closed orders
+    const totalPnl = filteredOrders.reduce((sum, order) => sum + order.pnl, 0);
+    const totalTransactions = filteredOrders.length;
+    const completedTransactions = filteredOrders.length;
 
     // Categorize by PNL percentage
     const categoryCounts = {
@@ -282,7 +319,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       underNeg50: 0,
     };
 
-    positionPnls.forEach(({ pnlPercentage }) => {
+    filteredOrders.forEach((order) => {
+      const pnlPercentage = order.pnlPercentage;
       if (pnlPercentage > 500) {
         categoryCounts.over500++;
       } else if (pnlPercentage > 200) {
@@ -297,7 +335,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     });
 
     // Calculate progress bar percentage (based on winning vs losing positions)
-    const winningPositions = positionPnls.filter((p) => p.pnl > 0).length;
+    const winningPositions = filteredOrders.filter((o) => o.pnl > 0).length;
     const progressPercentage =
       completedTransactions > 0
         ? (winningPositions / completedTransactions) * 100
@@ -310,7 +348,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       categoryCounts,
       progressPercentage,
     };
-  }, [history, selectedRange]);
+  }, [closedOrders, selectedRange]);
 
   // Convert TradeEvent to TradeRow format for Activity component
   const convertTradeEventToTradeRow = (trade: TradeEvent, index: number): TradeRow => {
@@ -355,68 +393,286 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     setError(null);
     setScanError(null);
 
-    // Call scan-wallet backend API (for balance and initial scan)
-    scanWallet(wallet.address, 100)
-      .then((data) => {
+    // Add a small delay to prevent race conditions on initial load
+    const loadData = async () => {
+      try {
+        // Small delay to ensure component is fully mounted
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Call scan-wallet backend API (for balance and initial scan)
+        const data = await scanWallet(wallet.address, 100);
+        
         // Set wallet balance from scan
-        setWalletBalance(data.balance);
-        setBalance(data.balance.sol);
+        if (data?.balance) {
+          setWalletBalance(data.balance);
+          setBalance(data.balance.sol);
+        }
 
         // Transform and set scan data (keep for backward compatibility)
-        const tradeRows = transformWalletScanToTradeRows(data);
-        setScanData(tradeRows);
-      })
-      .catch((err) => {
-        console.error("Error scanning wallet:", err);
-        setScanError(err.message || "Failed to scan wallet");
+        if (data?.tokenActivity) {
+          const tradeRows = transformWalletScanToTradeRows(data);
+          setScanData(tradeRows);
+        } else {
+          setScanData([]);
+        }
+        setScanError(null); // Clear any previous errors
+      } catch (err) {
+        // Silently handle errors - don't show runtime errors
+        console.warn("Error scanning wallet (handled gracefully):", err);
+        // Extract error message safely
+        const errorMessage = err instanceof Error 
+          ? err.message 
+          : typeof err === 'string' 
+            ? err 
+            : "Failed to scan wallet";
+        setScanError(errorMessage);
         setScanData([]);
 
         // Fallback to old method if scan fails
-        getWalletSolBalance(wallet.address)
-          .then((balance) => setBalance(balance))
-          .catch(() => setBalance(null));
-      })
-      .finally(() => {
+        try {
+          const balance = await getWalletSolBalance(wallet.address);
+          if (balance !== null) {
+            setBalance(balance);
+          }
+        } catch (balanceErr) {
+          // Silently handle balance fetch errors too
+          console.warn("Failed to get wallet balance (handled gracefully):", balanceErr);
+          setBalance(null);
+        }
+      } finally {
         setLoading(false);
         setScanLoading(false);
-      });
+      }
+    };
+
+    // Use void to explicitly mark promise as intentionally not awaited
+    void loadData();
   }, [wallet.address]);
 
-  // Fetch activity data when Activity tab is selected - show ALL chain activity (not wallet-specific)
+  // Calculate transactions that are part of open positions (both buys and sells)
+  interface OpenPositionTransaction {
+    trade: TradeEvent; // Original trade (buy or sell)
+    side: 'buy' | 'sell';
+    originalAmount: number; // Original amount
+    originalValue: number; // Original value
+    remainingAmount: number; // For buys: remaining amount. For sells: amount that matched open positions
+    remainingValue: number; // For buys: cost basis of remaining. For sells: value that matched open positions
+  }
+
+  const openPositionTransactions = useMemo((): OpenPositionTransaction[] => {
+    if (!history || history.length === 0) return [];
+
+    // Group trades by mint (token) to calculate positions
+    const positions = new Map<
+      string,
+      {
+        buys: Array<{ 
+          trade: TradeEvent; // Store original trade
+          amount: number; 
+          cost: number; 
+          timestamp: number;
+        }>;
+        sells: Array<{ 
+          trade: TradeEvent; // Store original trade
+          amount: number; 
+          revenue: number; 
+          timestamp: number;
+        }>;
+      }
+    >();
+
+    // Process all trades - store original trades for both buys and sells
+    history.forEach((trade) => {
+      if (!trade.mint) return;
+
+      const amount = typeof trade.amount === "number" ? trade.amount : 0;
+      const priceUsd = trade.price_usd ?? null;
+      const solSpent = trade.sol_spent ?? null;
+
+      // Calculate USD value
+      let usdValue: number | null = null;
+      if (priceUsd !== null && Number.isFinite(amount) && Number.isFinite(priceUsd)) {
+        usdValue = amount * priceUsd;
+      } else if (solSpent !== null && Number.isFinite(solSpent)) {
+        // Approximate: 1 SOL ≈ $150 (fallback, but ideally we'd have price_usd)
+        usdValue = solSpent * 150;
+      }
+
+      if (usdValue === null || !Number.isFinite(usdValue) || usdValue <= 0) return;
+
+      if (!positions.has(trade.mint)) {
+        positions.set(trade.mint, { buys: [], sells: [] });
+      }
+
+      const position = positions.get(trade.mint)!;
+
+      if (trade.side === "buy") {
+        position.buys.push({
+          trade, // Store original trade
+          amount,
+          cost: usdValue,
+          timestamp: trade.at,
+        });
+      } else if (trade.side === "sell") {
+        position.sells.push({
+          trade, // Store original trade
+          amount,
+          revenue: usdValue,
+          timestamp: trade.at,
+        });
+      }
+    });
+
+    // Calculate open position transactions using FIFO matching
+    const openTransactions: OpenPositionTransaction[] = [];
+
+    positions.forEach((position) => {
+      // Sort buys and sells by timestamp (FIFO)
+      position.buys.sort((a, b) => a.timestamp - b.timestamp);
+      position.sells.sort((a, b) => a.timestamp - b.timestamp);
+
+      // Create a working copy of buys for FIFO matching
+      const remainingBuys = position.buys.map(buy => ({
+        ...buy,
+        remainingAmount: buy.amount, // Track remaining amount
+        remainingCost: buy.cost, // Track remaining cost
+      }));
+
+      // Track which sells matched against buys that still have remaining amounts
+      const sellsMatchedToOpenPositions: Array<{
+        sell: typeof position.sells[0];
+        matchedAmount: number;
+        matchedValue: number;
+      }> = [];
+
+      // Match sells to buys using FIFO
+      for (const sell of position.sells) {
+        let remainingSellAmount = sell.amount;
+        let matchedToOpenAmount = 0;
+        let matchedToOpenValue = 0;
+
+        while (remainingSellAmount > 0 && remainingBuys.length > 0) {
+          const buy = remainingBuys[0];
+          const matchedAmount = Math.min(remainingSellAmount, buy.remainingAmount);
+          const costPerUnit = buy.remainingCost / buy.remainingAmount;
+          const matchedCost = matchedAmount * costPerUnit;
+          const matchedRevenue = (matchedAmount / sell.amount) * sell.revenue;
+
+          buy.remainingAmount -= matchedAmount;
+          buy.remainingCost -= matchedCost;
+          remainingSellAmount -= matchedAmount;
+
+          // Track if this sell matched against a buy that will still have remaining
+          // (i.e., the buy still has remainingAmount > 0 after this match)
+          if (buy.remainingAmount > 0) {
+            matchedToOpenAmount += matchedAmount;
+            matchedToOpenValue += matchedRevenue;
+          }
+
+          // Remove buy if fully matched
+          if (buy.remainingAmount <= 0) {
+            remainingBuys.shift();
+          }
+        }
+
+        // If this sell matched against buys that still have remaining (open positions), include it
+        if (matchedToOpenAmount > 0) {
+          sellsMatchedToOpenPositions.push({
+            sell,
+            matchedAmount: matchedToOpenAmount,
+            matchedValue: matchedToOpenValue,
+          });
+        }
+      }
+
+      // Add all buys that still have remaining amount
+      remainingBuys.forEach((buy) => {
+        if (buy.remainingAmount > 0 && buy.remainingCost > 0) {
+          openTransactions.push({
+            trade: buy.trade,
+            side: 'buy',
+            originalAmount: buy.amount,
+            originalValue: buy.cost,
+            remainingAmount: buy.remainingAmount,
+            remainingValue: buy.remainingCost,
+          });
+        }
+      });
+
+      // Add all sells that matched against open positions
+      sellsMatchedToOpenPositions.forEach(({ sell, matchedAmount, matchedValue }) => {
+        openTransactions.push({
+          trade: sell.trade,
+          side: 'sell',
+          originalAmount: sell.amount,
+          originalValue: sell.revenue,
+          remainingAmount: matchedAmount, // Amount that matched open positions
+          remainingValue: matchedValue, // Value that matched open positions
+        });
+      });
+    });
+
+    // Sort by trade timestamp (most recent first)
+    return openTransactions.sort((a, b) => b.trade.at - a.trade.at);
+  }, [history]);
+
+  // Fetch activity data when Activity tab is selected - show individual open position transactions (both buys and sells)
   useEffect(() => {
-    if (tab !== 'Activity') return;
+    if (tab !== 'Activity' || !wallet?.address) return;
+    
+    // If history is still loading, wait for it
+    if (historyLoading) {
+      setActivityLoading(true);
+      setActivityError(null);
+      return;
+    }
     
     setActivityLoading(true);
     setActivityError(null);
     
-    // Activity tab shows ALL trades from the chain (not filtered by wallet)
-    // Use all latestTrades from context (all wallets, all activity)
-    const allRealTimeTrades = latestTrades; // Don't filter by wallet - show all chain activity
-    
-    // For Activity tab, we want to show recent global activity
-    // Since we don't have a global trades endpoint, we'll use latestTrades which contains
-    // all trades from watched wallets (which represents recent chain activity)
+    // Activity tab shows each individual transaction (buy or sell) that is part of an open position
     const fetchActivity = async () => {
       try {
-        // Convert all real-time trades to TradeRow format
-        // These are already sorted by timestamp (newest first) from the context
-        const activityRows = allRealTimeTrades
-          .sort((a, b) => b.at - a.at)
-          .slice(0, 200) // Limit to 200 most recent
-          .map((trade, idx) => convertTradeEventToTradeRow(trade, idx));
+        // Add a small delay to ensure loading state is visible and prevent race conditions
+        await new Promise(resolve => setTimeout(resolve, 100));
         
-        console.log("[Activity] Showing all chain activity:", {
-          totalTrades: allRealTimeTrades.length,
+        // Convert each open position transaction to TradeRow format
+        const activityRows: TradeRow[] = openPositionTransactions.map((openTx, idx) => {
+          const trade = openTx.trade;
+          
+          return {
+            id: idx,
+            tokenAddress: trade.mint,
+            pairAddress: trade.pair_address,
+            blockchain: 'sol',
+            tradeTime: new Date(trade.at).toISOString(),
+            type: openTx.side === 'buy' ? 'Buy' : 'Sell',
+            marketCap: trade.market_cap_usd || 0,
+            solAmount: trade.sol_spent || 0,
+            tokenAmount: openTx.remainingAmount, // For buys: remaining amount. For sells: amount that matched open positions
+            usdValue: openTx.remainingValue, // For buys: cost basis. For sells: value that matched open positions
+            transactionHash: trade.tx,
+            createdAt: new Date(trade.at).toISOString(),
+            tokenName: trade.name || trade.symbol || undefined,
+          };
+        });
+        
+        console.log("[Activity] Showing individual open position transactions (buys and sells):", {
+          openTransactions: openPositionTransactions.length,
+          buys: openPositionTransactions.filter(t => t.side === 'buy').length,
+          sells: openPositionTransactions.filter(t => t.side === 'sell').length,
           displayed: activityRows.length
         });
         
         setActivityData(activityRows);
+        setActivityError(null); // Clear any previous errors
       } catch (err) {
-        console.error("[Activity] Error:", err);
+        // Silently handle errors - don't show runtime errors
+        console.warn("[Activity] Error (handled gracefully):", err);
         setActivityError(
           typeof err === 'object' && err !== null && 'message' in err && typeof err.message === "string"
             ? err.message
-            : "Failed to load activity",
+            : "Failed to load open positions",
         );
         setActivityData([]);
       } finally {
@@ -424,8 +680,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       }
     };
     
-    fetchActivity();
-  }, [tab, latestTrades]);
+    // Use void to explicitly mark promise as intentionally not awaited
+    void fetchActivity();
+  }, [tab, wallet?.address, openPositionTransactions, historyLoading]);
 
   useEffect(() => {
     if (!wallet.address) return;
@@ -483,6 +740,9 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
     // Fetch historical data using the same function as Live Trades
     const fetchHistory = async () => {
       try {
+        // Add a small delay to prevent race conditions
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
         const historicalTrades = await getWalletTradeHistory([wallet.address], {
           limit: 100,
           windowMs: 7 * 24 * 60 * 60 * 1000, // 7 days, same as Live Trades
@@ -516,8 +776,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
         });
 
         setHistory(mergedTrades);
+        setHistoryError(null); // Clear any previous errors
       } catch (err) {
-        console.error("[History] Error:", err);
+        // Silently handle errors - don't show runtime errors
+        console.warn("[History] Error (handled gracefully):", err);
         setHistoryError(
           typeof err === "object" &&
             err !== null &&
@@ -533,18 +795,23 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       }
     };
 
-    fetchHistory();
+    // Use void to explicitly mark promise as intentionally not awaited
+    void fetchHistory();
   }, [tab, wallet?.address, latestTrades]);
 
-  // Fetch token metadata for all mints in history
+  // Fetch token metadata for all mints in closed orders
   useEffect(() => {
-    if (history.length === 0) return;
+    if (closedOrders.length === 0) return;
 
     // Extract unique mints that don't have symbol/name
-    const mintsToFetch = history
-      .filter((trade) => trade.mint && (!trade.symbol || !trade.name))
-      .map((trade) => trade.mint)
-      .filter((mint, idx, arr) => arr.indexOf(mint) === idx); // unique
+    const mintsToFetch = closedOrders
+      .map((order) => order.mint)
+      .filter((mint, idx, arr) => arr.indexOf(mint) === idx) // unique
+      .filter((mint) => {
+        // Check if we already have metadata for this mint
+        const metadata = tokenMetadata.get(mint);
+        return !metadata?.symbol || !metadata?.name;
+      });
 
     if (mintsToFetch.length === 0) return;
 
@@ -562,7 +829,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       .catch((err) => {
         console.error("[History] Error fetching token metadata:", err);
       });
-  }, [history]);
+  }, [closedOrders, tokenMetadata]);
 
   const handleCopy = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
@@ -908,10 +1175,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   <div className="flex h-full items-center justify-center">
                     <div className="text-red-400">{historyError}</div>
                   </div>
-                ) : history.length === 0 ? (
+                ) : closedOrders.length === 0 ? (
                   <div className="flex h-full items-center justify-center">
                     <div className="text-neutral-500">
-                      No trading history found
+                      No closed orders found
                     </div>
                   </div>
                 ) : (
@@ -924,9 +1191,6 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         <th className="px-4 py-3 text-left font-semibold">
                           Token
                         </th>
-                        <th className="px-4 py-3 text-center font-semibold">
-                          Side
-                        </th>
                         <th className="px-4 py-3 text-right font-semibold">
                           Bought
                         </th>
@@ -936,109 +1200,78 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                         <th className="px-4 py-3 text-right font-semibold">
                           PnL
                         </th>
-                        <th className="px-4 py-3 text-center font-semibold">
+                        {/* <th className="px-4 py-3 text-center font-semibold">
                           Tx
-                        </th>
+                        </th> */}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-800">
-                      {history
-                        .filter((trade) => {
+                      {closedOrders
+                        .filter((order) => {
                           if (!searchTerm) return true;
                           const term = searchTerm.toLowerCase();
-                          const metadata = tokenMetadata.get(trade.mint);
+                          const metadata = tokenMetadata.get(order.mint);
                           return (
-                            trade.symbol?.toLowerCase().includes(term) ||
-                            trade.name?.toLowerCase().includes(term) ||
+                            order.buyTrade.symbol?.toLowerCase().includes(term) ||
+                            order.buyTrade.name?.toLowerCase().includes(term) ||
+                            order.sellTrade.symbol?.toLowerCase().includes(term) ||
+                            order.sellTrade.name?.toLowerCase().includes(term) ||
                             metadata?.symbol?.toLowerCase().includes(term) ||
                             metadata?.name?.toLowerCase().includes(term) ||
-                            trade.mint?.toLowerCase().includes(term) ||
-                            trade.tx?.toLowerCase().includes(term)
+                            order.mint?.toLowerCase().includes(term) ||
+                            order.sellTrade.tx?.toLowerCase().includes(term)
                           );
                         })
-                        .map((trade, idx) => {
-                          // TradeEvent format: amount is number, price_usd, sol_spent, at (timestamp)
-                          const amount =
-                            typeof trade.amount === "number" ? trade.amount : 0;
-                          const priceUsd = trade.price_usd ?? null;
-                          const solSpent = trade.sol_spent ?? null;
-
-                          // Calculate value and PnL
-                          const value =
-                            priceUsd !== null &&
-                            Number.isFinite(amount) &&
-                            Number.isFinite(priceUsd)
-                              ? amount * priceUsd
-                              : solSpent !== null && Number.isFinite(solSpent)
-                                ? solSpent // Fallback to SOL spent if price not available
-                                : null;
-
-                          const pnl =
-                            value !== null
-                              ? trade.side === "sell"
-                                ? value
-                                : -value
-                              : null;
-                          const pnlDisplay =
-                            pnl !== null && Number.isFinite(pnl)
-                              ? `${pnl >= 0 ? "+" : "-"}$${formatSmartNumber(Math.abs(pnl))}`
-                              : "—";
-
-                          // Format time - TradeEvent uses 'at' (timestamp in ms)
-                          const timeAgo = trade.at
-                            ? formatTimeAgo(trade.at)
-                            : "Unknown";
+                        .map((order, idx) => {
+                          // Format time - when the position was closed (sell time)
+                          const timeAgo = formatTimeAgo(order.closedAt);
 
                           // Use fetched metadata as fallback - match notification logic
-                          const metadata = tokenMetadata.get(trade.mint);
+                          const metadata = tokenMetadata.get(order.mint);
                           // Priority: name first (like notifications), then symbol, then mint
                           const displayName =
-                            trade.name ||
+                            order.sellTrade.name ||
+                            order.buyTrade.name ||
                             metadata?.name ||
-                            trade.symbol ||
+                            order.sellTrade.symbol ||
+                            order.buyTrade.symbol ||
                             metadata?.symbol ||
                             null;
                           const displaySymbol =
-                            trade.symbol ||
+                            order.sellTrade.symbol ||
+                            order.buyTrade.symbol ||
                             metadata?.symbol ||
-                            trade.name ||
+                            order.sellTrade.name ||
+                            order.buyTrade.name ||
                             metadata?.name ||
-                            trade.mint?.slice(0, 8) + "..." ||
+                            order.mint?.slice(0, 8) + "..." ||
                             "Unknown";
 
                           // Format bought/sold amounts
-                          const boughtDisplay =
-                            trade.side === "buy" &&
-                            Number.isFinite(amount) &&
-                            amount > 0
-                              ? currency === "USD" && priceUsd !== null
-                                ? `$${formatSmartNumber(amount * priceUsd)}`
-                                : solSpent !== null
-                                  ? (
-                                      <span className="flex items-center justify-end">
-                                        <img 
-                                          src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png" 
-                                          alt="SOL" 
-                                          className="w-5 h-5 inline-block"
-                                        />
-                                        {formatSmartNumber(Math.abs(solSpent))}
-                                      </span>
-                                    )
-                                  : `${formatSmartNumber(Math.abs(amount))} ${displaySymbol}`
-                              : "—";
+                          const boughtDisplay = currency === "USD"
+                            ? `$${formatSmartNumber(order.boughtValue)}`
+                            : (
+                                <span className="flex items-center justify-end">
+                                  <img 
+                                    src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png" 
+                                    alt="SOL" 
+                                    className="w-5 h-5 inline-block"
+                                  />
+                                  {formatSmartNumber(order.boughtAmount)}
+                                </span>
+                              );
 
-                          const soldDisplay =
-                            trade.side === "sell" &&
-                            Number.isFinite(amount) &&
-                            amount > 0
-                              ? currency === "USD" && priceUsd !== null
-                                ? `$${formatSmartNumber(amount * priceUsd)}`
-                                : `${formatSmartNumber(Math.abs(amount))}`
-                              : "—";
+                          const soldDisplay = currency === "USD"
+                            ? `$${formatSmartNumber(order.soldValue)}`
+                            : formatSmartNumber(order.soldAmount);
+
+                          // Format PnL
+                          const pnlDisplay = `${order.pnl >= 0 ? "+" : ""}$${formatSmartNumber(Math.abs(order.pnl))}`;
+                          const pnlPercentageDisplay = `${order.pnlPercentage >= 0 ? "+" : ""}${order.pnlPercentage.toFixed(2)}%`;
 
                           return (
                             <tr
-                              key={trade.tx || idx}
+                              key={order.sellTrade.tx || idx}
                               className="transition-colors hover:bg-neutral-800"
                             >
                               <td className="px-4 py-3 text-neutral-300">
@@ -1050,7 +1283,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 <div className="flex flex-col">
                                   <span
                                     className="font-semibold text-white"
-                                    title={trade.mint || undefined}
+                                    title={order.mint || undefined}
                                   >
                                     {displayName || displaySymbol}
                                   </span>
@@ -1063,24 +1296,13 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                     )}
                                   {!displayName &&
                                     !displaySymbol &&
-                                    trade.mint && (
+                                    order.mint && (
                                       <span className="font-mono text-[10px] text-neutral-500">
-                                        {trade.mint.slice(0, 4)}...
-                                        {trade.mint.slice(-4)}
+                                        {order.mint.slice(0, 4)}...
+                                        {order.mint.slice(-4)}
                                       </span>
                                     )}
                                 </div>
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <span
-                                  className={`rounded px-2 py-1 text-xs font-bold ${
-                                    trade.side === "buy"
-                                      ? "bg-emerald-900/30 text-emerald-400"
-                                      : "bg-rose-900/30 text-rose-400"
-                                  }`}
-                                >
-                                  {trade.side?.toUpperCase() || "—"}
-                                </span>
                               </td>
                               <td className="px-4 py-3 text-right text-neutral-300">
                                 {boughtDisplay}
@@ -1088,12 +1310,31 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                               <td className="px-4 py-3 text-right text-neutral-300">
                                 {soldDisplay}
                               </td>
-                              <td className="px-4 py-3 text-right text-neutral-300">
-                                {pnlDisplay}
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex flex-col items-end">
+                                  <div
+                                    className={`font-semibold ${
+                                      order.pnl >= 0
+                                        ? "text-emerald-400"
+                                        : "text-red-400"
+                                    }`}
+                                  >
+                                    {pnlDisplay}
+                                  </div>
+                                  <div
+                                    className={`text-xs ${
+                                      order.pnlPercentage >= 0
+                                        ? "text-emerald-400/70"
+                                        : "text-red-400/70"
+                                    }`}
+                                  >
+                                    {pnlPercentageDisplay}
+                                  </div>
+                                </div>
                               </td>
-                              <td className="px-4 py-3 text-center">
+                              {/* <td className="px-4 py-3 text-center">
                                 <a
-                                  href={`https://solscan.io/tx/${trade.tx}`}
+                                  href={`https://solscan.io/tx/${order.sellTrade.tx}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-blue-400 transition-colors hover:text-blue-300"
@@ -1101,7 +1342,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                                 >
                                   <FiExternalLink className="inline text-sm" />
                                 </a>
-                              </td>
+                              </td> */}
                             </tr>
                           );
                         })}
