@@ -260,6 +260,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
+  const usdMcButtonRef = useRef<HTMLElement | null>(null);
   const [isLoading, setIsLoading] = useState(!preloadedData || preloadedData.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [libraryLoaded, setLibraryLoaded] = useState(false);
@@ -269,6 +270,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   const selectedInterval = VALID_INTERVALS.includes(interval) ? interval : '1m';
   const [initialTokenId, setInitialTokenId] = useState<string | null>(() => (mint || pairAddress) ?? null);
+  const [displayMode, setDisplayMode] = useState<'USD' | 'MC'>('USD'); // USD/MC toggle for Monad chain
+  const displayModeRef = useRef<'USD' | 'MC'>('USD'); // Ref for fast access in callbacks
   const latestParamsRef = useRef({
     mint,
     pairAddress,
@@ -277,6 +280,35 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     optimize,
     network,
   });
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    displayModeRef.current = displayMode;
+  }, [displayMode]);
+
+  // Helper function to transform OHLC values based on display mode (USD vs MC)
+  // MC = USD * 1 billion
+  const transformOHLCValue = useCallback((value: number, mode: 'USD' | 'MC', isMonad: boolean): number => {
+    if (!isMonad || mode === 'USD') {
+      return value;
+    }
+    // MC mode: multiply by 1 billion
+    return value * 1_000_000_000;
+  }, []);
+
+  // Helper function to transform a bar object based on display mode
+  const transformBar = useCallback((bar: { time: number; open: number; high: number; low: number; close: number; volume: number }, mode: 'USD' | 'MC', isMonad: boolean) => {
+    if (!isMonad || mode === 'USD') {
+      return bar;
+    }
+    return {
+      ...bar,
+      open: transformOHLCValue(bar.open, mode, isMonad),
+      high: transformOHLCValue(bar.high, mode, isMonad),
+      low: transformOHLCValue(bar.low, mode, isMonad),
+      close: transformOHLCValue(bar.close, mode, isMonad),
+    };
+  }, [transformOHLCValue]);
 
   useEffect(() => {
     if (!initialTokenId && (mint || pairAddress)) {
@@ -300,6 +332,44 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     hasRightAlignedRef.current = false;
   }, [mint, pairAddress]);
 
+  // Refresh chart when displayMode changes (for Monad USD/MC toggle)
+  // Refresh chart when displayMode changes - Force complete reload by changing symbol
+  // Append mode suffix to symbol name so TradingView treats it as a new symbol
+  useEffect(() => {
+    const currentNetwork = latestParamsRef.current.network;
+    if (currentNetwork !== 'monad') return;
+    if (!hasInitializedRef.current) return;
+
+    const widget = widgetRef.current;
+    if (!widget) return;
+
+    widget.onChartReady(() => {
+      try {
+        const baseTokenId = widgetTokenRef.current || (latestParamsRef.current.mint || latestParamsRef.current.pairAddress) || 'TOKEN';
+        const currentInterval = latestParamsRef.current.interval || selectedInterval;
+        const currentResolution = INTERVAL_TO_RESOLUTION[currentInterval] || '1';
+        const currentDisplayMode = displayModeRef.current;
+        
+        // Append mode suffix to force TradingView to treat it as a new symbol
+        // This ensures getBars is called with the new mode
+        const symbolWithMode = `${baseTokenId}|${currentDisplayMode}`;
+        
+        console.log('[AdvancedOHLCChart] 🔄 Changing symbol to force reload:', {
+          baseTokenId,
+          symbolWithMode,
+          mode: currentDisplayMode,
+        });
+
+        // Change symbol - this forces TradingView to call getBars again
+        widget.setSymbol(symbolWithMode, currentResolution, () => {
+          console.log('[AdvancedOHLCChart] ✅ Symbol changed, getBars should be called with mode:', currentDisplayMode);
+        });
+      } catch (e) {
+        console.log('[AdvancedOHLCChart] Failed to change symbol:', e);
+      }
+    });
+  }, [displayMode, selectedInterval]);
+
   // Refs for data management (same as BackendOHLCChart)
   const lastGoodCandlesRef = useRef<BackendOHLCData[]>(preloadedData || []);
   const inFlightRef = useRef<string | null>(null);
@@ -316,6 +386,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const wsRef = useRef<WebSocket | null>(null);
   const wsReconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const subscribedCallbackRef = useRef<((bar: any) => void) | null>(null);
+  const historyCallbackRef = useRef<((bars: any[], meta: any) => void) | null>(null); // Store current history callback for fast refresh
   const latestTradeDataRef = useRef<any[]>(tradeData || []);
   const latestCreatorAddressRef = useRef<string | null>(creatorAddress || null);
   const latestTokenSymbolRef = useRef<string | null>(tokenSymbol || null);
@@ -604,6 +675,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       }
 
       lastGoodCandlesRef.current = items;
+      
+      // ✅ Mark cache as belonging to the current interval
+      // This prevents unnecessary HTTP requests when toggling USD/MC
+      cachedIntervalRef.current = selectedInterval;
+      
       setCandles(items);
       setLastUpdate(new Date());
       setRetryCount(0);
@@ -636,7 +712,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       hasInitializedRef.current = true;
       inFlightRef.current = null;
     }
-  }, [buildUrl, onDataUpdate, preloadedData]);
+  }, [buildUrl, onDataUpdate, preloadedData, selectedInterval]);
 
   // Load TradingView library
   useEffect(() => {
@@ -1135,7 +1211,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             });
             
             // Convert aggregated candle to TradingView bar format
-            let bar = {
+            const baseBar = {
               time: aggregatedCandle.unix_time * 1000, // Convert to ms
               open: aggregatedCandle.o,
               high: aggregatedCandle.h,
@@ -1144,7 +1220,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               volume: aggregatedCandle.v_usd,
             };
             
-            // Update cache with aggregated 1m candle
+            // Apply display mode transformation for Monad
+            const currentNetwork = latestParamsRef.current.network;
+            const isMonad = currentNetwork === 'monad';
+            const currentDisplayMode = displayModeRef.current; // Use ref for fast access
+            let bar = transformBar(baseBar, currentDisplayMode, isMonad);
+            
+            // Update cache with aggregated 1m candle (store raw USD data)
             const cachedData = lastGoodCandlesRef.current;
             const existingIdx = cachedData.findIndex(c => c.unix_time === aggregatedCandle.unix_time);
             if (existingIdx >= 0) {
@@ -1168,8 +1250,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             interval: selectedInterval,
           });
 
-          // Convert to TradingView bar format
-          let bar = {
+          // Convert to TradingView bar format (raw USD data first)
+          const baseBar = {
             time: (ohlcData.time || 0) * 1000, // Convert to ms
             open: ohlcData.o,
             high: ohlcData.h,
@@ -1178,9 +1260,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             volume: ohlcData.v || 0,
           };
 
-          // For Monad: Ensure new candle connects to previous candle
+          // For Monad: Ensure new candle connects to previous candle (work with raw USD data)
           const currentNetwork = latestParamsRef.current.network;
-          if (currentNetwork === 'monad') {
+          const isMonad = currentNetwork === 'monad';
+          if (isMonad) {
             const cachedData = lastGoodCandlesRef.current;
             if (cachedData.length > 0) {
               // Find the most recent candle before this one
@@ -1188,28 +1271,28 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               const previousCandle = sortedCache[sortedCache.length - 1];
               
               // If this candle's time is after the previous, ensure continuity
-              if (bar.time / 1000 > previousCandle.unix_time) {
+              if (baseBar.time / 1000 > previousCandle.unix_time) {
                 const previousClose = previousCandle.c;
                 
                 // Connect: new candle's open should equal previous candle's close
-                if (bar.open !== previousClose) {
-                  const wasFlat = bar.open === bar.high && bar.open === bar.low && bar.open === bar.close;
-                  bar.open = previousClose;
+                if (baseBar.open !== previousClose) {
+                  const wasFlat = baseBar.open === baseBar.high && baseBar.open === baseBar.low && baseBar.open === baseBar.close;
+                  baseBar.open = previousClose;
                   
                   if (wasFlat) {
                     // Was a flat candle - keep it flat at the new price
-                    bar.high = previousClose;
-                    bar.low = previousClose;
-                    bar.close = previousClose;
+                    baseBar.high = previousClose;
+                    baseBar.low = previousClose;
+                    baseBar.close = previousClose;
                   } else {
                     // Had variation - adjust high/low to maintain validity
-                    if (bar.high < bar.open) bar.high = bar.open;
-                    if (bar.low > bar.open) bar.low = bar.open;
+                    if (baseBar.high < baseBar.open) baseBar.high = baseBar.open;
+                    if (baseBar.low > baseBar.open) baseBar.low = baseBar.open;
                   }
                   
                   console.log('[AdvancedOHLCChart] 🔗 Connected WebSocket candle to previous:', {
                     previousClose,
-                    newOpen: bar.open,
+                    newOpen: baseBar.open,
                     wasFlat,
                   });
                 }
@@ -1217,19 +1300,23 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             }
           }
 
+          // Apply display mode transformation before sending to chart
+          const currentDisplayMode = displayModeRef.current; // Use ref for fast access
+          let bar = transformBar(baseBar, currentDisplayMode, isMonad);
+
           // Update the chart via callback if available
           if (subscribedCallbackRef.current && bar.time > 0) {
             subscribedCallbackRef.current(bar);
           }
 
-          // Also update our cache with the new candle (use aggregated bar for 1m)
+          // Also update our cache with the new candle (store raw USD data, not transformed)
           const newCandle: BackendOHLCData = {
-            unix_time: bar.time / 1000,
-            o: bar.open,
-            h: bar.high,
-            l: bar.low,
-            c: bar.close,
-            v_usd: bar.volume,
+            unix_time: baseBar.time / 1000,
+            o: baseBar.open,
+            h: baseBar.high,
+            l: baseBar.low,
+            c: baseBar.close,
+            v_usd: baseBar.volume,
           };
 
           // Update or add the candle to cache
@@ -1406,7 +1493,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       },
 
       resolveSymbol: (symbolName: string, onSymbolResolvedCallback: any) => {
-        console.log('[AdvancedOHLCChart] ========== resolveSymbol CALLED ==========', symbolName);
+        // Strip mode suffix from symbol name (e.g., "TOKEN|MC" -> "TOKEN")
+        const [baseSymbolName] = symbolName.split('|');
+        console.log('[AdvancedOHLCChart] ========== resolveSymbol CALLED ==========', symbolName, '-> base:', baseSymbolName);
         
         // Calculate appropriate pricescale based on typical price range
         // For crypto tokens, prices can vary widely, so we'll use a more flexible approach
@@ -1450,20 +1539,28 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           console.log('[AdvancedOHLCChart] resolveSymbol: sample price was invalid, using MIN_PRICE');
         }
         
+        // Adjust sample price based on display mode (MC = USD * 1 billion)
+        const mode = displayModeRef.current; // 'USD' | 'MC'
+        let effectiveSample = samplePrice;
+        if (mode === 'MC') {
+          effectiveSample = samplePrice * 1_000_000_000;
+        }
+        
+        // Calculate pricescale based on effective sample (accounts for MC mode)
         let pricescale = 100;
-        if (samplePrice < 0.01) {
+        if (effectiveSample < 0.01) {
           pricescale = 100000000; // 8 decimals for very small prices
-        } else if (samplePrice < 1) {
+        } else if (effectiveSample < 1) {
           pricescale = 1000000; // 6 decimals
-        } else if (samplePrice < 100) {
+        } else if (effectiveSample < 100) {
           pricescale = 10000; // 4 decimals
-        } else if (samplePrice < 1000) {
+        } else if (effectiveSample < 1000) {
           pricescale = 100; // 2 decimals
         } else {
           pricescale = 1; // 0 decimals for large numbers
         }
         
-        console.log('[AdvancedOHLCChart] resolveSymbol: samplePrice=', samplePrice, 'pricescale=', pricescale);
+        console.log('[AdvancedOHLCChart] resolveSymbol: samplePrice=', samplePrice, 'mode=', mode, 'effectiveSample=', effectiveSample, 'pricescale=', pricescale);
 
         // Use latestParamsRef to get the current network value (not closure value)
         const currentNetwork = latestParamsRef.current.network;
@@ -1474,9 +1571,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           isMonad,
           latestParamsNetwork: latestParamsRef.current.network 
         });
+        // Update description based on display mode (USD vs MC)
+        // Reuse the 'mode' variable already declared above
+        const modeLabel = mode === 'MC' ? 'Market Cap' : 'Price';
+        
         const symbolInfo = {
           name: symbolName,
-          description: `${dfMint || dfPairAddress || 'Token'} Price Chart`,
+          description: `${dfMint || dfPairAddress || 'Token'} ${modeLabel} Chart`,
           type: 'crypto',
           session: '24x7',
           timezone: 'Etc/UTC',
@@ -1527,6 +1628,21 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         onHistoryCallback: any,
         onErrorCallback: any
       ) => {
+        // Store the callback for fast refresh when displayMode changes
+        historyCallbackRef.current = onHistoryCallback;
+        
+        // Extract mode from symbol name if present (e.g., "TOKEN|MC" -> "MC")
+        const symbolName = symbolInfo?.name || symbolInfo?.ticker || 'TOKEN';
+        const [baseSymbol, modeFromSymbol] = symbolName.split('|');
+        
+        // Update displayModeRef if mode was in symbol name
+        if (modeFromSymbol && (modeFromSymbol === 'USD' || modeFromSymbol === 'MC')) {
+          displayModeRef.current = modeFromSymbol as 'USD' | 'MC';
+          console.log('[AdvancedOHLCChart] 🔄 Mode extracted from symbol, updated displayModeRef to:', modeFromSymbol);
+        }
+        
+        console.log('[AdvancedOHLCChart] 🔵 getBars CALLED - symbol:', symbolName, 'mode:', displayModeRef.current, 'resolution:', resolution);
+        
         // Convert TradingView resolution to our interval format
         const requestedInterval = RESOLUTION_TO_INTERVAL[resolution] || dfInterval;
 
@@ -1539,7 +1655,38 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         const needsFetch = !hasCachedData || intervalChanged;
 
         console.log('[AdvancedOHLCChart] ========== getBars #' + currentFetchCount + ' ==========');
+        console.log('[AdvancedOHLCChart] Cache check:', {
+          hasCachedData,
+          cachedInterval: cachedIntervalRef.current,
+          requestedInterval,
+          intervalChanged,
+          needsFetch,
+          cachedDataLength: lastGoodCandlesRef.current.length,
+          currentDisplayMode: displayModeRef.current,
+        });
         const now = Date.now();
+        
+        // Safely format periodParams dates with validation
+        let periodParamsFormatted = null;
+        if (periodParams && typeof periodParams.from === 'number' && typeof periodParams.to === 'number' && 
+            isFinite(periodParams.from) && isFinite(periodParams.to) && periodParams.from > 0 && periodParams.to > 0) {
+          try {
+            periodParamsFormatted = {
+              from: periodParams.from,
+              to: periodParams.to,
+              fromDate: new Date(periodParams.from * 1000).toISOString(),
+              toDate: new Date(periodParams.to * 1000).toISOString(),
+            };
+          } catch (e) {
+            periodParamsFormatted = {
+              from: periodParams.from,
+              to: periodParams.to,
+              fromDate: 'invalid',
+              toDate: 'invalid',
+            };
+          }
+        }
+        
         console.log('[AdvancedOHLCChart] getBars params:', {
           resolution,
           requestedInterval,
@@ -1549,12 +1696,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           intervalChanged,
           needsFetch,
           currentTime: new Date(now).toISOString(),
-          periodParams: periodParams ? {
-            from: periodParams.from,
-            to: periodParams.to,
-            fromDate: new Date(periodParams.from * 1000).toISOString(),
-            toDate: new Date(periodParams.to * 1000).toISOString(),
-          } : null,
+          periodParams: periodParamsFormatted,
           cachedDataTimeRange: lastGoodCandlesRef.current.length > 0 ? {
             firstCandle: new Date(lastGoodCandlesRef.current[0].unix_time * 1000).toISOString(),
             lastCandle: new Date(lastGoodCandlesRef.current[lastGoodCandlesRef.current.length - 1].unix_time * 1000).toISOString(),
@@ -1567,9 +1709,13 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           console.log('[AdvancedOHLCChart] 📦 Using cached data (skipping HTTP):', items.length, 'candles');
 
           const MIN_PRICE = 0.0000001;
+          const currentNetwork = latestParamsRef.current.network;
+          const isMonad = currentNetwork === 'monad';
+          const currentDisplayMode = displayModeRef.current; // Use ref which was updated from symbol if needed
+          console.log('[AdvancedOHLCChart] 📊 getBars using cached data with mode:', currentDisplayMode, 'isMonad:', isMonad, 'items count:', items.length);
           const allBars = items.map(item => {
             const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
-            return {
+            const baseBar = {
               time: item.unix_time * 1000,
               open: hasZeroValues ? MIN_PRICE : item.o,
               high: hasZeroValues ? MIN_PRICE : item.h,
@@ -1577,12 +1723,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               close: hasZeroValues ? MIN_PRICE : item.c,
               volume: item.v_usd || 0,
             };
+            return transformBar(baseBar, currentDisplayMode, isMonad);
           }).filter(bar => bar.time > 0 && isFinite(bar.time));
           allBars.sort((a, b) => a.time - b.time);
 
           // For Monad: Ensure candles connect properly by making close of one = open of next
-          const currentNetwork = latestParamsRef.current.network;
-          const isMonad = currentNetwork === 'monad';
           if (isMonad && allBars.length > 1) {
             for (let i = 0; i < allBars.length - 1; i++) {
               const currentBar = allBars[i];
@@ -1693,9 +1838,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             const items = lastGoodCandlesRef.current;
             if (items.length > 0) {
               const MIN_PRICE = 0.0000001;
+              const currentNetwork = latestParamsRef.current.network;
+              const isMonad = currentNetwork === 'monad';
+              const currentDisplayMode = displayModeRef.current; // Use ref for fast access
               const allBars = items.map(item => {
                 const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
-                return {
+                const baseBar = {
                   time: item.unix_time * 1000,
                   open: hasZeroValues ? MIN_PRICE : item.o,
                   high: hasZeroValues ? MIN_PRICE : item.h,
@@ -1703,6 +1851,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                   close: hasZeroValues ? MIN_PRICE : item.c,
                   volume: item.v_usd || 0,
                 };
+                return transformBar(baseBar, currentDisplayMode, isMonad);
               }).filter(bar => bar.time > 0 && isFinite(bar.time));
               allBars.sort((a, b) => a.time - b.time);
 
@@ -1775,9 +1924,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             if (hasAnyCandles) {
               console.log('[AdvancedOHLCChart] ⚠️ Items empty but have cached candles, using cache');
               const MIN_PRICE = 0.0000001;
+              const currentDisplayMode = displayModeRef.current; // Use ref for fast access
               const cachedBars = lastGoodCandlesRef.current.map(item => {
                 const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
-                return {
+                const baseBar = {
                   time: item.unix_time * 1000,
                   open: hasZeroValues ? MIN_PRICE : item.o,
                   high: hasZeroValues ? MIN_PRICE : item.h,
@@ -1785,6 +1935,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                   close: hasZeroValues ? MIN_PRICE : item.c,
                   volume: item.v_usd || 0,
                 };
+                return transformBar(baseBar, currentDisplayMode, isMonad);
               }).filter(bar => bar.time > 0 && isFinite(bar.time));
               cachedBars.sort((a, b) => a.time - b.time);
               
@@ -1821,6 +1972,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           // Convert to TradingView format - IMPORTANT: time must be in MILLISECONDS!
           // Our backend returns unix_time in seconds, so we need to convert to milliseconds
           const MIN_PRICE = 0.0000001; // Minimum price for display (0 values are invisible in TradingView)
+          const currentDisplayMode = displayModeRef.current; // Use ref for fast access
           
           const allBars = items.map(item => {
             // Validate data
@@ -1840,7 +1992,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             // This ensures TradingView renders them (otherwise they may be invisible)
             const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
             
-            const bar = {
+            const baseBar = {
               time: timeMs,
               open: hasZeroValues ? MIN_PRICE : item.o,
               high: hasZeroValues ? MIN_PRICE : item.h,
@@ -1848,6 +2000,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               close: hasZeroValues ? MIN_PRICE : item.c,
               volume: item.v_usd || 0,
             };
+            
+            const bar = transformBar(baseBar, currentDisplayMode, isMonad);
             
             if (hasZeroValues) {
               console.log('[AdvancedOHLCChart] 📊 Converted zero-value candle to min price:', bar);
@@ -1987,9 +2141,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             if (hasAnyCandles) {
               console.log('[AdvancedOHLCChart] ⚠️ Bars empty after filtering but have cached candles, using cache');
               const MIN_PRICE = 0.0000001;
+              const currentNetwork = latestParamsRef.current.network;
+              const isMonad = currentNetwork === 'monad';
+              const currentDisplayMode = displayModeRef.current; // Use ref for fast access
               const cachedBars = lastGoodCandlesRef.current.map(item => {
                 const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
-                return {
+                const baseBar = {
                   time: item.unix_time * 1000,
                   open: hasZeroValues ? MIN_PRICE : item.o,
                   high: hasZeroValues ? MIN_PRICE : item.h,
@@ -1997,6 +2154,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                   close: hasZeroValues ? MIN_PRICE : item.c,
                   volume: item.v_usd || 0,
                 };
+                return transformBar(baseBar, currentDisplayMode, isMonad);
               }).filter(bar => bar.time > 0 && isFinite(bar.time));
               cachedBars.sort((a, b) => a.time - b.time);
               
@@ -2079,9 +2237,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           if (lastGoodCandlesRef.current.length > 0) {
             console.log('[AdvancedOHLCChart] Using cached data due to error');
             const MIN_PRICE = 0.0000001;
+            const currentNetwork = latestParamsRef.current.network;
+            const isMonad = currentNetwork === 'monad';
+            const currentDisplayMode = displayModeRef.current; // Use ref for fast access
             const allBars = lastGoodCandlesRef.current.map(item => {
               const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
-              return {
+              const baseBar = {
                 time: item.unix_time * 1000, // Convert to milliseconds
                 open: hasZeroValues ? MIN_PRICE : item.o,
                 high: hasZeroValues ? MIN_PRICE : item.h,
@@ -2089,12 +2250,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 close: hasZeroValues ? MIN_PRICE : item.c,
                 volume: item.v_usd || 0,
               };
+              return transformBar(baseBar, currentDisplayMode, isMonad);
             }).filter(bar => bar.time > 0); // Filter out invalid bars
             allBars.sort((a, b) => a.time - b.time);
             
             // For Monad: Ensure candles connect properly in error fallback
-            const currentNetwork = latestParamsRef.current.network;
-            const isMonad = currentNetwork === 'monad';
             if (isMonad && allBars.length > 1) {
               for (let i = 0; i < allBars.length - 1; i++) {
                 const currentBar = allBars[i];
@@ -2940,6 +3100,36 @@ Maker: ${walletAddress}`;
             'volume.volume.plot.color.0': isMonad ? '#86d99f' : '#26a69a',
             'volume.volume.plot.color.1': isMonad ? '#f26682' : '#ef5350',
           },
+          // Custom price formatter for MC mode (K/M/B suffixes)
+          custom_formatters: {
+            priceFormatterFactory: (symbolInfo: any, minTick: any) => {
+              if (symbolInfo === null) {
+                return null;
+              }
+              
+              // Only apply custom formatting in MC mode for Monad
+              const currentMode = displayModeRef.current;
+              const currentNetwork = latestParamsRef.current.network;
+              if (currentMode === 'MC' && currentNetwork === 'monad') {
+                return {
+                  format: (price: number, signPositive?: boolean) => {
+                    // Format MC values with K/M/B suffixes
+                    if (price >= 1_000_000_000) {
+                      return `${(price / 1_000_000_000).toFixed(2)}B`;
+                    }
+                    if (price >= 1_000_000) {
+                      return `${(price / 1_000_000).toFixed(2)}M`;
+                    }
+                    if (price >= 1_000) {
+                      return `${(price / 1_000).toFixed(2)}K`;
+                    }
+                    return price.toFixed(2);
+                  },
+                };
+              }
+              return null; // Use default formatter for USD mode
+            },
+          },
           // ✅ Don't pass width/height when using autosize
         });
 
@@ -2950,6 +3140,37 @@ Maker: ${walletAddress}`;
         setError(null);
 
         console.log('[AdvancedOHLCChart] ✅ TradingView widget initialized - loading overlay should be dismissed now');
+
+        // Add USD/MC toggle button for Monad chain
+        if (isMonad) {
+          widget.headerReady().then(() => {
+            const button = widget.createButton();
+            const updateButtonText = (mode: 'USD' | 'MC') => {
+              button.innerHTML = mode === 'USD' 
+                ? '<span style="color: #86d99f;">USD</span>/MC'
+                : 'USD/<span style="color: #86d99f;">MC</span>';
+            };
+            updateButtonText(displayMode);
+            button.style.cursor = 'pointer';
+            button.style.padding = '4px 8px';
+            button.style.marginLeft = '8px';
+            usdMcButtonRef.current = button;
+            
+            button.addEventListener('click', () => {
+              setDisplayMode((prevMode) => {
+                const newMode = prevMode === 'USD' ? 'MC' : 'USD';
+                // ✅ CRITICAL: Update ref IMMEDIATELY and SYNCHRONOUSLY before useEffect runs
+                displayModeRef.current = newMode;
+                console.log('[AdvancedOHLCChart] 🎯 Button clicked - displayMode changed to:', newMode, 'ref updated to:', displayModeRef.current);
+                if (usdMcButtonRef.current) {
+                  updateButtonText(newMode);
+                }
+                return newMode;
+              });
+              // The useEffect will handle calling resetData() to refresh the chart
+            });
+          });
+        }
 
         // Force widget to load data after it's ready
         widget.onChartReady(() => {
