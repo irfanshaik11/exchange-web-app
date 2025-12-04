@@ -1,8 +1,9 @@
 import Head from "next/head";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, ShieldCheck, Loader2 } from "lucide-react";
 import { IframeStamper } from "@turnkey/iframe-stamper";
 import { useRouter } from "next/router";
+import dynamic from "next/dynamic";
 
 import Header from "~/components/Header";
 import Footer from "~/components/Footer";
@@ -12,6 +13,12 @@ import {
   WalletSource,
   useTurnkey,
 } from "~/lib/turnkeyWalletKit";
+import { useUser } from "~/components/UserContext";
+
+// Dynamically import LoginModal to avoid SSR issues
+const LoginModal = dynamic(() => import("~/components/LoginModal"), {
+  ssr: false,
+});
 
 type ExportStatus = "idle" | "initializing" | "requesting" | "injecting" | "done" | "error";
 
@@ -51,12 +58,19 @@ const statusCopy: Record<
   },
 };
 
+
 export default function TurnkeyExportPage() {
   const router = useRouter();
   const { walletId: walletIdQuery } = router.query;
   const turnkey = useTurnkey() as any;
-  const { authState, clientState, wallets = [], session, exportWallet } =
+  const { authState, clientState, wallets = [], exportWallet, user: turnkeyUser, session: turnkeySession } =
     turnkey || {};
+  // Access session directly from turnkey object - it might not be destructured immediately
+  // Try multiple ways to access the session
+  const session = turnkeySession || turnkey?.session;
+  
+  // Check if user is logged in to the app
+  const { user: appUser } = useUser();
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [status, setStatus] = useState<ExportStatus>("idle");
@@ -65,10 +79,159 @@ export default function TurnkeyExportPage() {
   const [targetPublicKey, setTargetPublicKey] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [fetchedWallets, setFetchedWallets] = useState<any[]>([]);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const walletsRequestRef = useRef(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [confirmedAuthenticated, setConfirmedAuthenticated] = useState(false);
 
   const iframeContainerRef = useRef<HTMLDivElement | null>(null);
   const iframeStamperRef = useRef<IframeStamper | null>(null);
+
+  // Check if authenticated - prioritize session over authState since authState can lag
+  // If we have a valid session with all required fields, consider it authenticated
+  // Also check if turnkey object has session nested differently
+  const sessionFromContext = session || turnkey?.session;
+  const hasValidSession = !!(
+    sessionFromContext?.token && 
+    sessionFromContext?.organizationId && 
+    sessionFromContext?.userId
+  );
+  // Also check if we have a Turnkey user object, which indicates authentication
+  const hasTurnkeyUser = !!turnkeyUser;
+  // If user is logged in to the app, they should be able to export if they have a Turnkey session
+  // The session might exist even if authState hasn't updated yet
+  const isAppUserLoggedIn = !!appUser;
+  const isAuthenticated = 
+    hasValidSession || 
+    authState === AuthState.Authenticated ||
+    confirmedAuthenticated ||
+    (hasTurnkeyUser && clientState === ClientState.Ready) ||
+    (isAppUserLoggedIn && hasValidSession); // If app user is logged in and has session, allow export
+
+  // Debug logging for Turnkey state
+  useEffect(() => {
+    const sessionFromTurnkey = turnkey?.session;
+    const allSessionSources = {
+      destructured: session,
+      fromTurnkey: turnkey?.session,
+      fromContext: sessionFromContext,
+    };
+    
+    console.log('[Export Page] Turnkey state:', {
+      authState,
+      authStateValue: authState === AuthState.Authenticated ? 'Authenticated' : 
+                      authState === AuthState.Unauthenticated ? 'Unauthenticated' : 
+                      String(authState),
+      hasValidSession,
+      hasTurnkeyUser,
+      confirmedAuthenticated,
+      isAuthenticated,
+      clientState,
+      clientStateValue: clientState === ClientState.Ready ? 'Ready' : String(clientState),
+      hasSession: !!session,
+      hasSessionFromTurnkey: !!sessionFromTurnkey,
+      sessionToken: session?.token ? 'present' : 'missing',
+      sessionTokenFromTurnkey: sessionFromTurnkey?.token ? 'present' : 'missing',
+      organizationId: session?.organizationId || sessionFromTurnkey?.organizationId,
+      userId: session?.userId || sessionFromTurnkey?.userId,
+      turnkeyUser: turnkeyUser ? { id: turnkeyUser?.id, email: turnkeyUser?.userEmail, name: turnkeyUser?.userName } : null,
+      appUser: appUser ? { email: appUser.email, name: appUser.name } : null,
+      isAppUserLoggedIn,
+      allSessionSources,
+      turnkeyContextKeys: turnkey ? Object.keys(turnkey) : [],
+      turnkeyHasSession: 'session' in (turnkey || {}),
+      turnkeyHasUser: 'user' in (turnkey || {}),
+      turnkeyType: typeof turnkey,
+      turnkeyIsNull: turnkey === null,
+      turnkeyIsUndefined: turnkey === undefined,
+    });
+  }, [authState, clientState, session, turnkey, turnkeyUser, appUser, isAuthenticated, hasValidSession, hasTurnkeyUser, confirmedAuthenticated, sessionFromContext, isAppUserLoggedIn]);
+
+  // Auto-close login modal when authentication succeeds
+  useEffect(() => {
+    if (isAuthenticated && showLoginModal) {
+      console.log('[Export Page] Auth succeeded, closing login modal');
+      setShowLoginModal(false);
+    }
+  }, [isAuthenticated, showLoginModal]);
+
+  // Wait for Turnkey context to fully initialize and check for session multiple times
+  // The session might not be immediately available on first render
+  useEffect(() => {
+    if (clientState !== ClientState.Ready) return;
+    
+    // Check immediately - check both session and turnkey?.session
+    const currentSession = session || turnkey?.session;
+    if (currentSession?.token && currentSession?.organizationId && currentSession?.userId) {
+      console.log('[Export Page] Valid session detected immediately');
+      setSessionChecked(true);
+      setConfirmedAuthenticated(true);
+      return;
+    }
+    
+    // If not found, check again after a short delay (session might be loading from IndexedDB)
+    const maxAttempts = 10;
+    let attempt = 0;
+    
+    const checkSession = () => {
+      attempt++;
+      const currentSession = turnkey?.session || session;
+      if (currentSession?.token && currentSession?.organizationId && currentSession?.userId) {
+        console.log('[Export Page] Session found after', attempt, 'attempt(s)');
+        setSessionChecked(true);
+        setConfirmedAuthenticated(true);
+        return;
+      }
+      
+      if (attempt < maxAttempts) {
+        setTimeout(checkSession, 200);
+      } else {
+        console.log('[Export Page] Session not found after', maxAttempts, 'attempts');
+        setSessionChecked(true); // Mark as checked even if not found
+      }
+    };
+    
+    const timer = setTimeout(checkSession, 200);
+    return () => clearTimeout(timer);
+  }, [clientState, session, turnkey]);
+
+  // Also confirm authentication when authState becomes Authenticated
+  useEffect(() => {
+    if (authState === AuthState.Authenticated) {
+      console.log('[Export Page] authState is now Authenticated');
+      setConfirmedAuthenticated(true);
+    }
+  }, [authState]);
+
+  // Confirm authentication when we detect a valid session or user (even if authState hasn't updated)
+  useEffect(() => {
+    if ((hasValidSession || (hasTurnkeyUser && clientState === ClientState.Ready)) && !confirmedAuthenticated) {
+      console.log('[Export Page] Valid session or user detected, confirming authentication', {
+        hasValidSession,
+        hasTurnkeyUser,
+        clientState,
+      });
+      setConfirmedAuthenticated(true);
+    }
+  }, [hasValidSession, hasTurnkeyUser, clientState, confirmedAuthenticated]);
+
+  // Close login modal if user becomes authenticated
+  useEffect(() => {
+    if (isAuthenticated && showLoginModal) {
+      console.log('[Export Page] User authenticated, closing login modal');
+      setShowLoginModal(false);
+    }
+  }, [isAuthenticated, showLoginModal]);
+
+  // If we have a valid session but authState hasn't caught up yet, wait a bit
+  // This handles the case where session exists but authState is still loading
+  useEffect(() => {
+    if (hasValidSession && authState !== AuthState.Authenticated && clientState === ClientState.Ready) {
+      console.log('[Export Page] Valid session detected but authState not yet Authenticated, waiting for sync...');
+      // The session check should be sufficient, but we log this for debugging
+    }
+  }, [hasValidSession, authState, clientState]);
+  
 
   useEffect(() => {
     setIsClient(true);
@@ -162,11 +325,24 @@ export default function TurnkeyExportPage() {
     setSelectedWalletId(embedded?.id ?? null);
   }, [selectedWalletId, walletOptions, walletIdQuery]);
 
+  // Allow export if we have a valid session and client is ready, even if authState isn't Authenticated
   const isTurnkeyReady =
-    authState === AuthState.Authenticated &&
     clientState === ClientState.Ready &&
-    !!session?.organizationId &&
-    !!selectedWalletId;
+    hasValidSession &&
+    !!sessionFromContext?.organizationId &&
+    !!selectedWalletId &&
+    !!exportWallet;
+
+  // Log isTurnkeyReady state
+  useEffect(() => {
+    console.log('[Export Page] isTurnkeyReady:', isTurnkeyReady, {
+      clientState: clientState === ClientState.Ready,
+      hasValidSession,
+      hasOrganizationId: !!sessionFromContext?.organizationId,
+      hasSelectedWallet: !!selectedWalletId,
+      hasExportWallet: !!exportWallet,
+    });
+  }, [isTurnkeyReady, clientState, hasValidSession, sessionFromContext?.organizationId, selectedWalletId, exportWallet]);
 
   const handleExport = useCallback(async () => {
     if (!isClient) return;
@@ -240,6 +416,16 @@ export default function TurnkeyExportPage() {
     }
   }, [exportWallet, isClient, isTurnkeyReady, selectedWalletId, session?.organizationId]);
 
+  // Open login modal to re-authenticate with Turnkey
+  const handleReauthenticate = useCallback(() => {
+    setShowLoginModal(true);
+  }, []);
+
+  // Close login modal (called when auth succeeds or user closes)
+  const handleLoginModalClose = useCallback(() => {
+    setShowLoginModal(false);
+  }, []);
+
   const currentStatus = statusCopy[status];
 
   return (
@@ -266,11 +452,13 @@ export default function TurnkeyExportPage() {
               </div>
               <div className="w-full max-w-xs rounded-2xl border border-neutral-800 bg-neutral-900/70 p-4 shadow-lg shadow-black/20">
                 <div className="flex items-center gap-3">
-                  <ShieldCheck className="h-10 w-10 text-emerald-400" />
+                  <ShieldCheck className={`h-10 w-10 ${isAuthenticated ? 'text-emerald-400' : 'text-amber-400'}`} />
                   <div>
                     <p className="text-sm text-neutral-400">Turnkey session</p>
                     <p className="text-lg font-semibold text-[#f4f6f7]">
-                      {authState === AuthState.Authenticated
+                      {clientState !== ClientState.Ready
+                        ? "Initializing..."
+                        : isAuthenticated
                         ? "Authenticated"
                         : "Sign in required"}
                     </p>
@@ -279,6 +467,21 @@ export default function TurnkeyExportPage() {
                 <p className="mt-3 text-xs text-neutral-500">
                   You must be logged in with your Turnkey session to sign the EXPORT_WALLET activity.
                 </p>
+                {clientState === ClientState.Ready && !isAuthenticated && (
+                  <>
+                    <button
+                      onClick={handleReauthenticate}
+                      className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-900 shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+                    >
+                      Connect with Turnkey
+                    </button>
+                    {isAppUserLoggedIn && !hasValidSession && authState !== AuthState.Authenticated && (
+                      <p className="mt-3 text-xs text-amber-400">
+                        You're logged in to the app, but need a Turnkey session to export. Please click "Connect with Turnkey" above.
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -353,6 +556,11 @@ export default function TurnkeyExportPage() {
                     disabled={!isTurnkeyReady || status === "initializing" || status === "requesting" || status === "injecting"}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-900 shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
                   >
+                    {(status === "initializing" ||
+                    status === "requesting" ||
+                    status === "injecting") && (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )}
                     {status === "initializing" ||
                     status === "requesting" ||
                     status === "injecting"
@@ -417,6 +625,14 @@ export default function TurnkeyExportPage() {
         </main>
         <Footer />
       </div>
+
+      {/* Login modal for re-authentication */}
+      {isClient && (
+        <LoginModal
+          open={showLoginModal}
+          onClose={handleLoginModalClose}
+        />
+      )}
     </>
   );
 }
