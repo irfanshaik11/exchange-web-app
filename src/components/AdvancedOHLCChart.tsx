@@ -845,7 +845,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               console.log('[AdvancedOHLCChart] ⚠️ No historical candles received from WebSocket');
               
               // For Monad: Create a placeholder candle at 0 when no data
-              if (network === 'monad') {
+              const currentNetwork = latestParamsRef.current.network;
+              if (currentNetwork === 'monad') {
                 const now = Math.floor(Date.now() / 1000);
                 const placeholderCandle: BackendOHLCData = {
                   unix_time: now,
@@ -1116,7 +1117,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           };
 
           // For Monad: Ensure new candle connects to previous candle
-          if (network === 'monad') {
+          const currentNetwork = latestParamsRef.current.network;
+          if (currentNetwork === 'monad') {
             const cachedData = lastGoodCandlesRef.current;
             if (cachedData.length > 0) {
               // Find the most recent candle before this one
@@ -1489,7 +1491,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           allBars.sort((a, b) => a.time - b.time);
 
           // For Monad: Ensure candles connect properly by making close of one = open of next
-          if (network === 'monad' && allBars.length > 1) {
+          const currentNetwork = latestParamsRef.current.network;
+          const isMonad = currentNetwork === 'monad';
+          if (isMonad && allBars.length > 1) {
             for (let i = 0; i < allBars.length - 1; i++) {
               const currentBar = allBars[i];
               const nextBar = allBars[i + 1];
@@ -1536,10 +1540,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             // If ALL cached data is AFTER the requested range (future relative to request)
             if (oldestDataTime > toMs) {
               if (!periodParams.firstDataRequest) {
-                // Not first request - stop backward pagination
-                console.log('[AdvancedOHLCChart] 📦 Cached data is in future, stopping backward pagination (noData: true)');
+                // Not first request - stop backward pagination (use noData: false to avoid ghost)
+                console.log('[AdvancedOHLCChart] 📦 Cached data is in future, stopping backward pagination (noData: false)');
                 if (typeof onHistoryCallback === 'function') {
-                  onHistoryCallback([], { noData: true });
+                  onHistoryCallback([], { noData: false });
                 }
                 return;
               }
@@ -1548,9 +1552,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             }
             // If ALL cached data is BEFORE the requested range
             else if (newestDataTime < fromMs && !periodParams.firstDataRequest) {
-              console.log('[AdvancedOHLCChart] 📦 Cached data is before range, noData: true');
+              // Use noData: false to avoid ghost - data exists, just not in this window
+              console.log('[AdvancedOHLCChart] 📦 Cached data is before range, noData: false');
               if (typeof onHistoryCallback === 'function') {
-                onHistoryCallback([], { noData: true });
+                onHistoryCallback([], { noData: false });
               }
               return;
             }
@@ -1570,7 +1575,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             console.log('[AdvancedOHLCChart] ⚠️ No bars to return');
             
             // For Monad: Return a placeholder candle at 0 on initial load
-            if (network === 'monad' && periodParams.firstDataRequest) {
+            if (isMonad && periodParams.firstDataRequest) {
               const now = Math.floor(Date.now() / 1000); // Current time in seconds
               const placeholderCandle = {
                 time: now * 1000, // Convert to milliseconds
@@ -1666,12 +1671,41 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           // Signal that request is complete
           resolveInFlight!();
           getBarsInFlightRef.current = null;
+          
+          // Get current network for Monad-specific logic
+          const currentNetwork = latestParamsRef.current.network;
+          const isMonad = currentNetwork === 'monad';
+          
           // Handle empty data case
           if (items.length === 0) {
             console.log('[AdvancedOHLCChart] No data available');
             
+            // Check if we have cached data before returning noData
+            const hasAnyCandles = lastGoodCandlesRef.current && lastGoodCandlesRef.current.length > 0;
+            if (hasAnyCandles) {
+              console.log('[AdvancedOHLCChart] ⚠️ Items empty but have cached candles, using cache');
+              const MIN_PRICE = 0.0000001;
+              const cachedBars = lastGoodCandlesRef.current.map(item => {
+                const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
+                return {
+                  time: item.unix_time * 1000,
+                  open: hasZeroValues ? MIN_PRICE : item.o,
+                  high: hasZeroValues ? MIN_PRICE : item.h,
+                  low: hasZeroValues ? MIN_PRICE : item.l,
+                  close: hasZeroValues ? MIN_PRICE : item.c,
+                  volume: item.v_usd || 0,
+                };
+              }).filter(bar => bar.time > 0 && isFinite(bar.time));
+              cachedBars.sort((a, b) => a.time - b.time);
+              
+              if (typeof onHistoryCallback === 'function') {
+                onHistoryCallback(cachedBars, { noData: false });
+              }
+              return;
+            }
+            
             // For Monad: Return a placeholder candle at 0 on initial load
-            if (network === 'monad' && periodParams.firstDataRequest) {
+            if (isMonad && periodParams.firstDataRequest) {
               const now = Math.floor(Date.now() / 1000); // Current time in seconds
               const placeholderCandle = {
                 time: now * 1000, // Convert to milliseconds
@@ -1741,7 +1775,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
           // For Monad: Ensure candles connect properly by making close of one = open of next
           // This creates visual continuity even when candles are flat (o=h=l=c)
-          if (network === 'monad' && allBars.length > 1) {
+          if (isMonad && allBars.length > 1) {
             for (let i = 0; i < allBars.length - 1; i++) {
               const currentBar = allBars[i];
               const nextBar = allBars[i + 1];
@@ -1775,7 +1809,33 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             }
           }
 
-          // Filter bars to requested time range
+          // CRITICAL FIX: For Monad first request, ignore from/to and return all candles
+          // This ensures TradingView always sees data on initial load
+          const isFirst = !!periodParams.firstDataRequest;
+          if (isMonad && isFirst) {
+            console.log('[AdvancedOHLCChart] 📊 Monad first request - ignoring time range, returning all', allBars.length, 'bars');
+            if (allBars.length === 0) {
+              // If somehow empty, create placeholder instead of noData:true
+              const now = Math.floor(Date.now() / 1000);
+              const placeholderCandle = {
+                time: now * 1000,
+                open: 0,
+                high: 0,
+                low: 0,
+                close: 0,
+                volume: 0,
+              };
+              allBars.push(placeholderCandle);
+              console.log('[AdvancedOHLCChart] 📊 Created placeholder candle for Monad first request');
+            }
+            if (typeof onHistoryCallback === 'function') {
+              onHistoryCallback(allBars, { noData: false });
+            }
+            rightAlignChart(allBars.length);
+            return;
+          }
+
+          // Filter bars to requested time range (for non-first requests or non-Monad)
           const fromMs = (periodParams.from ?? 0) * 1000;
           const toMs = (periodParams.to ?? 0) * 1000;
           let bars = allBars;
@@ -1797,12 +1857,12 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               console.log('[AdvancedOHLCChart] ⚠️ All data is in the FUTURE relative to requested range');
               console.log('[AdvancedOHLCChart] ⚠️ Oldest data:', new Date(oldestDataTime).toISOString(), '> requested to:', new Date(toMs).toISOString());
               
-              // If this is NOT the first data load (firstDataRequest), return noData to stop pagination
-              // TradingView will stop requesting more historical data
+              // If this is NOT the first data load (firstDataRequest), return noData: false to stop pagination
+              // Use noData: false to avoid ghost - data exists, just not in this window
               if (!periodParams.firstDataRequest) {
-                console.log('[AdvancedOHLCChart] ✋ Returning noData=true to stop backward pagination');
+                console.log('[AdvancedOHLCChart] ✋ Returning noData=false to stop backward pagination');
                 if (typeof onHistoryCallback === 'function') {
-                  onHistoryCallback([], { noData: true });
+                  onHistoryCallback([], { noData: false });
                 }
                 return;
               }
@@ -1817,10 +1877,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 bars = filteredBars;
                 console.log('[AdvancedOHLCChart] Filtered to', bars.length, 'bars within requested range');
               } else if (newestDataTime < fromMs) {
-                // All our data is BEFORE the requested range - no more data available
-                console.log('[AdvancedOHLCChart] ✋ All data is before requested range, noData=true');
+                // All our data is BEFORE the requested range - use noData: false to avoid ghost
+                console.log('[AdvancedOHLCChart] ✋ All data is before requested range, noData=false');
                 if (typeof onHistoryCallback === 'function') {
-                  onHistoryCallback([], { noData: true });
+                  onHistoryCallback([], { noData: false });
                 }
                 return;
               } else {
@@ -1832,8 +1892,32 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
           // Return bars to TradingView
           if (bars.length === 0) {
+            // Check if we have cached data before returning noData
+            const hasAnyCandles = lastGoodCandlesRef.current && lastGoodCandlesRef.current.length > 0;
+            if (hasAnyCandles) {
+              console.log('[AdvancedOHLCChart] ⚠️ Bars empty after filtering but have cached candles, using cache');
+              const MIN_PRICE = 0.0000001;
+              const cachedBars = lastGoodCandlesRef.current.map(item => {
+                const hasZeroValues = item.o === 0 && item.h === 0 && item.l === 0 && item.c === 0;
+                return {
+                  time: item.unix_time * 1000,
+                  open: hasZeroValues ? MIN_PRICE : item.o,
+                  high: hasZeroValues ? MIN_PRICE : item.h,
+                  low: hasZeroValues ? MIN_PRICE : item.l,
+                  close: hasZeroValues ? MIN_PRICE : item.c,
+                  volume: item.v_usd || 0,
+                };
+              }).filter(bar => bar.time > 0 && isFinite(bar.time));
+              cachedBars.sort((a, b) => a.time - b.time);
+              
+              if (typeof onHistoryCallback === 'function') {
+                onHistoryCallback(cachedBars, { noData: false });
+              }
+              return;
+            }
+            
             // For Monad: Return a placeholder candle at 0 on initial load
-            if (network === 'monad' && periodParams.firstDataRequest) {
+            if (isMonad && periodParams.firstDataRequest) {
               const now = Math.floor(Date.now() / 1000); // Current time in seconds
               const placeholderCandle = {
                 time: now * 1000, // Convert to milliseconds
@@ -1873,7 +1957,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                 rightAlignChart(bars.length);
                 
                 // For Monad: Ensure thin candles
-                if (network === 'monad' && widgetRef.current) {
+                if (isMonad && widgetRef.current) {
                   widgetRef.current.onChartReady(() => {
                     try {
                       const chart = widgetRef.current?.chart?.();
@@ -1919,7 +2003,9 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             allBars.sort((a, b) => a.time - b.time);
             
             // For Monad: Ensure candles connect properly in error fallback
-            if (network === 'monad' && allBars.length > 1) {
+            const currentNetwork = latestParamsRef.current.network;
+            const isMonad = currentNetwork === 'monad';
+            if (isMonad && allBars.length > 1) {
               for (let i = 0; i < allBars.length - 1; i++) {
                 const currentBar = allBars[i];
                 const nextBar = allBars[i + 1];
@@ -1948,7 +2034,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               console.log('[AdvancedOHLCChart] Cached data is empty');
               
               // For Monad: Return a placeholder candle at 0 on initial load
-              if (network === 'monad' && periodParams?.firstDataRequest) {
+              if (isMonad && periodParams?.firstDataRequest) {
                 const now = Math.floor(Date.now() / 1000); // Current time in seconds
                 const placeholderCandle = {
                   time: now * 1000, // Convert to milliseconds
