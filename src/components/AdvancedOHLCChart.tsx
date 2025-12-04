@@ -295,6 +295,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     };
   }, [mint, pairAddress, interval, timeframe, optimize, network]);
 
+  // Reset right-alignment flag when token changes so chart gets aligned again
+  useEffect(() => {
+    hasRightAlignedRef.current = false;
+  }, [mint, pairAddress]);
+
   // Refs for data management (same as BackendOHLCChart)
   const lastGoodCandlesRef = useRef<BackendOHLCData[]>(preloadedData || []);
   const inFlightRef = useRef<string | null>(null);
@@ -325,6 +330,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const currentAggregatedCandleRef = useRef<BackendOHLCData | null>(null);
   const oneSecondCandlesRef = useRef<BackendOHLCData[]>([]);
   const currentAggregatingIntervalRef = useRef<string | null>(null);
+  // Track if initial right-alignment has been done to prevent overriding user's zoom/pan
+  const hasRightAlignedRef = useRef(false);
 
   useEffect(() => {
     latestTradeDataRef.current = tradeData || [];
@@ -414,6 +421,110 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     },
     []
   );
+
+  // Helper function to right-align chart using logical range positioning
+  // This ensures candles are aligned to the right side, with latest candles visible
+  const rightAlignChart = useCallback((barCount: number) => {
+    if (!widgetRef.current || !containerRef.current || barCount === 0 || hasRightAlignedRef.current) {
+      return;
+    }
+
+    widgetRef.current.onChartReady(() => {
+      try {
+        const chart = widgetRef.current?.chart?.();
+        if (!chart) return;
+
+        const timeScale = chart.timeScale();
+        if (!timeScale) return;
+
+        // Get data from cache to calculate time-based ranges
+        const cachedData = lastGoodCandlesRef.current;
+        if (cachedData.length === 0) {
+          console.log('[AdvancedOHLCChart] ⚠️ No cached data available for right-alignment');
+          return;
+        }
+
+        // Calculate target bars based on container width
+        const PX_PER_BAR = 10;     // pixels per bar (higher = fewer bars, more zoomed in)
+        const MIN_BARS = 80;       // minimum bars to show (lower = more zoomed in)
+
+        const width = containerRef.current?.clientWidth || 800;
+        const targetBars = Math.max(Math.floor(width / PX_PER_BAR), MIN_BARS);
+
+        // Get the latest candle time
+        const sortedData = [...cachedData].sort((a, b) => a.unix_time - b.unix_time);
+        const latestCandle = sortedData[sortedData.length - 1];
+        const latestTime = latestCandle.unix_time;
+
+        // Calculate the interval in seconds from the data
+        let intervalSeconds = 60; // default 1 minute
+        if (sortedData.length > 1) {
+          const timeDiff = sortedData[1].unix_time - sortedData[0].unix_time;
+          if (timeDiff > 0) intervalSeconds = timeDiff;
+        }
+
+        // Calculate time range: show targetBars worth of data ending at latestTime
+        const barsToShow = Math.min(barCount, targetBars);
+        const timeSpan = barsToShow * intervalSeconds;
+        const fromTime = latestTime - timeSpan;
+        const toTime = latestTime + (intervalSeconds * 2); // Add buffer for future
+
+        // Try logical range first (for TradingView lightweight charts)
+        try {
+          if (barCount <= targetBars) {
+            // Sparse data: show all bars, position latest on right
+            const lastIdx = barCount - 1 + 5; // Add padding
+            const firstIdx = Math.max(0, lastIdx - targetBars);
+            if (typeof timeScale.setVisibleLogicalRange === 'function') {
+              timeScale.setVisibleLogicalRange({ from: firstIdx, to: lastIdx });
+              console.log('[AdvancedOHLCChart] 📊 Right-aligned sparse data (logical):', { barCount, firstIdx, lastIdx });
+            } else {
+              // Fallback to time-based range
+              if (typeof chart.setVisibleRange === 'function') {
+                chart.setVisibleRange({ from: fromTime, to: toTime });
+                console.log('[AdvancedOHLCChart] 📊 Right-aligned sparse data (time-based):', { fromTime, toTime });
+              }
+            }
+          } else {
+            // Dense data: show most recent bars
+            const lastIdx = barCount - 1 + 5;
+            const firstIdx = lastIdx - targetBars + 1;
+            if (typeof timeScale.setVisibleLogicalRange === 'function') {
+              timeScale.setVisibleLogicalRange({ from: firstIdx, to: lastIdx });
+              console.log('[AdvancedOHLCChart] 📊 Right-aligned dense data (logical):', { barCount, firstIdx, lastIdx });
+            } else {
+              // Fallback to time-based range
+              if (typeof chart.setVisibleRange === 'function') {
+                chart.setVisibleRange({ from: fromTime, to: toTime });
+                console.log('[AdvancedOHLCChart] 📊 Right-aligned dense data (time-based):', { fromTime, toTime });
+              }
+            }
+          }
+        } catch (logicalErr) {
+          // If logical range fails, use time-based range
+          console.log('[AdvancedOHLCChart] Logical range failed, trying time-based:', logicalErr);
+          if (typeof chart.setVisibleRange === 'function') {
+            chart.setVisibleRange({ from: fromTime, to: toTime });
+            console.log('[AdvancedOHLCChart] 📊 Right-aligned using time-based range:', { fromTime, toTime });
+          }
+        }
+
+        // Scroll to real-time to keep aligned to the right edge
+        setTimeout(() => {
+          try {
+            timeScale.scrollToRealTime();
+          } catch (e) {
+            console.log('[AdvancedOHLCChart] Could not scroll to real-time:', e);
+          }
+        }, 100);
+        
+        hasRightAlignedRef.current = true;
+        console.log('[AdvancedOHLCChart] ✅ Chart right-aligned successfully');
+      } catch (e) {
+        console.log('[AdvancedOHLCChart] ⚠️ Could not right-align chart:', e);
+      }
+    });
+  }, []);
 
   // Fetch candles function (EXACT same logic as BackendOHLCChart)
   const fetchCandles = useCallback(async () => {
@@ -819,28 +930,15 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
                       widgetRef.current.setSymbol(tokenId, currentResolution, () => {
                         console.log('[AdvancedOHLCChart] ✅ TradingView setSymbol() completed');
                         
-                        // After refresh, try to navigate to the data's time range
+                        // After refresh, right-align chart to show latest candles
                         try {
-                          const chart = widgetRef.current?.chart?.();
-                          if (chart && lastGoodCandlesRef.current.length > 0) {
-                            const firstCandle = lastGoodCandlesRef.current[0];
-                            const lastCandle = lastGoodCandlesRef.current[lastGoodCandlesRef.current.length - 1];
-                            const fromTime = firstCandle.unix_time;
-                            const toTime = lastCandle.unix_time + 60; // Add 1 minute buffer
-                            
-                            console.log('[AdvancedOHLCChart] 📊 Setting visible range to:', {
-                              from: new Date(fromTime * 1000).toISOString(),
-                              to: new Date(toTime * 1000).toISOString(),
-                            });
-                            
-                            // Set visible range to include all our data
-                            chart.setVisibleRange?.({
-                              from: fromTime,
-                              to: toTime,
-                            });
+                          if (lastGoodCandlesRef.current.length > 0) {
+                            setTimeout(() => {
+                              rightAlignChart(lastGoodCandlesRef.current.length);
+                            }, 300);
                           }
                         } catch (rangeErr) {
-                          console.log('[AdvancedOHLCChart] Could not set visible range:', rangeErr);
+                          console.log('[AdvancedOHLCChart] Could not right-align chart:', rangeErr);
                         }
                       });
                     } catch (e) {
@@ -1462,31 +1560,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             console.log('[AdvancedOHLCChart] ✅ Calling onHistoryCallback with', allBars.length, 'bars (noData: false)');
             onHistoryCallback(allBars, { noData: false });
             
-            // Navigate chart to data range if this was first request with future data
-            if (periodParams.firstDataRequest && widgetRef.current) {
-              const firstBarTime = allBars[0].time / 1000;
-              const lastBarTime = allBars[allBars.length - 1].time / 1000;
-              const toTime = lastBarTime + 60;
-              
+            // Right-align chart after first data load from cache
+            if (periodParams.firstDataRequest && allBars.length > 0) {
               setTimeout(() => {
-                try {
-                  if (widgetRef.current) {
-                    widgetRef.current.onChartReady(() => {
-                      try {
-                        const chart = widgetRef.current?.chart?.();
-                        if (chart && typeof chart.setVisibleRange === 'function') {
-                          console.log('[AdvancedOHLCChart] 📦 Navigating chart to cached data range');
-                          chart.setVisibleRange({ from: firstBarTime, to: toTime });
-                        }
-                      } catch (e) {
-                        console.log('[AdvancedOHLCChart] Navigation error:', e);
-                      }
-                    });
-                  }
-                } catch (e) {
-                  console.log('[AdvancedOHLCChart] Could not navigate:', e);
-                }
-              }, 200);
+                rightAlignChart(allBars.length);
+              }, 300);
             }
           } else if (typeof onHistoryCallback === 'function') {
             console.log('[AdvancedOHLCChart] ⚠️ No bars to return');
@@ -1789,37 +1867,31 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             console.log('[AdvancedOHLCChart] ✅ Calling onHistoryCallback with noData: false');
             onHistoryCallback(bars, { noData: false });
             
-            // For Monad: Zoom out and set thin candles after first data load
-            if (periodParams.firstDataRequest && bars.length > 0 && widgetRef.current && network === 'monad') {
+            // Right-align chart after first data load for all networks
+            if (periodParams.firstDataRequest && bars.length > 0) {
               setTimeout(() => {
-                try {
-                  if (widgetRef.current) {
-                    widgetRef.current.onChartReady(() => {
-                      try {
-                        const chart = widgetRef.current?.chart?.();
-                        if (chart) {
-                          // Zoom out to show all data (like Solana chart)
-                          chart.timeScale().fitContent();
-                          
-                          // Ensure thin candles
-                          chart.applyOptions({
-                            timeScale: {
-                              barSpacing: 2, // Thin candles
-                              minBarSpacing: 1,
-                            },
-                          });
-                          
-                          console.log('[AdvancedOHLCChart] 📊 Monad chart zoomed out and configured with thin candles');
-                        }
-                      } catch (navErr) {
-                        console.log('[AdvancedOHLCChart] Chart configuration error:', navErr);
+                rightAlignChart(bars.length);
+                
+                // For Monad: Ensure thin candles
+                if (network === 'monad' && widgetRef.current) {
+                  widgetRef.current.onChartReady(() => {
+                    try {
+                      const chart = widgetRef.current?.chart?.();
+                      if (chart) {
+                        chart.applyOptions({
+                          timeScale: {
+                            barSpacing: 2, // Thin candles
+                            minBarSpacing: 1,
+                          },
+                        });
+                        console.log('[AdvancedOHLCChart] 📊 Monad chart configured with thin candles');
                       }
-                    });
-                  }
-                } catch (e) {
-                  console.log('[AdvancedOHLCChart] Could not configure chart:', e);
+                    } catch (navErr) {
+                      console.log('[AdvancedOHLCChart] Chart configuration error:', navErr);
+                    }
+                  });
                 }
-              }, 500);
+              }, 300);
             }
           }
         } catch (error: any) {
@@ -2559,12 +2631,12 @@ Maker: ${walletAddress}`;
             // Explicitly set chart type to candlesticks
             'paneProperties.backgroundGradientStartColor': '#000000',
             'paneProperties.backgroundGradientEndColor': '#000000',
-            'mainSeriesProperties.candleStyle.upColor': '#26a69a',
-            'mainSeriesProperties.candleStyle.downColor': '#ef5350',
-            'mainSeriesProperties.candleStyle.borderUpColor': '#26a69a',
-            'mainSeriesProperties.candleStyle.borderDownColor': '#ef5350',
-            'mainSeriesProperties.candleStyle.wickUpColor': '#26a69a',
-            'mainSeriesProperties.candleStyle.wickDownColor': '#ef5350',
+            'mainSeriesProperties.candleStyle.upColor': isMonad ? '#86d99f' : '#26a69a',
+            'mainSeriesProperties.candleStyle.downColor': isMonad ? '#f26682' : '#ef5350',
+            'mainSeriesProperties.candleStyle.borderUpColor': isMonad ? '#86d99f' : '#26a69a',
+            'mainSeriesProperties.candleStyle.borderDownColor': isMonad ? '#f26682' : '#ef5350',
+            'mainSeriesProperties.candleStyle.wickUpColor': isMonad ? '#86d99f' : '#26a69a',
+            'mainSeriesProperties.candleStyle.wickDownColor': isMonad ? '#f26682' : '#ef5350',
             'mainSeriesProperties.candleStyle.drawWick': true,
             'mainSeriesProperties.candleStyle.drawBorder': true,
             'mainSeriesProperties.showCountdown': false,
@@ -2588,14 +2660,14 @@ Maker: ${walletAddress}`;
           },
           studies_overrides: {
             // Volume bar colors - 0 = up candles (green), 1 = down candles (red)
-            'volume.volume.color.0': '#26a69a', // Green bars for up candles (matches candle upColor)
-            'volume.volume.color.1': '#ef5350', // Red bars for down candles (matches candle downColor)
+            'volume.volume.color.0': isMonad ? '#86d99f' : '#26a69a', // Green bars for up candles (matches candle upColor)
+            'volume.volume.color.1': isMonad ? '#f26682' : '#ef5350', // Red bars for down candles (matches candle downColor)
             // Volume text/label colors - these control the text color above volume bars
-            'volume.volume.colorup': '#26a69a', // Green text for up candles
-            'volume.volume.colordown': '#ef5350', // Red text for down candles
+            'volume.volume.colorup': isMonad ? '#86d99f' : '#26a69a', // Green text for up candles
+            'volume.volume.colordown': isMonad ? '#f26682' : '#ef5350', // Red text for down candles
             // Alternative property names that some TradingView versions use
-            'volume.volume.plot.color.0': '#26a69a',
-            'volume.volume.plot.color.1': '#ef5350',
+            'volume.volume.plot.color.0': isMonad ? '#86d99f' : '#26a69a',
+            'volume.volume.plot.color.1': isMonad ? '#f26682' : '#ef5350',
           },
           // ✅ Don't pass width/height when using autosize
         });
@@ -2619,7 +2691,7 @@ Maker: ${walletAddress}`;
               chart.setChartType(1); // 1 = Candles, 2 = Hollow Candles, 3 = Bars, etc.
               console.log('[AdvancedOHLCChart] Chart type set to candlesticks');
               
-              // For Monad: Set thin candles and zoomed out view (like Solana chart)
+              // For Monad: Set thin candles configuration (right-alignment happens after data loads)
               if (network === 'monad') {
                 try {
                   // Set thin candles (small barSpacing = thin candles)
@@ -2631,17 +2703,7 @@ Maker: ${walletAddress}`;
                     },
                   });
                   
-                  // Zoom out to show more data (fit content after data loads)
-                  setTimeout(() => {
-                    try {
-                      chart.timeScale().fitContent();
-                      console.log('[AdvancedOHLCChart] Monad chart zoomed out (fitContent)');
-                    } catch (e) {
-                      console.log('[AdvancedOHLCChart] Could not fit content:', e);
-                    }
-                  }, 500);
-                  
-                  console.log('[AdvancedOHLCChart] Monad chart configured with thin candles');
+                  console.log('[AdvancedOHLCChart] Monad chart configured with thin candles (right-alignment will happen after data loads)');
                 } catch (e) {
                   console.log('[AdvancedOHLCChart] Could not configure Monad chart styling:', e);
                 }
@@ -2658,8 +2720,8 @@ Maker: ${walletAddress}`;
                   if (study && study.name && study.name.toLowerCase().includes('volume')) {
                     // Set volume colors for up (green) and down (red) candles
                     study.applyOverrides({
-                      'volume.volume.color.0': '#26a69a', // Green for up candles
-                      'volume.volume.color.1': '#ef5350', // Red for down candles
+                      'volume.volume.color.0': isMonad ? '#86d99f' : '#26a69a', // Green for up candles
+                      'volume.volume.color.1': isMonad ? '#f26682' : '#ef5350', // Red for down candles
                     });
                     console.log('[AdvancedOHLCChart] Volume colors set programmatically');
                   }

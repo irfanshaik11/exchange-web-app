@@ -1,11 +1,19 @@
 import React from "react";
 
-export default function ColorFillBar({ value = 50 }) {
+interface ColorFillBarProps {
+  value?: number;
+  color?: string; // Optional custom color (e.g., Monad red)
+}
+
+export default function ColorFillBar({ value = 50, color }: ColorFillBarProps) {
   // value: 0–100
   const clamped = Math.min(100, Math.max(0, value));
 
-  // Color interpolation from green → red
+  // Use custom color if provided, otherwise use color interpolation from green → red
   const getColor = (v) => {
+    if (color) return color; // Use custom color (e.g., Monad red)
+    
+    // Default color interpolation from green → red
     const r = Math.floor((v / 100) * 255);
     const g = Math.floor(((100 - v) / 100) * 255);
     return `rgb(${r}, ${g}, 0)`;
