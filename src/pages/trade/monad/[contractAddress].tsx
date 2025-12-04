@@ -18,6 +18,8 @@ import AdvancedOHLCChart from "../../../components/AdvancedOHLCChart";
 import MonadTopTradersTable from "../../../components/trade/MonadTopTradersTable";
 import MonadHoldersTable from "../../../components/trade/MonadHoldersTable";
 import MonadDevTokensTable from "../../../components/trade/MonadDevTokensTable";
+import { useMonadTradesWebSocket } from "../../../hooks/useMonadTradesWebSocket";
+import useMonadDevTokens from "../../../hooks/useMonadDevTokens";
 
 // Lazy load other components
 const MonadTrades = dynamic(() => import("../../../components/trade/MonadTrades"), { ssr: false });
@@ -502,6 +504,49 @@ export default function MonadTradePage() {
     return displayToken?.pair_address || (contractAddress as string);
   }, [displayToken?.pair_address, contractAddress]);
 
+  // Get dev address from dev token data
+  const { devTokenData: devData } = useMonadDevTokens(
+    (contractAddress as string) || undefined,
+    { enabled: !!contractAddress && typeof contractAddress === "string" }
+  );
+  const devAddress = React.useMemo(() => {
+    return devData?.dev_wallet || (displayToken as any)?.dev_address || (displayToken as any)?.creator_address || null;
+  }, [devData?.dev_wallet, displayToken]);
+
+  // Get trades for dev marker detection
+  const { trades: allTrades } = useMonadTradesWebSocket({
+    tokenAddress: pairAddress,
+    enabled: !!pairAddress && !!devAddress,
+    maxTrades: 200,
+  });
+
+  // Filter trades to find dev buys/sells
+  const devTrades = React.useMemo(() => {
+    if (!devAddress || !allTrades.length) return [];
+    return allTrades.filter(trade => 
+      trade.trader_address?.toLowerCase() === devAddress.toLowerCase()
+    ).map(trade => ({
+      id: trade.tx_hash,
+      transactionHash: trade.tx_hash,
+      timestamp: trade.block_timestamp,
+      is_buy: trade.is_buy,
+      side: trade.is_buy ? 'buy' : 'sell',
+      type: trade.is_buy ? 'buy' : 'sell',
+      eventDisplayType: trade.is_buy ? 'Buy' : 'Sell',
+      price: String(trade.price_mon),
+      amount: String(trade.token_amount),
+      totalUSD: String(Number(trade.mon_amount) * 0.25), // Approximate USD conversion
+      maker: trade.trader_address,
+      wallet_address: trade.trader_address,
+      user: trade.trader_address,
+      data: {
+        priceUsd: String(trade.price_mon),
+        amountNonLiquidityToken: String(trade.token_amount),
+        priceUsdTotal: String(Number(trade.mon_amount) * 0.25),
+      },
+    }));
+  }, [allTrades, devAddress]);
+
   return (
     <>
       <Head><title>{pageTitle}</title></Head>
@@ -580,8 +625,8 @@ export default function MonadTradePage() {
                     width="100%"
                     baseRefreshMs={10000}
                     className="relative"
-                    tradeData={[]} // Monad may not have trade data yet
-                    creatorAddress={null}
+                    tradeData={devTrades}
+                    creatorAddress={devAddress}
                     tokenSymbol={displayToken?.symbol || null}
                     tokenName={displayToken?.name || null}
                     tokenDecimals={displayToken?.decimals || null}
