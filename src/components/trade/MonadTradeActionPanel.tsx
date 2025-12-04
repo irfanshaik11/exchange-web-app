@@ -4,11 +4,12 @@ import React, { useState, useMemo, useEffect } from "react";
 import { formatSmartNumber, formatMarketCap, type Token } from "~/utils/db";
 import { useUser } from "~/components/UserContext";
 import { useWallet } from "~/components/useWallet";
-import { FaCopy, FaExternalLinkAlt, FaRunning } from "react-icons/fa";
+import { FaCopy, FaExternalLinkAlt, FaRunning, FaChevronDown, FaChevronUp } from "react-icons/fa";
 import { LuPencil, LuCheck } from "react-icons/lu";
 import InterstateTooltip from "../InterstateTooltip";
 import toast from "react-hot-toast";
 import { tradeMonadBuy, tradeMonadSell } from "~/utils/api";
+import useMonadDevTokens from "~/hooks/useMonadDevTokens";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -145,6 +146,10 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   const [presetDrafts, setPresetDrafts] = useState<string[]>(["0.01", "0.05", "0.1", "0.5", "1"]);
   const [maxSlippage, setMaxSlippage] = useState(0.15); // Default 15%
   const slippagePresets = [0.05, 0.10, 0.15, 0.20]; // 5%, 10%, 15%, 20% for Monad
+  const [isPoolInfoOpen, setIsPoolInfoOpen] = useState(false);
+  
+  // Fetch dev token data
+  const { devTokenData } = useMonadDevTokens(token?.mint, { enabled: !!token?.mint });
 
   // Load presets from localStorage on mount and listen for updates
   useEffect(() => {
@@ -829,6 +834,211 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       </div>
       */}
 
+      {/* ===== Pool Info Dropdown ===== */}
+      <div className="border-t border-[#2A2B33]">
+        <button
+          onClick={() => setIsPoolInfoOpen(!isPoolInfoOpen)}
+          className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#1E1F26] transition-colors"
+        >
+          <span className="text-[11px] font-semibold text-[#E6E7EA]">
+            {token?.name || token?.symbol || 'Token'} Pool Info
+          </span>
+          {isPoolInfoOpen ? (
+            <FaChevronUp className="w-3 h-3 text-[#9CA3AF]" />
+          ) : (
+            <FaChevronDown className="w-3 h-3 text-[#9CA3AF]" />
+          )}
+        </button>
+        
+        {isPoolInfoOpen && (
+          <div className="border-t border-[#2A2B33]" style={{ backgroundColor: '#0f1012' }}>
+            {/* Pool Info Section */}
+            <div className="px-3 py-2.5 space-y-2.5">
+              {/* Total Liq */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total liq</span>
+                <div className="text-right flex items-center gap-1">
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                    ${formatSmartNumber((token as any)?.liquidity_usd || (token as any)?.total_liquidity_usd || 0)}
+                  </span>
+                  {/* WMON conversion - commented out until we have dynamic MON price */}
+                  {/* <span className="text-[10px] text-[#9CA3AF]">
+                    ({formatSmartNumber(((token as any)?.liquidity_usd || (token as any)?.total_liquidity_usd || 0) / 0.25)} WMON)
+                  </span> */}
+                </div>
+              </div>
+              
+              {/* Pair Label */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+              </div>
+              
+              {/* Token */}
+              <div className="pl-3 space-y-1.5">
+                <div className="text-[11px] font-semibold text-[#E6E7EA]">{token?.symbol || 'TOKEN'}</div>
+                {/* Liq/Initial - only show if we have graduation_percent data */}
+                {((token as any)?.graduation_percent !== undefined || (token as any)?.bonding_pct !== undefined) && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-[#9CA3AF]">Liq/Initial</span>
+                    <div className="text-right">
+                      <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                        {formatCompactNumber((token as any)?.total_supply || 0)} / {formatCompactNumber((token as any)?.total_supply || 0)}
+                      </span>
+                      <span className="text-[10px] text-[#9CA3AF] ml-1">
+                        ({((token as any)?.graduation_percent || (token as any)?.bonding_pct || 0).toFixed(2)}%)
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[#9CA3AF]">Value</span>
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                    ${formatSmartNumber(token?.market_cap_usd || 0)}
+                  </span>
+                </div>
+              </div>
+              
+              {/* WMON - Commented out until we have dynamic WMON liquidity data */}
+              {/* <div className="pl-3 space-y-1.5">
+                <div className="text-[11px] font-semibold text-[#E6E7EA]">WMON</div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[#9CA3AF]">Liq/Initial</span>
+                  <div className="text-right">
+                    <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                      0 / {formatCompactNumber(14440)}
+                    </span>
+                    <span className="text-[10px] text-[#9CA3AF] ml-1">(-100%)</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[#9CA3AF]">Value</span>
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">$0</span>
+                </div>
+              </div> */}
+            </div>
+            
+            {/* Divider */}
+            <div className="border-t border-[#2A2B33]"></div>
+            
+            {/* Dev Section */}
+            <div className="px-3 py-2.5 space-y-2.5">
+              {/* DEV */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">DEV</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-[#E6E7EA] font-mono">
+                    {devTokenData?.dev_wallet ? truncateAddress(devTokenData.dev_wallet, 2, 4) : '--'}
+                  </span>
+                  {devTokenData && (
+                    <span className="text-[10px] text-[#9CA3AF]">
+                      ({formatSmartNumber(devTokenData.mon_balance || 0)}MON)
+                    </span>
+                  )}
+                  {devTokenData?.dev_wallet && (
+                    <button
+                      onClick={() => copyToClipboard(devTokenData.dev_wallet)}
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      title="Copy dev address"
+                    >
+                      <FaCopy className="w-3 h-3 text-[#9CA3AF]" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              {/* Funding */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Funding</span>
+                <span className="text-[11px] text-[#E6E7EA]">--</span>
+              </div>
+              
+              {/* Market cap */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Market cap</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  ${formatSmartNumber(token?.market_cap_usd || 0)}
+                </span>
+              </div>
+              
+              {/* Holders */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holders</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  {(token as any)?.total_holders || (token as any)?.unique_traders || 0}
+                </span>
+              </div>
+              
+              {/* Total supply - only show if we have the data */}
+              {(token as any)?.total_supply && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total supply</span>
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                    {formatCompactNumber((token as any)?.total_supply)}
+                  </span>
+                </div>
+              )}
+              
+              {/* Pair */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-[#E6E7EA] font-mono">
+                    {token?.pair_address ? truncateAddress(token.pair_address, 2, 4) : '--'}
+                  </span>
+                  {token?.pair_address && (
+                    <button
+                      onClick={() => copyToClipboard(token.pair_address)}
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      title="Copy pair address"
+                    >
+                      <FaCopy className="w-3 h-3 text-[#9CA3AF]" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              {/* Token created */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Token created</span>
+                <span className="text-[11px] text-[#E6E7EA]">
+                  {token?.created_at 
+                    ? (() => {
+                        const date = new Date(token.created_at);
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const year = date.getFullYear();
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        const seconds = String(date.getSeconds()).padStart(2, '0');
+                        return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
+                      })()
+                    : '--'}
+                </span>
+              </div>
+              
+              {/* Pool created */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pool created</span>
+                <span className="text-[11px] text-[#E6E7EA]">
+                  {token?.created_at 
+                    ? (() => {
+                        const date = new Date(token.created_at);
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const year = date.getFullYear();
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        const seconds = String(date.getSeconds()).padStart(2, '0');
+                        return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
+                      })()
+                    : '--'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ===== Contract Address ===== */}
       <div className="border-t border-[#2A2B33]">
         <AddressDisplay
@@ -850,7 +1060,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       {/* ===== Dev Address ===== */}
       <div className="border-t border-[#2A2B33]">
         {(() => {
-          const devAddress = (token as any)?.creator_address || (token as any)?.dev_address || (token as any)?.owner || (token as any)?.creator_wallet || '';
+          const devAddress = devTokenData?.dev_wallet || (token as any)?.creator_address || (token as any)?.dev_address || (token as any)?.owner || (token as any)?.creator_wallet || '';
           if (!devAddress) {
             // Show section even when empty with placeholder
             return (
@@ -888,12 +1098,6 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         })()}
       </div>
 
-      {/* Info Message */}
-      <div className="px-3 py-2 border-t border-[#2A2B33]">
-        <div className="text-[10px] text-[#9CA3AF] text-center">
-          <strong className="text-[#E6E7EA]">Note:</strong> Monad trading functionality is currently in development.
-        </div>
-      </div>
     </div>
   );
 };

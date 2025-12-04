@@ -2253,30 +2253,55 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
               timeSeconds = timestamp;
             }
             
-            // Handle different buy/sell detection formats
-            // Processed WebSocket data: trade.side = "buy" | "sell"
-            // Original event data: trade.eventDisplayType = "Buy" | "Sell"
-            // Mock data: trade.is_buy, trade.side, trade.type
-            const isBuy = trade.is_buy || 
-                         trade.side === 'buy' || 
-                         trade.type === 'buy' ||
-                         trade.eventDisplayType === 'Buy' ||
-                         trade.originalEvent?.eventDisplayType === 'Buy';
+            // Robust buy/sell detection - handles multiple trade data formats
+            // Normalized strings for side/type/eventDisplayType (check nested fields too)
+            const rawSide = String(
+              trade.side ||
+              trade.type ||
+              trade.eventDisplayType ||
+              trade.data?.side ||
+              trade.originalEvent?.data?.side ||
+              ''
+            ).toLowerCase();
+
+            let isBuy: boolean;
+
+            // 1) Strongest signal: boolean or numeric is_buy
+            if (trade.is_buy === true || trade.is_buy === 1 || trade.is_buy === '1') {
+              isBuy = true;
+            } else if (trade.is_buy === false || trade.is_buy === 0 || trade.is_buy === '0') {
+              isBuy = false;
+            }
+            // 2) Side / type / eventDisplayType hints (normalized, case-insensitive)
+            else if (rawSide.includes('buy') || rawSide === 'bid' || rawSide === 'buy_order') {
+              isBuy = true;
+            } else if (rawSide.includes('sell') || rawSide === 'ask' || rawSide === 'sell_order') {
+              isBuy = false;
+            }
+            // 3) Fallback: treat as buy if eventDisplayType looks like a dev buy
+            else if (String(trade.eventDisplayType || '').toLowerCase().includes('buy')) {
+              isBuy = true;
+            } else if (String(trade.eventDisplayType || '').toLowerCase().includes('sell')) {
+              isBuy = false;
+            }
+            // 4) Last resort: default to *buy* instead of sell, so DBs don't accidentally show red
+            else {
+              isBuy = true;
+            }
             
-            // TradingView marks should be positioned on top of candles
-            // Try different color formats - TradingView might prefer RGB or specific hex formats
-            const greenColorHex = '#00FF00';  // Bright green hex
-            const redColorHex = '#FF0000';    // Bright red hex
-            const greenColorRgb = 'rgb(0, 255, 0)';  // Bright green RGB
-            const redColorRgb = 'rgb(255, 0, 0)';    // Bright red RGB
+            // CRITICAL: getMarks does NOT support hex colors - only named colors!
+            // Use simple named colors: "green" for buys, "red" for sells
+            // getTimescaleMarks supports hex, but getMarks does not
+            const currentNetwork = latestParamsRef.current.network;
             
-            const markColorHex = isBuy ? greenColorHex : redColorHex;
-            const markColorRgb = isBuy ? greenColorRgb : redColorRgb;
-            
-            console.log('[AdvancedOHLCChart] Color assignment:', {
+            console.log('[AdvancedOHLCChart] Color assignment (getMarks - using named colors):', {
               isBuy,
-              hexColor: markColorHex,
-              rgbColor: markColorRgb,
+              is_buy: trade.is_buy,
+              side: trade.side,
+              type: trade.type,
+              eventDisplayType: trade.eventDisplayType,
+              willUseColor: isBuy ? 'green' : 'red',
+              currentNetwork,
             });
             
             // Format the timestamp to match the requested format
@@ -2320,24 +2345,49 @@ Amount: ${formattedAmount} ${displaySymbol}
 Total: ${formattedTotalUsd}
 Maker: ${walletAddress}`;
 
-            // Simplified approach - use only the essential properties TradingView supports
-            const markData = {
+            // CRITICAL: getMarks only supports named colors, NOT hex colors!
+            // Use simple named colors: "green" for buys, "red" for sells
+            const label = isBuy ? 'DB' : 'DS';
+            
+            // Use named colors - getMarks does NOT support hex (#86d99f, #941839, etc.)
+            // Named colors that work: "red", "green", "blue", "yellow", "orange", etc.
+            const markColor = isBuy ? 'green' : 'red';
+            
+            // getMarks structure - use named colors (NOT hex like timescale marks)
+            // CRITICAL: getMarks does NOT support hex colors, only named colors like "green", "red"
+            const markData: any = {
               id: `dev_trade_${timeSeconds}_${Math.random()}`,
               time: timeSeconds,
-              position: 'inBar', // Position markers inside the candle area near its top
-              color: isBuy ? 'green' : 'red', // Try color names instead of hex/rgb
-              text: markerText, // Dynamic paragraph text shown on marker
-              label: isBuy ? 'DB' : 'DS', // Simple label for tooltip
+              color: markColor, // Named color: "green" or "red" (getMarks doesn't support hex)
+              label: label,
+              position: 'inBar',
+              text: markerText,
               labelFontColor: 'white',
-              minSize: 24, // Keep original size
-              size: 1, // Keep original size multiplier
-              shape: 'circle', // Use circle shape for better visibility
+              minSize: 24,
+              size: 1,
+              shape: 'circle',
             };
+            
+            // markColor is already set to "green" or "red" (named colors)
+            // No override needed - getMarks only supports named colors, not hex
+            
+            // DEBUG: Log the exact color being sent to TradingView
+            console.log('[AdvancedOHLCChart] Mark color assignment (getMarks - named colors):', {
+              isBuy,
+              label,
+              markColor: markData.color,
+              note: 'getMarks only supports named colors (green/red), not hex values',
+            });
             
             console.log('[AdvancedOHLCChart] Creating mark:', {
               isBuy,
+              is_buy: trade.is_buy,
+              side: trade.side,
+              type: trade.type,
+              eventDisplayType: trade.eventDisplayType,
+              label: isBuy ? 'DB' : 'DS',
               expectedText: `${isBuy ? 'Dev Buy' : 'Dev Sell'} @ ${formattedDate}`,
-              expectedColor: isBuy ? '#00ff00' : '#ff0000',
+              markColor: markData.color,
               markData,
             });
             
@@ -2388,10 +2438,48 @@ Maker: ${walletAddress}`;
           });
 
           // Convert to TradingView timescale marks format
+          // Use Monad colors for timescale marks
+          const monadGreenHex = '#86d99f';  // Monad green for dev buys
+          const monadRedHex = '#941839';    // Monad red for dev sells
+          const currentNetwork = latestParamsRef.current.network;
           const timescaleMarks = devTrades.map((trade: any) => {
             const timestamp = trade.timestamp || trade.created_at || trade.unix_time;
             const timeSeconds = timestamp < 10000000000 ? timestamp : Math.floor(timestamp / 1000);
-            const isBuy = trade.is_buy || trade.side === 'buy' || trade.type === 'buy';
+            // Use same robust buy detection logic as getMarks
+            // Normalized strings for side/type/eventDisplayType (check nested fields too)
+            const rawSide = String(
+              trade.side ||
+              trade.type ||
+              trade.eventDisplayType ||
+              trade.data?.side ||
+              trade.originalEvent?.data?.side ||
+              ''
+            ).toLowerCase();
+
+            let isBuy: boolean;
+
+            // 1) Strongest signal: boolean or numeric is_buy
+            if (trade.is_buy === true || trade.is_buy === 1 || trade.is_buy === '1') {
+              isBuy = true;
+            } else if (trade.is_buy === false || trade.is_buy === 0 || trade.is_buy === '0') {
+              isBuy = false;
+            }
+            // 2) Side / type / eventDisplayType hints (normalized, case-insensitive)
+            else if (rawSide.includes('buy') || rawSide === 'bid' || rawSide === 'buy_order') {
+              isBuy = true;
+            } else if (rawSide.includes('sell') || rawSide === 'ask' || rawSide === 'sell_order') {
+              isBuy = false;
+            }
+            // 3) Fallback: treat as buy if eventDisplayType looks like a dev buy
+            else if (String(trade.eventDisplayType || '').toLowerCase().includes('buy')) {
+              isBuy = true;
+            } else if (String(trade.eventDisplayType || '').toLowerCase().includes('sell')) {
+              isBuy = false;
+            }
+            // 4) Last resort: default to *buy* instead of sell, so DBs don't accidentally show red
+            else {
+              isBuy = true;
+            }
             const {
               formattedAmount,
               formattedPrice,
@@ -2399,10 +2487,17 @@ Maker: ${walletAddress}`;
               displaySymbol,
             } = computeTradeDisplayValues(trade);
 
+            // Timescale marks color assignment - DB = green, DS = red
+            // For Monad: DB = #86d99f (green), DS = #941839 (red)
+            // For other networks: DB = #22c55e (green), DS = #ef4444 (red)
+            const markColor = (currentNetwork === 'monad' 
+              ? (isBuy ? monadGreenHex : monadRedHex)  // Monad: green for buys, red for sells
+              : (isBuy ? '#22c55e' : '#ef4444')); // Standard: green for buys, red for sells
+
             return {
               id: `dev_timescale_${timeSeconds}_${Math.random()}`,
               time: timeSeconds,
-              color: isBuy ? '#22c55e' : '#ef4444',
+              color: markColor.toLowerCase(), // Ensure lowercase for TradingView
               label: isBuy ? 'DB' : 'DS',
               tooltip: [
                 `${isBuy ? 'Dev Buy' : 'Dev Sell'} • ${displaySymbol}`,
