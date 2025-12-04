@@ -323,6 +323,7 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const latestTokenDecimalsRef = useRef<number | null>(
     typeof tokenDecimals === 'number' && !Number.isNaN(tokenDecimals) ? tokenDecimals : null
   );
+  const hasRealPriceDataRef = useRef<boolean>(false); // Track if we've received real price data
   const marksInitializedRef = useRef(false);
   const prevTradeDataLengthRef = useRef<number>(tradeData?.length || 0);
   
@@ -593,11 +594,37 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         return;
       }
 
+      // Check if we have real price data (not all zeros)
+      const hasRealData = items.some(item => item.c > 0 || item.o > 0 || item.h > 0 || item.l > 0);
+      const isFirstRealData = hasRealData && !hasRealPriceDataRef.current;
+      
+      if (isFirstRealData) {
+        hasRealPriceDataRef.current = true;
+        console.log('[AdvancedOHLCChart] 📊 First real price data from HTTP - will refresh symbol for price scale');
+      }
+
       lastGoodCandlesRef.current = items;
       setCandles(items);
       setLastUpdate(new Date());
       setRetryCount(0);
       onDataUpdate?.(items);
+      
+      // If this is the first real data and widget is ready, refresh symbol to update price scale
+      if (isFirstRealData && widgetRef.current) {
+        setTimeout(() => {
+          widgetRef.current?.onChartReady(() => {
+            try {
+              const tokenId = `${mint || pairAddress}`;
+              const currentResolution = INTERVAL_TO_RESOLUTION[selectedInterval];
+              widgetRef.current?.setSymbol(tokenId, currentResolution, () => {
+                console.log('[AdvancedOHLCChart] ✅ Symbol refreshed after HTTP data - price scale updated');
+              });
+            } catch (e) {
+              console.log('[AdvancedOHLCChart] Symbol refresh failed:', e);
+            }
+          });
+        }, 100);
+      }
     } catch (e: any) {
       if (!mountedRef.current) return;
       setError(e?.message || 'Fetch error');
@@ -908,6 +935,15 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             cachedIntervalRef.current = selectedInterval;
             console.log('[AdvancedOHLCChart] 📊 cachedIntervalRef set to:', cachedIntervalRef.current);
 
+            // Check if we have real price data (not all zeros)
+            const hasRealData = lastGoodCandlesRef.current.some(c => c.c > 0 || c.o > 0 || c.h > 0 || c.l > 0);
+            const isFirstRealData = hasRealData && !hasRealPriceDataRef.current;
+            
+            if (isFirstRealData) {
+              hasRealPriceDataRef.current = true;
+              console.log('[AdvancedOHLCChart] 📊 First real price data received - will refresh symbol for price scale');
+            }
+
             // Update state to trigger re-render and dismiss loading overlay
             setCandles([...lastGoodCandlesRef.current]);
             setIsLoading(false);
@@ -916,45 +952,71 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
             console.log('[AdvancedOHLCChart] 📊 WebSocket data received - loading state cleared');
 
             // Force TradingView to refresh data from the updated cache
+            // If this is the first real data, also refresh symbol to update price scale
             // Use a small delay to ensure React state has updated
             setTimeout(() => {
               if (widgetRef.current) {
                 try {
-                  console.log('[AdvancedOHLCChart] 📊 Forcing TradingView refresh via setSymbol...');
                   const tokenId = mint || pairAddress;
                   const currentResolution = INTERVAL_TO_RESOLUTION[selectedInterval] || '1S';
 
-                  // Use onChartReady to ensure chart is available
-                  widgetRef.current.onChartReady(() => {
-                    try {
-                      // Use setSymbol to force complete refresh including resolveSymbol (for price scale)
-                      widgetRef.current.setSymbol(tokenId, currentResolution, () => {
-                        console.log('[AdvancedOHLCChart] ✅ TradingView setSymbol() completed');
-                        
-                        // After refresh, right-align chart to show latest candles
-                        try {
-                          if (lastGoodCandlesRef.current.length > 0) {
-                            setTimeout(() => {
-                              rightAlignChart(lastGoodCandlesRef.current.length);
-                            }, 300);
-                          }
-                        } catch (rangeErr) {
-                          console.log('[AdvancedOHLCChart] Could not right-align chart:', rangeErr);
-                        }
-                      });
-                    } catch (e) {
-                      console.log('[AdvancedOHLCChart] setSymbol failed, trying chart().resetData():', e);
+                  if (isFirstRealData) {
+                    // First real data - refresh symbol to update price scale
+                    console.log('[AdvancedOHLCChart] 📊 First real data - refreshing symbol to update price scale...');
+                    widgetRef.current.onChartReady(() => {
                       try {
-                        const chart = widgetRef.current.chart();
-                        if (chart && typeof chart.resetData === 'function') {
-                          chart.resetData();
-                          console.log('[AdvancedOHLCChart] ✅ TradingView chart().resetData() called');
-                        }
-                      } catch (e2) {
-                        console.log('[AdvancedOHLCChart] chart().resetData() also failed:', e2);
+                        // Use setSymbol to force complete refresh including resolveSymbol (for price scale)
+                        widgetRef.current.setSymbol(tokenId, currentResolution, () => {
+                          console.log('[AdvancedOHLCChart] ✅ Symbol refreshed - price scale should now be correct');
+                          
+                          // After refresh, right-align chart to show latest candles
+                          try {
+                            if (lastGoodCandlesRef.current.length > 0) {
+                              setTimeout(() => {
+                                rightAlignChart(lastGoodCandlesRef.current.length);
+                              }, 300);
+                            }
+                          } catch (rangeErr) {
+                            console.log('[AdvancedOHLCChart] Could not right-align chart:', rangeErr);
+                          }
+                        });
+                      } catch (e) {
+                        console.log('[AdvancedOHLCChart] Symbol refresh failed:', e);
                       }
-                    }
-                  });
+                    });
+                  } else {
+                    // Regular refresh - just reset data
+                    console.log('[AdvancedOHLCChart] 📊 Forcing TradingView refresh via setSymbol...');
+                    widgetRef.current.onChartReady(() => {
+                      try {
+                        widgetRef.current.setSymbol(tokenId, currentResolution, () => {
+                          console.log('[AdvancedOHLCChart] ✅ TradingView setSymbol() completed');
+                          
+                          // After refresh, right-align chart to show latest candles
+                          try {
+                            if (lastGoodCandlesRef.current.length > 0) {
+                              setTimeout(() => {
+                                rightAlignChart(lastGoodCandlesRef.current.length);
+                              }, 300);
+                            }
+                          } catch (rangeErr) {
+                            console.log('[AdvancedOHLCChart] Could not right-align chart:', rangeErr);
+                          }
+                        });
+                      } catch (e) {
+                        console.log('[AdvancedOHLCChart] setSymbol failed, trying chart().resetData():', e);
+                        try {
+                          const chart = widgetRef.current.chart();
+                          if (chart && typeof chart.resetData === 'function') {
+                            chart.resetData();
+                            console.log('[AdvancedOHLCChart] ✅ TradingView chart().resetData() called');
+                          }
+                        } catch (e2) {
+                          console.log('[AdvancedOHLCChart] chart().resetData() also failed:', e2);
+                        }
+                      }
+                    });
+                  }
                 } catch (e) {
                   console.log('[AdvancedOHLCChart] Could not refresh TradingView data:', e);
                 }
@@ -1350,14 +1412,42 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // For crypto tokens, prices can vary widely, so we'll use a more flexible approach
         // pricescale determines the precision: 100 = 2 decimals, 1000 = 3 decimals, etc.
         const MIN_PRICE = 0.0000001;
-        let samplePrice = lastGoodCandlesRef.current.length > 0 
-          ? lastGoodCandlesRef.current[0].c 
-          : 1;
         
-        // If sample price is 0, use MIN_PRICE (same as our candle conversion)
-        if (samplePrice === 0) {
+        // Find a real candle with actual price data (not placeholder with all zeros)
+        // Use the LATEST candle instead of first - more likely to have current price
+        let samplePrice = 1; // Default fallback
+        
+        if (lastGoodCandlesRef.current.length > 0) {
+          // Sort candles by time to get the latest
+          const sortedCandles = [...lastGoodCandlesRef.current].sort((a, b) => a.unix_time - b.unix_time);
+          
+          // Try to find a candle with real price data (not all zeros)
+          // Start from the latest candle and work backwards
+          for (let i = sortedCandles.length - 1; i >= 0; i--) {
+            const candle = sortedCandles[i];
+            // Check if this is a real candle (not a placeholder with all zeros)
+            const hasRealPrice = candle.c > 0 || candle.o > 0 || candle.h > 0 || candle.l > 0;
+            if (hasRealPrice && candle.c > 0) {
+              samplePrice = candle.c;
+              console.log('[AdvancedOHLCChart] resolveSymbol: Using latest real candle price:', samplePrice, 'from candle at', new Date(candle.unix_time * 1000).toISOString());
+              break;
+            }
+          }
+          
+          // If we didn't find a real candle, try the first candle as fallback
+          if (samplePrice === 1 && sortedCandles.length > 0) {
+            const firstCandle = sortedCandles[0];
+            if (firstCandle.c > 0) {
+              samplePrice = firstCandle.c;
+              console.log('[AdvancedOHLCChart] resolveSymbol: Using first candle price as fallback:', samplePrice);
+            }
+          }
+        }
+        
+        // If sample price is still 0 or invalid, use MIN_PRICE
+        if (samplePrice === 0 || !isFinite(samplePrice) || samplePrice < 0) {
           samplePrice = MIN_PRICE;
-          console.log('[AdvancedOHLCChart] resolveSymbol: sample price was 0, using MIN_PRICE');
+          console.log('[AdvancedOHLCChart] resolveSymbol: sample price was invalid, using MIN_PRICE');
         }
         
         let pricescale = 100;
