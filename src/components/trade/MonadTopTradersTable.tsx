@@ -2,6 +2,10 @@ import React from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useMonadTopTraders from '../../hooks/useMonadTopTraders';
 
+// Monad candle colors (matches chart colors)
+const MONAD_GREEN = '#86d99f';
+const MONAD_RED = '#f26682';
+
 interface MonadTopTradersTableProps {
   tokenAddress: string | undefined;
   enabled?: boolean;
@@ -51,8 +55,8 @@ const MonadTopTradersTable: React.FC<MonadTopTradersTableProps> = ({
   if (error) {
     return (
       <div className="w-full p-4">
-        <div className="mb-4 p-2 bg-red-900/20 border border-red-500/30 rounded-lg">
-          <p className="text-red-400 text-xs">{error}</p>
+        <div className="mb-4 p-2 rounded-lg" style={{ backgroundColor: `${MONAD_RED}20`, border: `1px solid ${MONAD_RED}4D` }}>
+          <p className="text-xs" style={{ color: MONAD_RED }}>{error}</p>
         </div>
       </div>
     );
@@ -131,7 +135,7 @@ const MonadTopTradersTable: React.FC<MonadTopTradersTableProps> = ({
                     {/* Bought */}
                     <td className="px-2 py-2 text-neutral-300">
                       <div>
-                        <div className="text-emerald-400">${formatSmartNumber(trader.total_bought_usd)}</div>
+                        <div style={{ color: MONAD_GREEN }}>${formatSmartNumber(trader.total_bought_usd)}</div>
                         <div className="text-xs text-neutral-500">
                           {formatSmartNumber(trader.tokens_bought)}
                         </div>
@@ -141,7 +145,7 @@ const MonadTopTradersTable: React.FC<MonadTopTradersTableProps> = ({
                     {/* Sold */}
                     <td className="px-2 py-2 text-neutral-300">
                       <div>
-                        <div className="text-red-400">${formatSmartNumber(trader.total_sold_usd)}</div>
+                        <div style={{ color: MONAD_RED }}>${formatSmartNumber(trader.total_sold_usd)}</div>
                         <div className="text-xs text-neutral-500">
                           {formatSmartNumber(trader.tokens_sold)}
                         </div>
@@ -160,7 +164,7 @@ const MonadTopTradersTable: React.FC<MonadTopTradersTableProps> = ({
                     
                     {/* Realized P&L */}
                     <td className="px-2 py-2">
-                      <div className={`font-semibold ${realizedPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <div className="font-semibold" style={{ color: realizedPnL >= 0 ? MONAD_GREEN : MONAD_RED }}>
                         {realizedPnL >= 0 ? '+' : ''}${formatSmartNumber(realizedPnL)}
                       </div>
                       <div className="text-xs text-neutral-500">
@@ -170,7 +174,7 @@ const MonadTopTradersTable: React.FC<MonadTopTradersTableProps> = ({
                     
                     {/* Unrealized P&L */}
                     {/* <td className="px-2 py-2">
-                      <div className={`font-semibold ${unrealizedPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <div className="font-semibold" style={{ color: unrealizedPnL >= 0 ? MONAD_GREEN : MONAD_RED }}>
                         {unrealizedPnL >= 0 ? '+' : ''}${formatSmartNumber(unrealizedPnL)}
                       </div>
                       <div className="text-xs text-neutral-500">
@@ -180,7 +184,7 @@ const MonadTopTradersTable: React.FC<MonadTopTradersTableProps> = ({
                     
                     {/* Total P&L */}
                     <td className="px-2 py-2">
-                      <div className={`font-semibold ${totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <div className="font-semibold" style={{ color: totalPnL >= 0 ? MONAD_GREEN : MONAD_RED }}>
                         {totalPnL >= 0 ? '+' : ''}${formatSmartNumber(totalPnL)}
                       </div>
                       <div className="text-xs text-neutral-500">

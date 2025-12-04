@@ -30,9 +30,9 @@ const AX = {
   border: "#2A2B33",
   text: "#f0f5f5",
   muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
+  mint: "#86d99f", // Monad green (matches candle up color)
+  mintHover: "#70c387",
+  sell: "#f26682", // Monad red (matches candle down color)
 };
 
 interface MonadTokenData {
@@ -326,7 +326,8 @@ export default function MonadTradePage() {
     () => {
       const createdAt = tokenData?.created_at || tokenData?.launch_time;
       // Default to 1s interval for Monad for real-time trading view
-      if (!createdAt) return { interval: "1s" as const, timeframe: "1h" as const, optimize: false };
+      // Use 24h timeframe as default to capture sparse early trading data
+      if (!createdAt) return { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
 
       let timestamp = createdAt as any;
       if (typeof createdAt === "number" && createdAt < 10000000000) timestamp = createdAt * 1000;
@@ -350,7 +351,7 @@ export default function MonadTradePage() {
   );
 
   const ohlcParams = getOHLCParams;
-  const defaultOHLCParams = { interval: "1s" as const, timeframe: "1h" as const, optimize: false };
+  const defaultOHLCParams = { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
   const currentOHLCParams = React.useMemo(
     () => ohlcParams || defaultOHLCParams,
     [ohlcParams?.interval, ohlcParams?.timeframe, ohlcParams?.optimize]
@@ -651,9 +652,10 @@ export default function MonadTradePage() {
                     onClick={() => setSelectedTab("Transactions")}
                     className={`px-3 py-1 font-semibold transition-colors ${
                       selectedTab === "Transactions"
-                        ? "border-b-4 border-[#70E0B0] text-white"
+                        ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
                     }`}
+                    style={selectedTab === "Transactions" ? { borderBottomColor: AX.mint } : undefined}
                   >
                     Transactions
                   </button>
@@ -661,9 +663,10 @@ export default function MonadTradePage() {
                     onClick={() => setSelectedTab("Top Traders")}
                     className={`px-3 py-1 font-semibold transition-colors ${
                       selectedTab === "Top Traders"
-                        ? "border-b-4 border-[#70E0B0] text-white"
+                        ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
                     }`}
+                    style={selectedTab === "Top Traders" ? { borderBottomColor: AX.mint } : undefined}
                   >
                     Top Traders
                   </button>
@@ -671,9 +674,10 @@ export default function MonadTradePage() {
                     onClick={() => setSelectedTab("Holders")}
                     className={`px-3 py-1 font-semibold transition-colors ${
                       selectedTab === "Holders"
-                        ? "border-b-4 border-[#70E0B0] text-white"
+                        ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
                     }`}
+                    style={selectedTab === "Holders" ? { borderBottomColor: AX.mint } : undefined}
                   >
                     Holders
                   </button>
@@ -681,15 +685,17 @@ export default function MonadTradePage() {
                     onClick={() => setSelectedTab("Dev Tokens")}
                     className={`px-3 py-1 font-semibold transition-colors ${
                       selectedTab === "Dev Tokens"
-                        ? "border-b-4 border-[#70E0B0] text-white"
+                        ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
                     }`}
+                    style={selectedTab === "Dev Tokens" ? { borderBottomColor: AX.mint } : undefined}
                   >
                     Dev Tokens
                   </button>
                 </div>
                 <button
-                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full bg-[#101114] text-[#70E0B0] ml-auto"
+                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full ml-auto"
+                  style={{ backgroundColor: AX.bg, color: AX.mint }}
                   onClick={() => setIsInstantTradeOpen(true)}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
