@@ -266,7 +266,13 @@ function TurnkeySessionBridge() {
               pendingRefreshRef.current = false;
             }
 
-            router.push("/pulse?chain=monad");
+            // Don't redirect if we're on the export page - let user stay there to export
+            const isOnExportPage = router.pathname === "/turnkey/export" || router.asPath.includes("/turnkey/export");
+            if (!isOnExportPage) {
+              router.push("/pulse?chain=monad");
+            } else {
+              console.log("[TurnkeySessionBridge] User authenticated on export page, staying on page");
+            }
           } catch (err) {
             console.error("Error linking Turnkey session to app user", err);
             hasProcessedRef.current = false;
@@ -287,6 +293,8 @@ function TurnkeySessionBridge() {
     fetchOrCreatePolicies,
     refreshUser,
     router,
+    router.pathname,
+    router.asPath,
   ]);
 
   return null;
