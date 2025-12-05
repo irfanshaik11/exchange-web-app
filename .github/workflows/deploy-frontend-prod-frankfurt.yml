@@ -2,7 +2,7 @@ name: Deploy to GCP Prod MIG
 
 on:
   push:
-    branches: [ DISABLED  ]
+    branches: [ DISABLE ]
 
 permissions:
   contents: read
