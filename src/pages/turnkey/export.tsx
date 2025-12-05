@@ -81,162 +81,85 @@ export default function TurnkeyExportPage() {
   const [fetchedWallets, setFetchedWallets] = useState<any[]>([]);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const walletsRequestRef = useRef(false);
-  const [sessionChecked, setSessionChecked] = useState(false);
-  const [confirmedAuthenticated, setConfirmedAuthenticated] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const hasInitializedRef = useRef(false);
 
   const iframeContainerRef = useRef<HTMLDivElement | null>(null);
   const iframeStamperRef = useRef<IframeStamper | null>(null);
 
-  // Check if authenticated - prioritize session over authState since authState can lag
-  // If we have a valid session with all required fields, consider it authenticated
-  // Also check if turnkey object has session nested differently
+  // Check if authenticated - require both authState and valid session
   const sessionFromContext = session || turnkey?.session;
   const hasValidSession = !!(
     sessionFromContext?.token && 
     sessionFromContext?.organizationId && 
     sessionFromContext?.userId
   );
-  // Also check if we have a Turnkey user object, which indicates authentication
   const hasTurnkeyUser = !!turnkeyUser;
-  // If user is logged in to the app, they should be able to export if they have a Turnkey session
-  // The session might exist even if authState hasn't updated yet
   const isAppUserLoggedIn = !!appUser;
+  
+  // Require explicit authentication state - don't rely on stale sessions
   const isAuthenticated = 
-    hasValidSession || 
-    authState === AuthState.Authenticated ||
-    confirmedAuthenticated ||
-    (hasTurnkeyUser && clientState === ClientState.Ready) ||
-    (isAppUserLoggedIn && hasValidSession); // If app user is logged in and has session, allow export
+    authState === AuthState.Authenticated &&
+    hasValidSession &&
+    clientState === ClientState.Ready;
 
-  // Debug logging for Turnkey state
+  // Reset state on page mount/remount - force fresh authentication check
   useEffect(() => {
-    const sessionFromTurnkey = turnkey?.session;
-    const allSessionSources = {
-      destructured: session,
-      fromTurnkey: turnkey?.session,
-      fromContext: sessionFromContext,
-    };
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
     
-    console.log('[Export Page] Turnkey state:', {
-      authState,
-      authStateValue: authState === AuthState.Authenticated ? 'Authenticated' : 
-                      authState === AuthState.Unauthenticated ? 'Unauthenticated' : 
-                      String(authState),
-      hasValidSession,
-      hasTurnkeyUser,
-      confirmedAuthenticated,
-      isAuthenticated,
-      clientState,
-      clientStateValue: clientState === ClientState.Ready ? 'Ready' : String(clientState),
-      hasSession: !!session,
-      hasSessionFromTurnkey: !!sessionFromTurnkey,
-      sessionToken: session?.token ? 'present' : 'missing',
-      sessionTokenFromTurnkey: sessionFromTurnkey?.token ? 'present' : 'missing',
-      organizationId: session?.organizationId || sessionFromTurnkey?.organizationId,
-      userId: session?.userId || sessionFromTurnkey?.userId,
-      turnkeyUser: turnkeyUser ? { id: turnkeyUser?.id, email: turnkeyUser?.userEmail, name: turnkeyUser?.userName } : null,
-      appUser: appUser ? { email: appUser.email, name: appUser.name } : null,
-      isAppUserLoggedIn,
-      allSessionSources,
-      turnkeyContextKeys: turnkey ? Object.keys(turnkey) : [],
-      turnkeyHasSession: 'session' in (turnkey || {}),
-      turnkeyHasUser: 'user' in (turnkey || {}),
-      turnkeyType: typeof turnkey,
-      turnkeyIsNull: turnkey === null,
-      turnkeyIsUndefined: turnkey === undefined,
-    });
-  }, [authState, clientState, session, turnkey, turnkeyUser, appUser, isAuthenticated, hasValidSession, hasTurnkeyUser, confirmedAuthenticated, sessionFromContext, isAppUserLoggedIn]);
+    // Reset all export-related state
+    setStatus("idle");
+    setError(null);
+    setIframeVisible(false);
+    setTargetPublicKey(null);
+    setSelectedWalletId(null);
+    setFetchedWallets([]);
+    walletsRequestRef.current = false;
+    
+    // Clear any existing iframe
+    if (iframeStamperRef.current) {
+      iframeStamperRef.current.clear();
+    }
+    if (typeof document !== "undefined") {
+      const existing = document.getElementById("turnkey-export-iframe");
+      if (existing?.parentNode) {
+        existing.parentNode.removeChild(existing);
+      }
+    }
+    
+    console.log('[Export Page] Page initialized, resetting state');
+  }, []);
+
+  // Just track auth state, don't auto-popup modal
+  useEffect(() => {
+    if (!isClient) return;
+    if (clientState !== ClientState.Ready) return;
+    
+    if (isAuthenticated) {
+      console.log('[Export Page] Authenticated');
+      setAuthChecked(true);
+    } else {
+      console.log('[Export Page] Not authenticated - user must click Connect button');
+      setAuthChecked(true);
+    }
+  }, [isClient, clientState, isAuthenticated]);
 
   // Auto-close login modal when authentication succeeds
   useEffect(() => {
     if (isAuthenticated && showLoginModal) {
       console.log('[Export Page] Auth succeeded, closing login modal');
       setShowLoginModal(false);
+      setError(null); // Clear any previous errors
     }
   }, [isAuthenticated, showLoginModal]);
-
-  // Wait for Turnkey context to fully initialize and check for session multiple times
-  // The session might not be immediately available on first render
-  useEffect(() => {
-    if (clientState !== ClientState.Ready) return;
-    
-    // Check immediately - check both session and turnkey?.session
-    const currentSession = session || turnkey?.session;
-    if (currentSession?.token && currentSession?.organizationId && currentSession?.userId) {
-      console.log('[Export Page] Valid session detected immediately');
-      setSessionChecked(true);
-      setConfirmedAuthenticated(true);
-      return;
-    }
-    
-    // If not found, check again after a short delay (session might be loading from IndexedDB)
-    const maxAttempts = 10;
-    let attempt = 0;
-    
-    const checkSession = () => {
-      attempt++;
-      const currentSession = turnkey?.session || session;
-      if (currentSession?.token && currentSession?.organizationId && currentSession?.userId) {
-        console.log('[Export Page] Session found after', attempt, 'attempt(s)');
-        setSessionChecked(true);
-        setConfirmedAuthenticated(true);
-        return;
-      }
-      
-      if (attempt < maxAttempts) {
-        setTimeout(checkSession, 200);
-      } else {
-        console.log('[Export Page] Session not found after', maxAttempts, 'attempts');
-        setSessionChecked(true); // Mark as checked even if not found
-      }
-    };
-    
-    const timer = setTimeout(checkSession, 200);
-    return () => clearTimeout(timer);
-  }, [clientState, session, turnkey]);
-
-  // Also confirm authentication when authState becomes Authenticated
-  useEffect(() => {
-    if (authState === AuthState.Authenticated) {
-      console.log('[Export Page] authState is now Authenticated');
-      setConfirmedAuthenticated(true);
-    }
-  }, [authState]);
-
-  // Confirm authentication when we detect a valid session or user (even if authState hasn't updated)
-  useEffect(() => {
-    if ((hasValidSession || (hasTurnkeyUser && clientState === ClientState.Ready)) && !confirmedAuthenticated) {
-      console.log('[Export Page] Valid session or user detected, confirming authentication', {
-        hasValidSession,
-        hasTurnkeyUser,
-        clientState,
-      });
-      setConfirmedAuthenticated(true);
-    }
-  }, [hasValidSession, hasTurnkeyUser, clientState, confirmedAuthenticated]);
-
-  // Close login modal if user becomes authenticated
-  useEffect(() => {
-    if (isAuthenticated && showLoginModal) {
-      console.log('[Export Page] User authenticated, closing login modal');
-      setShowLoginModal(false);
-    }
-  }, [isAuthenticated, showLoginModal]);
-
-  // If we have a valid session but authState hasn't caught up yet, wait a bit
-  // This handles the case where session exists but authState is still loading
-  useEffect(() => {
-    if (hasValidSession && authState !== AuthState.Authenticated && clientState === ClientState.Ready) {
-      console.log('[Export Page] Valid session detected but authState not yet Authenticated, waiting for sync...');
-      // The session check should be sufficient, but we log this for debugging
-    }
-  }, [hasValidSession, authState, clientState]);
   
 
   useEffect(() => {
     setIsClient(true);
     return () => {
       iframeStamperRef.current?.clear();
+      hasInitializedRef.current = false; // Allow re-initialization on remount
     };
   }, []);
 
@@ -265,13 +188,14 @@ export default function TurnkeyExportPage() {
     }, []);
   }, [walletsSource]);
 
+  // Fetch wallets only when authenticated
   useEffect(() => {
     if (
       walletOptions.length ||
       walletsRequestRef.current ||
-      authState !== AuthState.Authenticated ||
-      clientState !== ClientState.Ready ||
-      !session?.organizationId
+      !isAuthenticated ||
+      !sessionFromContext?.organizationId ||
+      !sessionFromContext?.userId
     ) {
       return;
     }
@@ -281,31 +205,43 @@ export default function TurnkeyExportPage() {
       try {
         if (typeof turnkey?.refreshWallets === "function") {
           const refreshed = await turnkey.refreshWallets({
-            organizationId: session.organizationId,
-            userId: session.userId,
+            organizationId: sessionFromContext.organizationId,
+            userId: sessionFromContext.userId,
           });
           if (Array.isArray(refreshed)) {
             setFetchedWallets(refreshed);
           }
         } else if (typeof turnkey?.fetchWallets === "function") {
           const result = await turnkey.fetchWallets({
-            organizationId: session.organizationId,
-            userId: session.userId,
+            organizationId: sessionFromContext.organizationId,
+            userId: sessionFromContext.userId,
           });
           if (Array.isArray(result)) {
             setFetchedWallets(result);
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to load Turnkey wallets for export", err);
+        // If we get a session error, force re-authentication
+        const errorMessage = err?.message?.toLowerCase() || "";
+        if (
+          errorMessage.includes("session public key") ||
+          errorMessage.includes("session") && (
+            errorMessage.includes("not found") ||
+            errorMessage.includes("expired") ||
+            errorMessage.includes("invalid")
+          )
+        ) {
+          console.log('[Export Page] Session error detected');
+          setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again.");
+        }
         walletsRequestRef.current = false; // allow retry if state changes
       }
     })();
   }, [
-    authState,
-    clientState,
-    session?.organizationId,
-    session?.userId,
+    isAuthenticated,
+    sessionFromContext?.organizationId,
+    sessionFromContext?.userId,
     turnkey,
     walletOptions.length,
   ]);
@@ -325,24 +261,14 @@ export default function TurnkeyExportPage() {
     setSelectedWalletId(embedded?.id ?? null);
   }, [selectedWalletId, walletOptions, walletIdQuery]);
 
-  // Allow export if we have a valid session and client is ready, even if authState isn't Authenticated
+  // Allow export only when fully authenticated and ready
   const isTurnkeyReady =
+    isAuthenticated &&
     clientState === ClientState.Ready &&
     hasValidSession &&
     !!sessionFromContext?.organizationId &&
     !!selectedWalletId &&
     !!exportWallet;
-
-  // Log isTurnkeyReady state
-  useEffect(() => {
-    console.log('[Export Page] isTurnkeyReady:', isTurnkeyReady, {
-      clientState: clientState === ClientState.Ready,
-      hasValidSession,
-      hasOrganizationId: !!sessionFromContext?.organizationId,
-      hasSelectedWallet: !!selectedWalletId,
-      hasExportWallet: !!exportWallet,
-    });
-  }, [isTurnkeyReady, clientState, hasValidSession, sessionFromContext?.organizationId, selectedWalletId, exportWallet]);
 
   const handleExport = useCallback(async () => {
     if (!isClient) return;
@@ -391,16 +317,23 @@ export default function TurnkeyExportPage() {
       setTargetPublicKey(publicKey);
 
       setStatus("requesting");
+      
+      // Use the current session from context
+      const currentSession = sessionFromContext || session;
+      if (!currentSession?.organizationId) {
+        throw new Error("Session not available. Please log in again.");
+      }
+      
       const exportBundle: string = await exportWallet({
         walletId: selectedWalletId,
         targetPublicKey: publicKey,
-        organizationId: session.organizationId,
+        organizationId: currentSession.organizationId,
       });
 
       setStatus("injecting");
       const injected = await stamper.injectWalletExportBundle(
         exportBundle,
-        session.organizationId
+        currentSession.organizationId
       );
 
       if (!injected) {
@@ -412,9 +345,25 @@ export default function TurnkeyExportPage() {
     } catch (err: any) {
       console.error("Turnkey wallet export failed", err);
       setStatus("error");
-      setError(err?.message || "Wallet export failed");
+      
+      // Handle specific session errors
+      const errorMessage = err?.message || "Wallet export failed";
+      const errorLower = errorMessage.toLowerCase();
+      if (
+        errorLower.includes("session public key") ||
+        (errorLower.includes("session") && (
+          errorLower.includes("not found") ||
+          errorLower.includes("expired") ||
+          errorLower.includes("invalid") ||
+          errorLower.includes("could not be found")
+        ))
+      ) {
+        setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again and try exporting.");
+      } else {
+        setError(errorMessage);
+      }
     }
-  }, [exportWallet, isClient, isTurnkeyReady, selectedWalletId, session?.organizationId]);
+  }, [exportWallet, isClient, isTurnkeyReady, selectedWalletId, sessionFromContext, session]);
 
   // Open login modal to re-authenticate with Turnkey
   const handleReauthenticate = useCallback(() => {
@@ -475,11 +424,9 @@ export default function TurnkeyExportPage() {
                     >
                       Connect with Turnkey
                     </button>
-                    {isAppUserLoggedIn && !hasValidSession && authState !== AuthState.Authenticated && (
-                      <p className="mt-3 text-xs text-amber-400">
-                        You're logged in to the app, but need a Turnkey session to export. Please click "Connect with Turnkey" above.
-                      </p>
-                    )}
+                    <p className="mt-3 text-xs text-amber-400">
+                      You must authenticate with Turnkey to export your wallet. Click the button above to sign in.
+                    </p>
                   </>
                 )}
               </div>
