@@ -146,7 +146,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   const [presetDrafts, setPresetDrafts] = useState<string[]>(["0.01", "0.05", "0.1", "0.5", "1"]);
   const [maxSlippage, setMaxSlippage] = useState(0.15); // Default 15%
   const slippagePresets = [0.05, 0.10, 0.15, 0.20]; // 5%, 10%, 15%, 20% for Monad
-  const [isPoolInfoOpen, setIsPoolInfoOpen] = useState(false);
+  const [isPoolInfoOpen, setIsPoolInfoOpen] = useState(true);
   
   // Fetch dev token data
   const { devTokenData } = useMonadDevTokens(token?.mint, { enabled: !!token?.mint });
