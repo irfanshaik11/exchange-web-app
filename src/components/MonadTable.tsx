@@ -1481,6 +1481,8 @@ function MonadTable({
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
   const [showDevTooltip, setShowDevTooltip] = useState<number | null>(null);
+  const [showTop10Tooltip, setShowTop10Tooltip] = useState<number | null>(null);
+  const [showSniperTooltip, setShowSniperTooltip] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
   const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Wave animation for migrating tokens
   const { solPrice } = useSolPrice(); // Use shared SOL price from Footer context
@@ -5300,42 +5302,87 @@ function MonadTable({
                 </div>
                 {/* Bottom Row */}
                 <div className="absolute left-24 bottom-2 flex flex-row items-center gap-1">
-                  {/* Buyers percentage - Green */}
-                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200 number-font"
+                  {/* Top 10% Holders percentage - Green */}
+                  <div className="relative">
+                    <span 
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded border transition-all duration-200 number-font cursor-help"
+                      style={{ 
+                        color: AX.aiGreen,
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        borderColor: '#27282e',
+                        backgroundColor: 'transparent'
+                      }}
+                      onMouseEnter={() => setShowTop10Tooltip(token.id)}
+                      onMouseLeave={() => setShowTop10Tooltip(null)}
+                    >
+                      <BsPersonGear size={16} /> 
+                      <span className="number-font">
+                        {(() => {
+                          const value = (token as any).top10_hold_percent ?? 0;
+                          return value > 0 ? `${value.toFixed(2)}%` : '0%';
+                        })()}
+                      </span>
+                    </span>
+                    
+                    {/* Top 10% Tooltip */}
+                    {showTop10Tooltip === token.id && (
+                      <div 
+                        className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-4 py-3 rounded-lg text-xs font-medium whitespace-nowrap"
                         style={{ 
-                          color: AX.aiGreen,
-                          fontSize: '11px',
-                          fontWeight: '600',
-                          borderColor: 'rgba(107, 114, 128, 0.1)',
-                          backgroundColor: 'transparent'
-                        }}>
-                    <BsPersonGear size={13} /> <span className="number-font">{Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%</span>
-                  </span>
+                          backgroundColor: AX.surface, 
+                          color: AX.text, 
+                          border: `1px solid ${AX.border}`,
+                          minWidth: '240px',
+                          zIndex: 99999
+                        }}
+                        onMouseEnter={() => setShowTop10Tooltip(token.id)}
+                        onMouseLeave={() => setShowTop10Tooltip(null)}
+                      >
+                        <div className="mb-2">
+                          <div className="font-semibold text-sm mb-1" style={{ color: AX.aiGreen }}>
+                            Top 10% Holders: {(() => {
+                              const value = (token as any).top10_hold_percent ?? 0;
+                              return value > 0 ? `${value.toFixed(2)}%` : '0%';
+                            })()}
+                          </div>
+                        </div>
+                        
+                        {/* Tooltip arrow */}
+                        <div 
+                          className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent"
+                          style={{ borderBottomColor: AX.surface }}
+                        />
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Dev Hold indicator - Blue with percentage */}
                   {(() => {
                     const devHoldPercent = (token as any).dev_hold_percent ?? (token as any).dev_percent ?? 0;
                     const devWallet = (token as any).dev_wallet ?? (token as any).creator_address;
                     const hasDevInfo = devHoldPercent > 0 || devWallet;
+                    const isFinalStretch = title.toLowerCase().includes("final") || title.toLowerCase().includes("stretch");
                     
-                    if (!hasDevInfo) return null;
+                    // Show for tokens with dev info OR for final stretch tokens
+                    if (!hasDevInfo && !isFinalStretch) return null;
                     
                     return (
                       <div className="relative">
                         <span 
-                          className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200 cursor-help"
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded border transition-all duration-200 cursor-help"
                           style={{ 
-                            color: '#3B82F6',
-                            fontSize: '11px',
+                            color: '#566cdc',
+                            fontSize: '13px',
                             fontWeight: '500',
-                            borderColor: 'rgba(107, 114, 128, 0.1)',
+                            borderColor: '#27282e',
                             backgroundColor: 'transparent'
                           }}
                           onMouseEnter={() => setShowDevTooltip(token.id)}
                           onMouseLeave={() => setShowDevTooltip(null)}
                         >
-                          <LuChefHat size={13} style={{ color: '#3B82F6' }} />
-                          <span style={{ color: '#3B82F6' }}>
+                          <LuChefHat size={16} style={{ color: '#566cdc' }} />
+                          <span style={{ color: '#566cdc' }}>
                             {devHoldPercent > 0 ? `${devHoldPercent.toFixed(2)}%` : '0%'}
                           </span>
                         </span>
@@ -5463,47 +5510,67 @@ function MonadTable({
                     );
                   })()}
                   
-                  {/* Snipe percentage - Red */}
-                  {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                  {/* Sniper Hold percentage - Red */}
+                  <div className="relative">
+                    <span 
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded border transition-all duration-200 cursor-help"
+                      style={{ 
+                        color: '#f26681',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        borderColor: '#27282e',
+                        backgroundColor: 'transparent'
+                      }}
+                      onMouseEnter={() => setShowSniperTooltip(token.id)}
+                      onMouseLeave={() => setShowSniperTooltip(null)}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                        <line x1="12" y1="4" x2="12" y2="8" stroke="currentColor" strokeWidth="1.5"/>
+                        <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5"/>
+                        <line x1="4" y1="12" x2="8" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+                        <line x1="16" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+                        <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                      </svg>
+                      <span className="number-font">
+                        {(() => {
+                          const value = (token as any).sniper_hold_percent ?? 0;
+                          return value > 0 ? `${value.toFixed(2)}%` : '0%';
+                        })()}
+                      </span>
+                    </span>
+                    
+                    {/* Sniper Hold Tooltip */}
+                    {showSniperTooltip === token.id && (
+                      <div 
+                        className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-4 py-3 rounded-lg text-xs font-medium whitespace-nowrap"
                         style={{ 
-                          color: '#d11f3a',
-                          fontSize: '11px',
-                          fontWeight: '500',
-                          borderColor: 'rgba(107, 114, 128, 0.1)',
-                          backgroundColor: 'transparent'
-                        }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-                      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                      <line x1="12" y1="4" x2="12" y2="8" stroke="currentColor" strokeWidth="1.5"/>
-                      <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5"/>
-                      <line x1="4" y1="12" x2="8" y2="12" stroke="currentColor" strokeWidth="1.5"/>
-                      <line x1="16" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5"/>
-                      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
-                    </svg>
-                    {(() => {
-                      const address = pairAddress || mintAddress;
-                      const isEthereumAddress = address && address.startsWith('0x') && address.length === 42;
-                      
-                      if (isEthereumAddress) {
-                        return (
-                          <SniperHoldingsDisplay 
-                            pairAddress={address}
-                            chainId="eth"
-                            blocksAfterCreation={1000}
-                          />
-                        );
-                      } else {
-                        // For Solana addresses, show token analytics
-                        return (
-                          // <SolanaTokenAnalytics 
-                          //   mintAddress={mintAddress}
-                          //   metricType="sniper"
-                          // />
-                          <span className="text-xs text-gray-500">-</span>
-                        );
-                      }
-                    })()}
-                  </span> */}
+                          backgroundColor: AX.surface, 
+                          color: AX.text, 
+                          border: `1px solid ${AX.border}`,
+                          minWidth: '240px',
+                          zIndex: 99999
+                        }}
+                        onMouseEnter={() => setShowSniperTooltip(token.id)}
+                        onMouseLeave={() => setShowSniperTooltip(null)}
+                      >
+                        <div className="mb-2">
+                          <div className="font-semibold text-sm mb-1" style={{ color: '#f26681' }}>
+                            Sniper Hold: {(() => {
+                              const value = (token as any).sniper_hold_percent ?? 0;
+                              return value > 0 ? `${value.toFixed(2)}%` : '0%';
+                            })()}
+                          </div>
+                        </div>
+                        
+                        {/* Tooltip arrow */}
+                        <div 
+                          className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent"
+                          style={{ borderBottomColor: AX.surface }}
+                        />
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Ghost percentage (Insider Holdings) - Green */}
                   {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"

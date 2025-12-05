@@ -905,7 +905,10 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
     // For Monad: Always use 1s interval (backend supports it) and aggregate into 1m if needed
     const wsBaseUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081';
     const wsInterval = '1s'; // Always use 1s for Monad to get real-time updates
-    const wsUrl = wsBaseUrl.replace(/^http/, 'ws') + `/v1/ohlc/stream?token_address=${tokenAddress}&interval=${wsInterval}`;
+    // Convert http/https to ws/wss for WebSocket
+    const wsProtocol = wsBaseUrl.startsWith('https') ? 'wss' : 'ws';
+    const wsHost = wsBaseUrl.replace(/^https?:\/\//, '');
+    const wsUrl = `${wsProtocol}://${wsHost}/v1/ohlc/stream?token_address=${tokenAddress}&interval=${wsInterval}`;
     
     // Check if we need to aggregate 1s -> 1m when viewing 1m candles
     const needsAggregation = selectedInterval === '1m';
@@ -917,444 +920,480 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
       currentAggregatingIntervalRef.current = selectedInterval;
     }
 
-    console.log('[AdvancedOHLCChart] 🔌 Monad WebSocket connecting (via useEffect):', wsUrl);
-    console.log('[AdvancedOHLCChart] 📊 Selected interval:', selectedInterval, '| WS interval:', wsInterval, '| Aggregating 1s->1m:', needsAggregation);
+    // Track if connection was closed by cleanup (don't reconnect in that case)
+    let closedByCleanup = false;
 
-    // Close existing WebSocket if any
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+    // Extract message handler to reuse in connect function
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const message = JSON.parse(event.data);
 
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+        // Handle initial history batch
+        if (message.type === 'ohlc_history') {
+          const candles = message.data as Array<any>;
+          console.log('[AdvancedOHLCChart] 📊 WebSocket ohlc_history received:', candles.length, 'candles');
+          console.log('[AdvancedOHLCChart] 📊 Raw first candle from WS:', JSON.stringify(candles[0]));
 
-      ws.onopen = () => {
-        console.log('[AdvancedOHLCChart] ✅ Monad WebSocket connected for', tokenAddress.slice(0, 10) + '...');
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-
-          // Handle initial history batch
-          if (message.type === 'ohlc_history') {
-            const candles = message.data as Array<any>;
-            console.log('[AdvancedOHLCChart] 📊 WebSocket ohlc_history received:', candles.length, 'candles');
-            console.log('[AdvancedOHLCChart] 📊 Raw first candle from WS:', JSON.stringify(candles[0]));
-
-            if (candles.length === 0) {
-              console.log('[AdvancedOHLCChart] ⚠️ No historical candles received from WebSocket');
-              
-              // For Monad: Create a placeholder candle at 0 when no data
-              const currentNetwork = latestParamsRef.current.network;
-              if (currentNetwork === 'monad') {
-                const now = Math.floor(Date.now() / 1000);
-                const placeholderCandle: BackendOHLCData = {
-                  unix_time: now,
-                  o: 0,
-                  h: 0,
-                  l: 0,
-                  c: 0,
-                  v_usd: 0,
-                };
-                lastGoodCandlesRef.current = [placeholderCandle];
-                console.log('[AdvancedOHLCChart] 📊 Created placeholder candle at 0 for Monad (no WebSocket history)');
-                
-                // Update state to trigger chart refresh
-                setCandles([placeholderCandle]);
-                setIsLoading(false);
-                hasInitializedRef.current = true;
-                firstLoadRef.current = false;
-              }
-              return;
-            }
-
-            // Clear existing cache and replace with WebSocket data
-            lastGoodCandlesRef.current = [];
-
-            // Update cache with historical data - WebSocket sends { time, o, h, l, c, v }
-            candles.forEach((ohlcData: any, idx: number) => {
-              // Handle 0-value candles: if all OHLC values are 0, set a small minimum
-              // This ensures TradingView renders them (otherwise they may be invisible)
-              const hasZeroValues = ohlcData.o === 0 && ohlcData.h === 0 && ohlcData.l === 0 && ohlcData.c === 0;
-              const minPrice = 0.0000001; // Small non-zero value for display
-              
-              const newCandle: BackendOHLCData = {
-                unix_time: ohlcData.time,
-                o: hasZeroValues ? minPrice : ohlcData.o,
-                h: hasZeroValues ? minPrice : ohlcData.h,
-                l: hasZeroValues ? minPrice : ohlcData.l,
-                c: hasZeroValues ? minPrice : ohlcData.c,
-                v_usd: ohlcData.v || 0,
-              };
-
-              // Log first few candles for debugging
-              if (idx < 3) {
-                console.log(`[AdvancedOHLCChart] 📊 Mapped candle ${idx}:`, JSON.stringify(newCandle), hasZeroValues ? '(had zero values)' : '');
-              }
-
-              lastGoodCandlesRef.current.push(newCandle);
-            });
-
-            // Sort cache by time
-            lastGoodCandlesRef.current.sort((a, b) => a.unix_time - b.unix_time);
-
-            console.log('[AdvancedOHLCChart] 📊 Cache populated:', lastGoodCandlesRef.current.length, 'candles');
-            console.log('[AdvancedOHLCChart] 📊 Time range:', {
-              first: new Date(lastGoodCandlesRef.current[0]?.unix_time * 1000).toISOString(),
-              last: new Date(lastGoodCandlesRef.current[lastGoodCandlesRef.current.length - 1]?.unix_time * 1000).toISOString(),
-            });
-
-            // Update the cached interval ref so getBars knows we have fresh data for this interval
-            cachedIntervalRef.current = selectedInterval;
-            console.log('[AdvancedOHLCChart] 📊 cachedIntervalRef set to:', cachedIntervalRef.current);
-
-            // Check if we have real price data (not all zeros)
-            const hasRealData = lastGoodCandlesRef.current.some(c => c.c > 0 || c.o > 0 || c.h > 0 || c.l > 0);
-            const isFirstRealData = hasRealData && !hasRealPriceDataRef.current;
+          if (candles.length === 0) {
+            console.log('[AdvancedOHLCChart] ⚠️ No historical candles received from WebSocket');
             
-            if (isFirstRealData) {
-              hasRealPriceDataRef.current = true;
-              console.log('[AdvancedOHLCChart] 📊 First real price data received - will refresh symbol for price scale');
+            // For Monad: Create a placeholder candle at 0 when no data
+            const currentNetwork = latestParamsRef.current.network;
+            if (currentNetwork === 'monad') {
+              const now = Math.floor(Date.now() / 1000);
+              const placeholderCandle: BackendOHLCData = {
+                unix_time: now,
+                o: 0,
+                h: 0,
+                l: 0,
+                c: 0,
+                v_usd: 0,
+              };
+              lastGoodCandlesRef.current = [placeholderCandle];
+              console.log('[AdvancedOHLCChart] 📊 Created placeholder candle at 0 for Monad (no WebSocket history)');
+              
+              // Update state to trigger chart refresh
+              setCandles([placeholderCandle]);
+              setIsLoading(false);
+              hasInitializedRef.current = true;
+              firstLoadRef.current = false;
             }
-
-            // Update state to trigger re-render and dismiss loading overlay
-            setCandles([...lastGoodCandlesRef.current]);
-            setIsLoading(false);
-            hasInitializedRef.current = true;
-            firstLoadRef.current = false; // Ensure loading overlay is dismissed
-            console.log('[AdvancedOHLCChart] 📊 WebSocket data received - loading state cleared');
-
-            // Force TradingView to refresh data from the updated cache
-            // If this is the first real data, also refresh symbol to update price scale
-            // Use a small delay to ensure React state has updated
-            setTimeout(() => {
-              if (widgetRef.current) {
-                try {
-                  const tokenId = mint || pairAddress;
-                  const currentResolution = INTERVAL_TO_RESOLUTION[selectedInterval] || '1S';
-
-                  if (isFirstRealData) {
-                    // First real data - refresh symbol to update price scale
-                    console.log('[AdvancedOHLCChart] 📊 First real data - refreshing symbol to update price scale...');
-                    widgetRef.current.onChartReady(() => {
-                      try {
-                        // Use setSymbol to force complete refresh including resolveSymbol (for price scale)
-                        widgetRef.current.setSymbol(tokenId, currentResolution, () => {
-                          console.log('[AdvancedOHLCChart] ✅ Symbol refreshed - price scale should now be correct');
-                          
-                          // After refresh, right-align chart to show latest candles
-                          try {
-                            if (lastGoodCandlesRef.current.length > 0) {
-                              setTimeout(() => {
-                                rightAlignChart(lastGoodCandlesRef.current.length);
-                              }, 300);
-                            }
-                          } catch (rangeErr) {
-                            console.log('[AdvancedOHLCChart] Could not right-align chart:', rangeErr);
-                          }
-                        });
-                      } catch (e) {
-                        console.log('[AdvancedOHLCChart] Symbol refresh failed:', e);
-                      }
-                    });
-                  } else {
-                    // Regular refresh - just reset data
-                    console.log('[AdvancedOHLCChart] 📊 Forcing TradingView refresh via setSymbol...');
-                    widgetRef.current.onChartReady(() => {
-                      try {
-                        widgetRef.current.setSymbol(tokenId, currentResolution, () => {
-                          console.log('[AdvancedOHLCChart] ✅ TradingView setSymbol() completed');
-                          
-                          // After refresh, right-align chart to show latest candles
-                          try {
-                            if (lastGoodCandlesRef.current.length > 0) {
-                              setTimeout(() => {
-                                rightAlignChart(lastGoodCandlesRef.current.length);
-                              }, 300);
-                            }
-                          } catch (rangeErr) {
-                            console.log('[AdvancedOHLCChart] Could not right-align chart:', rangeErr);
-                          }
-                        });
-                      } catch (e) {
-                        console.log('[AdvancedOHLCChart] setSymbol failed, trying chart().resetData():', e);
-                        try {
-                          const chart = widgetRef.current.chart();
-                          if (chart && typeof chart.resetData === 'function') {
-                            chart.resetData();
-                            console.log('[AdvancedOHLCChart] ✅ TradingView chart().resetData() called');
-                          }
-                        } catch (e2) {
-                          console.log('[AdvancedOHLCChart] chart().resetData() also failed:', e2);
-                        }
-                      }
-                    });
-                  }
-                } catch (e) {
-                  console.log('[AdvancedOHLCChart] Could not refresh TradingView data:', e);
-                }
-              } else {
-                console.log('[AdvancedOHLCChart] ⚠️ widgetRef.current is null, cannot refresh chart');
-              }
-            }, 100);
-
             return;
           }
 
-          // Handle real-time candle updates
-          if (message.type !== 'ohlc_candle') {
-            return;
-          }
+          // Clear existing cache and replace with WebSocket data
+          lastGoodCandlesRef.current = [];
 
-          const ohlcData = message.data;
-
-          // For Monad: Aggregate 1s candles into the current viewing timeframe (1m, 5m, 15m, 1h, etc.)
-          const currentSelectedInterval = latestParamsRef.current.interval;
-          
-          // Only aggregate if viewing a timeframe that's longer than 1s (we always receive 1s candles)
-          const needsAggregation = network === 'monad' && 
-            currentSelectedInterval !== '1s' && 
-            currentSelectedInterval !== '5s' && 
-            currentSelectedInterval !== '15s' && 
-            currentSelectedInterval !== '30s';
-          
-          if (needsAggregation) {
-            // This is a 1s candle - aggregate into current 1m candle
-            const oneSecCandle: BackendOHLCData = {
+          // Update cache with historical data - WebSocket sends { time, o, h, l, c, v }
+          candles.forEach((ohlcData: any, idx: number) => {
+            // Handle 0-value candles: if all OHLC values are 0, set a small minimum
+            // This ensures TradingView renders them (otherwise they may be invisible)
+            const hasZeroValues = ohlcData.o === 0 && ohlcData.h === 0 && ohlcData.l === 0 && ohlcData.c === 0;
+            const minPrice = 0.0000001; // Small non-zero value for display
+            
+            const newCandle: BackendOHLCData = {
               unix_time: ohlcData.time,
-              o: ohlcData.o,
-              h: ohlcData.h,
-              l: ohlcData.l,
-              c: ohlcData.c,
+              o: hasZeroValues ? minPrice : ohlcData.o,
+              h: hasZeroValues ? minPrice : ohlcData.h,
+              l: hasZeroValues ? minPrice : ohlcData.l,
+              c: hasZeroValues ? minPrice : ohlcData.c,
               v_usd: ohlcData.v || 0,
             };
-            
-            // Get the current window start time for the viewing interval
-            const windowStart = getWindowStartTime(oneSecCandle.unix_time, currentSelectedInterval);
-            
-            // Check if this 1s candle belongs to current timeframe window
-            if (!currentAggregatedCandleRef.current || currentAggregatedCandleRef.current.unix_time !== windowStart) {
-              // New timeframe window - finalize previous candle if it exists
-              if (currentAggregatedCandleRef.current) {
-                const finalizedCandle = currentAggregatedCandleRef.current;
-                console.log(`[AdvancedOHLCChart] 📊 Finalized previous ${currentSelectedInterval} candle:`, {
-                  windowStart: new Date(finalizedCandle.unix_time * 1000).toISOString(),
-                  o: finalizedCandle.o,
-                  h: finalizedCandle.h,
-                  l: finalizedCandle.l,
-                  c: finalizedCandle.c,
-                  v: finalizedCandle.v_usd,
-                });
-                
-                // Update cache with finalized candle (it's complete now)
-                const cachedData = lastGoodCandlesRef.current;
-                const existingIdx = cachedData.findIndex(c => c.unix_time === finalizedCandle.unix_time);
-                if (existingIdx >= 0) {
-                  cachedData[existingIdx] = finalizedCandle;
-                } else {
-                  cachedData.push(finalizedCandle);
-                  cachedData.sort((a, b) => a.unix_time - b.unix_time);
-                }
-              }
-              
-              // Create new aggregated candle for new timeframe window
-              currentAggregatedCandleRef.current = {
-                unix_time: windowStart,
-                o: oneSecCandle.o,
-                h: oneSecCandle.h,
-                l: oneSecCandle.l,
-                c: oneSecCandle.c,
-                v_usd: oneSecCandle.v_usd,
-              };
-              oneSecondCandlesRef.current = [oneSecCandle];
-              
-              console.log(`[AdvancedOHLCChart] 📊 New ${currentSelectedInterval} candle window started:`, {
-                windowStart: new Date(windowStart * 1000).toISOString(),
-                open: currentAggregatedCandleRef.current.o,
-              });
-            } else {
-              // Update existing aggregated candle with this 1s candle
-              const currentCandle = currentAggregatedCandleRef.current;
-              currentCandle.h = Math.max(currentCandle.h, oneSecCandle.h);
-              currentCandle.l = Math.min(currentCandle.l, oneSecCandle.l);
-              currentCandle.c = oneSecCandle.c; // Close = latest price
-              currentCandle.v_usd += oneSecCandle.v_usd;
-              
-              oneSecondCandlesRef.current.push(oneSecCandle);
-              
-              // Keep only a reasonable number of 1s candles in memory (e.g., enough for the current timeframe)
-              // For 1m: 60, for 5m: 300, for 15m: 900, etc.
-              const maxCandlesToKeep = currentSelectedInterval === '1m' ? 60 :
-                                       currentSelectedInterval === '5m' ? 300 :
-                                       currentSelectedInterval === '15m' ? 900 :
-                                       currentSelectedInterval === '1h' ? 3600 : 100;
-              
-              if (oneSecondCandlesRef.current.length > maxCandlesToKeep) {
-                oneSecondCandlesRef.current = oneSecondCandlesRef.current.slice(-maxCandlesToKeep);
-              }
-            }
-            
-            // Use the aggregated candle for chart update
-            const aggregatedCandle = currentAggregatedCandleRef.current;
-            
-            console.log(`[AdvancedOHLCChart] 📊 Aggregated 1s -> ${currentSelectedInterval} candle:`, {
-              windowStart: new Date(aggregatedCandle.unix_time * 1000).toISOString(),
-              o: aggregatedCandle.o,
-              h: aggregatedCandle.h,
-              l: aggregatedCandle.l,
-              c: aggregatedCandle.c,
-              v: aggregatedCandle.v_usd,
-              oneSecCount: oneSecondCandlesRef.current.length,
-            });
-            
-            // Convert aggregated candle to TradingView bar format
-            const baseBar = {
-              time: aggregatedCandle.unix_time * 1000, // Convert to ms
-              open: aggregatedCandle.o,
-              high: aggregatedCandle.h,
-              low: aggregatedCandle.l,
-              close: aggregatedCandle.c,
-              volume: aggregatedCandle.v_usd,
-            };
-            
-            // Apply display mode transformation for Monad
-            const currentNetwork = latestParamsRef.current.network;
-            const isMonad = currentNetwork === 'monad';
-            const currentDisplayMode = displayModeRef.current; // Use ref for fast access
-            let bar = transformBar(baseBar, currentDisplayMode, isMonad);
-            
-            // Update cache with aggregated 1m candle (store raw USD data)
-            const cachedData = lastGoodCandlesRef.current;
-            const existingIdx = cachedData.findIndex(c => c.unix_time === aggregatedCandle.unix_time);
-            if (existingIdx >= 0) {
-              cachedData[existingIdx] = aggregatedCandle;
-            } else {
-              cachedData.push(aggregatedCandle);
-              cachedData.sort((a, b) => a.unix_time - b.unix_time);
-            }
-            
-            // Update chart via callback
-            if (subscribedCallbackRef.current && bar.time > 0) {
-              subscribedCallbackRef.current(bar);
-            }
-            
-            return; // Don't process as 1s candle
-          }
 
-          console.log('[AdvancedOHLCChart] 📊 WebSocket OHLC update:', {
-            time: new Date(ohlcData.time * 1000).toISOString(),
-            close: ohlcData.c,
-            interval: selectedInterval,
+            // Log first few candles for debugging
+            if (idx < 3) {
+              console.log(`[AdvancedOHLCChart] 📊 Mapped candle ${idx}:`, JSON.stringify(newCandle), hasZeroValues ? '(had zero values)' : '');
+            }
+
+            lastGoodCandlesRef.current.push(newCandle);
           });
 
-          // Convert to TradingView bar format (raw USD data first)
-          const baseBar = {
-            time: (ohlcData.time || 0) * 1000, // Convert to ms
-            open: ohlcData.o,
-            high: ohlcData.h,
-            low: ohlcData.l,
-            close: ohlcData.c,
-            volume: ohlcData.v || 0,
-          };
+          // Sort cache by time
+          lastGoodCandlesRef.current.sort((a, b) => a.unix_time - b.unix_time);
 
-          // For Monad: Ensure new candle connects to previous candle (work with raw USD data)
-          const currentNetwork = latestParamsRef.current.network;
-          const isMonad = currentNetwork === 'monad';
-          if (isMonad) {
-            const cachedData = lastGoodCandlesRef.current;
-            if (cachedData.length > 0) {
-              // Find the most recent candle before this one
-              const sortedCache = [...cachedData].sort((a, b) => a.unix_time - b.unix_time);
-              const previousCandle = sortedCache[sortedCache.length - 1];
-              
-              // If this candle's time is after the previous, ensure continuity
-              if (baseBar.time / 1000 > previousCandle.unix_time) {
-                const previousClose = previousCandle.c;
-                
-                // Connect: new candle's open should equal previous candle's close
-                if (baseBar.open !== previousClose) {
-                  const wasFlat = baseBar.open === baseBar.high && baseBar.open === baseBar.low && baseBar.open === baseBar.close;
-                  baseBar.open = previousClose;
+          console.log('[AdvancedOHLCChart] 📊 Cache populated:', lastGoodCandlesRef.current.length, 'candles');
+          console.log('[AdvancedOHLCChart] 📊 Time range:', {
+            first: new Date(lastGoodCandlesRef.current[0]?.unix_time * 1000).toISOString(),
+            last: new Date(lastGoodCandlesRef.current[lastGoodCandlesRef.current.length - 1]?.unix_time * 1000).toISOString(),
+          });
+
+          // Update the cached interval ref so getBars knows we have fresh data for this interval
+          cachedIntervalRef.current = selectedInterval;
+          console.log('[AdvancedOHLCChart] 📊 cachedIntervalRef set to:', cachedIntervalRef.current);
+
+          // Check if we have real price data (not all zeros)
+          const hasRealData = lastGoodCandlesRef.current.some(c => c.c > 0 || c.o > 0 || c.h > 0 || c.l > 0);
+          const isFirstRealData = hasRealData && !hasRealPriceDataRef.current;
+          
+          if (isFirstRealData) {
+            hasRealPriceDataRef.current = true;
+            console.log('[AdvancedOHLCChart] 📊 First real price data received - will refresh chart for price scale');
+          }
+
+          // Update state to trigger re-render and dismiss loading overlay
+          setCandles([...lastGoodCandlesRef.current]);
+          setIsLoading(false);
+          hasInitializedRef.current = true;
+          firstLoadRef.current = false; // Ensure loading overlay is dismissed
+          console.log('[AdvancedOHLCChart] 📊 WebSocket data received - loading state cleared');
+
+          // Force TradingView to refresh data from the updated cache
+          // Use resetData() instead of setSymbol to avoid disrupting subscription lifecycle
+          setTimeout(() => {
+            if (widgetRef.current) {
+              try {
+                // Use resetData() to refresh chart without disrupting subscription
+                const chart = widgetRef.current.chart();
+                if (chart && typeof chart.resetData === 'function') {
+                  chart.resetData();
+                  console.log('[AdvancedOHLCChart] ✅ TradingView chart().resetData() called - chart refreshed without disrupting subscription');
                   
-                  if (wasFlat) {
-                    // Was a flat candle - keep it flat at the new price
-                    baseBar.high = previousClose;
-                    baseBar.low = previousClose;
-                    baseBar.close = previousClose;
-                  } else {
-                    // Had variation - adjust high/low to maintain validity
-                    if (baseBar.high < baseBar.open) baseBar.high = baseBar.open;
-                    if (baseBar.low > baseBar.open) baseBar.low = baseBar.open;
+                  // After refresh, right-align chart to show latest candles
+                  try {
+                    if (lastGoodCandlesRef.current.length > 0) {
+                      setTimeout(() => {
+                        rightAlignChart(lastGoodCandlesRef.current.length);
+                      }, 300);
+                    }
+                  } catch (rangeErr) {
+                    console.log('[AdvancedOHLCChart] Could not right-align chart:', rangeErr);
                   }
-                  
-                  console.log('[AdvancedOHLCChart] 🔗 Connected WebSocket candle to previous:', {
-                    previousClose,
-                    newOpen: baseBar.open,
-                    wasFlat,
+                } else if (isFirstRealData) {
+                  // Fallback: only use setSymbol for first real data to update price scale
+                  console.log('[AdvancedOHLCChart] 📊 First real data - using setSymbol to update price scale...');
+                  widgetRef.current.onChartReady(() => {
+                    try {
+                      const tokenId = mint || pairAddress;
+                      const currentResolution = INTERVAL_TO_RESOLUTION[selectedInterval] || '1S';
+                      widgetRef.current.setSymbol(tokenId, currentResolution, () => {
+                        console.log('[AdvancedOHLCChart] ✅ Symbol refreshed - price scale should now be correct');
+                        
+                        // After refresh, right-align chart to show latest candles
+                        try {
+                          if (lastGoodCandlesRef.current.length > 0) {
+                            setTimeout(() => {
+                              rightAlignChart(lastGoodCandlesRef.current.length);
+                            }, 300);
+                          }
+                        } catch (rangeErr) {
+                          console.log('[AdvancedOHLCChart] Could not right-align chart:', rangeErr);
+                        }
+                      });
+                    } catch (e) {
+                      console.log('[AdvancedOHLCChart] Symbol refresh failed:', e);
+                    }
                   });
                 }
+              } catch (e) {
+                console.log('[AdvancedOHLCChart] Could not refresh TradingView data:', e);
+              }
+            } else {
+              console.log('[AdvancedOHLCChart] ⚠️ widgetRef.current is null, cannot refresh chart');
+            }
+          }, 100);
+
+          return;
+        }
+
+        // Handle real-time candle updates
+        if (message.type !== 'ohlc_candle') {
+          return;
+        }
+
+        const ohlcData = message.data;
+
+        // For Monad: Aggregate 1s candles into the current viewing timeframe (1m, 5m, 15m, 1h, etc.)
+        const currentSelectedInterval = latestParamsRef.current.interval;
+        
+        // Only aggregate if viewing a timeframe that's longer than 1s (we always receive 1s candles)
+        const needsAggregation = network === 'monad' && 
+          currentSelectedInterval !== '1s' && 
+          currentSelectedInterval !== '5s' && 
+          currentSelectedInterval !== '15s' && 
+          currentSelectedInterval !== '30s';
+        
+        if (needsAggregation) {
+          // This is a 1s candle - aggregate into current 1m candle
+          const oneSecCandle: BackendOHLCData = {
+            unix_time: ohlcData.time,
+            o: ohlcData.o,
+            h: ohlcData.h,
+            l: ohlcData.l,
+            c: ohlcData.c,
+            v_usd: ohlcData.v || 0,
+          };
+          
+          // Get the current window start time for the viewing interval
+          const windowStart = getWindowStartTime(oneSecCandle.unix_time, currentSelectedInterval);
+          
+          // Check if this 1s candle belongs to current timeframe window
+          if (!currentAggregatedCandleRef.current || currentAggregatedCandleRef.current.unix_time !== windowStart) {
+            // New timeframe window - finalize previous candle if it exists
+            if (currentAggregatedCandleRef.current) {
+              const finalizedCandle = currentAggregatedCandleRef.current;
+              console.log(`[AdvancedOHLCChart] 📊 Finalized previous ${currentSelectedInterval} candle:`, {
+                windowStart: new Date(finalizedCandle.unix_time * 1000).toISOString(),
+                o: finalizedCandle.o,
+                h: finalizedCandle.h,
+                l: finalizedCandle.l,
+                c: finalizedCandle.c,
+                v: finalizedCandle.v_usd,
+              });
+              
+              // Update cache with finalized candle (it's complete now)
+              const cachedData = lastGoodCandlesRef.current;
+              const existingIdx = cachedData.findIndex(c => c.unix_time === finalizedCandle.unix_time);
+              if (existingIdx >= 0) {
+                cachedData[existingIdx] = finalizedCandle;
+              } else {
+                cachedData.push(finalizedCandle);
+                cachedData.sort((a, b) => a.unix_time - b.unix_time);
+              }
+            }
+            
+            // Create new aggregated candle for new timeframe window
+            currentAggregatedCandleRef.current = {
+              unix_time: windowStart,
+              o: oneSecCandle.o,
+              h: oneSecCandle.h,
+              l: oneSecCandle.l,
+              c: oneSecCandle.c,
+              v_usd: oneSecCandle.v_usd,
+            };
+            oneSecondCandlesRef.current = [oneSecCandle];
+            
+            console.log(`[AdvancedOHLCChart] 📊 New ${currentSelectedInterval} candle window started:`, {
+              windowStart: new Date(windowStart * 1000).toISOString(),
+              open: currentAggregatedCandleRef.current.o,
+            });
+          } else {
+            // Update existing aggregated candle with this 1s candle
+            const currentCandle = currentAggregatedCandleRef.current;
+            currentCandle.h = Math.max(currentCandle.h, oneSecCandle.h);
+            currentCandle.l = Math.min(currentCandle.l, oneSecCandle.l);
+            currentCandle.c = oneSecCandle.c; // Close = latest price
+            currentCandle.v_usd += oneSecCandle.v_usd;
+            
+            oneSecondCandlesRef.current.push(oneSecCandle);
+            
+            // Keep only a reasonable number of 1s candles in memory (e.g., enough for the current timeframe)
+            // For 1m: 60, for 5m: 300, for 15m: 900, etc.
+            const maxCandlesToKeep = currentSelectedInterval === '1m' ? 60 :
+                                     currentSelectedInterval === '5m' ? 300 :
+                                     currentSelectedInterval === '15m' ? 900 :
+                                     currentSelectedInterval === '1h' ? 3600 : 100;
+            
+            if (oneSecondCandlesRef.current.length > maxCandlesToKeep) {
+              oneSecondCandlesRef.current = oneSecondCandlesRef.current.slice(-maxCandlesToKeep);
+            }
+          }
+          
+          // Use the aggregated candle for chart update
+          const aggregatedCandle = currentAggregatedCandleRef.current;
+          
+          console.log(`[AdvancedOHLCChart] 📊 Aggregated 1s -> ${currentSelectedInterval} candle:`, {
+            windowStart: new Date(aggregatedCandle.unix_time * 1000).toISOString(),
+            o: aggregatedCandle.o,
+            h: aggregatedCandle.h,
+            l: aggregatedCandle.l,
+            c: aggregatedCandle.c,
+            v: aggregatedCandle.v_usd,
+            oneSecCount: oneSecondCandlesRef.current.length,
+          });
+          
+          // Convert aggregated candle to TradingView bar format
+          const baseBar = {
+            time: aggregatedCandle.unix_time * 1000, // Convert to ms
+            open: aggregatedCandle.o,
+            high: aggregatedCandle.h,
+            low: aggregatedCandle.l,
+            close: aggregatedCandle.c,
+            volume: aggregatedCandle.v_usd,
+          };
+          
+          // Apply display mode transformation for Monad
+          const currentNetwork = latestParamsRef.current.network;
+          const isMonad = currentNetwork === 'monad';
+          const currentDisplayMode = displayModeRef.current; // Use ref for fast access
+          let bar = transformBar(baseBar, currentDisplayMode, isMonad);
+          
+          // Update cache with aggregated 1m candle (store raw USD data)
+          const cachedData = lastGoodCandlesRef.current;
+          const existingIdx = cachedData.findIndex(c => c.unix_time === aggregatedCandle.unix_time);
+          if (existingIdx >= 0) {
+            cachedData[existingIdx] = aggregatedCandle;
+          } else {
+            cachedData.push(aggregatedCandle);
+            cachedData.sort((a, b) => a.unix_time - b.unix_time);
+          }
+          
+          // Update chart via callback
+          if (subscribedCallbackRef.current && bar.time > 0) {
+            console.log(`[AdvancedOHLCChart] 📊 Calling subscribedCallback with aggregated ${currentSelectedInterval} bar:`, {
+              time: new Date(bar.time).toISOString(),
+              open: bar.open,
+              high: bar.high,
+              low: bar.low,
+              close: bar.close,
+            });
+            subscribedCallbackRef.current(bar);
+          } else {
+            console.warn(`[AdvancedOHLCChart] ⚠️ Aggregated ${currentSelectedInterval} update received but callback not available:`, {
+              hasCallback: !!subscribedCallbackRef.current,
+              barTime: bar.time,
+              message: 'subscribeBars may not have been called yet by TradingView',
+            });
+          }
+          
+          return; // Don't process as 1s candle
+        }
+
+        console.log('[AdvancedOHLCChart] 📊 WebSocket OHLC update:', {
+          time: new Date(ohlcData.time * 1000).toISOString(),
+          close: ohlcData.c,
+          interval: selectedInterval,
+        });
+
+        // Convert to TradingView bar format (raw USD data first)
+        const baseBar = {
+          time: (ohlcData.time || 0) * 1000, // Convert to ms
+          open: ohlcData.o,
+          high: ohlcData.h,
+          low: ohlcData.l,
+          close: ohlcData.c,
+          volume: ohlcData.v || 0,
+        };
+
+        // For Monad: Ensure new candle connects to previous candle (work with raw USD data)
+        const currentNetwork = latestParamsRef.current.network;
+        const isMonad = currentNetwork === 'monad';
+        if (isMonad) {
+          const cachedData = lastGoodCandlesRef.current;
+          if (cachedData.length > 0) {
+            // Find the most recent candle before this one
+            const sortedCache = [...cachedData].sort((a, b) => a.unix_time - b.unix_time);
+            const previousCandle = sortedCache[sortedCache.length - 1];
+            
+            // If this candle's time is after the previous, ensure continuity
+            if (baseBar.time / 1000 > previousCandle.unix_time) {
+              const previousClose = previousCandle.c;
+              
+              // Connect: new candle's open should equal previous candle's close
+              if (baseBar.open !== previousClose) {
+                const wasFlat = baseBar.open === baseBar.high && baseBar.open === baseBar.low && baseBar.open === baseBar.close;
+                baseBar.open = previousClose;
+                
+                if (wasFlat) {
+                  // Was a flat candle - keep it flat at the new price
+                  baseBar.high = previousClose;
+                  baseBar.low = previousClose;
+                  baseBar.close = previousClose;
+                } else {
+                  // Had variation - adjust high/low to maintain validity
+                  if (baseBar.high < baseBar.open) baseBar.high = baseBar.open;
+                  if (baseBar.low > baseBar.open) baseBar.low = baseBar.open;
+                }
+                
+                console.log('[AdvancedOHLCChart] 🔗 Connected WebSocket candle to previous:', {
+                  previousClose,
+                  newOpen: baseBar.open,
+                  wasFlat,
+                });
               }
             }
           }
-
-          // Apply display mode transformation before sending to chart
-          const currentDisplayMode = displayModeRef.current; // Use ref for fast access
-          let bar = transformBar(baseBar, currentDisplayMode, isMonad);
-
-          // Update the chart via callback if available
-          if (subscribedCallbackRef.current && bar.time > 0) {
-            subscribedCallbackRef.current(bar);
-          }
-
-          // Also update our cache with the new candle (store raw USD data, not transformed)
-          const newCandle: BackendOHLCData = {
-            unix_time: baseBar.time / 1000,
-            o: baseBar.open,
-            h: baseBar.high,
-            l: baseBar.low,
-            c: baseBar.close,
-            v_usd: baseBar.volume,
-          };
-
-          // Update or add the candle to cache
-          const cachedData = lastGoodCandlesRef.current;
-          const existingIdx = cachedData.findIndex(c => c.unix_time === newCandle.unix_time);
-          if (existingIdx >= 0) {
-            cachedData[existingIdx] = newCandle;
-          } else {
-            cachedData.push(newCandle);
-            cachedData.sort((a, b) => a.unix_time - b.unix_time);
-          }
-        } catch (e) {
-          console.error('[AdvancedOHLCChart] Error parsing WebSocket message:', e);
         }
-      };
 
-      ws.onerror = (error) => {
-        console.error('[AdvancedOHLCChart] Monad WebSocket error:', error);
-      };
+        // Apply display mode transformation before sending to chart
+        const currentDisplayMode = displayModeRef.current; // Use ref for fast access
+        let bar = transformBar(baseBar, currentDisplayMode, isMonad);
 
-      ws.onclose = (event) => {
-        console.log('[AdvancedOHLCChart] Monad WebSocket closed:', event.code, event.reason);
+        // Update the chart via callback if available
+        if (subscribedCallbackRef.current && bar.time > 0) {
+          console.log('[AdvancedOHLCChart] 📊 Calling subscribedCallback with bar:', {
+            time: new Date(bar.time).toISOString(),
+            open: bar.open,
+            high: bar.high,
+            low: bar.low,
+            close: bar.close,
+          });
+          subscribedCallbackRef.current(bar);
+        } else {
+          console.warn('[AdvancedOHLCChart] ⚠️ Real-time update received but callback not available:', {
+            hasCallback: !!subscribedCallbackRef.current,
+            barTime: bar.time,
+            message: 'subscribeBars may not have been called yet by TradingView',
+          });
+        }
+
+        // Also update our cache with the new candle (store raw USD data, not transformed)
+        const newCandle: BackendOHLCData = {
+          unix_time: baseBar.time / 1000,
+          o: baseBar.open,
+          h: baseBar.high,
+          l: baseBar.low,
+          c: baseBar.close,
+          v_usd: baseBar.volume,
+        };
+
+        // Update or add the candle to cache
+        const cachedData = lastGoodCandlesRef.current;
+        const existingIdx = cachedData.findIndex(c => c.unix_time === newCandle.unix_time);
+        if (existingIdx >= 0) {
+          cachedData[existingIdx] = newCandle;
+        } else {
+          cachedData.push(newCandle);
+          cachedData.sort((a, b) => a.unix_time - b.unix_time);
+        }
+      } catch (e) {
+        console.error('[AdvancedOHLCChart] Error parsing WebSocket message:', e);
+      }
+    };
+
+    // Extract connect function that can be called recursively for reconnection
+    const connect = () => {
+      if (closedByCleanup) {
+        console.log('[AdvancedOHLCChart] Connection attempt skipped - component unmounting');
+        return;
+      }
+
+      console.log('[AdvancedOHLCChart] 🔌 Monad WebSocket connecting (via useEffect):', wsUrl);
+      console.log('[AdvancedOHLCChart] 📊 Selected interval:', selectedInterval, '| WS interval:', wsInterval, '| Aggregating 1s->1m:', needsAggregation);
+
+      // Close existing WebSocket if any
+      if (wsRef.current) {
+        wsRef.current.close();
         wsRef.current = null;
+      }
 
-        // Reconnect after delay if component is still mounted
-        if (mountedRef.current) {
+      try {
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log('[AdvancedOHLCChart] ✅ Monad WebSocket connected for', tokenAddress.slice(0, 10) + '...');
+          console.log('[AdvancedOHLCChart] 📊 WebSocket ready - waiting for subscribeBars callback:', {
+            hasCallback: !!subscribedCallbackRef.current,
+            wsUrl,
+          });
+        };
+
+        ws.onmessage = handleMessage;
+
+        ws.onerror = (error) => {
+          console.error('[AdvancedOHLCChart] Monad WebSocket error:', error);
+        };
+
+        ws.onclose = (event) => {
+          console.log('[AdvancedOHLCChart] Monad WebSocket closed:', event.code, event.reason);
+          wsRef.current = null;
+
+          // Reconnect after delay if component is still mounted and not closed by cleanup
+          if (!closedByCleanup && mountedRef.current) {
+            wsReconnectTimeoutRef.current = setTimeout(() => {
+              console.log('[AdvancedOHLCChart] 🔄 Attempting Monad WebSocket reconnect...');
+              connect(); // Recursively call connect to reconnect
+            }, 2000); // Reduced from 5000ms to 2000ms for faster reconnection
+          }
+        };
+      } catch (e) {
+        console.error('[AdvancedOHLCChart] Failed to create Monad WebSocket:', e);
+        // Retry connection on error if not closed by cleanup
+        if (!closedByCleanup && mountedRef.current) {
           wsReconnectTimeoutRef.current = setTimeout(() => {
-            console.log('[AdvancedOHLCChart] Attempting Monad WebSocket reconnect...');
-            // The useEffect will re-run and reconnect automatically
-          }, 5000);
+            console.log('[AdvancedOHLCChart] 🔄 Retrying Monad WebSocket connection after error...');
+            connect();
+          }, 2000);
         }
-      };
-    } catch (e) {
-      console.error('[AdvancedOHLCChart] Failed to create Monad WebSocket:', e);
-    }
+      }
+    };
+
+    // Initial connection
+    connect();
 
     // Cleanup on unmount or when dependencies change
     return () => {
+      closedByCleanup = true;
       if (wsReconnectTimeoutRef.current) {
         clearTimeout(wsReconnectTimeoutRef.current);
         wsReconnectTimeoutRef.current = null;
@@ -2352,25 +2391,44 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
         // Store callback for use in WebSocket message handler (from useEffect)
         // The useEffect WebSocket will use this callback for real-time updates
         subscribedCallbackRef.current = onRealtimeCallback;
-        console.log('[AdvancedOHLCChart] ✅ subscribeBars registered callback for real-time updates');
+        console.log('[AdvancedOHLCChart] ✅ subscribeBars registered callback for real-time updates', {
+          hasWebSocket: !!wsRef.current,
+          wsState: wsRef.current ? wsRef.current.readyState : 'none',
+          wsStateName: wsRef.current ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][wsRef.current.readyState] : 'none',
+        });
 
-        // If we already have an active WebSocket from useEffect, don't create another one
+        // If we already have an active WebSocket from useEffect, ensure callback is set and return
         // The useEffect WebSocket will handle both initial data and real-time updates
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          console.log('[AdvancedOHLCChart] 📡 Reusing existing WebSocket connection from useEffect');
+          console.log('[AdvancedOHLCChart] 📡 Reusing existing WebSocket connection from useEffect - callback is now set for real-time updates');
+          // Callback is already set above, so future WebSocket messages will work
+          // The WebSocket in useEffect will now be able to send updates via this callback
           return;
         }
 
-        // If WebSocket is connecting, wait for it
+        // If WebSocket is connecting, set up a listener to ensure callback works when it opens
         if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
-          console.log('[AdvancedOHLCChart] 📡 WebSocket is connecting, will use when ready');
+          console.log('[AdvancedOHLCChart] 📡 WebSocket is connecting, callback set - will use when ready');
+          // Set up a one-time listener to confirm callback is ready when WebSocket opens
+          const checkConnection = () => {
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              console.log('[AdvancedOHLCChart] ✅ WebSocket opened - callback is ready for real-time updates');
+            } else if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
+              // Still connecting, check again in a bit
+              setTimeout(checkConnection, 100);
+            }
+          };
+          setTimeout(checkConnection, 100);
           return;
         }
 
         // No active WebSocket, create one (fallback if useEffect didn't connect)
         const requestedInterval = RESOLUTION_TO_INTERVAL[resolution] || '1s';
         const wsBaseUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL || 'http://localhost:8081';
-        const wsUrl = wsBaseUrl.replace(/^http/, 'ws') + `/v1/ohlc/stream?token_address=${tokenAddress}&interval=${requestedInterval}`;
+        // Convert http/https to ws/wss for WebSocket
+        const wsProtocol = wsBaseUrl.startsWith('https') ? 'wss' : 'ws';
+        const wsHost = wsBaseUrl.replace(/^https?:\/\//, '');
+        const wsUrl = `${wsProtocol}://${wsHost}/v1/ohlc/stream?token_address=${tokenAddress}&interval=${requestedInterval}`;
 
         console.log('[AdvancedOHLCChart] 🔌 Creating new WebSocket in subscribeBars:', wsUrl);
 
