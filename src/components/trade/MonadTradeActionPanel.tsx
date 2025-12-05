@@ -4,12 +4,17 @@ import React, { useState, useMemo, useEffect } from "react";
 import { formatSmartNumber, formatMarketCap, type Token } from "~/utils/db";
 import { useUser } from "~/components/UserContext";
 import { useWallet } from "~/components/useWallet";
-import { FaCopy, FaExternalLinkAlt, FaRunning, FaChevronDown, FaChevronUp } from "react-icons/fa";
-import { LuPencil, LuCheck } from "react-icons/lu";
+import { FaCopy, FaExternalLinkAlt, FaRunning, FaChevronDown, FaChevronUp, FaChartBar, FaCrown, FaFire, FaDice } from "react-icons/fa";
+import { LuPencil, LuCheck, LuChefHat } from "react-icons/lu";
+import { RiGhostLine } from "react-icons/ri";
+import { BiCandles } from "react-icons/bi";
+import { BsPersonGear } from "react-icons/bs";
+import { GoPeople } from "react-icons/go";
 import InterstateTooltip from "../InterstateTooltip";
 import toast from "react-hot-toast";
 import { tradeMonadBuy, tradeMonadSell } from "~/utils/api";
 import useMonadDevTokens from "~/hooks/useMonadDevTokens";
+import useMonadXray from "~/hooks/useMonadXray";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -150,6 +155,9 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   
   // Fetch dev token data
   const { devTokenData } = useMonadDevTokens(token?.mint, { enabled: !!token?.mint });
+  
+  // Fetch xray data
+  const { xrayData, isLoading: xrayLoading } = useMonadXray(token?.mint, { enabled: !!token?.mint });
 
   // Load presets from localStorage on mount and listen for updates
   useEffect(() => {
@@ -802,6 +810,202 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             </span>
           )}
         </button>
+      </div>
+
+      {/* Separator line */}
+      <div className="border-t border-[#2A2B33]"></div>
+
+      {/* Xray Risk Analysis Section - Always Visible */}
+      <div className="px-3 py-3 space-y-2" style={{ backgroundColor: AX.bg }}>
+        {xrayLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <div className="animate-pulse text-[#9CA3AF] text-[11px]">Loading risk analysis...</div>
+          </div>
+        ) : xrayData ? (
+          <>
+            {/* Token Metrics Grid - First Row */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {/* Top 10 Holders */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <BsPersonGear size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
+                      {xrayData.top10_hold_percent != null ? `${(xrayData.top10_hold_percent * 100).toFixed(2)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Top 10 H.</div>
+                </div>
+              </div>
+
+              {/* Dev Holdings */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <LuChefHat size={16} style={{ color: '#566cdc' }} />
+                    <div className="text-[12px] font-bold" style={{ color: '#566cdc' }}>
+                      {xrayData.dev_hold_percent != null ? `${(xrayData.dev_hold_percent * 100).toFixed(1)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev H.</div>
+                </div>
+              </div>
+
+              {/* Sniper Holdings */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#f26681' }}>
+                      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                      <line x1="12" y1="4" x2="12" y2="8" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="4" y1="12" x2="8" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="16" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+                      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                    </svg>
+                    <div className="text-[12px] font-bold" style={{ color: '#f26681' }}>
+                      {xrayData.sniper_hold_percent != null ? `${(xrayData.sniper_hold_percent * 100).toFixed(1)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Snipers H.</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Token Metrics Grid - Second Row */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {/* Insider Holdings */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <RiGhostLine size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
+                      {xrayData.insider_hold_percent != null ? `${(xrayData.insider_hold_percent * 100).toFixed(1)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Insiders</div>
+                </div>
+              </div>
+
+              {/* Bonding Curve Progress */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <FaChartBar size={16} style={{ color: AX.aiGreen }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                      {xrayData.bonding_curve_progress != null ? `${(xrayData.bonding_curve_progress * 100).toFixed(1)}%` : xrayData.is_graduated ? '100%' : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Bonding</div>
+                </div>
+              </div>
+
+              {/* Graduated Status */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <FaFire size={16} style={{ color: AX.aiGreen }} />
+                    <div className="text-[12px] font-bold" style={{ color: xrayData.is_graduated ? AX.aiGreen : AX.muted }}>
+                      {xrayData.is_graduated ? 'Yes' : 'No'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Graduated</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Separator Line */}
+            <div className="h-px" style={{ backgroundColor: AX.border }}></div>
+
+            {/* Trading Activity - Third Row */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {/* Total Transactions */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <FaChartBar size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                      {xrayData.total_transactions != null ? formatCompactNumber(xrayData.total_transactions) : '0'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Transactions</div>
+                </div>
+              </div>
+
+              {/* Unique Traders */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <GoPeople size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                      {xrayData.unique_traders != null ? formatCompactNumber(xrayData.unique_traders) : '0'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Traders</div>
+                </div>
+              </div>
+
+              {/* Buy/Sell Ratio */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <BiCandles size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                      {xrayData.total_buys != null && xrayData.total_sells != null 
+                        ? `${xrayData.total_buys}/${xrayData.total_sells}`
+                        : '0/0'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Buys/Sells</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Dev Trading Activity - Fourth Row */}
+            {(xrayData.dev_bought_count != null || xrayData.dev_sold_count != null || xrayData.dev_bought_usd != null || xrayData.dev_sold_usd != null) && (
+              <>
+                <div className="h-px" style={{ backgroundColor: AX.border }}></div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {/* Dev Buy Count */}
+                  <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <LuChefHat size={16} style={{ color: AX.mint }} />
+                        <div className="text-[12px] font-bold" style={{ color: AX.mint }}>
+                          {xrayData.dev_bought_count != null ? xrayData.dev_bought_count : '0'}
+                        </div>
+                      </div>
+                      <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev Buys</div>
+                      {xrayData.dev_bought_usd != null && (
+                        <div className="text-[9px] text-center leading-tight" style={{ color: AX.muted }}>
+                          ${formatCompactNumber(xrayData.dev_bought_usd)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dev Sell Count */}
+                  <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <LuChefHat size={16} style={{ color: AX.sell }} />
+                        <div className="text-[12px] font-bold" style={{ color: AX.sell }}>
+                          {xrayData.dev_sold_count != null ? xrayData.dev_sold_count : '0'}
+                        </div>
+                      </div>
+                      <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev Sells</div>
+                      {xrayData.dev_sold_usd != null && (
+                        <div className="text-[9px] text-center leading-tight" style={{ color: AX.muted }}>
+                          ${formatCompactNumber(xrayData.dev_sold_usd)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        ) : null}
       </div>
 
       {/* footer mini stats - simplified for Monad */}
