@@ -1480,6 +1480,7 @@ function MonadTable({
   const [thunderAmount, setThunderAmount] = useState(getInitialThunderAmount);
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
   const [showXPreview, setShowXPreview] = useState<number | null>(null);
+  const [showDevTooltip, setShowDevTooltip] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
   const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Wave animation for migrating tokens
   const { solPrice } = useSolPrice(); // Use shared SOL price from Footer context
@@ -5311,22 +5312,156 @@ function MonadTable({
                     <BsPersonGear size={13} /> <span className="number-font">{Math.round(((token.total_buyers_5m ?? 0) / Math.max(1, (token.total_buyers_5m ?? 0) + (token.total_sellers_5m ?? 0))) * 100)}%</span>
                   </span>
                   
-                  {/* DS indicator - Blue with time */}
-                  <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
-                        style={{ 
-                          color: '#3B82F6',
-                          fontSize: '11px',
-                          fontWeight: '500',
-                          borderColor: 'rgba(107, 114, 128, 0.1)',
-                          backgroundColor: 'transparent'
-                        }}>
-                    <LuChefHat size={13} style={{ color: '#3B82F6' }} /> DS{" "}
-                    <span style={{ color: '#3B82F6', display: 'inline-block' }}>
-                      <TokenAge
-                        createdAt={(token as any).created_at || (token as any).launch_time}
-                      />
-                    </span>
-                  </span>
+                  {/* Dev Hold indicator - Blue with percentage */}
+                  {(() => {
+                    const devHoldPercent = (token as any).dev_hold_percent ?? (token as any).dev_percent ?? 0;
+                    const devWallet = (token as any).dev_wallet ?? (token as any).creator_address;
+                    const hasDevInfo = devHoldPercent > 0 || devWallet;
+                    
+                    if (!hasDevInfo) return null;
+                    
+                    return (
+                      <div className="relative">
+                        <span 
+                          className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200 cursor-help"
+                          style={{ 
+                            color: '#3B82F6',
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            borderColor: 'rgba(107, 114, 128, 0.1)',
+                            backgroundColor: 'transparent'
+                          }}
+                          onMouseEnter={() => setShowDevTooltip(token.id)}
+                          onMouseLeave={() => setShowDevTooltip(null)}
+                        >
+                          <LuChefHat size={13} style={{ color: '#3B82F6' }} />
+                          <span style={{ color: '#3B82F6' }}>
+                            {devHoldPercent > 0 ? `${devHoldPercent.toFixed(2)}%` : '0%'}
+                          </span>
+                        </span>
+                        
+                        {/* Dev Info Tooltip */}
+                        {showDevTooltip === token.id && (
+                          <div 
+                            className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-4 py-3 rounded-lg text-xs font-medium whitespace-nowrap"
+                            style={{ 
+                              backgroundColor: AX.surface, 
+                              color: AX.text, 
+                              border: `1px solid ${AX.border}`,
+                              minWidth: '240px',
+                              zIndex: 99999
+                            }}
+                            onMouseEnter={() => setShowDevTooltip(token.id)}
+                            onMouseLeave={() => setShowDevTooltip(null)}
+                          >
+                            {/* DEV Holds X% */}
+                            <div className="mb-2">
+                              <div className="font-semibold text-sm mb-1" style={{ color: devHoldPercent > 0 ? AX.aiGreen : AX.text }}>
+                                DEV Holds {devHoldPercent > 0 ? `${devHoldPercent.toFixed(2)}%` : '0%'}
+                              </div>
+                            </div>
+                            
+                            {/* Dev Wallet */}
+                            {devWallet && (
+                              <div className="mb-2 flex items-center gap-2">
+                                <span className="text-xs" style={{ color: AX.muted }}>Dev Wallet</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-mono text-xs" style={{ color: AX.text }}>
+                                    {devWallet.length > 10 ? `${devWallet.slice(0, 4)}...${devWallet.slice(-4)}` : devWallet}
+                                  </span>
+                                  <FaRegCopy 
+                                    size={10} 
+                                    className="cursor-pointer hover:opacity-70"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigator.clipboard.writeText(devWallet);
+                                    }}
+                                    style={{ color: AX.muted }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Bought */}
+                            {((token as any).dev_bought_usd !== undefined || (token as any).dev_bought_count !== undefined) && (
+                              <div className="mb-2 flex items-center justify-between">
+                                <span className="text-xs" style={{ color: AX.muted }}>Bought</span>
+                                <span className="text-xs font-semibold" style={{ color: AX.aiGreen }}>
+                                  ${((token as any).dev_bought_usd ?? 0).toFixed(3)} / {((token as any).dev_bought_count ?? 0)}TXs
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* Sold */}
+                            {((token as any).dev_sold_usd !== undefined || (token as any).dev_sold_count !== undefined) && (
+                              <div className="mb-2 flex items-center justify-between">
+                                <span className="text-xs" style={{ color: AX.muted }}>Sold</span>
+                                <span className="text-xs font-semibold" style={{ color: ((token as any).dev_sold_usd ?? 0) > 0 ? AX.sell : AX.text }}>
+                                  ${((token as any).dev_sold_usd ?? 0).toFixed(3)} / {((token as any).dev_sold_count ?? 0)}TXs
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* Balance */}
+                            {((token as any).dev_balance_usd !== undefined) && (
+                              <div className="mb-2 flex items-center justify-between">
+                                <span className="text-xs" style={{ color: AX.muted }}>Balance</span>
+                                <span className="text-xs font-semibold" style={{ color: AX.text }}>
+                                  ${((token as any).dev_balance_usd ?? 0).toFixed(3)}
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* Funding (using dev_wallet as funding address) */}
+                            {devWallet && (
+                              <div className="mb-2 flex items-center gap-2">
+                                <span className="text-xs" style={{ color: AX.muted }}>Funding</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="font-mono text-xs" style={{ color: AX.text }}>
+                                    {devWallet.length > 10 ? `${devWallet.slice(0, 4)}...${devWallet.slice(-4)}` : devWallet}
+                                  </span>
+                                  <FaRegCopy 
+                                    size={10} 
+                                    className="cursor-pointer hover:opacity-70"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigator.clipboard.writeText(devWallet);
+                                    }}
+                                    style={{ color: AX.muted }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Time (dev_first_trade_at) */}
+                            {((token as any).dev_first_trade_at) && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs" style={{ color: AX.muted }}>Time</span>
+                                <span className="text-xs font-mono" style={{ color: AX.text }}>
+                                  {(() => {
+                                    const date = new Date((token as any).dev_first_trade_at);
+                                    const year = date.getFullYear();
+                                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                                    const day = String(date.getDate()).padStart(2, '0');
+                                    const hours = String(date.getHours()).padStart(2, '0');
+                                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                                    const seconds = String(date.getSeconds()).padStart(2, '0');
+                                    return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+                                  })()}
+                                </span>
+                              </div>
+                            )}
+                            
+                            {/* Tooltip arrow */}
+                            <div 
+                              className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent"
+                              style={{ borderBottomColor: AX.surface }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   
                   {/* Snipe percentage - Red */}
                   {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
