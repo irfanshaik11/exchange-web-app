@@ -2,11 +2,11 @@ name: Deploy to GCP Prod MIG
 
 on:
   push:
-    branches: [ DISABLED  ]
+    branches: [ DISABLE ]
 
 permissions:
   contents: read
-  id-token: write  # Required for OIDC authentication
+  id-token: write  # Required for OIDC authentication 
 
 env:
   PROJECT_ID: "interstate-dev"
