@@ -1483,6 +1483,7 @@ function MonadTable({
   const [showDevTooltip, setShowDevTooltip] = useState<number | null>(null);
   const [showTop10Tooltip, setShowTop10Tooltip] = useState<number | null>(null);
   const [showSniperTooltip, setShowSniperTooltip] = useState<number | null>(null);
+  const [showInsiderTooltip, setShowInsiderTooltip] = useState<number | null>(null);
   const [buttonPosition, setButtonPosition] = useState<{left: number, top: number} | null>(null);
   const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Wave animation for migrating tokens
   const { solPrice } = useSolPrice(); // Use shared SOL price from Footer context
@@ -5572,18 +5573,60 @@ function MonadTable({
                     )}
                   </div>
                   
-                  {/* Ghost percentage (Insider Holdings) - Green */}
-                  {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
+                  {/* Insider Hold percentage - Green */}
+                  <div className="relative">
+                    <span 
+                      className="flex items-center gap-1 text-xs px-2 py-1 rounded border transition-all duration-200 cursor-help"
+                      style={{ 
+                        color: AX.aiGreen,
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        borderColor: '#27282e',
+                        backgroundColor: 'transparent'
+                      }}
+                      onMouseEnter={() => setShowInsiderTooltip(token.id)}
+                      onMouseLeave={() => setShowInsiderTooltip(null)}
+                    >
+                      <RiGhostLine size={16} />
+                      <span className="number-font">
+                        {(() => {
+                          const value = (token as any).insider_hold_percent ?? 0;
+                          return value > 0 ? `${value.toFixed(2)}%` : '0%';
+                        })()}
+                      </span>
+                    </span>
+                    
+                    {/* Insider Hold Tooltip */}
+                    {showInsiderTooltip === token.id && (
+                      <div 
+                        className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-4 py-3 rounded-lg text-xs font-medium whitespace-nowrap"
                         style={{ 
-                          color: AX.aiGreen,
-                          fontSize: '11px',
-                          fontWeight: '500',
-                          borderColor: 'rgba(107, 114, 128, 0.1)',
-                          backgroundColor: 'transparent'
-                        }}>
-                    <RiGhostLine size={13} />
-                    <span className="text-xs text-gray-500">-</span>
-                  </span> */}
+                          backgroundColor: AX.surface, 
+                          color: AX.text, 
+                          border: `1px solid ${AX.border}`,
+                          minWidth: '240px',
+                          zIndex: 99999
+                        }}
+                        onMouseEnter={() => setShowInsiderTooltip(token.id)}
+                        onMouseLeave={() => setShowInsiderTooltip(null)}
+                      >
+                        <div className="mb-2">
+                          <div className="font-semibold text-sm mb-1" style={{ color: AX.aiGreen }}>
+                            Insider Hold: {(() => {
+                              const value = (token as any).insider_hold_percent ?? 0;
+                              return value > 0 ? `${value.toFixed(2)}%` : '0%';
+                            })()}
+                          </div>
+                        </div>
+                        
+                        {/* Tooltip arrow */}
+                        <div 
+                          className="absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent"
+                          style={{ borderBottomColor: AX.surface }}
+                        />
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Three Dice percentage (Dev Holdings/Bundle) - Green */}
                   {/* <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border transition-all duration-200"
