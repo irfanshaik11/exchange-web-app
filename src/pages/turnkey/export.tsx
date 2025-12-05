@@ -83,6 +83,7 @@ export default function TurnkeyExportPage() {
   const walletsRequestRef = useRef(false);
   const [authChecked, setAuthChecked] = useState(false);
   const hasInitializedRef = useRef(false);
+  const hasAuthenticatedThisVisitRef = useRef(false); // Track if user authenticated on this page visit
 
   const iframeContainerRef = useRef<HTMLDivElement | null>(null);
   const iframeStamperRef = useRef<IframeStamper | null>(null);
@@ -97,16 +98,21 @@ export default function TurnkeyExportPage() {
   const hasTurnkeyUser = !!turnkeyUser;
   const isAppUserLoggedIn = !!appUser;
   
-  // Require explicit authentication state - don't rely on stale sessions
+  // Require explicit authentication state AND that user authenticated on this page visit
+  // This forces re-authentication on every page visit
   const isAuthenticated = 
     authState === AuthState.Authenticated &&
     hasValidSession &&
-    clientState === ClientState.Ready;
+    clientState === ClientState.Ready &&
+    hasAuthenticatedThisVisitRef.current;
 
   // Reset state on page mount/remount - force fresh authentication check
   useEffect(() => {
     if (hasInitializedRef.current) return;
     hasInitializedRef.current = true;
+    
+    // Force re-authentication on every page visit
+    hasAuthenticatedThisVisitRef.current = false;
     
     // Reset all export-related state
     setStatus("idle");
@@ -128,7 +134,7 @@ export default function TurnkeyExportPage() {
       }
     }
     
-    console.log('[Export Page] Page initialized, resetting state');
+    console.log('[Export Page] Page initialized, forcing re-authentication');
   }, []);
 
   // Just track auth state, don't auto-popup modal
@@ -145,14 +151,23 @@ export default function TurnkeyExportPage() {
     }
   }, [isClient, clientState, isAuthenticated]);
 
-  // Auto-close login modal when authentication succeeds
+  // Track when user successfully authenticates on this page visit
   useEffect(() => {
-    if (isAuthenticated && showLoginModal) {
-      console.log('[Export Page] Auth succeeded, closing login modal');
+    if (clientState !== ClientState.Ready) return;
+    
+    // Check if user just authenticated (authState is Authenticated and has valid session)
+    const justAuthenticated = 
+      authState === AuthState.Authenticated &&
+      hasValidSession &&
+      !hasAuthenticatedThisVisitRef.current;
+    
+    if (justAuthenticated) {
+      console.log('[Export Page] User authenticated on this visit');
+      hasAuthenticatedThisVisitRef.current = true;
       setShowLoginModal(false);
       setError(null); // Clear any previous errors
     }
-  }, [isAuthenticated, showLoginModal]);
+  }, [authState, clientState, hasValidSession, showLoginModal]);
   
 
   useEffect(() => {
@@ -160,6 +175,7 @@ export default function TurnkeyExportPage() {
     return () => {
       iframeStamperRef.current?.clear();
       hasInitializedRef.current = false; // Allow re-initialization on remount
+      hasAuthenticatedThisVisitRef.current = false; // Reset auth flag on unmount
     };
   }, []);
 
@@ -232,8 +248,13 @@ export default function TurnkeyExportPage() {
             errorMessage.includes("invalid")
           )
         ) {
-          console.log('[Export Page] Session error detected');
+          console.log('[Export Page] Session error detected - resetting authentication');
+          // Reset authentication state to force re-authentication
+          hasAuthenticatedThisVisitRef.current = false;
           setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again.");
+          // Clear wallets to force re-fetch after re-authentication
+          setFetchedWallets([]);
+          walletsRequestRef.current = false;
         }
         walletsRequestRef.current = false; // allow retry if state changes
       }
@@ -358,7 +379,13 @@ export default function TurnkeyExportPage() {
           errorLower.includes("could not be found")
         ))
       ) {
+        console.log('[Export Page] Session error during export - resetting authentication');
+        // Reset authentication state to force re-authentication
+        hasAuthenticatedThisVisitRef.current = false;
         setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again and try exporting.");
+        // Clear wallets to force re-fetch after re-authentication
+        setFetchedWallets([]);
+        walletsRequestRef.current = false;
       } else {
         setError(errorMessage);
       }
@@ -442,7 +469,7 @@ export default function TurnkeyExportPage() {
                         "No wallet detected"}
                     </p>
                   </div>
-                  <div className="flex flex-col gap-2 sm:w-64">
+                  {/* <div className="flex flex-col gap-2 sm:w-64">
                     <label className="text-xs uppercase tracking-[0.2em] text-neutral-500">
                       Select wallet
                     </label>
@@ -461,7 +488,7 @@ export default function TurnkeyExportPage() {
                         </option>
                       ))}
                     </select>
-                  </div>
+                  </div> */}
                 </div>
 
                 <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
