@@ -3521,20 +3521,11 @@ Maker: ${walletAddress}`;
     >
       <div
         ref={containerRef}
-        className="w-full h-full chart-container"
-        style={{
-          height: '100%',
-          width: '100%',
-          position: 'relative',
-          zIndex: 1,
-          backgroundColor: 'transparent',
-          minHeight: 0,
-          minWidth: 0,
-        }}
+        className="w-full h-full min-w-0 min-h-0 relative z-10 chart-container bg-transparent"
       />
 
       {isLoading && firstLoadRef.current && (
-        <div className="absolute inset-0 grid place-items-center bg-gray-900/60" style={{ zIndex: 3 }}>
+        <div className="absolute inset-0 grid place-items-center bg-gray-900/60 z-30">
           <div className="flex flex-col items-center gap-3">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-400" />
             <div className="text-white text-sm">Loading OHLC data from backend…</div>
@@ -3543,7 +3534,7 @@ Maker: ${walletAddress}`;
       )}
 
       {error && (
-        <div className="absolute bottom-2 left-2 bg-red-900/90 text-white text-xs rounded px-2 py-1" style={{ zIndex: 4 }}>
+        <div className="absolute bottom-2 left-2 bg-red-900/90 text-white text-xs rounded px-2 py-1 z-40">
           ⚠️ {error}
         </div>
       )}
