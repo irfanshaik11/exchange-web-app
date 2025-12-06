@@ -67,6 +67,7 @@ interface WalletTrackerContextValue {
   latestTrades: TradeEvent[];
   watchedWallets: WatchWallet[];
   refreshWatchedWallets: () => Promise<void>;
+  clearNotifications: () => void;
 }
 
 const WalletTrackerContext = createContext<WalletTrackerContextValue | undefined>(undefined);
@@ -647,11 +648,16 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     }
   }, [latestTrades, user?.id]);
 
+  const clearNotifications = () => {
+    setLatestTrades([]);
+  };
+
   const value: WalletTrackerContextValue = {
     wsConnected,
     latestTrades,
     watchedWallets,
     refreshWatchedWallets,
+    clearNotifications,
   };
 
   return (
