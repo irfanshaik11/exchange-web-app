@@ -831,7 +831,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                   <div className="flex items-center gap-1.5">
                     <BsPersonGear size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
-                      {xrayData.top10_hold_percent != null ? `${(xrayData.top10_hold_percent * 100).toFixed(2)}%` : '0%'}
+                      {xrayData.top10_hold_percent != null ? `${xrayData.top10_hold_percent.toFixed(2)}%` : '0%'}
                     </div>
                   </div>
                   <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Top 10 H.</div>
@@ -844,7 +844,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                   <div className="flex items-center gap-1.5">
                     <LuChefHat size={16} style={{ color: '#566cdc' }} />
                     <div className="text-[12px] font-bold" style={{ color: '#566cdc' }}>
-                      {xrayData.dev_hold_percent != null ? `${(xrayData.dev_hold_percent * 100).toFixed(1)}%` : '0%'}
+                      {xrayData.dev_hold_percent != null ? `${xrayData.dev_hold_percent.toFixed(1)}%` : '0%'}
                     </div>
                   </div>
                   <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev H.</div>
@@ -864,7 +864,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                       <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
                     </svg>
                     <div className="text-[12px] font-bold" style={{ color: '#f26681' }}>
-                      {xrayData.sniper_hold_percent != null ? `${(xrayData.sniper_hold_percent * 100).toFixed(1)}%` : '0%'}
+                      {xrayData.sniper_hold_percent != null ? `${xrayData.sniper_hold_percent.toFixed(1)}%` : '0%'}
                     </div>
                   </div>
                   <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Snipers H.</div>
@@ -880,7 +880,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                   <div className="flex items-center gap-1.5">
                     <RiGhostLine size={16} style={{ color: '#31e3ac' }} />
                     <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
-                      {xrayData.insider_hold_percent != null ? `${(xrayData.insider_hold_percent * 100).toFixed(1)}%` : '0%'}
+                      {xrayData.insider_hold_percent != null ? `${xrayData.insider_hold_percent.toFixed(1)}%` : '0%'}
                     </div>
                   </div>
                   <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Insiders</div>
@@ -893,7 +893,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                   <div className="flex items-center gap-1.5">
                     <FaChartBar size={16} style={{ color: AX.aiGreen }} />
                     <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
-                      {xrayData.bonding_curve_progress != null ? `${(xrayData.bonding_curve_progress * 100).toFixed(1)}%` : xrayData.is_graduated ? '100%' : '0%'}
+                      {xrayData.bonding_curve_progress != null ? `${xrayData.bonding_curve_progress.toFixed(1)}%` : xrayData.is_graduated ? '100%' : '0%'}
                     </div>
                   </div>
                   <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Bonding</div>
