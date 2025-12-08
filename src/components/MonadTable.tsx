@@ -3337,7 +3337,7 @@ function MonadTable({
                   className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
                   style={{
                     backgroundColor: "#31e3ac",
-                    color: "#f0f5f5",
+                    color: "#000000",
                     fontSize: "10px",
                   }}
                 >

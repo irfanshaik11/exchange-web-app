@@ -481,34 +481,37 @@ export default function Footer() {
       }}
     >
       <div className="flex h-9 items-center justify-between overflow-x-auto px-2 py-1 sm:px-2">
-        {/* Left Section - Preset Button */}
+        {/* Left Section - Preset Button and Wallet Display */}
         <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
-          <button
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all duration-300 ease-out sm:gap-2 sm:text-xs"
-            style={{
-              backgroundColor: AX.mint,
-              color: "#000000",
-              border: `1px solid ${AX.mint}`,
-              cursor: "pointer",
-            }}
-            onClick={() => setShowPresetModal(true)}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = AX.mintHover;
-              e.currentTarget.style.boxShadow =
-                "0 0 8px rgba(112, 224, 176, 0.3)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = AX.mint;
-              e.currentTarget.style.boxShadow = "none";
-            }}
-          >
-            <FaBars size={11} className="sm:h-3 sm:w-3" />
-            <FaCog size={11} className="sm:h-3 sm:w-3" />
-            <span className="hidden leading-none sm:inline">
-              PRESET {activePreset + 1}
-            </span>
-            <span className="leading-none sm:hidden">P{activePreset + 1}</span>
-          </button>
+          {/* Preset Button - Commented out for Monad chain */}
+          {currentChain !== "monad" && (
+            <button
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all duration-300 ease-out sm:gap-2 sm:text-xs"
+              style={{
+                backgroundColor: AX.mint,
+                color: "#000000",
+                border: `1px solid ${AX.mint}`,
+                cursor: "pointer",
+              }}
+              onClick={() => setShowPresetModal(true)}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = AX.mintHover;
+                e.currentTarget.style.boxShadow =
+                  "0 0 8px rgba(112, 224, 176, 0.3)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = AX.mint;
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            >
+              <FaBars size={11} className="sm:h-3 sm:w-3" />
+              <FaCog size={11} className="sm:h-3 sm:w-3" />
+              <span className="hidden leading-none sm:inline">
+                PRESET {activePreset + 1}
+              </span>
+              <span className="leading-none sm:hidden">P{activePreset + 1}</span>
+            </button>
+          )}
 
           {/* Wallet Display */}
           <div className="relative">
@@ -1032,11 +1035,13 @@ export default function Footer() {
         </div>
       </div>
 
-      {/* Preset Settings Modal */}
-      <QuickBuySettingsModal
-        open={showPresetModal}
-        onClose={() => setShowPresetModal(false)}
-      />
+      {/* Preset Settings Modal - Commented out for Monad chain */}
+      {currentChain !== "monad" && (
+        <QuickBuySettingsModal
+          open={showPresetModal}
+          onClose={() => setShowPresetModal(false)}
+        />
+      )}
 
       {/* PnL Modal */}
       <PnLModal isOpen={showPnLModal} onClose={() => setShowPnLModal(false)} />
