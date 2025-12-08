@@ -34,6 +34,7 @@ import {
 } from "~/utils/walletTracking";
 import { useWalletTracker } from "./WalletTrackerContext";
 import Activity from "./trade/Activity";
+import { useSolPrice } from "./SolPriceContext";
 
 interface WalletScanPanelProps {
   wallet: Wallet;
@@ -88,6 +89,10 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 }) => {
   // Get latest trades from context (same as Live Trades)
   const { latestTrades } = useWalletTracker();
+  // Get SOL price from context
+  const { solPrice } = useSolPrice();
+  // Use SOL price with fallback if not available
+  const currentSolPrice = solPrice > 0 ? solPrice : 150;
 
   // Live data state
   const [balance, setBalance] = useState<number | null>(null);
@@ -177,8 +182,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       if (priceUsd !== null && Number.isFinite(amount) && Number.isFinite(priceUsd)) {
         usdValue = amount * priceUsd;
       } else if (solSpent !== null && Number.isFinite(solSpent)) {
-        // Approximate: 1 SOL ≈ $150 (fallback, but ideally we'd have price_usd)
-        usdValue = solSpent * 150;
+        // Use current SOL price from context
+        usdValue = solSpent * currentSolPrice;
       }
 
       if (usdValue === null || !Number.isFinite(usdValue) || usdValue <= 0) return;
@@ -271,7 +276,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     // Sort by closed time (newest first)
     return closedOrdersList.sort((a, b) => b.closedAt - a.closedAt);
-  }, [history]);
+  }, [history, currentSolPrice]);
 
   // Calculate performance metrics from closed orders
   const performanceMetrics = useMemo(() => {
@@ -494,8 +499,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       if (priceUsd !== null && Number.isFinite(amount) && Number.isFinite(priceUsd)) {
         usdValue = amount * priceUsd;
       } else if (solSpent !== null && Number.isFinite(solSpent)) {
-        // Approximate: 1 SOL ≈ $150 (fallback, but ideally we'd have price_usd)
-        usdValue = solSpent * 150;
+        // Use current SOL price from context
+        usdValue = solSpent * currentSolPrice;
       }
 
       if (usdValue === null || !Number.isFinite(usdValue) || usdValue <= 0) return;
@@ -614,7 +619,7 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     // Sort by trade timestamp (most recent first)
     return openTransactions.sort((a, b) => b.trade.at - a.trade.at);
-  }, [history]);
+  }, [history, currentSolPrice]);
 
   // Calculate aggregated active positions (grouped by token)
   interface AggregatedPosition {
@@ -660,8 +665,8 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
       if (priceUsd !== null && Number.isFinite(amount) && Number.isFinite(priceUsd)) {
         usdValue = amount * priceUsd;
       } else if (solSpent !== null && Number.isFinite(solSpent)) {
-        // Approximate: 1 SOL ≈ $150 (fallback, but ideally we'd have price_usd)
-        usdValue = solSpent * 150;
+        // Use current SOL price from context
+        usdValue = solSpent * currentSolPrice;
       }
 
       if (usdValue === null || !Number.isFinite(usdValue) || usdValue <= 0) return;
@@ -777,7 +782,41 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
 
     // Sort by total PnL (highest first)
     return aggregated.sort((a, b) => b.totalPnl - a.totalPnl);
-  }, [history]);
+  }, [history, currentSolPrice]);
+
+  // Calculate total portfolio value and unrealized PnL
+  const portfolioMetrics = useMemo(() => {
+    // Sum of all active positions' remaining value (cost basis)
+    const totalPositionsValue = aggregatedPositions.reduce(
+      (sum, position) => sum + position.remainingValue,
+      0
+    );
+
+    // Wallet SOL balance in USD
+    let solBalanceUsd = 0;
+    if (walletBalance) {
+      if (typeof walletBalance.usd === "number" && Number.isFinite(walletBalance.usd)) {
+        solBalanceUsd = walletBalance.usd;
+      } else if (typeof walletBalance.sol === "number" && Number.isFinite(walletBalance.sol)) {
+        // Use current SOL price from context
+        solBalanceUsd = walletBalance.sol * currentSolPrice;
+      }
+    }
+
+    // Total value = positions + SOL balance
+    const totalValue = totalPositionsValue + solBalanceUsd;
+
+    // Unrealized PnL = sum of unrealized PnL from all active positions
+    const unrealizedPnl = aggregatedPositions.reduce(
+      (sum, position) => sum + position.unrealizedPnl,
+      0
+    );
+
+    return {
+      totalValue,
+      unrealizedPnl,
+    };
+  }, [aggregatedPositions, walletBalance, currentSolPrice]);
 
   // Calculate top 100 positions by PnL
   const top100Positions = useMemo((): AggregatedPosition[] => {
@@ -1148,20 +1187,24 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
           <div className="flex flex-row gap-8 px-8 pt-6 pb-2">
             {/* Balance */}
             <div className="min-w-[180px] flex-1">
-              <div className="mb-1 text-xs text-neutral-400">Balance</div>
+              <div className="mb-1 text-xs text-neutral-400">Total Value</div>
               <div className="text-3xl font-bold text-white">
-                {tokenLoading ? (
+                {historyLoading || scanLoading || loading ? (
                   <span className="animate-pulse text-neutral-500">—</span>
-                ) : !token || typeof token.usd_price !== "number" ? (
-                  <span className="text-red-400">No price data</span>
                 ) : (
-                  `$${token.usd_price.toLocaleString(undefined, { maximumFractionDigits: 6 })}`
+                  `$${formatSmartNumber(portfolioMetrics.totalValue)}`
                 )}
               </div>
               <div className="mt-2 text-xs text-neutral-500">
                 Unrealized PNL
               </div>
-              <div className="text-lg font-semibold text-white">$0</div>
+              <div className={`text-lg font-semibold ${portfolioMetrics.unrealizedPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {historyLoading ? (
+                  <span className="animate-pulse text-neutral-500">—</span>
+                ) : (
+                  `${portfolioMetrics.unrealizedPnl >= 0 ? "+" : ""}$${formatSmartNumber(Math.abs(portfolioMetrics.unrealizedPnl))}`
+                )}
+              </div>
               <div className="mt-2 text-xs text-neutral-500">
                 Available Balance
               </div>
@@ -1172,15 +1215,26 @@ const WalletScanPanel: React.FC<WalletScanPanelProps> = ({
                   </span>
                 ) : walletBalance ? (
                   <div className="flex flex-col">
-                    <span>{walletBalance.sol.toFixed(4)} SOL</span>
-                    {walletBalance.usdFormatted && (
-                      <span className="text-sm font-normal text-neutral-400">
-                        {walletBalance.usdFormatted}
-                      </span>
+                    {typeof walletBalance.usd === "number" && Number.isFinite(walletBalance.usd) ? (
+                      <span>${formatSmartNumber(walletBalance.usd)}</span>
+                    ) : walletBalance.usdFormatted ? (
+                      <span>{walletBalance.usdFormatted}</span>
+                    ) : typeof walletBalance.sol === "number" && Number.isFinite(walletBalance.sol) ? (
+                      <span>${formatSmartNumber(walletBalance.sol * currentSolPrice)}</span>
+                    ) : (
+                      <span className="text-red-400">No balance</span>
                     )}
+                    <span className="text-sm font-normal text-neutral-400">
+                      {walletBalance.sol.toFixed(4)} SOL
+                    </span>
                   </div>
                 ) : balance !== null ? (
-                  `${balance.toFixed(4)} SOL`
+                  <div className="flex flex-col">
+                    <span>${formatSmartNumber(balance * currentSolPrice)}</span>
+                    <span className="text-sm font-normal text-neutral-400">
+                      {balance.toFixed(4)} SOL
+                    </span>
+                  </div>
                 ) : (
                   <span className="text-red-400">No balance</span>
                 )}

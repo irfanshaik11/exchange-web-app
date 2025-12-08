@@ -2209,7 +2209,9 @@ export default function DiscoverPage() {
     }
 
     if (tokenError) {
-      return <div className="py-10 text-center" style={{ color: '#f26681' }}>{tokenError}</div>;
+      return (
+        <div className="py-10 text-center text-[#f26681]">{tokenError}</div>
+      );
     }
 
     return <div className="py-10 text-center text-[#9CA3AF]">No tokens found.</div>;
@@ -2346,41 +2348,63 @@ export default function DiscoverPage() {
       <Head>
         <title>Interstate Memeboard | Discover</title>
         <meta name="description" content="Interstate dashboard" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="32x32"
+          href="/favicon-32x32.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="16x16"
+          href="/favicon-16x16.png"
+        />
+        <link
+          rel="apple-touch-icon"
+          sizes="180x180"
+          href="/apple-touch-icon.png?v=2"
+        />
         {/* Preload the static fallbacks used many times in PumpLive */}
         <link rel="preload" as="image" href="/placeholder/fallback-cover.jpg" />
-        <link rel="preload" as="image" href="/placeholder/fallback-avatar.jpg" />
+        <link
+          rel="preload"
+          as="image"
+          href="/placeholder/fallback-avatar.jpg"
+        />
       </Head>
 
-      <div className="min-h-screen text-[#E6E7EA] relative" style={{ backgroundColor: '#111214' }}>
+      <div className="relative min-h-screen bg-[#111214] text-[#E6E7EA]">
         {/* Header */}
-        <div className='relative' style={{ zIndex: 100 }}>
-          <Header search={search} setSearch={setSearch} selectedTimeframe={selectedTimeframe} />
+        <div className="relative z-[100]">
+          <Header
+            search={search}
+            setSearch={setSearch}
+            selectedTimeframe={selectedTimeframe}
+          />
         </div>
 
         {/* Tab Navigation */}
-        <div className="my-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 lg:gap-6 px-4 sm:px-6 lg:px-8">
+        <div className="my-4 flex flex-col gap-4 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
           {/* Tabs Section - Scrollable on mobile */}
-          <div className="flex items-center gap-3 sm:gap-4 lg:gap-6 overflow-x-auto scrollbar-hide pb-2 lg:pb-0 -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0">
+          <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
             <button
-              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
             >
               Trending
             </button>
             <button
-              className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "newPairs" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+              className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "newPairs" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("newPairs")}
             >
               New Pairs
             </button>
             {/* Hide xStocks, surge, and live tabs when Monad is selected */}
-            {currentChain !== 'monad' && (
+            {currentChain !== "monad" && (
               <>
                 <button
-                  className={`text-sm sm:text-base lg:text-lg font-light transition-colors whitespace-nowrap ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
+                  className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "xStocks" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
                   onClick={() => setActiveTab("xStocks")}
                 >
                   xStocks
@@ -2419,78 +2443,75 @@ export default function DiscoverPage() {
 
             {/* Timeframes - hide when on live tab, new pairs, xStocks, surge, or trending (for both Solana and Monad) */}
             {/* COMMENTED OUT: Timeframe selector hidden for trending section */}
-            {activeTab !== 'live' && activeTab !== 'newPairs' && activeTab !== 'xStocks' && activeTab !== 'surge' && activeTab !== 'trending' && (
-              <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border relative"
-                   style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '130px', width: '130px', height: '28px' }}>
-                {(["5m", "1h", "6h", "24h"] as Timeframe[]).map((tf: Timeframe) => (
-                  <div key={tf} className="relative flex items-center justify-center">
-                    <button
-                      className="px-1 text-sm font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded whitespace-nowrap"
-                      style={{
-                        paddingTop: '2px',
-                        paddingBottom: '2px',
-                        backgroundColor: selectedTimeframe === tf 
-                          ? 'rgba(24, 196, 140, 0.15)' 
-                          : 'rgba(22, 23, 28, 0.6)',
-                        color: selectedTimeframe === tf ? '#f0f5f5' : ''
-                      }}
-                      onClick={() => handleTimeframeClick(tf)}
-                      onMouseEnter={(e) => {
-                        if (selectedTimeframe !== tf) {
-                          e.currentTarget.style.color = '#f0f5f5';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (selectedTimeframe !== tf) {
-                          e.currentTarget.style.color = '';
-                        }
-                      }}
-                    >
-                      {tf}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            {activeTab !== "live" &&
+              activeTab !== "newPairs" &&
+              activeTab !== "xStocks" &&
+              activeTab !== "surge" &&
+              activeTab !== "trending" && (
+                <div className="relative hidden h-7 w-[130px] min-w-[130px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+                  {(["5m", "1h", "6h", "24h"] as Timeframe[]).map(
+                    (tf: Timeframe) => (
+                      <div
+                        key={tf}
+                        className="relative flex items-center justify-center"
+                      >
+                        <button
+                          className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium whitespace-nowrap transition-all duration-200 ${selectedTimeframe === tf ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-[rgba(22,23,28,0.6)]"}`}
+                          onClick={() => handleTimeframeClick(tf)}
+                          onMouseEnter={(e) => {
+                            if (selectedTimeframe !== tf) {
+                              e.currentTarget.style.color = "#f0f5f5";
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (selectedTimeframe !== tf) {
+                              e.currentTarget.style.color = "";
+                            }
+                          }}
+                        >
+                          {tf}
+                        </button>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
 
             {/* Filter button - hidden when in Live Pump tab */}
-            {activeTab !== 'live' && (
-              <div className="hidden sm:flex items-center justify-center rounded-md px-1.5 gap-1 border relative"
-                   style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '85px', width: '85px', height: '28px' }}>
+            {activeTab !== "live" && (
+              <div className="relative hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
                 <button
-                  className="flex items-center justify-between w-full h-full transition-all duration-200 cursor-pointer relative"
+                  className="relative flex h-full w-full cursor-pointer items-center justify-between transition-all duration-200"
                   onClick={() => setIsFilterPopoutOpen(true)}
                   onMouseEnter={(e) => {
-                    const text = e.currentTarget.querySelector('span');
-                    const icon = e.currentTarget.querySelector('svg');
-                    if (text) text.style.color = '#f0f5f5';
-                    if (icon) icon.style.color = '#f0f5f5';
+                    const text = e.currentTarget.querySelector("span");
+                    const icon = e.currentTarget.querySelector("svg");
+                    if (text) text.style.color = "#f0f5f5";
+                    if (icon) icon.style.color = "#f0f5f5";
                   }}
                   onMouseLeave={(e) => {
-                    const text = e.currentTarget.querySelector('span');
-                    const icon = e.currentTarget.querySelector('svg');
-                    const activeColor = isFilterPopoutOpen ? '#526fff' : '#9CA3AF';
+                    const text = e.currentTarget.querySelector("span");
+                    const icon = e.currentTarget.querySelector("svg");
+                    const activeColor = isFilterPopoutOpen
+                      ? "#526fff"
+                      : "#9CA3AF";
                     if (text) text.style.color = activeColor;
                     if (icon) icon.style.color = activeColor;
                   }}
                 >
-                  <span 
-                    className="text-sm font-medium"
-                    style={{ color: isFilterPopoutOpen ? '#526fff' : '#9CA3AF' }}
+                  <span
+                    className={`text-sm font-medium ${isFilterPopoutOpen ? "text-[#526fff]" : "text-[#9CA3AF]"}`}
                   >
                     Filter
                   </span>
-                  <BsSliders2 
-                    size={14} 
-                    style={{ color: isFilterPopoutOpen ? '#526fff' : '#9CA3AF' }}
+                  <BsSliders2
+                    size={14}
+                    className={`${isFilterPopoutOpen ? "text-[#526fff]" : "text-[#9CA3AF]"}`}
                   />
-                  
+
                   {/* Active Filter Count Badge */}
                   {activeFilterCount > 0 && (
-                    <span 
-                      className="absolute -top-1 -right-1 text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold"
-                      style={{ backgroundColor: '#85d99f', color: '#f0f5f5', fontSize: '10px' }}
-                    >
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#85d99f] text-xs text-[10px] font-bold text-[#f0f5f5]">
                       {activeFilterCount}
                     </span>
                   )}
@@ -2499,9 +2520,8 @@ export default function DiscoverPage() {
             )}
 
             {/* Thunder Icon and Amount Entry - Separate Thin Box */}
-            <div className="hidden sm:flex items-center justify-center rounded-md px-1.5 gap-1 border"
-                 style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '85px', width: '85px', height: '28px' }}>
-              <HiLightningBolt size={14} style={{ color: '#31e3ac' }} />
+            <div className="hidden h-7 w-[85px] min-w-[85px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+              <HiLightningBolt size={14} className="text-[#31e3ac]" />
               <input
                 type="text"
                 value={quickBuyAmount}
@@ -2509,48 +2529,52 @@ export default function DiscoverPage() {
                 onChange={(e) => {
                   const value = e.target.value;
                   // Allow only digits and at most one decimal point
-                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                  if (value === "" || /^\d*\.?\d*$/.test(value)) {
                     setQuickBuyAmount(value);
                     const numValue = Number(value) || 0;
-                    if (typeof window !== 'undefined') {
-                      localStorage.setItem('quickBuyAmount', numValue.toString());
+                    if (typeof window !== "undefined") {
+                      localStorage.setItem(
+                        "quickBuyAmount",
+                        numValue.toString(),
+                      );
                     }
                   }
                 }}
                 onKeyDown={(e) => {
                   // Block non-numeric keys except control/navigation keys and '.'
-                  const allowedKeys = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Home', 'End'];
+                  const allowedKeys = [
+                    "Backspace",
+                    "Delete",
+                    "ArrowLeft",
+                    "ArrowRight",
+                    "Tab",
+                    "Home",
+                    "End",
+                  ];
                   if (allowedKeys.includes(e.key)) return;
-                  if (e.key === '.') return;
+                  if (e.key === ".") return;
                   if (!/^[0-9]$/.test(e.key)) {
                     e.preventDefault();
                   }
                 }}
-                className="bg-transparent border-none outline-none text-sm font-medium w-12 text-center"
-                style={{ color: '#f0f5f5' }}
+                className="w-12 border-none bg-transparent text-center text-sm font-medium text-[#f0f5f5] outline-none"
               />
             </div>
-            
+
             {/* P1 P2 P3 Boxes - Separate Thin Box With Background Color */}
-            <div className="hidden sm:flex items-center justify-center gap-1 rounded-md px-1.5 border relative"
-                 style={{ borderColor: '#24252C', backgroundColor: '#272a2e', paddingTop: '4px', paddingBottom: '4px', minWidth: '100px', width: '100px', height: '28px' }}>
-              {['P1', 'P2', 'P3'].map((pill) => {
-                const presetIndex = parseInt(pill.replace('P', '')) - 1;
+            <div className="relative hidden h-7 w-[100px] min-w-[100px] items-center justify-center gap-1 rounded-md border border-[#24252C] bg-[#272a2e] px-1.5 py-1 sm:flex">
+              {["P1", "P2", "P3"].map((pill) => {
+                const presetIndex = parseInt(pill.replace("P", "")) - 1;
                 const preset = presets[presetIndex];
                 const settings = preset?.quickBuySettings;
-                
+
                 return (
-                  <div key={pill} className="relative flex items-center justify-center">
+                  <div
+                    key={pill}
+                    className="relative flex items-center justify-center"
+                  >
                     <button
-                      className="px-1 text-sm font-medium transition-all duration-200 cursor-pointer flex items-center justify-center rounded"
-                      style={{
-                        paddingTop: '2px',
-                        paddingBottom: '2px',
-                        backgroundColor: selectedPill === pill 
-                          ? 'rgba(24, 196, 140, 0.15)' 
-                          : 'rgba(22, 23, 28, 0.6)',
-                        color: selectedPill === pill ? '#f0f5f5' : ''
-                      }}
+                      className={`flex cursor-pointer items-center justify-center rounded px-1 py-[2px] text-sm font-medium transition-all duration-200 ${selectedPill === pill ? "bg-[rgba(24,196,140,0.15)] text-[#f0f5f5]" : "bg-[rgba(22,23,28,0.6)]"}`}
                       onClick={() => {
                         setSelectedPill(pill);
                         setActivePreset(presetIndex); // Also update global preset for consistency
@@ -2558,54 +2582,72 @@ export default function DiscoverPage() {
                       }}
                       onMouseEnter={(e) => {
                         if (selectedPill !== pill) {
-                          e.currentTarget.style.color = '#f0f5f5';
+                          e.currentTarget.style.color = "#f0f5f5";
                         }
                         setShowPillTooltip(pill);
                       }}
                       onMouseLeave={(e) => {
                         if (selectedPill !== pill) {
-                          e.currentTarget.style.color = '';
+                          e.currentTarget.style.color = "";
                         }
                         setShowPillTooltip(null);
                       }}
                     >
                       {pill}
                     </button>
-                    
+
                     {/* Tooltip for each pill */}
                     {showPillTooltip === pill && settings && (
-                      <div className="absolute top-full left-0 mt-1 w-28 rounded-lg shadow-xl border z-50"
-                           style={{ 
-                             backgroundColor: 'rgba(15, 16, 18, 0.95)',
-                             borderColor: '#24252C' 
-                           }}>
-                        <div className="p-2 space-y-1.5">
+                      <div className="bg-[rgba(15,16,18,0.95)] absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border border-[#24252C] shadow-xl">
+                        <div className="space-y-1.5 p-2">
                           {/* Slippage - Running person icon */}
                           <div className="flex items-center gap-1.5">
-                            <FaRunning size={10} className="opacity-80" style={{ strokeWidth: '2' }} />
-                            <span className="text-gray-300 text-xs font-light">{(settings.maxSlippage * 100).toFixed(0)}%</span>
+                            <FaRunning
+                              size={10}
+                              className="stroke-2 opacity-80"
+                            />
+                            <span className="text-xs font-light text-gray-300">
+                              {(settings.maxSlippage * 100).toFixed(0)}%
+                            </span>
                           </div>
-                          
+
                           {/* Priority Fee - Gas pump icon with yellow styling */}
                           <div className="flex items-center gap-1.5">
-                            <FaGasPump size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '2' }} />
-                            <span className="text-yellow-400 text-xs font-light">{settings.priority}</span>
-                            <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
+                            <FaGasPump
+                              size={10}
+                              className="stroke-2 text-[#FCD34D] opacity-90"
+                            />
+                            <span className="text-xs font-light text-yellow-400">
+                              {settings.priority}
+                            </span>
+                            <span className="text-xs font-light text-[#d11f3a]">
+                              ⚠
+                            </span>
                           </div>
-                          
+
                           {/* Bribe - Coins icon with yellow styling */}
                           <div className="flex items-center gap-1.5">
-                            <FaCoins size={10} className="opacity-90" style={{ color: '#FCD34D', strokeWidth: '2' }} />
-                            <span className="text-yellow-400 text-xs font-light">{settings.bribe}</span>
-                            <span className="text-xs font-light" style={{ color: '#d11f3a' }}>⚠</span>
+                            <FaCoins
+                              size={10}
+                              className="stroke-2 text-[#FCD34D] opacity-90"
+                            />
+                            <span className="text-xs font-light text-yellow-400">
+                              {settings.bribe}
+                            </span>
+                            <span className="text-xs font-light text-[#d11f3a]">
+                              ⚠
+                            </span>
                           </div>
-                          
+
                           {/* MEV Protection - Ban icon */}
                           <div className="flex items-center gap-1.5">
-                            <FaBan size={10} className="opacity-90" style={{ strokeWidth: '2' }} />
-                            <span className="text-gray-300 text-xs font-light">
-                              {settings.mevMode === 'off' ? 'Off' : 
-                               settings.mevMode === 'reduced' ? 'Reduced' : 'Secure'}
+                            <FaBan size={10} className="stroke-2 opacity-90" />
+                            <span className="text-xs font-light text-gray-300">
+                              {settings.mevMode === "off"
+                                ? "Off"
+                                : settings.mevMode === "reduced"
+                                  ? "Reduced"
+                                  : "Secure"}
                             </span>
                           </div>
                         </div>
@@ -2620,8 +2662,8 @@ export default function DiscoverPage() {
 
         {/* Filter Popout */}
         {isFilterPopoutOpen && (
-          <FilterPopout 
-            open={isFilterPopoutOpen} 
+          <FilterPopout
+            open={isFilterPopoutOpen}
             onClose={() => setIsFilterPopoutOpen(false)}
           />
         )}
@@ -2683,7 +2725,7 @@ export default function DiscoverPage() {
                 Waiting for live tokens...
               </div>
             ) : !pumpPortalConnected && pumpPortalError ? (
-              <div className="py-10 text-center" style={{ color: '#f26681' }}>
+              <div className="py-10 text-center text-[#f26681]">
                 Connection error: {pumpPortalError}
               </div>
             ) : (
@@ -2693,7 +2735,8 @@ export default function DiscoverPage() {
                 ))}
               </div>
             )
-          ) : */} {activeTab === 'newPairs' ? (
+          ) : */}{" "}
+          {activeTab === "newPairs" ? (
             <section aria-label="New Pairs">
               {/* <div className="mb-4 flex items-center justify-between">
                 {newPairsLoading && (
@@ -2703,14 +2746,19 @@ export default function DiscoverPage() {
                 )}
               </div> */}
 
-              {newPairsLoading && processedNewPairs.length === 0 && newPairsRaw.length === 0 ? (
+              {newPairsLoading &&
+              processedNewPairs.length === 0 &&
+              newPairsRaw.length === 0 ? (
                 <div className="space-y-4">
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
+                    <div
+                      key={i}
+                      className="h-12 w-full animate-pulse rounded bg-[#1E1F26]"
+                    />
                   ))}
                 </div>
               ) : newPairsError ? (
-                <div className="py-10 text-center" style={{ color: '#f26681' }}>
+                <div className="py-10 text-center text-[#f26681]">
                   {newPairsError}
                 </div>
               ) : processedNewPairs.length > 0 ? (
@@ -2730,12 +2778,17 @@ export default function DiscoverPage() {
                 </div>
               )}
             </section>
-          ) : activeTab === 'xStocks' ? (
+          ) : activeTab === "xStocks" ? (
             <section aria-label="xStocks" className="pb-8">
-              {xStocksLoading && processedXStocks.length === 0 && xStocksRaw.length === 0 ? (
+              {xStocksLoading &&
+              processedXStocks.length === 0 &&
+              xStocksRaw.length === 0 ? (
                 <div className="space-y-4">
                   {Array.from({ length: 10 }).map((_, i) => (
-                    <div key={i} className="h-12 w-full bg-[#1E1F26] animate-pulse rounded" />
+                    <div
+                      key={i}
+                      className="h-12 w-full animate-pulse rounded bg-[#1E1F26]"
+                    />
                   ))}
                 </div>
               ) : xStocksError && processedXStocks.length === 0 ? (
@@ -2758,7 +2811,8 @@ export default function DiscoverPage() {
                 </div>
               )}
             </section>
-          ) : /* activeTab === 'surge' ? (
+          ) : (
+            /* activeTab === 'surge' ? (
             <section aria-label="Surge">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-[#f0f5f5]">Surge</h2>
@@ -2780,13 +2834,15 @@ export default function DiscoverPage() {
                 quickBuyAmount={Number(quickBuyAmount) || 0}
               />
             </section>
-          ) : */ (
-            renderPrimaryTable()
+          ) : */ renderPrimaryTable()
           )}
         </main>
 
         <Footer />
-        <QuickBuySettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <QuickBuySettingsModal
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+        />
       </div>
     </>
   );

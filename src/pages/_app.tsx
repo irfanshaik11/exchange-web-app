@@ -448,14 +448,26 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
 // }
 
 const MyApp: AppType = ({ Component, pageProps }) => {
-  const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('bottom-center');
+  const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('top-center');
 
   // Load toast position from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('toast-position');
-      if (saved && ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
+      
+      // Migrate from bottom-center to top-center (or if no value exists)
+      if (!saved || saved === 'bottom-center') {
+        localStorage.setItem('toast-position', 'top-center');
+        setToastPosition('top-center');
+        return;
+      }
+      
+      if (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
         setToastPosition(saved as any);
+      } else {
+        // Invalid value, migrate to top-center
+        localStorage.setItem('toast-position', 'top-center');
+        setToastPosition('top-center');
       }
     }
   }, []);

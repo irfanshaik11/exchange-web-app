@@ -132,12 +132,7 @@ const AddWalletModal: React.FC<AddWalletModalProps> = ({ isOpen, onClose, onAddW
           </div>
           <button
             type="submit"
-            className="w-full font-semibold py-2 rounded transition-all duration-300"
-            style={{
-              backgroundColor: '#70E0B0',
-              color: '#000000',
-              border: 'none'
-            }}
+            className="w-full font-semibold py-2 rounded transition-all duration-300 text-black border-none bg-[#70E0B0]"
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = '#58B890';
               e.currentTarget.style.boxShadow = '0 0 8px rgba(112, 224, 176, 0.3), 0 0 16px rgba(112, 224, 176, 0.15)';
