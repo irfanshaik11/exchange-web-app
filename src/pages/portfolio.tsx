@@ -22,6 +22,7 @@ import { SiSolana } from "react-icons/si";
 import toast from "react-hot-toast";
 import { FiEdit2, FiCheck, FiX } from "react-icons/fi";
 import ImportWalletModal from "../components/ImportWalletModal";
+import ExportWalletModal from "../components/ExportWalletModal";
 
 // Stacked Token Boxes Component
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
@@ -101,6 +102,7 @@ interface UserWallet {
   holdingsCount: number;
   isArchived?: boolean;
   isPrimary?: boolean;
+  walletId?: string | null; // Turnkey wallet ID (null for imported wallets)
 }
 
 const normalizeWalletFromApi = (
@@ -136,6 +138,7 @@ const normalizeWalletFromApi = (
     holdingsCount: typeof wallet?.holdingsCount === "number" ? wallet.holdingsCount : 0,
     isArchived: Boolean(wallet?.isArchived),
     isPrimary: Boolean(wallet?.isPrimary),
+    walletId: wallet?.walletId ?? null, // Turnkey wallet ID
   };
 };
 
@@ -185,6 +188,9 @@ export default function PortfolioPage() {
   const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportWalletId, setExportWalletId] = useState<string | null>(null);
+  const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(null);
 
   const notifyWalletsUpdated = () => {
     if (typeof window !== "undefined") {
@@ -1013,7 +1019,23 @@ export default function PortfolioPage() {
   };
 
   const handleExportWallet = (walletId: string) => {
-    router.push(`/turnkey/export?walletId=${encodeURIComponent(walletId)}`);
+    const wallet = wallets.find((w) => w.id === walletId);
+    if (!wallet) {
+      toast.error("Wallet not found");
+      return;
+    }
+    
+    // Check if this is a Turnkey wallet (has walletId) or imported wallet
+    if (!wallet.walletId) {
+      toast.error("Imported wallets cannot be exported. Only Turnkey-managed wallets can be exported.");
+      return;
+    }
+    
+    const address = getAddressForChain(wallet, currentChain);
+    // Use the Turnkey walletId, not the database id
+    setExportWalletId(wallet.walletId);
+    setExportWalletAddress(address);
+    setShowExportModal(true);
   };
 
   const handleRenameWallet = async () => {
@@ -2379,6 +2401,18 @@ export default function PortfolioPage() {
         onClose={() => setShowImportModal(false)}
         onImport={handleImportWallets}
         chain={currentChain as 'sol' | 'monad'}
+      />
+      
+      {/* Export Wallet Modal */}
+      <ExportWalletModal
+        isOpen={showExportModal}
+        onClose={() => {
+          setShowExportModal(false);
+          setExportWalletId(null);
+          setExportWalletAddress(null);
+        }}
+        walletId={exportWalletId || undefined}
+        walletAddress={exportWalletAddress || undefined}
       />
     </>
   );
