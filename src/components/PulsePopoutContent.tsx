@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/router";
-import PulseTable from "./PulseTable";
+// import PulseTable from "./PulseTable";
 import MonadTable from "./MonadTable";
 import type { Token } from "~/utils/db";
 import { useUser } from "./UserContext";
@@ -112,54 +112,76 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
   const queryClient = useQueryClient();
 
   // React Query hooks - only enable Solana data fetching when NOT on Monad route
-  const shouldFetchSolanaData = router.isReady && !isMonadRoute;
+  // COMMENTED OUT: PulseTable is disabled, so these hooks are disabled too
+  const shouldFetchSolanaData = false; // router.isReady && !isMonadRoute;
   
-  const {
-    data: tokens = [],
-    isLoading: tokensLoading,
-    error: tokensError,
-    isStale: tokensStale,
-    refetch: refreshTokens,
-    dataUpdatedAt,
-    isFetching,
-  } = useQueryNewPairs(shouldFetchSolanaData);
+  // const {
+  //   data: tokens = [],
+  //   isLoading: tokensLoading,
+  //   error: tokensError,
+  //   isStale: tokensStale,
+  //   refetch: refreshTokens,
+  //   dataUpdatedAt,
+  //   isFetching,
+  // } = useQueryNewPairs(shouldFetchSolanaData);
 
-  const {
-    data: launchpadData = { new: [], completing: [], completed: [] },
-    isLoading: launchpadLoading,
-    error: launchpadError,
-    isStale: launchpadStale,
-    refetch: refreshLaunchpadData,
-  } = useQueryLaunchpadData(shouldFetchSolanaData);
+  // const {
+  //   data: launchpadData = { new: [], completing: [], completed: [] },
+  //   isLoading: launchpadLoading,
+  //   error: launchpadError,
+  //   isStale: launchpadStale,
+  //   refetch: refreshLaunchpadData,
+  // } = useQueryLaunchpadData(shouldFetchSolanaData);
 
-  const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
-  const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
+  // const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
+  // const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
+
+  // Placeholder values since hooks are commented out
+  const tokens: Token[] = [];
+  const tokensLoading = false;
+  const tokensError = null;
+  const tokensStale = false;
+  const refreshTokens = () => {};
+  const dataUpdatedAt = 0;
+  const isFetching = false;
+  const launchpadData: LaunchpadData = { new: [], completing: [], completed: [] };
+  const launchpadLoading = false;
+  const launchpadError = null;
+  const launchpadStale = false;
+  const refreshLaunchpadData = () => {};
+  const finalStretchTokensQuery: Token[] = [];
+  const migratedTokensQuery: Token[] = [];
 
   // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
-  const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
-    enabled: shouldFetchSolanaData,
-    onNewToken: useCallback((token) => {
-      queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 200);
-      });
-    }, [queryClient]),
-    onFinalStretchToken: useCallback((token) => {
-      queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 50);
-      });
-    }, [queryClient]),
-    onMigratedToken: useCallback((token) => {
-      queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 50);
-      });
-    }, [queryClient]),
-  });
+  // COMMENTED OUT: PulseTable is disabled, so WebSocket is disabled too
+  // const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
+  //   enabled: shouldFetchSolanaData,
+  //   onNewToken: useCallback((token) => {
+  //     queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
+  //       if (!oldData) return [token];
+  //       const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+  //       return [token, ...filtered].slice(0, 200);
+  //     });
+  //   }, [queryClient]),
+  //   onFinalStretchToken: useCallback((token) => {
+  //     queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
+  //       if (!oldData) return [token];
+  //       const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+  //       return [token, ...filtered].slice(0, 50);
+  //     });
+  //   }, [queryClient]),
+  //   onMigratedToken: useCallback((token) => {
+  //     queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
+  //       if (!oldData) return [token];
+  //       const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+  //       return [token, ...filtered].slice(0, 50);
+  //     });
+  //   }, [queryClient]),
+  // });
+
+  // Placeholder values since WebSocket is commented out
+  const pulseWsConnected = false;
+  const pulseWsError = null;
 
   // State for HTTP polling data
   const [httpNew, setHttpNew] = useState<any[]>([]);
@@ -241,7 +263,9 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
           const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
           apiUrl = `${monadServiceUrl}/v1/pulse/final-stretch?limit=35`;
         } else {
-          apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+          // COMMENTED OUT: PulseTable is disabled, so Solana API calls are disabled
+          // apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+          return; // Skip Solana route
         }
 
         const res = await fetch(apiUrl, {
@@ -896,48 +920,51 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
       return;
     }
 
-    const fetchInitialMigratedTokens = async () => {
-      try {
-        const endpoint = `/api/token-service/pulse-migrated?limit=70`;
-        const response = await fetch(endpoint, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.length > 0) {
-            const filteredData = data.filter((token: any) => {
-              if (!token) return false;
-              if (isZeroLiquidityToken(token)) {
-                return false;
-              }
-              return true;
-            });
+    // COMMENTED OUT: PulseTable is disabled, so Solana API calls are disabled
+    return;
 
-            if (filteredData.length === 0) {
-              setHttpMigrated([]);
-              setHttpMigratedTick((prev) => prev + 1);
-              return;
-            }
+    // const fetchInitialMigratedTokens = async () => {
+    //   try {
+    //     const endpoint = `/api/token-service/pulse-migrated?limit=70`;
+    //     const response = await fetch(endpoint, {
+    //       cache: 'no-store',
+    //       headers: {
+    //         'Cache-Control': 'no-cache',
+    //         'Pragma': 'no-cache'
+    //       }
+    //     });
+    //     if (response.ok) {
+    //       const data = await response.json();
+    //       if (data.length > 0) {
+    //         const filteredData = data.filter((token: any) => {
+    //           if (!token) return false;
+    //           if (isZeroLiquidityToken(token)) {
+    //             return false;
+    //           }
+    //           return true;
+    //         });
 
-            const tokensWithTimestamp = filteredData.map((token: any) => ({
-              ...token,
-              created_at: token.migrated_time || new Date().toISOString(),
-              timestamp: Date.now(),
-            }));
-            setHttpMigrated(tokensWithTimestamp);
-            setHttpMigratedTick((prev) => prev + 1);
-          }
-        }
-      } catch (error) {
-        console.error(`[Pulse] ❌ Failed to fetch initial migrated tokens:`, error);
-      }
-    };
+    //         if (filteredData.length === 0) {
+    //           setHttpMigrated([]);
+    //           setHttpMigratedTick((prev) => prev + 1);
+    //           return;
+    //         }
 
-    fetchInitialMigratedTokens();
+    //         const tokensWithTimestamp = filteredData.map((token: any) => ({
+    //           ...token,
+    //           created_at: token.migrated_time || new Date().toISOString(),
+    //           timestamp: Date.now(),
+    //         }));
+    //         setHttpMigrated(tokensWithTimestamp);
+    //         setHttpMigratedTick((prev) => prev + 1);
+    //       }
+    //     }
+    //   } catch (error) {
+    //     console.error(`[Pulse] ❌ Failed to fetch initial migrated tokens:`, error);
+    //   }
+    // };
+
+    // fetchInitialMigratedTokens();
   }, [isMonadRoute, isZeroLiquidityToken]);
 
   // Handle chain switching
@@ -1025,7 +1052,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
         ) : isLoading ? (
           <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
             <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
-              <PulseTable
+              {/* <PulseTable
                 title="New Pairs"
                 tokens={[]}
                 loading
@@ -1047,7 +1074,10 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
                 skeletonRowCount={10}
                 isFirstOrLast="last"
                 showBubbleMetrics={false}
-              />
+              /> */}
+              <div className="flex-1 text-center text-neutral-400 py-10">
+                PulseTable is currently disabled
+              </div>
             </div>
           </div>
         ) : hasError ? (
@@ -1066,7 +1096,7 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
         ) : (
           <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
             <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
-              <PulseTable
+              {/* <PulseTable
                 title="New Pairs"
                 tokens={enrichedNewPairsToShow as any}
                 loading={newPairsLoading}
@@ -1083,7 +1113,10 @@ export default function PulsePopoutContent({ forceMobileView = false }: PulsePop
                 tokens={enrichedMigrated as any}
                 isFirstOrLast="last"
                 showBubbleMetrics={false}
-              />
+              /> */}
+              <div className="flex-1 text-center text-neutral-400 py-10">
+                PulseTable is currently disabled
+              </div>
             </div>
           </div>
         )}
