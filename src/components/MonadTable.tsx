@@ -1135,11 +1135,10 @@ function TokenImage({
           }}
         >
           <div className="relative">
-            {/* Main preview container */}
+            {/* Main preview container - just the image, no border or decorations */}
             <div
-              className="relative h-64 w-64 overflow-hidden rounded-xl border border-[#9333ea]"
+              className="relative h-64 w-64 overflow-hidden rounded-xl"
               style={{
-                backgroundColor: AX.surface,
                 boxShadow: "0 8px 32px rgba(0, 0, 0, 0.3)",
               }}
             >
@@ -1148,37 +1147,11 @@ function TokenImage({
                 alt={token.name || token.symbol || ""}
                 symbol={token.symbol}
                 name={token.name}
-                width={225}
-                height={225}
+                width={256}
+                height={256}
                 className="h-full w-full object-cover"
                 priority={priority}
               />
-            </div>
-            {/* Migration progress tooltip - only for New Pairs */}
-            {isNewPairs && (
-              <div
-                className="bg-[rgba(0,0,0,0.8)] absolute -top-10 left-1/2 z-50 -translate-x-1/2 transform rounded border border-[#31e3ac20] px-2 py-1 text-xs font-medium whitespace-nowrap text-[#31e3ac]"
-                style={{
-                  backdropFilter: "blur(4px)",
-                  opacity: showPreview ? 1 : 0,
-                  transition: "opacity 0.2s ease-out",
-                }}
-              >
-                Progress: {Math.round(scaledProgress * 100)}%
-              </div>
-            )}
-
-            {/* Token info overlay */}
-            <div
-              className="absolute -bottom-8 left-1/2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap"
-              style={{
-                backgroundColor: AX.surface,
-                color: AX.text,
-                border: `1px solid ${AX.border}`,
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
-              }}
-            >
-              {token.symbol} - {token.name}
             </div>
           </div>
         </div>
