@@ -77,7 +77,7 @@ const navLinks = [
   { name: "Trackers", href: "/trackers" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
-  { name: "Rewards", href: "/rewards" },
+  { name: "Referral", href: "/rewards" },
 ];
 
 interface HeaderProps {

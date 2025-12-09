@@ -2406,12 +2406,15 @@ function MonadTable({
 
     // Get slippage from preset or use default (15%)
     const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
+    // Get gas price from preset (optional, undefined if not set)
+    const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
 
     console.log("📤 Monad Quick Buy params:", {
       tokenAddress,
       amountMON: buyAmount,
       launchpad,
       slippage,
+      gasPrice: gasPrice !== undefined ? `${gasPrice} gwei` : 'network suggestion',
     });
 
     const toastId = showEnhancedToast("loading", "Executing Monad buy...", {
@@ -2426,6 +2429,7 @@ function MonadTable({
           amountMON: buyAmount,
           launchpad,
           slippage,
+          gasPrice,
         },
         user.bearerToken,
       );
@@ -3265,40 +3269,6 @@ function MonadTable({
                               style={{ color: "#d11f3a" }}
                             >
                               ⚠
-                            </span>
-                          </div>
-
-                          {/* Bribe - Coins icon with yellow styling */}
-                          <div className="flex items-center gap-1.5">
-                            <FaCoins
-                              size={10}
-                              className="opacity-90"
-                              style={{ color: "#FCD34D", strokeWidth: "2" }}
-                            />
-                            <span className="text-xs font-light text-yellow-400">
-                              {settings.bribe}
-                            </span>
-                            <span
-                              className="text-xs font-light"
-                              style={{ color: "#d11f3a" }}
-                            >
-                              ⚠
-                            </span>
-                          </div>
-
-                          {/* MEV Protection - Ban icon */}
-                          <div className="flex items-center gap-1.5">
-                            <FaBan
-                              size={10}
-                              className="opacity-90"
-                              style={{ strokeWidth: "2" }}
-                            />
-                            <span className="text-xs font-light text-gray-300">
-                              {settings.mevMode === "off"
-                                ? "Off"
-                                : settings.mevMode === "reduced"
-                                  ? "Reduced"
-                                  : "Secure"}
                             </span>
                           </div>
                         </div>

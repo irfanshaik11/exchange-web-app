@@ -11,6 +11,7 @@ export interface QuickBuySettings {
   autoFee: boolean;
   maxFee: number;
   rpc?: string;
+  gasPrice?: number; // Gas price in gwei for Monad (optional, defaults to network suggestion)
 }
 
 export interface QuickBuyContextType {
@@ -38,6 +39,7 @@ const defaultSettings: QuickBuySettings = {
   autoFee: false,
   maxFee: 0,
   rpc: undefined,
+  gasPrice: undefined, // Default to network suggestion for Monad
 };
 
 const defaultPresets: QuickBuyPreset[] = [
@@ -62,6 +64,10 @@ function validateSettings(settings: QuickBuySettings): QuickBuySettings {
   }
   if (isNaN(validated.bribe) || validated.bribe === null || validated.bribe === undefined) {
     validated.bribe = defaultSettings.bribe;
+  }
+  // gasPrice is optional, so only validate if it's set
+  if (validated.gasPrice !== undefined && validated.gasPrice !== null && (isNaN(validated.gasPrice) || validated.gasPrice < 0)) {
+    validated.gasPrice = undefined;
   }
   
   return validated;

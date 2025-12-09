@@ -433,6 +433,50 @@ const Activity: React.FC<ActivityProps> = ({
                 });
               }
               
+              // For Sell trades, if tokenAmount is missing or 0, try to calculate it from other data
+              if (trade.type === 'Sell' && (!tokenAmountValue || tokenAmountValue <= 0)) {
+                // Try to calculate from usdValue and price
+                if (amountValue && amountValue > 0 && metadata?.priceUsd && metadata.priceUsd > 0) {
+                  tokenAmountValue = amountValue / metadata.priceUsd;
+                  console.log('✅ Calculated sell tokenAmount from usdValue and price:', {
+                    tokenAddress: trade.tokenAddress,
+                    usdValue: amountValue,
+                    priceUsd: metadata.priceUsd,
+                    calculatedTokenAmount: tokenAmountValue
+                  });
+                }
+                // If still missing, try to find corresponding buy trade
+                if ((!tokenAmountValue || tokenAmountValue <= 0) && amountValue && amountValue > 0) {
+                  const buyTrade = trades.find(t => 
+                    t.tokenAddress === trade.tokenAddress && 
+                    t.type === 'Buy' && 
+                    t.transactionHash !== trade.transactionHash
+                  );
+                  if (buyTrade) {
+                    const buyUsdValue = toNumber(buyTrade.usdValue);
+                    const buyTokenAmount = toNumber(buyTrade.tokenAmount);
+                    // Apply unit correction to buy token amount if needed
+                    let correctedBuyTokenAmount = buyTokenAmount;
+                    if (correctedBuyTokenAmount && correctedBuyTokenAmount > 1000000) {
+                      correctedBuyTokenAmount = correctedBuyTokenAmount / 1000000;
+                    }
+                    // Estimate sell token amount based on sell/buy USD ratio
+                    if (buyUsdValue && buyUsdValue > 0 && correctedBuyTokenAmount && correctedBuyTokenAmount > 0) {
+                      const sellRatio = amountValue / buyUsdValue;
+                      tokenAmountValue = correctedBuyTokenAmount * sellRatio;
+                      console.log('✅ Calculated sell tokenAmount from buy trade ratio:', {
+                        tokenAddress: trade.tokenAddress,
+                        buyTokenAmount: correctedBuyTokenAmount,
+                        buyUsdValue: buyUsdValue,
+                        sellUsdValue: amountValue,
+                        sellRatio: sellRatio,
+                        calculatedTokenAmount: tokenAmountValue
+                      });
+                    }
+                  }
+                }
+              }
+              
               // For Sell trades, validate usdValue is reasonable
               // If usdValue > $10,000 and tokenAmount exists, check if it's actually marketCap
               if (trade.type === 'Sell' && amountValue && amountValue > 10000) {

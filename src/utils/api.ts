@@ -677,6 +677,7 @@ export type MonadBuyParams = {
   amountMON: number; // Amount in MON (native currency)
   launchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs'; // Launchpad identifier
   slippage?: number; // Optional: Slippage percentage (e.g., 5 for 5%)
+  gasPrice?: number; // Optional: Gas price in gwei (defaults to network suggestion)
 };
 
 export type MonadSellParams = {
@@ -685,6 +686,7 @@ export type MonadSellParams = {
   tokenAmount?: string; // Optional: Exact token amount to sell (mutually exclusive with percentage)
   percentage?: number; // Optional: Percentage of balance to sell (1-100, mutually exclusive with tokenAmount)
   slippage?: number; // Optional: Slippage percentage
+  gasPrice?: number; // Optional: Gas price in gwei (defaults to network suggestion)
 };
 
 export const tradeMonadBuy = (params: MonadBuyParams, authToken: string) =>
