@@ -2,8 +2,8 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from "react"
 import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import PulseTable from "../components/PulseTable";
-import BnbTable from "../components/BnbTable";
+// import PulseTable from "../components/PulseTable";
+// import BnbTable from "../components/BnbTable";
 import MonadTable from "../components/MonadTable";
 import PulseControlBar from "../components/PulseControlBar";
 import type { Token } from "~/utils/db";
@@ -240,65 +240,87 @@ export default function PulsePage() {
   // CRITICAL: Only enable Solana data fetching when NOT on Monad route
   // This prevents Solana data from loading when on Monad chain
   // Wait for router to be ready before determining which chain we're on
-  const shouldFetchSolanaData = router.isReady && !isMonadRoute;
+  // COMMENTED OUT: PulseTable is disabled, so these hooks are disabled too
+  const shouldFetchSolanaData = false; // router.isReady && !isMonadRoute;
   
-  const {
-    data: tokens = [],
-    isLoading: tokensLoading,
-    error: tokensError,
-    isStale: tokensStale,
-    refetch: refreshTokens,
-    dataUpdatedAt,
-    isFetching,
-  } = useQueryNewPairs(shouldFetchSolanaData);
+  // const {
+  //   data: tokens = [],
+  //   isLoading: tokensLoading,
+  //   error: tokensError,
+  //   isStale: tokensStale,
+  //   refetch: refreshTokens,
+  //   dataUpdatedAt,
+  //   isFetching,
+  // } = useQueryNewPairs(shouldFetchSolanaData);
 
-  const {
-    data: launchpadData = { new: [], completing: [], completed: [] },
-    isLoading: launchpadLoading,
-    error: launchpadError,
-    isStale: launchpadStale,
-    refetch: refreshLaunchpadData,
-  } = useQueryLaunchpadData(shouldFetchSolanaData);
+  // const {
+  //   data: launchpadData = { new: [], completing: [], completed: [] },
+  //   isLoading: launchpadLoading,
+  //   error: launchpadError,
+  //   isStale: launchpadStale,
+  //   refetch: refreshLaunchpadData,
+  // } = useQueryLaunchpadData(shouldFetchSolanaData);
 
-  const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
+  // const { data: finalStretchTokensQuery = [] } = useQueryFinalStretch(shouldFetchSolanaData);
 
-  const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
+  // const { data: migratedTokensQuery = [] } = useQueryMigrated(shouldFetchSolanaData);
+
+  // Placeholder values since hooks are commented out
+  const tokens: Token[] = [];
+  const tokensLoading = false;
+  const tokensError = null;
+  const tokensStale = false;
+  const refreshTokens = () => {};
+  const dataUpdatedAt = 0;
+  const isFetching = false;
+  const launchpadData: LaunchpadData = { new: [], completing: [], completed: [] };
+  const launchpadLoading = false;
+  const launchpadError = null;
+  const launchpadStale = false;
+  const refreshLaunchpadData = () => {};
+  const finalStretchTokensQuery: Token[] = [];
+  const migratedTokensQuery: Token[] = [];
 
   // ✅ REAL-TIME WEBSOCKET: Direct cache updates (NO REFETCH)
   // Only enable WebSocket for Solana route, not Monad
-  const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
-    enabled: shouldFetchSolanaData, // Only enable WebSocket for Solana route
-    onNewToken: useCallback((token) => {
-      console.log('[Pulse] 🔥 WebSocket: New token received, adding to cache!', token.mint);
+  // COMMENTED OUT: PulseTable is disabled, so WebSocket is disabled too
+  // const { connected: pulseWsConnected, error: pulseWsError } = usePulseWebSocket({
+  //   enabled: shouldFetchSolanaData, // Only enable WebSocket for Solana route
+  //   onNewToken: useCallback((token) => {
+  //     console.log('[Pulse] 🔥 WebSocket: New token received, adding to cache!', token.mint);
 
-      // Directly update cache without triggering refetch
-      queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
+  //     // Directly update cache without triggering refetch
+  //     queryClient.setQueryData(tokenKeys.trenches.newPairs(), (oldData: any[] | undefined) => {
+  //       if (!oldData) return [token];
 
-        // Deduplicate by mint and prepend new token
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 200); // Keep max 200 tokens
-      });
-    }, [queryClient]),
-    onFinalStretchToken: useCallback((token) => {
-      console.log('[Pulse] 🎯 WebSocket: Final stretch token received, adding to cache!', token.mint);
+  //       // Deduplicate by mint and prepend new token
+  //       const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+  //       return [token, ...filtered].slice(0, 200); // Keep max 200 tokens
+  //     });
+  //   }, [queryClient]),
+  //   onFinalStretchToken: useCallback((token) => {
+  //     console.log('[Pulse] 🎯 WebSocket: Final stretch token received, adding to cache!', token.mint);
 
-      queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 50);
-      });
-    }, [queryClient]),
-    onMigratedToken: useCallback((token) => {
-      console.log('[Pulse] ✅ WebSocket: Migrated token received, adding to cache!', token.mint);
+  //     queryClient.setQueryData(tokenKeys.trenches.finalStretch(), (oldData: any[] | undefined) => {
+  //       if (!oldData) return [token];
+  //       const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+  //       return [token, ...filtered].slice(0, 50);
+  //     });
+  //   }, [queryClient]),
+  //   onMigratedToken: useCallback((token) => {
+  //     console.log('[Pulse] ✅ WebSocket: Migrated token received, adding to cache!', token.mint);
 
-      queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
-        if (!oldData) return [token];
-        const filtered = oldData.filter((t: any) => t.mint !== token.mint);
-        return [token, ...filtered].slice(0, 50);
-      });
-    }, [queryClient]),
-  });
+  //     queryClient.setQueryData(tokenKeys.trenches.migrated(), (oldData: any[] | undefined) => {
+  //       if (!oldData) return [token];
+  //       const filtered = oldData.filter((t: any) => t.mint !== token.mint);
+  //       return [token, ...filtered].slice(0, 50);
+  //     });
+  //   }, [queryClient]),
+  // });
+
+  // Placeholder values since WebSocket is commented out
+  const pulseWsConnected = false;
+  const pulseWsError = null;
 
   // State for HTTP polling data - no localStorage caching for fresh data always
   const [httpNew, setHttpNew] = useState<any[]>([]);
@@ -431,7 +453,9 @@ export default function PulsePage() {
           const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
           apiUrl = `${monadServiceUrl}/v1/pulse/final-stretch?limit=35`;
         } else {
-          apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+          // COMMENTED OUT: PulseTable is disabled, so Solana API calls are disabled
+          // apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+          return; // Skip Solana route
         }
 
         const res = await fetch(apiUrl, {
@@ -1147,86 +1171,89 @@ export default function PulsePage() {
       return;
     }
 
-    const fetchInitialMigratedTokens = async () => {
-      try {
-        console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
-        // Use Next.js proxy to avoid CORS issues
-        const endpoint = `/api/token-service/pulse-migrated?limit=70`;
-        console.log(`[Pulse] 🔄 URL:`, endpoint);
-        console.log(`[Pulse] 🔄 Chain: Solana`);
-        const response = await fetch(endpoint, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-        console.log(`[Pulse] 🔄 Response status:`, response.status);
-        if (response.ok) {
-          const data = await response.json();
-          console.log(
-            `[Pulse] 🔄 Fetched ${data.length} migrated tokens from API`,
-          );
-          if (data.length > 0) {
-            const filteredData = data.filter((token: any) => {
-              if (!token) return false;
+    // COMMENTED OUT: PulseTable is disabled, so Solana API calls are disabled
+    return;
 
-              if (isZeroLiquidityToken(token)) {
-                console.log(
-                  "[Pulse] ⛔ Skipping migrated token with zero liquidity:",
-                  token?.name,
-                  token?.mint,
-                );
-                return false;
-              }
+    // const fetchInitialMigratedTokens = async () => {
+    //   try {
+    //     console.log(`[Pulse] 🔄 Fetching initial migrated tokens...`);
+    //     // Use Next.js proxy to avoid CORS issues
+    //     const endpoint = `/api/token-service/pulse-migrated?limit=70`;
+    //     console.log(`[Pulse] 🔄 URL:`, endpoint);
+    //     console.log(`[Pulse] 🔄 Chain: Solana`);
+    //     const response = await fetch(endpoint, {
+    //       cache: 'no-store',
+    //       headers: {
+    //         'Cache-Control': 'no-cache',
+    //         'Pragma': 'no-cache'
+    //       }
+    //     });
+    //     console.log(`[Pulse] 🔄 Response status:`, response.status);
+    //     if (response.ok) {
+    //       const data = await response.json();
+    //       console.log(
+    //         `[Pulse] 🔄 Fetched ${data.length} migrated tokens from API`,
+    //       );
+    //       if (data.length > 0) {
+    //         const filteredData = data.filter((token: any) => {
+    //           if (!token) return false;
 
-              return true;
-            });
+    //           if (isZeroLiquidityToken(token)) {
+    //             console.log(
+    //               "[Pulse] ⛔ Skipping migrated token with zero liquidity:",
+    //               token?.name,
+    //               token?.mint,
+    //             );
+    //             return false;
+    //           }
 
-            if (filteredData.length === 0) {
-              console.log(
-                "[Pulse] ⚠️ All migrated tokens filtered due to zero liquidity. Clearing migrated list.",
-              );
-              setHttpMigrated([]);
-              setHttpMigratedTick((prev) => prev + 1);
-              return;
-            }
+    //           return true;
+    //         });
 
-            // Add timestamp to each token for proper sorting
-            const tokensWithTimestamp = filteredData.map((token: any) => ({
-              ...token,
-              created_at: token.migrated_time || new Date().toISOString(),
-              timestamp: Date.now(),
-            }));
-            console.log(
-              `[Pulse] 🔄 BEFORE setHttpMigrated - current count: ${httpMigrated.length}`,
-            );
-            setHttpMigrated(tokensWithTimestamp);
-            setHttpMigratedTick((prev) => prev + 1);
-            console.log(
-              `[Pulse] 🔄 Set initial migrated tokens:`,
-              tokensWithTimestamp.map((t) => t.name),
-            );
-            console.log(
-              `[Pulse] 🔄 AFTER setHttpMigrated - should be ${tokensWithTimestamp.length} tokens`,
-            );
-          }
-        } else {
-          console.error(
-            `[Pulse] ❌ HTTP error:`,
-            response.status,
-            response.statusText,
-          );
-        }
-      } catch (error) {
-        console.error(
-          `[Pulse] ❌ Failed to fetch initial migrated tokens:`,
-          error,
-        );
-      }
-    };
+    //         if (filteredData.length === 0) {
+    //           console.log(
+    //             "[Pulse] ⚠️ All migrated tokens filtered due to zero liquidity. Clearing migrated list.",
+    //           );
+    //           setHttpMigrated([]);
+    //           setHttpMigratedTick((prev) => prev + 1);
+    //           return;
+    //         }
 
-    fetchInitialMigratedTokens();
+    //         // Add timestamp to each token for proper sorting
+    //         const tokensWithTimestamp = filteredData.map((token: any) => ({
+    //           ...token,
+    //           created_at: token.migrated_time || new Date().toISOString(),
+    //           timestamp: Date.now(),
+    //         }));
+    //         console.log(
+    //           `[Pulse] 🔄 BEFORE setHttpMigrated - current count: ${httpMigrated.length}`,
+    //         );
+    //         setHttpMigrated(tokensWithTimestamp);
+    //         setHttpMigratedTick((prev) => prev + 1);
+    //         console.log(
+    //           `[Pulse] 🔄 Set initial migrated tokens:`,
+    //           tokensWithTimestamp.map((t) => t.name),
+    //         );
+    //         console.log(
+    //           `[Pulse] 🔄 AFTER setHttpMigrated - should be ${tokensWithTimestamp.length} tokens`,
+    //         );
+    //       }
+    //     } else {
+    //       console.error(
+    //         `[Pulse] ❌ HTTP error:`,
+    //         response.status,
+    //         response.statusText,
+    //       );
+    //     }
+    //   } catch (error) {
+    //     console.error(
+    //       `[Pulse] ❌ Failed to fetch initial migrated tokens:`,
+    //       error,
+    //     );
+    //   }
+    // };
+
+    // fetchInitialMigratedTokens();
   }, [isMonadRoute]); // Re-run when chain changes
 
   // Debug: log top entries order and timestamps (after data is computed)
@@ -1515,7 +1542,7 @@ export default function PulsePage() {
               </div>
               */}
               {/* All tables horizontally - always visible */}
-              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+              {/* <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <BnbTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow as any}
@@ -1534,7 +1561,7 @@ export default function PulsePage() {
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
                 />
-              </div>
+              </div> */}
             </div>
           ) : isMonadRoute ? ( // || isBaseRoute || isEthereumRoute
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
@@ -1612,7 +1639,7 @@ export default function PulsePage() {
               </div>
               */}
               {/* All tables horizontally - always visible */}
-              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+              {/* <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <PulseTable
                   title="New Pairs"
                   tokens={[]}
@@ -1636,7 +1663,7 @@ export default function PulsePage() {
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
                 />
-              </div>
+              </div> */}
             </div>
           ) : hasError ? (
             <div className="py-10 text-center text-red-400">
@@ -1685,7 +1712,7 @@ export default function PulsePage() {
               </div>
               */}
               {/* All tables horizontally - always visible */}
-              <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
+              {/* <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
                 <PulseTable
                   title="New Pairs"
                   tokens={enrichedNewPairsToShow as any}
@@ -1704,7 +1731,7 @@ export default function PulsePage() {
                   isFirstOrLast="last"
                   showBubbleMetrics={false}
                 />
-              </div>
+              </div> */}
             </div>
           )}
         </div>

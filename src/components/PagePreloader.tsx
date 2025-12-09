@@ -86,30 +86,31 @@ async function preloadPageData(user: any) {
 
   // 2. Preload Pulse page data (new, final-stretch, migrated)
   if (baseUrl) {
+    // COMMENTED OUT: PulseTable is disabled, so Solana pulse data preloading is disabled
     // Solana pulse data
-    preloadPromises.push(
-      fetch(`${baseUrl}/v1/pulse/new?limit=30`, {
-        headers: { 'Accept': 'application/json' },
-      }).catch(err => {
-        console.log('[Preloader] Pulse new data preload failed:', err);
-      })
-    );
+    // preloadPromises.push(
+    //   fetch(`${baseUrl}/v1/pulse/new?limit=30`, {
+    //     headers: { 'Accept': 'application/json' },
+    //   }).catch(err => {
+    //     console.log('[Preloader] Pulse new data preload failed:', err);
+    //   })
+    // );
 
-    preloadPromises.push(
-      fetch(`${baseUrl}/v1/pulse/final-stretch?limit=30`, {
-        headers: { 'Accept': 'application/json' },
-      }).catch(err => {
-        console.log('[Preloader] Pulse final-stretch data preload failed:', err);
-      })
-    );
+    // preloadPromises.push(
+    //   fetch(`${baseUrl}/v1/pulse/final-stretch?limit=30`, {
+    //     headers: { 'Accept': 'application/json' },
+    //   }).catch(err => {
+    //     console.log('[Preloader] Pulse final-stretch data preload failed:', err);
+    //   })
+    // );
 
-    preloadPromises.push(
-      fetch(`${baseUrl}/v1/pulse/migrated?limit=30`, {
-        headers: { 'Accept': 'application/json' },
-      }).catch(err => {
-        console.log('[Preloader] Pulse migrated data preload failed:', err);
-      })
-    );
+    // preloadPromises.push(
+    //   fetch(`${baseUrl}/v1/pulse/migrated?limit=30`, {
+    //     headers: { 'Accept': 'application/json' },
+    //   }).catch(err => {
+    //     console.log('[Preloader] Pulse migrated data preload failed:', err);
+    //   })
+    // );
 
     // Monad pulse data
     if (monadServiceUrl) {
