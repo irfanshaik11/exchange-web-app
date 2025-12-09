@@ -21,6 +21,7 @@ import { FiBarChart, FiChevronDown, FiStar } from "react-icons/fi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import UpdatesModal from "./UpdatesModal";
+import NotificationDropdown from "./NotificationDropdown";
 import type { Timeframe } from "../pages/index";
 import { CiBellOn, CiStar } from "react-icons/ci";
 
@@ -76,7 +77,7 @@ const navLinks = [
   { name: "Trackers", href: "/trackers" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
-  { name: "Rewards", href: "/rewards" },
+  { name: "Referral", href: "/rewards" },
 ];
 
 interface HeaderProps {
@@ -1011,76 +1012,10 @@ export default function Header({
               </button>
 
               {/* Notifications Panel */}
-              {notificationsOpen && (
-                <div
-                  className="fixed top-16 right-4 z-50 rounded-xl border shadow-2xl"
-                  style={{
-                    backgroundColor: "#1a1b20",
-                    borderColor: "#2A2B33",
-                    width: "280px",
-                    minWidth: "280px",
-                    maxWidth: "280px",
-                    maxHeight: "70vh",
-                  }}
-                >
-                  {/* Header */}
-                  <div
-                    className="flex items-center justify-between border-b p-4"
-                    style={{ borderColor: "#2A2B33" }}
-                  >
-                    <h3 className="text-sm font-semibold text-[#f0f5f5]">
-                      Notifications
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => {
-                          // Clear all notifications logic here
-                          toast.success("All notifications cleared");
-                        }}
-                        className="text-sm text-neutral-400 transition-colors hover:text-[#f0f5f5]"
-                      >
-                        Clear All
-                      </button>
-                      <button
-                        onClick={() => setNotificationsOpen(false)}
-                        className="text-neutral-400 transition-colors hover:text-white"
-                      >
-                        <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path d="M18 6L6 18M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div
-                    className="flex flex-col items-center justify-center p-8"
-                    style={{ minHeight: "300px" }}
-                  >
-                    <div className="mb-4 opacity-50">
-                      <svg
-                        width="80"
-                        height="80"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                      </svg>
-                    </div>
-                    <p className="text-base text-neutral-400">No Data</p>
-                  </div>
-                </div>
-              )}
+              <NotificationDropdown
+                open={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+              />
             </div>
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
@@ -1088,7 +1023,7 @@ export default function Header({
                 {/* Combined Balance + Username Button */}
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="group/account flex h-10 cursor-pointer flex-row items-center justify-center rounded-3xl border transition-all duration-300 ease-out lg:gap-2 px-1"
+                  className="group/account flex h-10 cursor-pointer flex-row items-center justify-center rounded-3xl border px-1 transition-all duration-300 ease-out lg:gap-2"
                   style={{
                     borderColor: AX.border,
                     color: AX.text,
@@ -1101,28 +1036,32 @@ export default function Header({
                   }}
                   title="Click to view account & wallet"
                 >
-                  <div
-                    className="hidden h-8 w-8 items-center justify-center rounded-[125px] bg-emerald-400 text-black text-xs font-bold select-none sm:flex"
-                  >
+                  <div className="hidden h-8 w-8 items-center justify-center rounded-[125px] bg-emerald-400 text-xs font-bold text-black select-none sm:flex">
                     {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                   </div>
-                    <div className="flex flex-col text-left items-left gap-0">
+                  <div className="items-left flex flex-col gap-0 text-left">
                     <div className="text-sm text-white">
-                      {formatBalance(chainBalance)} {chainSymbols[currentChain] ?? "SOL"}
-                    </div> 
+                      {formatBalance(chainBalance)}{" "}
+                      {chainSymbols[currentChain] ?? "SOL"}
+                    </div>
                     <div className="text-xs text-neutral-500">
-                      {user.name ? user.name : user.publicKey.slice(0,4).concat(user.name.slice(-4))}
+                      {user.name
+                        ? user.name
+                        : user.publicKey
+                            .slice(0, 4)
+                            .concat(user.name.slice(-4))}
                     </div>
                   </div>
-                  <FiChevronDown className="text-neutral-500 hover:text-neutral-200" size={16} />
+                  <FiChevronDown
+                    className="text-neutral-500 hover:text-neutral-200"
+                    size={16}
+                  />
                 </button>
                 {/* Combined Dropdown */}
                 {profileMenuOpen && (
                   <div
-                    className="absolute top-10 right-0 z-50 rounded-xl border shadow-2xl"
+                    className="absolute top-10 right-0 z-50 rounded-xl border border-[#20232b] bg-[#0a0b10] shadow-2xl"
                     style={{
-                      backgroundColor: "#0a0b10",
-                      borderColor: "#20232b",
                       width: "280px",
                       minWidth: "280px",
                       maxWidth: "280px",
@@ -1152,7 +1091,7 @@ export default function Header({
 
                       {/* Total Value */}
                       <div className="mb-3">
-                      <div className="mb-1 text-xs text-neutral-400">
+                        <div className="mb-1 text-xs text-neutral-400">
                           Total Value
                         </div>
                         <div className="text-2xl font-bold text-white">
@@ -1161,19 +1100,25 @@ export default function Header({
                       </div>
 
                       {/* Balance Display */}
-                      <div
-                        className="mb-4 flex items-center justify-between rounded-lg p-2"
-                        style={{ backgroundColor: "#17191e" }}
-                      >
+                      <div className="mb-4 flex items-center justify-between rounded-lg bg-[#17191e] p-2">
                         <div className="flex items-center gap-2">
                           <img
                             src={chainLogos[currentChain] ?? chainLogos.sol}
                             alt={chainSymbols[currentChain] ?? "SOL"}
-                            className={currentChain === 'monad' ? "w-8 h-10 rounded-md object-contain" : "h-4 w-4 rounded-md object-contain"}
-                            style={currentChain === 'monad' ? { minWidth: '32px', minHeight: '40px' } : { minWidth: '16px', minHeight: '16px' }}
+                            className={
+                              currentChain === "monad"
+                                ? "h-10 w-8 rounded-md object-contain"
+                                : "h-4 w-4 rounded-md object-contain"
+                            }
+                            style={
+                              currentChain === "monad"
+                                ? { minWidth: "32px", minHeight: "40px" }
+                                : { minWidth: "16px", minHeight: "16px" }
+                            }
                           />
                           <span className="text-sm text-[#f0f5f5]">
-                            ≈ {formatBalance(chainBalance)} {chainSymbols[currentChain] ?? "SOL"}
+                            ≈ {formatBalance(chainBalance)}{" "}
+                            {chainSymbols[currentChain] ?? "SOL"}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1193,8 +1138,16 @@ export default function Header({
                           <img
                             src={chainLogos[currentChain] ?? chainLogos.sol}
                             alt={chainSymbols[currentChain] ?? "SOL"}
-                            className={currentChain === 'monad' ? "w-8 h-10 rounded-md object-contain" : "h-4 w-4 rounded-md object-contain"}
-                            style={currentChain === 'monad' ? { minWidth: '32px', minHeight: '40px' } : { minWidth: '16px', minHeight: '16px' }}
+                            className={
+                              currentChain === "monad"
+                                ? "h-10 w-8 rounded-md object-contain"
+                                : "h-4 w-4 rounded-md object-contain"
+                            }
+                            style={
+                              currentChain === "monad"
+                                ? { minWidth: "32px", minHeight: "40px" }
+                                : { minWidth: "16px", minHeight: "16px" }
+                            }
                           />
                           <span className="text-sm text-[#f0f5f5]">
                             {formatMultiDigitBalance(chainBalance)}
@@ -1255,12 +1208,7 @@ export default function Header({
                               setProfileMenuOpen(false);
                               handleConvertClick();
                             }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0f1012] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
                             onMouseEnter={(e) => {
                               e.currentTarget.style.backgroundColor = "#1A1B1F";
                             }}
@@ -1288,12 +1236,7 @@ export default function Header({
                               setProfileMenuOpen(false);
                               handleBuyClick();
                             }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0f1012] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
                             onMouseEnter={(e) => {
                               e.currentTarget.style.backgroundColor = "#1A1B1F";
                             }}
@@ -1324,11 +1267,9 @@ export default function Header({
                             setProfileMenuOpen(false);
                             router.push("/rewards");
                           }}
-                          className="mt-2 flex w-full items-center gap-2 rounded-lg border-t px-3 py-2 pt-3 text-sm font-medium transition-all duration-200"
+                          className="mt-2 flex w-full items-center gap-2 rounded-lg border-t border-[#20232b] bg-transparent px-3 py-2 pt-3 text-sm font-medium transition-all duration-200"
                           style={{
-                            backgroundColor: "transparent",
                             color: AX.text,
-                            borderColor: "#20232b",
                           }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.backgroundColor =
@@ -1364,9 +1305,8 @@ export default function Header({
                             setIsFirstLogin(false);
                             setShowUpdatesModal(true);
                           }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
                           style={{
-                            backgroundColor: "transparent",
                             color: AX.text,
                           }}
                           onMouseEnter={(e) => {
@@ -1402,9 +1342,8 @@ export default function Header({
                             setProfileMenuOpen(false);
                             logout();
                           }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
                           style={{
-                            backgroundColor: "transparent",
                             color: "#ef4444",
                           }}
                           onMouseEnter={(e) => {
@@ -1439,11 +1378,9 @@ export default function Header({
             ) : (
               !userLoading && (
                 <button
-                  className="ml-0.5 flex-shrink-0 rounded-md px-2.5 py-1.5 text-sm font-medium transition-all duration-300 ease-out sm:ml-1 md:ml-1.5 md:px-3 lg:ml-2"
+                  className="ml-0.5 flex-shrink-0 rounded-md border-none px-2.5 py-1.5 text-sm font-medium text-black transition-all duration-300 ease-out sm:ml-1 md:ml-1.5 md:px-3 lg:ml-2"
                   style={{
                     backgroundColor: AX.mint,
-                    color: "#000000",
-                    border: "none",
                   }}
                   onClick={() => {
                     const event = new CustomEvent("open-login-modal");
@@ -1468,10 +1405,7 @@ export default function Header({
           </div>
         </div>
         {headerBarVisible && (
-          <div
-            className="flex items-center gap-2 px-3 py-0.5"
-            style={{ backgroundColor: "#06070b" }}
-          >
+          <div className="flex items-center gap-2 bg-[#06070b] px-3 py-0.5">
             {/* extra toolbar section */}
             <div className="group relative">
               <button
@@ -1610,7 +1544,8 @@ export default function Header({
           // If it's likely a token address navigate directly to trade page
           if (trimmed.length >= 10) {
             // Check if it's a Monad address (starts with 0x)
-            const isMonadAddress = trimmed.startsWith('0x') || trimmed.startsWith('0X');
+            const isMonadAddress =
+              trimmed.startsWith("0x") || trimmed.startsWith("0X");
             // For Monad tokens, use the Monad trade page route
             if (isMonadAddress) {
               router.push(`/trade/monad/${trimmed}`);
@@ -1618,7 +1553,10 @@ export default function Header({
               // For Solana or other chains, use the regular trade page with chain query param
               router.push({
                 pathname: `/trade/${trimmed}`,
-                query: currentChain && currentChain !== 'sol' ? { chain: currentChain } : {}
+                query:
+                  currentChain && currentChain !== "sol"
+                    ? { chain: currentChain }
+                    : {},
               });
             }
             setSearch?.("");
@@ -1629,7 +1567,10 @@ export default function Header({
           if (setSearch) {
             setSearch(trimmed);
             if (router.pathname.startsWith("/trade/")) {
-              router.push({ pathname: "/", query: trimmed ? { search: trimmed } : {} });
+              router.push({
+                pathname: "/",
+                query: trimmed ? { search: trimmed } : {},
+              });
               return;
             }
 

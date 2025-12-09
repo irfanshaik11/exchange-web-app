@@ -230,16 +230,27 @@ const EnhancedToastContent = ({
 
 // Get toast position from localStorage
 const getToastPosition = (): 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' => {
-  if (typeof window === 'undefined') return 'bottom-center';
+  if (typeof window === 'undefined') return 'top-center';
   try {
     const saved = localStorage.getItem('toast-position');
-    if (saved && ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
+    
+    // Migrate from bottom-center to top-center (or if no value exists)
+    if (!saved || saved === 'bottom-center') {
+      localStorage.setItem('toast-position', 'top-center');
+      return 'top-center';
+    }
+    
+    if (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
       return saved as any;
     }
+    
+    // Invalid value, migrate to top-center
+    localStorage.setItem('toast-position', 'top-center');
+    return 'top-center';
   } catch {
     // Ignore
   }
-  return 'bottom-center';
+  return 'top-center';
 };
 
 // Main enhanced toast function

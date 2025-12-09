@@ -21,6 +21,8 @@ import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
 import toast from "react-hot-toast";
 import { FiEdit2, FiCheck, FiX } from "react-icons/fi";
+import ImportWalletModal from "../components/ImportWalletModal";
+import ExportWalletModal from "../components/ExportWalletModal";
 
 // Stacked Token Boxes Component
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
@@ -100,6 +102,7 @@ interface UserWallet {
   holdingsCount: number;
   isArchived?: boolean;
   isPrimary?: boolean;
+  walletId?: string | null; // Turnkey wallet ID (null for imported wallets)
 }
 
 const normalizeWalletFromApi = (
@@ -135,6 +138,7 @@ const normalizeWalletFromApi = (
     holdingsCount: typeof wallet?.holdingsCount === "number" ? wallet.holdingsCount : 0,
     isArchived: Boolean(wallet?.isArchived),
     isPrimary: Boolean(wallet?.isPrimary),
+    walletId: wallet?.walletId ?? null, // Turnkey wallet ID
   };
 };
 
@@ -183,6 +187,10 @@ export default function PortfolioPage() {
   const [walletRenameValue, setWalletRenameValue] = useState("");
   const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportWalletId, setExportWalletId] = useState<string | null>(null);
+  const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(null);
 
   const notifyWalletsUpdated = () => {
     if (typeof window !== "undefined") {
@@ -1011,7 +1019,23 @@ export default function PortfolioPage() {
   };
 
   const handleExportWallet = (walletId: string) => {
-    router.push(`/turnkey/export?walletId=${encodeURIComponent(walletId)}`);
+    const wallet = wallets.find((w) => w.id === walletId);
+    if (!wallet) {
+      toast.error("Wallet not found");
+      return;
+    }
+    
+    // Check if this is a Turnkey wallet (has walletId) or imported wallet
+    if (!wallet.walletId) {
+      toast.error("Imported wallets cannot be exported. Only Turnkey-managed wallets can be exported.");
+      return;
+    }
+    
+    const address = getAddressForChain(wallet, currentChain);
+    // Use the Turnkey walletId, not the database id
+    setExportWalletId(wallet.walletId);
+    setExportWalletAddress(address);
+    setShowExportModal(true);
   };
 
   const handleRenameWallet = async () => {
@@ -1144,8 +1168,82 @@ export default function PortfolioPage() {
     }
   };
 
+  const handleImportWallets = async (privateKeys: string[]) => {
+    if (!user?.id || !user?.bearerToken) {
+      throw new Error("Please log in first");
+    }
 
+    if (!privateKeys || privateKeys.length === 0) {
+      throw new Error("No private keys provided");
+    }
 
+    // Filter out empty keys
+    const validKeys = privateKeys.filter(key => key?.trim().length > 0);
+    
+    if (validKeys.length === 0) {
+      throw new Error("No valid private keys provided");
+    }
+
+    try {
+      // Send all private keys in a single request (similar to createTurnkeyWallet pattern)
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet/import`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            privateKeys: validKeys, // Send array of private keys
+            chain: currentChain, // 'sol' or 'monad'
+          }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const errorMessage = data.error || data.message || `Failed to import wallets (${res.status})`;
+        throw new Error(errorMessage);
+      }
+
+      // Refresh wallets after import
+      await fetchWallets();
+
+      // Handle results from backend (similar to createTurnkeyWallet response pattern)
+      const successCount = data.successCount || 0;
+      const failureCount = data.failureCount || 0;
+
+      if (successCount === 0) {
+        // All failed
+        const errorDetails = data.results
+          ?.filter((r: any) => !r.success)
+          .map((r: any) => `Wallet ${r.index}: ${r.error}`)
+          .slice(0, 3)
+          .join("; ") || "All wallets failed to import";
+        throw new Error(errorDetails);
+      }
+
+      if (failureCount > 0) {
+        // Some succeeded, some failed
+        const errorDetails = data.results
+          ?.filter((r: any) => !r.success)
+          .map((r: any) => `Wallet ${r.index}: ${r.error}`)
+          .slice(0, 2)
+          .join("; ") || "";
+        toast.error(`Imported ${successCount} wallet(s), ${failureCount} failed. ${errorDetails}`);
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully imported ${successCount} wallet(s)`);
+      }
+    } catch (err: any) {
+      console.error("Failed to import wallets:", err);
+      throw err;
+    }
+  };
 
   return (
     <>
@@ -1887,7 +1985,10 @@ export default function PortfolioPage() {
                       <span className="hidden sm:inline">Show Archived</span>
                       <span className="sm:hidden">Archived</span>
                     </button>
-                    <button className="px-3  py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap">
+                    <button 
+                      onClick={() => setShowImportModal(true)}
+                      className="px-3  py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                    >
                       Import
                     </button>
                     <button
@@ -2293,6 +2394,26 @@ export default function PortfolioPage() {
         </div>
       </div>
       <Footer />
+      
+      {/* Import Wallet Modal */}
+      <ImportWalletModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportWallets}
+        chain={currentChain as 'sol' | 'monad'}
+      />
+      
+      {/* Export Wallet Modal */}
+      <ExportWalletModal
+        isOpen={showExportModal}
+        onClose={() => {
+          setShowExportModal(false);
+          setExportWalletId(null);
+          setExportWalletAddress(null);
+        }}
+        walletId={exportWalletId || undefined}
+        walletAddress={exportWalletAddress || undefined}
+      />
     </>
   );
 }

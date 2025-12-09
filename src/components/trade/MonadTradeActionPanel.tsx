@@ -4,11 +4,18 @@ import React, { useState, useMemo, useEffect } from "react";
 import { formatSmartNumber, formatMarketCap, type Token } from "~/utils/db";
 import { useUser } from "~/components/UserContext";
 import { useWallet } from "~/components/useWallet";
-import { FaCopy, FaExternalLinkAlt, FaRunning } from "react-icons/fa";
-import { LuPencil, LuCheck } from "react-icons/lu";
+import { useQuickBuy } from "~/components/QuickBuyContext";
+import { FaCopy, FaExternalLinkAlt, FaRunning, FaChevronDown, FaChevronUp, FaChartBar, FaCrown, FaFire, FaDice, FaGasPump } from "react-icons/fa";
+import { LuPencil, LuCheck, LuChefHat } from "react-icons/lu";
+import { RiGhostLine } from "react-icons/ri";
+import { BiCandles } from "react-icons/bi";
+import { BsPersonGear } from "react-icons/bs";
+import { GoPeople } from "react-icons/go";
 import InterstateTooltip from "../InterstateTooltip";
 import toast from "react-hot-toast";
 import { tradeMonadBuy, tradeMonadSell } from "~/utils/api";
+import useMonadDevTokens from "~/hooks/useMonadDevTokens";
+import useMonadXray from "~/hooks/useMonadXray";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -136,27 +143,77 @@ interface MonadTradeActionPanelProps {
 const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) => {
   const { user } = useUser();
   const { isConnected } = useWallet();
+  const { presets, activePreset, setActivePreset, setPresets } = useQuickBuy();
   const [mode, setMode] = useState<"buy" | "sell">("buy");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const [amount, setAmount] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [amountPresets, setAmountPresets] = useState<string[]>(["0.01", "0.05", "0.1", "0.5", "1"]);
+  // Buy presets: MON amounts
+  const [buyAmountPresets, setBuyAmountPresets] = useState<string[]>(["0.01", "0.05", "0.1", "0.5", "1"]);
+  // Sell presets: percentages
+  const [sellAmountPresets, setSellAmountPresets] = useState<string[]>(["5", "10", "25", "50", "100"]);
+  // Current presets based on mode
+  const [amountPresets, setAmountPresets] = useState<string[]>(mode === "buy" ? ["0.01", "0.05", "0.1", "0.5", "1"] : ["5", "10", "25", "50", "100"]);
   const [editingPresets, setEditingPresets] = useState(false);
-  const [presetDrafts, setPresetDrafts] = useState<string[]>(["0.01", "0.05", "0.1", "0.5", "1"]);
+  const [presetDrafts, setPresetDrafts] = useState<string[]>(amountPresets);
   const [maxSlippage, setMaxSlippage] = useState(0.15); // Default 15%
   const slippagePresets = [0.05, 0.10, 0.15, 0.20]; // 5%, 10%, 15%, 20% for Monad
+  const [gasPrice, setGasPrice] = useState<number | undefined>(undefined); // Gas price in gwei
+  const [isPoolInfoOpen, setIsPoolInfoOpen] = useState(true);
+  const [showSlippageDropdown, setShowSlippageDropdown] = useState(false);
+  const [showGasDropdown, setShowGasDropdown] = useState(false);
+  
+  // Fetch dev token data
+  const { devTokenData } = useMonadDevTokens(token?.mint, { enabled: !!token?.mint });
+  
+  // Fetch xray data
+  const { xrayData, isLoading: xrayLoading } = useMonadXray(token?.mint, { enabled: !!token?.mint });
+
+  // Sync slippage and gasPrice from active preset
+  useEffect(() => {
+    const preset = presets[activePreset];
+    const settings = mode === "buy" 
+      ? preset?.quickBuySettings 
+      : preset?.quickSellSettings;
+    
+    if (settings) {
+      // Update slippage from preset
+      if (settings.maxSlippage !== undefined) {
+        setMaxSlippage(settings.maxSlippage);
+      }
+      // Update gas price from preset
+      if (settings.gasPrice !== undefined) {
+        setGasPrice(settings.gasPrice > 0 ? settings.gasPrice : undefined);
+      } else {
+        setGasPrice(undefined);
+      }
+    }
+  }, [activePreset, presets, mode]);
 
   // Load presets from localStorage on mount and listen for updates
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const loadPresets = () => {
-        const saved = localStorage.getItem('monadTradeActionPanelPresets');
+      const loadBuyPresets = () => {
+        const saved = localStorage.getItem('monadTradeActionPanelBuyPresets');
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed) && parsed.length === 5) {
-              setAmountPresets(parsed);
-              setPresetDrafts(parsed);
+              setBuyAmountPresets(parsed);
+            }
+          } catch (err) {
+            // Ignore parse errors
+          }
+        }
+      };
+
+      const loadSellPresets = () => {
+        const saved = localStorage.getItem('monadTradeActionPanelSellPresets');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length === 5) {
+              setSellAmountPresets(parsed);
             }
           } catch (err) {
             // Ignore parse errors
@@ -165,20 +222,42 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       };
 
       // Load initially
-      loadPresets();
+      loadBuyPresets();
+      loadSellPresets();
 
       // Listen for custom events from InstantTradeModal
       const handleMonadPresetUpdate = (e: CustomEvent) => {
-        if (e.detail?.presets && Array.isArray(e.detail.presets) && e.detail.presets.length === 5) {
-          setAmountPresets(e.detail.presets);
-          setPresetDrafts(e.detail.presets);
+        if (e.detail?.type === 'buy' && e.detail?.presets && Array.isArray(e.detail.presets) && e.detail.presets.length === 5) {
+          setBuyAmountPresets(e.detail.presets);
+          if (mode === 'buy') {
+            setAmountPresets(e.detail.presets);
+            setPresetDrafts(e.detail.presets);
+          }
+        } else if (e.detail?.type === 'sell' && e.detail?.presets && Array.isArray(e.detail.presets) && e.detail.presets.length === 5) {
+          setSellAmountPresets(e.detail.presets);
+          if (mode === 'sell') {
+            setAmountPresets(e.detail.presets);
+            setPresetDrafts(e.detail.presets);
+          }
         }
       };
 
       // Listen for storage events (when InstantTradeModal saves)
       const handleStorageChange = (e: StorageEvent) => {
-        if (e.key === 'monadTradeActionPanelPresets' && e.newValue) {
-          loadPresets();
+        if (e.key === 'monadTradeActionPanelBuyPresets' && e.newValue) {
+          loadBuyPresets();
+          if (mode === 'buy') {
+            const parsed = JSON.parse(e.newValue);
+            setAmountPresets(parsed);
+            setPresetDrafts(parsed);
+          }
+        } else if (e.key === 'monadTradeActionPanelSellPresets' && e.newValue) {
+          loadSellPresets();
+          if (mode === 'sell') {
+            const parsed = JSON.parse(e.newValue);
+            setAmountPresets(parsed);
+            setPresetDrafts(parsed);
+          }
         }
       };
 
@@ -190,7 +269,20 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         window.removeEventListener('storage', handleStorageChange);
       };
     }
-  }, []);
+  }, [mode]);
+
+  // Update amountPresets when mode changes
+  useEffect(() => {
+    if (mode === "buy") {
+      setAmountPresets(buyAmountPresets);
+      setPresetDrafts(buyAmountPresets);
+    } else {
+      setAmountPresets(sellAmountPresets);
+      setPresetDrafts(sellAmountPresets);
+    }
+    // Clear amount when switching modes
+    setAmount("");
+  }, [mode, buyAmountPresets, sellAmountPresets]);
 
   // Sync presetDrafts when amountPresets change (but not when editing)
   useEffect(() => {
@@ -203,19 +295,31 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     const next = presetDrafts.map((s) => {
       // Handle empty string, just ".", or whitespace as 0
       if (!s || s.trim() === "" || s.trim() === ".") {
-        return "0";
+        return mode === "sell" ? "" : "0";
       }
       // Validate it's a valid decimal number
       const n = parseFloat(s.replace(/,/g, "."));
-      return Number.isFinite(n) && n >= 0 ? s.replace(/,/g, ".") : "0";
+      if (mode === "sell") {
+        // For sell, validate percentage (0-100)
+        return Number.isFinite(n) && n >= 0 && n <= 100 ? s.replace(/,/g, ".") : "";
+      } else {
+        // For buy, validate MON amount (>= 0)
+        return Number.isFinite(n) && n >= 0 ? s.replace(/,/g, ".") : "0";
+      }
     });
     setAmountPresets(next);
     setEditingPresets(false);
     setPresetDrafts(next);
     
-    // Save to localStorage
+    // Save to localStorage based on mode
     if (typeof window !== 'undefined') {
-      localStorage.setItem('monadTradeActionPanelPresets', JSON.stringify(next));
+      if (mode === "buy") {
+        setBuyAmountPresets(next);
+        localStorage.setItem('monadTradeActionPanelBuyPresets', JSON.stringify(next));
+      } else {
+        setSellAmountPresets(next);
+        localStorage.setItem('monadTradeActionPanelSellPresets', JSON.stringify(next));
+      }
     }
   };
 
@@ -330,6 +434,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             amountMON: amountValue,
             launchpad,
             slippage: maxSlippage * 100, // Convert to percentage (0.15 -> 15)
+            gasPrice: gasPrice, // Gas price in gwei (optional)
           },
           user.bearerToken
         );
@@ -377,6 +482,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             launchpad,
             percentage: sellPercentage,
             slippage: maxSlippage * 100,
+            gasPrice: gasPrice, // Gas price in gwei (optional)
           },
           user.bearerToken
         );
@@ -517,8 +623,26 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         </div>
       </div>
 
-      {/* ===== C. Buy/Sell switcher ===== */}
-      <div className="px-3 py-1.5 -mt-px border-b border-[#2A2B33]">
+      {/* ===== C. Preset Selector and Buy/Sell switcher ===== */}
+      <div className="px-3 py-1.5 -mt-px border-b border-[#2A2B33] space-y-2">
+        {/* Preset Selector P1/P2/P3 - Above Buy/Sell switcher, aligned left */}
+        <div className="flex items-center justify-start gap-1.5">
+          {[0, 1, 2].map((presetIndex) => (
+            <button
+              key={presetIndex}
+              onClick={() => setActivePreset(presetIndex)}
+              className="px-3 py-1 rounded text-[11px] font-semibold transition-all duration-200 border border-[#2A2B33]"
+              style={{
+                backgroundColor: "#1a1c1f",
+                color: activePreset === presetIndex ? "#85d99f" : "#9CA3AF",
+              }}
+            >
+              P{presetIndex + 1}
+            </button>
+          ))}
+        </div>
+        
+        {/* Buy/Sell Switcher */}
         <div className="mx-auto w-full max-w-xl relative">
           <div className="relative h-9 rounded-lg border border-[#2A2B33] bg-[#1E1F26] overflow-hidden">
             <div
@@ -651,7 +775,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                     style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
                     onClick={() => setAmount(opt)}
                   >
-                    {opt}
+                    {opt}{mode === "sell" && opt ? "%" : ""}
                   </button>
                 );
               })}
@@ -699,64 +823,176 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
 
       {/* ===== Settings ===== */}
       <div className="mx-3 mt-2">
-        {/* Slippage Display and Presets */}
-        <div className="mb-2">
-          <div className="flex items-center justify-between mb-1.5">
-            <InterstateTooltip label="Max Slippage">
-              <div className="flex items-center gap-1 text-[#9CA3AF] text-[11px]">
-                <FaRunning className="opacity-80" />
-                <span>Slippage</span>
+        {/* Compact Icon + Value Display */}
+        <div className="flex items-center gap-3 mb-2">
+          {/* Slippage Icon + Value */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowSlippageDropdown(!showSlippageDropdown);
+              setShowGasDropdown(false);
+            }}
+            className="flex items-center gap-1.5 px-2 py-1 rounded border transition-all duration-200 hover:bg-[#1E1F26]"
+            style={{
+              borderColor: showSlippageDropdown ? AX.mint : AX.border,
+              backgroundColor: showSlippageDropdown ? '#1E1F26' : 'transparent'
+            }}
+          >
+            <FaRunning className="opacity-80" size={12} />
+            <span className="text-[#E6E7EA] text-[12px] font-medium">
+              {(maxSlippage * 100).toFixed(1)}%
+            </span>
+          </button>
+
+          {/* Gas Icon + Value */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowGasDropdown(!showGasDropdown);
+              setShowSlippageDropdown(false);
+            }}
+            className="flex items-center gap-1.5 px-2 py-1 rounded border transition-all duration-200 hover:bg-[#1E1F26]"
+            style={{
+              borderColor: showGasDropdown ? AX.mint : AX.border,
+              backgroundColor: showGasDropdown ? '#1E1F26' : 'transparent'
+            }}
+          >
+            <FaGasPump className="opacity-90" size={12} style={{ color: "#FCD34D" }} />
+            <span className="text-[#E6E7EA] text-[12px] font-medium">
+              {gasPrice === undefined ? 'Auto' : `${gasPrice.toFixed(2)}`}
+            </span>
+          </button>
+        </div>
+
+        {/* Slippage Dropdown */}
+        {showSlippageDropdown && (
+          <div className="mb-2">
+            <div className="flex items-center justify-between">
+              <InterstateTooltip label="Max Slippage">
+                <div className="flex items-center gap-1 text-[#9CA3AF] text-[11px]">
+                  <FaRunning className="opacity-80" />
+                  <span>Slippage</span>
+                </div>
+              </InterstateTooltip>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={0.1}
+                  max={100}
+                  step={0.1}
+                  value={(maxSlippage * 100).toFixed(1)}
+                  onChange={(e) => {
+                    let val = Number(e.target.value);
+                    if (val < 0.1 && val !== 0) val = 0.1;
+                    if (val > 100) val = 100;
+                    val = Math.round(val * 10) / 10; // Round to 1 decimal
+                    const slippageValue = val / 100;
+                    setMaxSlippage(slippageValue);
+                    // Also update the preset
+                    const newPresets = presets.map((p, i) =>
+                      i === activePreset
+                        ? {
+                            ...p,
+                            quickBuySettings: mode === "buy"
+                              ? { ...p.quickBuySettings, maxSlippage: slippageValue }
+                              : p.quickBuySettings,
+                            quickSellSettings: mode === "sell"
+                              ? { ...p.quickSellSettings, maxSlippage: slippageValue }
+                              : p.quickSellSettings,
+                          }
+                        : p
+                    );
+                    setPresets(newPresets);
+                  }}
+                  onBlur={(e) => {
+                    let val = Number(e.target.value);
+                    if (val < 0.1) {
+                      val = 0.1;
+                      setMaxSlippage(val / 100);
+                    }
+                  }}
+                  className="w-24 bg-[#17191E] border border-[#2A2B33] rounded px-2 py-1 text-center text-[#E6E7EA] text-[12px] outline-none focus:border-[#70E0B0] focus:ring-1 focus:ring-[#70E0B0] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                  style={{ 
+                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                    MozAppearance: 'textfield'
+                  }}
+                />
+                <span className="text-[#9CA3AF] text-[11px]">%</span>
               </div>
-            </InterstateTooltip>
-            <div className="flex items-center gap-1">
-              <input
-                type="number"
-                min={0.1}
-                max={100}
-                step={0.1}
-                value={(maxSlippage * 100).toFixed(1)}
-                onChange={(e) => {
-                  let val = Number(e.target.value);
-                  if (val < 0.1 && val !== 0) val = 0.1;
-                  if (val > 100) val = 100;
-                  val = Math.round(val * 10) / 10; // Round to 1 decimal
-                  setMaxSlippage(val / 100);
-                }}
-                onBlur={(e) => {
-                  let val = Number(e.target.value);
-                  if (val < 0.1) {
-                    val = 0.1;
-                    setMaxSlippage(val / 100);
-                  }
-                }}
-                className="w-20 bg-[#17191E] border border-[#2A2B33] rounded px-2 py-1 text-center text-[#E6E7EA] text-[12px] outline-none focus:border-[#70E0B0] focus:ring-1 focus:ring-[#70E0B0] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                style={{ fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace' }}
-              />
-              <span className="text-[#9CA3AF] text-[11px]">%</span>
             </div>
           </div>
-          {/* Slippage Preset Buttons */}
-          <div className="flex gap-1.5">
-            {slippagePresets.map((preset) => {
-              const isActive = Math.abs(maxSlippage - preset) < 0.001;
-              return (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => setMaxSlippage(preset)}
-                  className={cx(
-                    "flex-1 h-7 rounded text-[11px] font-semibold transition-all duration-200",
-                    isActive
-                      ? "bg-[#A855F7] text-white shadow-sm"
-                      : "bg-[#17191E] text-[#9CA3AF] hover:text-[#E6E7EA] hover:bg-[#1E1F26] border border-[#2A2B33]"
-                  )}
-                >
-                  {(preset * 100).toFixed(0)}%
-                </button>
-              );
-            })}
+        )}
+
+        {/* Gas Price Dropdown */}
+        {showGasDropdown && (
+          <div className="mb-2">
+            <div className="flex items-center justify-between">
+              <InterstateTooltip label="Gas Price (gwei) - Optional, uses network suggestion if not set">
+                <div className="flex items-center gap-1 text-[#9CA3AF] text-[11px]">
+                  <FaGasPump className="opacity-90" style={{ color: "#FCD34D" }} />
+                  <span>Gas Price</span>
+                </div>
+              </InterstateTooltip>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={gasPrice === undefined ? '' : gasPrice}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || val === '.') {
+                      setGasPrice(undefined);
+                      // Update preset
+                      const newPresets = presets.map((p, i) =>
+                        i === activePreset
+                          ? {
+                              ...p,
+                              quickBuySettings: mode === "buy"
+                                ? { ...p.quickBuySettings, gasPrice: undefined }
+                                : p.quickBuySettings,
+                              quickSellSettings: mode === "sell"
+                                ? { ...p.quickSellSettings, gasPrice: undefined }
+                                : p.quickSellSettings,
+                            }
+                          : p
+                      );
+                      setPresets(newPresets);
+                      return;
+                    }
+                    const numVal = Number(val);
+                    if (numVal >= 0 && Number.isFinite(numVal)) {
+                      const gasPriceValue = numVal > 0 ? numVal : undefined;
+                      setGasPrice(gasPriceValue);
+                      // Update preset
+                      const newPresets = presets.map((p, i) =>
+                        i === activePreset
+                          ? {
+                              ...p,
+                              quickBuySettings: mode === "buy"
+                                ? { ...p.quickBuySettings, gasPrice: gasPriceValue }
+                                : p.quickBuySettings,
+                              quickSellSettings: mode === "sell"
+                                ? { ...p.quickSellSettings, gasPrice: gasPriceValue }
+                                : p.quickSellSettings,
+                            }
+                          : p
+                      );
+                      setPresets(newPresets);
+                    }
+                  }}
+                  placeholder="Auto"
+                  className="w-24 bg-[#17191E] border border-[#2A2B33] rounded px-2 py-1 text-center text-[#E6E7EA] text-[12px] outline-none focus:border-[#70E0B0] focus:ring-1 focus:ring-[#70E0B0] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] placeholder:text-[#6B7280]"
+                  style={{ 
+                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+                    MozAppearance: 'textfield'
+                  }}
+                />
+                <span className="text-[#9CA3AF] text-[11px]">gwei</span>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Primary action */}
@@ -799,6 +1035,202 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         </button>
       </div>
 
+      {/* Separator line */}
+      <div className="border-t border-[#2A2B33]"></div>
+
+      {/* Xray Risk Analysis Section - Always Visible */}
+      <div className="px-3 py-3 space-y-2" style={{ backgroundColor: AX.bg }}>
+        {xrayLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <div className="animate-pulse text-[#9CA3AF] text-[11px]">Loading risk analysis...</div>
+          </div>
+        ) : xrayData ? (
+          <>
+            {/* Token Metrics Grid - First Row */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {/* Top 10 Holders */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <BsPersonGear size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
+                      {xrayData.top10_hold_percent != null ? `${xrayData.top10_hold_percent.toFixed(2)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Top 10 H.</div>
+                </div>
+              </div>
+
+              {/* Dev Holdings */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <LuChefHat size={16} style={{ color: '#566cdc' }} />
+                    <div className="text-[12px] font-bold" style={{ color: '#566cdc' }}>
+                      {xrayData.dev_hold_percent != null ? `${xrayData.dev_hold_percent.toFixed(1)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev H.</div>
+                </div>
+              </div>
+
+              {/* Sniper Holdings */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#f26681' }}>
+                      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                      <line x1="12" y1="4" x2="12" y2="8" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="12" y1="16" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="4" y1="12" x2="8" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="16" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+                      <circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+                    </svg>
+                    <div className="text-[12px] font-bold" style={{ color: '#f26681' }}>
+                      {xrayData.sniper_hold_percent != null ? `${xrayData.sniper_hold_percent.toFixed(1)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Snipers H.</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Token Metrics Grid - Second Row */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {/* Insider Holdings */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <RiGhostLine size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: '#31e3ac' }}>
+                      {xrayData.insider_hold_percent != null ? `${xrayData.insider_hold_percent.toFixed(1)}%` : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Insiders</div>
+                </div>
+              </div>
+
+              {/* Bonding Curve Progress */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <FaChartBar size={16} style={{ color: AX.aiGreen }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.aiGreen }}>
+                      {xrayData.bonding_curve_progress != null ? `${xrayData.bonding_curve_progress.toFixed(1)}%` : xrayData.is_graduated ? '100%' : '0%'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Bonding</div>
+                </div>
+              </div>
+
+              {/* Graduated Status */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <FaFire size={16} style={{ color: AX.aiGreen }} />
+                    <div className="text-[12px] font-bold" style={{ color: xrayData.is_graduated ? AX.aiGreen : AX.muted }}>
+                      {xrayData.is_graduated ? 'Yes' : 'No'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Graduated</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Separator Line */}
+            <div className="h-px" style={{ backgroundColor: AX.border }}></div>
+
+            {/* Trading Activity - Third Row */}
+            <div className="grid grid-cols-3 gap-1.5">
+              {/* Total Transactions */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <FaChartBar size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                      {xrayData.total_transactions != null ? formatCompactNumber(xrayData.total_transactions) : '0'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Transactions</div>
+                </div>
+              </div>
+
+              {/* Unique Traders */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <GoPeople size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                      {xrayData.unique_traders != null ? formatCompactNumber(xrayData.unique_traders) : '0'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Traders</div>
+                </div>
+              </div>
+
+              {/* Buy/Sell Ratio */}
+              <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <BiCandles size={16} style={{ color: '#31e3ac' }} />
+                    <div className="text-[12px] font-bold" style={{ color: AX.muted }}>
+                      {xrayData.total_buys != null && xrayData.total_sells != null 
+                        ? `${xrayData.total_buys}/${xrayData.total_sells}`
+                        : '0/0'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Buys/Sells</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Dev Trading Activity - Fourth Row */}
+            {(xrayData.dev_bought_count != null || xrayData.dev_sold_count != null || xrayData.dev_bought_usd != null || xrayData.dev_sold_usd != null) && (
+              <>
+                <div className="h-px" style={{ backgroundColor: AX.border }}></div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {/* Dev Buy Count */}
+                  <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <LuChefHat size={16} style={{ color: AX.mint }} />
+                        <div className="text-[12px] font-bold" style={{ color: AX.mint }}>
+                          {xrayData.dev_bought_count != null ? xrayData.dev_bought_count : '0'}
+                        </div>
+                      </div>
+                      <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev Buys</div>
+                      {xrayData.dev_bought_usd != null && (
+                        <div className="text-[9px] text-center leading-tight" style={{ color: AX.muted }}>
+                          ${formatCompactNumber(xrayData.dev_bought_usd)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dev Sell Count */}
+                  <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <LuChefHat size={16} style={{ color: AX.sell }} />
+                        <div className="text-[12px] font-bold" style={{ color: AX.sell }}>
+                          {xrayData.dev_sold_count != null ? xrayData.dev_sold_count : '0'}
+                        </div>
+                      </div>
+                      <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Dev Sells</div>
+                      {xrayData.dev_sold_usd != null && (
+                        <div className="text-[9px] text-center leading-tight" style={{ color: AX.muted }}>
+                          ${formatCompactNumber(xrayData.dev_sold_usd)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        ) : null}
+      </div>
+
       {/* footer mini stats - simplified for Monad */}
       {/* Commented out - footer stats section
       <div className="grid grid-cols-4 gap-1 p-3" style={{ borderTop: `1px solid ${AX.border}` }}>
@@ -829,6 +1261,211 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       </div>
       */}
 
+      {/* ===== Pool Info Dropdown ===== */}
+      <div className="border-t border-[#2A2B33]">
+        <button
+          onClick={() => setIsPoolInfoOpen(!isPoolInfoOpen)}
+          className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#1E1F26] transition-colors"
+        >
+          <span className="text-[11px] font-semibold text-[#E6E7EA]">
+            {token?.name || token?.symbol || 'Token'} Pool Info
+          </span>
+          {isPoolInfoOpen ? (
+            <FaChevronUp className="w-3 h-3 text-[#9CA3AF]" />
+          ) : (
+            <FaChevronDown className="w-3 h-3 text-[#9CA3AF]" />
+          )}
+        </button>
+        
+        {isPoolInfoOpen && (
+          <div className="border-t border-[#2A2B33]" style={{ backgroundColor: '#0f1012' }}>
+            {/* Pool Info Section */}
+            <div className="px-3 py-2.5 space-y-2.5">
+              {/* Total Liq */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total liq</span>
+                <div className="text-right flex items-center gap-1">
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                    ${formatSmartNumber((token as any)?.liquidity_usd || (token as any)?.total_liquidity_usd || 0)}
+                  </span>
+                  {/* WMON conversion - commented out until we have dynamic MON price */}
+                  {/* <span className="text-[10px] text-[#9CA3AF]">
+                    ({formatSmartNumber(((token as any)?.liquidity_usd || (token as any)?.total_liquidity_usd || 0) / 0.25)} WMON)
+                  </span> */}
+                </div>
+              </div>
+              
+              {/* Pair Label */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+              </div>
+              
+              {/* Token */}
+              <div className="pl-3 space-y-1.5">
+                <div className="text-[11px] font-semibold text-[#E6E7EA]">{token?.symbol || 'TOKEN'}</div>
+                {/* Liq/Initial - only show if we have graduation_percent data */}
+                {((token as any)?.graduation_percent !== undefined || (token as any)?.bonding_pct !== undefined) && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-[#9CA3AF]">Liq/Initial</span>
+                    <div className="text-right">
+                      <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                        {formatCompactNumber((token as any)?.total_supply || 0)} / {formatCompactNumber((token as any)?.total_supply || 0)}
+                      </span>
+                      <span className="text-[10px] text-[#9CA3AF] ml-1">
+                        ({((token as any)?.graduation_percent || (token as any)?.bonding_pct || 0).toFixed(2)}%)
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[#9CA3AF]">Value</span>
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                    ${formatSmartNumber(token?.market_cap_usd || 0)}
+                  </span>
+                </div>
+              </div>
+              
+              {/* WMON - Commented out until we have dynamic WMON liquidity data */}
+              {/* <div className="pl-3 space-y-1.5">
+                <div className="text-[11px] font-semibold text-[#E6E7EA]">WMON</div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[#9CA3AF]">Liq/Initial</span>
+                  <div className="text-right">
+                    <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                      0 / {formatCompactNumber(14440)}
+                    </span>
+                    <span className="text-[10px] text-[#9CA3AF] ml-1">(-100%)</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[#9CA3AF]">Value</span>
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">$0</span>
+                </div>
+              </div> */}
+            </div>
+            
+            {/* Divider */}
+            <div className="border-t border-[#2A2B33]"></div>
+            
+            {/* Dev Section */}
+            <div className="px-3 py-2.5 space-y-2.5">
+              {/* DEV */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">DEV</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-[#E6E7EA] font-mono">
+                    {devTokenData?.dev_wallet ? truncateAddress(devTokenData.dev_wallet, 2, 4) : '--'}
+                  </span>
+                  {devTokenData && (
+                    <span className="text-[10px] text-[#9CA3AF]">
+                      ({formatSmartNumber(devTokenData.mon_balance || 0)}MON)
+                    </span>
+                  )}
+                  {devTokenData?.dev_wallet && (
+                    <button
+                      onClick={() => copyToClipboard(devTokenData.dev_wallet)}
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      title="Copy dev address"
+                    >
+                      <FaCopy className="w-3 h-3 text-[#9CA3AF]" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              {/* Funding */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Funding</span>
+                <span className="text-[11px] text-[#E6E7EA]">--</span>
+              </div>
+              
+              {/* Market cap */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Market cap</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  ${formatSmartNumber(token?.market_cap_usd || 0)}
+                </span>
+              </div>
+              
+              {/* Holders */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Holders</span>
+                <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                  {(token as any)?.total_holders || (token as any)?.unique_traders || 0}
+                </span>
+              </div>
+              
+              {/* Total supply - only show if we have the data */}
+              {(token as any)?.total_supply && (
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Total supply</span>
+                  <span className="text-[11px] text-[#E6E7EA] font-semibold">
+                    {formatCompactNumber((token as any)?.total_supply)}
+                  </span>
+                </div>
+              )}
+              
+              {/* Pair */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pair</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-[#E6E7EA] font-mono">
+                    {token?.pair_address ? truncateAddress(token.pair_address, 2, 4) : '--'}
+                  </span>
+                  {token?.pair_address && (
+                    <button
+                      onClick={() => copyToClipboard(token.pair_address)}
+                      className="p-0.5 hover:bg-[#2A2B33] rounded transition-colors"
+                      title="Copy pair address"
+                    >
+                      <FaCopy className="w-3 h-3 text-[#9CA3AF]" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              {/* Token created */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Token created</span>
+                <span className="text-[11px] text-[#E6E7EA]">
+                  {token?.created_at 
+                    ? (() => {
+                        const date = new Date(token.created_at);
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const year = date.getFullYear();
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        const seconds = String(date.getSeconds()).padStart(2, '0');
+                        return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
+                      })()
+                    : '--'}
+                </span>
+              </div>
+              
+              {/* Pool created */}
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-[#9CA3AF] uppercase tracking-wide">Pool created</span>
+                <span className="text-[11px] text-[#E6E7EA]">
+                  {token?.created_at 
+                    ? (() => {
+                        const date = new Date(token.created_at);
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const year = date.getFullYear();
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        const seconds = String(date.getSeconds()).padStart(2, '0');
+                        return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
+                      })()
+                    : '--'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ===== Contract Address ===== */}
       <div className="border-t border-[#2A2B33]">
         <AddressDisplay
@@ -850,7 +1487,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       {/* ===== Dev Address ===== */}
       <div className="border-t border-[#2A2B33]">
         {(() => {
-          const devAddress = (token as any)?.creator_address || (token as any)?.dev_address || (token as any)?.owner || (token as any)?.creator_wallet || '';
+          const devAddress = devTokenData?.dev_wallet || (token as any)?.creator_address || (token as any)?.dev_address || (token as any)?.owner || (token as any)?.creator_wallet || '';
           if (!devAddress) {
             // Show section even when empty with placeholder
             return (
@@ -888,12 +1525,6 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         })()}
       </div>
 
-      {/* Info Message */}
-      <div className="px-3 py-2 border-t border-[#2A2B33]">
-        <div className="text-[10px] text-[#9CA3AF] text-center">
-          <strong className="text-[#E6E7EA]">Note:</strong> Monad trading functionality is currently in development.
-        </div>
-      </div>
     </div>
   );
 };

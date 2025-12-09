@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/router';
 import { useUser } from '../components/UserContext';
 import { getTradeHistoryByUser, getActivePositionsByUser } from '~/utils/functions';
 import { formatSmartNumber } from '~/utils/db';
@@ -33,10 +34,19 @@ const SolanaIcon = ({ size = 16 }: { size?: number }) => (
 interface PnLModalProps {
   isOpen: boolean;
   onClose: () => void;
+  chain?: string;
 }
 
-export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
-  const { user, solBalance, usdcBalance } = useUser();
+export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
+  const router = useRouter();
+  const currentChain = chain || (router.query.chain as string) || 'sol';
+  const { user, solBalance, chainBalances, usdcBalance } = useUser();
+  const chainBalance = currentChain === 'monad' ? (chainBalances?.monad ?? 0) : solBalance;
+  
+  const chainLogos: Record<string, string> = {
+    sol: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+    monad: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+  };
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [unrealizedPnlPercentage, setUnrealizedPnlPercentage] = useState(0);
@@ -161,7 +171,7 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
 
           // Calculate total value
           const totalRemainingValue = positions.reduce((acc, pos) => acc + pos.remainingUsdValue, 0);
-          const totalUsdValue = (solBalance || 0) * solPrice + (usdcBalance || 0) + totalRemainingValue;
+          const totalUsdValue = (chainBalance || 0) * solPrice + (usdcBalance || 0) + totalRemainingValue;
           setTotalValue(totalUsdValue);
 
           // Generate chart data from positions (simplified for now)
@@ -177,7 +187,7 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
     if (isOpen) {
       fetchData();
     }
-  }, [user?.id, user?.bearerToken, isOpen, solBalance, usdcBalance, solPrice]);
+  }, [user?.id, user?.bearerToken, isOpen, chainBalance, usdcBalance, solPrice]);
 
   if (!isOpen) return null;
 
@@ -236,10 +246,18 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
         <div className="relative p-6 h-full flex items-center justify-between">
           {/* Balance Section */}
           <div className="flex items-center gap-4">
-            <SolanaIcon size={28} />
+            {currentChain === 'monad' ? (
+              <img 
+                src={chainLogos.monad} 
+                alt="Monad" 
+                className="w-7 h-7 rounded-full object-cover"
+              />
+            ) : (
+              <SolanaIcon size={28} />
+            )}
             <div>
               <div className="text-white font-bold text-3xl">
-                {formatSmartNumber(solBalance || 0)}
+                {formatSmartNumber(chainBalance || 0)}
               </div>
               <div className="text-gray-300 text-lg">Balance</div>
             </div>
@@ -247,7 +265,15 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
           
           {/* PnL Section */}
           <div className="flex items-center gap-4">
-            <SolanaIcon size={28} />
+            {currentChain === 'monad' ? (
+              <img 
+                src={chainLogos.monad} 
+                alt="Monad" 
+                className="w-7 h-7 rounded-full object-cover"
+              />
+            ) : (
+              <SolanaIcon size={28} />
+            )}
             <div>
               <div className={`font-bold text-3xl ${timeframeMetrics.realizedPnl >= 0 ? 'text-green-400' : 'text-pink-400'}`}>
                 {timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}${formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl))}

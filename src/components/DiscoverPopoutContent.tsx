@@ -1,11 +1,8 @@
-// src/pages/discover.tsx
+// src/components/DiscoverPopoutContent.tsx
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import Head from 'next/head';
 import { useRouter } from 'next/router';
-import InterstateTable from '../components/InterstateTable';
+import InterstateTable from './InterstateTable';
 import type { Token } from '~/utils/db';
-import Header from '../components/Header';
-import Footer from '../components/Footer';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
 import { usePumpPortalWebSocket } from '../hooks/usePumpPortalWebSocket';
 import { useQuickBuy } from "~/components/QuickBuyContext";
@@ -29,44 +26,51 @@ export type Timeframe = "5m" | "1h" | "6h" | "24h";
 // Extend Token with optional flags
 type TokenWithDexPaid = Token & { dexPaid?: boolean };
 
-export default function DiscoverPage() {
+export default function DiscoverPopoutContent() {
   const router = useRouter();
   
   // CRITICAL: Initialize chain from router query immediately to avoid race conditions
-  // This ensures we react to shallow routing changes immediately
+  // Default to monad chain for popout
+  const manualChainSwitchRef = useRef(false);
   const [currentChain, setCurrentChain] = useState<string>(() => {
-    // Initialize from router query if available, otherwise default to 'sol'
+    // Initialize from router query if available, otherwise default to 'monad'
     if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'sol';
+      return (router.query.chain as string) || 'monad';
     }
     // Also check URL params directly for immediate access
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'sol';
+      return urlParams.get('chain') || 'monad';
     }
-    return 'sol';
+    return 'monad';
   });
   
-  // Sync chain state with router query - this handles both initial load and shallow routing updates
+  // Sync chain state with router query (only if not manually switched)
   useEffect(() => {
-    if (!router.isReady) return;
-    const chainFromQuery = (router.query.chain as string) || 'sol';
+    if (!router.isReady || manualChainSwitchRef.current) {
+      manualChainSwitchRef.current = false;
+      return;
+    }
+    const chainFromQuery = (router.query.chain as string) || 'monad';
     if (chainFromQuery !== currentChain) {
-      console.log('[Discover] Chain changed from router:', currentChain, '->', chainFromQuery);
+      console.log('[DiscoverPopout] Chain changed from router:', currentChain, '->', chainFromQuery);
       setCurrentChain(chainFromQuery);
     }
-  }, [router.query.chain, router.isReady, currentChain]);
+  }, [router.query.chain, router.isReady]);
   
-  // Also watch router.asPath as a fallback for shallow routing
+  // Also watch router.asPath as a fallback (only if not manually switched)
   useEffect(() => {
-    if (!router.isReady) return;
+    if (!router.isReady || manualChainSwitchRef.current) {
+      manualChainSwitchRef.current = false;
+      return;
+    }
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
-    const chainFromUrl = urlParams.get('chain') || 'sol';
+    const chainFromUrl = urlParams.get('chain') || 'monad';
     if (chainFromUrl !== currentChain) {
-      console.log('[Discover] Chain changed from URL:', currentChain, '->', chainFromUrl);
+      console.log('[DiscoverPopout] Chain changed from URL:', currentChain, '->', chainFromUrl);
       setCurrentChain(chainFromUrl);
     }
-  }, [router.asPath, router.isReady, currentChain]);
+  }, [router.asPath, router.isReady]);
   
   // Debug: Log chain changes
   useEffect(() => {
@@ -85,7 +89,7 @@ export default function DiscoverPage() {
           // Check if we're on monad chain - if so, only allow trending or newPairs
           // Check URL params directly for immediate access (same pattern as currentChain)
           const urlParams = new URLSearchParams(window.location.search);
-          const initialChain = urlParams.get('chain') || 'sol';
+          const initialChain = urlParams.get('chain') || 'monad';
           if (initialChain === 'monad' && savedTab !== 'trending' && savedTab !== 'newPairs') {
             return 'trending';
           }
@@ -2344,50 +2348,79 @@ export default function DiscoverPage() {
   }, [displayed]);
 
   return (
-    <>
-      <Head>
-        <title>Interstate Memeboard | Discover</title>
-        <meta name="description" content="Interstate dashboard" />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="32x32"
-          href="/favicon-32x32.png"
-        />
-        <link
-          rel="icon"
-          type="image/png"
-          sizes="16x16"
-          href="/favicon-16x16.png"
-        />
-        <link
-          rel="apple-touch-icon"
-          sizes="180x180"
-          href="/apple-touch-icon.png?v=2"
-        />
-        {/* Preload the static fallbacks used many times in PumpLive */}
-        <link rel="preload" as="image" href="/placeholder/fallback-cover.jpg" />
-        <link
-          rel="preload"
-          as="image"
-          href="/placeholder/fallback-avatar.jpg"
-        />
-      </Head>
-
-      <div className="relative min-h-screen bg-[#111214] text-[#E6E7EA]">
-        {/* Header */}
-        <div className="relative z-[100]">
-          <Header
-            search={search}
-            setSearch={setSearch}
-            selectedTimeframe={selectedTimeframe}
-          />
-        </div>
+    <div className="flex h-full flex-col text-[#E6E7EA] overflow-hidden" style={{ backgroundColor: '#111214' }}>
 
         {/* Tab Navigation */}
-        <div className="my-4 flex flex-col gap-4 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
+        <div className="flex flex-col gap-4 px-4 pt-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
           {/* Tabs Section - Scrollable on mobile */}
           <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
+            {/* Chain Switcher - Commented out */}
+            {/* <div className="flex items-center gap-2 mr-2">
+              <button
+                onClick={() => {
+                  manualChainSwitchRef.current = true;
+                  setCurrentChain('monad');
+                  if (typeof window !== 'undefined') {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('chain', 'monad');
+                    window.history.replaceState({}, '', url.toString());
+                    // Also update router query using shallow routing
+                    router.push(
+                      {
+                        pathname: router.pathname,
+                        query: { ...router.query, chain: 'monad' },
+                      },
+                      undefined,
+                      { shallow: true }
+                    );
+                  }
+                }}
+                className={`relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 ${
+                  currentChain === 'monad'
+                    ? "bg-[#222733] text-white shadow-lg shadow-purple-500/20"
+                    : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
+                }`}
+                aria-label="View Monad tokens"
+              >
+                <img
+                  src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                  alt="Monad"
+                  className="h-7 w-7 rounded-full object-cover"
+                />
+              </button>
+              <button
+                onClick={() => {
+                  manualChainSwitchRef.current = true;
+                  setCurrentChain('sol');
+                  if (typeof window !== 'undefined') {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('chain', 'sol');
+                    window.history.replaceState({}, '', url.toString());
+                    // Also update router query using shallow routing
+                    router.push(
+                      {
+                        pathname: router.pathname,
+                        query: { ...router.query, chain: 'sol' },
+                      },
+                      undefined,
+                      { shallow: true }
+                    );
+                  }
+                }}
+                className={`relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#20232b] bg-[#171920] text-neutral-300 shadow-sm transition-all duration-200 ${
+                  currentChain === 'sol'
+                    ? "bg-[#222733] text-white shadow-lg shadow-emerald-500/20"
+                    : "bg-[#141821] text-neutral-500 opacity-75 hover:opacity-100 hover:text-neutral-100"
+                }`}
+                aria-label="View Solana tokens"
+              >
+                <img
+                  src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                  alt="Solana"
+                  className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
+                />
+              </button>
+            </div> */}
             <button
               className={`text-sm font-light whitespace-nowrap transition-colors sm:text-base lg:text-lg ${activeTab === "trending" ? "text-[#f0f5f5]" : "text-[#6B7280] hover:text-[#f0f5f5]"} cursor-pointer`}
               onClick={() => setActiveTab("trending")}
@@ -2838,13 +2871,11 @@ export default function DiscoverPage() {
           )}
         </main>
 
-        <Footer />
         <QuickBuySettingsModal
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
         />
-      </div>
-    </>
+    </div>
   );
 }
 

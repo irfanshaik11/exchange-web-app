@@ -3,6 +3,10 @@ import { IoOpenOutline } from 'react-icons/io5';
 import { formatSmartNumber } from '~/utils/db';
 import { useMonadTradesWebSocket, type MonadTrade } from '~/hooks/useMonadTradesWebSocket';
 
+// Monad candle colors (matches chart colors)
+const MONAD_GREEN = '#86d99f';
+const MONAD_RED = '#f26682';
+
 interface MonadTradesProps {
   tokenAddress: string;
   initialTrades?: MonadTrade[];
@@ -118,10 +122,10 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-white">Live Trades</span>
           {connected && (
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Connected" />
+            <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: MONAD_GREEN }} title="Connected" />
           )}
           {error && (
-            <span className="text-xs text-red-400" title={error}>Disconnected</span>
+            <span className="text-xs" style={{ color: MONAD_RED }} title={error}>Disconnected</span>
           )}
         </div>
         <span className="text-xs text-neutral-500">
@@ -156,7 +160,7 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
               <tr>
                 <td colSpan={6} className="text-center py-8 text-neutral-500">
                   <div className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-neutral-600 border-t-emerald-400 rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-neutral-600 rounded-full animate-spin" style={{ borderTopColor: MONAD_GREEN }} />
                     <span>Loading trades...</span>
                   </div>
                 </td>
@@ -172,13 +176,26 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
                 const age = getAge(trade.block_timestamp);
                 const time = getTimeFromTimestamp(trade.block_timestamp);
                 const isBuy = trade.is_buy;
-                const typeColor = isBuy ? 'text-emerald-400' : 'text-red-400';
-                const rowBg = isBuy ? 'hover:bg-emerald-950/20' : 'hover:bg-red-950/20';
+                const typeColor = isBuy ? MONAD_GREEN : MONAD_RED;
+                // Convert hex to rgba for hover background
+                const hexToRgba = (hex: string, alpha: number) => {
+                  const r = parseInt(hex.slice(1, 3), 16);
+                  const g = parseInt(hex.slice(3, 5), 16);
+                  const b = parseInt(hex.slice(5, 7), 16);
+                  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                };
+                const hoverBg = hexToRgba(typeColor, 0.1);
 
                 return (
                   <tr
                     key={trade.tx_hash || idx}
-                    className={`border-b border-neutral-900 ${rowBg} transition-colors`}
+                    className="border-b border-neutral-900 transition-colors"
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = hoverBg;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '';
+                    }}
                   >
                     {/* Age/Time */}
                     <td className="pl-3 pr-1 py-2 text-neutral-400">
@@ -186,12 +203,12 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
                     </td>
 
                     {/* Type */}
-                    <td className={`px-1 py-2 font-semibold ${typeColor}`}>
+                    <td className="px-1 py-2 font-semibold" style={{ color: typeColor }}>
                       {isBuy ? 'Buy' : 'Sell'}
                     </td>
 
                     {/* MON Amount */}
-                    <td className={`px-1 py-2 text-right font-mono ${typeColor}`}>
+                    <td className="px-1 py-2 text-right font-mono" style={{ color: typeColor }}>
                       {formatMONAmount(trade.mon_amount)}
                     </td>
 

@@ -3,6 +3,10 @@ import { formatSmartNumber } from '~/utils/db';
 import useMonadHolders from '../../hooks/useMonadHolders';
 import type { MonadHolder } from '../../hooks/useMonadHolders';
 
+// Monad candle colors (matches chart colors)
+const MONAD_GREEN = '#86d99f';
+const MONAD_RED = '#f26682';
+
 interface MonadHoldersTableProps {
   tokenAddress: string | undefined;
   enabled?: boolean;
@@ -37,8 +41,8 @@ const MonadHoldersTable: React.FC<MonadHoldersTableProps> = ({
   if (error) {
     return (
       <div className="w-full p-4">
-        <div className="mb-4 p-2 bg-red-900/20 border border-red-500/30 rounded-lg">
-          <p className="text-red-400 text-xs">{error}</p>
+        <div className="mb-4 p-2 rounded-lg" style={{ backgroundColor: `${MONAD_RED}20`, border: `1px solid ${MONAD_RED}4D` }}>
+          <p className="text-xs" style={{ color: MONAD_RED }}>{error}</p>
         </div>
       </div>
     );
@@ -112,7 +116,7 @@ const MonadHoldersTable: React.FC<MonadHoldersTableProps> = ({
                     {/* Bought */}
                     <td className="px-2 py-2 text-neutral-300">
                       <div>
-                        <div className="text-emerald-400">${formatSmartNumber(holder.total_bought_usd)}</div>
+                        <div style={{ color: MONAD_GREEN }}>${formatSmartNumber(holder.total_bought_usd)}</div>
                         <div className="text-xs text-neutral-500">
                           {formatSmartNumber(holder.tokens_bought)}
                         </div>
@@ -121,7 +125,7 @@ const MonadHoldersTable: React.FC<MonadHoldersTableProps> = ({
                     
                     {/* P&L */}
                     <td className="px-2 py-2">
-                      <div className={`font-semibold ${totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <div className="font-semibold" style={{ color: totalPnL >= 0 ? MONAD_GREEN : MONAD_RED }}>
                         {totalPnL >= 0 ? '+' : ''}${formatSmartNumber(totalPnL)}
                       </div>
                       <div className="text-xs text-neutral-500">

@@ -48,14 +48,19 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     const errorString = args[0]?.toString() || '';
     const stackTrace = args[1]?.stack || '';
 
-    // Suppress Next.js dev overlay for handled ApiErrors and trade-related errors
+    // Suppress Next.js dev overlay for handled ApiErrors, trade-related errors, and Turnkey errors
     if (
       errorString.includes('ApiError') ||
       errorString.includes('[Trade]') ||
       errorString.includes('Trade validation failed') ||
       errorString.includes('Insufficient') ||
+      errorString.includes('TurnkeyError') ||
+      errorString.includes('Session public key') ||
+      errorString.includes('session public key could not be found') ||
       stackTrace.includes('TradeActionPanel') ||
-      stackTrace.includes('api.ts')
+      stackTrace.includes('api.ts') ||
+      stackTrace.includes('turnkey') ||
+      stackTrace.includes('Turnkey')
     ) {
       // Still log to console for debugging, just don't trigger overlay
       originalConsoleError('[Handled Error - No Overlay]', ...args);
@@ -69,18 +74,22 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     const error = event.error;
     const errorMessage = error?.message || '';
 
-    // Check if this is an ApiError or trade-related error that we've already handled
+    // Check if this is an ApiError, trade-related error, or Turnkey error that we've already handled
     if (
       error?.name === 'ApiError' ||
       error?.constructor?.name === 'ApiError' ||
+      error?.name === 'TurnkeyError' ||
+      error?.constructor?.name === 'TurnkeyError' ||
       errorMessage.includes('Trade validation failed') ||
       errorMessage.includes('Insufficient') ||
       errorMessage.includes('NO_HOLDINGS') ||
-      errorMessage.includes('AMOUNT_TOO_SMALL')
+      errorMessage.includes('AMOUNT_TOO_SMALL') ||
+      errorMessage.includes('Session public key') ||
+      errorMessage.includes('session public key could not be found')
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      console.log('[Error Suppressed] ApiError caught and handled by application:', errorMessage);
+      console.log('[Error Suppressed] Error caught and handled by application:', errorMessage);
       return false;
     }
   }, true); // Use capture phase to intercept early
@@ -90,18 +99,22 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     const reason = event.reason;
     const reasonMessage = reason?.message || '';
 
-    // Check if this is an ApiError from our API
+    // Check if this is an ApiError, Turnkey error, or other handled error
     if (
       reason?.name === 'ApiError' ||
       reason?.constructor?.name === 'ApiError' ||
+      reason?.name === 'TurnkeyError' ||
+      reason?.constructor?.name === 'TurnkeyError' ||
       reasonMessage.includes('Trade validation failed') ||
       reasonMessage.includes('Insufficient') ||
       reasonMessage.includes('NO_HOLDINGS') ||
-      reasonMessage.includes('AMOUNT_TOO_SMALL')
+      reasonMessage.includes('AMOUNT_TOO_SMALL') ||
+      reasonMessage.includes('Session public key') ||
+      reasonMessage.includes('session public key could not be found')
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      console.log('[Error Suppressed] Unhandled ApiError rejection caught:', reasonMessage);
+      console.log('[Error Suppressed] Unhandled error rejection caught:', reasonMessage);
       return false;
     }
   }, true); // Use capture phase to intercept early
@@ -194,8 +207,14 @@ function TurnkeySessionBridge() {
               );
               hasCreatedDelegatedUserRef.current = true; // prevent infinite loop
             }
-          } catch (err) {
-            console.error("Failed to create delegated Turnkey user", err);
+          } catch (err: any) {
+            const errorMessage = err?.message || err?.toString() || "";
+            // Suppress Turnkey session errors - they're handled gracefully
+            if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
+              console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
+            } else {
+              console.error("Failed to create delegated Turnkey user", err);
+            }
             hasCreatedDelegatedUserRef.current = true; // still continue pipeline
           }
         }
@@ -224,8 +243,14 @@ function TurnkeySessionBridge() {
           try {
             await fetchOrCreatePolicies({ policies });
             console.log("Delegated policy ensured:", delegatedUserId);
-          } catch (err) {
-            console.error("Failed to create delegated policy", err);
+          } catch (err: any) {
+            const errorMessage = err?.message || err?.toString() || "";
+            // Suppress Turnkey session errors - they're handled gracefully
+            if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
+              console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
+            } else {
+              console.error("Failed to create delegated policy", err);
+            }
             hasCreatedDelegatedPolicyRef.current = false; // retry next render
           }
         }
@@ -266,9 +291,24 @@ function TurnkeySessionBridge() {
               pendingRefreshRef.current = false;
             }
 
-            router.push("/pulse?chain=monad");
-          } catch (err) {
-            console.error("Error linking Turnkey session to app user", err);
+            // Don't redirect if we're on the export page - let user stay there to export
+            const isOnExportPage =
+              router.pathname === "/turnkey/export" ||
+              router.asPath.includes("/turnkey/export") ||
+              router.pathname === "/portfolio";
+            if (!isOnExportPage) {
+              router.push("/pulse?chain=monad");
+            } else {
+              console.log("[TurnkeySessionBridge] User authenticated on export page, staying on page");
+            }
+          } catch (err: any) {
+            const errorMessage = err?.message || err?.toString() || "";
+            // Suppress Turnkey session errors - they're handled gracefully
+            if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
+              console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
+            } else {
+              console.error("Error linking Turnkey session to app user", err);
+            }
             hasProcessedRef.current = false;
           }
         }
@@ -287,12 +327,12 @@ function TurnkeySessionBridge() {
     fetchOrCreatePolicies,
     refreshUser,
     router,
+    router.pathname,
+    router.asPath,
   ]);
 
   return null;
 }
-
-
 
 const config = getDefaultConfig({
   appName: "Meme Dashboard",
@@ -440,14 +480,26 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
 // }
 
 const MyApp: AppType = ({ Component, pageProps }) => {
-  const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('bottom-center');
+  const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('top-center');
 
   // Load toast position from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('toast-position');
-      if (saved && ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
+      
+      // Migrate from bottom-center to top-center (or if no value exists)
+      if (!saved || saved === 'bottom-center') {
+        localStorage.setItem('toast-position', 'top-center');
+        setToastPosition('top-center');
+        return;
+      }
+      
+      if (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
         setToastPosition(saved as any);
+      } else {
+        // Invalid value, migrate to top-center
+        localStorage.setItem('toast-position', 'top-center');
+        setToastPosition('top-center');
       }
     }
   }, []);

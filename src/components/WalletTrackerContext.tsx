@@ -1,29 +1,39 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+} from "react";
 import {
   createWalletTrackerWebSocket,
   type WalletTrackerWebSocket,
   type TradeEvent,
   getTrackedWallets,
   getWalletTradeHistory,
-  type WatchWallet
-} from '~/utils/walletTracking';
-import { useUser } from './UserContext';
-import { showEnhancedToast } from '~/utils/enhancedToast';
-import { normalizeImageUrl } from '~/utils/images';
+  type WatchWallet,
+} from "~/utils/walletTracking";
+import { useUser } from "./UserContext";
+import { showEnhancedToast } from "~/utils/enhancedToast";
+import { normalizeImageUrl } from "~/utils/images";
 
 const HISTORY_LIMIT = 50;
 // Use 7 days window to ensure backfilled transactions are included
 const HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-const LIVE_TRADES_CACHE_PREFIX = 'walletTracker:liveTrades';
+const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const LIVE_TRADES_CACHE_MAX_ITEMS = HISTORY_LIMIT;
 const LIVE_TRADES_CACHE_MAX_AGE_MS = HISTORY_WINDOW_MS;
 
 const getCacheKey = (userId?: string) =>
-  userId ? `${LIVE_TRADES_CACHE_PREFIX}:user:${userId}` : `${LIVE_TRADES_CACHE_PREFIX}:global`;
+  userId
+    ? `${LIVE_TRADES_CACHE_PREFIX}:user:${userId}`
+    : `${LIVE_TRADES_CACHE_PREFIX}:global`;
+
+const NOTIFICATIONS_STORAGE_KEY = "walletTracker:notifications";
 
 const ensureMilliseconds = (timestamp: number | null | undefined) => {
-  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
+  if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) {
     return Date.now();
   }
   return timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp;
@@ -67,31 +77,61 @@ interface WalletTrackerContextValue {
   latestTrades: TradeEvent[];
   watchedWallets: WatchWallet[];
   refreshWatchedWallets: () => Promise<void>;
+  clearNotifications: () => void;
 }
 
-const WalletTrackerContext = createContext<WalletTrackerContextValue | undefined>(undefined);
+const WalletTrackerContext = createContext<
+  WalletTrackerContextValue | undefined
+>(undefined);
 
 export function useWalletTracker() {
   const context = useContext(WalletTrackerContext);
   if (!context) {
-    throw new Error('useWalletTracker must be used within WalletTrackerProvider');
+    throw new Error(
+      "useWalletTracker must be used within WalletTrackerProvider",
+    );
   }
   return context;
 }
 
-export function WalletTrackerProvider({ children }: { children: React.ReactNode }) {
+export function WalletTrackerProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user } = useUser();
   const [wsConnected, setWsConnected] = useState(false);
-  const [latestTrades, setLatestTrades] = useState<TradeEvent[]>([]);
+
+  // Load notifications from localStorage on mount
+  const [latestTrades, setLatestTrades] = useState<TradeEvent[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Validate and prune old trades
+        if (Array.isArray(parsed)) {
+          return pruneTrades(parsed);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load notifications from localStorage:", error);
+    }
+    return [];
+  });
+
   const [watchedWallets, setWatchedWallets] = useState<WatchWallet[]>([]);
-  const [wsConnection, setWsConnection] = useState<WalletTrackerWebSocket | null>(null);
-  const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(new Map());
+  const [wsConnection, setWsConnection] =
+    useState<WalletTrackerWebSocket | null>(null);
+  const [tokenMetadata, setTokenMetadata] = useState<Map<string, any>>(
+    new Map(),
+  );
 
   const watchedWalletsRef = useRef<WatchWallet[]>([]);
   const subscribedWalletsRef = useRef<string[]>([]);
   const hydrationRef = useRef(false);
   const initialHistoryFetchedRef = useRef(false);
-  
+
   // Keep ref in sync with state
   useEffect(() => {
     watchedWalletsRef.current = watchedWallets;
@@ -100,12 +140,12 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
   // Load watched wallets
   const refreshWatchedWallets = async () => {
     if (!user?.id) return;
-    
+
     try {
       const wallets = await getTrackedWallets(user.id);
       setWatchedWallets(wallets);
     } catch (error) {
-      console.error('Failed to fetch watched wallets:', error);
+      console.error("Failed to fetch watched wallets:", error);
     }
   };
 
@@ -117,6 +157,17 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
       watchedWalletsRef.current = [];
       subscribedWalletsRef.current = [];
       initialHistoryFetchedRef.current = false;
+      // Clear notifications from localStorage on logout
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+        } catch (error) {
+          console.error(
+            "Failed to clear notifications from localStorage on logout:",
+            error,
+          );
+        }
+      }
       if (wsConnection) {
         wsConnection.close();
         setWsConnection(null);
@@ -137,37 +188,19 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
     initialHistoryFetchedRef.current = false;
   }, [user?.id]);
 
-  // Fetch initial trade history from backend Redis cache (optional - doesn't block WebSocket)
+  // Save notifications to localStorage whenever latestTrades changes
   useEffect(() => {
-    if (!user?.id || watchedWallets.length === 0 || initialHistoryFetchedRef.current) {
-      return;
+    if (typeof window === "undefined") return;
+    try {
+      // Prune old trades before saving
+      const pruned = pruneTrades(latestTrades);
+      localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(pruned));
+    } catch (error) {
+      console.error("Failed to save notifications to localStorage:", error);
     }
+  }, [latestTrades]);
 
-    const fetchInitialTrades = async () => {
-      try {
-        initialHistoryFetchedRef.current = true;
-        const walletAddresses = watchedWallets.map(w => w.address);
-        
-        const history = await Promise.race([
-          getWalletTradeHistory(walletAddresses, {
-            limit: HISTORY_LIMIT,
-            windowMs: HISTORY_WINDOW_MS,
-          }),
-          new Promise<TradeEvent[]>((resolve) => setTimeout(() => resolve([]), 4000))
-        ]);
-        
-        if (history.length > 0) {
-          setLatestTrades(prev => mergeTrades(prev, history));
-        }
-      } catch (error) {
-        // Silent fail - WebSocket will still work
-      }
-    };
-
-    // Fetch after a delay to let WebSocket connect first
-    const timeoutId = setTimeout(fetchInitialTrades, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [user?.id, watchedWallets.length])
+  // Note: Removed initial history fetch from database - now only using live WebSocket notifications
 
   // WebSocket connection for real-time wallet updates
   useEffect(() => {
@@ -190,7 +223,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
       // Get token name/symbol FIRST and enrich the event before showing
       let tokenName = normalizedEvent.symbol || normalizedEvent.name;
       let tokenMetadataResolved = false;
-      
+
       // Try to get from existing metadata cache
       if (!tokenName) {
         const cachedMetadata = tokenMetadata.get(normalizedEvent.mint);
@@ -202,58 +235,73 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
           tokenMetadataResolved = true;
         }
       }
-      
+
       // If still no token name, fetch from backend
       if (!tokenName || !tokenMetadataResolved) {
         try {
           // Try to fetch from Go service first (most reliable for token names)
           const goServiceUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
           let tokenData = null;
-          
+
           // Try search endpoint first
           try {
-            const searchResponse = await fetch(`${goServiceUrl}/v1/token/search?mint=${normalizedEvent.mint}&limit=1`, {
-              signal: AbortSignal.timeout(3000)
-            });
+            const searchResponse = await fetch(
+              `${goServiceUrl}/v1/token/search?mint=${normalizedEvent.mint}&limit=1`,
+              {
+                signal: AbortSignal.timeout(3000),
+              },
+            );
             if (searchResponse.ok) {
               const searchData = await searchResponse.json();
-              tokenData = Array.isArray(searchData) ? searchData[0] : (searchData.tokens?.[0] || null);
+              tokenData = Array.isArray(searchData)
+                ? searchData[0]
+                : searchData.tokens?.[0] || null;
             }
           } catch (searchError) {
             // Silent fail
           }
-          
+
           // Update token name and enrich the event with fetched data
           if (tokenData) {
             tokenName = tokenData.symbol || tokenData.name || tokenName;
-            
+
             // IMPORTANT: Update the event object itself with fetched metadata
             normalizedEvent.symbol = tokenData.symbol || normalizedEvent.symbol;
             normalizedEvent.name = tokenData.name || normalizedEvent.name;
-            
+
             // Also resolve pair_address while we're at it
             if (!normalizedEvent.pair_address) {
-              normalizedEvent.pair_address = tokenData.pair_address || tokenData.poolId;
+              normalizedEvent.pair_address =
+                tokenData.pair_address || tokenData.poolId;
             }
-            
+
             // Cache the metadata
-            setTokenMetadata(prev => {
+            setTokenMetadata((prev) => {
               const updated = new Map(prev);
               updated.set(normalizedEvent.mint, {
                 symbol: tokenData.symbol,
                 name: tokenData.name,
                 image: tokenData.uri || tokenData.image || tokenData.logo,
-                launchpad_protocol: tokenData.launchpad_protocol || tokenData.protocol,
-                market_cap_usd: tokenData.market_cap_usd || tokenData.marketCapUsd || tokenData.fully_diluted_value,
+                launchpad_protocol:
+                  tokenData.launchpad_protocol || tokenData.protocol,
+                market_cap_usd:
+                  tokenData.market_cap_usd ||
+                  tokenData.marketCapUsd ||
+                  tokenData.fully_diluted_value,
               });
               return updated;
             });
           }
-          
+
           // Fallback: try fetchTokenMetadata utility (only if Go service failed)
-          if (!tokenName || tokenName === normalizedEvent.mint.slice(0, 8) + '...') {
+          if (
+            !tokenName ||
+            tokenName === normalizedEvent.mint.slice(0, 8) + "..."
+          ) {
             try {
-              const { fetchChainTokenMetadata } = await import('~/utils/tokenMetadata');
+              const { fetchChainTokenMetadata } = await import(
+                "~/utils/tokenMetadata"
+              );
               const meta = await fetchChainTokenMetadata(normalizedEvent.mint);
               if (meta?.symbol || meta?.name) {
                 tokenName = meta.symbol || meta.name;
@@ -261,7 +309,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
                 normalizedEvent.symbol = meta.symbol || normalizedEvent.symbol;
                 normalizedEvent.name = meta.name || normalizedEvent.name;
                 // Update metadata state
-                setTokenMetadata(prev => {
+                setTokenMetadata((prev) => {
                   const updated = new Map(prev);
                   updated.set(normalizedEvent.mint, meta);
                   return updated;
@@ -275,18 +323,20 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
           // Silent fail
         }
       }
-      
+
       // Final fallback to shortened mint address
       if (!tokenName) {
-        tokenName = normalizedEvent.mint.slice(0, 6) + '...';
+        tokenName = normalizedEvent.mint.slice(0, 6) + "...";
       }
 
       // Resolve pair_address if not already present (for better navigation UX)
       if (!normalizedEvent.pair_address && normalizedEvent.mint) {
         try {
           // First try to search for the token to get its pair_address
-          const searchResponse = await fetch(`/api/token-service/search?phrase=${encodeURIComponent(normalizedEvent.mint)}&limit=1`);
-          
+          const searchResponse = await fetch(
+            `/api/token-service/search?phrase=${encodeURIComponent(normalizedEvent.mint)}&limit=1`,
+          );
+
           if (searchResponse.ok) {
             const searchData = await searchResponse.json();
             if (searchData.tokens && searchData.tokens.length > 0) {
@@ -294,18 +344,22 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
               normalizedEvent.pair_address = token.pair_address || token.poolId;
             }
           }
-          
+
           // Fallback to hydrate-pair if search didn't work
           if (!normalizedEvent.pair_address) {
-            const hydrateResponse = await fetch('/api/token-service/hydrate-pair', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ mint: normalizedEvent.mint }),
-            });
-            
+            const hydrateResponse = await fetch(
+              "/api/token-service/hydrate-pair",
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mint: normalizedEvent.mint }),
+              },
+            );
+
             if (hydrateResponse.ok) {
               const hydrateData = await hydrateResponse.json();
-              normalizedEvent.pair_address = hydrateData.pair_address || hydrateData.poolId;
+              normalizedEvent.pair_address =
+                hydrateData.pair_address || hydrateData.poolId;
             }
           }
         } catch (error) {
@@ -314,16 +368,22 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
       }
 
       // Add to latest trades list (keep last hour, max 50)
-      setLatestTrades(prev => mergeTrades(prev, [normalizedEvent]));
+      setLatestTrades((prev) => mergeTrades(prev, [normalizedEvent]));
 
       // Find wallet info for better notification
-      const wallet = watchedWalletsRef.current.find(w => w.address === normalizedEvent.wallet);
-      const walletName = wallet?.walletName || normalizedEvent.wallet.slice(0, 8) + '...';
-      const side = normalizedEvent.side === 'buy' ? 'bought' : 'sold';
-      
+      const wallet = watchedWalletsRef.current.find(
+        (w) => w.address === normalizedEvent.wallet,
+      );
+      const walletName =
+        wallet?.walletName || normalizedEvent.wallet.slice(0, 8) + "...";
+      const side = normalizedEvent.side === "buy" ? "bought" : "sold";
+
       // Format SOL amount
-      let amountDisplay = '';
-      if (normalizedEvent.sol_spent !== null && normalizedEvent.sol_spent !== undefined) {
+      let amountDisplay = "";
+      if (
+        normalizedEvent.sol_spent !== null &&
+        normalizedEvent.sol_spent !== undefined
+      ) {
         const solAmount = Math.abs(normalizedEvent.sol_spent);
         if (solAmount >= 1) {
           amountDisplay = `${solAmount.toFixed(2)} SOL`;
@@ -333,13 +393,13 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
           amountDisplay = `${solAmount.toFixed(4)} SOL`;
         }
       }
-      
+
       // Check if display notifications is enabled
       const displayNotificationsEnabled = (() => {
-        if (typeof window === 'undefined') return true;
+        if (typeof window === "undefined") return true;
         try {
-          const saved = localStorage.getItem('notification-display-enabled');
-          return saved !== 'false'; // Default to true
+          const saved = localStorage.getItem("notification-display-enabled");
+          return saved !== "false"; // Default to true
         } catch {
           return true;
         }
@@ -347,20 +407,21 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
       // Check if transaction sounds is enabled
       const transactionSoundsEnabled = (() => {
-        if (typeof window === 'undefined') return true;
+        if (typeof window === "undefined") return true;
         try {
-          const saved = localStorage.getItem('transaction-sounds-enabled');
-          return saved !== 'false'; // Default to true
+          const saved = localStorage.getItem("transaction-sounds-enabled");
+          return saved !== "false"; // Default to true
         } catch {
           return true;
         }
       })();
 
       // Play notification sound if enabled
-      if (transactionSoundsEnabled && typeof window !== 'undefined') {
+      if (transactionSoundsEnabled && typeof window !== "undefined") {
         try {
           // Create a pleasant notification sound using Web Audio API
-          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const audioContext = new (window.AudioContext ||
+            (window as any).webkitAudioContext)();
           const oscillator = audioContext.createOscillator();
           const gainNode = audioContext.createGain();
 
@@ -369,18 +430,27 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
           // Set frequency for a pleasant chime (two-tone)
           oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-          oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
+          oscillator.frequency.setValueAtTime(
+            1000,
+            audioContext.currentTime + 0.1,
+          );
 
           // Set volume envelope
           gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-          gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+          gainNode.gain.linearRampToValueAtTime(
+            0.3,
+            audioContext.currentTime + 0.01,
+          );
+          gainNode.gain.exponentialRampToValueAtTime(
+            0.01,
+            audioContext.currentTime + 0.2,
+          );
 
           oscillator.start(audioContext.currentTime);
           oscillator.stop(audioContext.currentTime + 0.2);
         } catch (error) {
           // Silent fail if audio context fails (e.g., user hasn't interacted with page)
-          console.log('Audio playback failed:', error);
+          console.log("Audio playback failed:", error);
         }
       }
 
@@ -389,77 +459,65 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         // Get token image from metadata
         const tokenImage = (() => {
           const cachedMetadata = tokenMetadata.get(normalizedEvent.mint);
-          if (cachedMetadata?.image || cachedMetadata?.uri || cachedMetadata?.logo) {
-            return normalizeImageUrl(cachedMetadata.image || cachedMetadata.uri || cachedMetadata.logo);
+          if (
+            cachedMetadata?.image ||
+            cachedMetadata?.uri ||
+            cachedMetadata?.logo
+          ) {
+            return normalizeImageUrl(
+              cachedMetadata.image || cachedMetadata.uri || cachedMetadata.logo,
+            );
           }
           return null;
         })();
 
-        const isBuy = normalizedEvent.side === 'buy';
-        const sideColor = isBuy ? '#70E0B0' : '#ff6b6b';
-        const sideText = isBuy ? 'BOUGHT' : 'SOLD';
-        const sideIcon = isBuy ? '↑' : '↓';
+        const isBuy = normalizedEvent.side === "buy";
+        const sideColor = isBuy ? "#70E0B0" : "#ff6b6b";
+        const sideText = isBuy ? "BOUGHT" : "SOLD";
+        const sideIcon = isBuy ? "↑" : "↓";
 
         // Create custom content for live trades toast
         const customContent = (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '4px 0' }}>
+          <div className="flex items-center gap-3 py-1">
             {/* Token Image */}
             {tokenImage ? (
               <img
                 src={tokenImage}
                 alt={tokenName}
+                className="h-12 w-12 shrink-0 rounded-xl object-cover"
                 style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '12px',
-                  objectFit: 'cover',
                   border: `2px solid ${sideColor}40`,
-                  flexShrink: 0,
                 }}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
+                  (e.target as HTMLImageElement).style.display = "none";
                 }}
               />
             ) : (
               <div
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-[18px] font-semibold text-white"
                 style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#fff',
-                  fontSize: '18px',
-                  fontWeight: '600',
-                  flexShrink: 0,
+                  background:
+                    "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
                   border: `2px solid ${sideColor}40`,
                 }}
               >
-                {tokenName?.charAt(0)?.toUpperCase() || '?'}
+                {tokenName?.charAt(0)?.toUpperCase() || "?"}
               </div>
             )}
 
             {/* Content */}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="min-w-0 flex-1">
               {/* Wallet name and side */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <span style={{ fontSize: '13px', color: '#9CA3AF', fontWeight: '500' }}>
+              <div className="mb-1 flex items-center gap-2">
+                <span className="text-[13px] font-medium text-[#9CA3AF]">
                   {walletName}
                 </span>
                 <span
+                  className="flex items-center gap-1 rounded px-[6px] py-[2px] text-[11px] font-bold"
                   style={{
-                    fontSize: '11px',
-                    fontWeight: '700',
                     color: sideColor,
                     backgroundColor: `${sideColor}20`,
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    letterSpacing: '0.5px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
+                    letterSpacing: "0.5px",
                   }}
                 >
                   <span>{sideIcon}</span>
@@ -468,21 +526,19 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
               </div>
 
               {/* Token name */}
-              <div style={{ fontSize: '15px', fontWeight: '600', color: '#E6E7EA', marginBottom: '2px' }}>
+              <div className="mb-[2px] text-[15px] font-semibold text-[#E6E7EA]">
                 {tokenName}
               </div>
 
               {/* Amount */}
               {amountDisplay && (
-                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>
-                  {amountDisplay}
-                </div>
+                <div className="text-xs text-[#9CA3AF]">{amountDisplay}</div>
               )}
             </div>
           </div>
         );
 
-        showEnhancedToast('success', '', {
+        showEnhancedToast("success", "", {
           duration: 5000,
           customContent,
         });
@@ -491,12 +547,12 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
     const handleConnect = () => {
       setWsConnected(true);
-      
+
       // Subscribe to all tracked wallets after connection is established
       if (watchedWalletsRef.current.length > 0 && connection) {
         setTimeout(() => {
           if (connection?.ws.readyState === WebSocket.OPEN) {
-            const addresses = watchedWalletsRef.current.map(w => w.address);
+            const addresses = watchedWalletsRef.current.map((w) => w.address);
             connection.subscribe(addresses);
             subscribedWalletsRef.current = addresses;
           }
@@ -506,7 +562,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
     const handleDisconnect = () => {
       setWsConnected(false);
-      
+
       // Attempt to reconnect after 3 seconds
       reconnectTimeout = setTimeout(() => {
         initializeWebSocket();
@@ -518,11 +574,11 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         connection = createWalletTrackerWebSocket(
           handleTradeEvent,
           handleConnect,
-          handleDisconnect
+          handleDisconnect,
         );
         setWsConnection(connection);
       } catch (error) {
-        console.error('WebSocket failed to initialize:', error);
+        console.error("WebSocket failed to initialize:", error);
       }
     };
 
@@ -535,7 +591,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         clearTimeout(reconnectTimeout);
       }
       if (connection) {
-        console.log('🔌 Closing WebSocket connection (cleanup)...');
+        console.log("🔌 Closing WebSocket connection (cleanup)...");
         connection.close();
       }
       subscribedWalletsRef.current = [];
@@ -548,11 +604,11 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
       return;
     }
 
-    const addresses = watchedWallets.map(w => w.address);
+    const addresses = watchedWallets.map((w) => w.address);
     const previous = subscribedWalletsRef.current;
 
-    const toUnsubscribe = previous.filter(addr => !addresses.includes(addr));
-    const toSubscribe = addresses.filter(addr => !previous.includes(addr));
+    const toUnsubscribe = previous.filter((addr) => !addresses.includes(addr));
+    const toSubscribe = addresses.filter((addr) => !previous.includes(addr));
 
     if (toUnsubscribe.length > 0) {
       wsConnection.unsubscribe(toUnsubscribe);
@@ -567,7 +623,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
   // Hydrate cached trades from localStorage (user specific with global fallback)
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -591,7 +647,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
       const trades = parsed
         .map((trade): TradeEvent | null => {
-          if (!trade || typeof trade !== 'object') return null;
+          if (!trade || typeof trade !== "object") return null;
           try {
             return normalizeTradeForState(trade as TradeEvent);
           } catch {
@@ -601,10 +657,10 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         .filter((trade): trade is TradeEvent => Boolean(trade));
 
       if (trades.length > 0) {
-        setLatestTrades(prev => mergeTrades(prev, trades));
+        setLatestTrades((prev) => mergeTrades(prev, trades));
       }
     } catch (error) {
-      console.error('Failed to hydrate live trades cache:', error);
+      console.error("Failed to hydrate live trades cache:", error);
     } finally {
       hydrationRef.current = true;
     }
@@ -621,7 +677,7 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
 
   // Persist latest trades to localStorage
   useEffect(() => {
-    if (typeof window === 'undefined' || !hydrationRef.current) {
+    if (typeof window === "undefined" || !hydrationRef.current) {
       return;
     }
 
@@ -643,15 +699,31 @@ export function WalletTrackerProvider({ children }: { children: React.ReactNode 
         window.localStorage.setItem(getCacheKey(user.id), payload);
       }
     } catch (error) {
-      console.error('Failed to persist live trades cache:', error);
+      console.error("Failed to persist live trades cache:", error);
     }
   }, [latestTrades, user?.id]);
+
+  const clearNotifications = () => {
+    setLatestTrades([]);
+    // Also clear from localStorage
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+      } catch (error) {
+        console.error(
+          "Failed to clear notifications from localStorage:",
+          error,
+        );
+      }
+    }
+  };
 
   const value: WalletTrackerContextValue = {
     wsConnected,
     latestTrades,
     watchedWallets,
     refreshWatchedWallets,
+    clearNotifications,
   };
 
   return (

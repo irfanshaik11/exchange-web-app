@@ -36,16 +36,27 @@ const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({ i
   };
 
   const getInitialToastPosition = (): ToastPosition => {
-    if (typeof window === 'undefined') return 'bottom-center';
+    if (typeof window === 'undefined') return 'top-center';
     try {
       const saved = localStorage.getItem('toast-position') as ToastPosition;
+      
+      // Migrate from bottom-center to top-center (or if no value exists)
+      if (!saved || saved === 'bottom-center') {
+        localStorage.setItem('toast-position', 'top-center');
+        return 'top-center';
+      }
+      
       if (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
         return saved;
       }
+      
+      // Invalid value, migrate to top-center
+      localStorage.setItem('toast-position', 'top-center');
+      return 'top-center';
     } catch {
       // Ignore
     }
-    return 'bottom-center';
+    return 'top-center';
   };
 
   const [displayNotifications, setDisplayNotifications] = useState(getInitialDisplayNotifications);

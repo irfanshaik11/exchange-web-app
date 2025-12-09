@@ -2,6 +2,10 @@ import React from 'react';
 import { formatSmartNumber } from '~/utils/db';
 import useMonadDevTokens from '../../hooks/useMonadDevTokens';
 
+// Monad candle colors (matches chart colors)
+const MONAD_GREEN = '#86d99f';
+const MONAD_RED = '#f26682';
+
 interface MonadDevTokensTableProps {
   tokenAddress: string | undefined;
   enabled?: boolean;
@@ -23,8 +27,8 @@ const MonadDevTokensTable: React.FC<MonadDevTokensTableProps> = ({
   if (error) {
     return (
       <div className="w-full p-4">
-        <div className="mb-4 p-2 bg-red-900/20 border border-red-500/30 rounded-lg">
-          <p className="text-red-400 text-xs">{error}</p>
+        <div className="mb-4 p-2 rounded-lg" style={{ backgroundColor: `${MONAD_RED}20`, border: `1px solid ${MONAD_RED}4D` }}>
+          <p className="text-xs" style={{ color: MONAD_RED }}>{error}</p>
         </div>
       </div>
     );
@@ -110,7 +114,7 @@ const MonadDevTokensTable: React.FC<MonadDevTokensTableProps> = ({
               </td>
               
               {/* Buy Volume (USD) */}
-              <td className="px-2 py-2 text-emerald-400 whitespace-nowrap">
+              <td className="px-2 py-2 whitespace-nowrap" style={{ color: MONAD_GREEN }}>
                 ${formatSmartNumber(devTokenData.buy_volume_usd)}
               </td>
               
@@ -120,14 +124,12 @@ const MonadDevTokensTable: React.FC<MonadDevTokensTableProps> = ({
               </td>
               
               {/* Sell Volume (USD) */}
-              <td className="px-2 py-2 text-red-400 whitespace-nowrap">
+              <td className="px-2 py-2 whitespace-nowrap" style={{ color: MONAD_RED }}>
                 ${formatSmartNumber(devTokenData.sell_volume_usd)}
               </td>
               
               {/* Net Volume (USD) */}
-              <td className={`px-2 py-2 font-semibold whitespace-nowrap ${
-                netVolumeUsd >= 0 ? 'text-emerald-400' : 'text-red-400'
-              }`}>
+              <td className="px-2 py-2 font-semibold whitespace-nowrap" style={{ color: netVolumeUsd >= 0 ? MONAD_GREEN : MONAD_RED }}>
                 {netVolumeUsd >= 0 ? '+' : ''}${formatSmartNumber(netVolumeUsd)}
               </td>
             </tr>

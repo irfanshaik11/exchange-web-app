@@ -397,16 +397,28 @@
 
 // export default BirdeyeChart;
 // BirdeyePairChart.tsx
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
-import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { createChart, ColorType, CandlestickSeries } from "lightweight-charts";
+import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts";
 
-export type BirdeyeTF = '1s' | '15s' | '30s' | '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
-type Mode = 'range' | 'count';
+export type BirdeyeTF =
+  | "1s"
+  | "15s"
+  | "30s"
+  | "1m"
+  | "5m"
+  | "15m"
+  | "1h"
+  | "4h"
+  | "1d";
+type Mode = "range" | "count";
 
 export interface BirdeyeOHLC {
   address: string;
-  h: number; o: number; l: number; c: number;
+  h: number;
+  o: number;
+  l: number;
+  c: number;
   type: string;
   v: number;
   unix_time: number; // seconds
@@ -414,31 +426,46 @@ export interface BirdeyeOHLC {
 }
 
 export interface BirdeyePairChartProps {
-  pairAddress: string;             // PAIR address, not mint
-  timeframe?: BirdeyeTF;           // default '15m'
-  mode?: Mode;                     // 'count' (default) or 'range'
-  timeFrom?: number;               // UNIX seconds (range) or single anchor (count)
-  timeTo?: number;                 // UNIX seconds (range) or single anchor (count)
-  countLimit?: number;             // default 1000 (Birdeye max 5000)
+  pairAddress: string; // PAIR address, not mint
+  timeframe?: BirdeyeTF; // default '15m'
+  mode?: Mode; // 'count' (default) or 'range'
+  timeFrom?: number; // UNIX seconds (range) or single anchor (count)
+  timeTo?: number; // UNIX seconds (range) or single anchor (count)
+  countLimit?: number; // default 1000 (Birdeye max 5000)
   height?: string;
   width?: string;
   className?: string;
-  baseRefreshMs?: number;          // default 60000
+  baseRefreshMs?: number; // default 60000
   onDataUpdate?: (data: BirdeyeOHLC[]) => void;
 }
 
 /** Get API key from environment variables */
 // Use our secure proxy endpoint instead of calling BirdEye directly
-const BIRDEYE_PROXY_URL = '/api/birdeye-ohlcv-pair';
-const VALID_TF: BirdeyeTF[] = ['1s','15s','30s','1m','5m','15m','1h','4h','1d'];
+const BIRDEYE_PROXY_URL = "/api/birdeye-ohlcv-pair";
+const VALID_TF: BirdeyeTF[] = [
+  "1s",
+  "15s",
+  "30s",
+  "1m",
+  "5m",
+  "15m",
+  "1h",
+  "4h",
+  "1d",
+];
 
 /** Wait until an element is visible and non-zero sized */
 function waitForVisibleContainer(el: HTMLElement): Promise<void> {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const tick = () => {
       const r = el.getBoundingClientRect();
-      const visible = r.width > 40 && r.height > 40 && el.isConnected && getComputedStyle(el).display !== 'none';
-      if (visible) resolve(); else requestAnimationFrame(tick);
+      const visible =
+        r.width > 40 &&
+        r.height > 40 &&
+        el.isConnected &&
+        getComputedStyle(el).display !== "none";
+      if (visible) resolve();
+      else requestAnimationFrame(tick);
     };
     tick();
   });
@@ -446,65 +473,73 @@ function waitForVisibleContainer(el: HTMLElement): Promise<void> {
 
 const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
   pairAddress,
-  timeframe = '15m',
-  mode = 'count',
+  timeframe = "15m",
+  mode = "count",
   timeFrom,
   timeTo,
   countLimit = 1000,
-  height = '400px',
-  width  = '100%',
-  className = '',
+  height = "400px",
+  width = "100%",
+  className = "",
   baseRefreshMs = 60000,
   onDataUpdate,
 }) => {
-  const [tf, setTf] = useState<BirdeyeTF>(VALID_TF.includes(timeframe) ? timeframe : '15m');
+  const [tf, setTf] = useState<BirdeyeTF>(
+    VALID_TF.includes(timeframe) ? timeframe : "15m",
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [candles, setCandles] = useState<BirdeyeOHLC[]>([]);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [retryCount, setRetryCount] = useState(0);
 
-  const chartRef     = useRef<IChartApi | null>(null);
-  const seriesRef    = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const lastGoodCandlesRef = useRef<BirdeyeOHLC[]>([]);
-  const inFlightRef        = useRef<string | null>(null);
-  const mountedRef         = useRef(true);
-  const lastFetchAtRef     = useRef<number>(0);
-  const roRef              = useRef<ResizeObserver | null>(null);
-  const firstLoadRef       = useRef(true);
-  const moRef              = useRef<MutationObserver | null>(null);
+  const inFlightRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const lastFetchAtRef = useRef<number>(0);
+  const roRef = useRef<ResizeObserver | null>(null);
+  const firstLoadRef = useRef(true);
+  const moRef = useRef<MutationObserver | null>(null);
 
   /** Build the proxy request URL according to mode */
   const buildUrl = (m: Mode) => {
     const url = new URL(BIRDEYE_PROXY_URL, window.location.origin);
-    url.searchParams.set('address', pairAddress);
-    url.searchParams.set('type', tf);
-    url.searchParams.set('padding', 'true');  // keep empty candles to stabilize scale
-    url.searchParams.set('outlier', 'true');  // default true
+    url.searchParams.set("address", pairAddress);
+    url.searchParams.set("type", tf);
+    url.searchParams.set("padding", "true"); // keep empty candles to stabilize scale
+    url.searchParams.set("outlier", "true"); // default true
 
-    if (m === 'range') {
-      if (!timeFrom || !timeTo) throw new Error('timeFrom/timeTo required when mode="range"');
-      url.searchParams.set('mode', 'range');
-      url.searchParams.set('time_from', String(timeFrom));
-      url.searchParams.set('time_to',   String(timeTo));
+    if (m === "range") {
+      if (!timeFrom || !timeTo)
+        throw new Error('timeFrom/timeTo required when mode="range"');
+      url.searchParams.set("mode", "range");
+      url.searchParams.set("time_from", String(timeFrom));
+      url.searchParams.set("time_to", String(timeTo));
     } else {
       // COUNT MODE: Birdeye requires AT MOST ONE of time_from / time_to
-      url.searchParams.set('mode', 'count');
-      url.searchParams.set('count_limit', String(Math.min(Math.max(countLimit, 1), 5000)));
+      url.searchParams.set("mode", "count");
+      url.searchParams.set(
+        "count_limit",
+        String(Math.min(Math.max(countLimit, 1), 5000)),
+      );
 
       const hasFrom = Number.isFinite(timeFrom as number);
-      const hasTo   = Number.isFinite(timeTo as number);
+      const hasTo = Number.isFinite(timeTo as number);
 
       if (hasFrom && !hasTo) {
-        url.searchParams.set('time_from', String(timeFrom));
+        url.searchParams.set("time_from", String(timeFrom));
       } else if (hasTo && !hasFrom) {
-        url.searchParams.set('time_to', String(timeTo));
+        url.searchParams.set("time_to", String(timeTo));
       } else if (hasFrom && hasTo) {
         // Both provided: Birdeye says provide only one. We’ll send neither and warn.
         // (Caller can switch to range if they need a fixed window.)
-        console.warn('[BirdeyeChart] In count mode, provide only one of timeFrom OR timeTo. Ignoring both.');
+        console.warn(
+          "[BirdeyeChart] In count mode, provide only one of timeFrom OR timeTo. Ignoring both.",
+        );
       }
       // else: no anchor -> latest N candles “up to now”
     }
@@ -513,7 +548,7 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
 
   const fetchCandles = useCallback(async () => {
     if (!pairAddress) {
-      setError('No pair address provided');
+      setError("No pair address provided");
       setIsLoading(false);
       return;
     }
@@ -527,21 +562,25 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
     // tiny throttle (handles double-renders)
     const now = Date.now();
     const since = now - lastFetchAtRef.current;
-    if (since < 2000) await new Promise(r => setTimeout(r, 2000 - since));
+    if (since < 2000) await new Promise((r) => setTimeout(r, 2000 - since));
     lastFetchAtRef.current = Date.now();
 
     const doFetch = async (u: URL) => {
       const r = await fetch(u.toString(), {
-        method: 'GET',
+        method: "GET",
         headers: {
-          accept: 'application/json',
-          'x-chain': 'solana',
+          accept: "application/json",
+          "x-chain": "solana",
         },
       });
       let body: any = null;
-      try { body = await r.clone().json(); } catch {}
-      if (!r.ok) throw new Error(body?.message || `${r.status} ${r.statusText}`);
-      if (!body?.success) throw new Error(body?.message || 'API returned unsuccessful response');
+      try {
+        body = await r.clone().json();
+      } catch {}
+      if (!r.ok)
+        throw new Error(body?.message || `${r.status} ${r.statusText}`);
+      if (!body?.success)
+        throw new Error(body?.message || "API returned unsuccessful response");
       return (body?.data?.items ?? []) as BirdeyeOHLC[];
     };
 
@@ -552,23 +591,35 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
       let items = await doFetch(url);
 
       // If empty in count mode, try one coarser TF once
-      if ((!items || items.length === 0) && mode === 'count') {
-        const fallback: Record<string,string> = { '1s':'1m','15s':'1m','30s':'5m','1m':'5m','5m':'15m','15m':'1h' };
+      if ((!items || items.length === 0) && mode === "count") {
+        const fallback: Record<string, string> = {
+          "1s": "1m",
+          "15s": "1m",
+          "30s": "5m",
+          "1m": "5m",
+          "5m": "15m",
+          "15m": "1h",
+        };
         const next = fallback[tf];
         if (next) {
           const url2 = new URL(BIRDEYE_PROXY_URL, window.location.origin);
-          url2.searchParams.set('address', pairAddress);
-          url2.searchParams.set('type', next);
-          url2.searchParams.set('mode', 'count');
-          url2.searchParams.set('count_limit', String(Math.min(Math.max(countLimit, 1), 5000)));
-          url2.searchParams.set('padding', 'true');
-          url2.searchParams.set('outlier', 'true');
+          url2.searchParams.set("address", pairAddress);
+          url2.searchParams.set("type", next);
+          url2.searchParams.set("mode", "count");
+          url2.searchParams.set(
+            "count_limit",
+            String(Math.min(Math.max(countLimit, 1), 5000)),
+          );
+          url2.searchParams.set("padding", "true");
+          url2.searchParams.set("outlier", "true");
 
           // Repeat the single-anchor rule for the fallback call
           const hasFrom = Number.isFinite(timeFrom as number);
-          const hasTo   = Number.isFinite(timeTo as number);
-          if (hasFrom && !hasTo) url2.searchParams.set('time_from', String(timeFrom));
-          else if (hasTo && !hasFrom) url2.searchParams.set('time_to', String(timeTo));
+          const hasTo = Number.isFinite(timeTo as number);
+          if (hasFrom && !hasTo)
+            url2.searchParams.set("time_from", String(timeFrom));
+          else if (hasTo && !hasFrom)
+            url2.searchParams.set("time_to", String(timeTo));
 
           items = await doFetch(url2);
           if (items.length > 0) setTf(next as BirdeyeTF);
@@ -578,7 +629,7 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
       if (!items || items.length === 0) {
         // keep last data drawn; increase backoff
         setError(null);
-        setRetryCount(n => Math.min(n + 1, 8));
+        setRetryCount((n) => Math.min(n + 1, 8));
         return;
       }
 
@@ -589,15 +640,15 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
       onDataUpdate?.(items);
     } catch (e: any) {
       if (!mountedRef.current) return;
-      setError(e?.message || 'Fetch error');
+      setError(e?.message || "Fetch error");
       setCandles(lastGoodCandlesRef.current);
-      setRetryCount(n => Math.min(n + 1, 8));
+      setRetryCount((n) => Math.min(n + 1, 8));
     } finally {
       if (mountedRef.current) setIsLoading(false);
       firstLoadRef.current = false;
       inFlightRef.current = null;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pairAddress, tf, mode, timeFrom, timeTo, countLimit, onDataUpdate]);
 
   // Init chart once
@@ -612,34 +663,46 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
       if (disposed) return;
       if (chartRef.current) return; // guard
 
-      container.innerHTML = '';
+      container.innerHTML = "";
 
       const chart = createChart(container, {
         width: container.clientWidth || 600,
         height: container.clientHeight || 400,
-        layout: { background: { type: ColorType.Solid, color: '#131722' }, textColor: '#d1d4dc' },
-        grid:   { vertLines: { color: '#2B2B43' }, horzLines: { color: '#2B2B43' } },
+        layout: {
+          background: { type: ColorType.Solid, color: "#131722" },
+          textColor: "#d1d4dc",
+        },
+        grid: {
+          vertLines: { color: "#2B2B43" },
+          horzLines: { color: "#2B2B43" },
+        },
         crosshair: { mode: 1 },
-        rightPriceScale: { borderColor: '#2B2B43' },
+        rightPriceScale: { borderColor: "#2B2B43" },
         timeScale: {
-          borderColor: '#2B2B43',
+          borderColor: "#2B2B43",
           timeVisible: true,
-          secondsVisible: ['1s','15s','30s'].includes(tf),
+          secondsVisible: ["1s", "15s", "30s"].includes(tf),
           rightOffset: 10,
         },
         handleScroll: { mouseWheel: true, pressedMouseMove: true },
-        handleScale:  { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
-        localization: { timeFormatter: (t: any) => new Date(t * 1000).toLocaleString() },
+        handleScale: {
+          axisPressedMouseMove: true,
+          mouseWheel: true,
+          pinch: true,
+        },
+        localization: {
+          timeFormatter: (t: any) => new Date(t * 1000).toLocaleString(),
+        },
       });
 
       const series = chart.addSeries(CandlestickSeries, {
-        upColor: '#26a69a',
-        downColor: '#ef5350',
-        borderDownColor: '#ef5350',
-        borderUpColor: '#26a69a',
-        wickDownColor: '#ef5350',
-        wickUpColor: '#26a69a',
-        priceFormat: { type: 'price', precision: 8, minMove: 1e-8 },
+        upColor: "#26a69a",
+        downColor: "#ef5350",
+        borderDownColor: "#ef5350",
+        borderUpColor: "#26a69a",
+        wickDownColor: "#ef5350",
+        wickUpColor: "#26a69a",
+        priceFormat: { type: "price", precision: 8, minMove: 1e-8 },
         lastValueVisible: true,
         priceLineVisible: true,
       });
@@ -651,23 +714,28 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
         if (!chartRef.current || !containerRef.current) return;
         await waitForVisibleContainer(containerRef.current);
         chartRef.current.applyOptions({
-          width:  containerRef.current.clientWidth  || 600,
+          width: containerRef.current.clientWidth || 600,
           height: containerRef.current.clientHeight || 400,
         });
         chartRef.current.timeScale().fitContent();
       };
 
-      if ('ResizeObserver' in window) {
+      if ("ResizeObserver" in window) {
         const ro = new ResizeObserver(() => resize());
         roRef.current = ro;
         ro.observe(container);
       }
 
-      const onVisible = () => { if (document.visibilityState === 'visible') resize(); };
-      document.addEventListener('visibilitychange', onVisible);
+      const onVisible = () => {
+        if (document.visibilityState === "visible") resize();
+      };
+      document.addEventListener("visibilitychange", onVisible);
 
       const mo = new MutationObserver(() => resize());
-      mo.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
+      mo.observe(document.body, {
+        attributes: true,
+        attributeFilter: ["class", "style"],
+      });
       moRef.current = mo;
     };
 
@@ -675,7 +743,7 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
 
     return () => {
       disposed = true;
-      document.removeEventListener('visibilitychange', () => {});
+      document.removeEventListener("visibilitychange", () => {});
       moRef.current?.disconnect();
       moRef.current = null;
       roRef.current?.disconnect();
@@ -684,7 +752,7 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
       seriesRef.current = null;
       chartRef.current?.remove();
       chartRef.current = null;
-      container && (container.innerHTML = '');
+      container && (container.innerHTML = "");
     };
   }, []);
 
@@ -694,7 +762,7 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
     fetchCandles();
 
     const backoff = Math.min(Math.pow(2, retryCount), 8);
-    const jitter  = Math.floor(Math.random() * 4000);
+    const jitter = Math.floor(Math.random() * 4000);
     const interval = baseRefreshMs * backoff + jitter;
 
     const id = setInterval(fetchCandles, interval);
@@ -708,17 +776,18 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
   useEffect(() => {
     const run = async () => {
       if (!seriesRef.current || !containerRef.current) return;
-      const src = candles && candles.length > 0 ? candles : lastGoodCandlesRef.current;
+      const src =
+        candles && candles.length > 0 ? candles : lastGoodCandlesRef.current;
       if (!src || src.length === 0) return;
 
       await waitForVisibleContainer(containerRef.current);
 
       const data = src
-        .map(c => ({
-          time:  c.unix_time as UTCTimestamp,
-          open:  c.o,
-          high:  c.h,
-          low:   c.l,
+        .map((c) => ({
+          time: c.unix_time as UTCTimestamp,
+          open: c.o,
+          high: c.h,
+          low: c.l,
           close: c.c,
         }))
         .sort((a, b) => (a.time as number) - (b.time as number));
@@ -733,21 +802,21 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
   useEffect(() => {
     if (!chartRef.current) return;
     chartRef.current.applyOptions({
-      timeScale: { secondsVisible: ['1s','15s','30s'].includes(tf) },
+      timeScale: { secondsVisible: ["1s", "15s", "30s"].includes(tf) },
     });
   }, [tf]);
 
   return (
     <div className={`relative ${className}`} style={{ height, width }}>
-      <div ref={containerRef} className="w-full h-full" style={{ height: '100%', width: '100%' }} />
+      <div ref={containerRef} className="h-full w-full" />
 
       {/* Controls */}
-      <div className="absolute top-2 right-2 bg-gray-800/90 rounded px-2 py-1 flex items-center gap-2">
+      <div className="absolute top-2 right-2 flex items-center gap-2 rounded bg-gray-800/90 px-2 py-1">
         <span className="text-xs text-gray-300">PAIR</span>
         <select
           value={tf}
           onChange={(e) => setTf(e.target.value as BirdeyeTF)}
-          className="bg-transparent text-white text-xs border-none outline-none cursor-pointer"
+          className="cursor-pointer border-none bg-transparent text-xs text-white outline-none"
           disabled={isLoading}
         >
           <option value="1s">1s</option>
@@ -762,7 +831,7 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
         </select>
         <button
           onClick={() => fetchCandles()}
-          className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+          className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
           disabled={isLoading}
         >
           Refresh
@@ -773,25 +842,27 @@ const BirdeyeChart: React.FC<BirdeyePairChartProps> = ({
       {isLoading && firstLoadRef.current && (
         <div className="absolute inset-0 grid place-items-center bg-gray-900/60">
           <div className="flex flex-col items-center gap-3">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-400" />
-            <div className="text-white text-sm">Loading Birdeye OHLCV…</div>
+            <div className="h-10 w-10 animate-spin rounded-full border-b-2 border-blue-400" />
+            <div className="text-sm text-white">Loading Birdeye OHLCV…</div>
           </div>
         </div>
       )}
 
       {/* Error */}
       {!isLoading && error && (
-        <div className="absolute bottom-2 left-2 bg-red-900/90 text-white text-xs rounded px-2 py-1">
+        <div className="absolute bottom-2 left-2 rounded bg-red-900/90 px-2 py-1 text-xs text-white">
           ⚠️ {error}
         </div>
       )}
 
       {/* Status */}
-      {(candles.length > 0 || lastGoodCandlesRef.current.length > 0) && lastUpdate && (
-        <div className="absolute bottom-2 left-2 bg-gray-800/90 rounded px-3 py-1 text-xs text-gray-300">
-          <span className="text-green-400">●</span> Birdeye v3 pair | TF {tf} | Updated {lastUpdate.toLocaleTimeString()}
-        </div>
-      )}
+      {(candles.length > 0 || lastGoodCandlesRef.current.length > 0) &&
+        lastUpdate && (
+          <div className="absolute bottom-2 left-2 rounded bg-gray-800/90 px-3 py-1 text-xs text-gray-300">
+            <span className="text-green-400">●</span> Birdeye v3 pair | TF {tf}{" "}
+            | Updated {lastUpdate.toLocaleTimeString()}
+          </div>
+        )}
     </div>
   );
 };

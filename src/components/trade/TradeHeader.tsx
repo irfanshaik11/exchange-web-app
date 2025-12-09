@@ -37,6 +37,8 @@ const MONAD_BRAND = {
   color: "#9B59B6",
   icon: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
 };
+// Monad candle colors (matches chart colors)
+const MONAD_RED = '#f26682';
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
@@ -1378,7 +1380,10 @@ const TradeHeader: React.FC<TradeHeaderProps> = ({ token }) => {
               {Number.isFinite(Number(curvePct))
                 ? `${Number(curvePct).toFixed(1)}%`
                 : "—"}
-              <ColorFillBar value={curvePct * 100} />
+              <ColorFillBar 
+                value={curvePct * 100} 
+                color={isMonadContext ? MONAD_RED : undefined}
+              />
             </div>
           </StatInline>
         </div>

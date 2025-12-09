@@ -45,15 +45,16 @@ interface LaunchpadData {
   completed: LaunchpadToken[];
 }
 
-interface PulseContentProps {
+interface PulsePopoutContentProps {
   forceMobileView?: boolean;
 }
 
-export default function PulseContent({ forceMobileView = false }: PulseContentProps = {}) {
+export default function PulsePopoutContent({ forceMobileView = false }: PulsePopoutContentProps = {}) {
   const { user } = useUser();
   const router = useRouter();
+  const manualChainSwitchRef = useRef(false);
   
-  // CRITICAL: Initialize chain from URL immediately to avoid race conditions
+  // CRITICAL: Default to monad chain for popout
   const [currentChain, setCurrentChain] = useState<string>(() => {
     if (typeof window !== 'undefined' && router.isReady) {
       return (router.query.chain as string) || 'monad';
@@ -65,24 +66,30 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
     return 'monad';
   });
   
-  // Sync chain state with router query
+  // Sync chain state with router query (only if not manually switched)
   useEffect(() => {
-    if (!router.isReady) return;
+    if (!router.isReady || manualChainSwitchRef.current) {
+      manualChainSwitchRef.current = false;
+      return;
+    }
     const chainFromQuery = (router.query.chain as string) || 'monad';
     if (chainFromQuery !== currentChain) {
       setCurrentChain(chainFromQuery);
     }
-  }, [router.query.chain, router.isReady, currentChain]);
+  }, [router.query.chain, router.isReady]);
   
-  // Also watch router.asPath as a fallback
+  // Also watch router.asPath as a fallback (only if not manually switched)
   useEffect(() => {
-    if (!router.isReady) return;
+    if (!router.isReady || manualChainSwitchRef.current) {
+      manualChainSwitchRef.current = false;
+      return;
+    }
     const urlParams = new URLSearchParams(router.asPath.split('?')[1] || '');
     const chainFromUrl = urlParams.get('chain') || 'monad';
     if (chainFromUrl !== currentChain) {
       setCurrentChain(chainFromUrl);
     }
-  }, [router.asPath, router.isReady, currentChain]);
+  }, [router.asPath, router.isReady]);
 
   const chain = currentChain;
   const isMonadRoute = chain === 'monad';
@@ -107,21 +114,21 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   // React Query hooks - only enable Solana data fetching when NOT on Monad route
   // COMMENTED OUT: PulseTable is disabled, so these hooks are disabled too
   const shouldFetchSolanaData = false; // router.isReady && !isMonadRoute;
-
-  // const { 
-  //   data: tokens = [], 
-  //   isLoading: tokensLoading, 
-  //   error: tokensError, 
+  
+  // const {
+  //   data: tokens = [],
+  //   isLoading: tokensLoading,
+  //   error: tokensError,
   //   isStale: tokensStale,
   //   refetch: refreshTokens,
   //   dataUpdatedAt,
   //   isFetching,
   // } = useQueryNewPairs(shouldFetchSolanaData);
-  
-  // const { 
-  //   data: launchpadData = { new: [], completing: [], completed: [] }, 
-  //   isLoading: launchpadLoading, 
-  //   error: launchpadError, 
+
+  // const {
+  //   data: launchpadData = { new: [], completing: [], completed: [] },
+  //   isLoading: launchpadLoading,
+  //   error: launchpadError,
   //   isStale: launchpadStale,
   //   refetch: refreshLaunchpadData,
   // } = useQueryLaunchpadData(shouldFetchSolanaData);
@@ -256,7 +263,9 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
           const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
           apiUrl = `${monadServiceUrl}/v1/pulse/final-stretch?limit=35`;
         } else {
-          apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+          // COMMENTED OUT: PulseTable is disabled, so Solana API calls are disabled
+          // apiUrl = `/api/token-service/pulse-final-stretch?limit=50&t=${Date.now()}`;
+          return; // Skip Solana route
         }
 
         const res = await fetch(apiUrl, {
@@ -283,18 +292,23 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
                 setMonadFinalStretch([]);
                 setMonadFinalStretchTick((t) => t + 1);
               } else {
-              setHttpFinalStretch([]);
-              setHttpFinalStretchTick((t) => t + 1);
+                setHttpFinalStretch([]);
+                setHttpFinalStretchTick((t) => t + 1);
               }
               return;
             }
 
             if (isMonadRoute) {
-              setMonadFinalStretch(filteredData as any[]);
+              // Transform Monad tokens: map 'address' to 'mint'
+              const transformed = filteredData.map((t: any) => ({
+                ...t,
+                mint: t.address || t.mint,
+              }));
+              setMonadFinalStretch(transformed);
               setMonadFinalStretchTick((t) => t + 1);
             } else {
-            setHttpFinalStretch(filteredData as any[]);
-            setHttpFinalStretchTick((t) => t + 1);
+              setHttpFinalStretch(filteredData as any[]);
+              setHttpFinalStretchTick((t) => t + 1);
             }
           }
         }
@@ -309,9 +323,6 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   // Fetch Monad data when chain is monad (with localStorage caching)
   useEffect(() => {
     if (!isMonadRoute) {
-      setMonadNewTick(0);
-      setMonadFinalStretchTick(0);
-      setMonadMigratedTick(0);
       return;
     }
 
@@ -329,6 +340,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
           const parsed = JSON.parse(newCached);
           if (now < parsed.expiresAt && parsed.data && parsed.data.length > 0) {
             setMonadNew(parsed.data);
+            setMonadNewTick(1); // Mark as fetched
             hasValidCache = true;
           }
         }
@@ -337,6 +349,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
           const parsed = JSON.parse(finalStretchCached);
           if (now < parsed.expiresAt && parsed.data && parsed.data.length > 0) {
             setMonadFinalStretch(parsed.data);
+            setMonadFinalStretchTick(1); // Mark as fetched
             hasValidCache = true;
           }
         }
@@ -345,6 +358,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
           const parsed = JSON.parse(migratedCached);
           if (now < parsed.expiresAt && parsed.data && parsed.data.length > 0) {
             setMonadMigrated(parsed.data);
+            setMonadMigratedTick(1); // Mark as fetched
             hasValidCache = true;
           }
         }
@@ -355,7 +369,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       return hasValidCache;
     };
 
-    const cacheValid = loadFromCache();
+    loadFromCache();
 
     const fetchMonadData = async () => {
       try {
@@ -445,75 +459,80 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
         }
       } catch (error) {
         console.error('[Monad] ❌ Failed to fetch Monad data:', error);
+        // Even on error, mark as fetched so we don't show loading forever
+        setMonadNewTick(prev => prev > 0 ? prev : 1);
+        setMonadFinalStretchTick(prev => prev > 0 ? prev : 1);
+        setMonadMigratedTick(prev => prev > 0 ? prev : 1);
       }
     };
 
+    // Always fetch, even if cache was valid (for background refresh)
     fetchMonadData();
-  }, [isMonadRoute, isZeroLiquidityToken, chain]);
+  }, [isMonadRoute, isZeroLiquidityToken]);
 
   // Convert launchpad tokens to Token format for PulseTable
   const convertLaunchpadToToken = useCallback(
     (launchpadToken: LaunchpadToken): Token =>
       ({
-    id: 0,
-    mint: launchpadToken.mint,
+        id: 0,
+        mint: launchpadToken.mint,
         standard: "SPL",
         name: launchpadToken.name || "Unknown",
         symbol: launchpadToken.symbol || "UNK",
         logo: launchpadToken.image || "",
-    decimals: 6,
-    metaplex: null,
-    fully_diluted_value: launchpadToken.marketCapUsd,
-    total_supply: 0,
-    total_supply_formatted: 0,
-    links: null,
+        decimals: 6,
+        metaplex: null,
+        fully_diluted_value: launchpadToken.marketCapUsd,
+        total_supply: 0,
+        total_supply_formatted: 0,
+        links: null,
         description: "",
-    is_verified_contract: false,
-    possible_spam: false,
-    total_buy_volume_5m: 0,
-    total_buy_volume_1h: 0,
-    total_buy_volume_6h: 0,
-    total_buy_volume_24h: launchpadToken.volume24h,
-    total_sell_volume_5m: 0,
-    total_sell_volume_1h: 0,
-    total_sell_volume_6h: 0,
-    total_sell_volume_24h: 0,
-    total_buyers_5m: 0,
-    total_buyers_1h: 0,
-    total_buyers_6h: 0,
-    total_buyers_24h: 0,
-    total_sellers_5m: 0,
-    total_sellers_1h: 0,
-    total_sellers_6h: 0,
-    total_sellers_24h: 0,
-    total_buys_5m: 0,
-    total_buys_1h: 0,
-    total_buys_6h: 0,
-    total_buys_24h: 0,
-    total_sells_5m: 0,
-    total_sells_1h: 0,
-    total_sells_6h: 0,
-    total_sells_24h: 0,
-    unique_wallets_5m: 0,
-    unique_wallets_1h: 0,
-    unique_wallets_6h: 0,
-    unique_wallets_24h: 0,
-    price_percent_change_5m: 0,
-    price_percent_change_1h: 0,
-    price_percent_change_6h: 0,
-    price_percent_change_24h: launchpadToken.priceChange24h,
-    sol_price: 0,
-    usd_price: launchpadToken.priceUsd,
-    total_liquidity_usd: launchpadToken.marketCapUsd,
-    total_fully_diluted_valuation: launchpadToken.marketCapUsd,
-    total_snipers: 0,
-    pair_address: launchpadToken.mint,
-    total_holders: 0,
-    created_at: launchpadToken.createdAt,
-    updated_at: launchpadToken.createdAt,
-    bonding_curve_progress: launchpadToken.graduationPercent,
-    uri: launchpadToken.image || null,
-    image: launchpadToken.image || null,
+        is_verified_contract: false,
+        possible_spam: false,
+        total_buy_volume_5m: 0,
+        total_buy_volume_1h: 0,
+        total_buy_volume_6h: 0,
+        total_buy_volume_24h: launchpadToken.volume24h,
+        total_sell_volume_5m: 0,
+        total_sell_volume_1h: 0,
+        total_sell_volume_6h: 0,
+        total_sell_volume_24h: 0,
+        total_buyers_5m: 0,
+        total_buyers_1h: 0,
+        total_buyers_6h: 0,
+        total_buyers_24h: 0,
+        total_sellers_5m: 0,
+        total_sellers_1h: 0,
+        total_sellers_6h: 0,
+        total_sellers_24h: 0,
+        total_buys_5m: 0,
+        total_buys_1h: 0,
+        total_buys_6h: 0,
+        total_buys_24h: 0,
+        total_sells_5m: 0,
+        total_sells_1h: 0,
+        total_sells_6h: 0,
+        total_sells_24h: 0,
+        unique_wallets_5m: 0,
+        unique_wallets_1h: 0,
+        unique_wallets_6h: 0,
+        unique_wallets_24h: 0,
+        price_percent_change_5m: 0,
+        price_percent_change_1h: 0,
+        price_percent_change_6h: 0,
+        price_percent_change_24h: launchpadToken.priceChange24h,
+        sol_price: 0,
+        usd_price: launchpadToken.priceUsd,
+        total_liquidity_usd: launchpadToken.marketCapUsd,
+        total_fully_diluted_valuation: launchpadToken.marketCapUsd,
+        total_snipers: 0,
+        pair_address: launchpadToken.mint,
+        total_holders: 0,
+        created_at: launchpadToken.createdAt,
+        updated_at: launchpadToken.createdAt,
+        bonding_curve_progress: launchpadToken.graduationPercent,
+        uri: launchpadToken.image || null,
+        image: launchpadToken.image || null,
       }) as any,
     [],
   );
@@ -560,13 +579,15 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   // Memoize the loading state
   const isLoading = useMemo(() => {
     if (isMonadRoute) {
-      return monadNew.length === 0 && monadNewTick === 0;
+      // For Monad, only show loading if we haven't fetched yet (tick is 0)
+      // Once we've fetched (tick > 0), even if data is empty, don't show loading
+      return monadNewTick === 0;
     }
     return !tokens.length && !launchpadData?.new?.length && !httpNew.length;
-  }, [isMonadRoute, tokens.length, launchpadData?.new?.length, httpNew.length, monadNew.length, monadNewTick]);
+  }, [isMonadRoute, tokens.length, launchpadData?.new?.length, httpNew.length, monadNewTick]);
   
   const newPairsLoading = isLoading;
-  
+
   const hasError = useMemo(() => {
     return (
       launchpadError &&
@@ -686,19 +707,19 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
     );
     if (vals.length === 0)
       return combinedNewPairs.filter((token) => !isZeroLiquidityToken(token)).slice(0, 35);
-    
+
     const tsCache = new Map<any, number>();
     const getOrCacheTs = (t: any) => {
       if (!tsCache.has(t)) tsCache.set(t, getTs(t));
       return tsCache.get(t)!;
     };
-    
+
     const withTs: any[] = [];
     const withoutTs: any[] = [];
     for (const t of vals) {
       (getOrCacheTs(t) > 0 ? withTs : withoutTs).push(t);
     }
-    
+
     withTs.sort((a, b) => getOrCacheTs(b) - getOrCacheTs(a));
     if (withoutTs.length > 0) {
       withoutTs.sort((a, b) => {
@@ -711,7 +732,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
         return aName < bName ? -1 : aName > bName ? 1 : 0;
       });
     }
-    
+
     const result = withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
     return result.slice(0, 35);
   };
@@ -728,7 +749,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       (token: any) => !isZeroLiquidityToken(token),
     );
     if (filteredSource.length === 0) return [];
-    
+
     const tsCache = new Map<any, number>();
     const getOrCacheTs = (t: any) => {
       if (!tsCache.has(t)) tsCache.set(t, getTs(t));
@@ -740,7 +761,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
     for (const t of filteredSource) {
       (getOrCacheTs(t) > 0 ? withTs : withoutTs).push(t);
     }
-    
+
     withTs.sort((a, b) => getOrCacheTs(b) - getOrCacheTs(a));
     if (withoutTs.length > 0) {
       withoutTs.sort((a, b) => {
@@ -753,7 +774,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
         return aName < bName ? -1 : aName > bName ? 1 : 0;
       });
     }
-    
+
     return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
   };
 
@@ -769,7 +790,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       (token: any) => !isZeroLiquidityToken(token),
     );
     if (filteredSource.length === 0) return [];
-    
+
     const tsCache = new Map<any, number>();
     const getOrCacheTs = (t: any) => {
       if (!tsCache.has(t)) tsCache.set(t, getTs(t));
@@ -781,7 +802,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
     for (const t of filteredSource) {
       (getOrCacheTs(t) > 0 ? withTs : withoutTs).push(t);
     }
-    
+
     withTs.sort((a, b) => getOrCacheTs(b) - getOrCacheTs(a));
     if (withoutTs.length > 0) {
       withoutTs.sort((a, b) => {
@@ -794,7 +815,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
         return aName < bName ? -1 : aName > bName ? 1 : 0;
       });
     }
-    
+
     return withTs.length > 0 ? withTs.concat(withoutTs) : withoutTs;
   };
 
@@ -839,36 +860,36 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
 
   const enrichWithMarketData = useCallback(
     (arr: any[]): any[] => {
-    if (!arr || arr.length === 0) return arr;
+      if (!arr || arr.length === 0) return arr;
 
-    return arr.map((t: any) => {
-      const mintKey = t?.mint as string | undefined;
-      const pairKey = t?.pair_address as string | undefined;
+      return arr.map((t: any) => {
+        const mintKey = t?.mint as string | undefined;
+        const pairKey = t?.pair_address as string | undefined;
         const md =
           (mintKey && marketData[mintKey]) || (pairKey && marketData[pairKey]);
 
-      if (!md) return t;
+        if (!md) return t;
 
-      const hasChanges = 
-        t.price_usd !== md.price_usd ||
-        t.usd_price !== md.price_usd ||
-        t.market_cap_usd !== md.market_cap_usd ||
-        t.fully_diluted_value !== md.market_cap_usd ||
-        t.volume_24h !== (md as any).volume_usd;
+        const hasChanges =
+          t.price_usd !== md.price_usd ||
+          t.usd_price !== md.price_usd ||
+          t.market_cap_usd !== md.market_cap_usd ||
+          t.fully_diluted_value !== md.market_cap_usd ||
+          t.volume_24h !== (md as any).volume_usd;
 
-      if (!hasChanges) return t;
+        if (!hasChanges) return t;
 
-      const patched: any = { ...t };
-      patched.price_usd = md.price_usd;
-      patched.usd_price = md.price_usd;
-      patched.market_cap_usd = md.market_cap_usd;
-      patched.fully_diluted_value = md.market_cap_usd;
-      patched.total_fully_diluted_valuation = md.market_cap_usd;
-      if ((md as any).volume_usd !== undefined) {
-        patched.volume_24h = (md as any).volume_usd;
-      }
-      return patched;
-    });
+        const patched: any = { ...t };
+        patched.price_usd = md.price_usd;
+        patched.usd_price = md.price_usd;
+        patched.market_cap_usd = md.market_cap_usd;
+        patched.fully_diluted_value = md.market_cap_usd;
+        patched.total_fully_diluted_valuation = md.market_cap_usd;
+        if ((md as any).volume_usd !== undefined) {
+          patched.volume_24h = (md as any).volume_usd;
+        }
+        return patched;
+      });
     },
     [marketData],
   );
@@ -879,7 +900,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
   const enrichedMigrated = isMonadRoute ? monadMigrated : migratedToShow;
 
   const { preloadImages } = useImagePreloader();
-  
+
   useEffect(() => {
     if (newPairsToShow && newPairsToShow.length > 0) {
       const imageSources = newPairsToShow
@@ -899,69 +920,83 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
       return;
     }
 
-    const fetchInitialMigratedTokens = async () => {
-      try {
-        const endpoint = `/api/token-service/pulse-migrated?limit=70`;
-        const response = await fetch(endpoint, {
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (data.length > 0) {
-            const filteredData = data.filter((token: any) => {
-              if (!token) return false;
-              if (isZeroLiquidityToken(token)) {
-                return false;
-              }
-              return true;
-            });
+    // COMMENTED OUT: PulseTable is disabled, so Solana API calls are disabled
+    return;
 
-            if (filteredData.length === 0) {
-              setHttpMigrated([]);
-              setHttpMigratedTick((prev) => prev + 1);
-              return;
-            }
+    // const fetchInitialMigratedTokens = async () => {
+    //   try {
+    //     const endpoint = `/api/token-service/pulse-migrated?limit=70`;
+    //     const response = await fetch(endpoint, {
+    //       cache: 'no-store',
+    //       headers: {
+    //         'Cache-Control': 'no-cache',
+    //         'Pragma': 'no-cache'
+    //       }
+    //     });
+    //     if (response.ok) {
+    //       const data = await response.json();
+    //       if (data.length > 0) {
+    //         const filteredData = data.filter((token: any) => {
+    //           if (!token) return false;
+    //           if (isZeroLiquidityToken(token)) {
+    //             return false;
+    //           }
+    //           return true;
+    //         });
 
-            const tokensWithTimestamp = filteredData.map((token: any) => ({
-              ...token,
-              created_at: token.migrated_time || new Date().toISOString(),
-              timestamp: Date.now(),
-            }));
-            setHttpMigrated(tokensWithTimestamp);
-            setHttpMigratedTick((prev) => prev + 1);
-          }
-        }
-      } catch (error) {
-        console.error(`[Pulse] ❌ Failed to fetch initial migrated tokens:`, error);
-      }
-    };
+    //         if (filteredData.length === 0) {
+    //           setHttpMigrated([]);
+    //           setHttpMigratedTick((prev) => prev + 1);
+    //           return;
+    //         }
 
-    fetchInitialMigratedTokens();
+    //         const tokensWithTimestamp = filteredData.map((token: any) => ({
+    //           ...token,
+    //           created_at: token.migrated_time || new Date().toISOString(),
+    //           timestamp: Date.now(),
+    //         }));
+    //         setHttpMigrated(tokensWithTimestamp);
+    //         setHttpMigratedTick((prev) => prev + 1);
+    //       }
+    //     }
+    //   } catch (error) {
+    //     console.error(`[Pulse] ❌ Failed to fetch initial migrated tokens:`, error);
+    //   }
+    // };
+
+    // fetchInitialMigratedTokens();
   }, [isMonadRoute, isZeroLiquidityToken]);
 
   // Handle chain switching
   const handleChainSwitch = useCallback((newChain: string) => {
+    manualChainSwitchRef.current = true;
     setCurrentChain(newChain);
-    // Update URL without navigation for popout context
+    // Update URL and router query for popout context
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
       url.searchParams.set('chain', newChain);
       window.history.replaceState({}, '', url.toString());
+      // Also update router query using shallow routing
+      router.push(
+        {
+          pathname: router.pathname,
+          query: { ...router.query, chain: newChain },
+        },
+        undefined,
+        { shallow: true }
+      );
     }
-  }, []);
+  }, [router]);
 
   return (
     <div className="flex h-full flex-col text-neutral-100 overflow-hidden" style={{ backgroundColor: '#06070b' }}>
       <div className="w-full px-6 pt-4 flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="mb-1">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 px-2 mb-1">
+          <div className="mb-1 flex flex-col gap-3 px-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold">Trenches</h1>
-              <div className="flex items-center gap-3">
+              {/* Chain switching buttons commented out */}
+              {/* <div className="flex items-center gap-3">
                 <button
                   onClick={() => handleChainSwitch('monad')}
                   aria-label="View Monad tokens"
@@ -973,7 +1008,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
                     className="h-7 w-7 rounded-full object-cover"
                   />
                 </button>
-                {/* <button
+                <button
                   onClick={() => handleChainSwitch('sol')}
                   aria-label="View Solana tokens"
                   className={solanaButtonClasses}
@@ -983,8 +1018,8 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
                     alt="Solana"
                     className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
                   />
-                </button> */}
-              </div>
+                </button>
+              </div> */}
             </div>
           </div>
         </div>
@@ -993,35 +1028,37 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
           <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
             <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
               <MonadTable
-                    title="New Pairs" 
+                title="New Pairs"
                 tokens={enrichedNewPairsToShow}
-                loading={false}
+                loading={monadNewTick === 0}
                 isFirstOrLast="first"
-                    showBubbleMetrics={false} 
-                  />
+                showBubbleMetrics={false}
+              />
               <MonadTable
-                    title="Final Stretch" 
+                title="Final Stretch"
                 tokens={enrichedFinalStretch}
-                    showBubbleMetrics={false} 
-                  />
+                loading={monadFinalStretchTick === 0}
+                showBubbleMetrics={false}
+              />
               <MonadTable
-                    title="Migrated" 
+                title="Migrated"
                 tokens={enrichedMigrated}
+                loading={monadMigratedTick === 0}
                 isFirstOrLast="last"
-                    showBubbleMetrics={false} 
-                  />
-              </div>
+                showBubbleMetrics={false}
+              />
             </div>
+          </div>
         ) : isLoading ? (
           <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
             <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
               {/* <PulseTable
-                title="New Pairs" 
+                title="New Pairs"
                 tokens={[]}
                 loading
                 skeletonRowCount={10}
-                isFirstOrLast="first" 
-                showBubbleMetrics={false} 
+                isFirstOrLast="first"
+                showBubbleMetrics={false}
               />
               <PulseTable
                 title="Final Stretch"
@@ -1030,13 +1067,13 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
                 skeletonRowCount={10}
                 showBubbleMetrics={false}
               />
-              <PulseTable 
+              <PulseTable
                 title="Migrated"
-                tokens={[]} 
-                loading 
-                skeletonRowCount={10} 
+                tokens={[]}
+                loading
+                skeletonRowCount={10}
                 isFirstOrLast="last"
-                showBubbleMetrics={false} 
+                showBubbleMetrics={false}
               /> */}
               <div className="flex-1 text-center text-neutral-400 py-10">
                 PulseTable is currently disabled
@@ -1059,27 +1096,27 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
         ) : (
           <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
             <div className="flex min-h-0 w-full flex-1 flex-row overflow-hidden">
-                  {/* <PulseTable 
-                    title="New Pairs" 
+              {/* <PulseTable
+                title="New Pairs"
                 tokens={enrichedNewPairsToShow as any}
-                    loading={newPairsLoading} 
+                loading={newPairsLoading}
                 isFirstOrLast="first"
-                    showBubbleMetrics={false} 
-                  />
-                  <PulseTable 
-                    title="Final Stretch" 
-                    tokens={enrichedFinalStretch as any} 
-                    showBubbleMetrics={false} 
-                  />
-                  <PulseTable 
-                    title="Migrated" 
-                    tokens={enrichedMigrated as any} 
+                showBubbleMetrics={false}
+              />
+              <PulseTable
+                title="Final Stretch"
+                tokens={enrichedFinalStretch as any}
+                showBubbleMetrics={false}
+              />
+              <PulseTable
+                title="Migrated"
+                tokens={enrichedMigrated as any}
                 isFirstOrLast="last"
-                    showBubbleMetrics={false} 
-                  /> */}
-                  <div className="flex-1 text-center text-neutral-400 py-10">
-                    PulseTable is currently disabled
-                  </div>
+                showBubbleMetrics={false}
+              /> */}
+              <div className="flex-1 text-center text-neutral-400 py-10">
+                PulseTable is currently disabled
+              </div>
             </div>
           </div>
         )}
@@ -1087,3 +1124,4 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
     </div>
   );
 }
+

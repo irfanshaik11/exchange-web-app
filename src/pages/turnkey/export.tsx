@@ -1,8 +1,9 @@
 import Head from "next/head";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, ShieldCheck, Loader2 } from "lucide-react";
 import { IframeStamper } from "@turnkey/iframe-stamper";
 import { useRouter } from "next/router";
+import dynamic from "next/dynamic";
 
 import Header from "~/components/Header";
 import Footer from "~/components/Footer";
@@ -12,6 +13,12 @@ import {
   WalletSource,
   useTurnkey,
 } from "~/lib/turnkeyWalletKit";
+import { useUser } from "~/components/UserContext";
+
+// Dynamically import LoginModal to avoid SSR issues
+const LoginModal = dynamic(() => import("~/components/LoginModal"), {
+  ssr: false,
+});
 
 type ExportStatus = "idle" | "initializing" | "requesting" | "injecting" | "done" | "error";
 
@@ -51,12 +58,19 @@ const statusCopy: Record<
   },
 };
 
+
 export default function TurnkeyExportPage() {
   const router = useRouter();
   const { walletId: walletIdQuery } = router.query;
   const turnkey = useTurnkey() as any;
-  const { authState, clientState, wallets = [], session, exportWallet } =
+  const { authState, clientState, wallets = [], exportWallet, user: turnkeyUser, session: turnkeySession } =
     turnkey || {};
+  // Access session directly from turnkey object - it might not be destructured immediately
+  // Try multiple ways to access the session
+  const session = turnkeySession || turnkey?.session;
+  
+  // Check if user is logged in to the app
+  const { user: appUser } = useUser();
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [status, setStatus] = useState<ExportStatus>("idle");
@@ -65,15 +79,103 @@ export default function TurnkeyExportPage() {
   const [targetPublicKey, setTargetPublicKey] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [fetchedWallets, setFetchedWallets] = useState<any[]>([]);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const walletsRequestRef = useRef(false);
+  const [authChecked, setAuthChecked] = useState(false);
+  const hasInitializedRef = useRef(false);
+  const hasAuthenticatedThisVisitRef = useRef(false); // Track if user authenticated on this page visit
 
   const iframeContainerRef = useRef<HTMLDivElement | null>(null);
   const iframeStamperRef = useRef<IframeStamper | null>(null);
+
+  // Check if authenticated - require both authState and valid session
+  const sessionFromContext = session || turnkey?.session;
+  const hasValidSession = !!(
+    sessionFromContext?.token && 
+    sessionFromContext?.organizationId && 
+    sessionFromContext?.userId
+  );
+  const hasTurnkeyUser = !!turnkeyUser;
+  const isAppUserLoggedIn = !!appUser;
+  
+  // Require explicit authentication state AND that user authenticated on this page visit
+  // This forces re-authentication on every page visit
+  const isAuthenticated = 
+    authState === AuthState.Authenticated &&
+    hasValidSession &&
+    clientState === ClientState.Ready &&
+    hasAuthenticatedThisVisitRef.current;
+
+  // Reset state on page mount/remount - force fresh authentication check
+  useEffect(() => {
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+    
+    // Force re-authentication on every page visit
+    hasAuthenticatedThisVisitRef.current = false;
+    
+    // Reset all export-related state
+    setStatus("idle");
+    setError(null);
+    setIframeVisible(false);
+    setTargetPublicKey(null);
+    setSelectedWalletId(null);
+    setFetchedWallets([]);
+    walletsRequestRef.current = false;
+    
+    // Clear any existing iframe
+    if (iframeStamperRef.current) {
+      iframeStamperRef.current.clear();
+    }
+    if (typeof document !== "undefined") {
+      const existing = document.getElementById("turnkey-export-iframe");
+      if (existing?.parentNode) {
+        existing.parentNode.removeChild(existing);
+      }
+    }
+    
+    console.log('[Export Page] Page initialized, forcing re-authentication');
+  }, []);
+
+  // Just track auth state, don't auto-popup modal
+  useEffect(() => {
+    if (!isClient) return;
+    if (clientState !== ClientState.Ready) return;
+    
+    if (isAuthenticated) {
+      console.log('[Export Page] Authenticated');
+      setAuthChecked(true);
+    } else {
+      console.log('[Export Page] Not authenticated - user must click Connect button');
+      setAuthChecked(true);
+    }
+  }, [isClient, clientState, isAuthenticated]);
+
+  // Track when user successfully authenticates on this page visit
+  useEffect(() => {
+    if (clientState !== ClientState.Ready) return;
+    
+    // Check if user just authenticated (authState is Authenticated and has valid session)
+    const justAuthenticated = 
+      authState === AuthState.Authenticated &&
+      hasValidSession &&
+      !hasAuthenticatedThisVisitRef.current;
+    
+    if (justAuthenticated) {
+      console.log('[Export Page] User authenticated on this visit');
+      hasAuthenticatedThisVisitRef.current = true;
+      setShowLoginModal(false);
+      setError(null); // Clear any previous errors
+    }
+  }, [authState, clientState, hasValidSession, showLoginModal]);
+  
 
   useEffect(() => {
     setIsClient(true);
     return () => {
       iframeStamperRef.current?.clear();
+      hasInitializedRef.current = false; // Allow re-initialization on remount
+      hasAuthenticatedThisVisitRef.current = false; // Reset auth flag on unmount
     };
   }, []);
 
@@ -102,13 +204,14 @@ export default function TurnkeyExportPage() {
     }, []);
   }, [walletsSource]);
 
+  // Fetch wallets only when authenticated
   useEffect(() => {
     if (
       walletOptions.length ||
       walletsRequestRef.current ||
-      authState !== AuthState.Authenticated ||
-      clientState !== ClientState.Ready ||
-      !session?.organizationId
+      !isAuthenticated ||
+      !sessionFromContext?.organizationId ||
+      !sessionFromContext?.userId
     ) {
       return;
     }
@@ -118,31 +221,48 @@ export default function TurnkeyExportPage() {
       try {
         if (typeof turnkey?.refreshWallets === "function") {
           const refreshed = await turnkey.refreshWallets({
-            organizationId: session.organizationId,
-            userId: session.userId,
+            organizationId: sessionFromContext.organizationId,
+            userId: sessionFromContext.userId,
           });
           if (Array.isArray(refreshed)) {
             setFetchedWallets(refreshed);
           }
         } else if (typeof turnkey?.fetchWallets === "function") {
           const result = await turnkey.fetchWallets({
-            organizationId: session.organizationId,
-            userId: session.userId,
+            organizationId: sessionFromContext.organizationId,
+            userId: sessionFromContext.userId,
           });
           if (Array.isArray(result)) {
             setFetchedWallets(result);
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to load Turnkey wallets for export", err);
+        // If we get a session error, force re-authentication
+        const errorMessage = err?.message?.toLowerCase() || "";
+        if (
+          errorMessage.includes("session public key") ||
+          errorMessage.includes("session") && (
+            errorMessage.includes("not found") ||
+            errorMessage.includes("expired") ||
+            errorMessage.includes("invalid")
+          )
+        ) {
+          console.log('[Export Page] Session error detected - resetting authentication');
+          // Reset authentication state to force re-authentication
+          hasAuthenticatedThisVisitRef.current = false;
+          setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again.");
+          // Clear wallets to force re-fetch after re-authentication
+          setFetchedWallets([]);
+          walletsRequestRef.current = false;
+        }
         walletsRequestRef.current = false; // allow retry if state changes
       }
     })();
   }, [
-    authState,
-    clientState,
-    session?.organizationId,
-    session?.userId,
+    isAuthenticated,
+    sessionFromContext?.organizationId,
+    sessionFromContext?.userId,
     turnkey,
     walletOptions.length,
   ]);
@@ -162,11 +282,14 @@ export default function TurnkeyExportPage() {
     setSelectedWalletId(embedded?.id ?? null);
   }, [selectedWalletId, walletOptions, walletIdQuery]);
 
+  // Allow export only when fully authenticated and ready
   const isTurnkeyReady =
-    authState === AuthState.Authenticated &&
+    isAuthenticated &&
     clientState === ClientState.Ready &&
-    !!session?.organizationId &&
-    !!selectedWalletId;
+    hasValidSession &&
+    !!sessionFromContext?.organizationId &&
+    !!selectedWalletId &&
+    !!exportWallet;
 
   const handleExport = useCallback(async () => {
     if (!isClient) return;
@@ -215,16 +338,23 @@ export default function TurnkeyExportPage() {
       setTargetPublicKey(publicKey);
 
       setStatus("requesting");
+      
+      // Use the current session from context
+      const currentSession = sessionFromContext || session;
+      if (!currentSession?.organizationId) {
+        throw new Error("Session not available. Please log in again.");
+      }
+      
       const exportBundle: string = await exportWallet({
         walletId: selectedWalletId,
         targetPublicKey: publicKey,
-        organizationId: session.organizationId,
+        organizationId: currentSession.organizationId,
       });
 
       setStatus("injecting");
       const injected = await stamper.injectWalletExportBundle(
         exportBundle,
-        session.organizationId
+        currentSession.organizationId
       );
 
       if (!injected) {
@@ -236,9 +366,41 @@ export default function TurnkeyExportPage() {
     } catch (err: any) {
       console.error("Turnkey wallet export failed", err);
       setStatus("error");
-      setError(err?.message || "Wallet export failed");
+      
+      // Handle specific session errors
+      const errorMessage = err?.message || "Wallet export failed";
+      const errorLower = errorMessage.toLowerCase();
+      if (
+        errorLower.includes("session public key") ||
+        (errorLower.includes("session") && (
+          errorLower.includes("not found") ||
+          errorLower.includes("expired") ||
+          errorLower.includes("invalid") ||
+          errorLower.includes("could not be found")
+        ))
+      ) {
+        console.log('[Export Page] Session error during export - resetting authentication');
+        // Reset authentication state to force re-authentication
+        hasAuthenticatedThisVisitRef.current = false;
+        setError("Session expired or invalid. Please click 'Connect with Turnkey' to log in again and try exporting.");
+        // Clear wallets to force re-fetch after re-authentication
+        setFetchedWallets([]);
+        walletsRequestRef.current = false;
+      } else {
+        setError(errorMessage);
+      }
     }
-  }, [exportWallet, isClient, isTurnkeyReady, selectedWalletId, session?.organizationId]);
+  }, [exportWallet, isClient, isTurnkeyReady, selectedWalletId, sessionFromContext, session]);
+
+  // Open login modal to re-authenticate with Turnkey
+  const handleReauthenticate = useCallback(() => {
+    setShowLoginModal(true);
+  }, []);
+
+  // Close login modal (called when auth succeeds or user closes)
+  const handleLoginModalClose = useCallback(() => {
+    setShowLoginModal(false);
+  }, []);
 
   const currentStatus = statusCopy[status];
 
@@ -266,11 +428,13 @@ export default function TurnkeyExportPage() {
               </div>
               <div className="w-full max-w-xs rounded-2xl border border-neutral-800 bg-neutral-900/70 p-4 shadow-lg shadow-black/20">
                 <div className="flex items-center gap-3">
-                  <ShieldCheck className="h-10 w-10 text-emerald-400" />
+                  <ShieldCheck className={`h-10 w-10 ${isAuthenticated ? 'text-emerald-400' : 'text-amber-400'}`} />
                   <div>
                     <p className="text-sm text-neutral-400">Turnkey session</p>
                     <p className="text-lg font-semibold text-[#f4f6f7]">
-                      {authState === AuthState.Authenticated
+                      {clientState !== ClientState.Ready
+                        ? "Initializing..."
+                        : isAuthenticated
                         ? "Authenticated"
                         : "Sign in required"}
                     </p>
@@ -279,6 +443,19 @@ export default function TurnkeyExportPage() {
                 <p className="mt-3 text-xs text-neutral-500">
                   You must be logged in with your Turnkey session to sign the EXPORT_WALLET activity.
                 </p>
+                {clientState === ClientState.Ready && !isAuthenticated && (
+                  <>
+                    <button
+                      onClick={handleReauthenticate}
+                      className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-900 shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400"
+                    >
+                      Connect with Turnkey
+                    </button>
+                    <p className="mt-3 text-xs text-amber-400">
+                      You must authenticate with Turnkey to export your wallet. Click the button above to sign in.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
 
@@ -292,7 +469,7 @@ export default function TurnkeyExportPage() {
                         "No wallet detected"}
                     </p>
                   </div>
-                  <div className="flex flex-col gap-2 sm:w-64">
+                  {/* <div className="flex flex-col gap-2 sm:w-64">
                     <label className="text-xs uppercase tracking-[0.2em] text-neutral-500">
                       Select wallet
                     </label>
@@ -311,7 +488,7 @@ export default function TurnkeyExportPage() {
                         </option>
                       ))}
                     </select>
-                  </div>
+                  </div> */}
                 </div>
 
                 <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
@@ -353,6 +530,11 @@ export default function TurnkeyExportPage() {
                     disabled={!isTurnkeyReady || status === "initializing" || status === "requesting" || status === "injecting"}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-neutral-900 shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-neutral-700 disabled:text-neutral-400"
                   >
+                    {(status === "initializing" ||
+                    status === "requesting" ||
+                    status === "injecting") && (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    )}
                     {status === "initializing" ||
                     status === "requesting" ||
                     status === "injecting"
@@ -417,6 +599,14 @@ export default function TurnkeyExportPage() {
         </main>
         <Footer />
       </div>
+
+      {/* Login modal for re-authentication */}
+      {isClient && (
+        <LoginModal
+          open={showLoginModal}
+          onClose={handleLoginModalClose}
+        />
+      )}
     </>
   );
 }

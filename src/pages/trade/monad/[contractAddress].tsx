@@ -18,6 +18,8 @@ import AdvancedOHLCChart from "../../../components/AdvancedOHLCChart";
 import MonadTopTradersTable from "../../../components/trade/MonadTopTradersTable";
 import MonadHoldersTable from "../../../components/trade/MonadHoldersTable";
 import MonadDevTokensTable from "../../../components/trade/MonadDevTokensTable";
+import { useMonadTradesWebSocket } from "../../../hooks/useMonadTradesWebSocket";
+import useMonadDevTokens from "../../../hooks/useMonadDevTokens";
 
 // Lazy load other components
 const MonadTrades = dynamic(() => import("../../../components/trade/MonadTrades"), { ssr: false });
@@ -30,9 +32,9 @@ const AX = {
   border: "#2A2B33",
   text: "#f0f5f5",
   muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
+  mint: "#86d99f", // Monad green (matches candle up color)
+  mintHover: "#70c387",
+  sell: "#f26682", // Monad red (matches candle down color)
 };
 
 interface MonadTokenData {
@@ -502,6 +504,49 @@ export default function MonadTradePage() {
     return displayToken?.pair_address || (contractAddress as string);
   }, [displayToken?.pair_address, contractAddress]);
 
+  // Get dev address from dev token data
+  const { devTokenData: devData } = useMonadDevTokens(
+    (contractAddress as string) || undefined,
+    { enabled: !!contractAddress && typeof contractAddress === "string" }
+  );
+  const devAddress = React.useMemo(() => {
+    return devData?.dev_wallet || (displayToken as any)?.dev_address || (displayToken as any)?.creator_address || null;
+  }, [devData?.dev_wallet, displayToken]);
+
+  // Get trades for dev marker detection
+  const { trades: allTrades } = useMonadTradesWebSocket({
+    tokenAddress: pairAddress,
+    enabled: !!pairAddress && !!devAddress,
+    maxTrades: 200,
+  });
+
+  // Filter trades to find dev buys/sells
+  const devTrades = React.useMemo(() => {
+    if (!devAddress || !allTrades.length) return [];
+    return allTrades.filter(trade => 
+      trade.trader_address?.toLowerCase() === devAddress.toLowerCase()
+    ).map(trade => ({
+      id: trade.tx_hash,
+      transactionHash: trade.tx_hash,
+      timestamp: trade.block_timestamp,
+      is_buy: trade.is_buy,
+      side: trade.is_buy ? 'buy' : 'sell',
+      type: trade.is_buy ? 'buy' : 'sell',
+      eventDisplayType: trade.is_buy ? 'Buy' : 'Sell',
+      price: String(trade.price_mon),
+      amount: String(trade.token_amount),
+      totalUSD: String(Number(trade.mon_amount) * 0.25), // Approximate USD conversion
+      maker: trade.trader_address,
+      wallet_address: trade.trader_address,
+      user: trade.trader_address,
+      data: {
+        priceUsd: String(trade.price_mon),
+        amountNonLiquidityToken: String(trade.token_amount),
+        priceUsdTotal: String(Number(trade.mon_amount) * 0.25),
+      },
+    }));
+  }, [allTrades, devAddress]);
+
   return (
     <>
       <Head><title>{pageTitle}</title></Head>
@@ -580,8 +625,8 @@ export default function MonadTradePage() {
                     width="100%"
                     baseRefreshMs={10000}
                     className="relative"
-                    tradeData={[]} // Monad may not have trade data yet
-                    creatorAddress={null}
+                    tradeData={devTrades}
+                    creatorAddress={devAddress}
                     tokenSymbol={displayToken?.symbol || null}
                     tokenName={displayToken?.name || null}
                     tokenDecimals={displayToken?.decimals || null}
@@ -652,9 +697,10 @@ export default function MonadTradePage() {
                     onClick={() => setSelectedTab("Transactions")}
                     className={`px-3 py-1 font-semibold transition-colors ${
                       selectedTab === "Transactions"
-                        ? "border-b-4 border-[#70E0B0] text-white"
+                        ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
                     }`}
+                    style={selectedTab === "Transactions" ? { borderBottomColor: AX.mint } : undefined}
                   >
                     Transactions
                   </button>
@@ -662,9 +708,10 @@ export default function MonadTradePage() {
                     onClick={() => setSelectedTab("Top Traders")}
                     className={`px-3 py-1 font-semibold transition-colors ${
                       selectedTab === "Top Traders"
-                        ? "border-b-4 border-[#70E0B0] text-white"
+                        ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
                     }`}
+                    style={selectedTab === "Top Traders" ? { borderBottomColor: AX.mint } : undefined}
                   >
                     Top Traders
                   </button>
@@ -672,9 +719,10 @@ export default function MonadTradePage() {
                     onClick={() => setSelectedTab("Holders")}
                     className={`px-3 py-1 font-semibold transition-colors ${
                       selectedTab === "Holders"
-                        ? "border-b-4 border-[#70E0B0] text-white"
+                        ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
                     }`}
+                    style={selectedTab === "Holders" ? { borderBottomColor: AX.mint } : undefined}
                   >
                     Holders
                   </button>
@@ -682,15 +730,17 @@ export default function MonadTradePage() {
                     onClick={() => setSelectedTab("Dev Tokens")}
                     className={`px-3 py-1 font-semibold transition-colors ${
                       selectedTab === "Dev Tokens"
-                        ? "border-b-4 border-[#70E0B0] text-white"
+                        ? "border-b-4 text-white"
                         : "text-neutral-400 hover:text-neutral-300"
                     }`}
+                    style={selectedTab === "Dev Tokens" ? { borderBottomColor: AX.mint } : undefined}
                   >
                     Dev Tokens
                   </button>
                 </div>
                 <button
-                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full bg-[#101114] text-[#70E0B0] ml-auto"
+                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full ml-auto"
+                  style={{ backgroundColor: AX.bg, color: AX.mint }}
                   onClick={() => setIsInstantTradeOpen(true)}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">

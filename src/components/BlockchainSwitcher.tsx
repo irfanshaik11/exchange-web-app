@@ -16,12 +16,12 @@ const blockchains: Blockchain[] = [
     logo: 'https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1',
     color: '#9B59B6' 
   },
-  { 
-    id: 'sol', 
-    name: 'Solana', 
-    logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
-    color: '#14F195' 
-  },
+  // { 
+  //   id: 'sol', 
+  //   name: 'Solana', 
+  //   logo: 'https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png',
+  //   color: '#14F195' 
+  // },
   // { 
   //   id: 'eth', 
   //   name: 'Ethereum', 
