@@ -951,7 +951,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
                     className="h-7 w-7 rounded-full object-cover"
                   />
                 </button>
-                <button
+                {/* <button
                   onClick={() => handleChainSwitch('sol')}
                   aria-label="View Solana tokens"
                   className={solanaButtonClasses}
@@ -961,7 +961,7 @@ export default function PulseContent({ forceMobileView = false }: PulseContentPr
                     alt="Solana"
                     className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
                   />
-                </button>
+                </button> */}
               </div>
             </div>
           </div>

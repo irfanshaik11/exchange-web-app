@@ -1368,7 +1368,7 @@ export default function PulsePage() {
                       className="h-7 w-7 rounded-full object-cover"
                     />
                   </Link>
-                  <Link
+                  {/* <Link
                     href="/pulse?chain=sol"
                     aria-label="View Solana tokens"
                     className={solanaButtonClasses}
@@ -1378,7 +1378,7 @@ export default function PulsePage() {
                       alt="Solana"
                       className="h-6 w-6 rounded-full object-contain mix-blend-screen contrast-[1.2]"
                     />
-                  </Link>
+                  </Link> */}
                   {/* <Link
                     href="/pulse?chain=bnb"
                     aria-label="View BNB tokens (beta)"

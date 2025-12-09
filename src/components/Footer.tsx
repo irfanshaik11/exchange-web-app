@@ -23,6 +23,7 @@ import QuickBuySettingsModal from "./QuickBuySettingsModal";
 import PnLModal from "./PnLModal";
 import WalletSwitcher from "./WalletSwitcher";
 import WalletTrackerPopup from "./WalletTrackerPopup";
+import MonadWalletSwitcher from "./MonadWalletSwitcher";
 import TwitterTrackerPopup from "./TwitterTrackerPopup";
 import DiscoverPopup from "./DiscoverPopup";
 import PulsePopup from "./PulsePopup";
@@ -483,35 +484,33 @@ export default function Footer() {
       <div className="flex h-9 items-center justify-between overflow-x-auto px-2 py-1 sm:px-2">
         {/* Left Section - Preset Button and Wallet Display */}
         <div className="flex flex-shrink-0 items-center gap-2 sm:gap-3">
-          {/* Preset Button - Commented out for Monad chain */}
-          {currentChain !== "monad" && (
-            <button
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all duration-300 ease-out sm:gap-2 sm:text-xs"
-              style={{
-                backgroundColor: AX.mint,
-                color: "#000000",
-                border: `1px solid ${AX.mint}`,
-                cursor: "pointer",
-              }}
-              onClick={() => setShowPresetModal(true)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = AX.mintHover;
-                e.currentTarget.style.boxShadow =
-                  "0 0 8px rgba(112, 224, 176, 0.3)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = AX.mint;
-                e.currentTarget.style.boxShadow = "none";
-              }}
-            >
-              <FaBars size={11} className="sm:h-3 sm:w-3" />
-              <FaCog size={11} className="sm:h-3 sm:w-3" />
-              <span className="hidden leading-none sm:inline">
-                PRESET {activePreset + 1}
-              </span>
-              <span className="leading-none sm:hidden">P{activePreset + 1}</span>
-            </button>
-          )}
+          {/* Preset Button - Show for all chains now (Monad shows only gas and slippage) */}
+          <button
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all duration-300 ease-out sm:gap-2 sm:text-xs"
+            style={{
+              backgroundColor: AX.mint,
+              color: "#000000",
+              border: `1px solid ${AX.mint}`,
+              cursor: "pointer",
+            }}
+            onClick={() => setShowPresetModal(true)}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = AX.mintHover;
+              e.currentTarget.style.boxShadow =
+                "0 0 8px rgba(112, 224, 176, 0.3)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = AX.mint;
+              e.currentTarget.style.boxShadow = "none";
+            }}
+          >
+            <FaBars size={11} className="sm:h-3 sm:w-3" />
+            <FaCog size={11} className="sm:h-3 sm:w-3" />
+            <span className="hidden leading-none sm:inline">
+              PRESET {activePreset + 1}
+            </span>
+            <span className="leading-none sm:hidden">P{activePreset + 1}</span>
+          </button>
 
           {/* Wallet Display */}
           <div className="relative">
@@ -1036,15 +1035,13 @@ export default function Footer() {
       </div>
 
       {/* Preset Settings Modal - Commented out for Monad chain */}
-      {currentChain !== "monad" && (
-        <QuickBuySettingsModal
-          open={showPresetModal}
-          onClose={() => setShowPresetModal(false)}
-        />
-      )}
+      <QuickBuySettingsModal
+        open={showPresetModal}
+        onClose={() => setShowPresetModal(false)}
+      />
 
       {/* PnL Modal */}
-      <PnLModal isOpen={showPnLModal} onClose={() => setShowPnLModal(false)} />
+      <PnLModal isOpen={showPnLModal} onClose={() => setShowPnLModal(false)} chain={currentChain} />
 
       {/* Wallet Switcher Modal - Commented out */}
       {/* <WalletSwitcher 
@@ -1052,11 +1049,21 @@ export default function Footer() {
         onClose={() => setShowWalletDropdown(false)} 
       /> */}
 
-      {/* Wallet Tracker Popup */}
-      <WalletTrackerPopup
-        isOpen={showWalletDropdown}
-        onClose={() => setShowWalletDropdown(false)}
-      />
+      {/* Monad Wallet Switcher - Show when chain is Monad */}
+      {currentChain === "monad" && (
+        <MonadWalletSwitcher
+          isOpen={showWalletDropdown}
+          onClose={() => setShowWalletDropdown(false)}
+        />
+      )}
+
+      {/* Wallet Tracker Popup - Show when chain is Solana */}
+      {currentChain !== "monad" && (
+        <WalletTrackerPopup
+          isOpen={showWalletDropdown}
+          onClose={() => setShowWalletDropdown(false)}
+        />
+      )}
 
       {/* Twitter Tracker Popup */}
       <TwitterTrackerPopup

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Head from "next/head";
+import { useRouter } from "next/router";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { getActivePositionsByUser } from "~/utils/functions";
@@ -167,6 +168,8 @@ const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
 const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 
 export default function TrackersPage() {
+  const router = useRouter();
+  const currentChain = (router.query.chain as string) || "sol";
   const { user, solBalance } = useUser();
   const {
     wsConnected,
@@ -432,7 +435,8 @@ export default function TrackersPage() {
     null,
   );
   const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
-  const showWalletSection = !isMobile || mobileMainTab === "wallets";
+  // Hide wallet section when chain is Monad
+  const showWalletSection = currentChain !== "monad" && (!isMobile || mobileMainTab === "wallets");
   const showTwitterSection = !isMobile || mobileMainTab === "twitter";
 
   // Calculate if all notifications are enabled
@@ -2467,8 +2471,8 @@ export default function TrackersPage() {
                 </div>
               )}
 
-              {/* RESIZE HANDLE (desktop only) */}
-              {!isMobile && (
+              {/* RESIZE HANDLE (desktop only) - Hide when wallet section is hidden (Monad chain) */}
+              {!isMobile && showWalletSection && (
                 <div
                   className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-emerald-400/10 lg:flex"
                   onMouseDown={() => setIsResizing(true)}
@@ -2485,6 +2489,12 @@ export default function TrackersPage() {
                     isMobile
                       ? {
                           maxHeight: "calc(100vh - 140px)",
+                        }
+                      : currentChain === "monad"
+                      ? {
+                          // Full width when wallet section is hidden (Monad chain)
+                          width: "100%",
+                          maxHeight: "calc(100vh - 160px)",
                         }
                       : {
                           width: `${sidebarWidth}px`,
