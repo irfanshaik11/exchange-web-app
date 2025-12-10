@@ -1,4 +1,2 @@
 memecoin UI
 
-
- 
