@@ -1103,8 +1103,8 @@ export default function Header({
                       <div className="mb-4 flex items-center justify-between rounded-lg bg-[#17191e] p-2">
                         <div className="flex items-center gap-2">
                           <img
-                            src={chainLogos[currentChain] ?? chainLogos.sol}
-                            alt={chainSymbols[currentChain] ?? "SOL"}
+                            src={chainLogos[currentChain] ?? chainLogos.monad}
+                            alt={chainSymbols[currentChain] ?? "MON"}
                             className={
                               currentChain === "monad"
                                 ? "h-10 w-8 rounded-md object-contain"
@@ -1118,7 +1118,7 @@ export default function Header({
                           />
                           <span className="text-sm text-[#f0f5f5]">
                             ≈ {formatBalance(chainBalance)}{" "}
-                            {chainSymbols[currentChain] ?? "SOL"}
+                            {chainSymbols[currentChain] ?? "MON"}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1136,8 +1136,8 @@ export default function Header({
                             />
                           </svg>
                           <img
-                            src={chainLogos[currentChain] ?? chainLogos.sol}
-                            alt={chainSymbols[currentChain] ?? "SOL"}
+                            src={chainLogos[currentChain] ?? chainLogos.monad}
+                            alt={chainSymbols[currentChain] ?? "MON"}
                             className={
                               currentChain === "monad"
                                 ? "h-10 w-8 rounded-md object-contain"

@@ -159,7 +159,7 @@ export default function PortfolioPage() {
   const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, chainBalances } = useUser();
   const { monPrice } = useSolPrice();
   const router = useRouter();
-  const currentChain = (router.query.chain as string) || "sol";
+  const currentChain = (router.query.chain as string) || "monad";
   const monBalance = chainBalances?.monad || 0;
   const [walletChecked, setWalletChecked] = useState(false);
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);

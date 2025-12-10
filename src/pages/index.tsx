@@ -72,7 +72,7 @@ export default function Home() {
   // Redirect to /pulse if we're on the root path without any query params
   useEffect(() => {
     if (router.isReady && router.pathname === '/' && !router.query.search && !router.query.chain) {
-      router.replace('/pulse?chain=sol', undefined, { shallow: false });
+      router.replace('/pulse?chain=monad', undefined, { shallow: false });
       return;
     }
   }, [router.isReady, router.pathname, router.query.search, router.query.chain, router]);

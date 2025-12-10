@@ -7,6 +7,22 @@ import { FiBell, FiBarChart2, FiTrash2 } from 'react-icons/fi';
 import { TbChartBubble } from 'react-icons/tb';
 import { IoLogoRss } from 'react-icons/io5';
 
+// Chain-aware icon component
+const ChainIcon = ({ chain, size = 16 }: { chain?: 'monad' | 'sol'; size?: number }) => {
+  if (chain != 'sol') {
+    return (
+      <img
+        src="./monad_icon.png"
+        alt="Monad"
+        className="object-contain"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  // Default to Solana icon
+  return <SolanaIcon size={size} />;
+};
+
 interface WalletRowProps {
   wallet: Wallet;
   watchedWallet?: WatchWallet;
@@ -221,12 +237,13 @@ export default function WalletRow({
         }
       }
       
-      // Call backend API with ownerId from watchedWallet (non-blocking - localStorage is source of truth)
+      // Call backend API with ownerId and chain from watchedWallet (non-blocking - localStorage is source of truth)
       try {
         await toggleWalletNotifications(
           wallet.address, 
           newState, 
-          watchedWallet?.ownerId || undefined
+          watchedWallet?.ownerId || undefined,
+          watchedWallet?.chain || 'sol'
         );
         console.log(`✅ [TOGGLE] Backend updated successfully for ${wallet.address}`);
       } catch (apiError) {
@@ -359,7 +376,7 @@ export default function WalletRow({
           <span className="w-36 text-xs text-neutral-300">
             {balance !== undefined ? (
               <span className="flex items-center gap-1 text-green-400 font-mono">
-                <SolanaIcon size={12} />
+                <ChainIcon chain={watchedWallet?.chain} size={12} />
                 <span>{balance.toFixed(4)}</span>
               </span>
             ) : watchedWallet ? (
