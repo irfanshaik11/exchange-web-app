@@ -3,6 +3,7 @@ import type { Wallet } from '~/utils/functions';
 import type { WatchWallet, WalletEvent } from '~/utils/walletTracking';
 import { toggleWalletNotifications } from '~/utils/walletTracking';
 import { SolanaIcon } from './Footer';
+import { useUser } from './UserContext';
 import { FiBell, FiBarChart2, FiTrash2 } from 'react-icons/fi';
 import { TbChartBubble } from 'react-icons/tb';
 import { IoLogoRss } from 'react-icons/io5';
@@ -89,6 +90,7 @@ export default function WalletRow({
   onClick,
   onNotificationToggle,
 }: WalletRowProps) {
+  const { user } = useUser();
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [analyticsEnabled, setAnalyticsEnabled] = React.useState(false);
@@ -243,7 +245,8 @@ export default function WalletRow({
           wallet.address, 
           newState, 
           watchedWallet?.ownerId || undefined,
-          watchedWallet?.chain || 'sol'
+          watchedWallet?.chain || 'sol',
+          user?.bearerToken
         );
         console.log(`✅ [TOGGLE] Backend updated successfully for ${wallet.address}`);
       } catch (apiError) {

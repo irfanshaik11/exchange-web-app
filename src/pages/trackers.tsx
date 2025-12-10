@@ -262,7 +262,7 @@ export default function TrackersPage() {
         walletsToEnable.map((wallet) => {
           const walletData = watchedWallets.find(w => w.address === wallet.address);
           const walletChain = walletData?.chain || selectedChain;
-          return toggleWalletNotifications(wallet.address, true, user?.id, walletChain);
+          return toggleWalletNotifications(wallet.address, true, user?.id, walletChain, user?.bearerToken);
         }),
       );
       const failures = results.filter((result) => result.status === "rejected");
@@ -568,7 +568,7 @@ export default function TrackersPage() {
       }
 
       // Fetch wallets from backend for the selected chain
-      const tracked = await getTrackedWallets(user?.id, selectedChain);
+      const tracked = await getTrackedWallets(user?.bearerToken, user?.id, selectedChain);
 
       // Also refresh global watched wallets
       await refreshWatchedWallets();
@@ -844,7 +844,7 @@ export default function TrackersPage() {
     try {
       const walletChain = chain || 'monad';
       // Add to backend with notifications enabled by default
-      await addTrackedWallet(address, name, user?.id, emoji, true, walletChain);
+      await addTrackedWallet(address, name, user?.id, emoji, true, walletChain, user?.bearerToken);
 
       // Save notification preference to localStorage
       if (typeof window !== "undefined") {
@@ -879,7 +879,7 @@ export default function TrackersPage() {
       if (addressToRemove === "all") {
         // Remove all wallets for the selected chain
         await Promise.all(
-          wallets.map((w) => removeTrackedWallet(w.address, user?.id, selectedChain)),
+          wallets.map((w) => removeTrackedWallet(w.address, user?.id, selectedChain, user?.bearerToken)),
         );
 
         // Clear all state
@@ -910,7 +910,7 @@ export default function TrackersPage() {
         // Remove single wallet - need to find the chain from watchedWallets
         const wallet = watchedWallets.find(w => w.address === addressToRemove);
         const walletChain = wallet?.chain || selectedChain;
-        await removeTrackedWallet(addressToRemove, user?.id, walletChain);
+        await removeTrackedWallet(addressToRemove, user?.id, walletChain, user?.bearerToken);
 
         // Filter out trades from deleted wallet
         setCachedLiveTrades((prev) =>
@@ -985,6 +985,7 @@ export default function TrackersPage() {
           newState,
           wallet.ownerId || undefined,
           wallet.chain || selectedChain,
+          user?.bearerToken,
         );
       });
 
@@ -1274,7 +1275,7 @@ export default function TrackersPage() {
             emoji: wallet.emoji || getRandomEmoji(),
           }));
 
-          await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain);
+          await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
           await ensureNotificationsEnabled(walletsToAdd);
 
           let successCount = walletsToAdd.length;
@@ -2840,7 +2841,7 @@ export default function TrackersPage() {
                 emoji: wallet.emoji || getRandomEmoji(),
               }));
 
-              await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain);
+              await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
               await ensureNotificationsEnabled(walletsToAdd);
               successCount = walletsToAdd.length;
               processed = walletsToAdd.length;
