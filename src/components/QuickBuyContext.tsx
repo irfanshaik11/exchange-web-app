@@ -121,7 +121,18 @@ export function QuickBuyProvider({ children }: { children: ReactNode }) {
   // Save to localStorage on change
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('quickBuySettings', JSON.stringify({ presets, activePreset }));
+      try {
+        localStorage.setItem('quickBuySettings', JSON.stringify({ presets, activePreset }));
+      } catch (e) {
+        // localStorage quota exceeded - clear old data and try again
+        console.warn('localStorage quota exceeded, clearing old data...');
+        try {
+          localStorage.clear();
+          localStorage.setItem('quickBuySettings', JSON.stringify({ presets, activePreset }));
+        } catch {
+          console.error('Failed to save quickBuySettings to localStorage');
+        }
+      }
     }
   }, [presets, activePreset]);
 
