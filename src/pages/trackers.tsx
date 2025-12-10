@@ -440,7 +440,7 @@ export default function TrackersPage() {
   );
   const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
   // Hide wallet section when chain is Monad
-  const showWalletSection = currentChain !== "monad" && (!isMobile || mobileMainTab === "wallets");
+  const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = !isMobile || mobileMainTab === "twitter";
 
   // Calculate if all notifications are enabled
@@ -1325,7 +1325,7 @@ export default function TrackersPage() {
             {/* Tabs Section - Scrollable on mobile */}
             <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
               <button
-                className={`hover:text-[#f0f5f5]"} cursor-pointer text-sm font-light whitespace-nowrap text-[#f0f5f5] transition-colors sm:text-base lg:text-lg`}
+                className={`hover:text-[#f0f5f5]"} text-sm font-light whitespace-nowrap text-[#f0f5f5] transition-colors sm:text-base lg:text-lg`}
               >
                 Trackers
               </button>
@@ -2492,7 +2492,7 @@ export default function TrackersPage() {
               )}
 
               {/* RESIZE HANDLE (desktop only) - Hide when wallet section is hidden (Monad chain) */}
-              {!isMobile && showWalletSection && (
+              {!isMobile && (
                 <div
                   className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-emerald-400/10 lg:flex"
                   onMouseDown={() => setIsResizing(true)}
@@ -2509,12 +2509,6 @@ export default function TrackersPage() {
                     isMobile
                       ? {
                           maxHeight: "calc(100vh - 140px)",
-                        }
-                      : currentChain === "monad"
-                      ? {
-                          // Full width when wallet section is hidden (Monad chain)
-                          width: "100%",
-                          maxHeight: "calc(100vh - 160px)",
                         }
                       : {
                           width: `${sidebarWidth}px`,
