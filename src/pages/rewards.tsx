@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Head from "next/head";
+import { Copy, Gift, Users, Wallet, Trophy, Medal } from "lucide-react";
 import { useRouter } from "next/router";
-import { Copy, Gift, Users, Wallet } from "lucide-react";
 import Header from "~/components/Header";
 import InterstateButton from "~/components/InterstateButton";
 import Footer from '~/components/Footer';
 import { useUser } from "~/components/UserContext";
-import { ensureReferralCodeForUser, fetchReferralCodeForUser } from "~/utils/referrals";
+import { ensureReferralCodeForUser, fetchReferralCodeForUser, getReferralLeaderboard, type LeaderboardEntry } from "~/utils/referrals";
 
 const referralRows = [
   {
@@ -25,15 +25,20 @@ const referralRows = [
   },
 ];
 
+type ViewMode = "my-referrals" | "leaderboard";
+
 export default function RewardsPage() {
   const router = useRouter();
   const currentChain = (router.query.chain as string) || "sol";
-  const { user } = useUser();
+  const { user, refreshUser } = useUser();
   const [copied, setCopied] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [loadingReferral, setLoadingReferral] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [referralError, setReferralError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("my-referrals");
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const referralLink = referralCode
     ? `https://app.narrative.trade?referrer=${referralCode}`
     : "";
@@ -54,7 +59,11 @@ export default function RewardsPage() {
       try {
         setLoadingReferral(true);
         setReferralError(null);
-        const record = await fetchReferralCodeForUser(user.id);
+        if (!user.bearerToken || !user.id) {
+          setReferralCode(null);
+          return;
+        }
+        const record = await fetchReferralCodeForUser(user.bearerToken, user.id);
         if (cancelled) return;
         if (record) {
           setReferralCode(record.referralCode);
@@ -85,7 +94,7 @@ export default function RewardsPage() {
   }, [user?.id]);
 
   const handleGenerateCode = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.id || !user?.bearerToken) {
       setReferralError("Sign in to generate a referral code.");
       return;
     }
@@ -93,7 +102,22 @@ export default function RewardsPage() {
     try {
       setIsGenerating(true);
       setReferralError(null);
-      const record = await ensureReferralCodeForUser(user.id);
+      
+      // Verify token exists before making the request
+      if (!user.bearerToken || user.bearerToken.trim() === '') {
+        setReferralError("Authentication token is missing. Please sign in again.");
+        return;
+      }
+
+      // Try to refresh user token first to ensure it's valid
+      try {
+        await refreshUser();
+      } catch (refreshError) {
+        console.warn("Failed to refresh user token:", refreshError);
+        // Continue anyway with existing token
+      }
+
+      const record = await ensureReferralCodeForUser(user.bearerToken);
       setReferralCode(record.referralCode);
       setCopied(false);
     } catch (error: any) {
@@ -101,11 +125,23 @@ export default function RewardsPage() {
         error instanceof Error
           ? error.message
           : "Unable to generate referral code";
-      setReferralError(message);
+      
+      // Check if it's an authentication error and suggest signing in again
+      if (message.includes('token') || message.includes('Invalid') || message.includes('expired') || message.includes('403') || message.includes('401')) {
+        setReferralError(`${message}. Please try signing out and signing in again.`);
+        // Optionally refresh user to get a new token
+        try {
+          await refreshUser();
+        } catch (refreshError) {
+          console.error("Failed to refresh user after error:", refreshError);
+        }
+      } else {
+        setReferralError(message);
+      }
     } finally {
       setIsGenerating(false);
     }
-  }, [user?.id]);
+  }, [user?.id, user?.bearerToken]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -124,6 +160,24 @@ export default function RewardsPage() {
       console.error("Unable to copy referral link", error);
     }
   }, [referralLink]);
+
+  useEffect(() => {
+    if (viewMode === "leaderboard") {
+      const loadLeaderboard = async () => {
+        try {
+          setLoadingLeaderboard(true);
+          const response = await getReferralLeaderboard(50, 0);
+          setLeaderboard(response.data);
+        } catch (error) {
+          console.error("Failed to load leaderboard:", error);
+          setLeaderboard([]);
+        } finally {
+          setLoadingLeaderboard(false);
+        }
+      };
+      loadLeaderboard();
+    }
+  }, [viewMode]);
 
   return (
     <>
