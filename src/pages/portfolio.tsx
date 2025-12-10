@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import Header from "../components/Header";
@@ -7,6 +7,7 @@ import Positions from "../components/trade/Positions";
 import TradeTable from "../components/trade/TradeTable";
 import Activity from "../components/trade/Activity";
 import { useUser } from "../components/UserContext";
+import { useSolPrice } from "../components/SolPriceContext";
 import InterstateTooltip from "~/components/InterstateTooltip";
 import CustomCheckbox from "../components/CustomCheckbox";
 import {
@@ -15,10 +16,13 @@ import {
 } from "~/utils/functions";
 import { formatSmartNumber } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
+import type { UnifiedTokenMetadata } from "~/utils/tokenMetadata";
 import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
 import toast from "react-hot-toast";
 import { FiEdit2, FiCheck, FiX } from "react-icons/fi";
+import ImportWalletModal from "../components/ImportWalletModal";
+import ExportWalletModal from "../components/ExportWalletModal";
 
 // Stacked Token Boxes Component
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
@@ -47,27 +51,44 @@ const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
   </InterstateTooltip>
 );
 
-// SOL icon component for inline use
-const SolIcon = () => (
-  <SiSolana
-    className="h-3 w-3 inline-block -mt-0.5 mx-0.5"
-    aria-hidden="true"
-    style={{
-      color: "unset",
-      fill: "url(#solana-gradient-inline)",
-      filter: "none",
-    }}
-  />
-);
+// Dynamic chain icon component (Solana or Monad)
+const ChainIcon = ({ chain = 'sol', size = 'small' }: { chain?: string; size?: 'small' | 'medium' | 'large' }) => {
+  const sizeClasses = {
+    small: 'h-3 w-3',
+    medium: 'h-4 w-4',
+    large: 'h-5 w-5',
+  };
+  
+  if (chain === 'monad') {
+    return (
+      <img
+        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+        alt="Monad"
+        className={`${sizeClasses[size]} inline-block -mt-0.5 mx-0.5 rounded`}
+        style={{ objectFit: 'contain' }}
+      />
+    );
+  }
+  return (
+    <SiSolana
+      className={`${sizeClasses[size]} inline-block -mt-0.5 mx-0.5`}
+      aria-hidden="true"
+      style={{
+        color: "unset",
+        fill: "url(#solana-gradient-inline)",
+        filter: "none",
+      }}
+    />
+  );
+};
+
+// SOL icon component for inline use (kept for backward compatibility)
+const SolIcon = () => <ChainIcon chain="sol" />;
 
 const spotTabs = ["Active Positions", /* "History", */ "Top 100", "Activity"];
 
 // Token metadata cache interface
-interface TokenMetadataCache {
-  imageUrl?: string;
-  protocol?: string;
-  name?: string;
-  symbol?: string;
+interface TokenMetadataCache extends UnifiedTokenMetadata {
   timestamp: number; // When it was cached
 }
 
@@ -81,6 +102,7 @@ interface UserWallet {
   holdingsCount: number;
   isArchived?: boolean;
   isPrimary?: boolean;
+  walletId?: string | null; // Turnkey wallet ID (null for imported wallets)
 }
 
 const normalizeWalletFromApi = (
@@ -116,6 +138,7 @@ const normalizeWalletFromApi = (
     holdingsCount: typeof wallet?.holdingsCount === "number" ? wallet.holdingsCount : 0,
     isArchived: Boolean(wallet?.isArchived),
     isPrimary: Boolean(wallet?.isPrimary),
+    walletId: wallet?.walletId ?? null, // Turnkey wallet ID
   };
 };
 
@@ -133,9 +156,11 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, chainBalances } = useUser();
+  const { monPrice } = useSolPrice();
   const router = useRouter();
-  const currentChain = (router.query.chain as string) || "sol";
+  const currentChain = (router.query.chain as string) || "monad";
+  const monBalance = chainBalances?.monad || 0;
   const [walletChecked, setWalletChecked] = useState(false);
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [loadingTradeHistory, setLoadingTradeHistory] = useState(true);
@@ -146,10 +171,6 @@ export default function PortfolioPage() {
   const [totalValue, setTotalValue] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
-  const [filteredPositions, setFilteredPositions] = useState<PositionRow[]>([]);
-  const [filteredTop100Positions, setFilteredTop100Positions] = useState<PositionRow[]>([]);
-  const [filteredTradeHistory, setFilteredTradeHistory] = useState<TradeRow[]>([]);
-  const [filteredTradeActivity, setFilteredTradeActivity] = useState<TradeRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
@@ -162,6 +183,11 @@ export default function PortfolioPage() {
   const [walletRenameValue, setWalletRenameValue] = useState("");
   const [renamingWalletId, setRenamingWalletId] = useState<string | null>(null);
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportWalletId, setExportWalletId] = useState<string | null>(null);
+  const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(null);
+  const [walletSearchQuery, setWalletSearchQuery] = useState("");
 
   const notifyWalletsUpdated = () => {
     if (typeof window !== "undefined") {
@@ -173,6 +199,7 @@ export default function PortfolioPage() {
   // Shared token metadata cache across all tabs
   const [tokenMetadataCache, setTokenMetadataCache] =
     useState<Record<string, TokenMetadataCache>>({});
+  const tokenMetadataCacheRef = useRef<Record<string, TokenMetadataCache>>({});
 
   // Load cache from localStorage on mount
   useEffect(() => {
@@ -190,6 +217,7 @@ export default function PortfolioPage() {
         });
         if (Object.keys(validCache).length > 0) {
           setTokenMetadataCache(validCache);
+          tokenMetadataCacheRef.current = validCache;
           console.log(
             `📦 Loaded ${Object.keys(validCache).length} cached tokens from localStorage`,
           );
@@ -199,6 +227,10 @@ export default function PortfolioPage() {
       console.error("Error loading token cache:", error);
     }
   }, []);
+
+  useEffect(() => {
+    tokenMetadataCacheRef.current = tokenMetadataCache;
+  }, [tokenMetadataCache]);
 
   // Save cache to localStorage when it changes (debounced)
   useEffect(() => {
@@ -217,25 +249,94 @@ export default function PortfolioPage() {
   }, [tokenMetadataCache]);
 
   // Helper function to update cache
-  const updateTokenMetadataCache = (
-    tokenAddress: string,
-    metadata: Omit<TokenMetadataCache, "timestamp">,
-  ) => {
-    setTokenMetadataCache((prev) => ({
-      ...prev,
-      [tokenAddress]: {
-        ...metadata,
-        timestamp: Date.now(),
-      },
-    }));
-  };
+  const updateTokenMetadataCache = useCallback(
+    (
+      tokenAddress: string,
+      metadata: Omit<TokenMetadataCache, "timestamp">,
+    ) => {
+      setTokenMetadataCache((prev) => ({
+        ...prev,
+        [tokenAddress]: {
+          ...metadata,
+          timestamp: Date.now(),
+        },
+      }));
+    },
+    [],
+  );
 
   // Helper function to check if cache entry is valid
-  const isCacheValid = (tokenAddress: string): boolean => {
-    const cached = tokenMetadataCache[tokenAddress];
+  const isCacheValid = useCallback((tokenAddress: string): boolean => {
+    const cached = tokenMetadataCacheRef.current[tokenAddress];
     if (!cached) return false;
     return Date.now() - cached.timestamp < CACHE_TTL;
+  }, []);
+
+  const normalizeBlockchainValue = (value?: string | null) => {
+    if (!value) return "solana";
+    const normalized = value.toLowerCase();
+    if (normalized === "sol") return "solana";
+    return normalized;
   };
+
+  const isTradeOnCurrentChain = useCallback(
+    (trade: TradeRow) => {
+      const normalized = normalizeBlockchainValue(trade.blockchain);
+      if (currentChain === "monad") {
+        return normalized === "monad";
+      }
+      // Default to Solana for undefined/other values
+      return normalized === "solana";
+    },
+    [currentChain],
+  );
+
+  const fallbackPositions = useMemo(() => {
+    const map: Record<string, PositionRow> = {};
+
+    tradeHistory.forEach((trade) => {
+      const tokenKey = trade.tokenAddress?.toLowerCase();
+      if (!tokenKey) return;
+
+      if (!map[tokenKey]) {
+        map[tokenKey] = {
+          tokenAddress: trade.tokenAddress,
+          pairAddress: trade.originalPairAddress || trade.pairAddress,
+          bought: 0,
+          boughtUsdValue: 0,
+          sold: 0,
+          soldUsdValue: 0,
+          remaining: 0,
+          remainingUsdValue: 0,
+          pnl: 0,
+          pnlPercentage: 0,
+          actions: "sell",
+          blockchain: trade.blockchain,
+          launchpad: trade.launchpad || null,
+        };
+      }
+
+      const entry = map[tokenKey];
+      const tokenAmount = Number(trade.tokenAmount) || 0;
+      const usdValue = Number(trade.usdValue) || 0;
+
+      if (trade.type === "Buy") {
+        entry.bought += tokenAmount;
+        entry.boughtUsdValue += usdValue;
+      } else if (trade.type === "Sell") {
+        entry.sold += tokenAmount;
+        entry.soldUsdValue += usdValue;
+      }
+
+      entry.remaining = entry.bought - entry.sold;
+      entry.remainingUsdValue = entry.boughtUsdValue - entry.soldUsdValue;
+      entry.pnl = entry.soldUsdValue + entry.remainingUsdValue - entry.boughtUsdValue;
+      entry.pnlPercentage =
+        entry.boughtUsdValue > 0 ? (entry.pnl / entry.boughtUsdValue) * 100 : 0;
+    });
+
+    return map;
+  }, [tradeHistory]);
 
   // Fetch SOL price using Pyth Network
   useEffect(() => {
@@ -291,8 +392,13 @@ export default function PortfolioPage() {
       if (user?.id) {
         setLoadingTradeHistory(true);
         try {
-          const history = await getTradeHistoryByUser(user.id);
-          setTradeHistory(history);
+          // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
+          const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
+          const history = await getTradeHistoryByUser(user.id, blockchain);
+          const filteredHistory = Array.isArray(history)
+            ? history.filter(isTradeOnCurrentChain)
+            : [];
+          setTradeHistory(filteredHistory);
         } catch (error) {
           console.error("Failed to fetch trade history:", error);
           setTradeHistory([]);
@@ -303,7 +409,7 @@ export default function PortfolioPage() {
     };
 
     fetchTradeHistory();
-  }, [user?.id]);
+  }, [user?.id, currentChain, isTradeOnCurrentChain]);
 
   // Fetch trade activity only when on Activity tab (index 2 after History commented out)
   useEffect(() => {
@@ -316,9 +422,14 @@ export default function PortfolioPage() {
           setLoadingTradeActivity(true);
         }
         try {
-          const activity = await getTradeActivityByUser(user.id);
+          // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
+          const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
+          const activity = await getTradeActivityByUser(user.id, blockchain);
+          const filteredActivity = Array.isArray(activity)
+            ? activity.filter(isTradeOnCurrentChain)
+            : [];
           // Reverse array so newest trades appear at the top
-          setTradeActivity([...activity].reverse());
+          setTradeActivity(filteredActivity.reverse());
         } catch (error) {
           console.error("Failed to fetch trade activity:", error);
           setTradeActivity([]);
@@ -341,7 +452,7 @@ export default function PortfolioPage() {
 
       return () => clearInterval(intervalId);
     }
-  }, [user?.id, activeSpotTab]);
+  }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain]);
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -434,7 +545,12 @@ export default function PortfolioPage() {
       setUnrealizedPnlPercentage(
         totalBoughtValue ? (totalPnl / totalBoughtValue) * 100 : 0,
       );
-      setTotalValue(solBalance + totalRemainingValue);
+      // Use appropriate balance based on current chain
+      // For Monad: convert MON to USD, for Solana: solBalance is already in USD
+      const currentBalanceUsd = currentChain === 'monad' 
+        ? monBalance * (monPrice || 0.025) // Convert MON to USD using MON price
+        : solBalance; // solBalance is already in USD
+      setTotalValue(currentBalanceUsd + totalRemainingValue);
 
       // Create top 100 positions sorted by corrected USD value
       const sortedByUsdValue = [...correctedPositions].sort((a, b) => {
@@ -442,77 +558,116 @@ export default function PortfolioPage() {
       });
       setTop100Positions(sortedByUsdValue.slice(0, 100));
     }
-  }, [positions, solBalance]);
+  }, [positions, solBalance, monBalance, currentChain, monPrice]);
 
-  // Search filtering effect
-  useEffect(() => {
-    const filterData = () => {
-      if (!searchQuery.trim()) {
-        // If no search query, show all data
-        setFilteredPositions(positions);
-        setFilteredTop100Positions(top100Positions);
-        setFilteredTradeHistory(tradeHistory);
-        setFilteredTradeActivity(tradeActivity);
-        return;
-      }
+  // Search filtering using useMemo for better performance and reactivity
+  const filteredPositions = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return positions;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return positions.filter((pos) => {
+      const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
+      const pairAddr = pos.pairAddress?.toLowerCase() || "";
+      
+      // Check token name from tokenNames mapping
+      const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
+      
+      // Check token metadata (name and symbol) from cache
+      const metadata = tokenMetadataCache[pos.tokenAddress];
+      const metadataName = metadata?.name?.toLowerCase() || "";
+      const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
+      
+      return (
+        tokenAddr.includes(query) ||
+        pairAddr.includes(query) ||
+        tokenName.includes(query) ||
+        metadataName.includes(query) ||
+        metadataSymbol.includes(query)
+      );
+    });
+  }, [searchQuery, positions, tokenNames, tokenMetadataCache]);
 
-      const query = searchQuery.toLowerCase().trim();
+  const filteredTop100Positions = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return top100Positions;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return top100Positions.filter((pos) => {
+      const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
+      const pairAddr = pos.pairAddress?.toLowerCase() || "";
+      
+      // Check token name from tokenNames mapping
+      const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
+      
+      // Check token metadata (name and symbol) from cache
+      const metadata = tokenMetadataCache[pos.tokenAddress];
+      const metadataName = metadata?.name?.toLowerCase() || "";
+      const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
+      
+      return (
+        tokenAddr.includes(query) ||
+        pairAddr.includes(query) ||
+        tokenName.includes(query) ||
+        metadataName.includes(query) ||
+        metadataSymbol.includes(query)
+      );
+    });
+  }, [searchQuery, top100Positions, tokenNames, tokenMetadataCache]);
 
-      // Filter positions (Active Positions and Top 100 tabs)
-      const filteredPos = positions.filter((pos) => {
-        const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
-        const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
-        const pairAddr = pos.pairAddress?.toLowerCase() || "";
-        return (
-          tokenAddr.includes(query) ||
-          pairAddr.includes(query) ||
-          tokenName.includes(query)
-        );
-      });
-      setFilteredPositions(filteredPos);
+  const filteredTradeHistory = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return tradeHistory;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return tradeHistory.filter((trade) => {
+      const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
+      const txHash = trade.transactionHash?.toLowerCase() || "";
+      
+      // Check token name from tokenNames mapping
+      const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
+      
+      // Check token metadata (name and symbol) from cache
+      const metadata = tokenMetadataCache[trade.tokenAddress];
+      const metadataName = metadata?.name?.toLowerCase() || "";
+      const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
+      
+      return (
+        tokenAddr.includes(query) ||
+        txHash.includes(query) ||
+        tokenName.includes(query) ||
+        metadataName.includes(query) ||
+        metadataSymbol.includes(query)
+      );
+    });
+  }, [searchQuery, tradeHistory, tokenNames, tokenMetadataCache]);
 
-      // Filter top 100 positions
-      const filteredTop100 = top100Positions.filter((pos) => {
-        const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
-        const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
-        const pairAddr = pos.pairAddress?.toLowerCase() || "";
-        return (
-          tokenAddr.includes(query) ||
-          pairAddr.includes(query) ||
-          tokenName.includes(query)
-        );
-      });
-      setFilteredTop100Positions(filteredTop100);
-
-      // Filter trade history
-      const filteredHistory = tradeHistory.filter((trade) => {
-        const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
-        const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
-        const txHash = trade.transactionHash?.toLowerCase() || "";
-        return (
-          tokenAddr.includes(query) ||
-          txHash.includes(query) ||
-          tokenName.includes(query)
-        );
-      });
-      setFilteredTradeHistory(filteredHistory);
-
-      // Filter trade activity
-      const filteredActivity = tradeActivity.filter((trade) => {
-        const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
-        const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
-        const txHash = trade.transactionHash?.toLowerCase() || "";
-        return (
-          tokenAddr.includes(query) ||
-          txHash.includes(query) ||
-          tokenName.includes(query)
-        );
-      });
-      setFilteredTradeActivity(filteredActivity);
-    };
-
-    filterData();
-  }, [searchQuery, positions, top100Positions, tradeHistory, tradeActivity, tokenNames]);
+  const filteredTradeActivity = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return tradeActivity;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return tradeActivity.filter((trade) => {
+      const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
+      const txHash = trade.transactionHash?.toLowerCase() || "";
+      
+      // Check token name from tokenNames mapping
+      const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
+      
+      // Check token metadata (name and symbol) from cache
+      const metadata = tokenMetadataCache[trade.tokenAddress];
+      const metadataName = metadata?.name?.toLowerCase() || "";
+      const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
+      
+      return (
+        tokenAddr.includes(query) ||
+        txHash.includes(query) ||
+        tokenName.includes(query) ||
+        metadataName.includes(query) ||
+        metadataSymbol.includes(query)
+      );
+    });
+  }, [searchQuery, tradeActivity, tokenNames, tokenMetadataCache]);
 
   // Calculate metrics based on selected timeframe
   useEffect(() => {
@@ -783,7 +938,25 @@ export default function PortfolioPage() {
         : [];
 
       setWallets(mappedWallets);
-      setWalletBalances(Object.fromEntries(mappedWallets.map((w) => [w.id, w.balance])));
+      
+      // Initialize walletBalances from API response
+      // Preserve any balances that were explicitly set to 0 (new wallets) to avoid overwriting
+      // them with potentially incorrect API values
+      setWalletBalances((prevBalances) => {
+        const newBalances: Record<string, number> = {};
+        mappedWallets.forEach((w) => {
+          // If a wallet was just created (balance was explicitly set to 0),
+          // keep it at 0 instead of using potentially incorrect API balance
+          // The balance refresh will update it with the actual chain balance
+          if (prevBalances[w.id] === 0) {
+            newBalances[w.id] = 0;
+          } else {
+            // Use API balance if it's a valid number, otherwise default to 0
+            newBalances[w.id] = typeof w.balance === "number" && w.balance >= 0 ? w.balance : 0;
+          }
+        });
+        return newBalances;
+      });
       notifyWalletsUpdated();
     } catch (err) {
       console.error(err);
@@ -793,7 +966,7 @@ export default function PortfolioPage() {
     }
   }, [user?.id, user?.bearerToken]);
 
-  // Refresh only the selected primary wallet balance for the current chain
+  // Refresh all wallet balances for the current chain
   useEffect(() => {
     if (!user || wallets.length === 0) {
       return;
@@ -801,30 +974,57 @@ export default function PortfolioPage() {
 
     const primaryWallet =
       wallets.find((w) => w.isPrimary) ?? wallets[0] ?? null;
-    if (!primaryWallet) return;
-
-    const address =
-      currentChain === "sol"
-        ? primaryWallet.solanaAddress || primaryWallet.address
-        : primaryWallet.ethereumAddress || null;
-    if (!address) return;
 
     let cancelled = false;
-    const refreshPrimary = async () => {
-      const result = await refreshBalance({
-        chain: currentChain,
-        address,
-      });
-      if (!cancelled && result?.balance !== undefined) {
-        setWalletBalances((prev) => ({
-          ...prev,
-          [primaryWallet.id]: result.balance,
-        }));
+
+    // Refresh all wallets that have an address for the current chain
+    const refreshAllWallets = async () => {
+      // Refresh wallets sequentially with a small delay to avoid hammering the API
+      // Primary wallet is refreshed first to update chainBalances immediately
+      const walletsToRefresh = primaryWallet 
+        ? [primaryWallet, ...wallets.filter(w => w.id !== primaryWallet.id)]
+        : wallets;
+
+      for (const wallet of walletsToRefresh) {
+        if (cancelled) break;
+
+        const address =
+          currentChain === "sol"
+            ? wallet.solanaAddress || wallet.address
+            : wallet.ethereumAddress || null;
+        
+        if (!address) continue;
+
+        try {
+          const result = await refreshBalance({
+            chain: currentChain,
+            address,
+            force: false, // Respect cooldown to avoid hammering the API
+          });
+          
+          if (!cancelled && result?.balance !== undefined) {
+            setWalletBalances((prev) => ({
+              ...prev,
+              [wallet.id]: result.balance,
+            }));
+          }
+
+          // Small delay between wallet refreshes to avoid overwhelming the API
+          if (wallet.id !== walletsToRefresh[walletsToRefresh.length - 1]?.id) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        } catch (error) {
+          console.error(`Failed to refresh balance for wallet ${wallet.id}:`, error);
+        }
       }
     };
 
-    refreshPrimary();
-    const interval = setInterval(refreshPrimary, 12000);
+    // Refresh immediately
+    refreshAllWallets();
+
+    // Set up interval to refresh all wallets periodically
+    const interval = setInterval(refreshAllWallets, 12000);
+    
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -834,6 +1034,34 @@ export default function PortfolioPage() {
   useEffect(() => {
     fetchWallets();
   }, [fetchWallets]);
+
+  // Filter wallets based on search query and archived status
+  const filteredWallets = useMemo(() => {
+    return wallets.filter((w) => {
+      // Filter by archived status
+      if (!showHidden && w.isArchived) return false;
+      
+      // Filter by search query
+      if (walletSearchQuery.trim()) {
+        const query = walletSearchQuery.toLowerCase().trim();
+        const label = (w.label || "").toLowerCase();
+        const solanaAddr = (w.solanaAddress || "").toLowerCase();
+        const ethereumAddr = (w.ethereumAddress || "").toLowerCase();
+        const address = (w.address || "").toLowerCase();
+        const displayAddr = getAddressForChain(w, currentChain).toLowerCase();
+        
+        return (
+          label.includes(query) ||
+          solanaAddr.includes(query) ||
+          ethereumAddr.includes(query) ||
+          address.includes(query) ||
+          displayAddr.includes(query)
+        );
+      }
+      
+      return true;
+    });
+  }, [wallets, showHidden, walletSearchQuery, currentChain]);
 
     const handleCreateWallet = async () => {
     if (!user?.id) {
@@ -847,6 +1075,7 @@ export default function PortfolioPage() {
       // - create Turnkey sub-org / wallet for this user
       // - persist wallet to DB
       // - return the new wallet with balance = 0 (or computed)
+      console.log("Creating new wallet for user:", user.id);
       const res = await fetch(
   `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
   {
@@ -870,13 +1099,48 @@ export default function PortfolioPage() {
       const createdRaw = await res.json();
       const newWalletData = createdRaw?.wallet ?? createdRaw;
 
-      setWallets((prev) => {
-        const nextIndex = prev.length;
-        const newWallet = normalizeWalletFromApi(newWalletData, nextIndex);
-        return [...prev, newWallet];
-      });
+      // Initialize the new wallet with balance 0 immediately
+      const nextIndex = wallets.length;
+      const newWallet = normalizeWalletFromApi(newWalletData, nextIndex);
+      
+      // Set balance to 0 for the new wallet immediately (before fetching from API/chain)
+      setWalletBalances((prev) => ({
+        ...prev,
+        [newWallet.id]: 0, // New wallet starts with 0 balance
+      }));
+
+      setWallets((prev) => [...prev, newWallet]);
       notifyWalletsUpdated();
+      
+      // Fetch all wallets to get the latest state, then refresh balances
       await fetchWallets();
+      
+      // Immediately fetch the actual balance for the new wallet from the chain
+      // This ensures it shows the correct balance (which should be 0 for a new wallet)
+      const newWalletAddress =
+        currentChain === "sol"
+          ? newWallet.solanaAddress || newWallet.address
+          : newWallet.ethereumAddress || null;
+      
+      if (newWalletAddress) {
+        try {
+          const balanceResult = await refreshBalance({
+            chain: currentChain,
+            address: newWalletAddress,
+            force: true, // Force refresh to get actual balance from chain
+          });
+          
+          if (balanceResult?.balance !== undefined) {
+            setWalletBalances((prev) => ({
+              ...prev,
+              [newWallet.id]: balanceResult.balance, // Update with actual chain balance
+            }));
+          }
+        } catch (error) {
+          console.error(`Failed to fetch balance for new wallet ${newWallet.id}:`, error);
+          // Keep balance at 0 if fetch fails
+        }
+      }
 
       toast.success("New wallet created");
     } catch (err) {
@@ -896,6 +1160,26 @@ export default function PortfolioPage() {
     setEditingWalletId(null);
     setWalletRenameValue("");
     setRenamingWalletId(null);
+  };
+
+  const handleExportWallet = (walletId: string) => {
+    const wallet = wallets.find((w) => w.id === walletId);
+    if (!wallet) {
+      toast.error("Wallet not found");
+      return;
+    }
+    
+    // Check if this is a Turnkey wallet (has walletId) or imported wallet
+    if (!wallet.walletId) {
+      toast.error("Imported wallets cannot be exported. Only Turnkey-managed wallets can be exported.");
+      return;
+    }
+    
+    const address = getAddressForChain(wallet, currentChain);
+    // Use the Turnkey walletId, not the database id
+    setExportWalletId(wallet.walletId);
+    setExportWalletAddress(address);
+    setShowExportModal(true);
   };
 
   const handleRenameWallet = async () => {
@@ -1021,6 +1305,41 @@ export default function PortfolioPage() {
 
       setWallets(mappedWallets);
       notifyWalletsUpdated();
+      
+      // Immediately refresh the new primary wallet's balance to update Header
+      const newPrimaryWallet = mappedWallets.find((w) => w.isPrimary) ?? mappedWallets[0];
+      if (newPrimaryWallet) {
+        const newPrimaryAddress =
+          currentChain === "sol"
+            ? newPrimaryWallet.solanaAddress || newPrimaryWallet.address
+            : newPrimaryWallet.ethereumAddress || null;
+        
+        if (newPrimaryAddress) {
+          // Force immediate refresh to update Header balance right away
+          // Use updateChainBalance to ensure chainBalances is updated even though
+          // primaryWalletAddresses hasn't updated in UserContext yet
+          try {
+            const balanceResult = await refreshBalance({
+              chain: currentChain,
+              address: newPrimaryAddress,
+              force: true, // Force refresh to bypass cooldown
+              updateChainBalance: true, // Force update chainBalances[chain] for Header
+            });
+            
+            if (balanceResult?.balance !== undefined) {
+              // Balance is now updated in chainBalances, which Header will read
+              // Also update the walletBalances for consistency
+              setWalletBalances((prev) => ({
+                ...prev,
+                [newPrimaryWallet.id]: balanceResult.balance,
+              }));
+            }
+          } catch (error) {
+            console.error(`Failed to refresh balance for new primary wallet:`, error);
+          }
+        }
+      }
+      
       toast.success("Primary wallet updated");
     } catch (err) {
       console.error("Error setting primary wallet:", err);
@@ -1028,8 +1347,82 @@ export default function PortfolioPage() {
     }
   };
 
+  const handleImportWallets = async (privateKeys: string[]) => {
+    if (!user?.id || !user?.bearerToken) {
+      throw new Error("Please log in first");
+    }
 
+    if (!privateKeys || privateKeys.length === 0) {
+      throw new Error("No private keys provided");
+    }
 
+    // Filter out empty keys
+    const validKeys = privateKeys.filter(key => key?.trim().length > 0);
+    
+    if (validKeys.length === 0) {
+      throw new Error("No valid private keys provided");
+    }
+
+    try {
+      // Send all private keys in a single request (similar to createTurnkeyWallet pattern)
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet/import`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.bearerToken}`,
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            privateKeys: validKeys, // Send array of private keys
+            chain: currentChain, // 'sol' or 'monad'
+          }),
+        }
+      );
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const errorMessage = data.error || data.message || `Failed to import wallets (${res.status})`;
+        throw new Error(errorMessage);
+      }
+
+      // Refresh wallets after import
+      await fetchWallets();
+
+      // Handle results from backend (similar to createTurnkeyWallet response pattern)
+      const successCount = data.successCount || 0;
+      const failureCount = data.failureCount || 0;
+
+      if (successCount === 0) {
+        // All failed
+        const errorDetails = data.results
+          ?.filter((r: any) => !r.success)
+          .map((r: any) => `Wallet ${r.index}: ${r.error}`)
+          .slice(0, 3)
+          .join("; ") || "All wallets failed to import";
+        throw new Error(errorDetails);
+      }
+
+      if (failureCount > 0) {
+        // Some succeeded, some failed
+        const errorDetails = data.results
+          ?.filter((r: any) => !r.success)
+          .map((r: any) => `Wallet ${r.index}: ${r.error}`)
+          .slice(0, 2)
+          .join("; ") || "";
+        toast.error(`Imported ${successCount} wallet(s), ${failureCount} failed. ${errorDetails}`);
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully imported ${successCount} wallet(s)`);
+      }
+    } catch (err: any) {
+      console.error("Failed to import wallets:", err);
+      throw err;
+    }
+  };
 
   return (
     <>
@@ -1078,17 +1471,26 @@ export default function PortfolioPage() {
             {/* Right side controls for Spot section */}
             {activeSection === "spot" && (
               <div className="flex items-center gap-4">
-                <InterstateTooltip label="SOL Balance">
+                <InterstateTooltip label={currentChain === 'monad' ? 'MON Balance' : 'SOL Balance'}>
                   <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-                    <SiSolana
-                      className="h-4 w-4 -mt-px"
-                      aria-hidden="true"
-                      style={{
-                        color: "unset",
-                        fill: "url(#solana-gradient)",
-                        filter: "none",
-                      }}
-                    />
+                    {currentChain === 'monad' ? (
+                      <img
+                        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                        alt="Monad"
+                        className="h-6 w-6 -mt-px rounded"
+                        style={{ objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <SiSolana
+                        className="h-4 w-4 -mt-px"
+                        aria-hidden="true"
+                        style={{
+                          color: "unset",
+                          fill: "url(#solana-gradient)",
+                          filter: "none",
+                        }}
+                      />
+                    )}
                     <svg className="absolute w-0 h-0">
                       <defs>
                         <linearGradient
@@ -1114,7 +1516,9 @@ export default function PortfolioPage() {
                       </defs>
                     </svg>
                     <span className="text-sm text-[#9CA3AF]">
-                      {formatSmartNumber(solBalance)}
+                      {currentChain === 'monad' 
+                        ? `${formatSmartNumber(monBalance)} MON`
+                        : `${formatSmartNumber(solBalance)} SOL`}
                     </span>
                   </div>
                 </InterstateTooltip>
@@ -1189,14 +1593,7 @@ export default function PortfolioPage() {
                         Total Value
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
-                        {sortByUSD && solPrice > 0 ? (
-                          <>
-                            <SolIcon />
-                            {formatSmartNumber(totalValue / solPrice)}
-                          </>
-                        ) : (
-                          `$${totalValue.toFixed(2)}`
-                        )}
+                        ${formatSmartNumber(totalValue)}
                       </div>
                     </div>
                     <div>
@@ -1204,14 +1601,7 @@ export default function PortfolioPage() {
                         Unrealized PNL
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
-                        {sortByUSD && solPrice > 0 ? (
-                          <>
-                            <SolIcon />
-                            {formatSmartNumber(unrealizedPnl / solPrice)}
-                          </>
-                        ) : (
-                          `$${unrealizedPnl.toFixed(2)}`
-                        )}
+                        ${formatSmartNumber(unrealizedPnl)}
                       </div>
                     </div>
                     <div>
@@ -1219,13 +1609,18 @@ export default function PortfolioPage() {
                         Available Balance
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
-                        {sortByUSD && solPrice > 0 ? (
+                        {currentChain === 'monad' ? (
                           <>
-                            <SolIcon />
-                            {formatSmartNumber(usdcBalance / solPrice)}
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber(monBalance)} MON
+                          </>
+                        ) : sortByUSD && solPrice > 0 ? (
+                          <>
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber(solBalance / solPrice)}
                           </>
                         ) : (
-                          `$${formatSmartNumber(usdcBalance)}`
+                          `$${formatSmartNumber(solBalance)}`
                         )}
                       </div>
                     </div>
@@ -1259,7 +1654,7 @@ export default function PortfolioPage() {
                     >
                       {sortByUSD && solPrice > 0 ? (
                         <>
-                          <SolIcon />
+                          <ChainIcon chain={currentChain} size="medium" />
                           {formatSmartNumber(
                             Math.abs(timeframeMetrics.realizedPnl) / solPrice,
                           )}
@@ -1426,7 +1821,7 @@ export default function PortfolioPage() {
                       <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(
                               timeframeMetrics.unrealizedPnl / solPrice,
                             )}
@@ -1443,7 +1838,7 @@ export default function PortfolioPage() {
                       <span className="text-[#f0f5f5] font-light">
                         {sortByUSD && solPrice > 0 ? (
                           <>
-                            <SolIcon />
+                            <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(
                               timeframeMetrics.realizedPnl / solPrice,
                             )}
@@ -1638,17 +2033,19 @@ export default function PortfolioPage() {
                       </div>
                     ) : (
                       <Positions
+                        key={`positions-tab-${activeSpotTab}`}
                         bearerToken={user.bearerToken}
                         userId={user.id}
                         onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
-                        preloadedPositions={filteredPositions}
+                        preloadedPositions={searchQuery.trim() !== "" ? filteredPositions : undefined}
                         skipFetch={searchQuery.trim() !== ""}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}
+                        fallbackPositions={fallbackPositions}
                       />
                     ))}
                   {/* History tab commented out */}
@@ -1679,6 +2076,7 @@ export default function PortfolioPage() {
                       </div>
                     ) : (
                       <Positions
+                        key={`top100-tab-${activeSpotTab}`}
                         bearerToken={user.bearerToken}
                         userId={user.id}
                         onPositionsChange={setPositions}
@@ -1692,6 +2090,7 @@ export default function PortfolioPage() {
                         tokenMetadataCache={tokenMetadataCache}
                         onUpdateCache={updateTokenMetadataCache}
                         isCacheValid={isCacheValid}
+                        fallbackPositions={fallbackPositions}
                       />
                     ))}
                   {activeSpotTab === 2 &&
@@ -1724,16 +2123,27 @@ export default function PortfolioPage() {
           {activeSection === "wallet" && (
             <div className="bg-[#101114] rounded-lg overflow-hidden">
               {/* Header Row  */}
-              <div className="grid grid-cols-2 border-b border-[#2A2B33]">
+              <div className="border-b border-[#2A2B33]">
                 {/* Left Panel Header */}
                 <div className="px-4 py-3">
                   <div className="flex justify-between gap-2">
                     <div className="flex items-center px-3 py-1 rounded-full bg-[#17191E] border border-[#2A2B33] w-48">
+                      <FaSearch className="text-[#9CA3AF] text-xs mr-2 flex-shrink-0" />
                       <input
                         type="text"
                         placeholder="Search by name or address"
                         className="bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none w-full"
+                        value={walletSearchQuery}
+                        onChange={(e) => setWalletSearchQuery(e.target.value)}
                       />
+                      {walletSearchQuery.trim() && (
+                        <button
+                          onClick={() => setWalletSearchQuery("")}
+                          className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors ml-2 flex-shrink-0"
+                        >
+                          <FaTimes className="text-xs" />
+                        </button>
+                      )}
                     </div>
                     <button
                       onClick={() => setShowHidden(!showHidden)}
@@ -1767,7 +2177,10 @@ export default function PortfolioPage() {
                       <span className="hidden sm:inline">Show Archived</span>
                       <span className="sm:hidden">Archived</span>
                     </button>
-                    <button className="px-3  py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap">
+                    <button 
+                      onClick={() => setShowImportModal(true)}
+                      className="px-3  py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                    >
                       Import
                     </button>
                     <button
@@ -1785,13 +2198,13 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Right Panel Header */}
-                <div className="px-2 py-4 border-l border-[#2A2B33]">
+                {/* <div className="px-2 py-4 border-l border-[#2A2B33]">
                   <h3 className="text-[#f0f5f5] font-medium text-sm">Source wallets</h3>
-                </div>
+                </div> */}
               </div>
 
               {/* Table Headers Row - Spans Both Panels */}
-              <div className="grid grid-cols-2 border-b border-[#2A2B33]">
+              <div className="border-b border-[#2A2B33]">
                 <div className="px-4 py-2">
                   <div className="grid grid-cols-4 gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
@@ -1800,18 +2213,18 @@ export default function PortfolioPage() {
                     <div className="font-medium truncate">Actions</div>
                   </div>
                 </div>
-                <div className="px-4 py-2 border-l border-[#2A2B33]">
+                {/* <div className="px-4 py-2 border-l border-[#2A2B33]">
                   <div className="grid grid-cols-4 gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
                     <div className="font-medium truncate">Balance</div>
                     <div className="font-medium truncate">Holdings</div>
                     <div className="font-medium truncate">Actions</div>
                   </div>
-                </div>
+                </div> */}
               </div>
 
               {/* Content Area */}
-              <div className="grid grid-cols-2">
+              <div>
                 {/* Left Panel Content */}
                 <div className="px-4 py-3 ">
                   <div className="min-h-[300px]">
@@ -1827,10 +2240,16 @@ export default function PortfolioPage() {
                       <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
                         No wallets yet. Click &quot;Create Wallet&quot; to get started.
                       </div>
+                    ) : filteredWallets.length === 0 ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        {walletSearchQuery.trim() 
+                          ? `No wallets found matching "${walletSearchQuery}"`
+                          : showHidden 
+                            ? "No archived wallets"
+                            : "No wallets found"}
+                      </div>
                     ) : (
-                      wallets
-                        .filter((w) => (showHidden ? true : !w.isArchived))
-                        .map((wallet) => {
+                      filteredWallets.map((wallet) => {
                           const displayAddress = getAddressForChain(wallet, currentChain);
                           const truncated =
                             displayAddress.length > 8
@@ -1941,15 +2360,24 @@ export default function PortfolioPage() {
 
                               {/* Balance */}
                               <div className="flex items-center gap-1 justify-center">
-                                <SiSolana
-                                  className="h-3 w-3 flex-shrink-0"
-                                  aria-hidden="true"
-                                  style={{
-                                    color: "unset",
-                                    fill: "url(#solana-gradient-wallets)",
-                                    filter: "none",
-                                  }}
-                                />
+                                {currentChain === 'monad' ? (
+                                  <img
+                                    src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                                    alt="Monad"
+                                    className="h-4 w-4 flex-shrink-0 rounded"
+                                    style={{ objectFit: 'contain' }}
+                                  />
+                                ) : (
+                                  <SiSolana
+                                    className="h-3 w-3 flex-shrink-0"
+                                    aria-hidden="true"
+                                    style={{
+                                      color: "unset",
+                                      fill: "url(#solana-gradient-wallets)",
+                                      filter: "none",
+                                    }}
+                                  />
+                                )}
                                 <span className="text-xs text-white">
                                   {formatSmartNumber(
                                     walletBalances[wallet.id] ?? wallet.balance,
@@ -1969,7 +2397,13 @@ export default function PortfolioPage() {
 
                               {/* Actions */}
                               <div className="text-center">
-                                <span className="text-xs text-[#9CA3AF]">-</span>
+                                <button
+                                  className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                                  onClick={() => handleExportWallet(wallet.id)}
+                                  title="Export wallet"
+                                >
+                                  Export wallet
+                                </button>
                               </div>
                             </div>
                           </div>
@@ -1979,8 +2413,8 @@ export default function PortfolioPage() {
                 </div>
                 </div>
 
-                {/* Right Panel Content */}
-                <div className="py-3 border-l border-[#2A2B33]">
+                {/* Right Panel Content - Source wallets and Destination sections commented out */}
+                {/* <div className="py-3 border-l border-[#2A2B33]">
                   <div className="min-h-[150px] flex flex-col items-center justify-center">
                     <div className="flex flex-col items-center gap-3 text-[#9CA3AF]">
                       <svg
@@ -1997,7 +2431,7 @@ export default function PortfolioPage() {
                     </div>
                   </div>
 
-                  {/* Destination Section */}
+                  Destination Section
                   <div className="px-4 py-2 border-t border-[#2A2B33] flex items-center justify-between">
                     <h3 className="text-[#f0f5f5] font-medium text-sm">Destination</h3>
                     <button className="px-3 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:bg-[#58B890] transition-colors cursor-pointer">
@@ -2016,7 +2450,7 @@ export default function PortfolioPage() {
                       No destination wallets selected
                     </div>
                   </div>
-                </div>
+                </div> */}
               </div>
             </div>
           )}
@@ -2158,6 +2592,26 @@ export default function PortfolioPage() {
         </div>
       </div>
       <Footer />
+      
+      {/* Import Wallet Modal */}
+      <ImportWalletModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportWallets}
+        chain={currentChain as 'sol' | 'monad'}
+      />
+      
+      {/* Export Wallet Modal */}
+      <ExportWalletModal
+        isOpen={showExportModal}
+        onClose={() => {
+          setShowExportModal(false);
+          setExportWalletId(null);
+          setExportWalletAddress(null);
+        }}
+        walletId={exportWalletId || undefined}
+        walletAddress={exportWalletAddress || undefined}
+      />
     </>
   );
 }

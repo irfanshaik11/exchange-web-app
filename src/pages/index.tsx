@@ -69,6 +69,14 @@ export type Timeframe = "5m" | "1h" | "6h" | "24h";
 export default function Home() {
   const router = useRouter();
 
+  // Redirect to /pulse if we're on the root path without any query params
+  useEffect(() => {
+    if (router.isReady && router.pathname === '/' && !router.query.search && !router.query.chain) {
+      router.replace('/pulse?chain=monad', undefined, { shallow: false });
+      return;
+    }
+  }, [router.isReady, router.pathname, router.query.search, router.query.chain, router]);
+
   const [search, setSearch] = useState("");
   // Populate search state if we arrived with ?search= in the URL
   useEffect(() => {
@@ -111,6 +119,9 @@ export default function Home() {
   // Don't make API calls if we're on a different page
   const shouldMakeCalls = router.pathname === '/';
   
+  // Get current chain from query parameter, default to 'sol'
+  const currentChain = (router.query.chain as string) || 'sol';
+  
   const {
     data: allTokens,
     loading: tokensLoading,
@@ -121,6 +132,7 @@ export default function Home() {
   } = usePaginatedTokensWithFallback({
     filter: selectedTab === 'dex' ? 'new' : 'trending',
     timeframe: selectedTimeframe,
+    chain: currentChain, // Pass chain parameter
     // Disable the hook when not on home page
     limit: shouldMakeCalls ? 20 : 0
   });

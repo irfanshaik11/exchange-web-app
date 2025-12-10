@@ -1,148 +1,425 @@
-// Backend API URL
-const WALLET_TRACKER_API_URL = process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
-
-// Token metadata interface
-export interface TokenMetadata {
-  symbol: string | null;
-  name: string | null;
-  image: string | null;
-  launchpad_protocol?: string | null;
+export interface UnifiedTokenMetadata {
+  address?: string;
+  name?: string;
+  symbol?: string;
+  protocol?: string;
+  launchpad?: string | null;
+  imageUrl?: string;
+  createdAt?: string | number;
+  priceUsd?: number;
+  marketCapUsd?: number;
+  migrated_pool_address?: string;
 }
 
-// Cache for token metadata to avoid repeated fetches
-const metadataCache = new Map<string, TokenMetadata>();
+interface FetchOptions {
+  signal?: AbortSignal;
+  pairAddress?: string | null;
+}
 
-/**
- * Fetch token metadata via secure backend (using Helius DAS API)
- * This keeps API keys secure and provides better coverage than manually parsing Metaplex metadata
- */
-export async function fetchTokenMetadata(mintAddress: string): Promise<TokenMetadata> {
-  // Check cache first
-  if (metadataCache.has(mintAddress)) {
-    const cached = metadataCache.get(mintAddress)!;
-    console.log(`[TokenMetadata] Using cached data for ${mintAddress.slice(0, 8)}...`, cached);
-    return cached;
+const DEFAULT_MONAD_ENDPOINT = "/api/token-service/monad/token";
+const DEFAULT_TRADE_VIEW_ENDPOINT = "/api/token-service/trade-view";
+
+// Standard ERC-20 ABI for name() and symbol()
+const ERC20_ABI = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+] as const;
+
+// ERC-721/ERC-1155 style tokenURI (some tokens may have this)
+const TOKEN_URI_ABI = [
+  "function tokenURI(uint256 tokenId) view returns (string)",
+  "function uri(uint256 tokenId) view returns (string)",
+] as const;
+
+// Monad RPC URL
+const MONAD_RPC_URL = process.env.NEXT_PUBLIC_MONAD_RPC_URL || 
+  "https://rpc-mainnet.monadinfra.com/rpc/2jSlaER7hP372wZ53U9JBwrxTWm7BTt8";
+
+export function isProbablyMonadAddress(address?: string | null): boolean {
+  return typeof address === "string" && address.trim().toLowerCase().startsWith("0x");
+}
+
+export function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : fallback;
   }
-
-  console.log(`[TokenMetadata] Fetching metadata for ${mintAddress.slice(0, 8)}...`);
-
-  try {
-    // Use backend endpoint to keep API key secure
-    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/token-metadata`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        mints: [mintAddress],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (data.ok && data.metadata && data.metadata[mintAddress]) {
-      const apiResult = data.metadata[mintAddress];
-      // Ensure all required fields are present
-      const result: TokenMetadata = {
-        symbol: apiResult.symbol || null,
-        name: apiResult.name || null,
-        image: apiResult.image || apiResult.logo || apiResult.uri || null,
-        launchpad_protocol: apiResult.launchpad_protocol || apiResult.protocol || null,
-      };
-      console.log(`[TokenMetadata] Successfully fetched for ${mintAddress.slice(0, 8)}...`, result);
-      metadataCache.set(mintAddress, result);
-      return result;
-    } else {
-      console.warn(`[TokenMetadata] No data in response for ${mintAddress.slice(0, 8)}...`);
-    }
-  } catch (error) {
-    console.error(`[TokenMetadata] Error fetching metadata for ${mintAddress.slice(0, 8)}...`, error);
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
   }
-
-  // Return null if unable to fetch
-  const fallback: TokenMetadata = { symbol: null, name: null, image: null, launchpad_protocol: null };
-  console.log(`[TokenMetadata] Using fallback for ${mintAddress.slice(0, 8)}...`);
-  metadataCache.set(mintAddress, fallback);
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
   return fallback;
 }
 
+function toOptionalNumber(value: unknown): number | undefined {
+  const parsed = toNumber(value, Number.NaN);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export async function fetchChainTokenMetadata(
+  tokenAddress: string,
+  options: FetchOptions = {},
+): Promise<UnifiedTokenMetadata | null> {
+  if (!tokenAddress) return null;
+
+  const trimmedAddress = tokenAddress.trim();
+  if (!trimmedAddress) return null;
+
+  if (isProbablyMonadAddress(trimmedAddress)) {
+    return fetchMonadMetadata(trimmedAddress, options.signal);
+  }
+
+  return fetchSolanaMetadata(trimmedAddress, options);
+}
+
 /**
- * Batch fetch token metadata for multiple mints via secure backend
+ * Fetch ERC-20 token metadata directly from blockchain as fallback
+ * Only works in browser (client-side)
  */
-export async function batchFetchTokenMetadata(mintAddresses: string[]): Promise<Map<string, TokenMetadata>> {
-  const results = new Map<string, TokenMetadata>();
-  
-  // Filter out already cached addresses
-  const uncachedAddresses = mintAddresses.filter(addr => !metadataCache.has(addr));
-  
-  // Add cached results
-  mintAddresses.forEach(addr => {
-    if (metadataCache.has(addr)) {
-      results.set(addr, metadataCache.get(addr)!);
-    }
-  });
-  
-  if (uncachedAddresses.length === 0) {
-    console.log('[TokenMetadata] All addresses already cached');
-    return results;
+async function fetchMonadMetadataFromBlockchain(address: string, signal?: AbortSignal): Promise<UnifiedTokenMetadata | null> {
+  // Only run in browser
+  if (typeof window === 'undefined') {
+    return null;
   }
   
-  console.log(`[TokenMetadata] Fetching ${uncachedAddresses.length} uncached tokens in batch`);
+  try {
+    // Dynamically import ethers to avoid SSR issues
+    const { ethers } = await import('ethers');
+    
+    const provider = new ethers.JsonRpcProvider(MONAD_RPC_URL);
+    const tokenContract = new ethers.Contract(address, ERC20_ABI, provider);
+    
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    if (signal) {
+      signal.addEventListener('abort', () => controller.abort());
+    }
+    
+    try {
+      // Fetch name and symbol in parallel with timeout
+      const fetchPromise = Promise.all([
+        tokenContract.name().catch(() => null),
+        tokenContract.symbol().catch(() => null),
+      ]);
+      
+      const timeoutPromise = new Promise<null>((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout')), 5000);
+      });
+      
+      const [name, symbol] = await Promise.race([fetchPromise, timeoutPromise]).catch(() => [null, null]) as [string | null, string | null];
+      
+      clearTimeout(timeoutId);
+      
+      if (!name && !symbol) {
+        console.log(`ℹ️ [fetchMonadMetadataFromBlockchain] No name/symbol found for ${address}`);
+        return null;
+      }
+      
+      console.log(`✅ [fetchMonadMetadataFromBlockchain] Fetched from blockchain:`, { name, symbol });
+      
+      // Try to search for image using symbol (for launchpad tokens like nadfun)
+      // Note: This is async but we don't want to block too long
+      let imageUrl: string | undefined = undefined;
+      if (symbol) {
+        // Normalize symbol for URL (remove special chars, handle spaces)
+        const normalizedSymbol = symbol.toLowerCase().replace(/[^a-z0-9]/g, '');
+        
+        // Try common image sources for Monad tokens (nadfun, etc.)
+        // Try symbol-based first, then address-based
+        const imageSources = [
+          // Symbol-based (most common) - try multiple variations
+          `https://cdn.nad.fun/${normalizedSymbol}.png`,
+          `https://cdn.nad.fun/${symbol.toLowerCase()}.png`,
+          `https://nad.fun/${normalizedSymbol}.png`,
+          `https://nad.fun/${symbol.toLowerCase()}.png`,
+          `https://static.nad.fun/${normalizedSymbol}.png`,
+          `https://static.nad.fun/${symbol.toLowerCase()}.png`,
+          // Address-based (fallback)
+          `https://cdn.nad.fun/${address.toLowerCase()}.png`,
+          `https://nad.fun/${address.toLowerCase()}.png`,
+          // Also try with checksummed address
+          `https://cdn.nad.fun/${address}.png`,
+        ];
+        
+        // Try to find a valid image (quick HEAD request with short timeout)
+        // Use Promise.race to get first successful result
+        const imageCheckPromises = imageSources.map(async (imgSrc, index) => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5 second timeout per image
+            
+            if (signal) {
+              signal.addEventListener('abort', () => controller.abort());
+            }
+            
+            const imgResponse = await fetch(imgSrc, { 
+              method: 'HEAD', 
+              signal: controller.signal,
+              cache: 'no-cache',
+            });
+            clearTimeout(timeoutId);
+            
+            if (imgResponse.ok && imgResponse.headers.get('content-type')?.startsWith('image/')) {
+              console.log(`✅ [fetchMonadMetadataFromBlockchain] Found image at: ${imgSrc}`);
+              return imgSrc;
+            }
+          } catch (err) {
+            // Continue to next source
+          }
+          return null;
+        });
+        
+        // Wait for first successful image check (with overall timeout)
+        try {
+          const timeoutPromise = new Promise<null>((_, reject) => {
+            setTimeout(() => reject(new Error('Image search timeout')), 3000); // 3 second overall timeout
+          });
+          
+          const results = await Promise.race([
+            Promise.allSettled(imageCheckPromises),
+            timeoutPromise,
+          ]) as PromiseSettledResult<string | null>[];
+          
+          const foundImage = results
+            .map((result) => (result.status === 'fulfilled' ? result.value : null))
+            .find((url) => url !== null);
+          
+          if (foundImage) {
+            imageUrl = foundImage;
+          }
+        } catch {
+          // Timeout or error - continue without image
+          console.log(`⏱️ [fetchMonadMetadataFromBlockchain] Image search timed out for ${address}`);
+        }
+      }
+      
+      return {
+        address: address.toLowerCase(),
+        name: name || undefined,
+        symbol: symbol || undefined,
+        imageUrl: imageUrl,
+      };
+    } catch (contractError: any) {
+      clearTimeout(timeoutId);
+      if (controller.signal.aborted || contractError?.message === 'Timeout') {
+        console.log(`⏱️ [fetchMonadMetadataFromBlockchain] Request timed out for ${address}`);
+        return null;
+      }
+      throw contractError;
+    }
+  } catch (error: any) {
+    console.warn(`⚠️ [fetchMonadMetadataFromBlockchain] Failed to fetch from blockchain:`, error?.message || error);
+    return null;
+  }
+}
+
+async function fetchMonadMetadata(address: string, signal?: AbortSignal): Promise<UnifiedTokenMetadata | null> {
+  // Normalize address to lowercase for consistency
+  const normalizedAddress = address.toLowerCase();
+  const url = `${DEFAULT_MONAD_ENDPOINT}?address=${encodeURIComponent(normalizedAddress)}`;
+  
+  console.log(`🔍 [fetchMonadMetadata] Fetching metadata for: ${normalizedAddress}`);
+  console.log(`   URL: ${url}`);
   
   try {
-    // Backend API supports up to 100 assets at once
-    const chunkSize = 100;
-    
-    for (let i = 0; i < uncachedAddresses.length; i += chunkSize) {
-      const chunk = uncachedAddresses.slice(i, i + chunkSize);
-      
-      const response = await fetch(`${WALLET_TRACKER_API_URL}/api/token-metadata`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          mints: chunk,
-        }),
-      });
+    const response = await fetch(url, { signal });
 
+    if (!response.ok) {
+      // Handle 404 gracefully - try blockchain fallback
+      if (response.status === 404) {
+        console.log(`ℹ️ [fetchMonadMetadata] Token ${normalizedAddress} not found in service (404) - trying blockchain fallback`);
+        // Try to fetch from blockchain directly
+        const blockchainMetadata = await fetchMonadMetadataFromBlockchain(normalizedAddress, signal);
+        if (blockchainMetadata) {
+          console.log(`✅ [fetchMonadMetadata] Got metadata from blockchain fallback`);
+          
+          // If we have symbol but no image, try multiple sources
+          if (blockchainMetadata.symbol && !blockchainMetadata.imageUrl) {
+            // Try 1: nadfun API
+            try {
+              const nadfunApiUrl = `https://api.nad.fun/v1/token/${normalizedAddress}`;
+              const nadfunResponse = await fetch(nadfunApiUrl, { 
+                signal,
+                headers: { 'Accept': 'application/json' }
+              });
+              
+              if (nadfunResponse.ok) {
+                const nadfunData = await nadfunResponse.json();
+                if (nadfunData?.image || nadfunData?.logo || nadfunData?.imageUrl) {
+                  blockchainMetadata.imageUrl = nadfunData.image || nadfunData.logo || nadfunData.imageUrl;
+                  console.log(`✅ [fetchMonadMetadata] Found image from nadfun API`);
+                  return blockchainMetadata;
+                }
+              }
+            } catch (nadfunError) {
+              // Continue to next source
+            }
+            
+            // Try 2: Check pulse/new pairs endpoint (where Monad table gets images)
+            try {
+              const pulseUrl = `/api/token-service/pulse-new?chain=monad`;
+              const pulseResponse = await fetch(pulseUrl, { signal });
+              
+              if (pulseResponse.ok) {
+                const pulseData = await pulseResponse.json();
+                const tokens = pulseData?.new || pulseData?.data || [];
+                const token = tokens.find((t: any) => 
+                  (t.address || t.mint || t.pair_address)?.toLowerCase() === normalizedAddress
+                );
+                
+                if (token) {
+                  const imageUrl = token.image || token.logo || token.uri || token.image_url;
+                  if (imageUrl) {
+                    blockchainMetadata.imageUrl = imageUrl;
+                    console.log(`✅ [fetchMonadMetadata] Found image from pulse-new endpoint`);
+                    return blockchainMetadata;
+                  }
+                }
+              }
+            } catch (pulseError) {
+              // Continue - image search already tried CDN paths
+            }
+          }
+          
+          return blockchainMetadata;
+        }
+        return null; // Return null if blockchain also fails
+      }
+      console.warn(`⚠️ [fetchMonadMetadata] API responded with ${response.status} for ${normalizedAddress}`);
+      throw new Error(`Monad token service responded with ${response.status}`);
+    }
+
+    const payload = await response.json();
+    console.log(`📦 [fetchMonadMetadata] Response for ${normalizedAddress}:`, payload);
+    
+    // The API might return data directly or nested in a 'data' field
+    // Also handle case where response is already the token object
+    const data = payload?.data || payload?.token || payload;
+    
+    if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
+      console.warn(`⚠️ [fetchMonadMetadata] No data in response for ${normalizedAddress}`, {
+        payload,
+        hasData: !!payload?.data,
+        hasToken: !!payload?.token,
+        payloadKeys: Object.keys(payload || {}),
+      });
+      return null;
+    }
+
+    const metadata = {
+      address: data.address || normalizedAddress,
+      name: data.name || undefined,
+      symbol: data.symbol || undefined,
+      protocol: data.launchpad_protocol || data.launchpad_name || data.protocol || undefined,
+      launchpad: data.launchpad_protocol || data.launchpad_name || data.protocol || undefined,
+      // Try multiple image field names from token service
+      imageUrl: data.image_url || data.image || data.logo || data.uri || data.logo_url || undefined,
+      createdAt: data.created_at || data.updated_at,
+      priceUsd: toOptionalNumber(data.price_usd),
+      marketCapUsd: toOptionalNumber(data.market_cap_usd),
+    };
+    
+    console.log(`✅ [fetchMonadMetadata] Successfully parsed metadata for ${normalizedAddress}:`, {
+      name: metadata.name,
+      symbol: metadata.symbol,
+      hasImage: !!metadata.imageUrl,
+      imageSource: metadata.imageUrl ? 'token-service' : 'none',
+    });
+    
+    return metadata;
+  } catch (error: any) {
+    console.error(`❌ [fetchMonadMetadata] Error fetching metadata for ${normalizedAddress}:`, error);
+    throw error; // Re-throw to let caller handle fallback
+  }
+}
+
+async function fetchSolanaMetadata(
+  address: string,
+  options: FetchOptions,
+): Promise<UnifiedTokenMetadata | null> {
+  const endpoints: string[] = [
+    `${DEFAULT_TRADE_VIEW_ENDPOINT}?mint_address=${encodeURIComponent(address)}`,
+  ];
+
+  if (options.pairAddress) {
+    endpoints.push(`${DEFAULT_TRADE_VIEW_ENDPOINT}?pair_address=${encodeURIComponent(options.pairAddress)}`);
+  }
+
+  let lastError: unknown = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, { signal: options.signal });
       if (!response.ok) {
-        console.error(`[TokenMetadata] HTTP error! status: ${response.status}`);
+        lastError = new Error(`Token service responded with ${response.status}`);
         continue;
       }
 
-      const data = await response.json();
-      
-      if (data.ok && data.metadata) {
-        chunk.forEach((mintAddress) => {
-          const apiResult = data.metadata[mintAddress];
-          const metadata: TokenMetadata = {
-            symbol: apiResult?.symbol || null,
-            name: apiResult?.name || null,
-            image: apiResult?.image || apiResult?.logo || apiResult?.uri || null,
-            launchpad_protocol: apiResult?.launchpad_protocol || apiResult?.protocol || null,
-          };
-          results.set(mintAddress, metadata);
-          metadataCache.set(mintAddress, metadata);
-          console.log(`[TokenMetadata] Batch fetched ${mintAddress.slice(0, 8)}...`, metadata);
-        });
+      const payload = await response.json();
+      const token =
+        payload?.token ||
+        payload?.data ||
+        payload;
+
+      if (!token) {
+        continue;
       }
-    }
-  } catch (error) {
-    console.error('[TokenMetadata] Batch fetch error:', error);
-    
-    // Fallback to individual fetches if batch fails
-    console.log('[TokenMetadata] Falling back to individual fetches...');
-    for (const mint of uncachedAddresses) {
-      const metadata = await fetchTokenMetadata(mint);
-      results.set(mint, metadata);
+
+      return {
+        address: token.mint_address || token.mintAddress || token.address || address,
+        name: token.name || undefined,
+        symbol: token.symbol || undefined,
+        protocol:
+          token.launchpad_protocol ||
+          token.protocol ||
+          token.launchpadName ||
+          token.amm ||
+          undefined,
+        launchpad:
+          token.launchpad_protocol ||
+          token.protocol ||
+          token.launchpadName ||
+          token.amm ||
+          undefined,
+        imageUrl: token.uri || token.image || token.logo || undefined,
+        createdAt: token.created_timestamp || token.createdAt,
+        priceUsd: toOptionalNumber(token.price_usd ?? token.priceUsd),
+        marketCapUsd: toOptionalNumber(token.market_cap_usd ?? token.market_cap),
+        migrated_pool_address: token.migrated_pool_address || token.pair_address || undefined,
+      };
+    } catch (error) {
+      lastError = error;
     }
   }
-  
+
+  if (lastError) {
+    throw lastError instanceof Error ? lastError : new Error("Failed to fetch token metadata");
+  }
+
+  return null;
+}
+
+export async function batchFetchChainTokenMetadata(
+  tokenAddresses: string[],
+  options: FetchOptions = {},
+): Promise<Map<string, UnifiedTokenMetadata>> {
+  const results = new Map<string, UnifiedTokenMetadata>();
+  const uniqueAddresses = Array.from(new Set(tokenAddresses.filter(Boolean)));
+
+  await Promise.allSettled(
+    uniqueAddresses.map(async (address) => {
+      const metadata = await fetchChainTokenMetadata(address, options);
+      if (metadata) {
+        results.set(address, metadata);
+      }
+    }),
+  );
+
   return results;
 }
 

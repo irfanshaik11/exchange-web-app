@@ -67,6 +67,34 @@ export class ApiError extends Error {
  *  – Adds `Authorization` header when `authToken` provided
  *  – Parses JSON response and throws for non-2xx statuses
  */
+
+// Normalize/upgrade backend URL to avoid mixed-content fetch failures when the app is served over HTTPS.
+function resolveBackendBaseUrl(): string {
+  const envUrl = env.NEXT_PUBLIC_BACKEND_URL || "";
+
+  // Helper to strip a trailing slash for clean concatenation
+  const stripTrailingSlash = (url: string) =>
+    url.endsWith("/") ? url.slice(0, -1) : url;
+
+  if (typeof window === "undefined") {
+    return stripTrailingSlash(envUrl);
+  }
+
+  try {
+    const url = new URL(envUrl || window.location.origin);
+
+    // If the app is running on https and the env is http, upgrade to https to avoid mixed-content blocks.
+    if (window.location.protocol === "https:" && url.protocol === "http:") {
+      url.protocol = "https:";
+    }
+
+    return stripTrailingSlash(url.toString());
+  } catch {
+    // Fallback to current origin if env value is malformed
+    return stripTrailingSlash(window.location.origin);
+  }
+}
+
 async function apiFetch<T = unknown>(
   endpoint: string,
   options: RequestOptions = {},
@@ -107,7 +135,7 @@ async function apiFetch<T = unknown>(
 
     // Critical Fix #10: Use fetchWithTimeout instead of fetch (45s timeout for trade operations)
     const res = await fetchWithTimeout(
-      `${env.NEXT_PUBLIC_BACKEND_URL}${endpoint}`,
+      `${resolveBackendBaseUrl()}${endpoint}`,
       {
         headers: finalHeaders,
         body: body ? JSON.stringify(body) : undefined,
@@ -133,7 +161,8 @@ async function apiFetch<T = unknown>(
         // Suppress console.error for expected validation errors to prevent Next.js dev overlay
         const EXPECTED_ERROR_CODES = [
           'NO_HOLDINGS', 'INSUFFICIENT_BALANCE', 'VALIDATION_ERROR',
-          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED', 'METEORA_NO_LIQUIDITY', 'TURNKEY_NOT_SUPPORTED', 'TOKEN_NOT_SUPPORTED'
+          'AMOUNT_TOO_SMALL', 'POOL_UNAVAILABLE', 'TX_FAILED', 'POOL_GRADUATED', 'METEORA_NO_LIQUIDITY', 'TURNKEY_NOT_SUPPORTED', 'TOKEN_NOT_SUPPORTED',
+          'INVALID_TOKEN', 'TOKEN_EXPIRED', 'UNAUTHORIZED'
         ];
         if (EXPECTED_ERROR_CODES.includes(code)) {
           // Mark as expected error (won't trigger Next.js error overlay in dev)
@@ -182,6 +211,18 @@ export const getUserById = (token: string) =>
     method: "GET",
   });
 
+export const updateUser = (
+  token: string,
+  email: string,
+  name: string,
+  userId: string | number
+) =>
+  apiFetch<{ user: any }>("/api/users/userDetails", {
+    authToken: token,
+    method: "PUT",
+    body: { email, name, userId },
+  });
+
 export const login = (email: string, password: string) =>
   apiFetch<{ token: string }>("/api/users/login", {
     method: "POST",
@@ -214,6 +255,33 @@ export const metamaskLogin = (
     method: "POST",
     body: { address, signature, message },
   });
+};
+
+export const turnkeyLogin = (
+  params: {
+    turnkeySessionToken: string;
+    organizationId: string;
+    userId: string;
+  }
+) => {
+  const endpoints = [
+    "/api/users/turnkey/login"
+  ];
+  console.log("Turnkey login called with params:", params);
+  return (async () => {
+    let lastError: unknown;
+    for (const endpoint of endpoints) {
+      try {
+        return await apiFetch<{ token: string }>(endpoint, {
+          method: "POST",
+          body: params,
+        });
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError;
+  })();
 };
 
 /** Returns the Google OAuth redirect URL (client will navigate to it) */
@@ -461,6 +529,12 @@ export const getWaitlistStatus = (params: { userId?: number; walletId?: string }
     updatedAt: string;
   } }>(`/api/waitlist/status?${qs.toString()}`, {
     method: "GET",
+  }).catch((err) => {
+    // If the user isn't on the waitlist yet, treat as no waitlist instead of throwing
+    if (err instanceof ApiError && err.status === 404) {
+      return { waitlist: null as any };
+    }
+    throw err;
   });
 };
 
@@ -499,14 +573,17 @@ export const grantWaitlistAccess = (params: { userId?: number; walletId?: string
     body: params,
   });
 
-export const redeemAccessCode = (params: { userId?: number; walletId?: string; accessCode: string }) =>
+// SECURITY FIX: Now requires authentication token - userId parameter is ignored by backend
+export const redeemAccessCode = (params: { accessCode: string; authToken: string }) =>
   apiFetch<{ waitlist: {
     id: number;
     waitlistNumber: string;
     status: 'waiting' | 'invited' | 'activated' | 'removed';
   } }>("/api/waitlist/redeem-access", {
     method: "POST",
-    body: params,
+    body: { accessCode: params.accessCode },
+    // SECURITY: userId is no longer sent - backend uses authenticated user from JWT token
+    authToken: params.authToken,
   });
 
 /* -------------------------------------------------------------------------- */
@@ -592,6 +669,54 @@ export const tradeSellExactAmount = (params: SellExactAmountParams) =>
   apiFetch("/api/trade/sell_exactAmount", {
     method: "POST",
     body: params,
+  });
+
+/* -------------------------------------------------------------------------- */
+/*                          Monad Trading endpoints                            */
+/* -------------------------------------------------------------------------- */
+
+export type MonadBuyParams = {
+  tokenAddress: string; // ERC-20 token address (0x format)
+  amountMON: number; // Amount in MON (native currency)
+  launchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs'; // Launchpad identifier
+  slippage?: number; // Optional: Slippage percentage (e.g., 5 for 5%)
+  gasPrice?: number; // Optional: Gas price in gwei (defaults to network suggestion)
+};
+
+export type MonadSellParams = {
+  tokenAddress: string; // ERC-20 token address
+  launchpad: 'nadfun' | 'flapsh-simple' | 'flapsh-devs'; // Launchpad identifier
+  tokenAmount?: string; // Optional: Exact token amount to sell (mutually exclusive with percentage)
+  percentage?: number; // Optional: Percentage of balance to sell (1-100, mutually exclusive with tokenAmount)
+  slippage?: number; // Optional: Slippage percentage
+  gasPrice?: number; // Optional: Gas price in gwei (defaults to network suggestion)
+};
+
+export const tradeMonadBuy = (params: MonadBuyParams, authToken: string) =>
+  apiFetch<{
+    success: boolean;
+    txHash: string;
+    blockNumber: number;
+    launchpad: string;
+    tokenAddress: string;
+    amountMON: number;
+  }>("/api/trade/monad/buy", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+export const tradeMonadSell = (params: MonadSellParams, authToken: string) =>
+  apiFetch<{
+    success: boolean;
+    txHash: string;
+    blockNumber: number;
+    launchpad: string;
+    tokenAddress: string;
+  }>("/api/trade/monad/sell", {
+    method: "POST",
+    body: params,
+    authToken,
   });
 
 /* -------------------------------------------------------------------------- */

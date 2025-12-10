@@ -22,10 +22,11 @@ import dynamic from "next/dynamic";
 import SimilarTokensPanel from "../../components/trade/SimilarTokensPanel";
 import ReusedImageTokensPanel from "../../components/trade/ReusedImageTokensPanel";
 import TokenLimitOrders from "../../components/trade/TokenLimitOrders";
+// Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
+import AdvancedOHLCChart from "../../components/AdvancedOHLCChart";
 
-// Lazy load heavy components to reduce initial bundle size
+// Lazy load other heavy components to reduce initial bundle size
 //const BackendOHLCChart = dynamic(() => import("../../components/BackendOHLCChart"), { ssr: false });
-const AdvancedOHLCChart = dynamic(() => import("../../components/AdvancedOHLCChart"), { ssr: false });
 const CodexTrades = dynamic(() => import("../../components/trade/CodexTrades"), { ssr: false });
 const CodexTopTraders = dynamic(() => import("../../components/trade/CodexTopTraders"), { ssr: false });
 const CodexDevTokens = dynamic(() => import("../../components/trade/CodexDevTokens"), { ssr: false });
@@ -70,7 +71,11 @@ type ReusedTokenLite = {
 
 export default function TradePage() {
   const router = useRouter();
-  const { id, _name, _symbol, _price, _mcap, _image, _mint } = router.query;
+  const { id, _name, _symbol, _price, _mcap, _image, _mint, chain } = router.query;
+
+  // Determine network from chain parameter (defaults to 'monad')
+  // If chain is explicitly 'sol', use 'solana', otherwise default to 'monad'
+  const network = chain === 'sol' ? 'solana' : 'monad';
 
   const { backgroundData: backgroundOHLCData, isPreloading, preloadComplete } = useBackgroundOHLCPreload();
 
@@ -213,7 +218,7 @@ export default function TradePage() {
       const diffMs = Date.now() - createdDate.getTime();
       const ageInHours = diffMs / (1000 * 60 * 60);
       const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
+      // if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
       if (ageInHours < 1) return { interval: "1m", timeframe: "1h", optimize: false } as const;
       if (ageInHours < 6) return { interval: "1h", timeframe: "4h", optimize: false } as const;
       if (ageInDays < 1) return { interval: "1h", timeframe: "24h", optimize: false } as const;
@@ -520,7 +525,7 @@ export default function TradePage() {
       <Head><title>{pageTitle}</title></Head>
 
       <div 
-        className="min-h-screen w-full flex flex-col"
+        className="h-screen w-full flex flex-col overflow-hidden"
         style={{ 
           backgroundColor: "#0f1012", 
           color: AX.text, 
@@ -531,14 +536,14 @@ export default function TradePage() {
         <Header search={search} setSearch={setSearch} />
 
         {isHydrating && (
-          <div className="text-center text-xs px-2 py-1.5"
+          <div className="text-center text-xs px-2 py-1.5 flex-shrink-0"
                style={{ color: AX.text, backgroundColor: "#2A2414", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}>
             Finding trading pair for this token…
           </div>
         )}
 
         <div 
-          className="flex flex-1 w-full max-w-full overflow-hidden" 
+          className="flex flex-1 w-full max-w-full overflow-hidden min-h-0" 
           style={{ 
             minHeight: 0,
             flex: '1 1 auto',
@@ -585,7 +590,6 @@ export default function TradePage() {
               >
                 {canStartOHLC || (typeof resolvedPairAddress === "string" && resolvedPairAddress.length >= 32) ? (
                   <AdvancedOHLCChart
-                    key={`chart-${resolvedPairAddress || _mint}`}
                     mint={typeof _mint === "string" ? _mint : undefined}
                     pairAddress={resolvedPairAddress}
                     interval={currentOHLCParams.interval}
@@ -600,6 +604,7 @@ export default function TradePage() {
                     tokenSymbol={displayToken?.symbol || null}
                     tokenName={displayToken?.name || null}
                     tokenDecimals={typeof displayToken?.decimals === 'number' ? displayToken.decimals : null}
+                    network={network}
                   />
                   // <BackendOHLCChart
                   //   key={`chart-${resolvedPairAddress || _mint}`}
@@ -692,14 +697,16 @@ export default function TradePage() {
             </div>
 
             {/* BOTTOM pane (tabs + tables) */}
-            <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col overflow-y-auto">
-              <TradeTabs 
-                selectedTab={selectedTab} 
-                setSelectedTab={setSelectedTab} 
-                onInstantTradeClick={() => setIsInstantTradeOpen(true)}
-                isInstantTradeOpen={isInstantTradeOpen}
-              />
-              <div className="flex-1 min-h-0 overflow-y-auto">
+            <div id="tabs-pane" className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="flex-shrink-0">
+                <TradeTabs 
+                  selectedTab={selectedTab} 
+                  setSelectedTab={setSelectedTab} 
+                  onInstantTradeClick={() => setIsInstantTradeOpen(true)}
+                  isInstantTradeOpen={isInstantTradeOpen}
+                />
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto" style={{ paddingBottom: '2rem' }}>
                 <div style={{ display: selectedTab === "Trades" ? "block" : "none", height: "100%" }}>
                   <CodexTrades 
                     token={correctTokenData || displayToken} 

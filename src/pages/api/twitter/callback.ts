@@ -14,9 +14,10 @@ import {
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
-) {
+): Promise<void> {
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   try {
@@ -42,18 +43,21 @@ export default async function handler(
         userFriendlyError = 'You cancelled the authorization. Please try again if you want to link your Twitter account.';
       }
       
-      return res.redirect(
+      res.redirect(
         `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}twitter_error=${encodeURIComponent(userFriendlyError)}`
       );
+      return;
     }
 
     // Validate required parameters
     if (!code || typeof code !== 'string') {
-      return res.redirect('/?twitter_error=missing_code');
+      res.redirect('/?twitter_error=missing_code');
+      return;
     }
 
     if (!state || typeof state !== 'string') {
-      return res.redirect('/?twitter_error=missing_state');
+      res.redirect('/?twitter_error=missing_state');
+      return;
     }
 
     // Get stored values from cookies
@@ -64,11 +68,13 @@ export default async function handler(
 
     // Verify state parameter (CSRF protection)
     if (!storedState || state !== storedState) {
-      return res.redirect('/?twitter_error=invalid_state');
+      res.redirect('/?twitter_error=invalid_state');
+      return;
     }
 
     if (!codeVerifier) {
-      return res.redirect('/?twitter_error=missing_code_verifier');
+      res.redirect('/?twitter_error=missing_code_verifier');
+      return;
     }
 
     // Exchange code for access token

@@ -28,7 +28,7 @@ export default function TwitterTrackerContent() {
   // Load Twitter accounts
   const loadTwitterAccounts = async () => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.id);
+      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || '');
       setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
@@ -80,7 +80,7 @@ export default function TwitterTrackerContent() {
 
   const handleAddTwitterAccount = async (username: string) => {
     try {
-      await addTrackedTwitterAccount(username, user?.id);
+      await addTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
     } catch (error: any) {
       console.error("Failed to add Twitter account:", error);
@@ -90,7 +90,7 @@ export default function TwitterTrackerContent() {
 
   const handleRemoveTwitterAccount = async (username: string) => {
     try {
-      await removeTrackedTwitterAccount(username, user?.id);
+      await removeTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
       // Clear feed if removed user was selected
       if (selectedTwitterUser === username) {

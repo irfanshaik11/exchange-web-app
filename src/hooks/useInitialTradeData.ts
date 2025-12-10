@@ -194,8 +194,8 @@ export default function useInitialTradeData(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
-      console.warn(`[useInitialTradeData] Request timeout for ${pair} after 3 seconds`);
-    }, 3000); // Reduced timeout to 3 seconds for faster loading
+      console.warn(`[useInitialTradeData] Request timeout for ${pair} after 15 seconds`);
+    }, 15000); // Increased timeout to 15 seconds to allow slow backend responses
     
     try {
       console.log(`[useInitialTradeData] Fetching fresh data for ${pair} in parallel`);

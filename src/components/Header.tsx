@@ -12,6 +12,7 @@ import {
 } from "react-icons/fa";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { useUser } from "./UserContext";
+import { useSolPrice } from "./SolPriceContext";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
@@ -20,6 +21,7 @@ import { FiBarChart, FiChevronDown, FiStar } from "react-icons/fi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import UpdatesModal from "./UpdatesModal";
+import NotificationDropdown from "./NotificationDropdown";
 import type { Timeframe } from "../pages/index";
 import { CiBellOn, CiStar } from "react-icons/ci";
 
@@ -75,7 +77,7 @@ const navLinks = [
   { name: "Trackers", href: "/trackers" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
-  { name: "Rewards", href: "/rewards" },
+  { name: "Referral", href: "/rewards" },
 ];
 
 interface HeaderProps {
@@ -146,8 +148,11 @@ export default function Header({
     refreshBalance,
     primaryWalletAddresses,
     chainBalances,
+    logout,
   } = useUser();
-  const currentChain = (router.query.chain as string) || "sol";
+  const currentChain = (router.query.chain as string) || "monad";
+  const { solPrice, monPrice } = useSolPrice();
+  const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositInitialTab, setDepositInitialTab] = useState<
@@ -182,8 +187,25 @@ export default function Header({
     bnb: "BNB",
     base: "BASE",
   };
-  const [chainBalance, setChainBalance] = useState<number>(
-    chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0),
+  
+  const chainLogos: Record<string, string> = {
+    sol: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+    monad: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+    eth: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+    bnb: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+    base: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+  };
+  
+  // Use chainBalances from UserContext as the single source of truth
+  // Derive chainBalance from chainBalances instead of maintaining separate state
+  const chainBalance = chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
+
+  const chainAwareHref = useCallback(
+    (href: string) => ({
+      pathname: href,
+      query: { ...router.query, chain: currentChain },
+    }),
+    [router.query, currentChain],
   );
   const formatBalance = (value: number, digits = 3) => {
     if (value === 0) return "0";
@@ -203,6 +225,8 @@ export default function Header({
       maximumFractionDigits: 2,
     });
 
+  // Refresh the primary wallet balance and update UserContext chainBalances
+  // This ensures Header and Portfolio stay in sync since they both read from chainBalances
   useEffect(() => {
     const address =
       currentChain === "sol"
@@ -210,26 +234,33 @@ export default function Header({
         : primaryWalletAddresses.ethereum || null;
 
     if (!address) {
-      if (currentChain === "sol" && user?.publicKey) {
-        refreshBalance({ chain: "sol", address: user.publicKey }).then((res) => {
-          if (res?.balance !== undefined) {
-            setChainBalance(res.balance);
-          }
-        });
-      } else {
-        setChainBalance(0);
-      }
+      // If no address, ensure chainBalances reflects 0 for this chain
+      // Note: We don't directly update chainBalances here as it's managed by UserContext
+      // The UserContext's refreshBalance handles updating chainBalances
       return;
     }
 
     let cancelled = false;
-    refreshBalance({ chain: currentChain, address }).then((res) => {
+    
+    // Refresh balance immediately when primary wallet address changes (force refresh to bypass cooldown)
+    // This ensures Header updates instantly when primary wallet is changed
+    refreshBalance({ chain: currentChain, address, force: true }).then((res) => {
       if (!cancelled && res?.balance !== undefined) {
-        setChainBalance(res.balance);
+        // Balance is already updated in UserContext's chainBalances via refreshBalance
+        // No need to update local state since we're using chainBalances directly
       }
     });
+    
+    // Set up periodic refresh to keep balance up to date
+    const interval = setInterval(() => {
+      if (!cancelled) {
+        refreshBalance({ chain: currentChain, address });
+      }
+    }, 12000);
+    
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [
     currentChain,
@@ -345,6 +376,7 @@ export default function Header({
     return () => clearInterval(interval);
   }, [checkClipboard]);
 
+  
   useEffect(() => {
     if (typeof document === "undefined") return;
 
@@ -642,7 +674,7 @@ export default function Header({
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden md:gap-3">
             <Link
-              href="/pulse"
+              href={chainAwareHref("/pulse")}
               className="flex flex-shrink-0 items-center text-xl tracking-tight select-none"
               style={{ color: AX.text }}
               title="Go to Trenches"
@@ -690,18 +722,7 @@ export default function Header({
                   return (
                     <Link
                       key={link.name}
-                      href={link.href}
-                      onClick={(e) => {
-                        // Use router.push for client-side navigation with fallback
-                        router.push(link.href).catch((err: any) => {
-                          // Fallback to full page navigation if router.push fails
-                          console.error(
-                            "Router.push failed, using fallback:",
-                            err,
-                          );
-                          window.location.href = link.href;
-                        });
-                      }}
+                      href={chainAwareHref(link.href)}
                       className={`flex-shrink-0 rounded px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out sm:px-3 xl:px-4`}
                       style={{
                         color: isActive ? AX.mint : AX.text,
@@ -1000,85 +1021,18 @@ export default function Header({
               </button>
 
               {/* Notifications Panel */}
-              {notificationsOpen && (
-                <div
-                  className="fixed top-16 right-4 z-50 rounded-xl border shadow-2xl"
-                  style={{
-                    backgroundColor: "#1a1b20",
-                    borderColor: "#2A2B33",
-                    width: "280px",
-                    minWidth: "280px",
-                    maxWidth: "280px",
-                    maxHeight: "70vh",
-                  }}
-                >
-                  {/* Header */}
-                  <div
-                    className="flex items-center justify-between border-b p-4"
-                    style={{ borderColor: "#2A2B33" }}
-                  >
-                    <h3 className="text-sm font-semibold text-[#f0f5f5]">
-                      Notifications
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => {
-                          // Clear all notifications logic here
-                          toast.success("All notifications cleared");
-                        }}
-                        className="text-sm text-neutral-400 transition-colors hover:text-[#f0f5f5]"
-                      >
-                        Clear All
-                      </button>
-                      <button
-                        onClick={() => setNotificationsOpen(false)}
-                        className="text-neutral-400 transition-colors hover:text-white"
-                      >
-                        <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path d="M18 6L6 18M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div
-                    className="flex flex-col items-center justify-center p-8"
-                    style={{ minHeight: "300px" }}
-                  >
-                    <div className="mb-4 opacity-50">
-                      <svg
-                        width="80"
-                        height="80"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                      </svg>
-                    </div>
-                    <p className="text-base text-neutral-400">No Data</p>
-                  </div>
-                </div>
-              )}
+              <NotificationDropdown
+                open={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+              />
             </div>
-
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
               <div ref={profileMenuRef} className="relative">
                 {/* Combined Balance + Username Button */}
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="group/account flex h-10 cursor-pointer flex-row items-center justify-center rounded-3xl border transition-all duration-300 ease-out lg:gap-2 px-1"
+                  className="group/account flex h-10 cursor-pointer flex-row items-center justify-center rounded-3xl border px-1 transition-all duration-300 ease-out lg:gap-2"
                   style={{
                     borderColor: AX.border,
                     color: AX.text,
@@ -1091,29 +1045,32 @@ export default function Header({
                   }}
                   title="Click to view account & wallet"
                 >
-                  <div
-                    className="hidden h-8 w-8 items-center justify-center rounded-[125px] bg-emerald-400 text-black text-xs font-bold select-none sm:flex"
-                  >
+                  <div className="hidden h-8 w-8 items-center justify-center rounded-[125px] bg-emerald-400 text-xs font-bold text-black select-none sm:flex">
                     {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                   </div>
-                    <div className="flex flex-col text-left items-left gap-0">
+                  <div className="items-left flex flex-col gap-0 text-left">
                     <div className="text-sm text-white">
-                      {formatBalance(chainBalance)} {chainSymbols[currentChain] ?? "SOL"}
-                    </div> 
+                      {formatBalance(chainBalance)}{" "}
+                      {chainSymbols[currentChain] ?? "SOL"}
+                    </div>
                     <div className="text-xs text-neutral-500">
-                      {user.name ? user.name : user.publicKey.slice(0,4).concat(user.name.slice(-4))}
+                      {user.name
+                        ? user.name
+                        : user.publicKey
+                            .slice(0, 4)
+                            .concat(user.name.slice(-4))}
                     </div>
                   </div>
-                  <FiChevronDown className="text-neutral-500 hover:text-neutral-200" size={16} />
+                  <FiChevronDown
+                    className="text-neutral-500 hover:text-neutral-200"
+                    size={16}
+                  />
                 </button>
-
                 {/* Combined Dropdown */}
                 {profileMenuOpen && (
                   <div
-                    className="absolute top-10 right-0 z-50 rounded-xl border shadow-2xl"
+                    className="absolute top-10 right-0 z-50 rounded-xl border border-[#20232b] bg-[#0a0b10] shadow-2xl"
                     style={{
-                      backgroundColor: "#0a0b10",
-                      borderColor: "#20232b",
                       width: "280px",
                       minWidth: "280px",
                       maxWidth: "280px",
@@ -1143,27 +1100,34 @@ export default function Header({
 
                       {/* Total Value */}
                       <div className="mb-3">
-                      <div className="mb-1 text-xs text-neutral-400">
+                        <div className="mb-1 text-xs text-neutral-400">
                           Total Value
                         </div>
                         <div className="text-2xl font-bold text-white">
-                          ${formatCurrency(chainBalance * 100)}
+                          ${formatCurrency(chainBalance * chainPrice)}
                         </div>
                       </div>
 
                       {/* Balance Display */}
-                      <div
-                        className="mb-4 flex items-center justify-between rounded-lg p-2"
-                        style={{ backgroundColor: "#17191e" }}
-                      >
+                      <div className="mb-4 flex items-center justify-between rounded-lg bg-[#17191e] p-2">
                         <div className="flex items-center gap-2">
                           <img
-                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                            alt="SOL"
-                            className="h-4 w-4 rounded-md"
+                            src={chainLogos[currentChain] ?? chainLogos.monad}
+                            alt={chainSymbols[currentChain] ?? "MON"}
+                            className={
+                              currentChain === "monad"
+                                ? "h-10 w-8 rounded-md object-contain"
+                                : "h-4 w-4 rounded-md object-contain"
+                            }
+                            style={
+                              currentChain === "monad"
+                                ? { minWidth: "32px", minHeight: "40px" }
+                                : { minWidth: "16px", minHeight: "16px" }
+                            }
                           />
                           <span className="text-sm text-[#f0f5f5]">
-                            ≈ {formatBalance(chainBalance)} {chainSymbols[currentChain] ?? "SOL"}
+                            ≈ {formatBalance(chainBalance)}{" "}
+                            {chainSymbols[currentChain] ?? "MON"}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1181,9 +1145,18 @@ export default function Header({
                             />
                           </svg>
                           <img
-                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                            alt="SOL"
-                            className="h-4 w-4 rounded-md"
+                            src={chainLogos[currentChain] ?? chainLogos.monad}
+                            alt={chainSymbols[currentChain] ?? "MON"}
+                            className={
+                              currentChain === "monad"
+                                ? "h-10 w-8 rounded-md object-contain"
+                                : "h-4 w-4 rounded-md object-contain"
+                            }
+                            style={
+                              currentChain === "monad"
+                                ? { minWidth: "32px", minHeight: "40px" }
+                                : { minWidth: "16px", minHeight: "16px" }
+                            }
                           />
                           <span className="text-sm text-[#f0f5f5]">
                             {formatMultiDigitBalance(chainBalance)}
@@ -1244,12 +1217,7 @@ export default function Header({
                               setProfileMenuOpen(false);
                               handleConvertClick();
                             }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0f1012] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
                             onMouseEnter={(e) => {
                               e.currentTarget.style.backgroundColor = "#1A1B1F";
                             }}
@@ -1277,12 +1245,7 @@ export default function Header({
                               setProfileMenuOpen(false);
                               handleBuyClick();
                             }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0f1012] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
                             onMouseEnter={(e) => {
                               e.currentTarget.style.backgroundColor = "#1A1B1F";
                             }}
@@ -1313,11 +1276,9 @@ export default function Header({
                             setProfileMenuOpen(false);
                             router.push("/rewards");
                           }}
-                          className="mt-2 flex w-full items-center gap-2 rounded-lg border-t px-3 py-2 pt-3 text-sm font-medium transition-all duration-200"
+                          className="mt-2 flex w-full items-center gap-2 rounded-lg border-t border-[#20232b] bg-transparent px-3 py-2 pt-3 text-sm font-medium transition-all duration-200"
                           style={{
-                            backgroundColor: "transparent",
                             color: AX.text,
-                            borderColor: "#20232b",
                           }}
                           onMouseEnter={(e) => {
                             e.currentTarget.style.backgroundColor =
@@ -1353,9 +1314,8 @@ export default function Header({
                             setIsFirstLogin(false);
                             setShowUpdatesModal(true);
                           }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
                           style={{
-                            backgroundColor: "transparent",
                             color: AX.text,
                           }}
                           onMouseEnter={(e) => {
@@ -1389,22 +1349,10 @@ export default function Header({
                         <button
                           onClick={() => {
                             setProfileMenuOpen(false);
-                            if (typeof window !== "undefined") {
-                              document.cookie = "token=; Max-Age=0; path=/;";
-                            }
-                            if (
-                              typeof window !== "undefined" &&
-                              window.localStorage
-                            ) {
-                              window.localStorage.removeItem("token");
-                            }
-                            if (typeof window !== "undefined") {
-                              window.location.reload();
-                            }
+                            logout();
                           }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
                           style={{
-                            backgroundColor: "transparent",
                             color: "#ef4444",
                           }}
                           onMouseEnter={(e) => {
@@ -1439,11 +1387,9 @@ export default function Header({
             ) : (
               !userLoading && (
                 <button
-                  className="ml-0.5 flex-shrink-0 rounded-md px-2.5 py-1.5 text-sm font-medium transition-all duration-300 ease-out sm:ml-1 md:ml-1.5 md:px-3 lg:ml-2"
+                  className="ml-0.5 flex-shrink-0 rounded-md border-none px-2.5 py-1.5 text-sm font-medium text-black transition-all duration-300 ease-out sm:ml-1 md:ml-1.5 md:px-3 lg:ml-2"
                   style={{
                     backgroundColor: AX.mint,
-                    color: "#000000",
-                    border: "none",
                   }}
                   onClick={() => {
                     const event = new CustomEvent("open-login-modal");
@@ -1468,10 +1414,7 @@ export default function Header({
           </div>
         </div>
         {headerBarVisible && (
-          <div
-            className="flex items-center gap-2 px-3 py-0.5"
-            style={{ backgroundColor: "#06070b" }}
-          >
+          <div className="flex items-center gap-2 bg-[#06070b] px-3 py-0.5">
             {/* extra toolbar section */}
             <div className="group relative">
               <button
@@ -1604,17 +1547,56 @@ export default function Header({
         open={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
         selectedTimeframe={selectedTimeframe}
+        chain={currentChain}
         onSubmit={(q) => {
           const trimmed = q.trim();
           // If it's likely a token address navigate directly to trade page
           if (trimmed.length >= 10) {
-            router.push(`/trade/${trimmed}`);
+            // Check if it's a Monad address (starts with 0x)
+            const isMonadAddress =
+              trimmed.startsWith("0x") || trimmed.startsWith("0X");
+            // For Monad tokens, use the Monad trade page route
+            if (isMonadAddress) {
+              router.push(`/trade/monad/${trimmed}`);
+            } else {
+              // For Solana or other chains, use the regular trade page with chain query param
+              router.push({
+                pathname: `/trade/${trimmed}`,
+                query:
+                  currentChain && currentChain !== "sol"
+                    ? { chain: currentChain }
+                    : {},
+              });
+            }
             setSearch?.("");
             return;
           }
 
           // Otherwise treat as name search and stay on Discover
-          if (setSearch) setSearch(trimmed);
+          if (setSearch) {
+            setSearch(trimmed);
+            if (router.pathname.startsWith("/trade/")) {
+              router.push({
+                pathname: "/",
+                query: trimmed ? { search: trimmed } : {},
+              });
+              return;
+            }
+
+            const nextQuery = { ...router.query };
+            if (trimmed) {
+              nextQuery.search = trimmed;
+            } else {
+              delete nextQuery.search;
+            }
+            router.replace(
+              { pathname: router.pathname, query: nextQuery },
+              undefined,
+              { shallow: true },
+            );
+            return;
+          }
+
           if (
             router.pathname !== "/" &&
             !router.pathname.startsWith("/trade/")
@@ -1633,17 +1615,45 @@ export default function Header({
 
           // Skip routing updates for short queries (<3 chars)
           if (trimmed.length < 3) {
-            if (
+            if (setSearch) {
+              setSearch(trimmed);
+              if (!router.pathname.startsWith("/trade/")) {
+                const { search: _qSearch, ...restQuery } = router.query;
+                router.replace(
+                  { pathname: router.pathname, query: restQuery },
+                  undefined,
+                  { shallow: true },
+                );
+              }
+            } else if (
               router.pathname === "/" &&
               Object.keys(router.query).includes("search")
             ) {
               router.replace({ pathname: "/" }, undefined, { shallow: true });
             }
-            if (setSearch) setSearch(trimmed);
             return;
           }
 
           // Live updates for longer queries - only redirect to home if not on a trade page
+          if (setSearch) {
+            setSearch(trimmed);
+            if (router.pathname.startsWith("/trade/")) {
+              router.push(
+                { pathname: "/", query: { search: trimmed } },
+                undefined,
+                { shallow: true },
+              );
+            } else {
+              const nextQuery = { ...router.query, search: trimmed };
+              router.replace(
+                { pathname: router.pathname, query: nextQuery },
+                undefined,
+                { shallow: true },
+              );
+            }
+            return;
+          }
+
           if (
             router.pathname !== "/" &&
             !router.pathname.startsWith("/trade/")
@@ -1660,7 +1670,6 @@ export default function Header({
               { shallow: true },
             );
           }
-          if (setSearch) setSearch(trimmed);
         }}
       />
       {/* Updates Modal */}

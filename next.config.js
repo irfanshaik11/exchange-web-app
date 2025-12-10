@@ -3,6 +3,11 @@
  * for Docker builds.
  */
 import "./src/env.js";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /** @type {import("next").NextConfig} */
 const config = {
@@ -13,7 +18,7 @@ const config = {
     position: "bottom-right",
   },
   // Transpile these packages to fix CommonJS/ESM issues
-  transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit'],
+  transpilePackages: ['@vanilla-extract/sprinkles', '@vanilla-extract/css', '@rainbow-me/rainbowkit',  '@turnkey/react-wallet-kit', '@turnkey/core'],
   // Optimize package imports for faster loading
   experimental: {
     optimizePackageImports: ['react-icons'],
@@ -22,16 +27,39 @@ const config = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
-  // Turbopack configuration
-  turbopack: {
-    // Turbopack settings
-  },
-  webpack: (config) => {
+  // Turbopack configuration (empty - using webpack for builds)
+  turbopack: {},
+  webpack: (config, { isServer, webpack }) => {
     // Handle @react-native-async-storage warning (optional dependency for MetaMask SDK)
     config.resolve.fallback = {
       ...config.resolve.fallback,
       '@react-native-async-storage/async-storage': false,
     };
+
+    // Ignore test files from node_modules (fixes Next.js 16 bundling issues)
+    // Use NormalModuleReplacementPlugin to replace test file imports with empty modules
+    const emptyModulePath = path.resolve(__dirname, './src/utils/empty-module.js');
+    config.plugins.push(
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules\/thread-stream\/test\/.*$/,
+        emptyModulePath
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules\/@turnkey\/core\/node_modules\/thread-stream\/test\/.*$/,
+        emptyModulePath
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules\/thread-stream\/bench\.js$/,
+        emptyModulePath
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /node_modules\/@turnkey\/core\/node_modules\/thread-stream\/bench\.js$/,
+        emptyModulePath
+      ),
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^(tap|desm|fastbench|pino-elasticsearch|why-is-node-running|tape)$/,
+      })
+    );
 
     return config;
   },
@@ -58,6 +86,15 @@ const config = {
       { protocol: "https", hostname: "play-lh.googleusercontent.com" },
       { protocol: "https", hostname: "avatars.githubusercontent.com" },
       { protocol: "https", hostname: "api.phantom.app" },
+      { protocol: "https", hostname: "token-media.defined.fi" },
+      { protocol: "https", hostname: "cdn.dexscreener.com" },
+      { protocol: "https", hostname: "raw.githubusercontent.com" },
+      { protocol: "https", hostname: "gateway.irys.xyz" },
+      { protocol: "https", hostname: "encrypted-tbn3.gstatic.com" },
+      { protocol: "https", hostname: "bronze-manual-jaguar-516.mypinata.cloud" },
+      { protocol: "https", hostname: "pub-392e3698ab10439a9bf254db45b52c0b.r2.dev" },
+      { protocol: "https", hostname: "dweb.link" },
+      { protocol: "https", hostname: "metadata.rapidlaunch.io" },
     ],
   },
 

@@ -15,16 +15,22 @@ export const tokenKeys = {
 };
 
 async function fetchNewPairs(): Promise<Token[]> {
-  const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
-  const url = `${baseUrl}/v1/pulse/new?limit=200`;
-  const response = await fetch(url);
+  // Use Next.js API proxy to ensure proper field mapping (mint_address, etc.)
+  const apiUrl = `/api/token-service/pulse-new?limit=35&fresh=1&t=${Date.now()}`;
+  const response = await fetch(apiUrl, {
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    }
+  });
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
   return Array.isArray(data) ? data : (data.result || []);
 }
 
 async function fetchFinalStretch(): Promise<Token[]> {
-  const apiUrl = `/api/token-service/pulse-final-stretch?limit=30&t=${Date.now()}`;
+  const apiUrl = `/api/token-service/pulse-final-stretch?limit=100&t=${Date.now()}`;
   const response = await fetch(apiUrl);
   if (!response.ok) throw new Error(`Failed to fetch: ${response.status}`);
   const data = await response.json();
@@ -57,49 +63,56 @@ async function fetchLaunchpadData(): Promise<LaunchpadData> {
   return await response.json();
 }
 
-export function useQueryNewPairs(): UseQueryResult<Token[], Error> {
+export function useQueryNewPairs(enabled: boolean = true): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.newPairs(),
     queryFn: fetchNewPairs,
-    staleTime: 0,                  // Always stale - always refetch (matches original behavior)
+    enabled,                        // Conditionally enable/disable the query
+    staleTime: Infinity,           // Never mark as stale - WebSocket provides updates
     gcTime: 10 * 60 * 1000,        // Keep in cache for 10 min for instant display
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: true,
-    refetchOnMount: true,          // Refetch on navigation (shows cache first, then updates)
+    refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
+    refetchOnReconnect: true,      // Refetch on reconnect to catch missed updates
+    refetchOnMount: true,          // ✅ ALWAYS fetch on mount to ensure fresh data
+    // ✅ NO POLLING - WebSocket provides instant updates via cache updates
     retry: 1,
   });
 }
 
-export function useQueryFinalStretch(): UseQueryResult<Token[], Error> {
+export function useQueryFinalStretch(enabled: boolean = true): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.finalStretch(),
     queryFn: fetchFinalStretch,
-    staleTime: 0,                  // Always stale - always refetch
+    enabled,                        // Conditionally enable/disable the query
+    staleTime: 30 * 1000,          // Consider fresh for 30 seconds (WebSocket provides real-time updates)
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
     refetchOnReconnect: true,
     refetchOnMount: true,
+    // ✅ NO POLLING - WebSocket provides instant updates via query invalidation
     retry: 1,
   });
 }
 
-export function useQueryMigrated(): UseQueryResult<Token[], Error> {
+export function useQueryMigrated(enabled: boolean = true): UseQueryResult<Token[], Error> {
   return useQuery({
     queryKey: tokenKeys.trenches.migrated(),
     queryFn: fetchMigrated,
-    staleTime: 0,                  // Always stale - always refetch
+    enabled,                        // Conditionally enable/disable the query
+    staleTime: 30 * 1000,          // Consider fresh for 30 seconds (WebSocket provides real-time updates)
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: false,   // Don't refetch on focus (WebSocket handles updates)
     refetchOnReconnect: true,
     refetchOnMount: true,
+    // ✅ NO POLLING - WebSocket provides instant updates via query invalidation
     retry: 1,
   });
 }
 
-export function useQueryLaunchpadData(): UseQueryResult<LaunchpadData, Error> {
+export function useQueryLaunchpadData(enabled: boolean = true): UseQueryResult<LaunchpadData, Error> {
   return useQuery({
     queryKey: tokenKeys.launchpad.data(),
     queryFn: fetchLaunchpadData,
+    enabled,                        // Conditionally enable/disable the query
     staleTime: 0,                  // Always stale - always refetch
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,

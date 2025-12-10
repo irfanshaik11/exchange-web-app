@@ -18,6 +18,7 @@ set -euo pipefail
 PROJECT_DIR="/home/ubuntu/exchange-web-app"
 BRANCH="prod"
 APP_NAME="nextjs-app"
+ENV_SOURCE="$PROJECT_DIR/deployment/env/.env.production"
 ENV_FILE="$PROJECT_DIR/.env"
 LOG_DIR="/home/ubuntu/logs"
 TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
@@ -58,13 +59,16 @@ git fetch origin || DEPLOY_STATUS="failure"
 git reset --hard origin/"$BRANCH" || DEPLOY_STATUS="failure"
 
 ########################################
-# Fetch .env from GCS bucket
+# Copy .env from Repo (instead of GCS)
 ########################################
-echo "📥 Fetching .env file from GCS bucket..."
-gsutil cp gs://github-deployment/prod/env-file/frontend/.env "$PROJECT_DIR/.env" || {
-  echo "⚠️ Failed to copy .env file from GCS bucket"
-  DEPLOY_STATUS="failure"
-}
+echo "📥 Copying .env.production from repo..."
+if [ -f "$ENV_SOURCE" ]; then
+    cp "$ENV_SOURCE" "$ENV_FILE"
+    echo "✅ .env copied successfully"
+else
+    echo "❌ ERROR: .env.production not found at $ENV_SOURCE"
+    DEPLOY_STATUS="failure"
+fi
 
 ########################################
 # Install dependencies

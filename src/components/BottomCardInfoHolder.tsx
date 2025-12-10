@@ -22,7 +22,7 @@ const BottomCardHolderInfo: React.FC<{
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
-      <div className={`flex flex-row items-center gap-1 rounded-lg border border-neutral-700 px-2 py-0.5 text-sm ${green ? `text-emerald-500` : `text-red-500`}`}>
+      <div className={`flex flex-row items-center gap-1 rounded-lg border border-neutral-700 px-2 py-0.5 text-xs ${green ? `text-emerald-500` : `text-red-500`}`}>
         <PassedIcon size={12} />
         {value}%
       </div>

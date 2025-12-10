@@ -22,6 +22,10 @@ const ALLOWED = [
   'cdn.pump.fun',
   'moonitcdn.io',
   'metadata.pumployer.fun',
+  'metadata.rapidlaunch.io',
+  'rapidlaunch.io',
+  'image.solanatracker.io',
+  'solanatracker.io',
   'wormhole.com',
   'raw.githubusercontent.com',
   'githubusercontent.com',
@@ -43,16 +47,29 @@ const ALLOWED = [
   'debridge.finance',
   'launchonsoar.com',
   'media.launchonsoar.com',
+  // Allow all subdomains of common CDNs that serve PNGs
+  's3.amazonaws.com',
+  's3.us-east-1.amazonaws.com',
+  's3.us-west-2.amazonaws.com',
+  // Narrative/Trade domains
+  'narrative.trade',
+  'token.narrative.trade',
+  // Filebase IPFS hosting
+  'myfilebase.com',
+  // Monad token image storage
+  'storage.nadapp.net',
+  'nadapp.net',
 ];
 
 // Allowed image MIME types - only image types are permitted
+// NOTE: SVG is explicitly excluded due to XSS security concerns (SVG can contain JavaScript)
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/png',
   'image/gif',
   'image/webp',
-  'image/svg+xml',
+  // 'image/svg+xml', // BLOCKED: SVG can contain JavaScript and execute XSS attacks
   'image/avif',
   'image/bmp',
   'image/x-icon',
@@ -69,6 +86,46 @@ function isValidImageMimeType(contentType: string | null): boolean {
   // Remove charset and other parameters (e.g., "image/jpeg; charset=utf-8" -> "image/jpeg")
   const baseType = contentType.split(';')[0].trim().toLowerCase();
   return ALLOWED_IMAGE_TYPES.includes(baseType);
+}
+
+// Infer MIME type from image content (magic bytes)
+function inferImageMimeType(buffer: Buffer): string | null {
+  if (buffer.length < 4) return null;
+  
+  const bytes = buffer.slice(0, 12);
+  
+  // PNG: 89 50 4E 47
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return 'image/png';
+  }
+  
+  // JPEG: FF D8 FF
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  
+  // GIF: 47 49 46 38
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) {
+    return 'image/gif';
+  }
+  
+  // WebP: RIFF...WEBP
+  if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+      bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+    return 'image/webp';
+  }
+  
+  // SVG detection - but we block SVG for security (XSS prevention)
+  // SVG files can contain JavaScript in <script> tags and event handlers
+  // We detect but reject SVG to prevent XSS attacks
+  // (No return statement - SVG is not allowed)
+  
+  // BMP: 42 4D
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
+    return 'image/bmp';
+  }
+  
+  return null;
 }
 
 function isValidImageContent(buffer: Buffer): boolean {
@@ -158,14 +215,14 @@ function isValidImageContent(buffer: Buffer): boolean {
     return true;
   }
 
-  // SVG: Check if it starts with <svg or <?xml
+  // SVG detection - but we block SVG for security (XSS prevention)
+  // SVG files can contain JavaScript in <script> tags and event handlers
+  // We explicitly reject SVG content to prevent XSS attacks
   if (buffer.length >= 100) {
     const textStart = buffer.slice(0, 100).toString('utf-8').trim();
     if (textStart.startsWith('<svg') || textStart.startsWith('<?xml')) {
-      // Additional validation: should contain svg tag
-      if (textStart.toLowerCase().includes('<svg')) {
-        return true;
-      }
+      // Reject SVG - it can contain executable JavaScript
+      return false;
     }
   }
 
@@ -199,8 +256,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (parsed.protocol !== 'https:') {
       return sendError(res, 400, 'Only HTTPS URLs are allowed');
     }
+    // Check if this is an IPFS URL path (even if hostname doesn't include 'ipfs')
+    const hasIpfsPath = parsed.pathname.includes('/ipfs/');
+    
+    // Check if host is allowed, but be more lenient for image files and IPFS URLs
+    // If URL ends with .png/.jpg/.jpeg/.gif/.webp, allow more hosts
+    // NOTE: SVG extension is excluded for security (XSS prevention)
+    const isImageFile = /\.(png|jpg|jpeg|gif|webp|avif|bmp|ico)$/i.test(parsed.pathname);
+    
     if (!isAllowedHost(parsed.hostname)) {
-      return sendError(res, 403, 'Host not allowed');
+      // For IPFS paths, allow any host (IPFS is decentralized)
+      if (hasIpfsPath) {
+        console.log(`[image proxy] Allowing IPFS path from non-whitelisted host: ${parsed.hostname}`);
+        // Continue processing - IPFS URLs are handled specially below
+      }
+      // For direct image file URLs, allow common CDN patterns
+      else if (isImageFile) {
+        // Allow if it's a known CDN pattern or subdomain
+        const isCommonCDN = parsed.hostname.includes('cdn.') ||
+                           parsed.hostname.includes('static.') ||
+                           parsed.hostname.includes('media.') ||
+                           parsed.hostname.includes('assets.') ||
+                           parsed.hostname.endsWith('.cloudfront.net') ||
+                           parsed.hostname.endsWith('.amazonaws.com') ||
+                           parsed.hostname.endsWith('.digitaloceanspaces.com');
+        
+        if (!isCommonCDN) {
+          return sendError(res, 403, 'Host not allowed');
+        }
+      } else {
+        return sendError(res, 403, 'Host not allowed');
+      }
     }
 
     // IPFS multi-gateway fallback if /ipfs/<cid>
@@ -208,6 +294,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const candidates: string[] = [];
     if (ipfsMatch && ipfsMatch[1]) {
       const cid = ipfsMatch[1];
+      // Try the original gateway first (might be faster/cheaper for that provider)
+      candidates.push(parsed.toString());
+      // Then try common IPFS gateways as fallbacks
       const gateways = [
         'https://cloudflare-ipfs.com/ipfs/',
         'https://ipfs.io/ipfs/',
@@ -255,24 +344,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return sendError(res, 502, 'Failed to fetch image');
     }
 
-    // Get and validate content type
-    const contentType = upstream.headers.get('content-type');
-    if (!isValidImageMimeType(contentType)) {
-      console.error('[image proxy] invalid content type:', contentType);
-      return sendError(res, 415, 'Unsupported media type');
-    }
-
-    // Get response body and validate it's actually an image
+    // Get response body first
     const body = Buffer.from(await upstream.arrayBuffer());
     
-    // Validate content is actually an image using magic bytes
+    // SECURITY: Apply strict validation to ALL URLs, including IPFS
+    // Previously IPFS URLs bypassed validation, which was a security risk
+    // All content must pass magic bytes validation to prevent XSS attacks
     if (!isValidImageContent(body)) {
-      console.error('[image proxy] invalid image content detected');
-      return sendError(res, 415, 'Invalid image content');
+      console.error('[image proxy] invalid image content detected (rejected for security)');
+      return sendError(res, 415, 'Invalid image content - security validation failed');
+    }
+
+    // Get content type from header
+    let contentType = upstream.headers.get('content-type');
+    
+    // If Content-Type is missing or invalid, try to infer from image content
+    if (!isValidImageMimeType(contentType)) {
+      const inferredType = inferImageMimeType(body);
+      if (inferredType) {
+        console.log(`[image proxy] Content-Type missing/invalid (${contentType || 'missing'}), inferred ${inferredType} from content`);
+        contentType = inferredType;
+      } else {
+        console.error('[image proxy] invalid content type:', contentType);
+        return sendError(res, 415, 'Unsupported media type');
+      }
     }
 
     // Extract base content type (remove charset parameters)
-    const baseContentType = contentType?.split(';')[0].trim() || 'image/jpeg';
+    const baseContentType = contentType?.split(';')[0].trim() || 'image/png';
 
     // Set security headers
     setSecurityHeaders(res);
