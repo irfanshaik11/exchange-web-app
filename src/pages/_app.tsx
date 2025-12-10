@@ -23,9 +23,9 @@ const LoginModal = dynamic(() => import('../components/LoginModal'), {
 });
 
 // Dynamically import MonadTradeBanner with no SSR for animations
-const MonadTradeBanner = dynamic(() => import('../components/MonadTradeBanner'), {
-  ssr: false,
-});
+// const MonadTradeBanner = dynamic(() => import('../components/MonadTradeBanner'), {
+//   ssr: false,
+// });
 import { env } from '../env';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
@@ -600,7 +600,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         <MobileBlocker>
         */}
         <TurnkeyRootProvider>
-          <MonadTradeBanner />
+          {/* <MonadTradeBanner /> */}
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
             <UserProvider>
               <TurnkeySessionBridge />
