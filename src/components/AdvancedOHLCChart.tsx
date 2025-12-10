@@ -3309,6 +3309,22 @@ Maker: ${walletAddress}`;
               //     console.log('[AdvancedOHLCChart] Symbol reset complete');
               //   });
               // }, 1000);
+
+              // Fix: Scroll to real-time after data loads to populate the OHLC legend
+              // TradingView's legend shows "O∅ H∅ L∅ C∅" until the chart scrolls to data
+              // This triggers the legend to display the latest candle's values on initial load
+              setTimeout(() => {
+                try {
+                  const activeChart = widget.activeChart?.() || widget.chart?.();
+                  if (activeChart) {
+                    // Scroll to the rightmost (most recent) bar to trigger legend update
+                    activeChart.executeActionById?.('timeScaleReset');
+                    console.log('[AdvancedOHLCChart] Scrolled to real-time to populate OHLC legend');
+                  }
+                } catch (e) {
+                  console.log('[AdvancedOHLCChart] Could not scroll to real-time:', e);
+                }
+              }, 1500); // Delay to allow data to load first
             }
           } catch (e) {
             console.error('[AdvancedOHLCChart] Error in onChartReady callback:', e);

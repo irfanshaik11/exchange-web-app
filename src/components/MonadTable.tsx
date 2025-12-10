@@ -2682,6 +2682,15 @@ function MonadTable({
       `[MonadTable ${title}] 🔀 Merged ${filteredWsTokens.length} WS (filtered from ${wsTokens.length}) + ${tokensToUse.length} HTTP = ${filtered.length} total tokens after protocol filter, protocols: ${filters.protocols.join(",")}`,
     );
 
+    // Filter out specific blocked token address for New Pairs
+    if (isNewPairs) {
+      const blockedTokenAddress = "0x3bd359c1119da7da1d913d1c4d2b7c461115433a".toLowerCase();
+      filtered = filtered.filter((token) => {
+        const tokenMint = (token.mint || "").toLowerCase();
+        return tokenMint !== blockedTokenAddress;
+      });
+    }
+
     // Only apply keyword search filters (user-initiated), NO other filtering
     if (filters.searchKeywords.trim()) {
       const searchTerms = filters.searchKeywords

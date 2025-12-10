@@ -167,6 +167,13 @@ export default function MonadTradePage() {
                   typeof t.marketCapUSD === 'number' ? t.marketCapUSD :
                   typeof t.fully_diluted_value === 'number' ? t.fully_diluted_value :
                   0;
+                // Normalize bonding curve progress (backend sends as 0-1 decimal)
+                const bondingCurveProgress =
+                  t.bonding_curve_progress ?? t.graduation_percent ?? t.graduationPercent ?? 0;
+                // Convert to percentage if needed (backend sends 0-1, we want 0-100)
+                const normalizedBondingPct = bondingCurveProgress > 1
+                  ? bondingCurveProgress
+                  : bondingCurveProgress * 100;
                 return {
                   ...t,
                   mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
@@ -174,6 +181,10 @@ export default function MonadTradePage() {
                   price_usd: t.price_usd ?? t.usd_price ?? t.priceUsd ?? normalizedPrice,
                   market_cap_usd: t.market_cap_usd ?? t.marketCapUSD ?? normalizedMarketCap,
                   fully_diluted_value: t.fully_diluted_value ?? t.market_cap_usd ?? t.marketCapUSD ?? normalizedMarketCap,
+                  // Include bonding curve progress
+                  bonding_curve_progress: bondingCurveProgress,
+                  graduation_percent: normalizedBondingPct,
+                  bonding_pct: normalizedBondingPct,
                 };
               });
               const token = tokens.find(

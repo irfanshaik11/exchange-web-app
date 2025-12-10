@@ -5,7 +5,14 @@ export function normalizeImageUrl(src?: string | null): string | null {
     if (src.startsWith('/')) {
       return src;
     }
-    
+
+    // Handle raw IPFS CIDs (Flap.SH stores images as raw CIDs)
+    // IPFS CIDv0 starts with "Qm" (46 chars)
+    // IPFS CIDv1 starts with "baf" (typically "bafy" for images)
+    if (src.startsWith('Qm') || src.startsWith('baf')) {
+      return `https://cloudflare-ipfs.com/ipfs/${src}`;
+    }
+
     // Unwrap Next.js image proxy URLs (e.g., pump.fun/_next/image?url=...)
     try {
       const u = new URL(src);
@@ -13,7 +20,7 @@ export function normalizeImageUrl(src?: string | null): string | null {
         src = u.searchParams.get('url') || src;
       }
     } catch {}
-    
+
     // Force https for http URLs (most hosts support TLS)
     if (src.startsWith('http://')) {
       src = src.replace(/^http:\/\//i, 'https://');

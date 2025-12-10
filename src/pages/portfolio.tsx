@@ -171,10 +171,6 @@ export default function PortfolioPage() {
   const [totalValue, setTotalValue] = useState(0);
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
-  const [filteredPositions, setFilteredPositions] = useState<PositionRow[]>([]);
-  const [filteredTop100Positions, setFilteredTop100Positions] = useState<PositionRow[]>([]);
-  const [filteredTradeHistory, setFilteredTradeHistory] = useState<TradeRow[]>([]);
-  const [filteredTradeActivity, setFilteredTradeActivity] = useState<TradeRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [tokenNames, setTokenNames] = useState<Record<string, string>>({});
   const [showHidden, setShowHidden] = useState(false);
@@ -191,6 +187,7 @@ export default function PortfolioPage() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportWalletId, setExportWalletId] = useState<string | null>(null);
   const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(null);
+  const [walletSearchQuery, setWalletSearchQuery] = useState("");
 
   const notifyWalletsUpdated = () => {
     if (typeof window !== "undefined") {
@@ -563,75 +560,114 @@ export default function PortfolioPage() {
     }
   }, [positions, solBalance, monBalance, currentChain, monPrice]);
 
-  // Search filtering effect
-  useEffect(() => {
-    const filterData = () => {
-      if (!searchQuery.trim()) {
-        // If no search query, show all data
-        setFilteredPositions(positions);
-        setFilteredTop100Positions(top100Positions);
-        setFilteredTradeHistory(tradeHistory);
-        setFilteredTradeActivity(tradeActivity);
-        return;
-      }
+  // Search filtering using useMemo for better performance and reactivity
+  const filteredPositions = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return positions;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return positions.filter((pos) => {
+      const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
+      const pairAddr = pos.pairAddress?.toLowerCase() || "";
+      
+      // Check token name from tokenNames mapping
+      const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
+      
+      // Check token metadata (name and symbol) from cache
+      const metadata = tokenMetadataCache[pos.tokenAddress];
+      const metadataName = metadata?.name?.toLowerCase() || "";
+      const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
+      
+      return (
+        tokenAddr.includes(query) ||
+        pairAddr.includes(query) ||
+        tokenName.includes(query) ||
+        metadataName.includes(query) ||
+        metadataSymbol.includes(query)
+      );
+    });
+  }, [searchQuery, positions, tokenNames, tokenMetadataCache]);
 
-      const query = searchQuery.toLowerCase().trim();
+  const filteredTop100Positions = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return top100Positions;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return top100Positions.filter((pos) => {
+      const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
+      const pairAddr = pos.pairAddress?.toLowerCase() || "";
+      
+      // Check token name from tokenNames mapping
+      const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
+      
+      // Check token metadata (name and symbol) from cache
+      const metadata = tokenMetadataCache[pos.tokenAddress];
+      const metadataName = metadata?.name?.toLowerCase() || "";
+      const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
+      
+      return (
+        tokenAddr.includes(query) ||
+        pairAddr.includes(query) ||
+        tokenName.includes(query) ||
+        metadataName.includes(query) ||
+        metadataSymbol.includes(query)
+      );
+    });
+  }, [searchQuery, top100Positions, tokenNames, tokenMetadataCache]);
 
-      // Filter positions (Active Positions and Top 100 tabs)
-      const filteredPos = positions.filter((pos) => {
-        const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
-        const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
-        const pairAddr = pos.pairAddress?.toLowerCase() || "";
-        return (
-          tokenAddr.includes(query) ||
-          pairAddr.includes(query) ||
-          tokenName.includes(query)
-        );
-      });
-      setFilteredPositions(filteredPos);
+  const filteredTradeHistory = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return tradeHistory;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return tradeHistory.filter((trade) => {
+      const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
+      const txHash = trade.transactionHash?.toLowerCase() || "";
+      
+      // Check token name from tokenNames mapping
+      const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
+      
+      // Check token metadata (name and symbol) from cache
+      const metadata = tokenMetadataCache[trade.tokenAddress];
+      const metadataName = metadata?.name?.toLowerCase() || "";
+      const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
+      
+      return (
+        tokenAddr.includes(query) ||
+        txHash.includes(query) ||
+        tokenName.includes(query) ||
+        metadataName.includes(query) ||
+        metadataSymbol.includes(query)
+      );
+    });
+  }, [searchQuery, tradeHistory, tokenNames, tokenMetadataCache]);
 
-      // Filter top 100 positions
-      const filteredTop100 = top100Positions.filter((pos) => {
-        const tokenName = tokenNames[pos.tokenAddress]?.toLowerCase() || "";
-        const tokenAddr = pos.tokenAddress?.toLowerCase() || "";
-        const pairAddr = pos.pairAddress?.toLowerCase() || "";
-        return (
-          tokenAddr.includes(query) ||
-          pairAddr.includes(query) ||
-          tokenName.includes(query)
-        );
-      });
-      setFilteredTop100Positions(filteredTop100);
-
-      // Filter trade history
-      const filteredHistory = tradeHistory.filter((trade) => {
-        const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
-        const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
-        const txHash = trade.transactionHash?.toLowerCase() || "";
-        return (
-          tokenAddr.includes(query) ||
-          txHash.includes(query) ||
-          tokenName.includes(query)
-        );
-      });
-      setFilteredTradeHistory(filteredHistory);
-
-      // Filter trade activity
-      const filteredActivity = tradeActivity.filter((trade) => {
-        const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
-        const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
-        const txHash = trade.transactionHash?.toLowerCase() || "";
-        return (
-          tokenAddr.includes(query) ||
-          txHash.includes(query) ||
-          tokenName.includes(query)
-        );
-      });
-      setFilteredTradeActivity(filteredActivity);
-    };
-
-    filterData();
-  }, [searchQuery, positions, top100Positions, tradeHistory, tradeActivity, tokenNames]);
+  const filteredTradeActivity = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return tradeActivity;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return tradeActivity.filter((trade) => {
+      const tokenAddr = trade.tokenAddress?.toLowerCase() || "";
+      const txHash = trade.transactionHash?.toLowerCase() || "";
+      
+      // Check token name from tokenNames mapping
+      const tokenName = tokenNames[trade.tokenAddress]?.toLowerCase() || "";
+      
+      // Check token metadata (name and symbol) from cache
+      const metadata = tokenMetadataCache[trade.tokenAddress];
+      const metadataName = metadata?.name?.toLowerCase() || "";
+      const metadataSymbol = metadata?.symbol?.toLowerCase() || "";
+      
+      return (
+        tokenAddr.includes(query) ||
+        txHash.includes(query) ||
+        tokenName.includes(query) ||
+        metadataName.includes(query) ||
+        metadataSymbol.includes(query)
+      );
+    });
+  }, [searchQuery, tradeActivity, tokenNames, tokenMetadataCache]);
 
   // Calculate metrics based on selected timeframe
   useEffect(() => {
@@ -953,6 +989,34 @@ export default function PortfolioPage() {
   useEffect(() => {
     fetchWallets();
   }, [fetchWallets]);
+
+  // Filter wallets based on search query and archived status
+  const filteredWallets = useMemo(() => {
+    return wallets.filter((w) => {
+      // Filter by archived status
+      if (!showHidden && w.isArchived) return false;
+      
+      // Filter by search query
+      if (walletSearchQuery.trim()) {
+        const query = walletSearchQuery.toLowerCase().trim();
+        const label = (w.label || "").toLowerCase();
+        const solanaAddr = (w.solanaAddress || "").toLowerCase();
+        const ethereumAddr = (w.ethereumAddress || "").toLowerCase();
+        const address = (w.address || "").toLowerCase();
+        const displayAddr = getAddressForChain(w, currentChain).toLowerCase();
+        
+        return (
+          label.includes(query) ||
+          solanaAddr.includes(query) ||
+          ethereumAddr.includes(query) ||
+          address.includes(query) ||
+          displayAddr.includes(query)
+        );
+      }
+      
+      return true;
+    });
+  }, [wallets, showHidden, walletSearchQuery, currentChain]);
 
     const handleCreateWallet = async () => {
     if (!user?.id) {
@@ -1854,12 +1918,13 @@ export default function PortfolioPage() {
                       </div>
                     ) : (
                       <Positions
+                        key={`positions-tab-${activeSpotTab}`}
                         bearerToken={user.bearerToken}
                         userId={user.id}
                         onPositionsChange={setPositions}
                         onTokenNamesChange={setTokenNames}
                         preloadedPositions={searchQuery.trim() !== "" ? filteredPositions : undefined}
-                        skipFetch={false}
+                        skipFetch={searchQuery.trim() !== ""}
                         showHidden={showHidden}
                         showInSOL={sortByUSD}
                         tokenMetadataCache={tokenMetadataCache}
@@ -1896,6 +1961,7 @@ export default function PortfolioPage() {
                       </div>
                     ) : (
                       <Positions
+                        key={`top100-tab-${activeSpotTab}`}
                         bearerToken={user.bearerToken}
                         userId={user.id}
                         onPositionsChange={setPositions}
@@ -1942,16 +2008,27 @@ export default function PortfolioPage() {
           {activeSection === "wallet" && (
             <div className="bg-[#101114] rounded-lg overflow-hidden">
               {/* Header Row  */}
-              <div className="grid grid-cols-2 border-b border-[#2A2B33]">
+              <div className="border-b border-[#2A2B33]">
                 {/* Left Panel Header */}
                 <div className="px-4 py-3">
                   <div className="flex justify-between gap-2">
                     <div className="flex items-center px-3 py-1 rounded-full bg-[#17191E] border border-[#2A2B33] w-48">
+                      <FaSearch className="text-[#9CA3AF] text-xs mr-2 flex-shrink-0" />
                       <input
                         type="text"
                         placeholder="Search by name or address"
                         className="bg-transparent text-xs text-[#9CA3AF] placeholder-[#6B7280] focus:outline-none w-full"
+                        value={walletSearchQuery}
+                        onChange={(e) => setWalletSearchQuery(e.target.value)}
                       />
+                      {walletSearchQuery.trim() && (
+                        <button
+                          onClick={() => setWalletSearchQuery("")}
+                          className="text-[#9CA3AF] hover:text-[#f0f5f5] transition-colors ml-2 flex-shrink-0"
+                        >
+                          <FaTimes className="text-xs" />
+                        </button>
+                      )}
                     </div>
                     <button
                       onClick={() => setShowHidden(!showHidden)}
@@ -2006,13 +2083,13 @@ export default function PortfolioPage() {
                 </div>
 
                 {/* Right Panel Header */}
-                <div className="px-2 py-4 border-l border-[#2A2B33]">
+                {/* <div className="px-2 py-4 border-l border-[#2A2B33]">
                   <h3 className="text-[#f0f5f5] font-medium text-sm">Source wallets</h3>
-                </div>
+                </div> */}
               </div>
 
               {/* Table Headers Row - Spans Both Panels */}
-              <div className="grid grid-cols-2 border-b border-[#2A2B33]">
+              <div className="border-b border-[#2A2B33]">
                 <div className="px-4 py-2">
                   <div className="grid grid-cols-4 gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
@@ -2021,18 +2098,18 @@ export default function PortfolioPage() {
                     <div className="font-medium truncate">Actions</div>
                   </div>
                 </div>
-                <div className="px-4 py-2 border-l border-[#2A2B33]">
+                {/* <div className="px-4 py-2 border-l border-[#2A2B33]">
                   <div className="grid grid-cols-4 gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
                     <div className="font-medium truncate">Balance</div>
                     <div className="font-medium truncate">Holdings</div>
                     <div className="font-medium truncate">Actions</div>
                   </div>
-                </div>
+                </div> */}
               </div>
 
               {/* Content Area */}
-              <div className="grid grid-cols-2">
+              <div>
                 {/* Left Panel Content */}
                 <div className="px-4 py-3 ">
                   <div className="min-h-[300px]">
@@ -2048,10 +2125,16 @@ export default function PortfolioPage() {
                       <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
                         No wallets yet. Click &quot;Create Wallet&quot; to get started.
                       </div>
+                    ) : filteredWallets.length === 0 ? (
+                      <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
+                        {walletSearchQuery.trim() 
+                          ? `No wallets found matching "${walletSearchQuery}"`
+                          : showHidden 
+                            ? "No archived wallets"
+                            : "No wallets found"}
+                      </div>
                     ) : (
-                      wallets
-                        .filter((w) => (showHidden ? true : !w.isArchived))
-                        .map((wallet) => {
+                      filteredWallets.map((wallet) => {
                           const displayAddress = getAddressForChain(wallet, currentChain);
                           const truncated =
                             displayAddress.length > 8
@@ -2215,8 +2298,8 @@ export default function PortfolioPage() {
                 </div>
                 </div>
 
-                {/* Right Panel Content */}
-                <div className="py-3 border-l border-[#2A2B33]">
+                {/* Right Panel Content - Source wallets and Destination sections commented out */}
+                {/* <div className="py-3 border-l border-[#2A2B33]">
                   <div className="min-h-[150px] flex flex-col items-center justify-center">
                     <div className="flex flex-col items-center gap-3 text-[#9CA3AF]">
                       <svg
@@ -2233,7 +2316,7 @@ export default function PortfolioPage() {
                     </div>
                   </div>
 
-                  {/* Destination Section */}
+                  Destination Section
                   <div className="px-4 py-2 border-t border-[#2A2B33] flex items-center justify-between">
                     <h3 className="text-[#f0f5f5] font-medium text-sm">Destination</h3>
                     <button className="px-3 py-1 rounded-full bg-[#70E0B0] text-xs text-[#1A1A1A] hover:bg-[#58B890] transition-colors cursor-pointer">
@@ -2252,7 +2335,7 @@ export default function PortfolioPage() {
                       No destination wallets selected
                     </div>
                   </div>
-                </div>
+                </div> */}
               </div>
             </div>
           )}
