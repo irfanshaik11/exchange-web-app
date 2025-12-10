@@ -225,10 +225,10 @@ export default function WalletTrackerContent() {
     setShowAddWalletModal(true);
   };
 
-  const handleAddWallet = async (address: string, name: string, emoji?: string) => {
+  const handleAddWallet = async (address: string, name: string, emoji?: string, chain?: 'sol' | 'monad') => {
     try {
       // Add to backend with notifications enabled by default
-      await addTrackedWallet(address, user?.bearerToken || '', name, emoji, true);
+      await addTrackedWallet(address, name, user?.id, emoji, true, chain || 'sol');
       
       // Save notification preference to localStorage
       if (typeof window !== 'undefined') {
@@ -873,6 +873,7 @@ export default function WalletTrackerContent() {
           refreshWatchedWallets();
         }}
         onAddWallet={handleAddWallet}
+        chain="sol"
       />
       <ImportExportWalletModal
         mode="import"
@@ -886,4 +887,3 @@ export default function WalletTrackerContent() {
     </div>
   );
 }
-
