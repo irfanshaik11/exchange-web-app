@@ -1,4 +1,4 @@
-import { env } from "../env";
+import { WALLET_TRACKER_API_URL } from "./walletTracking";
 
 export interface ReferralRecord {
   id: number;
@@ -17,7 +17,7 @@ export interface ReferralUsageRecord {
 }
 
 interface ReferralCodeResponse {
-  status: boolean;
+  ok: boolean;
   data: ReferralRecord;
   alreadyExisted?: boolean;
   error?: string;
@@ -25,20 +25,12 @@ interface ReferralCodeResponse {
 }
 
 interface ReferralUsageResponse {
-  status: boolean;
-  data: {
-    referral: ReferralRecord;
-    usage: ReferralUsageRecord;
-  };
+  ok: boolean;
+  data: ReferralRecord;
+  usage: ReferralUsageRecord;
   alreadyRecorded?: boolean;
   error?: string;
   message?: string;
-}
-
-interface CheckReferralUsageResponse {
-  status: boolean;
-  hasUsedReferral: boolean;
-  data: ReferralUsageRecord | null;
 }
 
 function buildErrorMessage(
@@ -59,19 +51,14 @@ function buildErrorMessage(
 }
 
 export async function fetchReferralCodeForUser(
-  authToken: string,
-  userId?: string,
+  userId: string,
 ): Promise<ReferralRecord | null> {
+  const url = `${WALLET_TRACKER_API_URL}/api/referrals/code?userId=${encodeURIComponent(
+    userId,
+  )}`;
+
   try {
-    // Add userId to query params if provided
-    const queryParams = userId ? `?userId=${encodeURIComponent(userId)}` : '';
-    const response = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/referral/fetch_referral_code${queryParams}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
+    const response = await fetch(url);
 
     if (response.status === 404) {
       return null;
@@ -90,7 +77,7 @@ export async function fetchReferralCodeForUser(
 
     const payload = (await response.json()) as ReferralCodeResponse;
 
-    if (!payload?.status || !payload.data?.referralCode) {
+    if (!payload?.ok || !payload.data?.referralCode) {
       throw new Error("Unexpected response while fetching referral code");
     }
 
@@ -102,34 +89,20 @@ export async function fetchReferralCodeForUser(
 }
 
 export async function ensureReferralCodeForUser(
-  authToken: string,
+  userId: string,
 ): Promise<ReferralRecord> {
-  if (!authToken) {
-    throw new Error("Authentication token is required");
-  }
-
   try {
-    const response = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/referral/create_referral_code`, {
+    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/referrals/code`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify({}),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
     });
 
-    const payload = await response.json().catch(() => null);
+    const payload = (await response.json().catch(() => null)) as
+      | ReferralCodeResponse
+      | null;
 
-    if (!response.ok) {
-      // Handle authentication errors specifically
-      if (response.status === 401 || response.status === 403) {
-        const errorPayload = payload as { error?: string; message?: string } | null;
-        const errorMsg = errorPayload && typeof errorPayload === 'object' 
-          ? (errorPayload.error || errorPayload.message || 'Invalid or expired token')
-          : 'Invalid or expired token';
-        throw new Error(errorMsg);
-      }
-      
+    if (!response.ok || !payload?.ok || !payload.data?.referralCode) {
       const message = buildErrorMessage(
         response.status,
         response.statusText,
@@ -139,12 +112,7 @@ export async function ensureReferralCodeForUser(
       throw new Error(message);
     }
 
-    const successPayload = payload as ReferralCodeResponse;
-    if (!successPayload || !successPayload.status || !successPayload.data?.referralCode) {
-      throw new Error("Unexpected response format while generating referral code");
-    }
-
-    return successPayload.data;
+    return payload.data;
   } catch (error) {
     console.error("Error generating referral code:", error);
     throw error;
@@ -152,23 +120,21 @@ export async function ensureReferralCodeForUser(
 }
 
 export async function recordReferralUsage(
-  authToken: string,
+  referredUserId: string,
   referralCode: string,
 ): Promise<ReferralUsageResponse> {
   const normalizedCode = referralCode.trim().toUpperCase();
-  if (!normalizedCode) {
-    throw new Error("Referral code is required");
+  if (!normalizedCode || !referredUserId) {
+    throw new Error("Referral code and referred user are required");
   }
 
   try {
-    const response = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/referral/record_referral_usage`, {
+    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/referrals/usage`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         referralCode: normalizedCode,
+        referredUserId,
       }),
     });
 
@@ -176,7 +142,7 @@ export async function recordReferralUsage(
       | ReferralUsageResponse
       | null;
 
-    if (!response.ok || !payload?.status) {
+    if (!response.ok || !payload?.ok) {
       const message = buildErrorMessage(
         response.status,
         response.statusText,
@@ -189,109 +155,6 @@ export async function recordReferralUsage(
     return payload;
   } catch (error) {
     console.error("Error recording referral usage:", error);
-    throw error;
-  }
-}
-
-export async function checkReferralUsageForUser(
-  authToken: string,
-  userId?: string,
-): Promise<{ hasUsedReferral: boolean; data: ReferralUsageRecord | null }> {
-  try {
-    // Add userId to query params if provided
-    const queryParams = userId ? `?userId=${encodeURIComponent(userId)}` : '';
-    const response = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/referral/check_referral_usage${queryParams}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
-
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      const message = buildErrorMessage(
-        response.status,
-        response.statusText,
-        payload,
-        "Failed to check referral usage",
-      );
-      throw new Error(message);
-    }
-
-    const payload = (await response.json()) as CheckReferralUsageResponse;
-
-    if (!payload?.status) {
-      throw new Error("Unexpected response while checking referral usage");
-    }
-
-    return {
-      hasUsedReferral: payload.hasUsedReferral,
-      data: payload.data,
-    };
-  } catch (error) {
-    console.error("Error checking referral usage:", error);
-    throw error;
-  }
-}
-
-export interface LeaderboardEntry {
-  id: number;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  publicKey: string;
-  referralCode: string;
-  referredOn: string;
-  totalTradingVolume: number;
-  totalTrades: number;
-}
-
-interface LeaderboardResponse {
-  status: boolean;
-  data: LeaderboardEntry[];
-  total: number;
-  limit: number;
-  offset: number;
-}
-
-export async function getReferralLeaderboard(
-  limit: number = 50,
-  offset: number = 0,
-): Promise<LeaderboardResponse> {
-  try {
-    const queryParams = new URLSearchParams({
-      limit: limit.toString(),
-      offset: offset.toString(),
-    });
-    
-    const response = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/api/referral/leaderboard?${queryParams.toString()}`, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      const message = buildErrorMessage(
-        response.status,
-        response.statusText,
-        payload,
-        "Failed to fetch leaderboard",
-      );
-      throw new Error(message);
-    }
-
-    const payload = (await response.json()) as LeaderboardResponse;
-
-    if (!payload?.status) {
-      throw new Error("Unexpected response format while fetching leaderboard");
-    }
-
-    return payload;
-  } catch (error) {
-    console.error("Error fetching leaderboard:", error);
     throw error;
   }
 }
