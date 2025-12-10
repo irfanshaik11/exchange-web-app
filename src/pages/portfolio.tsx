@@ -14,7 +14,7 @@ import {
   getTradeHistoryByUser,
   getTradeActivityByUser,
 } from "~/utils/functions";
-import { formatSmartNumber } from "~/utils/db";
+import { formatSmartNumber, formatSmallPrice } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
 import type { UnifiedTokenMetadata } from "~/utils/tokenMetadata";
 import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
@@ -459,6 +459,7 @@ export default function PortfolioPage() {
       // Add validation to prevent extreme values
       const validPositions = positions.filter(
         (pos) =>
+          pos.remaining > 0 && // Only include positions with remaining balance > 0
           isFinite(pos.pnl) &&
           isFinite(pos.remainingUsdValue) &&
           isFinite(pos.boughtUsdValue) &&
@@ -1601,7 +1602,7 @@ export default function PortfolioPage() {
                         Unrealized PNL
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
-                        ${formatSmartNumber(unrealizedPnl)}
+                        ${formatSmallPrice(unrealizedPnl)}
                       </div>
                     </div>
                     <div>
@@ -1662,7 +1663,7 @@ export default function PortfolioPage() {
                       ) : (
                         `${
                           timeframeMetrics.realizedPnl >= 0 ? "+" : "-"
-                        }$${formatSmartNumber(
+                        }$${formatSmallPrice(
                           Math.abs(timeframeMetrics.realizedPnl),
                         )}`
                       )}
@@ -1827,7 +1828,7 @@ export default function PortfolioPage() {
                             )}
                           </>
                         ) : (
-                          `$${timeframeMetrics.unrealizedPnl.toFixed(2)}`
+                          `$${formatSmallPrice(timeframeMetrics.unrealizedPnl)}`
                         )}
                       </span>
                     </div>
@@ -1846,7 +1847,7 @@ export default function PortfolioPage() {
                         ) : (
                           `${
                             timeframeMetrics.realizedPnl >= 0 ? "+" : "-"
-                          }$${formatSmartNumber(
+                          }$${formatSmallPrice(
                             Math.abs(timeframeMetrics.realizedPnl),
                           )}`
                         )}

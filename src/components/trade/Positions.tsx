@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { formatSmartNumber } from '~/utils/db';
+import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
 import { getActivePositionsByUser } from '~/utils/functions';
 import type { PositionRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
@@ -505,7 +505,7 @@ const Positions: React.FC<PositionsProps> = ({
           ) : (
             [...positions]
               .reverse() // Reverse so newest/most recent positions appear at the top
-              .filter(pos => showHidden || !hiddenTokens.has(pos.tokenAddress))
+              .filter(pos => (pos.remaining > 0) && (showHidden || !hiddenTokens.has(pos.tokenAddress)))
               .map((pos, idx) => {
               const sourcePosition = mergeWithFallback(pos);
 
@@ -741,7 +741,7 @@ const Positions: React.FC<PositionsProps> = ({
                     <span className="text-neutral-400">
                       {showInSOL && solPrice > 0
                         ? <>(<SolIcon />{formatSmartNumber(sourcePosition.boughtUsdValue / solPrice)})</>
-                        : `($${formatSmartNumber(Math.max(0, sourcePosition.boughtUsdValue || 0))})`
+                        : `($${formatSmallPrice(Math.max(0, sourcePosition.boughtUsdValue || 0))})`
                       }
                     </span>
                   </div>
@@ -752,7 +752,7 @@ const Positions: React.FC<PositionsProps> = ({
                     <span className="text-neutral-400">
                       {showInSOL && solPrice > 0
                         ? <>(<SolIcon />{formatSmartNumber(corrected.correctedSoldUsdValue / solPrice)})</>
-                        : `($${formatSmartNumber(corrected.correctedSoldUsdValue)})`
+                        : `($${formatSmallPrice(corrected.correctedSoldUsdValue)})`
                       }
                     </span>
                   </div>
@@ -763,7 +763,7 @@ const Positions: React.FC<PositionsProps> = ({
                     <span className="text-neutral-400">
                       {showInSOL && solPrice > 0
                         ? <>(<SolIcon />{formatSmartNumber(corrected.correctedRemainingUsdValue / solPrice)})</>
-                        : `($${formatSmartNumber(corrected.correctedRemainingUsdValue)})`
+                        : `($${formatSmallPrice(corrected.correctedRemainingUsdValue)})`
                       }
                     </span>
                   </div>
@@ -771,9 +771,9 @@ const Positions: React.FC<PositionsProps> = ({
                 <td className={`px-2 py-2 font-semibold ${corrected.correctedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
                   {showInSOL && solPrice > 0
                     ? <>{corrected.correctedPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(corrected.correctedPnl) / solPrice)}</>
-                    : `${corrected.correctedPnl >= 0 ? '+' : ''}$${formatSmartNumber(Math.abs(corrected.correctedPnl))}`
+                    : `${corrected.correctedPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(corrected.correctedPnl))}`
                   }
-                  <span className="ml-1 text-xs">({corrected.correctedPnlPercentage.toFixed(2)}%)</span>
+                  <span className="ml-1 text-xs">({formatSmallPrice(corrected.correctedPnlPercentage)}%)</span>
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-2">
