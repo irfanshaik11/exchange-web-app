@@ -196,9 +196,9 @@ export default function Header({
     base: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
   };
   
-  const [chainBalance, setChainBalance] = useState<number>(
-    chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0),
-  );
+  // Use chainBalances from UserContext as the single source of truth
+  // Derive chainBalance from chainBalances instead of maintaining separate state
+  const chainBalance = chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
 
   const chainAwareHref = useCallback(
     (href: string) => ({
@@ -225,6 +225,8 @@ export default function Header({
       maximumFractionDigits: 2,
     });
 
+  // Refresh the primary wallet balance and update UserContext chainBalances
+  // This ensures Header and Portfolio stay in sync since they both read from chainBalances
   useEffect(() => {
     const address =
       currentChain === "sol"
@@ -232,26 +234,33 @@ export default function Header({
         : primaryWalletAddresses.ethereum || null;
 
     if (!address) {
-      if (currentChain === "sol" && user?.publicKey) {
-        refreshBalance({ chain: "sol", address: user.publicKey }).then((res) => {
-          if (res?.balance !== undefined) {
-            setChainBalance(res.balance);
-          }
-        });
-      } else {
-        setChainBalance(0);
-      }
+      // If no address, ensure chainBalances reflects 0 for this chain
+      // Note: We don't directly update chainBalances here as it's managed by UserContext
+      // The UserContext's refreshBalance handles updating chainBalances
       return;
     }
 
     let cancelled = false;
-    refreshBalance({ chain: currentChain, address }).then((res) => {
+    
+    // Refresh balance immediately when primary wallet address changes (force refresh to bypass cooldown)
+    // This ensures Header updates instantly when primary wallet is changed
+    refreshBalance({ chain: currentChain, address, force: true }).then((res) => {
       if (!cancelled && res?.balance !== undefined) {
-        setChainBalance(res.balance);
+        // Balance is already updated in UserContext's chainBalances via refreshBalance
+        // No need to update local state since we're using chainBalances directly
       }
     });
+    
+    // Set up periodic refresh to keep balance up to date
+    const interval = setInterval(() => {
+      if (!cancelled) {
+        refreshBalance({ chain: currentChain, address });
+      }
+    }, 12000);
+    
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [
     currentChain,

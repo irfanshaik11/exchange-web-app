@@ -938,7 +938,25 @@ export default function PortfolioPage() {
         : [];
 
       setWallets(mappedWallets);
-      setWalletBalances(Object.fromEntries(mappedWallets.map((w) => [w.id, w.balance])));
+      
+      // Initialize walletBalances from API response
+      // Preserve any balances that were explicitly set to 0 (new wallets) to avoid overwriting
+      // them with potentially incorrect API values
+      setWalletBalances((prevBalances) => {
+        const newBalances: Record<string, number> = {};
+        mappedWallets.forEach((w) => {
+          // If a wallet was just created (balance was explicitly set to 0),
+          // keep it at 0 instead of using potentially incorrect API balance
+          // The balance refresh will update it with the actual chain balance
+          if (prevBalances[w.id] === 0) {
+            newBalances[w.id] = 0;
+          } else {
+            // Use API balance if it's a valid number, otherwise default to 0
+            newBalances[w.id] = typeof w.balance === "number" && w.balance >= 0 ? w.balance : 0;
+          }
+        });
+        return newBalances;
+      });
       notifyWalletsUpdated();
     } catch (err) {
       console.error(err);
@@ -948,7 +966,7 @@ export default function PortfolioPage() {
     }
   }, [user?.id, user?.bearerToken]);
 
-  // Refresh only the selected primary wallet balance for the current chain
+  // Refresh all wallet balances for the current chain
   useEffect(() => {
     if (!user || wallets.length === 0) {
       return;
@@ -956,30 +974,57 @@ export default function PortfolioPage() {
 
     const primaryWallet =
       wallets.find((w) => w.isPrimary) ?? wallets[0] ?? null;
-    if (!primaryWallet) return;
-
-    const address =
-      currentChain === "sol"
-        ? primaryWallet.solanaAddress || primaryWallet.address
-        : primaryWallet.ethereumAddress || null;
-    if (!address) return;
 
     let cancelled = false;
-    const refreshPrimary = async () => {
-      const result = await refreshBalance({
-        chain: currentChain,
-        address,
-      });
-      if (!cancelled && result?.balance !== undefined) {
-        setWalletBalances((prev) => ({
-          ...prev,
-          [primaryWallet.id]: result.balance,
-        }));
+
+    // Refresh all wallets that have an address for the current chain
+    const refreshAllWallets = async () => {
+      // Refresh wallets sequentially with a small delay to avoid hammering the API
+      // Primary wallet is refreshed first to update chainBalances immediately
+      const walletsToRefresh = primaryWallet 
+        ? [primaryWallet, ...wallets.filter(w => w.id !== primaryWallet.id)]
+        : wallets;
+
+      for (const wallet of walletsToRefresh) {
+        if (cancelled) break;
+
+        const address =
+          currentChain === "sol"
+            ? wallet.solanaAddress || wallet.address
+            : wallet.ethereumAddress || null;
+        
+        if (!address) continue;
+
+        try {
+          const result = await refreshBalance({
+            chain: currentChain,
+            address,
+            force: false, // Respect cooldown to avoid hammering the API
+          });
+          
+          if (!cancelled && result?.balance !== undefined) {
+            setWalletBalances((prev) => ({
+              ...prev,
+              [wallet.id]: result.balance,
+            }));
+          }
+
+          // Small delay between wallet refreshes to avoid overwhelming the API
+          if (wallet.id !== walletsToRefresh[walletsToRefresh.length - 1]?.id) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+        } catch (error) {
+          console.error(`Failed to refresh balance for wallet ${wallet.id}:`, error);
+        }
       }
     };
 
-    refreshPrimary();
-    const interval = setInterval(refreshPrimary, 12000);
+    // Refresh immediately
+    refreshAllWallets();
+
+    // Set up interval to refresh all wallets periodically
+    const interval = setInterval(refreshAllWallets, 12000);
+    
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -1054,13 +1099,48 @@ export default function PortfolioPage() {
       const createdRaw = await res.json();
       const newWalletData = createdRaw?.wallet ?? createdRaw;
 
-      setWallets((prev) => {
-        const nextIndex = prev.length;
-        const newWallet = normalizeWalletFromApi(newWalletData, nextIndex);
-        return [...prev, newWallet];
-      });
+      // Initialize the new wallet with balance 0 immediately
+      const nextIndex = wallets.length;
+      const newWallet = normalizeWalletFromApi(newWalletData, nextIndex);
+      
+      // Set balance to 0 for the new wallet immediately (before fetching from API/chain)
+      setWalletBalances((prev) => ({
+        ...prev,
+        [newWallet.id]: 0, // New wallet starts with 0 balance
+      }));
+
+      setWallets((prev) => [...prev, newWallet]);
       notifyWalletsUpdated();
+      
+      // Fetch all wallets to get the latest state, then refresh balances
       await fetchWallets();
+      
+      // Immediately fetch the actual balance for the new wallet from the chain
+      // This ensures it shows the correct balance (which should be 0 for a new wallet)
+      const newWalletAddress =
+        currentChain === "sol"
+          ? newWallet.solanaAddress || newWallet.address
+          : newWallet.ethereumAddress || null;
+      
+      if (newWalletAddress) {
+        try {
+          const balanceResult = await refreshBalance({
+            chain: currentChain,
+            address: newWalletAddress,
+            force: true, // Force refresh to get actual balance from chain
+          });
+          
+          if (balanceResult?.balance !== undefined) {
+            setWalletBalances((prev) => ({
+              ...prev,
+              [newWallet.id]: balanceResult.balance, // Update with actual chain balance
+            }));
+          }
+        } catch (error) {
+          console.error(`Failed to fetch balance for new wallet ${newWallet.id}:`, error);
+          // Keep balance at 0 if fetch fails
+        }
+      }
 
       toast.success("New wallet created");
     } catch (err) {
@@ -1225,6 +1305,41 @@ export default function PortfolioPage() {
 
       setWallets(mappedWallets);
       notifyWalletsUpdated();
+      
+      // Immediately refresh the new primary wallet's balance to update Header
+      const newPrimaryWallet = mappedWallets.find((w) => w.isPrimary) ?? mappedWallets[0];
+      if (newPrimaryWallet) {
+        const newPrimaryAddress =
+          currentChain === "sol"
+            ? newPrimaryWallet.solanaAddress || newPrimaryWallet.address
+            : newPrimaryWallet.ethereumAddress || null;
+        
+        if (newPrimaryAddress) {
+          // Force immediate refresh to update Header balance right away
+          // Use updateChainBalance to ensure chainBalances is updated even though
+          // primaryWalletAddresses hasn't updated in UserContext yet
+          try {
+            const balanceResult = await refreshBalance({
+              chain: currentChain,
+              address: newPrimaryAddress,
+              force: true, // Force refresh to bypass cooldown
+              updateChainBalance: true, // Force update chainBalances[chain] for Header
+            });
+            
+            if (balanceResult?.balance !== undefined) {
+              // Balance is now updated in chainBalances, which Header will read
+              // Also update the walletBalances for consistency
+              setWalletBalances((prev) => ({
+                ...prev,
+                [newPrimaryWallet.id]: balanceResult.balance,
+              }));
+            }
+          } catch (error) {
+            console.error(`Failed to refresh balance for new primary wallet:`, error);
+          }
+        }
+      }
+      
       toast.success("Primary wallet updated");
     } catch (err) {
       console.error("Error setting primary wallet:", err);
