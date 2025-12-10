@@ -36,6 +36,7 @@ interface UserContextType {
     chain?: string;
     address?: string;
     force?: boolean;
+    updateChainBalance?: boolean; // Force update chainBalances[chain] regardless of isPrimaryWallet check
   }) => Promise<{ balance: number; usdBalance: number } | null>;
   setUser: (user: UserInfo | null) => void;
   logout: () => void;
@@ -84,6 +85,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     sol: 0,
   });
   const chainBalancesRef = useRef<Record<string, number>>({ sol: 0 });
+  // Cache balances by address to avoid cross-wallet contamination
+  const addressBalanceCacheRef = useRef<Record<string, number>>({});
   const solUsdBalanceRef = useRef(0);
   const solBalanceRef = useRef(0);
   const lastNotifiedBalanceRef = useRef<Record<string, number>>({});
@@ -227,7 +230,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const refreshBalance = useCallback(
     async (
-      options?: { chain?: string; address?: string; force?: boolean }
+      options?: { chain?: string; address?: string; force?: boolean; updateChainBalance?: boolean }
     ): Promise<{ balance: number; usdBalance: number } | null> => {
       const chain = options?.chain || "sol";
       const overrideAddress = options?.address;
@@ -241,11 +244,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (!targetAddress) return null;
 
       const checkKey = `${chain}:${targetAddress}`;
+      const isPrimaryWallet = !overrideAddress || 
+        (chain === "sol" && targetAddress === primaryWalletAddresses.solana) ||
+        (chain !== "sol" && targetAddress === primaryWalletAddresses.ethereum);
 
       if (!options?.force) {
         const lastFetch = lastBalanceFetchRef.current[checkKey];
         if (lastFetch && Date.now() - lastFetch < BALANCE_REFRESH_COOLDOWN_MS) {
-          const cachedBalance = chainBalancesRef.current[chain];
+          // Return the cached balance for THIS specific address, not the chain-level balance
+          const cachedBalance = addressBalanceCacheRef.current[checkKey];
           const cachedUsdBalance =
             chain === "sol" ? solUsdBalanceRef.current : 0;
           if (typeof cachedBalance === "number") {
@@ -291,10 +298,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const newBalance = data.data.balance;
         const newUsdBalance = data.data.usdBalance;
 
-        setChainBalances((prev) => ({
-          ...prev,
-          [chain]: newBalance,
-        }));
+        // Cache the balance for this specific address
+        addressBalanceCacheRef.current[checkKey] = newBalance;
+
+        // Update chainBalances for the primary wallet OR if explicitly requested
+        // This allows Portfolio to force update chainBalances when setting a new primary wallet
+        // even before primaryWalletAddresses is updated in UserContext
+        if (isPrimaryWallet || options?.updateChainBalance) {
+          setChainBalances((prev) => ({
+            ...prev,
+            [chain]: newBalance,
+          }));
+        }
 
         if (chain === "sol") {
           const lastNotified =
@@ -555,10 +570,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setChainBalances({ sol: 0 });
       setLastNotifiedBalance({});
       chainBalancesRef.current = { sol: 0 };
+      addressBalanceCacheRef.current = {}; // Clear address-specific cache on logout
       solUsdBalanceRef.current = 0;
       solBalanceRef.current = 0;
       lastNotifiedBalanceRef.current = {};
-      lastBalanceFetchRef.current = {};
       balanceCheckInProgressRef.current = {};
       if (typeof window !== "undefined") {
         clearStoredReferralAccess();
