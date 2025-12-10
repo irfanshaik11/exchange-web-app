@@ -62,13 +62,14 @@ const ALLOWED = [
 ];
 
 // Allowed image MIME types - only image types are permitted
+// NOTE: SVG is explicitly excluded due to XSS security concerns (SVG can contain JavaScript)
 const ALLOWED_IMAGE_TYPES = [
   'image/jpeg',
   'image/jpg',
   'image/png',
   'image/gif',
   'image/webp',
-  'image/svg+xml',
+  // 'image/svg+xml', // BLOCKED: SVG can contain JavaScript and execute XSS attacks
   'image/avif',
   'image/bmp',
   'image/x-icon',
@@ -114,14 +115,10 @@ function inferImageMimeType(buffer: Buffer): string | null {
     return 'image/webp';
   }
   
-  // SVG: Check if it starts with <svg or <?xml
-  if (buffer.length >= 100) {
-    const textStart = buffer.slice(0, 100).toString('utf-8').trim();
-    if ((textStart.startsWith('<svg') || textStart.startsWith('<?xml')) &&
-        textStart.toLowerCase().includes('<svg')) {
-      return 'image/svg+xml';
-    }
-  }
+  // SVG detection - but we block SVG for security (XSS prevention)
+  // SVG files can contain JavaScript in <script> tags and event handlers
+  // We detect but reject SVG to prevent XSS attacks
+  // (No return statement - SVG is not allowed)
   
   // BMP: 42 4D
   if (bytes[0] === 0x42 && bytes[1] === 0x4d) {
@@ -218,14 +215,14 @@ function isValidImageContent(buffer: Buffer): boolean {
     return true;
   }
 
-  // SVG: Check if it starts with <svg or <?xml
+  // SVG detection - but we block SVG for security (XSS prevention)
+  // SVG files can contain JavaScript in <script> tags and event handlers
+  // We explicitly reject SVG content to prevent XSS attacks
   if (buffer.length >= 100) {
     const textStart = buffer.slice(0, 100).toString('utf-8').trim();
     if (textStart.startsWith('<svg') || textStart.startsWith('<?xml')) {
-      // Additional validation: should contain svg tag
-      if (textStart.toLowerCase().includes('<svg')) {
-        return true;
-      }
+      // Reject SVG - it can contain executable JavaScript
+      return false;
     }
   }
 
@@ -264,7 +261,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Check if host is allowed, but be more lenient for image files and IPFS URLs
     // If URL ends with .png/.jpg/.jpeg/.gif/.webp, allow more hosts
-    const isImageFile = /\.(png|jpg|jpeg|gif|webp|svg|avif|bmp|ico)$/i.test(parsed.pathname);
+    // NOTE: SVG extension is excluded for security (XSS prevention)
+    const isImageFile = /\.(png|jpg|jpeg|gif|webp|avif|bmp|ico)$/i.test(parsed.pathname);
     
     if (!isAllowedHost(parsed.hostname)) {
       // For IPFS paths, allow any host (IPFS is decentralized)
@@ -349,40 +347,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get response body first
     const body = Buffer.from(await upstream.arrayBuffer());
     
-    // Check if this is an IPFS URL - be VERY lenient for IPFS
-    // Check both hostname (ipfs gateways) and path (/ipfs/...)
-    const isIpfsUrl = parsed.hostname.includes('ipfs') || parsed.pathname.includes('/ipfs/');
-    
-    // For IPFS URLs, completely bypass strict validation
-    // Just try to infer the type and pass through if we got content
-    if (isIpfsUrl) {
-      if (body.length === 0) {
-        console.error('[image proxy] IPFS URL returned empty content');
-        return sendError(res, 502, 'Empty content from IPFS');
-      }
-      
-      // Try to infer the image type from content
-      let contentType = inferImageMimeType(body) || 'image/png'; // Default to PNG for IPFS
-      
-      console.log(`[image proxy] IPFS URL - allowing through (${body.length} bytes, type: ${contentType})`);
-      
-      // Set security headers
-      setSecurityHeaders(res);
-      
-      // Set response headers
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=86400');
-      
-      // Send content - trust IPFS to serve valid images
-      res.status(200).send(body);
-      return;
-    }
-    
-    // For non-IPFS URLs, do strict validation
-    // Validate content is actually an image using magic bytes
+    // SECURITY: Apply strict validation to ALL URLs, including IPFS
+    // Previously IPFS URLs bypassed validation, which was a security risk
+    // All content must pass magic bytes validation to prevent XSS attacks
     if (!isValidImageContent(body)) {
-      console.error('[image proxy] invalid image content detected');
-      return sendError(res, 415, 'Invalid image content');
+      console.error('[image proxy] invalid image content detected (rejected for security)');
+      return sendError(res, 415, 'Invalid image content - security validation failed');
     }
 
     // Get content type from header

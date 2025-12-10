@@ -1117,7 +1117,7 @@ export default function TrackersPage() {
   // Twitter functions
   const loadTwitterAccounts = async () => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.id);
+      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || '');
       setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
@@ -1127,7 +1127,7 @@ export default function TrackersPage() {
 
   const handleAddTwitterAccount = async (username: string) => {
     try {
-      await addTrackedTwitterAccount(username, user?.id);
+      await addTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
       setToast(`Added @${username}`);
       setTimeout(() => setToast(""), 3000);
@@ -1140,7 +1140,7 @@ export default function TrackersPage() {
 
   const handleRemoveTwitterAccount = async (username: string) => {
     try {
-      await removeTrackedTwitterAccount(username, user?.id);
+      await removeTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
       setToast(`Removed @${username}`);
       setTimeout(() => setToast(""), 3000);

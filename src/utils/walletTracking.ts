@@ -119,7 +119,15 @@ export async function getTrackedWallets(userId?: string, chain?: 'sol' | 'monad'
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const headers: HeadersInit = {};
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      
+      const response = await fetch(url, { 
+        signal: controller.signal,
+        headers
+      });
       clearTimeout(timeoutId);
       
       if (!response.ok) {
@@ -155,9 +163,14 @@ export async function addTrackedWallet(
   chain: 'sol' | 'monad' = 'sol'
 ): Promise<void> {
   try {
+    const headers: HeadersInit = { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    };
+    
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ 
         wallet: address, 
         walletName: name || undefined,
@@ -225,9 +238,14 @@ export async function addTrackedWalletsBulk(
   }
 
   try {
+    const headers: HeadersInit = { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    };
+    
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch/bulk`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         wallets,
         ...(userId ? { userId } : {}),
@@ -293,6 +311,7 @@ export async function removeTrackedWallet(address: string, userId?: string, chai
     const url = `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}${params.toString() ? `?${params.toString()}` : ''}`;
     const response = await fetch(url, {
       method: 'DELETE',
+      headers
     });
     
     const body = await response.json().catch(() => ({}));
@@ -343,6 +362,7 @@ export async function getWalletSnapshots(address: string): Promise<WalletBalance
 }
 
 // Toggle notifications for a wallet
+// SECURITY FIX: Now requires authentication token - userId parameter is ignored by backend
 export async function toggleWalletNotifications(
   address: string, 
   enabled: boolean, 
@@ -362,7 +382,7 @@ export async function toggleWalletNotifications(
     
     const response = await fetch(url, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ enabled }),
     });
     
