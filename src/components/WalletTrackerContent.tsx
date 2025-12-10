@@ -228,7 +228,7 @@ export default function WalletTrackerContent() {
   const handleAddWallet = async (address: string, name: string, emoji?: string) => {
     try {
       // Add to backend with notifications enabled by default
-      await addTrackedWallet(address, name, user?.id, emoji, true);
+      await addTrackedWallet(address, user?.bearerToken || '', name, emoji, true);
       
       // Save notification preference to localStorage
       if (typeof window !== 'undefined') {

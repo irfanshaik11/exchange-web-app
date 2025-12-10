@@ -573,14 +573,17 @@ export const grantWaitlistAccess = (params: { userId?: number; walletId?: string
     body: params,
   });
 
-export const redeemAccessCode = (params: { userId?: number; walletId?: string; accessCode: string }) =>
+// SECURITY FIX: Now requires authentication token - userId parameter is ignored by backend
+export const redeemAccessCode = (params: { accessCode: string; authToken: string }) =>
   apiFetch<{ waitlist: {
     id: number;
     waitlistNumber: string;
     status: 'waiting' | 'invited' | 'activated' | 'removed';
   } }>("/api/waitlist/redeem-access", {
     method: "POST",
-    body: params,
+    body: { accessCode: params.accessCode },
+    // SECURITY: userId is no longer sent - backend uses authenticated user from JWT token
+    authToken: params.authToken,
   });
 
 /* -------------------------------------------------------------------------- */

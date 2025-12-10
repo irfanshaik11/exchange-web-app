@@ -258,7 +258,7 @@ export default function TrackersPage() {
     try {
       const results = await Promise.allSettled(
         walletsToEnable.map((wallet) =>
-          toggleWalletNotifications(wallet.address, true, user?.id),
+          toggleWalletNotifications(wallet.address, true, user?.bearerToken || ''),
         ),
       );
       const failures = results.filter((result) => result.status === "rejected");
@@ -564,7 +564,7 @@ export default function TrackersPage() {
       }
 
       // Fetch wallets from backend
-      const tracked = await getTrackedWallets(user?.id);
+      const tracked = await getTrackedWallets(user?.bearerToken);
 
       // Also refresh global watched wallets
       await refreshWatchedWallets();
@@ -827,7 +827,7 @@ export default function TrackersPage() {
 
     try {
       // Add to backend with notifications enabled by default
-      await addTrackedWallet(address, name, user?.id, emoji, true);
+      await addTrackedWallet(address, user?.bearerToken || '', name, emoji, true);
 
       // Save notification preference to localStorage
       if (typeof window !== "undefined") {
@@ -862,7 +862,7 @@ export default function TrackersPage() {
       if (addressToRemove === "all") {
         // Remove all wallets
         await Promise.all(
-          wallets.map((w) => removeTrackedWallet(w.address, user?.id)),
+          wallets.map((w) => removeTrackedWallet(w.address, user?.bearerToken || '')),
         );
 
         // Clear all state
@@ -891,7 +891,7 @@ export default function TrackersPage() {
         await refreshWatchedWallets();
       } else {
         // Remove single wallet
-        await removeTrackedWallet(addressToRemove, user?.id);
+        await removeTrackedWallet(addressToRemove, user?.bearerToken || '');
 
         // Filter out trades from deleted wallet
         setCachedLiveTrades((prev) =>
@@ -964,7 +964,7 @@ export default function TrackersPage() {
         return toggleWalletNotifications(
           wallet.address,
           newState,
-          wallet.ownerId || undefined,
+          user?.bearerToken || '',
         );
       });
 
@@ -1097,7 +1097,7 @@ export default function TrackersPage() {
   // Twitter functions
   const loadTwitterAccounts = async () => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.id);
+      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || '');
       setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
@@ -1107,7 +1107,7 @@ export default function TrackersPage() {
 
   const handleAddTwitterAccount = async (username: string) => {
     try {
-      await addTrackedTwitterAccount(username, user?.id);
+      await addTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
       setToast(`Added @${username}`);
       setTimeout(() => setToast(""), 3000);
@@ -1120,7 +1120,7 @@ export default function TrackersPage() {
 
   const handleRemoveTwitterAccount = async (username: string) => {
     try {
-      await removeTrackedTwitterAccount(username, user?.id);
+      await removeTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
       setToast(`Removed @${username}`);
       setTimeout(() => setToast(""), 3000);
@@ -1254,7 +1254,7 @@ export default function TrackersPage() {
             emoji: wallet.emoji || getRandomEmoji(),
           }));
 
-          await addTrackedWalletsBulk(bulkPayload, user?.id);
+          await addTrackedWalletsBulk(bulkPayload, user?.bearerToken || '');
           await ensureNotificationsEnabled(walletsToAdd);
 
           let successCount = walletsToAdd.length;
@@ -2825,7 +2825,7 @@ export default function TrackersPage() {
                 emoji: wallet.emoji || getRandomEmoji(),
               }));
 
-              await addTrackedWalletsBulk(bulkPayload, user?.id);
+              await addTrackedWalletsBulk(bulkPayload, user?.bearerToken || '');
               await ensureNotificationsEnabled(walletsToAdd);
               successCount = walletsToAdd.length;
               processed = walletsToAdd.length;

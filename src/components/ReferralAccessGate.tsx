@@ -389,9 +389,8 @@ export function ReferralAccessGate({
       setError(null);
       setInfo(null);
 
-      // Special handling for admin code - always grant access
-      const isAdminCode = normalized === 'NARRATIVE-ADMIN-247';
-      
+      // SECURITY: All access code validation happens server-side only.
+      // No hardcoded secrets in client-side code. Backend validates all codes including admin codes.
       // Validate with backend and mark waitlist as activated (number -> 0) on success.
       // If the user has no waitlist row yet, create it and retry once.
       (async () => {
@@ -402,26 +401,19 @@ export function ReferralAccessGate({
             return;
           }
           
-          // For admin code, grant access immediately as fallback
-          if (isAdminCode) {
-            try {
-              await redeemAccessCode({
-                userId: Number(user.id),
-                accessCode: normalized,
-              });
-            } catch (adminErr: any) {
-              // Even if backend fails, grant access for admin code
-              console.warn('Admin code backend validation failed, granting access anyway:', adminErr);
-            }
-            persistAccess(user.id);
-            grantAccess();
+          // All codes (including admin codes) are validated server-side only
+          // Backend is the single source of truth for access control
+          // SECURITY: userId is no longer sent - backend uses authenticated user from JWT token
+          if (!user?.bearerToken) {
+            setStatus("prompt");
+            setError("Please login to activate Early Access.");
             return;
           }
           
           try {
             await redeemAccessCode({
-              userId: Number(user.id),
               accessCode: normalized,
+              authToken: user.bearerToken,
             });
           } catch (err: any) {
             // If no waitlist row, create it, then retry redeem once
@@ -429,8 +421,8 @@ export function ReferralAccessGate({
             if (statusCode === 404) {
               await completeAllQuests({ userId: Number(user.id) });
               await redeemAccessCode({
-                userId: Number(user.id),
                 accessCode: normalized,
+                authToken: user.bearerToken,
               });
             } else {
               throw err;
