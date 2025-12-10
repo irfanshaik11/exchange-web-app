@@ -102,7 +102,7 @@ const WALLET_TRACKER_WS_URL = resolveWsUrl();
 // ===== API Functions =====
 
 // Get all tracked wallets
-export async function getTrackedWallets(userId?: string, chain?: 'sol' | 'monad'): Promise<WatchWallet[]> {
+export async function getTrackedWallets(authToken?: string, userId?: string, chain?: 'sol' | 'monad'): Promise<WatchWallet[]> {
   try {
     const params = new URLSearchParams();
     if (userId) {
@@ -160,13 +160,16 @@ export async function addTrackedWallet(
   userId?: string, 
   emoji?: string, 
   notificationsEnabled: boolean = true,
-  chain: 'sol' | 'monad' = 'sol'
+  chain: 'sol' | 'monad' = 'sol',
+  authToken?: string
 ): Promise<void> {
   try {
     const headers: HeadersInit = { 
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${authToken}`
     };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
     
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch`, {
       method: 'POST',
@@ -191,7 +194,7 @@ export async function addTrackedWallet(
     // Enable notifications if requested (separate API call)
     if (notificationsEnabled) {
       try {
-        await toggleWalletNotifications(address, true, userId, chain);
+        await toggleWalletNotifications(address, true, userId, chain, authToken);
       } catch (notifError) {
         console.warn('Failed to enable notifications for wallet, but wallet was added successfully:', notifError);
         // Don't throw - wallet was added successfully, notification toggle can be done manually
@@ -223,7 +226,8 @@ type BulkWalletEntry = {
 export async function addTrackedWalletsBulk(
   wallets: BulkWalletEntry[],
   userId?: string | number,
-  chain?: 'sol' | 'monad'
+  chain?: 'sol' | 'monad',
+  authToken?: string
 ): Promise<BulkWalletInsertResponse> {
   if (!wallets || wallets.length === 0) {
     return {
@@ -240,8 +244,10 @@ export async function addTrackedWalletsBulk(
   try {
     const headers: HeadersInit = { 
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${authToken}`
     };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
     
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch/bulk`, {
       method: 'POST',
@@ -298,7 +304,7 @@ export async function getWalletsLastActive(wallets: string[]): Promise<WalletLas
 }
 
 // Remove a wallet from tracking
-export async function removeTrackedWallet(address: string, userId?: string, chain?: 'sol' | 'monad'): Promise<void> {
+export async function removeTrackedWallet(address: string, userId?: string, chain?: 'sol' | 'monad', authToken?: string): Promise<void> {
   try {
     const params = new URLSearchParams();
     if (userId) {
@@ -309,6 +315,10 @@ export async function removeTrackedWallet(address: string, userId?: string, chai
     }
     
     const url = `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}${params.toString() ? `?${params.toString()}` : ''}`;
+    const headers: HeadersInit = {};
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
     const response = await fetch(url, {
       method: 'DELETE',
       headers
@@ -367,7 +377,8 @@ export async function toggleWalletNotifications(
   address: string, 
   enabled: boolean, 
   userId?: string,
-  chain?: 'sol' | 'monad'
+  chain?: 'sol' | 'monad',
+  authToken?: string
 ): Promise<void> {
   try {
     const params = new URLSearchParams();
@@ -379,6 +390,13 @@ export async function toggleWalletNotifications(
     }
     
     const url = `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}/notifications${params.toString() ? `?${params.toString()}` : ''}`;
+    
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
     
     const response = await fetch(url, {
       method: 'PATCH',
