@@ -16,7 +16,7 @@ import {
   removeTrackedWallet,
   getTrackedWallets,
   getWalletHistory,
-  getWalletSolBalance,
+  getWalletBalance,
   getWalletsLastActive,
   toggleWalletNotifications,
   type WatchWallet,
@@ -169,7 +169,6 @@ const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 
 export default function TrackersPage() {
   const router = useRouter();
-  const currentChain = (router.query.chain as string) || "sol";
   const { user, solBalance } = useUser();
   const {
     wsConnected,
@@ -205,6 +204,9 @@ export default function TrackersPage() {
   const [lastActiveMap, setLastActiveMap] = useState<
     Record<string, number | null | undefined>
   >({});
+  // Get chain from router query (same as Header component)
+  const currentChain = (router.query.chain as string) || "monad";
+  const selectedChain = (currentChain === 'monad' || currentChain === 'sol') ? currentChain : 'monad';
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
     Map<
@@ -257,9 +259,11 @@ export default function TrackersPage() {
     if (!walletsToEnable.length) return;
     try {
       const results = await Promise.allSettled(
-        walletsToEnable.map((wallet) =>
-          toggleWalletNotifications(wallet.address, true, user?.id),
-        ),
+        walletsToEnable.map((wallet) => {
+          const walletData = watchedWallets.find(w => w.address === wallet.address);
+          const walletChain = walletData?.chain || selectedChain;
+          return toggleWalletNotifications(wallet.address, true, user?.id, walletChain, user?.bearerToken);
+        }),
       );
       const failures = results.filter((result) => result.status === "rejected");
       if (failures.length > 0) {
@@ -436,7 +440,7 @@ export default function TrackersPage() {
   );
   const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
   // Hide wallet section when chain is Monad
-  const showWalletSection = currentChain !== "monad" && (!isMobile || mobileMainTab === "wallets");
+  const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = !isMobile || mobileMainTab === "twitter";
 
   // Calculate if all notifications are enabled
@@ -498,10 +502,10 @@ export default function TrackersPage() {
     }
   }, [user?.id]);
 
-  // Load wallets when user changes or page loads (fetches fresh data in background)
+  // Load wallets when user changes, page loads, or chain changes (fetches fresh data in background)
   useEffect(() => {
     loadWalletsFromBackend();
-  }, [user?.id]);
+  }, [user?.id, router.query.chain]);
 
   // Load Twitter accounts on mount
   useEffect(() => {
@@ -563,8 +567,8 @@ export default function TrackersPage() {
         return;
       }
 
-      // Fetch wallets from backend
-      const tracked = await getTrackedWallets(user?.id);
+      // Fetch wallets from backend for the selected chain
+      const tracked = await getTrackedWallets(user?.bearerToken, user?.id, selectedChain);
 
       // Also refresh global watched wallets
       await refreshWatchedWallets();
@@ -613,30 +617,41 @@ export default function TrackersPage() {
         }
       }
 
-      // Fetch real balances for tracked wallets
+      // Fetch real balances for tracked wallets (both Solana and Monad)
+      console.log(`[Trackers] Fetching balances for ${allWallets.length} wallets:`, allWallets.map(w => ({ address: w.address.slice(0, 8) + '...', chain: w.chain })));
       allWallets.forEach(async (wallet) => {
-        const balance = await getWalletSolBalance(wallet.address);
-        if (balance !== null) {
-          setWalletBalances((prev) => {
-            const updated = { ...prev, [wallet.address]: balance };
+        // Use wallet.chain from backend, fallback to selectedChain if not available
+        const walletChain = (wallet.chain === 'monad' || wallet.chain === 'sol') ? wallet.chain : selectedChain;
+        console.log(`[Trackers] Fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain from wallet: ${wallet.chain}, using: ${walletChain})`);
+        try {
+          const balance = await getWalletBalance(wallet.address, walletChain);
+          console.log(`[Trackers] Got balance for ${wallet.address.slice(0, 8)}...: ${balance} (chain: ${walletChain})`);
+          if (balance !== null && !isNaN(balance)) {
+            setWalletBalances((prev) => {
+              const updated = { ...prev, [wallet.address]: balance };
 
-            // Update balance in cache
-            if (typeof window !== "undefined") {
-              const cacheKey = `walletTracker:wallets:${user.id}`;
-              const cached = localStorage.getItem(cacheKey);
-              if (cached) {
-                try {
-                  const cacheData = JSON.parse(cached);
-                  cacheData.balances = updated;
-                  localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-                } catch (error) {
-                  // Silent fail
+              // Update balance in cache
+              if (typeof window !== "undefined") {
+                const cacheKey = `walletTracker:wallets:${user.id}`;
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) {
+                  try {
+                    const cacheData = JSON.parse(cached);
+                    cacheData.balances = updated;
+                    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+                  } catch (error) {
+                    // Silent fail
+                  }
                 }
               }
-            }
 
-            return updated;
-          });
+              return updated;
+            });
+          } else {
+            console.warn(`[Trackers] Balance is null or NaN for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain})`);
+          }
+        } catch (error) {
+          console.error(`[Trackers] Error fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain}):`, error);
         }
       });
     } catch (error) {
@@ -819,6 +834,7 @@ export default function TrackersPage() {
     address: string,
     name: string,
     emoji?: string,
+    chain?: 'sol' | 'monad',
   ) => {
     if (isAtWalletLimit) {
       showWalletLimitToast();
@@ -826,8 +842,9 @@ export default function TrackersPage() {
     }
 
     try {
+      const walletChain = chain || 'monad';
       // Add to backend with notifications enabled by default
-      await addTrackedWallet(address, name, user?.id, emoji, true);
+      await addTrackedWallet(address, name, user?.id, emoji, true, walletChain, user?.bearerToken);
 
       // Save notification preference to localStorage
       if (typeof window !== "undefined") {
@@ -860,9 +877,9 @@ export default function TrackersPage() {
   const handleRemoveWallet = async (addressToRemove: string) => {
     try {
       if (addressToRemove === "all") {
-        // Remove all wallets
+        // Remove all wallets for the selected chain
         await Promise.all(
-          wallets.map((w) => removeTrackedWallet(w.address, user?.id)),
+          wallets.map((w) => removeTrackedWallet(w.address, user?.id, selectedChain, user?.bearerToken)),
         );
 
         // Clear all state
@@ -890,8 +907,10 @@ export default function TrackersPage() {
         // Refresh global watched wallets
         await refreshWatchedWallets();
       } else {
-        // Remove single wallet
-        await removeTrackedWallet(addressToRemove, user?.id);
+        // Remove single wallet - need to find the chain from watchedWallets
+        const wallet = watchedWallets.find(w => w.address === addressToRemove);
+        const walletChain = wallet?.chain || selectedChain;
+        await removeTrackedWallet(addressToRemove, user?.id, walletChain, user?.bearerToken);
 
         // Filter out trades from deleted wallet
         setCachedLiveTrades((prev) =>
@@ -965,6 +984,8 @@ export default function TrackersPage() {
           wallet.address,
           newState,
           wallet.ownerId || undefined,
+          wallet.chain || selectedChain,
+          user?.bearerToken,
         );
       });
 
@@ -1097,7 +1118,7 @@ export default function TrackersPage() {
   // Twitter functions
   const loadTwitterAccounts = async () => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.id);
+      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || '');
       setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
@@ -1107,7 +1128,7 @@ export default function TrackersPage() {
 
   const handleAddTwitterAccount = async (username: string) => {
     try {
-      await addTrackedTwitterAccount(username, user?.id);
+      await addTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
       setToast(`Added @${username}`);
       setTimeout(() => setToast(""), 3000);
@@ -1120,7 +1141,7 @@ export default function TrackersPage() {
 
   const handleRemoveTwitterAccount = async (username: string) => {
     try {
-      await removeTrackedTwitterAccount(username, user?.id);
+      await removeTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
       setToast(`Removed @${username}`);
       setTimeout(() => setToast(""), 3000);
@@ -1254,7 +1275,7 @@ export default function TrackersPage() {
             emoji: wallet.emoji || getRandomEmoji(),
           }));
 
-          await addTrackedWalletsBulk(bulkPayload, user?.id);
+          await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
           await ensureNotificationsEnabled(walletsToAdd);
 
           let successCount = walletsToAdd.length;
@@ -1305,7 +1326,7 @@ export default function TrackersPage() {
             {/* Tabs Section - Scrollable on mobile */}
             <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
               <button
-                className={`hover:text-[#f0f5f5]"} cursor-pointer text-sm font-light whitespace-nowrap text-[#f0f5f5] transition-colors sm:text-base lg:text-lg`}
+                className={`hover:text-[#f0f5f5]"} text-sm font-light whitespace-nowrap text-[#f0f5f5] transition-colors sm:text-base lg:text-lg`}
               >
                 Trackers
               </button>
@@ -2472,7 +2493,7 @@ export default function TrackersPage() {
               )}
 
               {/* RESIZE HANDLE (desktop only) - Hide when wallet section is hidden (Monad chain) */}
-              {!isMobile && showWalletSection && (
+              {!isMobile && (
                 <div
                   className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-emerald-400/10 lg:flex"
                   onMouseDown={() => setIsResizing(true)}
@@ -2489,12 +2510,6 @@ export default function TrackersPage() {
                     isMobile
                       ? {
                           maxHeight: "calc(100vh - 140px)",
-                        }
-                      : currentChain === "monad"
-                      ? {
-                          // Full width when wallet section is hidden (Monad chain)
-                          width: "100%",
-                          maxHeight: "calc(100vh - 160px)",
                         }
                       : {
                           width: `${sidebarWidth}px`,
@@ -2734,6 +2749,7 @@ export default function TrackersPage() {
           isOpen={showAddWalletModal}
           onClose={() => setShowAddWalletModal(false)}
           onAddWallet={handleAddWallet}
+          chain={selectedChain}
         />
         <ImportExportWalletModal
           mode={"import"}
@@ -2825,7 +2841,7 @@ export default function TrackersPage() {
                 emoji: wallet.emoji || getRandomEmoji(),
               }));
 
-              await addTrackedWalletsBulk(bulkPayload, user?.id);
+              await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
               await ensureNotificationsEnabled(walletsToAdd);
               successCount = walletsToAdd.length;
               processed = walletsToAdd.length;

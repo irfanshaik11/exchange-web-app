@@ -139,10 +139,10 @@ export function WalletTrackerProvider({
 
   // Load watched wallets
   const refreshWatchedWallets = async () => {
-    if (!user?.id) return;
+    if (!user?.bearerToken) return;
 
     try {
-      const wallets = await getTrackedWallets(user.id);
+      const wallets = await getTrackedWallets(user.bearerToken);
       setWatchedWallets(wallets);
     } catch (error) {
       console.error("Failed to fetch watched wallets:", error);

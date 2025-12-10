@@ -35,22 +35,22 @@ export default function DiscoverPage() {
   // CRITICAL: Initialize chain from router query immediately to avoid race conditions
   // This ensures we react to shallow routing changes immediately
   const [currentChain, setCurrentChain] = useState<string>(() => {
-    // Initialize from router query if available, otherwise default to 'sol'
+    // Initialize from router query if available, otherwise default to 'monad'
     if (typeof window !== 'undefined' && router.isReady) {
-      return (router.query.chain as string) || 'sol';
+      return (router.query.chain as string) || 'monad';
     }
     // Also check URL params directly for immediate access
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get('chain') || 'sol';
+      return urlParams.get('chain') || 'monad';
     }
-    return 'sol';
+    return 'monad';
   });
   
   // Sync chain state with router query - this handles both initial load and shallow routing updates
   useEffect(() => {
     if (!router.isReady) return;
-    const chainFromQuery = (router.query.chain as string) || 'sol';
+    const chainFromQuery = (router.query.chain as string) || 'monad';
     if (chainFromQuery !== currentChain) {
       console.log('[Discover] Chain changed from router:', currentChain, '->', chainFromQuery);
       setCurrentChain(chainFromQuery);

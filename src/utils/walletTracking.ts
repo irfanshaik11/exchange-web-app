@@ -7,6 +7,7 @@ export interface WatchWallet {
   address: string;
   walletName: string | null;
   emoji: string | null;
+  chain: 'sol' | 'monad';
   notificationsEnabled: boolean;
   createdAt: string;
 }
@@ -101,18 +102,32 @@ const WALLET_TRACKER_WS_URL = resolveWsUrl();
 // ===== API Functions =====
 
 // Get all tracked wallets
-export async function getTrackedWallets(userId?: string): Promise<WatchWallet[]> {
+export async function getTrackedWallets(authToken?: string, userId?: string, chain?: 'sol' | 'monad'): Promise<WatchWallet[]> {
   try {
-    const url = userId 
-      ? `${WALLET_TRACKER_API_URL}/api/watch?userId=${encodeURIComponent(userId)}`
-      : `${WALLET_TRACKER_API_URL}/api/watch`;
+    const params = new URLSearchParams();
+    if (userId) {
+      params.append('userId', userId);
+    }
+    if (chain) {
+      params.append('chain', chain);
+    }
+    
+    const url = `${WALLET_TRACKER_API_URL}/api/watch${params.toString() ? `?${params.toString()}` : ''}`;
     
     // Add 10 second timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const headers: HeadersInit = {};
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      
+      const response = await fetch(url, { 
+        signal: controller.signal,
+        headers
+      });
       clearTimeout(timeoutId);
       
       if (!response.ok) {
@@ -139,16 +154,32 @@ export async function getTrackedWallets(userId?: string): Promise<WatchWallet[]>
 }
 
 // Add a wallet to tracking
-export async function addTrackedWallet(address: string, name?: string, userId?: string, emoji?: string, notificationsEnabled: boolean = true): Promise<void> {
+export async function addTrackedWallet(
+  address: string, 
+  name?: string, 
+  userId?: string, 
+  emoji?: string, 
+  notificationsEnabled: boolean = true,
+  chain: 'sol' | 'monad' = 'sol',
+  authToken?: string
+): Promise<void> {
   try {
+    const headers: HeadersInit = { 
+      'Content-Type': 'application/json',
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ 
         wallet: address, 
         walletName: name || undefined,
         userId: userId || undefined,
-        emoji: emoji || undefined
+        emoji: emoji || undefined,
+        chain: chain || 'sol'
         // Note: notificationsEnabled is set via a separate API call below
       }),
     });
@@ -163,7 +194,7 @@ export async function addTrackedWallet(address: string, name?: string, userId?: 
     // Enable notifications if requested (separate API call)
     if (notificationsEnabled) {
       try {
-        await toggleWalletNotifications(address, true, userId);
+        await toggleWalletNotifications(address, true, userId, chain, authToken);
       } catch (notifError) {
         console.warn('Failed to enable notifications for wallet, but wallet was added successfully:', notifError);
         // Don't throw - wallet was added successfully, notification toggle can be done manually
@@ -194,7 +225,9 @@ type BulkWalletEntry = {
 
 export async function addTrackedWalletsBulk(
   wallets: BulkWalletEntry[],
-  userId?: string | number
+  userId?: string | number,
+  chain?: 'sol' | 'monad',
+  authToken?: string
 ): Promise<BulkWalletInsertResponse> {
   if (!wallets || wallets.length === 0) {
     return {
@@ -209,12 +242,20 @@ export async function addTrackedWalletsBulk(
   }
 
   try {
+    const headers: HeadersInit = { 
+      'Content-Type': 'application/json',
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/watch/bulk`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         wallets,
         ...(userId ? { userId } : {}),
+        ...(chain ? { chain } : { chain: 'sol' }),
       }),
     });
 
@@ -263,13 +304,24 @@ export async function getWalletsLastActive(wallets: string[]): Promise<WalletLas
 }
 
 // Remove a wallet from tracking
-export async function removeTrackedWallet(address: string, userId?: string): Promise<void> {
+export async function removeTrackedWallet(address: string, userId?: string, chain?: 'sol' | 'monad', authToken?: string): Promise<void> {
   try {
-    const url = userId
-      ? `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}?userId=${encodeURIComponent(userId)}`
-      : `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}`;
+    const params = new URLSearchParams();
+    if (userId) {
+      params.append('userId', userId);
+    }
+    if (chain) {
+      params.append('chain', chain);
+    }
+    
+    const url = `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}${params.toString() ? `?${params.toString()}` : ''}`;
+    const headers: HeadersInit = {};
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
     const response = await fetch(url, {
       method: 'DELETE',
+      headers
     });
     
     const body = await response.json().catch(() => ({}));
@@ -320,19 +372,35 @@ export async function getWalletSnapshots(address: string): Promise<WalletBalance
 }
 
 // Toggle notifications for a wallet
+// SECURITY FIX: Now requires authentication token - userId parameter is ignored by backend
 export async function toggleWalletNotifications(
   address: string, 
   enabled: boolean, 
-  userId?: string
+  userId?: string,
+  chain?: 'sol' | 'monad',
+  authToken?: string
 ): Promise<void> {
   try {
-    const url = userId
-      ? `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}/notifications?userId=${encodeURIComponent(userId)}`
-      : `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}/notifications`;
+    const params = new URLSearchParams();
+    if (userId) {
+      params.append('userId', userId);
+    }
+    if (chain) {
+      params.append('chain', chain);
+    }
+    
+    const url = `${WALLET_TRACKER_API_URL}/api/watch/${encodeURIComponent(address)}/notifications${params.toString() ? `?${params.toString()}` : ''}`;
+    
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
     
     const response = await fetch(url, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ enabled }),
     });
     
@@ -346,28 +414,38 @@ export async function toggleWalletNotifications(
   }
 }
 
-// Get SOL balance for a wallet (via backend to keep RPC key secure)
-export async function getWalletSolBalance(address: string): Promise<number | null> {
+// Get balance for a wallet (supports both SOL and MONAD via backend to keep RPC key secure)
+export async function getWalletBalance(address: string, chain: 'sol' | 'monad' = 'sol'): Promise<number | null> {
   try {
-    const response = await fetch(
-      `${WALLET_TRACKER_API_URL}/api/wallet-balance/${encodeURIComponent(address)}`
-    );
+    const url = `${WALLET_TRACKER_API_URL}/api/wallet-balance/${encodeURIComponent(address)}?chain=${chain}`;
+    console.log(`[getWalletBalance] Fetching ${chain} balance for ${address.slice(0, 8)}... from ${url}`);
+    const response = await fetch(url);
     
     if (!response.ok) {
-      throw new Error('Failed to fetch wallet balance');
+      const errorData = await response.json().catch(() => ({}));
+      console.error(`[getWalletBalance] API error for ${chain} wallet ${address.slice(0, 8)}...:`, response.status, errorData);
+      throw new Error(errorData.error || 'Failed to fetch wallet balance');
     }
     
     const data = await response.json();
+    console.log(`[getWalletBalance] Response for ${chain} wallet ${address.slice(0, 8)}...:`, data);
     
     if (data.ok && typeof data.balance === 'number') {
+      console.log(`[getWalletBalance] Successfully got ${chain} balance: ${data.balance}`);
       return data.balance;
     }
     
+    console.warn(`[getWalletBalance] Invalid response format for ${chain} wallet ${address.slice(0, 8)}...:`, data);
     return null;
   } catch (error) {
-    console.error('Error fetching SOL balance:', error);
+    console.error(`[getWalletBalance] Error fetching ${chain} balance for ${address.slice(0, 8)}...:`, error);
     return null;
   }
+}
+
+// Legacy function name for backward compatibility
+export async function getWalletSolBalance(address: string): Promise<number | null> {
+  return getWalletBalance(address, 'sol');
 }
 
 // Transaction interface for wallet activity

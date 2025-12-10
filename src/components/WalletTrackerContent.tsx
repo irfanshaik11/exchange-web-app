@@ -123,7 +123,7 @@ export default function WalletTrackerContent() {
     if (!user?.id) return;
 
     try {
-      const trackedWallets = await getTrackedWallets(user.id);
+      const trackedWallets = await getTrackedWallets(user.bearerToken, user.id);
       const walletList: Wallet[] = trackedWallets.map((w) => ({
         address: w.address,
         name: w.walletName || "Unnamed Wallet",
@@ -205,13 +205,13 @@ export default function WalletTrackerContent() {
       if (address === "all") {
         for (const wallet of watchedWallets) {
           try {
-            await removeTrackedWallet(wallet.address, user.id);
+            await removeTrackedWallet(wallet.address, user.id, undefined, user.bearerToken);
           } catch (error) {
             console.error(`Failed to remove wallet ${wallet.address}:`, error);
           }
         }
       } else {
-        await removeTrackedWallet(address, user.id);
+        await removeTrackedWallet(address, user.id, undefined, user.bearerToken);
       }
 
       await refreshWatchedWallets();
@@ -225,10 +225,10 @@ export default function WalletTrackerContent() {
     setShowAddWalletModal(true);
   };
 
-  const handleAddWallet = async (address: string, name: string, emoji?: string) => {
+  const handleAddWallet = async (address: string, name: string, emoji?: string, chain?: 'sol' | 'monad') => {
     try {
       // Add to backend with notifications enabled by default
-      await addTrackedWallet(address, name, user?.id, emoji, true);
+      await addTrackedWallet(address, name, user?.id, emoji, true, chain || 'sol', user?.bearerToken);
       
       // Save notification preference to localStorage
       if (typeof window !== 'undefined') {
@@ -271,7 +271,7 @@ export default function WalletTrackerContent() {
     try {
       const { toggleWalletNotifications } = await import("~/utils/walletTracking");
       for (const wallet of watchedWallets) {
-        await toggleWalletNotifications(wallet.address, !allEnabled, user.id);
+        await toggleWalletNotifications(wallet.address, !allEnabled, user.id, undefined, user.bearerToken);
       }
       await refreshWatchedWallets();
     } catch (error) {
@@ -873,6 +873,7 @@ export default function WalletTrackerContent() {
           refreshWatchedWallets();
         }}
         onAddWallet={handleAddWallet}
+        chain="sol"
       />
       <ImportExportWalletModal
         mode="import"
@@ -886,4 +887,3 @@ export default function WalletTrackerContent() {
     </div>
   );
 }
-

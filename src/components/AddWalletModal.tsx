@@ -1,41 +1,58 @@
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { isValidSolanaAddress } from '~/utils/verifySolanaAddress';
+import { isValidMonadAddress } from '~/utils/verifyMonadAddress';
 
 const EmojiPicker = dynamic(() => import('emoji-picker-react'), { ssr: false });
+
+type Chain = 'sol' | 'monad';
 
 type AddWalletModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  onAddWallet: (address: string, name: string, emoji?: string) => void;
+  onAddWallet: (address: string, name: string, emoji?: string, chain?: Chain) => void;
+  chain: Chain; // Chain is passed from parent (from Header via router query)
 };
 
-const AddWalletModal: React.FC<AddWalletModalProps> = ({ isOpen, onClose, onAddWallet }) => {
+const AddWalletModal: React.FC<AddWalletModalProps> = ({ isOpen, onClose, onAddWallet, chain }) => {
   const [walletAddress, setWalletAddress] = useState('');
   const [walletName, setWalletName] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState('👻');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [addressError, setAddressError] = useState('');
+  const selectedChain = chain; // Use chain from props
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate Solana address
+    // Validate address based on selected chain
     if (!walletAddress.trim()) {
       setAddressError('Wallet address is required');
       return;
     }
     
-    if (!isValidSolanaAddress(walletAddress.trim())) {
-      setAddressError('Invalid Solana wallet address');
-      return;
+    const trimmedAddress = walletAddress.trim();
+    let isValid = false;
+    
+    if (selectedChain === 'sol') {
+      isValid = isValidSolanaAddress(trimmedAddress);
+      if (!isValid) {
+        setAddressError('Invalid Solana wallet address');
+        return;
+      }
+    } else if (selectedChain === 'monad') {
+      isValid = isValidMonadAddress(trimmedAddress);
+      if (!isValid) {
+        setAddressError('Invalid Monad wallet address (must be 0x followed by 40 hex characters)');
+        return;
+      }
     }
     
     // Clear error and proceed
     setAddressError('');
-    onAddWallet(walletAddress.trim(), walletName, selectedEmoji);
+    onAddWallet(trimmedAddress, walletName, selectedEmoji, selectedChain);
     setWalletAddress('');
     setWalletName('');
     setSelectedEmoji('👻');
@@ -54,8 +71,13 @@ const AddWalletModal: React.FC<AddWalletModalProps> = ({ isOpen, onClose, onAddW
 
   const handleAddressBlur = () => {
     // Validate on blur if there's a value
-    if (walletAddress.trim() && !isValidSolanaAddress(walletAddress.trim())) {
-      setAddressError('Invalid Solana wallet address');
+    if (walletAddress.trim()) {
+      const trimmedAddress = walletAddress.trim();
+      if (selectedChain === 'sol' && !isValidSolanaAddress(trimmedAddress)) {
+        setAddressError('Invalid Solana wallet address');
+      } else if (selectedChain === 'monad' && !isValidMonadAddress(trimmedAddress)) {
+        setAddressError('Invalid Monad wallet address (must be 0x followed by 40 hex characters)');
+      }
     }
   };
 
@@ -75,7 +97,9 @@ const AddWalletModal: React.FC<AddWalletModalProps> = ({ isOpen, onClose, onAddW
         </div>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label htmlFor="walletAddress" className="block text-sm font-medium text-neutral-400 mb-1">Wallet Address</label>
+            <label htmlFor="walletAddress" className="block text-sm font-medium text-neutral-400 mb-1">
+              {selectedChain === 'sol' ? 'Solana' : 'Monad'} Wallet Address
+            </label>
             <input
               type="text"
               id="walletAddress"
@@ -84,7 +108,7 @@ const AddWalletModal: React.FC<AddWalletModalProps> = ({ isOpen, onClose, onAddW
                   ? 'border-red-500 focus:border-red-500' 
                   : 'border-neutral-700 focus:border-emerald-500'
               }`}
-              placeholder="Enter wallet address"
+              placeholder={selectedChain === 'sol' ? 'Enter Solana wallet address' : 'Enter Monad wallet address (0x...)'}
               value={walletAddress}
               onChange={handleAddressChange}
               onBlur={handleAddressBlur}
