@@ -515,7 +515,7 @@ function TokenMetrics({
 
   // Real data from token
   const rawMetrics = {
-    users: token.total_holders || token.unique_wallets_24h || 0,
+    users: token.total_holders || token.unique_wallets_24h || (token as any).unique_traders || 0,
     trades: token.unique_wallets_5m || token.unique_wallets_1h || 0,
     achievements: 0,
     rank: "0/1",
@@ -2285,15 +2285,27 @@ function MonadTable({
 
   const handlePendingFilterChange = (updater: (prev: any) => any) => {
     setPendingFilters(updater);
-    setHasPendingChanges(true);
   };
 
-  // Update pending changes when filters change
-  useEffect(() => {
-    setHasPendingChanges(
-      JSON.stringify(filters) !== JSON.stringify(pendingFilters),
-    );
+  // Update pending changes when filters change - use useMemo for comparison
+  const hasPendingChangesComputed = useMemo(() => {
+    const filtersStr = JSON.stringify(filters);
+    const pendingStr = JSON.stringify(pendingFilters);
+    const hasChanges = filtersStr !== pendingStr;
+    // Debug log for troubleshooting
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[MonadTable] Filter comparison:', {
+        current: filters.protocols,
+        pending: pendingFilters.protocols,
+        hasChanges,
+      });
+    }
+    return hasChanges;
   }, [filters, pendingFilters]);
+
+  useEffect(() => {
+    setHasPendingChanges(hasPendingChangesComputed);
+  }, [hasPendingChangesComputed]);
 
   const router = useRouter();
 
@@ -2722,18 +2734,242 @@ function MonadTable({
       }
     }
 
-    // COMMENTED OUT: Filter out tokens with liquidity_usd === 0 (for all columns)
-    // filtered = filtered.filter(token => {
-    //   const liquidityUsd = (token as any).liquidity_usd;
-    //   // Only filter out if liquidity_usd is explicitly 0 (not null/undefined)
-    //   if (liquidityUsd === 0 || liquidityUsd === '0') {
-    //     return false;
-    //   }
-    //   return true;
-    // });
+    // Apply filters for all metrics
+    // Holders filter - uses unique_traders from API
+    if (filters.holdersMin) {
+      const minHolders = parseFloat(filters.holdersMin);
+      if (!isNaN(minHolders)) {
+        filtered = filtered.filter((token) => {
+          const holders = (token as any).unique_traders || 0;
+          return holders >= minHolders;
+        });
+      }
+    }
+    if (filters.holdersMax) {
+      const maxHolders = parseFloat(filters.holdersMax);
+      if (!isNaN(maxHolders)) {
+        filtered = filtered.filter((token) => {
+          const holders = (token as any).unique_traders || 0;
+          return holders <= maxHolders;
+        });
+      }
+    }
 
-    // NO FE filtering at all - skip all other filters (quote tokens, dexPaid, caEndsInPump, age, market cap, volume, liquidity, etc.)
-    // Return tokens exactly as received from Monad token service (only keyword search applied if user initiated)
+    // Dev Bought Count filter - uses dev_bought_count from API
+    if (filters.proTradersMin) {
+      const minDevBought = parseFloat(filters.proTradersMin);
+      if (!isNaN(minDevBought)) {
+        filtered = filtered.filter((token) => {
+          const devBought = (token as any).dev_bought_count || 0;
+          return devBought >= minDevBought;
+        });
+      }
+    }
+    if (filters.proTradersMax) {
+      const maxDevBought = parseFloat(filters.proTradersMax);
+      if (!isNaN(maxDevBought)) {
+        filtered = filtered.filter((token) => {
+          const devBought = (token as any).dev_bought_count || 0;
+          return devBought <= maxDevBought;
+        });
+      }
+    }
+
+    // Dev Sold Count filter - uses dev_sold_count from API
+    if (filters.devMigrationsMin) {
+      const minDevSold = parseFloat(filters.devMigrationsMin);
+      if (!isNaN(minDevSold)) {
+        filtered = filtered.filter((token) => {
+          const devSold = (token as any).dev_sold_count || 0;
+          return devSold >= minDevSold;
+        });
+      }
+    }
+    if (filters.devMigrationsMax) {
+      const maxDevSold = parseFloat(filters.devMigrationsMax);
+      if (!isNaN(maxDevSold)) {
+        filtered = filtered.filter((token) => {
+          const devSold = (token as any).dev_sold_count || 0;
+          return devSold <= maxDevSold;
+        });
+      }
+    }
+
+
+    // Age filter
+    if (filters.minAge) {
+      const minAge = parseFloat(filters.minAge);
+      if (!isNaN(minAge)) {
+        const ageUnit = filters.ageUnit || "m";
+        const multiplier = ageUnit === "h" ? 3600000 : ageUnit === "d" ? 86400000 : 60000; // h=hours, d=days, m=minutes
+        const minAgeMs = minAge * multiplier;
+        filtered = filtered.filter((token) => {
+          const tokenTime = (token as any).created_at || (token as any).launch_time || "";
+          if (!tokenTime) return false;
+          const tokenAge = Date.now() - new Date(tokenTime).getTime();
+          return tokenAge >= minAgeMs;
+        });
+      }
+    }
+    if (filters.maxAge) {
+      const maxAge = parseFloat(filters.maxAge);
+      if (!isNaN(maxAge)) {
+        const ageUnit = filters.ageUnit || "m";
+        const multiplier = ageUnit === "h" ? 3600000 : ageUnit === "d" ? 86400000 : 60000;
+        const maxAgeMs = maxAge * multiplier;
+        filtered = filtered.filter((token) => {
+          const tokenTime = (token as any).created_at || (token as any).launch_time || "";
+          if (!tokenTime) return false;
+          const tokenAge = Date.now() - new Date(tokenTime).getTime();
+          return tokenAge <= maxAgeMs;
+        });
+      }
+    }
+
+    // Liquidity filter
+    if (filters.minLiquidity) {
+      const minLiquidity = parseFloat(filters.minLiquidity);
+      if (!isNaN(minLiquidity)) {
+        filtered = filtered.filter((token) => {
+          const liquidity = (token as any).liquidity_usd || (token as any).total_liquidity_usd || 0;
+          return liquidity >= minLiquidity;
+        });
+      }
+    }
+    if (filters.maxLiquidity) {
+      const maxLiquidity = parseFloat(filters.maxLiquidity);
+      if (!isNaN(maxLiquidity)) {
+        filtered = filtered.filter((token) => {
+          const liquidity = (token as any).liquidity_usd || (token as any).total_liquidity_usd || 0;
+          return liquidity <= maxLiquidity;
+        });
+      }
+    }
+
+    // Volume filter - uses volume_24h_usd from API
+    if (filters.minVolume) {
+      const minVolume = parseFloat(filters.minVolume);
+      if (!isNaN(minVolume)) {
+        filtered = filtered.filter((token) => {
+          const volume = (token as any).volume_24h_usd || 0;
+          return volume >= minVolume;
+        });
+      }
+    }
+    if (filters.maxVolume) {
+      const maxVolume = parseFloat(filters.maxVolume);
+      if (!isNaN(maxVolume)) {
+        filtered = filtered.filter((token) => {
+          const volume = (token as any).volume_24h_usd || 0;
+          return volume <= maxVolume;
+        });
+      }
+    }
+
+    // Market Cap filter
+    if (filters.minMarketCap) {
+      const minMarketCap = parseFloat(filters.minMarketCap);
+      if (!isNaN(minMarketCap)) {
+        filtered = filtered.filter((token) => {
+          const marketCap = (token as any).fully_diluted_value || (token as any).market_cap_usd || 0;
+          return marketCap >= minMarketCap;
+        });
+      }
+    }
+    if (filters.maxMarketCap) {
+      const maxMarketCap = parseFloat(filters.maxMarketCap);
+      if (!isNaN(maxMarketCap)) {
+        filtered = filtered.filter((token) => {
+          const marketCap = (token as any).fully_diluted_value || (token as any).market_cap_usd || 0;
+          return marketCap <= maxMarketCap;
+        });
+      }
+    }
+
+    // Bonding Curve % filter
+    if (filters.bCurvePercentMin) {
+      const minBonding = parseFloat(filters.bCurvePercentMin);
+      if (!isNaN(minBonding)) {
+        filtered = filtered.filter((token) => {
+          const bonding = (token as any).bonding_curve_progress || (token as any).bonding_pct || 0;
+          return bonding >= minBonding;
+        });
+      }
+    }
+    if (filters.bCurvePercentMax) {
+      const maxBonding = parseFloat(filters.bCurvePercentMax);
+      if (!isNaN(maxBonding)) {
+        filtered = filtered.filter((token) => {
+          const bonding = (token as any).bonding_curve_progress || (token as any).bonding_pct || 0;
+          return bonding <= maxBonding;
+        });
+      }
+    }
+
+
+    // Transactions filter
+    if (filters.txnsMin) {
+      const minTxns = parseFloat(filters.txnsMin);
+      if (!isNaN(minTxns)) {
+        filtered = filtered.filter((token) => {
+          const txns = (token as any).total_transactions || 
+                       ((token as any).total_buys || 0) + ((token as any).total_sells || 0) ||
+                       ((token as any).total_buys_24h || 0) + ((token as any).total_sells_24h || 0) || 0;
+          return txns >= minTxns;
+        });
+      }
+    }
+    if (filters.txnsMax) {
+      const maxTxns = parseFloat(filters.txnsMax);
+      if (!isNaN(maxTxns)) {
+        filtered = filtered.filter((token) => {
+          const txns = (token as any).total_transactions || 
+                       ((token as any).total_buys || 0) + ((token as any).total_sells || 0) ||
+                       ((token as any).total_buys_24h || 0) + ((token as any).total_sells_24h || 0) || 0;
+          return txns <= maxTxns;
+        });
+      }
+    }
+
+    // Num Buys filter
+    if (filters.numBuysMin) {
+      const minBuys = parseFloat(filters.numBuysMin);
+      if (!isNaN(minBuys)) {
+        filtered = filtered.filter((token) => {
+          const buys = (token as any).total_buys || (token as any).total_buys_24h || 0;
+          return buys >= minBuys;
+        });
+      }
+    }
+    if (filters.numBuysMax) {
+      const maxBuys = parseFloat(filters.numBuysMax);
+      if (!isNaN(maxBuys)) {
+        filtered = filtered.filter((token) => {
+          const buys = (token as any).total_buys || (token as any).total_buys_24h || 0;
+          return buys <= maxBuys;
+        });
+      }
+    }
+
+    // Num Sells filter
+    if (filters.numSellsMin) {
+      const minSells = parseFloat(filters.numSellsMin);
+      if (!isNaN(minSells)) {
+        filtered = filtered.filter((token) => {
+          const sells = (token as any).total_sells || (token as any).total_sells_24h || 0;
+          return sells >= minSells;
+        });
+      }
+    }
+    if (filters.numSellsMax) {
+      const maxSells = parseFloat(filters.numSellsMax);
+      if (!isNaN(maxSells)) {
+        filtered = filtered.filter((token) => {
+          const sells = (token as any).total_sells || (token as any).total_sells_24h || 0;
+          return sells <= maxSells;
+        });
+      }
+    }
 
     // Simple sort by created_at (newest first) - NO other sorting or filtering
     filtered.sort((a, b) => {
@@ -2753,6 +2989,31 @@ function MonadTable({
     filters.protocols,
     filters.searchKeywords,
     filters.excludeKeywords,
+    filters.holdersMin,
+    filters.holdersMax,
+    filters.proTradersMin,
+    filters.proTradersMax,
+    filters.devMigrationsMin,
+    filters.devMigrationsMax,
+    filters.devPairsCreatedMin,
+    filters.devPairsCreatedMax,
+    filters.minAge,
+    filters.maxAge,
+    filters.ageUnit,
+    filters.minLiquidity,
+    filters.maxLiquidity,
+    filters.minVolume,
+    filters.maxVolume,
+    filters.minMarketCap,
+    filters.maxMarketCap,
+    filters.bCurvePercentMin,
+    filters.bCurvePercentMax,
+    filters.txnsMin,
+    filters.txnsMax,
+    filters.numBuysMin,
+    filters.numBuysMax,
+    filters.numSellsMin,
+    filters.numSellsMax,
   ]);
 
   // Memoize token rendering to prevent unnecessary re-renders
@@ -3303,12 +3564,12 @@ function MonadTable({
               <>
                 {/* Backdrop */}
                 <div
-                  className="fixed inset-0 z-40 bg-[rgba(0,0,0,0.3)]"
+                  className="fixed inset-0 z-[99998] bg-[rgba(0,0,0,0.3)]"
                   onClick={() => setShowFilters(false)}
                 />
                 {/* Modal */}
                 <div
-                  className="filter-modal fixed top-1/2 left-1/2 z-50 max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform overflow-y-auto rounded-lg border shadow-xl"
+                  className="filter-modal fixed top-1/2 left-1/2 z-[99999] max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform overflow-y-auto rounded-lg border shadow-xl"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -3445,35 +3706,55 @@ function MonadTable({
                         >
                           Protocols
                         </h4>
-                        <button
-                          className="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all duration-300 ease-out"
-                          style={{
-                            backgroundColor: AX.aiBlue,
-                            color: "#000000",
-                            borderRadius: "20px",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = "#2563eb";
-                            e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
-                            e.currentTarget.style.transform = "scale(1.05)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = AX.aiBlue;
-                            e.currentTarget.style.boxShadow = "none";
-                            e.currentTarget.style.transform = "scale(1)";
-                          }}
-                          onClick={() => {
-                            // Simply revert to ['nad.fun'] - same as default state, no API call needed
-                            handlePendingFilterChange((prev) => {
-                              return {
-                                ...prev,
-                                protocols: ["nad.fun"],
-                              };
-                            });
-                          }}
-                        >
-                          Select All
-                        </button>
+                        {(() => {
+                          const allProtocols = protocols.map(p => p.name);
+                          const allSelected = allProtocols.length > 0 && allProtocols.every(p => pendingFilters.protocols.includes(p));
+                          const noneSelected = pendingFilters.protocols.length === 0;
+                          
+                          return (
+                            <button
+                              className="cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition-all duration-300 ease-out"
+                              style={{
+                                backgroundColor: AX.aiBlue,
+                                color: "#000000",
+                                borderRadius: "20px",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = "#2563eb";
+                                e.currentTarget.style.boxShadow = `0 0 8px ${AX.glowBlue}`;
+                                e.currentTarget.style.transform = "scale(1.05)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = AX.aiBlue;
+                                e.currentTarget.style.boxShadow = "none";
+                                e.currentTarget.style.transform = "scale(1)";
+                              }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (allSelected) {
+                                  // Deselect all protocols
+                                  handlePendingFilterChange((prev) => {
+                                    return {
+                                      ...prev,
+                                      protocols: [],
+                                    };
+                                  });
+                                } else {
+                                  // Select all protocols
+                                  handlePendingFilterChange((prev) => {
+                                    return {
+                                      ...prev,
+                                      protocols: [...allProtocols],
+                                    };
+                                  });
+                                }
+                              }}
+                            >
+                              {allSelected ? "Deselect All" : "Select All"}
+                            </button>
+                          );
+                        })()}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {protocols.map((protocol) => (
@@ -3549,26 +3830,17 @@ function MonadTable({
                                 const currentProtocols = prev.protocols;
                                 const clickedProtocol = protocol.name;
 
-                                // If clicking "All", clear all other protocols
-                                if (clickedProtocol === "All") {
-                                  return { ...prev, protocols: ["nad.fun"] };
-                                }
-
                                 // If clicking a specific protocol
                                 if (
                                   currentProtocols.includes(clickedProtocol)
                                 ) {
-                                  // Deselecting a protocol
+                                  // Deselecting a protocol - allow empty selection
                                   const remaining = currentProtocols.filter(
                                     (p) => p !== clickedProtocol,
                                   );
-                                  // If no protocols left, default to nad.fun
                                   return {
                                     ...prev,
-                                    protocols:
-                                      remaining.length === 0
-                                        ? ["nad.fun"]
-                                        : remaining,
+                                    protocols: remaining,
                                   };
                                 } else {
                                   // Selecting a new protocol - add it to the list
@@ -4039,13 +4311,13 @@ function MonadTable({
                           </div>
                         </div>
 
-                        {/* Pro Traders */}
+                        {/* Dev Bought Count */}
                         <div>
                           <label
                             className="mb-2 block text-sm font-medium"
                             style={{ color: AX.text }}
                           >
-                            Pro Traders
+                            Dev Bought Count
                           </label>
                           <div className="flex gap-1">
                             <input
@@ -4102,13 +4374,13 @@ function MonadTable({
                             />
                           </div>
                         </div>
-                        {/* Dev Migrations */}
+                        {/* Dev Sold Count */}
                         <div>
                           <label
                             className="mb-2 block text-sm font-medium"
                             style={{ color: AX.text }}
                           >
-                            Dev Migrations
+                            Dev Sold Count
                           </label>
                           <div className="flex gap-1">
                             <input
@@ -4145,69 +4417,6 @@ function MonadTable({
                                 handlePendingFilterChange((prev) => ({
                                   ...prev,
                                   devMigrationsMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {/* Dev Pairs Created */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Dev Pairs Created
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.devPairsCreatedMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  devPairsCreatedMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.devPairsCreatedMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  devPairsCreatedMax: e.target.value,
                                 }))
                               }
                               className="flex-1 rounded border px-3 py-2 text-sm"
@@ -4613,70 +4822,6 @@ function MonadTable({
                             />
                           </div>
                         </div>
-                        {/* Global Fees Paid (SOL) */}
-                        <div>
-                          <label
-                            className="mb-2 block text-sm font-medium"
-                            style={{ color: AX.text }}
-                          >
-                            Global Fees Paid (SOL)
-                          </label>
-                          <div className="flex gap-1">
-                            <input
-                              type="number"
-                              placeholder="Min"
-                              value={pendingFilters.globalFeesPaidMin}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  globalFeesPaidMin: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                            <input
-                              type="number"
-                              placeholder="Max"
-                              value={pendingFilters.globalFeesPaidMax}
-                              onChange={(e) =>
-                                handlePendingFilterChange((prev) => ({
-                                  ...prev,
-                                  globalFeesPaidMax: e.target.value,
-                                }))
-                              }
-                              className="flex-1 rounded border px-3 py-2 text-sm"
-                              style={{
-                                backgroundColor: AX.surface,
-                                borderColor: AX.border,
-                                color: AX.text,
-                                WebkitAppearance: "none",
-                                MozAppearance: "textfield",
-                                outline: "none",
-                                boxShadow: "none",
-                              }}
-                              onFocus={(e) => {
-                                e.target.style.outline = "none";
-                                e.target.style.boxShadow = "none";
-                                e.target.style.borderColor = AX.border;
-                              }}
-                            />
-                          </div>
-                        </div>
-
                         {/* Txns */}
                         <div>
                           <label
@@ -6172,6 +6317,7 @@ function MonadTable({
                                   const holders =
                                     token.total_holders ||
                                     token.unique_wallets_24h ||
+                                    (token as any).unique_traders ||
                                     0;
                                   if (holders >= 1e9)
                                     return `${(holders / 1e9).toFixed(1)}B`;
