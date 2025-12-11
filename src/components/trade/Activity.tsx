@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { formatSmartNumber, formatMarketCap } from '~/utils/db';
+import { formatSmartNumber, formatMarketCap, formatSmallPrice } from '~/utils/db';
 import type { TradeRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
 import FastImage from '../FastImage';
@@ -620,7 +620,7 @@ const Activity: React.FC<ActivityProps> = ({
                 }
               }
 
-              const formattedAmount = amountValue && amountValue > 0 ? `$${formatSmartNumber(amountValue)}` : 'N/A';
+              const formattedAmount = amountValue && amountValue > 0 ? `$${formatSmallPrice(amountValue)}` : 'N/A';
               
               const explorerUrl = trade.transactionHash
                 ? ((trade.blockchain || '').toLowerCase() === 'monad'
