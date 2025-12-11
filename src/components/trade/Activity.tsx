@@ -325,7 +325,12 @@ const Activity: React.FC<ActivityProps> = ({
           >
             <div className="space-y-0 pb-12">
             {
-              trades.map((trade, idx) => {
+              [...trades].sort((a, b) => {
+                // Sort by createdAt timestamp (newest first)
+                const aTime = new Date(a.createdAt).getTime();
+                const bTime = new Date(b.createdAt).getTime();
+                return bTime - aTime; // Descending order (newest first)
+              }).map((trade, idx) => {
               const handleRowClick = () => {
                 const navigateAddress = trade.originalPairAddress || trade.pairAddress || trade.tokenAddress;
                 const isMonadTrade =

@@ -428,8 +428,7 @@ export default function PortfolioPage() {
           const filteredActivity = Array.isArray(activity)
             ? activity.filter(isTradeOnCurrentChain)
             : [];
-          // Reverse array so newest trades appear at the top
-          setTradeActivity(filteredActivity.reverse());
+          setTradeActivity(filteredActivity);
         } catch (error) {
           console.error("Failed to fetch trade activity:", error);
           setTradeActivity([]);
@@ -591,7 +590,8 @@ export default function PortfolioPage() {
 
   const filteredTop100Positions = useMemo(() => {
     if (!searchQuery.trim()) {
-      return top100Positions;
+      // Reverse so newest positions appear at the top
+      return [...top100Positions].reverse();
     }
     const query = searchQuery.toLowerCase().trim();
     return top100Positions.filter((pos) => {
