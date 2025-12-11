@@ -580,7 +580,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         window.dispatchEvent(new Event("referral-access-reset"));
       }
 
-      router.push("/login").catch((err) =>
+      router.push("/").catch((err) =>
         console.warn("[logout] Failed to navigate to login", err)
       );
     };
