@@ -546,7 +546,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       align="center"
       className={`relative w-[460px] max-w-[94vw] overflow-hidden rounded-[28px] border border-white/5 bg-[#0c0f18]/95 p-8 pt-12 shadow-[0_48px_160px_rgba(12,20,33,0.6)] backdrop-blur-xl text-neutral-100 ${wiggle ? ' wiggle' : ''}`}
       disableClickOutside={forceLogin}
-      overlayClassName="bg-[radial-gradient(circle_at_22%_18%,rgba(16,185,129,0.18),transparent_62%),radial-gradient(circle_at_78%_20%,rgba(59,130,246,0.16),transparent_58%),radial-gradient(circle_at_center,rgba(12,18,32,0.92),rgba(6,8,12,0.96))] backdrop-blur-[18px]"
+      overlayClassName="bg-[radial-gradient(circle_at_22%_18%,rgba(16,185,129,0.02),transparent_62%),radial-gradient(circle_at_78%_20%,rgba(59,130,246,0.02),transparent_58%),radial-gradient(circle_at_center,rgba(12,18,32,0.05),rgba(6,8,12,0.08))] !backdrop-blur-[2px]"
     >
       <div className="pointer-events-none absolute -inset-14 -z-10 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.25),transparent_55%),radial-gradient(circle_at_bottom_right,rgba(110,231,183,0.12),transparent_55%),radial-gradient(circle_at_top_right,rgba(129,140,248,0.2),transparent_55%)] opacity-80 blur-[90px]" />
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(148,163,184,0.12),transparent_70%)]" />
@@ -738,7 +738,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
                 type="button"
                 className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
                   metaMaskWallet.isConnected
-                    ? 'bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50'
+                    ? 'bg-transparent hover:bg-neutral-700/30 border border-green-600/50 hover:border-green-500/50'
                     : 'bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50'
                 } ${metamaskLoading || metaMaskWallet.connecting ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
@@ -775,7 +775,7 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
                 type="button"
                 className={`w-full flex items-center justify-between p-3 rounded-lg transition-all duration-200 ${
                   phantomWallet.isConnected 
-                    ? 'bg-green-700/50 hover:bg-green-600/50 border border-green-600/50 hover:border-green-500/50' 
+                    ? 'bg-transparent hover:bg-neutral-700/30 border border-green-600/50 hover:border-green-500/50' 
                     : 'bg-neutral-700/50 hover:bg-neutral-600/50 border border-neutral-600/50 hover:border-neutral-500/50'
                 } ${phantomLoading || phantomWallet.connecting ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
