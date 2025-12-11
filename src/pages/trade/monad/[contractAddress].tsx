@@ -350,16 +350,16 @@ export default function MonadTradePage() {
       const ageInHours = diffMs / (1000 * 60 * 60);
       const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-      // Use 1s candles for recent tokens, scale up as token ages
+      // Always use 1s candles by default, timeframe scales with token age
       if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
       if (ageInHours < 6) return { interval: "1s", timeframe: "4h", optimize: false } as const;
-      if (ageInDays < 1) return { interval: "1m", timeframe: "24h", optimize: false } as const;
-      if (ageInDays < 7) return { interval: "5m", timeframe: "7d", optimize: false } as const;
-      if (ageInDays < 30) return { interval: "15m", timeframe: "30d", optimize: false } as const;
-      if (ageInDays < 90) return { interval: "1h", timeframe: "90d", optimize: true } as const;
-      if (ageInDays < 180) return { interval: "4h", timeframe: "180d", optimize: true } as const;
-      if (ageInDays < 365) return { interval: "1d", timeframe: "365d", optimize: true } as const;
-      return { interval: "1d", timeframe: "365d", optimize: true } as const;
+      if (ageInDays < 1) return { interval: "1s", timeframe: "24h", optimize: false } as const;
+      if (ageInDays < 7) return { interval: "1s", timeframe: "7d", optimize: false } as const;
+      if (ageInDays < 30) return { interval: "1s", timeframe: "30d", optimize: false } as const;
+      if (ageInDays < 90) return { interval: "1s", timeframe: "90d", optimize: true } as const;
+      if (ageInDays < 180) return { interval: "1s", timeframe: "180d", optimize: true } as const;
+      if (ageInDays < 365) return { interval: "1s", timeframe: "365d", optimize: true } as const;
+      return { interval: "1s", timeframe: "365d", optimize: true } as const;
     }
   );
 
