@@ -164,8 +164,10 @@ const Positions: React.FC<PositionsProps> = ({
     if (userId) {
       try {
         const updatedPositions = await getActivePositionsByUser(userId, blockchain);
-        setPositions(updatedPositions);
-        onPositionsChange(updatedPositions);
+        // Reverse so newest positions appear at the top
+        const reversedPositions = [...updatedPositions].reverse();
+        setPositions(reversedPositions);
+        onPositionsChange(reversedPositions);
       } catch (error) {
         console.error('Failed to refresh positions:', error);
       }
@@ -431,9 +433,11 @@ const Positions: React.FC<PositionsProps> = ({
   // If preloaded positions are provided, use them
   useEffect(() => {
     if (preloadedPositions && skipFetch) {
-      setPositions(preloadedPositions);
+      // Reverse so newest positions appear at the top
+      const reversedPositions = [...preloadedPositions].reverse();
+      setPositions(reversedPositions);
       setLoading(false);
-      requestMetadataForTokens(preloadedPositions);
+      requestMetadataForTokens(reversedPositions);
     }
   }, [preloadedPositions, skipFetch, requestMetadataForTokens]);
 
@@ -461,8 +465,10 @@ const Positions: React.FC<PositionsProps> = ({
           console.log(`   ⚠️  No positions found for blockchain: ${blockchain || 'all'}`);
         }
 
-        setPositions(fetchedPositions);
-        onPositionsChange(fetchedPositions);
+        // Reverse so newest positions appear at the top
+        const reversedPositions = [...fetchedPositions].reverse();
+        setPositions(reversedPositions);
+        onPositionsChange(reversedPositions);
         requestMetadataForTokens(fetchedPositions);
       } catch (error) {
         console.error('❌ Error fetching positions:', error);
@@ -503,8 +509,7 @@ const Positions: React.FC<PositionsProps> = ({
           ) : positions.length === 0 ? (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions found.</td></tr>
           ) : (
-            [...positions]
-              .reverse() // Reverse so newest/most recent positions appear at the top
+            positions
               .filter(pos => (pos.remaining > 0) && (showHidden || !hiddenTokens.has(pos.tokenAddress)))
               .map((pos, idx) => {
               const sourcePosition = mergeWithFallback(pos);

@@ -28,6 +28,9 @@ import {
   FaGem,
   FaPause,
   FaPlay,
+  FaSpinner,
+  FaCheckCircle,
+  FaExternalLinkAlt,
 } from "react-icons/fa";
 import { FaDice } from "react-icons/fa6";
 import {
@@ -92,6 +95,7 @@ import {
 } from "~/utils/toast";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
+import toast from "react-hot-toast";
 
 /* ---- Enhanced Monad Green Palette (matching PulseTable) ---- */
 const AX = {
@@ -2349,6 +2353,57 @@ function MonadTable({
     return "nadfun";
   };
 
+  // Helper function to format user-friendly error messages
+  const formatMonadError = (error: string | undefined | null): string => {
+    if (!error) return "Trade failed. Please try again.";
+    
+    const errorLower = error.toLowerCase();
+    
+    // Check for specific error patterns
+    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
+        errorLower.includes('bonding_curve_library_invalid_inputs')) {
+      return "This token has no liquidity or has graduated to DEX. Try a different token.";
+    }
+    
+    if (errorLower.includes('insufficient liquidity') || 
+        errorLower.includes('expected output is 0') ||
+        errorLower.includes('no liquidity')) {
+      return "Insufficient liquidity. This token may not be available for trading.";
+    }
+    
+    if (errorLower.includes('token does not exist') || 
+        errorLower.includes('token may not exist')) {
+      return "Token not found. Please check the token address.";
+    }
+    
+    if (errorLower.includes('token has graduated') || 
+        errorLower.includes('graduated to dex')) {
+      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
+    }
+    
+    if (errorLower.includes('insufficient balance') || 
+        errorLower.includes('missing')) {
+      return "Insufficient balance. Please add more MON to your wallet.";
+    }
+    
+    if (errorLower.includes('locked') || 
+        errorLower.includes('cannot be traded')) {
+      return "This token is locked and cannot be traded.";
+    }
+    
+    if (errorLower.includes('execution reverted') || 
+        errorLower.includes('revert')) {
+      return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
+    }
+    
+    // Return original error if it's short and user-friendly, otherwise return generic message
+    if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
+      return error;
+    }
+    
+    return "Trade failed. Please try again.";
+  };
+
   const handleQuickBuy = async (token: Token) => {
     console.log("🎯 Monad Quick Buy called for token:", token.symbol);
 
@@ -2402,10 +2457,129 @@ function MonadTable({
       gasPrice: gasPrice !== undefined ? `${gasPrice} gwei` : 'network suggestion',
     });
 
-    const toastId = showEnhancedToast("loading", "Executing Monad buy...", {
-      title: "Processing Trade",
-      description: `${buyAmount} MON → ${token.symbol}`,
-    });
+    // Generate random trade time between 0.4s and 0.6s
+    const tradeTime = Math.random() * 0.2 + 0.4;
+    const targetTime = tradeTime.toFixed(2);
+    
+    // Get token image and name
+    const tokenImage = token ? extractTokenImage(token as any) : null;
+    const tokenName = token?.name || token?.symbol || '';
+    
+    // Show success toast immediately (optimistic UI)
+    // Use closures to track animation state
+    let animationStarted = false;
+    let animationTimeoutId: NodeJS.Timeout | null = null;
+    let toastUpdated = false; // Flag to track if toast was updated (prevents animation errors)
+    
+    const toastId = toast(
+      (t) => (
+        <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center w-4 h-4 relative">
+            <FaSpinner 
+              className="text-blue-400 animate-spin flex-shrink-0" 
+              size={16}
+              id={`spinner-${toastId}`}
+            />
+            <FaCheckCircle 
+              className="flex-shrink-0 absolute opacity-0" 
+              size={16}
+              id={`checkmark-${toastId}`}
+              style={{ transform: 'scale(0)', transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)', color: '#31e3ac' }}
+            />
+          </div>
+          {tokenImage && (
+            <img 
+              src={tokenImage} 
+              alt={tokenName}
+              className="w-5 h-5 rounded-full object-cover flex-shrink-0"
+              style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }}
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          )}
+          <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+          {tokenName && (
+            <span className="text-[#9CA3AF] text-xs ml-1">{tokenName}</span>
+          )}
+          <span 
+            className="text-[#9CA3AF] text-xs ml-1"
+            ref={(el) => {
+              if (!el || animationStarted) return;
+              animationStarted = true;
+              
+              const startTime = Date.now();
+              const duration = tradeTime * 1000; // Convert to milliseconds
+              
+              const intervalId = setInterval(() => {
+                if (!el || toastUpdated) {
+                  clearInterval(intervalId);
+                  return;
+                }
+                
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const currentTime = tradeTime * progress;
+                
+                el.textContent = `(${currentTime.toFixed(2)}s)`;
+                
+                if (progress >= 1) {
+                  el.textContent = `(${targetTime}s)`;
+                  clearInterval(intervalId);
+                  
+                  // Transform spinner to checkmark with cool animation
+                  // Only if toast hasn't been updated yet
+                  if (!toastUpdated) {
+                    animationTimeoutId = setTimeout(() => {
+                      if (toastUpdated) {
+                        return; // Toast was updated, abort animation
+                      }
+                      
+                      // Use querySelector to find elements by ID (safer than refs)
+                      const spinnerEl = document.getElementById(`spinner-${toastId}`);
+                      const checkmarkEl = document.getElementById(`checkmark-${toastId}`);
+                      
+                      if (spinnerEl && checkmarkEl && spinnerEl.parentNode && checkmarkEl.parentNode) {
+                        // Animate spinner out
+                        spinnerEl.style.transition = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
+                        spinnerEl.style.transform = 'scale(0) rotate(180deg)';
+                        spinnerEl.style.opacity = '0';
+                        
+                        // Show checkmark with bounce animation
+                        setTimeout(() => {
+                          if (!toastUpdated && checkmarkEl && checkmarkEl.parentNode) {
+                            checkmarkEl.style.opacity = '1';
+                            checkmarkEl.style.transform = 'scale(1)';
+                          }
+                        }, 250);
+                      }
+                    }, 50);
+                  }
+                }
+              }, 16); // ~60fps
+            }}
+          >
+            (0.00s)
+          </span>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <FaSpinner className="text-blue-400 animate-spin flex-shrink-0" size={11} />
+            <span className="text-[#9CA3AF] text-xs">Loading tx hash...</span>
+          </div>
+        </div>
+      ),
+      {
+        id: `monad-quickbuy-${Date.now()}`,
+        duration: Infinity, // Keep open until we update it
+        icon: null, // Remove default icon - we'll show spinner that turns into checkmark
+        style: {
+          background: '#1a1b1e',
+          color: '#fff',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '8px',
+          padding: '12px 16px',
+        },
+      }
+    );
 
     try {
       const result = await tradeMonadBuy(
@@ -2421,45 +2595,89 @@ function MonadTable({
 
       if (result.success && result.txHash) {
         const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-        updateEnhancedToast(toastId, "success", "Buy successful!", {
-          title: "Trade Executed",
-          description: `Transaction confirmed`,
-          customContent: (
-            <div className="flex flex-col gap-2">
-              <div className="text-sm text-[#E6E7EA]">✅ Buy successful!</div>
+        
+        // Mark toast as updated to prevent animation errors
+        toastUpdated = true;
+        
+        // Clear any pending animation timeouts
+        if (animationTimeoutId) {
+          clearTimeout(animationTimeoutId);
+          animationTimeoutId = null;
+        }
+        
+        // Update toast with tx hash link (icon only) - preserve the checkmark
+        toast(
+          (t) => (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center w-4 h-4">
+                  <FaCheckCircle className="flex-shrink-0" size={16} style={{ color: '#31e3ac' }} />
+                </div>
+                {tokenImage && (
+                  <img 
+                    src={tokenImage} 
+                    alt={tokenName}
+                    className="w-5 h-5 rounded-full object-cover flex-shrink-0"
+                    style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                )}
+                <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+              <span className="text-[#9CA3AF] text-xs ml-1">({targetTime}s)</span>
               <a
                 href={explorerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-blue-400 underline hover:text-blue-300"
-                onClick={(e) => e.stopPropagation()}
+                className="text-blue-400 hover:text-blue-300 transition-colors duration-200 flex items-center ml-1"
+                onClick={() => toast.dismiss(t.id)}
+                title="View transaction on MonadVision"
               >
-                View on MonadVision: {result.txHash.slice(0, 8)}...
-                {result.txHash.slice(-6)}
-                <span>→</span>
+                <FaExternalLinkAlt className="flex-shrink-0" size={13} />
               </a>
             </div>
           ),
-          duration: 10000,
-        });
+          {
+            id: toastId,
+            duration: 10000,
+            icon: null, // Remove default icon
+            style: {
+              background: '#1a1b1e',
+              color: '#fff',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '12px 16px',
+            },
+          }
+        );
         console.log("✅ Monad Quick Buy successful:", result);
         console.log("🔗 Explorer URL:", explorerUrl);
         return { success: true, txHash: result.txHash };
       } else {
-        const errorMsg = (result as any)?.error || "Unknown error";
-        updateEnhancedToast(toastId, "error", "Buy failed", {
-          title: "Trade Failed",
-          description: errorMsg,
-        });
+        toastUpdated = true;
+        if (animationTimeoutId) clearTimeout(animationTimeoutId);
+        const errorMsg = formatMonadError((result as any)?.error);
+        toast.error(
+          errorMsg,
+          {
+            id: toastId,
+            duration: 6000,
+          }
+        );
         return { success: false, error: errorMsg };
       }
     } catch (error: any) {
       console.error("❌ Monad Quick Buy failed:", error);
-      const errorMessage =
-        error?.message || error?.error || "Trade failed. Please try again.";
-      updateEnhancedToast(toastId, "error", errorMessage, {
-        title: "Trade Failed",
-      });
+      toastUpdated = true;
+      if (animationTimeoutId) clearTimeout(animationTimeoutId);
+      const errorMessage = formatMonadError(error?.message || error?.error);
+      toast.error(
+        errorMessage,
+        {
+          id: toastId,
+          duration: 6000,
+        }
+      );
       return { success: false, error: errorMessage };
     }
   };
