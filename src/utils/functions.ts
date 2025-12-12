@@ -20,6 +20,11 @@ export interface PositionRow {
 }
 
 export interface TradeRow {
+  // New fields for accurate PNL calculation
+  pricePerToken?: number; // USD price per token at trade time
+  costBasis?: number; // For Sell trades: what we paid for the tokens
+  realizedPnl?: number; // For Sell trades: profit/loss (stored in DB)
+  realizedPnlPercentage?: number; // PNL as percentage of cost basis
   id: number;
   tokenAddress: string;
   pairAddress?: string; // Pool/pair address

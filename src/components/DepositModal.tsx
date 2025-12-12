@@ -78,6 +78,27 @@ const CHAIN_CONFIG: Record<
   },
 };
 
+// Helper function to detect chain from transaction signature
+// Monad/EVM transactions start with "0x", Solana uses base58
+const getTransactionChain = (txSignature?: string | null): "monad" | "sol" => {
+  if (!txSignature) return "sol"; // Default to Solana
+  return txSignature.startsWith("0x") ? "monad" : "sol";
+};
+
+// Helper function to get explorer URL and name based on chain
+const getExplorerInfo = (chain: "monad" | "sol", txSignature: string) => {
+  if (chain === "monad") {
+    return {
+      url: `https://monadvision.com/tx/${txSignature}`,
+      name: "Monad Vision",
+    };
+  }
+  return {
+    url: `https://solscan.io/tx/${txSignature}`,
+    name: "Solscan",
+  };
+};
+
 const DepositModal: React.FC<DepositModalProps> = ({
   open,
   onClose,
@@ -116,13 +137,13 @@ const DepositModal: React.FC<DepositModalProps> = ({
   } | null>(null);
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [withdrawalFee, setWithdrawalFee] = useState<number>(0.0005);
+  const [minimumReserve, setMinimumReserve] = useState<number>(0.00139); // Dynamic minimum reserve from API
   const [withdrawView, setWithdrawView] = useState<"form" | "history">("form");
   const [history, setHistory] = useState<WithdrawalTransaction[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const MIN_WITHDRAWAL = 0.001;
   const MAX_WITHDRAWAL = 100;
-  const minimumReserve = 0.00139;
 
   const chainConfig = CHAIN_CONFIG[selectedChain] ?? CHAIN_CONFIG.sol;
   const tokenSymbol = chainConfig.tokenSymbol;
@@ -268,6 +289,14 @@ const DepositModal: React.FC<DepositModalProps> = ({
           ? feeData
           : ((feeData as any)?.fee ?? withdrawalFee);
       setWithdrawalFee(fee);
+      
+      // Extract minimumReserve from API response
+      if (typeof feeData === "object" && feeData !== null) {
+        const apiMinimumReserve = (feeData as any)?.minimumReserve;
+        if (typeof apiMinimumReserve === "number" && apiMinimumReserve > 0) {
+          setMinimumReserve(apiMinimumReserve);
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch withdrawal fee:", error);
       // quietly keep prior fallback without surfacing an error toast
@@ -386,8 +415,13 @@ const DepositModal: React.FC<DepositModalProps> = ({
   };
 
   const handleMaxClick = () => {
-    const maxAmount = Math.max(0, chainBalance - minimumReserve);
-    setWithdrawAmount(maxAmount.toFixed(4));
+    // Calculate max with a small buffer to account for floating point precision
+    // This ensures the validation will pass
+    const precisionBuffer = 0.00001;
+    const maxAmount = Math.max(0, chainBalance - minimumReserve - precisionBuffer);
+    // Round down to 4 decimal places to avoid issues
+    const roundedMax = Math.floor(maxAmount * 10000) / 10000;
+    setWithdrawAmount(roundedMax.toFixed(4));
   };
 
   const handleWithdraw = async () => {
@@ -421,11 +455,12 @@ const DepositModal: React.FC<DepositModalProps> = ({
       return;
     }
 
-    const totalRequired = amount + withdrawalFee;
+    // Use minimumReserve for validation - it already includes fee + safety margins
+    const totalRequired = amount + minimumReserve;
     if (totalRequired > chainBalance) {
       setWithdrawMessage({
         type: "error",
-        text: `Insufficient balance. You need ${totalRequired.toFixed(4)} ${tokenSymbol} (including ${withdrawalFee.toFixed(4)} ${tokenSymbol} fee).`,
+        text: `Insufficient balance. You need ${totalRequired.toFixed(4)} ${tokenSymbol} (including ${minimumReserve.toFixed(4)} ${tokenSymbol} for fees and reserves).`,
       });
       return;
     }
@@ -1134,16 +1169,21 @@ const DepositModal: React.FC<DepositModalProps> = ({
                               {withdrawMessage.text}
                             </div>
                           </div>
-                          {txSignature && (
-                            <a
-                              href={`https://solscan.io/tx/${txSignature}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-2 flex items-center gap-1 text-xs text-[#18c48c] transition-opacity hover:opacity-80"
-                            >
-                              View on Solscan <FaExternalLinkAlt size={10} />
-                            </a>
-                          )}
+                          {txSignature && (() => {
+                            const txChain = getTransactionChain(txSignature);
+                            const explorer = getExplorerInfo(txChain, txSignature);
+                            return (
+                              <a
+                                href={explorer.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 flex items-center gap-1 text-xs text-[#18c48c] transition-opacity hover:opacity-80"
+                              >
+                                View on {explorer.name}{" "}
+                                <FaExternalLinkAlt size={10} />
+                              </a>
+                            );
+                          })()}
                         </div>
                       )}
 
@@ -1286,17 +1326,21 @@ const DepositModal: React.FC<DepositModalProps> = ({
                               <div className="text-xs text-neutral-500">
                                 {new Date(tx.createdAt).toLocaleString()}
                               </div>
-                              {tx.txSignature && (
-                                <a
-                                  href={`https://solscan.io/tx/${tx.txSignature}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="mt-2 flex items-center gap-1 text-xs text-[#18c48c] transition-opacity hover:opacity-80"
-                                >
-                                  View Transaction{" "}
-                                  <FaExternalLinkAlt size={10} />
-                                </a>
-                              )}
+                              {tx.txSignature && (() => {
+                                const txChain = getTransactionChain(tx.txSignature);
+                                const explorer = getExplorerInfo(txChain, tx.txSignature);
+                                return (
+                                  <a
+                                    href={explorer.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-2 flex items-center gap-1 text-xs text-[#18c48c] transition-opacity hover:opacity-80"
+                                  >
+                                    View on {explorer.name}{" "}
+                                    <FaExternalLinkAlt size={10} />
+                                  </a>
+                                );
+                              })()}
                             </div>
                           ))}
                         </div>
