@@ -1641,8 +1641,8 @@ function MonadTable({
   });
 
   const [filters, setFilters] = useState({
-    // Protocols - Monad launchpad protocols (nad.fun and flap.sh)
-    protocols: ["nad.fun", "flap.sh"] as string[],
+    // Protocols - Monad launchpad protocols (nad.fun, flap.sh, and clanker)
+    protocols: ["nad.fun", "flap.sh", "clanker"] as string[],
     // Quote Tokens
     quoteTokens: [] as string[],
     // Keywords
@@ -2221,7 +2221,7 @@ function MonadTable({
 
   const handleResetFilters = () => {
     const defaultFilters = {
-      protocols: ["nad.fun"] as string[],
+      protocols: ["nad.fun", "flap.sh", "clanker"] as string[],
       quoteTokens: [] as string[],
       searchKeywords: "",
       excludeKeywords: "",
