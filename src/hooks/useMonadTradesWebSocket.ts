@@ -87,7 +87,23 @@ export function useMonadTradesWebSocket(
 
       const data = await response.json();
       if (data.status === 'success' && Array.isArray(data.data)) {
-        setTrades(data.data);
+        const fetched = data.data as MonadTrade[];
+        // Merge with existing trades to avoid overwriting WebSocket updates
+        setTrades((prev) => {
+          if (!prev || prev.length === 0) {
+            return fetched.slice(0, maxTrades);
+          }
+          const existingHashes = new Set(prev.map((t) => t.tx_hash));
+          const combined = [...prev];
+          for (const t of fetched) {
+            if (!existingHashes.has(t.tx_hash)) {
+              combined.push(t);
+            }
+          }
+          // Keep most recent first based on block_timestamp if available, else insertion order
+          combined.sort((a, b) => (b.block_timestamp || 0) - (a.block_timestamp || 0));
+          return combined.slice(0, maxTrades);
+        });
       }
     } catch (err) {
       console.error('[useMonadTradesWebSocket] Failed to fetch initial trades:', err);
