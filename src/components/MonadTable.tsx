@@ -731,6 +731,7 @@ function TokenImage({
     meteora_v2: "#d11f3a", // Pink-red for meteora
     pump_amm: "#e9ba14", // Gold for meteora amm
     orca: "#0ea5e9",
+    clanker: "#0ea5e9", // Blue for clanker (matching orca color)
   };
 
   // Get protocol color based on launchpad_protocol field
@@ -760,6 +761,11 @@ function TokenImage({
     // Special handling for Kuru - green color
     if (launchpadProtocol.includes("kuru")) {
       return "#31e3ac"; // Green for Kuru (matching PulseTable)
+    }
+
+    // Special handling for clanker - blue color
+    if (launchpadProtocol.includes("clanker")) {
+      return "#0ea5e9"; // Blue for clanker
     }
 
     // Special handling for Meteora - use column type since Meteora doesn't have bonding scores
@@ -860,6 +866,11 @@ function TokenImage({
     // Map Kuru to Twitter profile image
     if (launchpadProtocol.includes("kuru")) {
       return "https://pbs.twimg.com/profile_images/1950962142917619714/R7Cj_qk7_400x400.jpg";
+    }
+
+    // Map clanker to CoinGecko icon
+    if (launchpadProtocol.includes("clanker")) {
+      return "https://coin-images.coingecko.com/coins/images/51440/large/CLANKER.png?1731232869";
     }
 
     // Map launchpad_protocol to external logo URLs
@@ -2709,6 +2720,19 @@ function MonadTable({
         />
       ),
       color: "#31e3ac",
+    },
+    {
+      name: "clanker",
+      icon: (
+        <Image
+          src="https://coin-images.coingecko.com/coins/images/51440/large/CLANKER.png?1731232869"
+          alt="clanker"
+          width={16}
+          height={16}
+          className="rounded-full"
+        />
+      ),
+      color: "#0ea5e9",
     },
     {
       name: "Kuru",
