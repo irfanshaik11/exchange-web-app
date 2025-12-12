@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
 import { getActivePositionsByUser } from '~/utils/functions';
@@ -12,6 +12,7 @@ import Image from 'next/image';
 import SellPopup from '../SellPopup';
 import { fetchChainTokenMetadata, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
 import { getProtocolBranding } from '~/utils/protocolBranding';
+import { usePositionPrices } from '~/hooks/usePositionPrices';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -129,6 +130,25 @@ const Positions: React.FC<PositionsProps> = ({
   const router = useRouter();
   const currentChain = (router.query.chain as string) || 'sol';
   const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
+
+  // Get unique token addresses from positions with remaining > 0
+  const activeTokenAddresses = useMemo(() => {
+    return Array.from(
+      new Set(
+        positions
+          .filter((pos) => pos.remaining > 0)
+          .map((pos) => pos.tokenAddress)
+          .filter(Boolean)
+      )
+    );
+  }, [positions]);
+
+  // Fetch live prices for active positions
+  const { prices: livePrices } = usePositionPrices(activeTokenAddresses, {
+    enabled: activeTokenAddresses.length > 0,
+    refreshInterval: 2000, // Update every 2 seconds for faster updates
+    chain: currentChain,
+  });
 
   const mergeWithFallback = useCallback(
     (position: PositionRow): PositionRow => {
@@ -631,6 +651,21 @@ const Positions: React.FC<PositionsProps> = ({
               
               const corrected = getCorrectedValues();
               
+              // Calculate live PNL using current token price
+              const currentPrice = livePrices[pos.tokenAddress] || 0;
+              const liveRemainingValue = currentPrice > 0 
+                ? corrected.correctedRemaining * currentPrice 
+                : corrected.correctedRemainingUsdValue; // Fallback to stored value if no live price
+              
+              const livePnl = corrected.correctedSoldUsdValue + liveRemainingValue - sourcePosition.boughtUsdValue;
+              const livePnlPercentage = sourcePosition.boughtUsdValue > 0 
+                ? (livePnl / sourcePosition.boughtUsdValue) * 100 
+                : 0;
+              
+              // Use live PNL if we have a current price, otherwise use corrected PNL
+              const displayPnl = currentPrice > 0 ? livePnl : corrected.correctedPnl;
+              const displayPnlPercentage = currentPrice > 0 ? livePnlPercentage : corrected.correctedPnlPercentage;
+              
               // For positions: backend stores originalPairAddress value in pairAddress field
               const navigateAddress = sourcePosition.pairAddress || pos.tokenAddress;
               const displayAddress = sourcePosition.pairAddress || pos.tokenAddress;
@@ -773,12 +808,17 @@ const Positions: React.FC<PositionsProps> = ({
                     </span>
                   </div>
                 </td>
-                <td className={`px-2 py-2 font-semibold ${corrected.correctedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
+                <td className={`px-2 py-2 font-semibold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
                   {showInSOL && solPrice > 0
-                    ? <>{corrected.correctedPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(corrected.correctedPnl) / solPrice)}</>
-                    : `${corrected.correctedPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(corrected.correctedPnl))}`
+                    ? <>{displayPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(displayPnl) / solPrice)}</>
+                    : `${displayPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(displayPnl))}`
                   }
-                  <span className="ml-1 text-xs">({formatSmallPrice(corrected.correctedPnlPercentage)}%)</span>
+                  <span className="ml-1 text-xs">({formatSmallPrice(displayPnlPercentage)}%)</span>
+                  {currentPrice > 0 && (
+                    <span className="ml-1 text-[10px] text-neutral-500" title="Live price update">
+                      ●
+                    </span>
+                  )}
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-2">

@@ -14,15 +14,155 @@ import {
   getTradeHistoryByUser,
   getTradeActivityByUser,
 } from "~/utils/functions";
+import { getWithdrawalHistory } from "~/utils/api";
 import { formatSmartNumber, formatSmallPrice } from "~/utils/db";
 import type { PositionRow, TradeRow } from "~/utils/functions";
 import type { UnifiedTokenMetadata } from "~/utils/tokenMetadata";
-import { FaSearch, FaEye, FaUpload, FaTimes } from "react-icons/fa";
+import { FaSearch, FaEye, FaUpload, FaTimes, FaInfoCircle } from "react-icons/fa";
 import { SiSolana } from "react-icons/si";
 import toast from "react-hot-toast";
-import { FiEdit2, FiCheck, FiX } from "react-icons/fi";
+import { FiEdit2, FiCheck, FiX, FiInfo } from "react-icons/fi";
 import ImportWalletModal from "../components/ImportWalletModal";
 import ExportWalletModal from "../components/ExportWalletModal";
+import { usePositionPrices } from "~/hooks/usePositionPrices";
+import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+
+// Interactive Balance Chart Component
+const BalanceChart = ({ 
+  data, 
+  chain, 
+  initialBalance 
+}: { 
+  data: Array<{ timestamp: number; balance: number; balanceChange: number }>; 
+  chain: string;
+  initialBalance: number;
+}) => {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const gradientId = `balanceGradient-${chain}-${Date.now()}`;
+  
+  const chartData = data.map((entry, index) => {
+    const date = new Date(entry.timestamp);
+    const timeLabel = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const balanceChangeFromInitial = entry.balance - initialBalance;
+    const balanceChangePercent = initialBalance > 0 ? ((balanceChangeFromInitial / initialBalance) * 100) : 0;
+    
+    return {
+      time: timeLabel,
+      timestamp: entry.timestamp,
+      balance: entry.balance,
+      balanceChange: entry.balanceChange,
+      balanceChangeFromInitial,
+      balanceChangePercent,
+      index,
+    };
+  });
+
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-[#1A1B23] border border-[#2A2B33] rounded-lg p-3 shadow-lg z-50 pointer-events-none" style={{
+          position: 'absolute',
+          transform: 'translateY(-100%)',
+          marginTop: '-10px'
+        }}>
+          <p className="text-[#6B7280] text-xs mb-2 font-medium">{data.time}</p>
+          <div className="space-y-1">
+            <p className="text-sm font-medium" style={{ color: data.balanceChangeFromInitial >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+              Balance: {formatSmartNumber(data.balance)} {chain === 'monad' ? 'MON' : 'SOL'}
+            </p>
+            <p className="text-xs" style={{ color: data.balanceChangeFromInitial >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+              Change: {data.balanceChangeFromInitial >= 0 ? "+" : ""}{formatSmartNumber(Math.abs(data.balanceChangeFromInitial))} {chain === 'monad' ? 'MON' : 'SOL'}
+            </p>
+            <p className="text-xs" style={{ color: data.balanceChangePercent >= 0 ? "#70E0B0" : "#FF4D7F" }}>
+              {data.balanceChangePercent >= 0 ? "+" : ""}{data.balanceChangePercent.toFixed(2)}%
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  if (chartData.length === 0) return null;
+
+  const isPositive = chartData[chartData.length - 1]?.balanceChangeFromInitial >= 0;
+  const strokeColor = isPositive ? "#70E0B0" : "#FF4D7F";
+
+  // Calculate fixed domain for Y-axis to prevent chart from moving
+  const allValues = chartData.map(d => d.balanceChangeFromInitial);
+  const minValue = Math.min(...allValues, 0);
+  const maxValue = Math.max(...allValues, 0);
+  const padding = Math.max(Math.abs(minValue), Math.abs(maxValue)) * 0.1; // 10% padding
+  const yDomain = [minValue - padding, maxValue + padding];
+
+  return (
+    <div className="w-full h-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart
+          data={chartData}
+          margin={{ top: 5, right: 10, left: 0, bottom: 0 }}
+          onMouseMove={(e: any) => {
+            if (e && e.activeTooltipIndex !== undefined) {
+              setHoveredIndex(e.activeTooltipIndex);
+            }
+          }}
+          onMouseLeave={() => setHoveredIndex(null)}
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={strokeColor} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={strokeColor} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#2A2B33" opacity={0.5} />
+          <XAxis 
+            dataKey="time" 
+            stroke="#6B7280"
+            fontSize={10}
+            tick={{ fill: '#6B7280' }}
+            interval={Math.floor(chartData.length / 5)}
+            tickLine={{ stroke: '#2A2B33' }}
+          />
+          <YAxis 
+            stroke="#6B7280"
+            fontSize={10}
+            tick={{ fill: '#6B7280' }}
+            tickLine={{ stroke: '#2A2B33' }}
+            domain={yDomain}
+            allowDataOverflow={false}
+            tickFormatter={(value) => {
+              if (Math.abs(value) >= 1) return value.toFixed(3);
+              if (Math.abs(value) >= 0.1) return value.toFixed(4);
+              return value.toFixed(6);
+            }}
+          />
+          <Tooltip 
+            content={<CustomTooltip />}
+            cursor={{ stroke: strokeColor, strokeWidth: 1, strokeDasharray: '5 5' }}
+            position={{ y: -10 }}
+          />
+          <Area
+            type="monotone"
+            dataKey="balanceChangeFromInitial"
+            stroke={strokeColor}
+            strokeWidth={2}
+            fill={`url(#${gradientId})`}
+            dot={false}
+            activeDot={{ 
+              r: 5, 
+              fill: strokeColor,
+              stroke: '#1A1B23',
+              strokeWidth: 2
+            }}
+            animationDuration={300}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
 
 // Stacked Token Boxes Component
 const StackedTokenBoxes = ({ count = 0 }: { count?: number }) => (
@@ -156,7 +296,7 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, chainBalances } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, chainBalances, primaryWalletAddresses } = useUser();
   const { monPrice } = useSolPrice();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || "monad";
@@ -168,7 +308,36 @@ export default function PortfolioPage() {
   const [loadingTradeActivity, setLoadingTradeActivity] = useState(true);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [unrealizedPnlPercentage, setUnrealizedPnlPercentage] = useState(0);
+  const [totalPnl, setTotalPnl] = useState(0);
+  const [totalPnlPercentage, setTotalPnlPercentage] = useState(0);
+  const [actualBalanceChangePnl, setActualBalanceChangePnl] = useState(0);
+  const [actualBalanceChangePnlPercentage, setActualBalanceChangePnlPercentage] = useState(0);
+  const [actualBalanceChangeNative, setActualBalanceChangeNative] = useState(0); // Native balance change (MON or SOL)
+  const [actualBalanceChangeNativePercentage, setActualBalanceChangeNativePercentage] = useState(0); // Native percentage change
+  const [balanceHistory, setBalanceHistory] = useState<Array<{ timestamp: number; balance: number; balanceChange: number }>>([]);
   const [totalValue, setTotalValue] = useState(0);
+  // Track previous balances to detect sales - persist across page reloads
+  const previousBalancesRef = useRef<Record<string, number>>({});
+  
+  // Track cumulative realized PNL history for chart
+  const realizedPnlHistoryRef = useRef<Array<{ timestamp: number; value: number }>>([]);
+  
+  // Track cumulative realized PNL (persists across reloads)
+  const cumulativeRealizedPnlRef = useRef<number>(0);
+  
+  // Track initial native balance (MON for Monad, SOL for Solana) for actual PNL calculation
+  const initialNativeBalanceRef = useRef<number | null>(null);
+  
+  // Track if balance refresh should be forced (e.g., when wallets are updated)
+  const forceBalanceRefreshRef = useRef(false);
+  
+  // Helper to get localStorage keys (computed based on user and chain)
+  const getStorageKeys = () => ({
+    previousBalances: `previousBalances_${user?.id || 'anonymous'}_${currentChain}`,
+    realizedPnlHistory: `realizedPnlHistory_${user?.id || 'anonymous'}_${currentChain}`,
+    cumulativeRealizedPnl: `cumulativeRealizedPnl_${user?.id || 'anonymous'}_${currentChain}`,
+    initialNativeBalance: `initialNativeBalance_${user?.id || 'anonymous'}_${currentChain}`,
+  });
   const [positions, setPositions] = useState<PositionRow[]>([]);
   const [top100Positions, setTop100Positions] = useState<PositionRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -176,6 +345,15 @@ export default function PortfolioPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [sortByUSD, setSortByUSD] = useState(false);
   const [solPrice, setSolPrice] = useState(0);
+  
+  // Calculate native price for current chain
+  const nativePriceForDisplay = useMemo(() => {
+    if (currentChain === 'monad') {
+      return monPrice || 0.025;
+    } else {
+      return solPrice || 150; // Default SOL price fallback
+    }
+  }, [currentChain, monPrice, solPrice]);
   const [wallets, setWallets] = useState<UserWallet[]>([]);
   const [loadingWallets, setLoadingWallets] = useState(false);
   const [creatingWallet, setCreatingWallet] = useState(false);
@@ -372,9 +550,16 @@ export default function PortfolioPage() {
     return () => clearInterval(interval);
   }, []);
   const [selectedTimeframe, setSelectedTimeframe] = useState("Max");
-  const [timeframeMetrics, setTimeframeMetrics] = useState({
+  const [timeframeMetrics, setTimeframeMetrics] = useState<{
+    unrealizedPnl: number;
+    realizedPnl: number;
+    realizedPnlPercentage: number;
+    winningTrades: number;
+    losingTrades: number;
+  }>({
     unrealizedPnl: 0,
     realizedPnl: 0,
+    realizedPnlPercentage: 0,
     winningTrades: 0,
     losingTrades: 0,
   });
@@ -394,7 +579,8 @@ export default function PortfolioPage() {
         try {
           // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
           const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
-          const history = await getTradeHistoryByUser(user.id, blockchain);
+          // Use getTradeActivityByUser to get raw trades with PNL fields (pricePerToken, costBasis, realizedPnl, etc.)
+          const history = await getTradeActivityByUser(user.id, blockchain);
           const filteredHistory = Array.isArray(history)
             ? history.filter(isTradeOnCurrentChain)
             : [];
@@ -452,6 +638,136 @@ export default function PortfolioPage() {
       return () => clearInterval(intervalId);
     }
   }, [user?.id, activeSpotTab, currentChain, isTradeOnCurrentChain]);
+
+  // Note: Initial balance is set once when first detected and persists
+  // It does NOT auto-reset to prevent wallet balance change from going to 0
+
+  // Get unique token addresses from active positions for live price fetching
+  const activeTokenAddresses = useMemo(() => {
+    return Array.from(
+      new Set(
+        positions
+          .filter((pos) => pos.remaining > 0)
+          .map((pos) => pos.tokenAddress)
+          .filter(Boolean)
+      )
+    );
+  }, [positions]);
+
+  // Get wallet address for current chain
+  const walletAddress = useMemo(() => {
+    if (currentChain === 'monad') {
+      return primaryWalletAddresses?.ethereum || user?.publicKey || null;
+    }
+    return primaryWalletAddresses?.solana || user?.publicKey || null;
+  }, [currentChain, primaryWalletAddresses, user?.publicKey]);
+
+  // Fetch live prices for active positions
+  const { prices: livePrices } = usePositionPrices(activeTokenAddresses, {
+    enabled: activeTokenAddresses.length > 0,
+    refreshInterval: 2000, // Update every 2 seconds for faster updates
+    chain: currentChain,
+  });
+
+  // Fetch actual token balances from wallet (real blockchain state)
+  const { balances: actualBalances } = useWalletTokenBalances(
+    walletAddress,
+    activeTokenAddresses,
+    {
+      enabled: activeTokenAddresses.length > 0 && !!walletAddress,
+      refreshInterval: 3000, // Update every 3 seconds for faster updates
+      chain: currentChain,
+    }
+  );
+
+  // Load persisted data on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const storageKeys = getStorageKeys();
+    
+    try {
+      // Load previous balances from localStorage
+      const savedBalances = localStorage.getItem(storageKeys.previousBalances);
+      if (savedBalances) {
+        previousBalancesRef.current = JSON.parse(savedBalances);
+        console.log("📊 Loaded previous balances from localStorage:", previousBalancesRef.current);
+      }
+      
+      // Load realized PNL history
+      const savedHistory = localStorage.getItem(storageKeys.realizedPnlHistory);
+      if (savedHistory) {
+        realizedPnlHistoryRef.current = JSON.parse(savedHistory);
+        console.log("📊 Loaded realized PNL history from localStorage:", realizedPnlHistoryRef.current.length, "points");
+      }
+      
+      // Load cumulative realized PNL
+      const savedCumulative = localStorage.getItem(storageKeys.cumulativeRealizedPnl);
+      if (savedCumulative) {
+        cumulativeRealizedPnlRef.current = parseFloat(savedCumulative) || 0;
+        console.log("📊 Loaded cumulative realized PNL:", cumulativeRealizedPnlRef.current);
+      }
+      
+      // Load initial native balance
+      const savedInitialBalance = localStorage.getItem(storageKeys.initialNativeBalance);
+      if (savedInitialBalance) {
+        initialNativeBalanceRef.current = parseFloat(savedInitialBalance);
+        console.log("📊 Loaded initial native balance:", initialNativeBalanceRef.current);
+      }
+    } catch (error) {
+      console.error("Error loading persisted data:", error);
+    }
+  }, [user?.id, currentChain]);
+
+  // Initialize previous balances when positions are loaded (before actual balances come in)
+  useEffect(() => {
+    if (positions.length > 0) {
+      // Only initialize if we don't have saved data
+      if (Object.keys(previousBalancesRef.current).length === 0) {
+        // Initialize with positions' remaining amounts as baseline
+        positions.forEach(pos => {
+          if (pos.tokenAddress && pos.remaining > 0) {
+            previousBalancesRef.current[pos.tokenAddress] = pos.remaining;
+          }
+        });
+        console.log("📊 Initialized previous balances from positions:", previousBalancesRef.current);
+        
+        // Save to localStorage
+        try {
+          const storageKeys = getStorageKeys();
+          localStorage.setItem(storageKeys.previousBalances, JSON.stringify(previousBalancesRef.current));
+        } catch (error) {
+          console.error("Error saving previous balances:", error);
+        }
+      }
+    }
+  }, [positions, user?.id, currentChain]);
+
+  // Update previous balances when actual balances come in - but ONLY if we don't have a saved value
+  useEffect(() => {
+    if (Object.keys(actualBalances).length > 0) {
+      let updated = false;
+      
+      // Update balances that exist, but keep previous values for comparison
+      Object.keys(actualBalances).forEach(tokenAddress => {
+        if (previousBalancesRef.current[tokenAddress] === undefined) {
+          // New token we're tracking, initialize with current balance
+          previousBalancesRef.current[tokenAddress] = actualBalances[tokenAddress];
+          updated = true;
+        }
+      });
+      
+      // Save to localStorage if updated
+      if (updated) {
+        try {
+          const storageKeys = getStorageKeys();
+          localStorage.setItem(storageKeys.previousBalances, JSON.stringify(previousBalancesRef.current));
+        } catch (error) {
+          console.error("Error saving previous balances:", error);
+        }
+      }
+    }
+  }, [actualBalances, user?.id, currentChain]);
 
   useEffect(() => {
     if (positions.length > 0) {
@@ -515,9 +831,24 @@ export default function PortfolioPage() {
           }
         }
 
-        // Recalculate PnL using corrected values
+        // Get actual balance from wallet (real blockchain state)
+        const actualBalance = actualBalances[pos.tokenAddress] ?? null;
+        const actualRemaining = actualBalance !== null ? actualBalance : correctedRemaining;
+        
+        // Use actual balance if available, otherwise use backend-reported balance
+        const remainingToUse = actualRemaining;
+        
+        // Use live price if available, otherwise use corrected remaining value
+        const currentPrice = livePrices[pos.tokenAddress] || 0;
+        const liveRemainingValue = currentPrice > 0 
+          ? remainingToUse * currentPrice 
+          : (actualBalance !== null && correctedBought > 0) 
+            ? (remainingToUse * (pos.boughtUsdValue / correctedBought)) // Use average buy price
+            : correctedRemainingUsdValue;
+
+        // Recalculate PnL using actual balances and live prices
         const correctedPnl =
-          correctedSoldUsdValue + correctedRemainingUsdValue - pos.boughtUsdValue;
+          correctedSoldUsdValue + liveRemainingValue - pos.boughtUsdValue;
         const correctedPnlPercentage =
           pos.boughtUsdValue > 0 ? (correctedPnl / pos.boughtUsdValue) * 100 : 0;
 
@@ -526,13 +857,13 @@ export default function PortfolioPage() {
           sold: correctedSold,
           remaining: correctedRemaining,
           soldUsdValue: correctedSoldUsdValue,
-          remainingUsdValue: correctedRemainingUsdValue,
+          remainingUsdValue: liveRemainingValue, // Use live value
           pnl: correctedPnl,
           pnlPercentage: correctedPnlPercentage,
         };
       });
 
-      const totalPnl = correctedPositions.reduce((acc, pos) => acc + pos.pnl, 0);
+      const totalUnrealizedPnl = correctedPositions.reduce((acc, pos) => acc + pos.pnl, 0);
       const totalRemainingValue = correctedPositions.reduce(
         (acc, pos) => acc + pos.remainingUsdValue,
         0,
@@ -541,9 +872,9 @@ export default function PortfolioPage() {
         (acc, pos) => acc + pos.boughtUsdValue,
         0,
       );
-      setUnrealizedPnl(totalPnl);
+      setUnrealizedPnl(totalUnrealizedPnl);
       setUnrealizedPnlPercentage(
-        totalBoughtValue ? (totalPnl / totalBoughtValue) * 100 : 0,
+        totalBoughtValue ? (totalUnrealizedPnl / totalBoughtValue) * 100 : 0,
       );
       // Use appropriate balance based on current chain
       // For Monad: convert MON to USD, for Solana: solBalance is already in USD
@@ -557,8 +888,14 @@ export default function PortfolioPage() {
         return b.remainingUsdValue - a.remainingUsdValue;
       });
       setTop100Positions(sortedByUsdValue.slice(0, 100));
+    } else {
+      // Reset values when no positions
+      setUnrealizedPnl(0);
+      setUnrealizedPnlPercentage(0);
+      setTotalPnl(0);
+      setTotalPnlPercentage(0);
     }
-  }, [positions, solBalance, monBalance, currentChain, monPrice]);
+  }, [positions, solBalance, monBalance, currentChain, monPrice, livePrices, actualBalances]);
 
   // Search filtering using useMemo for better performance and reactivity
   const filteredPositions = useMemo(() => {
@@ -680,7 +1017,7 @@ export default function PortfolioPage() {
         unrealizedPnl,
       });
 
-      const now = Date.now();
+      const currentTime = Date.now();
       let timeframeDays = 0;
 
       switch (selectedTimeframe) {
@@ -699,12 +1036,400 @@ export default function PortfolioPage() {
       }
 
       const cutoffTime =
-        timeframeDays === Infinity ? 0 : now - timeframeDays * 24 * 60 * 60 * 1000;
+        timeframeDays === Infinity ? 0 : currentTime - timeframeDays * 24 * 60 * 60 * 1000;
 
       // Calculate winning and losing trades based on positions
       let winningTrades = 0;
       let losingTrades = 0;
+      
+      // COMPREHENSIVE REALIZED PNL CALCULATION
+      // Calculate from multiple sources: balance changes, trade history, and backend data
       let totalRealizedPnl = 0;
+      const salesDetected: Array<{
+        tokenAddress: string;
+        soldAmount: number;
+        salePrice: number;
+        costBasis: number;
+        realizedPnl: number;
+        source: string;
+      }> = [];
+      
+      // 1. Calculate from TRADE HISTORY (most accurate - actual sell transactions)
+      // Normalize token addresses for matching (case-insensitive)
+      const normalizeAddress = (addr: string | undefined) => {
+        if (!addr) return '';
+        return addr.toLowerCase().trim();
+      };
+      
+      const sellTrades = tradeHistory.filter(t => {
+        const type = t.type?.toLowerCase();
+        return type === "sell" || type === "s";
+      });
+      
+      const buyTradesByToken = new Map<string, Array<{
+        amount: number; 
+        usdValue: number;
+        pricePerToken: number; // Price per token for accurate cost basis
+        timestamp: number;
+        tradeId: string;
+        consumed: number; // Track how much of this buy has been used
+      }>>();
+      
+      // Group buys by token (normalized address)
+      tradeHistory.filter(t => {
+        const type = t.type?.toLowerCase();
+        return type === "buy" || type === "b";
+      }).forEach(buy => {
+        const tokenAddress = normalizeAddress(buy.tokenAddress);
+        if (!tokenAddress) return;
+        
+        const tokenAmount = typeof buy.tokenAmount === 'string' ? parseFloat(buy.tokenAmount) : (buy.tokenAmount || 0);
+        const usdValue = typeof buy.usdValue === 'string' ? parseFloat(buy.usdValue) : (buy.usdValue || 0);
+        const timestamp = new Date(buy.tradeTime || buy.createdAt || Date.now()).getTime();
+        const tradeId = buy.transactionHash || `${buy.tokenAddress}_${timestamp}`;
+        
+        if (tokenAmount > 0 && usdValue > 0) {
+          if (!buyTradesByToken.has(tokenAddress)) {
+            buyTradesByToken.set(tokenAddress, []);
+          }
+          // Use stored pricePerToken if available, otherwise calculate
+          const pricePerToken = buy.pricePerToken || (usdValue / tokenAmount);
+          buyTradesByToken.get(tokenAddress)!.push({ 
+            amount: tokenAmount, 
+            usdValue,
+            pricePerToken, // Store price per token for accurate cost basis calculation
+            timestamp,
+            tradeId,
+            consumed: 0,
+          });
+        }
+      });
+      
+      // Sort all buys by timestamp (oldest first for FIFO)
+      buyTradesByToken.forEach((buys, tokenAddress) => {
+        buys.sort((a, b) => a.timestamp - b.timestamp);
+      });
+      
+      // Track which trades we've already counted (to avoid double-counting)
+      const processedSellTrades = new Set<string>();
+      
+      // Calculate realized PNL from sell trades
+      // PRIORITY: Use stored realizedPnl from database if available (more accurate)
+      sellTrades.forEach(sell => {
+        const tokenAddress = normalizeAddress(sell.tokenAddress);
+        if (!tokenAddress) return;
+        
+        const tradeId = sell.transactionHash || `${sell.tokenAddress}_${new Date(sell.tradeTime || sell.createdAt || Date.now()).getTime()}`;
+        
+        // Skip if already processed
+        if (processedSellTrades.has(tradeId)) return;
+        processedSellTrades.add(tradeId);
+        
+        const soldAmount = typeof sell.tokenAmount === 'string' ? parseFloat(sell.tokenAmount) : (sell.tokenAmount || 0);
+        const saleValueUsd = typeof sell.usdValue === 'string' ? parseFloat(sell.usdValue) : (sell.usdValue || 0);
+        
+        if (soldAmount <= 0 || saleValueUsd <= 0) return;
+        
+        // Check if we have stored realizedPnl from database (preferred - more accurate)
+        const storedRealizedPnl = typeof sell.realizedPnl === 'string' 
+          ? parseFloat(sell.realizedPnl) 
+          : (sell.realizedPnl || null);
+        const storedCostBasis = typeof sell.costBasis === 'string'
+          ? parseFloat(sell.costBasis)
+          : (sell.costBasis || null);
+        
+        let saleRealizedPnl: number;
+        let totalCostBasis: number;
+        
+        if (storedRealizedPnl !== null && storedRealizedPnl !== undefined && !isNaN(storedRealizedPnl)) {
+          // Use stored values from database (calculated at trade time)
+          saleRealizedPnl = storedRealizedPnl;
+          totalCostBasis = storedCostBasis || (saleValueUsd - saleRealizedPnl);
+          
+          console.log("💰 Using stored realized PNL from database:", {
+            tokenAddress: sell.tokenAddress,
+            soldAmount,
+            saleValueUsd,
+            storedCostBasis: totalCostBasis,
+            storedRealizedPnl: saleRealizedPnl,
+            tradeId,
+          });
+        } else {
+          // Fallback: Calculate using FIFO matching (for older trades without stored PNL)
+          const buys = buyTradesByToken.get(tokenAddress) || [];
+          if (buys.length === 0) {
+            console.warn("⚠️ Sell trade found but no matching buys:", {
+              tokenAddress: sell.tokenAddress,
+              soldAmount,
+              saleValueUsd,
+            });
+            return;
+          }
+          
+          // Match sold amount with buys (FIFO) - track consumed amounts
+          let remainingToSell = soldAmount;
+          totalCostBasis = 0;
+          
+          for (const buy of buys) {
+            if (remainingToSell <= 0) break;
+            
+            const availableFromThisBuy = buy.amount - buy.consumed;
+            if (availableFromThisBuy <= 0) continue; // This buy is fully consumed
+            
+            const buyPricePerToken = buy.pricePerToken || (buy.usdValue / buy.amount);
+            const amountFromThisBuy = Math.min(remainingToSell, availableFromThisBuy);
+            const costBasisForThisAmount = amountFromThisBuy * buyPricePerToken;
+            
+            totalCostBasis += costBasisForThisAmount;
+            buy.consumed += amountFromThisBuy; // Mark as consumed
+            remainingToSell -= amountFromThisBuy;
+          }
+          
+          // If we couldn't match all sold amount, use average buy price as fallback
+          if (remainingToSell > 0) {
+            const totalBuyAmount = buys.reduce((sum, b) => sum + b.amount, 0);
+            const totalBuyValue = buys.reduce((sum, b) => sum + b.usdValue, 0);
+            if (totalBuyAmount > 0) {
+              const avgBuyPrice = totalBuyValue / totalBuyAmount;
+              totalCostBasis += remainingToSell * avgBuyPrice;
+              console.warn("⚠️ Partial match for sale, using average buy price for remainder:", {
+                tokenAddress: sell.tokenAddress,
+                remainingToSell,
+                avgBuyPrice,
+              });
+            }
+          }
+          
+          // Calculate realized PNL for this sale
+          saleRealizedPnl = saleValueUsd - totalCostBasis;
+          
+          console.log("💰 Calculated realized PNL (fallback - no stored value):", {
+            tokenAddress: sell.tokenAddress,
+            soldAmount,
+            saleValueUsd,
+            totalCostBasis,
+            realizedPnl: saleRealizedPnl,
+            tradeId,
+            note: "Consider backfilling this trade with stored PNL for accuracy",
+          });
+        }
+        
+        totalRealizedPnl += saleRealizedPnl;
+        
+        salesDetected.push({
+          tokenAddress: sell.tokenAddress || tokenAddress,
+          soldAmount,
+          salePrice: saleValueUsd / soldAmount,
+          costBasis: totalCostBasis,
+          realizedPnl: saleRealizedPnl,
+          source: storedRealizedPnl !== null ? 'trade_history_stored' : 'trade_history',
+        });
+      });
+      
+      // 2. Calculate from balance decreases (for recent sales not yet in trade history)
+      // This catches sales that happened but aren't in trade history yet
+      const allTrackedTokens = new Set([
+        ...positions.map(p => normalizeAddress(p.tokenAddress)),
+        ...Object.keys(actualBalances).map(addr => normalizeAddress(addr)),
+      ]);
+      
+      allTrackedTokens.forEach((normalizedTokenAddress) => {
+        // Find the original token address (for matching)
+        const originalTokenAddress = positions.find(p => normalizeAddress(p.tokenAddress) === normalizedTokenAddress)?.tokenAddress 
+          || Object.keys(actualBalances).find(addr => normalizeAddress(addr) === normalizedTokenAddress)
+          || normalizedTokenAddress;
+        
+        const currentBalance = actualBalances[originalTokenAddress] ?? actualBalances[normalizedTokenAddress] ?? 0;
+        const previousBalance = previousBalancesRef.current[originalTokenAddress] 
+          ?? previousBalancesRef.current[normalizedTokenAddress]
+          ?? undefined;
+        
+        // If balance decreased significantly, tokens were sold
+        if (previousBalance !== undefined && currentBalance < previousBalance - 0.0001) {
+          const soldAmount = previousBalance - currentBalance;
+          
+          // Check if this sale was already counted from trade history
+          const alreadyCounted = salesDetected.some(s => {
+            const sAddr = normalizeAddress(s.tokenAddress);
+            return (sAddr === normalizedTokenAddress || sAddr === normalizeAddress(originalTokenAddress)) &&
+              Math.abs(s.soldAmount - soldAmount) < Math.max(soldAmount * 0.1, 0.0001) && // Allow 10% tolerance
+              s.source === 'trade_history';
+          });
+          
+          if (alreadyCounted) {
+            // Already counted from trade history, just update balance
+            previousBalancesRef.current[originalTokenAddress] = currentBalance;
+            previousBalancesRef.current[normalizedTokenAddress] = currentBalance;
+            return;
+          }
+          
+          // Find the position to get buy price
+          const position = positions.find(p => 
+            normalizeAddress(p.tokenAddress) === normalizedTokenAddress || 
+            p.tokenAddress === originalTokenAddress
+          );
+          
+          if (position && position.bought > 0 && position.boughtUsdValue > 0) {
+            const avgBuyPrice = position.boughtUsdValue / position.bought;
+            const currentPrice = livePrices[originalTokenAddress] || livePrices[normalizedTokenAddress] || 0;
+            let salePrice = currentPrice;
+            
+            // Try to get sale price from position data
+            if (salePrice <= 0 && position.soldUsdValue > 0 && position.sold > 0) {
+              salePrice = position.soldUsdValue / position.sold;
+            }
+            
+            // If still no price, try to estimate from recent trade history
+            if (salePrice <= 0) {
+              const recentSells = sellTrades
+                .filter(s => normalizeAddress(s.tokenAddress) === normalizedTokenAddress)
+                .sort((a, b) => {
+                  const aTime = new Date(a.tradeTime || a.createdAt || 0).getTime();
+                  const bTime = new Date(b.tradeTime || b.createdAt || 0).getTime();
+                  return bTime - aTime; // Most recent first
+                });
+              
+              if (recentSells.length > 0) {
+                const recentSell = recentSells[0];
+                const recentSoldAmount = typeof recentSell.tokenAmount === 'string' 
+                  ? parseFloat(recentSell.tokenAmount) 
+                  : (recentSell.tokenAmount || 0);
+                const recentSaleValue = typeof recentSell.usdValue === 'string' 
+                  ? parseFloat(recentSell.usdValue) 
+                  : (recentSell.usdValue || 0);
+                
+                if (recentSoldAmount > 0) {
+                  salePrice = recentSaleValue / recentSoldAmount;
+                }
+              }
+            }
+            
+            // Last resort: use buy price (break-even assumption)
+            if (salePrice <= 0) {
+              salePrice = avgBuyPrice;
+            }
+            
+            const saleValueUsd = soldAmount * salePrice;
+            const costBasisOfSold = soldAmount * avgBuyPrice;
+            const saleRealizedPnl = saleValueUsd - costBasisOfSold;
+            
+            totalRealizedPnl += saleRealizedPnl;
+            
+            salesDetected.push({
+              tokenAddress: originalTokenAddress,
+              soldAmount,
+              salePrice,
+              costBasis: costBasisOfSold,
+              realizedPnl: saleRealizedPnl,
+              source: 'balance_change',
+            });
+            
+            console.log("💰 BALANCE CHANGE SALE - Realized PNL:", {
+              tokenAddress: originalTokenAddress,
+              normalizedTokenAddress,
+              previousBalance,
+              currentBalance,
+              soldAmount,
+              avgBuyPrice,
+              salePrice,
+              saleValueUsd,
+              costBasisOfSold,
+              realizedPnl: saleRealizedPnl,
+            });
+          } else {
+            // No position found - might be fully sold, try to find in trade history
+            console.log("⚠️ Balance decreased but no position found:", {
+              tokenAddress: originalTokenAddress,
+              normalizedTokenAddress,
+              previousBalance,
+              currentBalance,
+              soldAmount,
+            });
+          }
+        }
+        
+        // Always update previous balance for next check (even if no sale detected)
+        previousBalancesRef.current[originalTokenAddress] = currentBalance;
+        previousBalancesRef.current[normalizedTokenAddress] = currentBalance;
+      });
+      
+      // Save updated balances to localStorage
+      try {
+        const storageKeys = getStorageKeys();
+        localStorage.setItem(storageKeys.previousBalances, JSON.stringify(previousBalancesRef.current));
+      } catch (error) {
+        console.error("Error saving previous balances:", error);
+      }
+      
+      // 3. Calculate from backend-reported sales (for positions with sold > 0)
+      // Only count if not already counted from trade history or balance changes
+      positions.forEach((pos) => {
+        if (pos.sold > 0 && pos.bought > 0 && pos.boughtUsdValue > 0) {
+          // Check if already counted
+          const alreadyCounted = salesDetected.some(s => 
+            s.tokenAddress === pos.tokenAddress &&
+            (s.source === 'trade_history' || s.source === 'balance_change')
+          );
+          
+          if (alreadyCounted) return;
+          
+          const avgBuyPrice = pos.boughtUsdValue / pos.bought;
+          const costBasisOfSold = pos.sold * avgBuyPrice;
+          const saleValueUsd = pos.soldUsdValue || (pos.sold * (livePrices[pos.tokenAddress] || avgBuyPrice));
+          const saleRealizedPnl = saleValueUsd - costBasisOfSold;
+          
+          totalRealizedPnl += saleRealizedPnl;
+          
+          salesDetected.push({
+            tokenAddress: pos.tokenAddress,
+            soldAmount: pos.sold,
+            salePrice: saleValueUsd / pos.sold,
+            costBasis: costBasisOfSold,
+            realizedPnl: saleRealizedPnl,
+            source: 'backend',
+          });
+          
+          console.log("💰 BACKEND SALE - Realized PNL:", {
+            tokenAddress: pos.tokenAddress,
+            sold: pos.sold,
+            soldUsdValue: pos.soldUsdValue,
+            costBasisOfSold,
+            saleRealizedPnl,
+          });
+        }
+      });
+      
+      // Update cumulative realized PNL (persists across reloads)
+      // Store the total calculated from all sources
+      cumulativeRealizedPnlRef.current = totalRealizedPnl;
+      
+      // Update realized PNL history for chart
+      const currentTimestamp = Date.now();
+      const lastHistoryPoint = realizedPnlHistoryRef.current[realizedPnlHistoryRef.current.length - 1];
+      
+      // Only add new point if value changed significantly or it's been 5+ seconds
+      if (!lastHistoryPoint || 
+          Math.abs(lastHistoryPoint.value - totalRealizedPnl) > 0.01 ||
+          (currentTimestamp - lastHistoryPoint.timestamp) > 5000) {
+        realizedPnlHistoryRef.current.push({
+          timestamp: currentTimestamp,
+          value: totalRealizedPnl,
+        });
+        
+        // Keep only last 100 data points
+        if (realizedPnlHistoryRef.current.length > 100) {
+          realizedPnlHistoryRef.current.shift();
+        }
+        
+        // Save to localStorage
+        try {
+          const storageKeys = getStorageKeys();
+          localStorage.setItem(storageKeys.realizedPnlHistory, JSON.stringify(realizedPnlHistoryRef.current));
+          localStorage.setItem(storageKeys.cumulativeRealizedPnl, totalRealizedPnl.toString());
+        } catch (error) {
+          console.error("Error saving realized PNL data:", error);
+        }
+      }
 
       // Performance breakdown counters
       let above500 = 0;
@@ -719,79 +1444,6 @@ export default function PortfolioPage() {
           winningTrades++;
         } else if (pos.pnl < 0) {
           losingTrades++;
-        }
-
-        // Calculate realized PNL from sold positions
-        // Realized PnL = Money received from selling - Cost basis of sold tokens
-        if (pos.sold > 0 && pos.bought > 0 && pos.boughtUsdValue > 0) {
-          // Detect unit mismatch: if sold amount is much larger than bought amount
-          // This indicates the backend is storing sold amount in wrong units
-          let correctedSold = pos.sold;
-
-          if (pos.sold > pos.bought * 1000) {
-            // Likely unit mismatch - sold amount is probably in smaller units
-            // Try to correct by scaling down
-            correctedSold = pos.sold / 1000000; // Scale down by 1 million
-            console.warn("Unit mismatch detected - correcting sold amount:", {
-              tokenAddress: pos.tokenAddress,
-              originalSold: pos.sold,
-              correctedSold: correctedSold,
-              bought: pos.bought,
-            });
-          }
-
-          // Calculate average cost per token
-          const avgCostPerToken = pos.boughtUsdValue / pos.bought;
-          // Cost basis of sold tokens = average cost * amount sold (corrected)
-          const costBasisOfSold = avgCostPerToken * correctedSold;
-
-          // Correct soldUsdValue anomalies (same heuristics as Positions table)
-          let correctedSoldUsdValue = pos.soldUsdValue;
-          if (
-            correctedSoldUsdValue > 10000 &&
-            pos.boughtUsdValue > 0 &&
-            pos.boughtUsdValue < 1000
-          ) {
-            if (pos.sold > pos.bought) {
-              const sellRatio = Math.min(correctedSold / pos.bought, 1);
-              correctedSoldUsdValue = pos.boughtUsdValue * sellRatio;
-            } else if (correctedSoldUsdValue > pos.boughtUsdValue * 100) {
-              const sellRatio = pos.sold / pos.bought;
-              correctedSoldUsdValue = pos.boughtUsdValue * Math.min(sellRatio, 1);
-            }
-          }
-          if (pos.sold > pos.bought && correctedSoldUsdValue > pos.boughtUsdValue) {
-            correctedSoldUsdValue = pos.boughtUsdValue;
-          }
-
-          // Realized PnL = money received - cost basis (using corrected USD)
-          const realizedPnl = correctedSoldUsdValue - costBasisOfSold;
-
-          // Debug logging for PNL calculation
-          console.log("PNL calculation debug:", {
-            tokenAddress: pos.tokenAddress,
-            bought: pos.bought,
-            boughtUsdValue: pos.boughtUsdValue,
-            sold: pos.sold,
-            correctedSold: correctedSold,
-            soldUsdValue: pos.soldUsdValue,
-            avgCostPerToken: avgCostPerToken,
-            costBasisOfSold: costBasisOfSold,
-            realizedPnl: realizedPnl,
-          });
-
-          // Add validation to prevent extreme values
-          if (isFinite(realizedPnl) && Math.abs(realizedPnl) < 1e12) {
-            // Less than 1 trillion
-            totalRealizedPnl += realizedPnl;
-          } else {
-            console.warn(
-              "Invalid realized PNL value:",
-              realizedPnl,
-              "for token:",
-              pos.tokenAddress,
-            );
-          }
         }
 
         // Categorize by PNL percentage
@@ -811,21 +1463,288 @@ export default function PortfolioPage() {
 
       // For now, use the overall unrealized PNL since positions don't have timestamps
       const unrealizedPnlForTimeframe = unrealizedPnl;
+      
+      // Calculate total PNL (realized + unrealized)
+      const totalPnlForTimeframe = totalRealizedPnl + unrealizedPnlForTimeframe;
+      
+      // Calculate total cost basis (for percentage calculation)
+      // For REALIZED PNL percentage, use cost basis of SOLD tokens only (not all buys)
+      // This gives accurate percentage: realizedPnl / costBasisOfSoldTokens
+      const totalCostBasisOfSoldTokens = salesDetected.reduce((acc, sale) => acc + (sale.costBasis || 0), 0);
+      
+      // For TOTAL PNL percentage, use all buy trades (includes unrealized positions)
+      const totalCostBasisFromTrades = tradeHistory
+        .filter(t => t.type === "Buy")
+        .reduce((acc, buy) => {
+          const usdValue = typeof buy.usdValue === 'string' ? parseFloat(buy.usdValue) : buy.usdValue;
+          return acc + (usdValue || 0);
+        }, 0);
+      
+      const totalCostBasisFromPositions = positions.reduce((acc, pos) => acc + (pos.boughtUsdValue || 0), 0);
+      const totalCostBasis = Math.max(totalCostBasisFromTrades, totalCostBasisFromPositions);
+      
+      const totalPnlPercentageForTimeframe = totalCostBasis > 0 
+        ? (totalPnlForTimeframe / totalCostBasis) * 100 
+        : 0;
+      
+      // Calculate realized PNL percentage using cost basis of SOLD tokens only
+      // This is the correct way: realizedPnl / costBasisOfSoldTokens
+      const realizedPnlPercentage = totalCostBasisOfSoldTokens > 0 
+        ? (totalRealizedPnl / totalCostBasisOfSoldTokens) * 100 
+        : 0;
 
       console.log("📊 Final timeframe metrics:", {
         unrealizedPnl: unrealizedPnlForTimeframe,
         realizedPnl: totalRealizedPnl,
+        realizedPnlPercentage: realizedPnlPercentage,
+        totalPnl: totalPnlForTimeframe,
+        totalPnlPercentage: totalPnlPercentageForTimeframe,
+        totalCostBasis,
+        totalCostBasisFromTrades,
+        totalCostBasisFromPositions,
+        totalCostBasisOfSoldTokens, // Cost basis of only sold tokens (for realized PNL %)
         winningTrades,
         losingTrades,
-        totalRealizedPnl,
+        salesDetected: salesDetected.length,
+        salesDetails: salesDetected,
+        sellTradesCount: sellTrades.length,
+        actualBalancesCount: Object.keys(actualBalances).length,
       });
 
       setTimeframeMetrics({
         unrealizedPnl: unrealizedPnlForTimeframe,
         realizedPnl: totalRealizedPnl,
+        realizedPnlPercentage: realizedPnlPercentage,
         winningTrades,
         losingTrades,
       });
+      
+      // Update total PNL state
+      setTotalPnl(totalPnlForTimeframe);
+      setTotalPnlPercentage(totalPnlPercentageForTimeframe);
+
+      // ROBUST ACTUAL BALANCE CHANGE PNL CALCULATION
+      // Formula: Trading PNL = Current Balance - Initial Balance - (Deposits - Withdrawals)
+      // This excludes external deposits/withdrawals to show pure trading performance
+      const currentNativeBalance = currentChain === 'monad' 
+        ? (chainBalances?.monad || 0)
+        : (solBalance || 0);
+      
+      // Use correct price for the chain
+      const nativePrice = currentChain === 'monad' ? (monPrice || 0.025) : solPrice;
+      
+      // Initialize initial balance if not set (first time we see a balance)
+      // This represents the balance when the user FIRST started using the platform
+      if (initialNativeBalanceRef.current === null && currentNativeBalance > 0) {
+        initialNativeBalanceRef.current = currentNativeBalance;
+        const storageKeys = getStorageKeys();
+        try {
+          localStorage.setItem(storageKeys.initialNativeBalance, currentNativeBalance.toString());
+          console.log("📊 Initialized initial native balance:", currentNativeBalance);
+        } catch (error) {
+          console.error("Error saving initial balance:", error);
+        }
+      }
+      
+      // VALIDATION: Detect if initial balance seems incorrect
+      // If current balance is significantly larger than stored initial, it might be wrong
+      // This can happen if initial balance was set when balance was very low
+      if (initialNativeBalanceRef.current !== null && 
+          initialNativeBalanceRef.current > 0 && 
+          currentNativeBalance > 0 &&
+          currentNativeBalance > initialNativeBalanceRef.current * 10) {
+        // Current balance is 10x+ larger than initial - this suggests initial was set incorrectly
+        // However, don't auto-update - let user reset manually to avoid false positives
+        console.warn("⚠️ Initial balance seems unusually small compared to current balance:", {
+          initialBalance: initialNativeBalanceRef.current,
+          currentBalance: currentNativeBalance,
+          ratio: currentNativeBalance / initialNativeBalanceRef.current,
+          recommendation: "Consider resetting initial balance if this seems incorrect",
+        });
+      }
+      
+      // Calculate actual balance change PNL
+      const storedInitialBalance = initialNativeBalanceRef.current;
+      
+      if (storedInitialBalance !== null && storedInitialBalance > 0 && user?.bearerToken) {
+        // Fetch all transactions to get deposits and withdrawals
+        getWithdrawalHistory(user.bearerToken)
+          .then((withdrawalData) => {
+            // Get all transactions for this chain (both deposits and withdrawals)
+            const allChainTransactions = (withdrawalData?.transactions || []).filter((tx: any) => {
+              // For withdrawals, check destination address format
+              if (tx.destinationAddress) {
+                const addr = String(tx.destinationAddress).trim();
+                if (currentChain === 'monad') {
+                  return addr.startsWith('0x') && addr.length === 42;
+                } else {
+                  return !addr.startsWith('0x') && addr.length >= 32 && addr.length <= 44;
+                }
+              }
+              // For deposits, include them (they might not have destinationAddress)
+              return tx.type === 'deposit';
+            });
+            
+            // Calculate total deposits and withdrawals (completed only)
+            let totalDeposits = 0;
+            let totalWithdrawals = 0;
+            
+            allChainTransactions.forEach((tx: any) => {
+              if (tx.status !== 'completed') return;
+              
+              if (tx.type === 'deposit') {
+                totalDeposits += Number(tx.amount) || 0;
+              } else if (tx.type === 'withdraw' || tx.type === 'withdrawal') {
+                totalWithdrawals += Number(tx.amount) || 0;
+              }
+            });
+            
+            // ROBUST CALCULATION:
+            // Trading PNL = Current Balance - Initial Balance - (Deposits - Withdrawals)
+            // 
+            // Explanation:
+            // - Current Balance = Initial + Deposits - Withdrawals + Trading PNL
+            // - Therefore: Trading PNL = Current - Initial - Deposits + Withdrawals
+            // - Which simplifies to: Trading PNL = Current - Initial - (Deposits - Withdrawals)
+            //
+            // Example:
+            // - Started with 0.5 MON (initial)
+            // - Deposited 0.2 MON (totalDeposits = 0.2)
+            // - Withdrew 0.3 MON (totalWithdrawals = 0.3)
+            // - Current balance: 0.145 MON
+            // - Net Deposits = 0.2 - 0.3 = -0.1 (net withdrawal)
+            // - Trading PNL = 0.145 - 0.5 - (-0.1) = 0.145 - 0.5 + 0.1 = -0.255 MON
+            // This means you lost 0.255 MON from trading
+            
+            const netDeposits = totalDeposits - totalWithdrawals; // Positive = money added, negative = money removed
+            const tradingBalanceChange = currentNativeBalance - storedInitialBalance - netDeposits;
+            
+            const tradingBalanceChangeUsd = tradingBalanceChange * nativePrice;
+            const storedInitialBalanceUsd = storedInitialBalance * nativePrice;
+            
+            // Calculate percentage - only show if initial balance is reasonable (>= $0.10 to avoid huge percentages)
+            let tradingBalanceChangePercentage = 0;
+            if (storedInitialBalanceUsd >= 0.10) {
+              tradingBalanceChangePercentage = (tradingBalanceChangeUsd / storedInitialBalanceUsd) * 100;
+            } else {
+              // If initial balance is too small, percentage will be unreliable - don't show it
+              console.warn("⚠️ Initial balance too small for accurate percentage:", {
+                initialBalance: storedInitialBalance,
+                initialBalanceUsd: storedInitialBalanceUsd,
+                threshold: 0.10,
+                recommendation: "Reset initial balance or wait until you have more balance",
+              });
+              tradingBalanceChangePercentage = 0;
+            }
+            
+            setActualBalanceChangePnl(tradingBalanceChangeUsd);
+            setActualBalanceChangePnlPercentage(tradingBalanceChangePercentage);
+            setActualBalanceChangeNative(tradingBalanceChange); // Store native balance change (MON or SOL)
+            
+            // Calculate native percentage change
+            let nativePercentageChange = 0;
+            if (storedInitialBalance > 0) {
+              nativePercentageChange = (tradingBalanceChange / storedInitialBalance) * 100;
+            }
+            setActualBalanceChangeNativePercentage(nativePercentageChange);
+            
+            // Update balance history for chart
+            setBalanceHistory((prev) => {
+              const newEntry = {
+                timestamp: Date.now(),
+                balance: currentNativeBalance,
+                balanceChange: tradingBalanceChange,
+              };
+              const updated = [...prev, newEntry];
+              // Keep last 100 data points
+              return updated.slice(-100);
+            });
+            
+            console.log("📊 ROBUST Actual Trading PNL Calculation:", {
+              storedInitialBalance,
+              storedInitialBalanceUsd,
+              currentBalance: currentNativeBalance,
+              totalDeposits,
+              totalWithdrawals,
+              netDeposits,
+              tradingBalanceChange,
+              tradingBalanceChangeUsd,
+              tradingBalanceChangePercentage: tradingBalanceChangePercentage !== 0 
+                ? `${tradingBalanceChangePercentage.toFixed(2)}%` 
+                : "N/A (initial balance < $0.10)",
+              nativePrice,
+              tradeBasedPnl: totalPnlForTimeframe,
+              discrepancy: tradingBalanceChangeUsd - totalPnlForTimeframe,
+              formula: "Trading PNL = Current - Initial - (Deposits - Withdrawals)",
+              validation: storedInitialBalanceUsd >= 0.10 ? "✅ Valid" : "⚠️ Initial balance too small",
+            });
+          })
+          .catch((error) => {
+            console.error("Failed to fetch transaction history for PNL calculation:", error);
+            // Fallback: calculate raw balance change (without deposits/withdrawals adjustment)
+            const balanceChange = currentNativeBalance - storedInitialBalance;
+            const balanceChangeUsd = balanceChange * nativePrice;
+            const storedInitialBalanceUsd = storedInitialBalance * nativePrice;
+            
+            let balanceChangePercentage = 0;
+            if (storedInitialBalanceUsd >= 0.10) {
+              balanceChangePercentage = (balanceChangeUsd / storedInitialBalanceUsd) * 100;
+            }
+            
+            setActualBalanceChangePnl(balanceChangeUsd);
+            setActualBalanceChangePnlPercentage(balanceChangePercentage);
+            setActualBalanceChangeNative(balanceChange); // Store native balance change (MON or SOL)
+            
+            // Calculate native percentage change
+            let nativePercentageChange = 0;
+            if (storedInitialBalance > 0) {
+              nativePercentageChange = (balanceChange / storedInitialBalance) * 100;
+            }
+            setActualBalanceChangeNativePercentage(nativePercentageChange);
+            
+            // Update balance history for chart
+            setBalanceHistory((prev) => {
+              const newEntry = {
+                timestamp: Date.now(),
+                balance: currentNativeBalance,
+                balanceChange: balanceChange,
+              };
+              const updated = [...prev, newEntry];
+              // Keep last 100 data points
+              return updated.slice(-100);
+            });
+            
+            console.log("📊 Actual Balance Change (fallback, no transaction history):", {
+              storedInitialBalance,
+              currentBalance: currentNativeBalance,
+              balanceChange,
+              balanceChangeUsd,
+              balanceChangePercentage: balanceChangePercentage !== 0 
+                ? `${balanceChangePercentage.toFixed(2)}%` 
+                : "N/A",
+              note: "Deposits/withdrawals not accounted for in fallback calculation",
+            });
+          });
+      } else if (storedInitialBalance === null && currentNativeBalance > 0) {
+        // No stored initial balance - initialize with current balance (first time user)
+        initialNativeBalanceRef.current = currentNativeBalance;
+        const storageKeys = getStorageKeys();
+        try {
+          localStorage.setItem(storageKeys.initialNativeBalance, currentNativeBalance.toString());
+          console.log("📊 Initialized initial native balance (first time):", currentNativeBalance);
+        } catch (error) {
+          console.error("Error saving initial balance:", error);
+        }
+        setActualBalanceChangePnl(0);
+        setActualBalanceChangePnlPercentage(0);
+        setActualBalanceChangeNative(0);
+        setActualBalanceChangeNativePercentage(0);
+      } else {
+        setActualBalanceChangePnl(0);
+        setActualBalanceChangePnlPercentage(0);
+        setActualBalanceChangeNative(0);
+        setActualBalanceChangeNativePercentage(0);
+      }
 
       setPerformanceBreakdown({
         above500,
@@ -837,7 +1756,7 @@ export default function PortfolioPage() {
     };
 
     calculateTimeframeMetrics();
-  }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl]);
+  }, [selectedTimeframe, tradeHistory, positions, unrealizedPnl, actualBalances, livePrices, user?.id, user?.bearerToken, currentChain, chainBalances, solBalance, solPrice, monPrice]);
 
   // Export performance data as CSV
   const exportPerformanceData = () => {
@@ -851,6 +1770,8 @@ export default function PortfolioPage() {
       ["Performance Metrics", ""],
       ["Unrealized PnL", timeframeMetrics.unrealizedPnl],
       ["Realized PnL", timeframeMetrics.realizedPnl],
+      ["Total PnL", totalPnl],
+      ["Total PnL %", `${totalPnlPercentage >= 0 ? "+" : ""}${totalPnlPercentage.toFixed(2)}%`],
       ["Winning Trades", timeframeMetrics.winningTrades],
       ["Losing Trades", timeframeMetrics.losingTrades],
       [
@@ -940,20 +1861,32 @@ export default function PortfolioPage() {
 
       setWallets(mappedWallets);
       
-      // Initialize walletBalances from API response
-      // Preserve any balances that were explicitly set to 0 (new wallets) to avoid overwriting
-      // them with potentially incorrect API values
+      // Preserve existing walletBalances when fetching wallets
+      // Only update balances for new wallets or if API has a valid balance and we don't have one
       setWalletBalances((prevBalances) => {
-        const newBalances: Record<string, number> = {};
+        const newBalances: Record<string, number> = { ...prevBalances };
         mappedWallets.forEach((w) => {
-          // If a wallet was just created (balance was explicitly set to 0),
-          // keep it at 0 instead of using potentially incorrect API balance
-          // The balance refresh will update it with the actual chain balance
-          if (prevBalances[w.id] === 0) {
-            newBalances[w.id] = 0;
+          // Preserve existing balance if we have one (from previous refresh)
+          if (prevBalances[w.id] !== undefined && prevBalances[w.id] !== null) {
+            // Keep existing balance - it will be refreshed by the balance refresh useEffect
+            newBalances[w.id] = prevBalances[w.id];
           } else {
-            // Use API balance if it's a valid number, otherwise default to 0
-            newBalances[w.id] = typeof w.balance === "number" && w.balance >= 0 ? w.balance : 0;
+            // New wallet or no existing balance - use API balance or 0
+            // If a wallet was just created (balance was explicitly set to 0),
+            // keep it at 0 instead of using potentially incorrect API balance
+            if (prevBalances[w.id] === 0) {
+              newBalances[w.id] = 0;
+            } else {
+              // Use API balance if it's a valid number, otherwise default to 0
+              newBalances[w.id] = typeof w.balance === "number" && w.balance >= 0 ? w.balance : 0;
+            }
+          }
+        });
+        // Remove balances for wallets that no longer exist
+        const walletIds = new Set(mappedWallets.map(w => w.id));
+        Object.keys(newBalances).forEach(id => {
+          if (!walletIds.has(id)) {
+            delete newBalances[id];
           }
         });
         return newBalances;
@@ -979,7 +1912,7 @@ export default function PortfolioPage() {
     let cancelled = false;
 
     // Refresh all wallets that have an address for the current chain
-    const refreshAllWallets = async () => {
+    const refreshAllWallets = async (forceRefresh = false) => {
       // Refresh wallets sequentially with a small delay to avoid hammering the API
       // Primary wallet is refreshed first to update chainBalances immediately
       const walletsToRefresh = primaryWallet 
@@ -1000,7 +1933,7 @@ export default function PortfolioPage() {
           const result = await refreshBalance({
             chain: currentChain,
             address,
-            force: false, // Respect cooldown to avoid hammering the API
+            force: forceRefresh, // Force refresh if triggered by wallets-updated event
           });
           
           if (!cancelled && result?.balance !== undefined) {
@@ -1018,13 +1951,19 @@ export default function PortfolioPage() {
           console.error(`Failed to refresh balance for wallet ${wallet.id}:`, error);
         }
       }
+      
+      // Reset force flag after refresh
+      forceBalanceRefreshRef.current = false;
     };
 
+    // Check if this is a forced refresh
+    const shouldForce = forceBalanceRefreshRef.current;
+    
     // Refresh immediately
-    refreshAllWallets();
+    refreshAllWallets(shouldForce);
 
-    // Set up interval to refresh all wallets periodically
-    const interval = setInterval(refreshAllWallets, 12000);
+    // Set up interval to refresh all wallets periodically (not forced)
+    const interval = setInterval(() => refreshAllWallets(false), 12000);
     
     return () => {
       cancelled = true;
@@ -1034,6 +1973,27 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     fetchWallets();
+  }, [fetchWallets]);
+
+  // Listen for wallet updates from other components (e.g., footer wallet switcher)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const handleWalletsUpdated = () => {
+      console.log("🔄 Wallets updated event received, refreshing wallets list and balances...");
+      // Set flag to force balance refresh
+      forceBalanceRefreshRef.current = true;
+      // Fetch wallets first, which will trigger the balance refresh useEffect
+      fetchWallets().then(() => {
+        console.log("✅ Wallets refreshed, balances will update automatically with force refresh");
+      });
+    };
+    
+    window.addEventListener("wallets-updated", handleWalletsUpdated);
+    
+    return () => {
+      window.removeEventListener("wallets-updated", handleWalletsUpdated);
+    };
   }, [fetchWallets]);
 
   // Filter wallets based on search query and archived status
@@ -1582,7 +2542,7 @@ export default function PortfolioPage() {
           {activeSection === "spot" && (
             <div className="space-y-6">
               {/* Top Panels */}
-              <div className="grid grid-cols-3 gap-6">
+              <div className={`grid gap-6 ${initialNativeBalanceRef.current !== null ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 {/* Balance */}
                 <div className="bg-[#101114] rounded-lg p-6">
                   <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
@@ -1591,23 +2551,36 @@ export default function PortfolioPage() {
                   <div className="space-y-4">
                     <div>
                       <div className="text-[#6B7280] text-sm font-light">
-                        Total Value
+                        Available Balance in $
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
-                        ${formatSmartNumber(totalValue)}
+                        {currentChain === 'monad' ? (
+                          `$${formatSmartNumber((monBalance || 0) * (monPrice || 0.025))}`
+                        ) : (
+                          `$${formatSmartNumber(solBalance)}`
+                        )}
                       </div>
                     </div>
-                    <div>
-                      <div className="text-[#6B7280] text-sm font-light">
+                    {/* Unrealized PNL - Commented out */}
+                    {/* <div>
+                      <div className="text-[#6B7280] text-sm font-light flex items-center gap-1">
                         Unrealized PNL
+                        <InterstateTooltip label="Profit/loss from positions you still hold (tokens you haven't sold yet). This changes as token prices change.">
+                          <span className="text-[#6B7280] hover:text-[#9CA3AF] cursor-help text-xs">ℹ️</span>
+                        </InterstateTooltip>
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
                         ${formatSmallPrice(unrealizedPnl)}
                       </div>
-                    </div>
+                      {unrealizedPnlPercentage !== 0 && (
+                        <div className={`text-xs mt-1 ${unrealizedPnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {unrealizedPnlPercentage >= 0 ? '+' : ''}{formatSmallPrice(unrealizedPnlPercentage)}%
+                        </div>
+                      )}
+                    </div> */}
                     <div>
                       <div className="text-[#6B7280] text-sm font-light">
-                        Available Balance
+                        Available Balance in MON
                       </div>
                       <div className="text-2xl font-light text-[#f0f5f5]">
                         {currentChain === 'monad' ? (
@@ -1615,24 +2588,128 @@ export default function PortfolioPage() {
                             <ChainIcon chain={currentChain} size="medium" />
                             {formatSmartNumber(monBalance)} MON
                           </>
-                        ) : sortByUSD && solPrice > 0 ? (
-                          <>
-                            <ChainIcon chain={currentChain} size="medium" />
-                            {formatSmartNumber(solBalance / solPrice)}
-                          </>
                         ) : (
-                          `$${formatSmartNumber(solBalance)}`
+                          <>
+                            <ChainIcon chain="monad" size="medium" />
+                            0 MON
+                          </>
                         )}
                       </div>
                     </div>
                   </div>
                 </div>
 
+                {/* Total PNL - Commented out */}
+                {/* <div className="bg-[#101114] rounded-lg p-6">
+                  <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                    Total PNL
+                  </div>
+                  <div className="flex flex-col h-32">
+                    <div
+                      className="text-2xl font-light mb-2"
+                      style={{
+                        color: totalPnl >= 0 ? "#70E0B0" : "#FF4D7F",
+                      }}
+                    >
+                      {sortByUSD && solPrice > 0 ? (
+                        <>
+                          <ChainIcon chain={currentChain} size="medium" />
+                          {formatSmartNumber(Math.abs(totalPnl) / solPrice)}
+                        </>
+                      ) : (
+                        `${totalPnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(totalPnl))}`
+                      )}
+                    </div>
+                    {totalPnlPercentage !== 0 && (
+                      <div className={`text-sm mb-2 ${totalPnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {totalPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(totalPnlPercentage)}%
+                      </div>
+                    )}
+                    <div className="text-xs text-[#6B7280] mt-auto flex items-center gap-2">
+                      <span>Realized + Unrealized</span>
+                      <InterstateTooltip label={
+                        <div className="text-xs space-y-1">
+                          <div><strong>Realized PNL:</strong> Profit/loss from completed trades (tokens you've sold)</div>
+                          <div><strong>Unrealized PNL:</strong> Profit/loss from positions you still hold (tokens you haven't sold yet)</div>
+                          <div><strong>Total PNL:</strong> Realized + Unrealized combined</div>
+                        </div>
+                      }>
+                        <span className="text-[#6B7280] hover:text-[#9CA3AF] cursor-help">ℹ️</span>
+                      </InterstateTooltip>
+                    </div>
+                  </div>
+                </div> */}
+
+                {/* Wallet Balance Change */}
+                {initialNativeBalanceRef.current !== null && (
+                  <div className="bg-[#101114] rounded-lg p-6">
+                    <div className="mb-4 text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                      Wallet Balance Change
+                    </div>
+                    <div className="flex flex-col">
+                      <div
+                        className="text-2xl font-light mb-2"
+                        style={{
+                          color: actualBalanceChangePnl >= 0 ? "#70E0B0" : "#FF4D7F",
+                        }}
+                      >
+                        {sortByUSD && nativePriceForDisplay > 0 ? (
+                          <>
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber(Math.abs(actualBalanceChangePnl) / (nativePriceForDisplay || 1))}
+                          </>
+                        ) : (
+                          `${actualBalanceChangePnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(actualBalanceChangePnl))}`
+                        )}
+                      </div>
+                      {/* Show native balance change (MON or SOL) */}
+                      <div 
+                        className="text-sm mb-1"
+                        style={{
+                          color: actualBalanceChangeNative >= 0 ? "#70E0B0" : "#FF4D7F",
+                        }}
+                      >
+                        {actualBalanceChangeNative >= 0 ? "+" : "-"}
+                        {formatSmartNumber(Math.abs(actualBalanceChangeNative))} {currentChain === 'monad' ? 'MON' : 'SOL'}
+                      </div>
+                      {/* Show native percentage change */}
+                      {actualBalanceChangeNativePercentage !== 0 && (
+                        <div 
+                          className="text-sm mb-2"
+                          style={{
+                            color: actualBalanceChangeNativePercentage >= 0 ? "#70E0B0" : "#FF4D7F",
+                          }}
+                        >
+                          {actualBalanceChangeNativePercentage >= 0 ? "+" : ""}{formatSmallPrice(actualBalanceChangeNativePercentage)}%
+                        </div>
+                      )}
+                      {actualBalanceChangePnlPercentage !== 0 && (
+                        <div className={`text-sm mb-3 ${actualBalanceChangePnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {actualBalanceChangePnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(actualBalanceChangePnlPercentage)}% (USD)
+                        </div>
+                      )}
+                      {/* Interactive Chart */}
+                      {balanceHistory.length > 0 && (
+                        <div className="mt-2 h-40 w-full">
+                          <BalanceChart 
+                            data={balanceHistory} 
+                            chain={currentChain}
+                            initialBalance={initialNativeBalanceRef.current || 0}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Realized PNL */}
                 <div className="bg-[#101114] rounded-lg p-6">
                   <div className="mb-4 flex items-center justify-between">
-                    <div className="text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors">
+                    <div className="text-[#f0f5f5] text-sm font-medium cursor-pointer hover:text-[#70E0B0] transition-colors flex items-center gap-2">
                       Realized PNL
+                      <InterstateTooltip label="Profit/loss from completed trades (tokens you've sold). This is locked in and won't change unless you make more trades.">
+                        <FiInfo className="text-[#6B7280] hover:text-[#9CA3AF] cursor-help text-xs w-3.5 h-3.5 transition-colors" />
+                      </InterstateTooltip>
                     </div>
                     {/* Calendar icon commented out */}
                     {/* <InterstateTooltip label="View realized profit/loss over time">
@@ -1667,6 +2744,10 @@ export default function PortfolioPage() {
                           Math.abs(timeframeMetrics.realizedPnl),
                         )}`
                       )}
+                    </div>
+                    {/* Realized PNL Percentage - Always show */}
+                    <div className={`text-sm mb-2 ${timeframeMetrics.realizedPnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {timeframeMetrics.realizedPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(timeframeMetrics.realizedPnlPercentage)}%
                     </div>
                     {/* Dynamic PNL chart */}
                     <div className="relative w-full flex-1">
@@ -1707,46 +2788,47 @@ export default function PortfolioPage() {
                           opacity="0.7"
                         />
 
-                        {/* Dynamic PNL line */}
+                        {/* Dynamic PNL line - shows realized PNL over time */}
                         <path
                           d={(() => {
+                            const history = realizedPnlHistoryRef.current;
                             const pnl = timeframeMetrics.realizedPnl;
-
-                            // More aggressive scaling for small values to make slope visible
-                            let normalizedPnl;
-                            if (Math.abs(pnl) < 0.01) {
-                              // For very small values, use much more aggressive scaling
-                              normalizedPnl = Math.max(
-                                -1,
-                                Math.min(1, pnl * 5000),
-                              ); // Scale up by 5000x
-                            } else if (Math.abs(pnl) < 1) {
-                              // For small-medium values, moderate scaling
-                              normalizedPnl = Math.max(
-                                -1,
-                                Math.min(1, pnl * 100),
-                              ); // Scale up by 100x
-                            } else {
-                              // For larger values, use the original logic
+                            
+                            if (history.length === 0) {
+                              // No history yet, use current value
                               const absMaxPnl = Math.max(Math.abs(pnl), 100);
-                              normalizedPnl = Math.max(
-                                -1,
-                                Math.min(1, pnl / absMaxPnl),
-                              );
+                              const normalizedPnl = absMaxPnl > 0 ? Math.max(-1, Math.min(1, pnl / absMaxPnl)) : 0;
+                              const endY = 40 - normalizedPnl * 30;
+                              return `M 0 40 L 300 ${endY}`;
                             }
-
+                            
+                            // Use history to create a line chart
+                            const points: string[] = [];
+                            const maxTime = Math.max(...history.map(h => h.timestamp));
+                            const minTime = Math.min(...history.map(h => h.timestamp));
+                            const timeRange = maxTime - minTime || 1;
+                            
+                            // Normalize PNL values for display
+                            const allValues = [...history.map(h => h.value), pnl];
+                            const maxAbsValue = Math.max(...allValues.map(Math.abs), 100);
+                            
+                            history.forEach((point, index) => {
+                              const x = ((point.timestamp - minTime) / timeRange) * 300;
+                              const normalizedValue = maxAbsValue > 0 ? Math.max(-1, Math.min(1, point.value / maxAbsValue)) : 0;
+                              const y = 40 - normalizedValue * 30;
+                              if (index === 0) {
+                                points.push(`M ${x} ${y}`);
+                              } else {
+                                points.push(`L ${x} ${y}`);
+                              }
+                            });
+                            
+                            // Add current value
+                            const normalizedPnl = maxAbsValue > 0 ? Math.max(-1, Math.min(1, pnl / maxAbsValue)) : 0;
                             const endY = 40 - normalizedPnl * 30;
-
-                            // Create a more dramatic line that trends up/down based on PNL
-                            return `M 0 40 L 60 ${
-                              40 - normalizedPnl * 12
-                            } L 120 ${
-                              40 - normalizedPnl * 18
-                            } L 180 ${
-                              40 - normalizedPnl * 24
-                            } L 240 ${
-                              40 - normalizedPnl * 27
-                            } L 300 ${endY}`;
+                            points.push(`L 300 ${endY}`);
+                            
+                            return points.join(' ');
                           })()}
                           stroke={
                             timeframeMetrics.realizedPnl >= 0
@@ -1771,22 +2853,12 @@ export default function PortfolioPage() {
                         />
                         <circle
                           cx="300"
-                          cy={
-                            40 -
-                            Math.max(
-                              -1,
-                              Math.min(
-                                1,
-                                timeframeMetrics.realizedPnl *
-                                  (Math.abs(timeframeMetrics.realizedPnl) < 0.01
-                                    ? 5000
-                                    : Math.abs(timeframeMetrics.realizedPnl) < 1
-                                    ? 100
-                                    : 1),
-                              ),
-                            ) *
-                              30
-                          }
+                          cy={(() => {
+                            const pnl = timeframeMetrics.realizedPnl;
+                            const absMaxPnl = Math.max(Math.abs(pnl), 100);
+                            const normalizedPnl = absMaxPnl > 0 ? Math.max(-1, Math.min(1, pnl / absMaxPnl)) : 0;
+                            return 40 - normalizedPnl * 30;
+                          })()}
                           r="2"
                           fill={
                             timeframeMetrics.realizedPnl >= 0
@@ -1850,6 +2922,31 @@ export default function PortfolioPage() {
                           }$${formatSmallPrice(
                             Math.abs(timeframeMetrics.realizedPnl),
                           )}`
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[#6B7280] font-light">
+                        {selectedTimeframe} Total PNL
+                      </span>
+                      <span
+                        className="font-light"
+                        style={{
+                          color: totalPnl >= 0 ? "#70E0B0" : "#FF4D7F",
+                        }}
+                      >
+                        {sortByUSD && solPrice > 0 ? (
+                          <>
+                            <ChainIcon chain={currentChain} size="medium" />
+                            {formatSmartNumber(Math.abs(totalPnl) / solPrice)}
+                          </>
+                        ) : (
+                          `${totalPnl >= 0 ? "+" : "-"}$${formatSmallPrice(Math.abs(totalPnl))}`
+                        )}
+                        {totalPnlPercentage !== 0 && (
+                          <span className="ml-2 text-xs">
+                            ({totalPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(totalPnlPercentage)}%)
+                          </span>
                         )}
                       </span>
                     </div>
