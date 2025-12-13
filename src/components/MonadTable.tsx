@@ -2339,11 +2339,10 @@ function MonadTable({
     
     console.log('[MonadTable] 🚀 INSTANT txHash via WebSocket:', data.txHash);
     
-    // Just update the link element - checkmark is controlled by timer
+    // Update the link element - wrap Monad logo in anchor to make clickable
     const linkEl = document.getElementById(`link-${pending.id}`);
     if (linkEl) {
-      linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 transition-colors ml-1"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" height="13" width="13"><path d="M432,320H400a16,16,0,0,0-16,16V448H64V128H208a16,16,0,0,0,16-16V80a16,16,0,0,0-16-16H48A48,48,0,0,0,0,112V464a48,48,0,0,0,48,48H400a48,48,0,0,0,48-48V336A16,16,0,0,0,432,320ZM488,0h-128c-21.37,0-32.05,25.91-17,41l35.73,35.73L135,320.37a24,24,0,0,0,0,34L157.67,377a24,24,0,0,0,34,0L435.28,133.32,471,169c15,15,41,4.5,41-17V24A24,24,0,0,0,488,0Z"></path></svg></a>`;
-      linkEl.style.display = 'inline-flex';
+      linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
     }
     
     // Set duration for auto-dismiss after 10s
@@ -2515,7 +2514,7 @@ function MonadTable({
     const timerCap = 0.40 + Math.random() * 0.20;
     let timerFinished = false;
     
-    // Show initial loading toast with timer - checkmark hidden until timer finishes
+    // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
     toast.custom(
       (t) => (
         <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
@@ -2525,7 +2524,9 @@ function MonadTable({
           )}
           <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
           <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
-          <span id={`link-${uniqueToastId}`} style={{ display: 'none' }}></span>
+          <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
+            <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+          </span>
         </div>
       ),
       { id: uniqueToastId, duration: Infinity }
@@ -2540,12 +2541,16 @@ function MonadTable({
         timerEl.textContent = `(${displayTime}s)`;
       }
       
-      // When timer reaches cap, show checkmark
+      // When timer reaches cap, show checkmark and Monad logo
       if (!timerFinished && elapsed >= timerCap) {
         timerFinished = true;
         const checkEl = document.getElementById(`check-${uniqueToastId}`);
         if (checkEl) {
           checkEl.style.display = 'block';
+        }
+        const linkEl = document.getElementById(`link-${uniqueToastId}`);
+        if (linkEl) {
+          linkEl.style.display = 'inline-flex';
         }
       }
     }, 50);
@@ -2569,11 +2574,10 @@ function MonadTable({
         // Only update toast if WebSocket hasn't already handled it
         if (pendingQuickBuyToastRef.current?.id === uniqueToastId) {
           const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-          // Just update the link element - checkmark is controlled by timer
+            // Update the link element - wrap Monad logo in anchor to make clickable
           const linkEl = document.getElementById(`link-${uniqueToastId}`);
           if (linkEl) {
-            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 transition-colors ml-1"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" height="13" width="13"><path d="M432,320H400a16,16,0,0,0-16,16V448H64V128H208a16,16,0,0,0,16-16V80a16,16,0,0,0-16-16H48A48,48,0,0,0,0,112V464a48,48,0,0,0,48,48H400a48,48,0,0,0,48-48V336A16,16,0,0,0,432,320ZM488,0h-128c-21.37,0-32.05,25.91-17,41l35.73,35.73L135,320.37a24,24,0,0,0,0,34L157.67,377a24,24,0,0,0,34,0L435.28,133.32,471,169c15,15,41,4.5,41-17V24A24,24,0,0,0,488,0Z"></path></svg></a>`;
-            linkEl.style.display = 'inline-flex';
+            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
           }
           // Auto-dismiss after 10s
           setTimeout(() => {
