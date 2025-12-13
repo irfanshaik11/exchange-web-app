@@ -30,6 +30,7 @@ interface UseMonadTradesWebSocketOptions {
   maxReconnectAttempts?: number;
   onNewTrade?: (trade: MonadTrade) => void;
   addressAliases?: string[]; // Additional identifiers that should match incoming trades
+  fallbackPollIntervals?: number[]; // Additional REST fetch attempts (ms) after mount to bridge WS lag
 }
 
 interface UseMonadTradesWebSocketReturn {
@@ -54,6 +55,7 @@ export function useMonadTradesWebSocket(
     maxReconnectAttempts = 10,
     onNewTrade,
     addressAliases = [],
+    fallbackPollIntervals = [500, 1500, 3000, 7000],
   } = options;
 
   const [trades, setTrades] = useState<MonadTrade[]>([]);
@@ -66,6 +68,8 @@ export function useMonadTradesWebSocket(
   const reconnectAttemptsRef = useRef(0);
   const mountedRef = useRef(true);
   const onNewTradeRef = useRef(onNewTrade);
+  const pollTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
+  const tradesRef = useRef<MonadTrade[]>([]);
 
   // Update callback ref when it changes
   useEffect(() => {
@@ -92,8 +96,11 @@ export function useMonadTradesWebSocket(
         const fetched = data.data as MonadTrade[];
         // Merge with existing trades to avoid overwriting WebSocket updates
         setTrades((prev) => {
+          tradesRef.current = prev;
           if (!prev || prev.length === 0) {
-            return fetched.slice(0, maxTrades);
+            const next = fetched.slice(0, maxTrades);
+            tradesRef.current = next;
+            return next;
           }
           const existingHashes = new Set(prev.map((t) => t.tx_hash));
           const combined = [...prev];
@@ -104,7 +111,9 @@ export function useMonadTradesWebSocket(
           }
           // Keep most recent first based on block_timestamp if available, else insertion order
           combined.sort((a, b) => (b.block_timestamp || 0) - (a.block_timestamp || 0));
-          return combined.slice(0, maxTrades);
+          const next = combined.slice(0, maxTrades);
+          tradesRef.current = next;
+          return next;
         });
       }
     } catch (err) {
@@ -114,6 +123,22 @@ export function useMonadTradesWebSocket(
       setLoading(false);
     }
   }, [tokenAddress, maxTrades]);
+
+  // Schedule a handful of REST refetches to bridge WS delivery delays
+  const scheduleFallbackFetches = useCallback(() => {
+    pollTimeoutsRef.current.forEach((t) => clearTimeout(t));
+    pollTimeoutsRef.current = [];
+
+    for (const delay of fallbackPollIntervals) {
+      const timeoutId = setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (tradesRef.current.length === 0) {
+          fetchInitialTrades();
+        }
+      }, delay);
+      pollTimeoutsRef.current.push(timeoutId);
+    }
+  }, [fallbackPollIntervals, fetchInitialTrades]);
 
   // Connect to WebSocket
   const connect = useCallback(() => {
@@ -173,11 +198,14 @@ export function useMonadTradesWebSocket(
 
                 // Update trades list with deduplication
                 setTrades((prev) => {
+                  tradesRef.current = prev;
                   const exists = prev.some((t) => t.tx_hash === trade.tx_hash);
                   if (exists) return prev;
 
                   const newTrades = [trade, ...prev];
-                  return newTrades.slice(0, maxTrades);
+                  const next = newTrades.slice(0, maxTrades);
+                  tradesRef.current = next;
+                  return next;
                 });
               }
             } catch (parseErr) {
@@ -236,6 +264,7 @@ export function useMonadTradesWebSocket(
 
     if (tokenAddress) {
       fetchInitialTrades();
+      scheduleFallbackFetches();
     }
 
     if (enabled) {
@@ -247,8 +276,10 @@ export function useMonadTradesWebSocket(
     return () => {
       mountedRef.current = false;
       disconnect();
+      pollTimeoutsRef.current.forEach((t) => clearTimeout(t));
+      pollTimeoutsRef.current = [];
     };
-  }, [enabled, tokenAddress, fetchInitialTrades, connect, disconnect]);
+  }, [enabled, tokenAddress, fetchInitialTrades, connect, disconnect, scheduleFallbackFetches]);
 
   return {
     trades,

@@ -73,6 +73,9 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
   onTradesUpdate
 }) => {
   const [showAge, setShowAge] = React.useState(true);
+  const [highlighted, setHighlighted] = React.useState<Set<string>>(new Set());
+  const prevHashesRef = React.useRef<Set<string>>(new Set());
+  const highlightTimeoutsRef = React.useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   // Use cached trades from token data if available (instant load)
   const effectiveInitialTrades = React.useMemo(() => {
@@ -95,6 +98,43 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
     }
     return effectiveInitialTrades;
   }, [wsTrades, effectiveInitialTrades]);
+
+  // Track newly arrived trades and apply a brief glow by side
+  React.useEffect(() => {
+    const currentHashes = new Set(displayTrades.map((t) => t.tx_hash));
+    const prev = prevHashesRef.current;
+    const newOnes = displayTrades.filter((t) => !prev.has(t.tx_hash));
+
+    if (newOnes.length > 0) {
+      setHighlighted((prevSet) => {
+        const next = new Set(prevSet);
+        newOnes.forEach((t) => {
+          const hash = t.tx_hash;
+          next.add(hash);
+          const existingTimeout = highlightTimeoutsRef.current.get(hash);
+          if (existingTimeout) clearTimeout(existingTimeout);
+          const timeout = setTimeout(() => {
+            setHighlighted((prevInner) => {
+              const innerNext = new Set(prevInner);
+              innerNext.delete(hash);
+              return innerNext;
+            });
+            highlightTimeoutsRef.current.delete(hash);
+          }, 1500);
+          highlightTimeoutsRef.current.set(hash, timeout);
+        });
+        return next;
+      });
+    }
+
+    prevHashesRef.current = currentHashes;
+
+    return () => {
+      // clean timeouts on unmount
+      highlightTimeoutsRef.current.forEach((t) => clearTimeout(t));
+      highlightTimeoutsRef.current.clear();
+    };
+  }, [displayTrades]);
 
   // Notify parent when trades update
   React.useEffect(() => {
@@ -119,9 +159,7 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
     <div className="w-full h-full flex flex-col bg-black">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-white">Trades</span>
-        </div>
+        <div className="flex items-center gap-2" />
         <span className="text-xs text-neutral-500">
           {displayTrades.length} trades
         </span>
@@ -171,25 +209,14 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
                 const time = getTimeFromTimestamp(trade.block_timestamp);
                 const isBuy = trade.is_buy;
                 const typeColor = isBuy ? MONAD_GREEN : MONAD_RED;
-                // Convert hex to rgba for hover background
-                const hexToRgba = (hex: string, alpha: number) => {
-                  const r = parseInt(hex.slice(1, 3), 16);
-                  const g = parseInt(hex.slice(3, 5), 16);
-                  const b = parseInt(hex.slice(5, 7), 16);
-                  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-                };
-                const hoverBg = hexToRgba(typeColor, 0.1);
+                const isHighlighted = highlighted.has(trade.tx_hash);
 
                 return (
                   <tr
                     key={trade.tx_hash || idx}
-                    className="border-b border-neutral-900 transition-colors"
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = hoverBg;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '';
-                    }}
+                    className={`border-b border-neutral-900 transition-colors ${
+                      isHighlighted ? (isBuy ? 'flash-buy' : 'flash-sell') : ''
+                    }`}
                   >
                     {/* Age/Time */}
                     <td className="pl-3 pr-1 py-2 text-neutral-400">
@@ -251,3 +278,28 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
 };
 
 export default MonadTrades;
+
+// Flash animation for newly arrived rows
+// Note: style jsx is local to this component
+// Buy: green wave, Sell: red wave
+// Falls back to transparent after the animation completes
+// Duration kept short to avoid lingering color on hover
+// eslint-disable-next-line @next/next/no-css-tags
+<style jsx>{`
+  @keyframes flashWaveGreen {
+    0% { background-color: rgba(134, 217, 159, 0.22); box-shadow: 0 0 0 0 rgba(134, 217, 159, 0.2); }
+    50% { background-color: rgba(134, 217, 159, 0.12); box-shadow: 0 0 0 10px rgba(134, 217, 159, 0.05); }
+    100% { background-color: transparent; box-shadow: 0 0 0 0 rgba(134, 217, 159, 0); }
+  }
+  @keyframes flashWaveRed {
+    0% { background-color: rgba(242, 102, 130, 0.24); box-shadow: 0 0 0 0 rgba(242, 102, 130, 0.2); }
+    50% { background-color: rgba(242, 102, 130, 0.14); box-shadow: 0 0 0 10px rgba(242, 102, 130, 0.05); }
+    100% { background-color: transparent; box-shadow: 0 0 0 0 rgba(242, 102, 130, 0); }
+  }
+  .flash-buy {
+    animation: flashWaveGreen 0.9s ease-out;
+  }
+  .flash-sell {
+    animation: flashWaveRed 0.9s ease-out;
+  }
+`}</style>
