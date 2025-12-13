@@ -229,6 +229,13 @@ export function useMonadPositionWebSocket(
   // Fetch initial position and connect to WebSocket on mount
   useEffect(() => {
     mountedRef.current = true;
+    
+    // Update configRef synchronously BEFORE calling connect (fixes race condition)
+    configRef.current = {
+      tokenAddress,
+      enabled,
+      userId: user?.id,
+    };
 
     // Only fetch position if we have a specific tokenAddress
     if (tokenAddress && user?.id) {
