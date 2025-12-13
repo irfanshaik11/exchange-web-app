@@ -1089,7 +1089,7 @@ const DepositModal: React.FC<DepositModalProps> = ({
                           </button>
                         </div>
                         <div className="mt-1 text-xs text-neutral-400">
-                          Fee: {withdrawalFee.toFixed(4)} {tokenSymbol} • Min:{" "}
+                          Gas Fee: {withdrawalFee.toFixed(4)} {tokenSymbol} • Min:{" "}
                           {MIN_WITHDRAWAL} {tokenSymbol} • Max: {MAX_WITHDRAWAL}{" "}
                           {tokenSymbol}
                         </div>
