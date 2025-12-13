@@ -120,13 +120,7 @@ const MonadTrades: React.FC<MonadTradesProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-neutral-800">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-white">Live Trades</span>
-          {connected && (
-            <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: MONAD_GREEN }} title="Connected" />
-          )}
-          {error && (
-            <span className="text-xs" style={{ color: MONAD_RED }} title={error}>Disconnected</span>
-          )}
+          <span className="text-sm font-medium text-white">Trades</span>
         </div>
         <span className="text-xs text-neutral-500">
           {displayTrades.length} trades

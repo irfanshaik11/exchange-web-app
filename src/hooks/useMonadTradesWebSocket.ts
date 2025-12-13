@@ -29,6 +29,7 @@ interface UseMonadTradesWebSocketOptions {
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
   onNewTrade?: (trade: MonadTrade) => void;
+  addressAliases?: string[]; // Additional identifiers that should match incoming trades
 }
 
 interface UseMonadTradesWebSocketReturn {
@@ -52,6 +53,7 @@ export function useMonadTradesWebSocket(
     reconnectInterval = 2000,
     maxReconnectAttempts = 10,
     onNewTrade,
+    addressAliases = [],
   } = options;
 
   const [trades, setTrades] = useState<MonadTrade[]>([]);
@@ -156,8 +158,13 @@ export function useMonadTradesWebSocket(
               if (message.type === 'new_trade' && message.data) {
                 const trade: MonadTrade = JSON.parse(message.data);
 
-                // Filter by token address if specified
-                if (tokenAddress && trade.token_address.toLowerCase() !== tokenAddress.toLowerCase()) {
+                // Filter by token address or aliases if specified
+                const allowed = new Set(
+                  [tokenAddress, ...addressAliases]
+                    .filter(Boolean)
+                    .map((a) => (a as string).toLowerCase())
+                );
+                if (allowed.size > 0 && !allowed.has(trade.token_address.toLowerCase())) {
                   continue;
                 }
 

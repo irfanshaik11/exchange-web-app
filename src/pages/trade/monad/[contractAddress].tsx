@@ -102,11 +102,17 @@ export default function MonadTradePage() {
   const { settings: quickBuySettings, side: quickBuySide } = useQuickBuyQueryParams();
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
 
+  // Streams are keyed by token/mint address; seed with URL/_mint and update once token loads
+  const [tokenMintForLive, setTokenMintForLive] = useState<string>(() => {
+    if (typeof _mint === "string" && _mint.trim()) return _mint;
+    return typeof contractAddress === "string" ? contractAddress : "";
+  });
+
   // Real-time token metrics via WebSocket
   const [liveMetrics, setLiveMetrics] = useState<TokenMetrics | null>(null);
   const { metrics: wsMetrics, connected: wsMetricsConnected } = useMonadTokenMetrics({
-    tokenAddress: (contractAddress as string) || "",
-    enabled: !!contractAddress && typeof contractAddress === "string",
+    tokenAddress: tokenMintForLive,
+    enabled: !!tokenMintForLive,
     onUpdate: (metrics) => setLiveMetrics(metrics),
   });
 
@@ -321,6 +327,13 @@ export default function MonadTradePage() {
     };
   }, [tokenData, optimisticToken, contractAddress, liveMetrics, wsMetrics]);
 
+  // Once token data resolves, align live stream identifier to the mint
+  useEffect(() => {
+    if (displayToken?.mint && displayToken.mint !== tokenMintForLive) {
+      setTokenMintForLive(displayToken.mint);
+    }
+  }, [displayToken?.mint, tokenMintForLive]);
+
   const tokenNameForTitle =
     (displayToken?.name && displayToken.name.trim()) ||
     (displayToken?.symbol && displayToken.symbol.trim()) ||
@@ -526,8 +539,9 @@ export default function MonadTradePage() {
 
   // Get trades for dev marker detection
   const { trades: allTrades } = useMonadTradesWebSocket({
-    tokenAddress: pairAddress,
-    enabled: !!pairAddress && !!devAddress,
+    tokenAddress: tokenMintForLive,
+    addressAliases: pairAddress ? [pairAddress] : [],
+    enabled: !!tokenMintForLive && !!devAddress,
     maxTrades: 200,
   });
 
@@ -763,7 +777,7 @@ export default function MonadTradePage() {
               <div className="flex-1 min-h-0" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: '2rem' }}>
                 {selectedTab === "Transactions" ? (
                   <MonadTrades
-                    tokenAddress={pairAddress}
+                    tokenAddress={tokenMintForLive}
                     cachedTrades={(tokenData as any)?.recent_trades || []}
                   />
                 ) : selectedTab === "Top Traders" ? (
