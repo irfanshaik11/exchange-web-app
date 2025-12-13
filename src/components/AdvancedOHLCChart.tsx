@@ -397,6 +397,11 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
   const hasRealPriceDataRef = useRef<boolean>(false); // Track if we've received real price data
   const marksInitializedRef = useRef(false);
   const prevTradeDataLengthRef = useRef<number>(tradeData?.length || 0);
+  const tradeSignatureRef = useRef<string>(
+    Array.isArray(tradeData)
+      ? tradeData.map((t: any) => t.transactionHash || t.tx_hash || t.id || '').join('|')
+      : ''
+  );
   
   // For Monad aggregation: track 1s candles within current timeframe window (1m, 5m, 15m, 1h, etc.)
   const currentAggregatedCandleRef = useRef<BackendOHLCData | null>(null);
@@ -459,6 +464,28 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
     prevTradeDataLengthRef.current = tradeCount;
   }, [creatorAddress, tradeData?.length]);
+
+  // Refresh marks when the underlying trade set changes (even if length stays the same)
+  useEffect(() => {
+    const signature = Array.isArray(tradeData)
+      ? tradeData.map((t: any) => t.transactionHash || t.tx_hash || t.id || '').join('|')
+      : '';
+
+    if (signature && signature !== tradeSignatureRef.current) {
+      tradeSignatureRef.current = signature;
+      if (widgetRef.current) {
+        widgetRef.current.onChartReady?.(() => {
+          try {
+            const chart = widgetRef.current?.chart?.();
+            chart?.resetData?.();
+            console.log('[AdvancedOHLCChart] Triggered chart reset after trade data signature change');
+          } catch (error) {
+            console.error('[AdvancedOHLCChart] Failed to reset chart after trade data signature change', error);
+          }
+        });
+      }
+    }
+  }, [tradeData]);
 
   // Build URL for OHLC data (same as BackendOHLCChart)
   // Allow override of interval for when TradingView requests a different resolution
@@ -1008,6 +1035,20 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
           if (isFirstRealData) {
             hasRealPriceDataRef.current = true;
             console.log('[AdvancedOHLCChart] 📊 First real price data received - will refresh chart for price scale');
+            // Refresh symbol once to force TradingView to recalc price scale/timeframe stats
+            setTimeout(() => {
+              widgetRef.current?.onChartReady(() => {
+                try {
+                  const tokenId = `${mint || pairAddress}`;
+                  const currentResolution = INTERVAL_TO_RESOLUTION[selectedInterval];
+                  widgetRef.current?.setSymbol(tokenId, currentResolution, () => {
+                    console.log('[AdvancedOHLCChart] ✅ Symbol refreshed after WS data - price scale updated');
+                  });
+                } catch (e) {
+                  console.log('[AdvancedOHLCChart] Symbol refresh after WS data failed:', e);
+                }
+              });
+            }, 50);
           }
 
           // Update state to trigger re-render and dismiss loading overlay

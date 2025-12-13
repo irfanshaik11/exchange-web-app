@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { formatSmartNumber, formatMarketCap, type Token } from "~/utils/db";
 import { useUser } from "~/components/UserContext";
 import { useWallet } from "~/components/useWallet";
@@ -17,8 +17,26 @@ import { tradeMonadBuy, tradeMonadSell } from "~/utils/api";
 import useMonadDevTokens from "~/hooks/useMonadDevTokens";
 import useMonadXray from "~/hooks/useMonadXray";
 import { extractTokenImage } from "~/utils/images";
+import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
+
+type MonadPositionSummary = {
+  tokenAddress: string;
+  userId: number | string;
+  totalBoughtTokens: number;
+  totalBoughtUsd: number;
+  totalBoughtMon: number;
+  totalSoldTokens: number;
+  totalSoldUsd: number;
+  totalSoldMon: number;
+  balanceTokens: number;
+  balanceUsdHistorical: number;
+  balanceMon: number;
+  realizedPnl: number;
+  realizedPnlMon: number;
+  realizedPnlPct: number;
+};
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -75,6 +93,21 @@ const prettyAmt = (s: string) => {
   const n = Number(s);
   if (!Number.isFinite(n)) return "";
   return Number(n.toFixed(6)).toString();
+};
+
+const formatMiniUsd = (v?: number) => {
+  if (!Number.isFinite(v)) return "--";
+  const abs = Math.abs(v!);
+  if (abs < 1) return "<$1";
+  return `$${formatSmartNumber(abs)}`;
+};
+
+const formatMiniMon = (v?: number, symbol: string = "MON") => {
+  if (!Number.isFinite(v)) return `0${symbol}`;
+  const sign = v! < 0 ? "-" : "";
+  const abs = Math.abs(v!);
+  if (abs < 0.01) return `${sign}<0.01${symbol}`;
+  return `${sign}${formatSmartNumber(abs)}${symbol}`;
 };
 
 // Helper function to truncate address
@@ -215,11 +248,68 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   const [showSlippageDropdown, setShowSlippageDropdown] = useState(false);
   const [showGasDropdown, setShowGasDropdown] = useState(false);
   
+  // Ref to track pending toast for WebSocket txHash update
+  const pendingToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
+  
   // Fetch dev token data
   const { devTokenData } = useMonadDevTokens(token?.mint, { enabled: !!token?.mint });
   
   // Fetch xray data
   const { xrayData, isLoading: xrayLoading } = useMonadXray(token?.mint, { enabled: !!token?.mint });
+
+  // Use WebSocket for real-time position updates AND instant txHash
+  const tokenAddress = token?.mint || token?.pair_address || '';
+  
+  // Callback for instant txHash update via WebSocket (fires before HTTP response)
+  const handleWsTxHash = useCallback((data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
+    const pending = pendingToastRef.current;
+    if (!pending) return;
+    
+    console.log('[MonadTradeActionPanel] 🚀 INSTANT txHash via WebSocket:', data.txHash);
+    
+    // Just update the link element - checkmark is controlled by timer
+    const linkEl = document.getElementById(`link-${pending.id}`);
+    if (linkEl) {
+      linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 transition-colors ml-1"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" height="13" width="13"><path d="M432,320H400a16,16,0,0,0-16,16V448H64V128H208a16,16,0,0,0,16-16V80a16,16,0,0,0-16-16H48A48,48,0,0,0,0,112V464a48,48,0,0,0,48,48H400a48,48,0,0,0,48-48V336A16,16,0,0,0,432,320ZM488,0h-128c-21.37,0-32.05,25.91-17,41l35.73,35.73L135,320.37a24,24,0,0,0,0,34L157.67,377a24,24,0,0,0,34,0L435.28,133.32,471,169c15,15,41,4.5,41-17V24A24,24,0,0,0,488,0Z"></path></svg></a>`;
+      linkEl.style.display = 'inline-flex';
+    }
+    
+    // Set duration for auto-dismiss after 10s
+    setTimeout(() => {
+      if (pendingToastRef.current?.id === pending.id) {
+        toast.dismiss(pending.id);
+        pendingToastRef.current = null;
+      }
+    }, 10000);
+  }, []);
+  
+  const { position: wsPosition, loading: positionLoading, connected: positionConnected } = useMonadPositionWebSocket({
+    tokenAddress,
+    enabled: !!user?.id, // Don't require tokenAddress - we want to receive txHash even before token is loaded
+    onUpdate: (pos) => {
+      // Position updated via WebSocket
+      console.log('[MonadTradeActionPanel] Position updated via WebSocket:', pos);
+    },
+    onTxHash: handleWsTxHash, // INSTANT txHash callback
+  });
+
+  // Use WebSocket position if available, otherwise fallback to null (will show defaults)
+  const positionSummary: MonadPositionSummary | null = wsPosition ? {
+    tokenAddress: wsPosition.tokenAddress,
+    userId: wsPosition.userId,
+    totalBoughtTokens: wsPosition.totalBoughtTokens,
+    totalBoughtUsd: wsPosition.totalBoughtUsd,
+    totalBoughtMon: wsPosition.totalBoughtMon,
+    totalSoldTokens: wsPosition.totalSoldTokens,
+    totalSoldUsd: wsPosition.totalSoldUsd,
+    totalSoldMon: wsPosition.totalSoldMon,
+    balanceTokens: wsPosition.balanceTokens,
+    balanceUsdHistorical: wsPosition.balanceUsdHistorical,
+    balanceMon: wsPosition.balanceMon,
+    realizedPnl: wsPosition.realizedPnl,
+    realizedPnlMon: wsPosition.realizedPnlMon,
+    realizedPnlPct: wsPosition.realizedPnlPct,
+  } : null;
 
   // Sync slippage and gasPrice from active preset
   useEffect(() => {
@@ -343,6 +433,9 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     }
   }, [amountPresets, editingPresets]);
 
+  // Position is now fetched via WebSocket hook above (useMonadPositionWebSocket)
+  // No need for manual fetching - WebSocket handles initial fetch and real-time updates
+
   const commitPresetDrafts = () => {
     const next = presetDrafts.map((s) => {
       // Handle empty string, just ".", or whitespace as 0
@@ -397,6 +490,21 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
 
   const price = (token as any).usd_price || (token as any).price_usd || 0;
   const marketCap = token.market_cap_usd || (token as any).fully_diluted_value || 0;
+
+  const pos = positionSummary;
+  // Show 0 instead of "--" when there's no position data (no trades yet)
+  // First row: USD values, Second row: MON values (native Monad currency)
+  const balUsd = pos ? formatMiniUsd(pos.balanceUsdHistorical) : "$0";
+  const balMon = pos ? formatMiniMon(pos.balanceMon, "MON") : "0MON"; // MON net (received - spent)
+  const boughtUsd = pos ? formatMiniUsd(pos.totalBoughtUsd) : "$0";
+  const boughtMon = pos ? formatMiniMon(pos.totalBoughtMon, "MON") : "0MON"; // MON spent on buys
+  const soldUsd = pos ? formatMiniUsd(pos.totalSoldUsd) : "$0";
+  const soldMon = pos ? formatMiniMon(pos.totalSoldMon, "MON") : "0MON"; // MON received from sells
+  const pnlUsd = pos
+    ? `${pos.realizedPnl < 0 ? "-" : ""}${formatMiniUsd(Math.abs(pos.realizedPnl))}`
+    : "$0";
+  const pnlPct = pos ? `${pos.realizedPnl >= 0 ? "+" : ""}${pos.realizedPnlPct.toFixed(0)}%` : "0%";
+  const pnlMon = pos ? formatMiniMon(pos.realizedPnlMon, "MON") : "0MON"; // MON PnL (received - spent)
 
   // Get stats from token data - using same mapping as TradeHeader
   const getStatsForTimeframe = (range: TimeRange) => {
@@ -473,129 +581,56 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
 
     setIsLoading(true);
     
-    // Generate random trade time between 0.4s and 0.6s
-    const tradeTime = Math.random() * 0.2 + 0.4;
-    const targetTime = tradeTime.toFixed(2);
-    
     // Get token image and name
     const tokenImage = token ? extractTokenImage(token) : null;
     const tokenName = token?.name || token?.symbol || '';
     
-    // Show success toast immediately (optimistic UI)
-    // Use closures to track animation state
-    let animationStarted = false;
-    let animationTimeoutId: NodeJS.Timeout | null = null;
-    let toastUpdated = false; // Flag to track if toast was updated (prevents animation errors)
+    // Generate unique toast ID and fake fast time (0.40-0.60s)
+    const uniqueToastId = `monad-trade-${Date.now()}`;
+    const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
+    const startTime = Date.now();
     
-    const toastId = toast(
+    // Show initial loading toast with timer - checkmark hidden until timer finishes
+    toast.custom(
       (t) => (
-        <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-4 h-4 relative">
-            <FaSpinner 
-              className="text-blue-400 animate-spin flex-shrink-0" 
-              size={16}
-              id={`spinner-${toastId}`}
-            />
-            <FaCheckCircle 
-              className="flex-shrink-0 absolute opacity-0" 
-              size={16}
-              id={`checkmark-${toastId}`}
-              style={{ transform: 'scale(0)', transition: 'all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)', color: '#31e3ac' }}
-            />
-          </div>
+        <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
+          <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
           {tokenImage && (
-            <img 
-              src={tokenImage} 
-              alt={tokenName}
-              className="w-5 h-5 rounded-full object-cover flex-shrink-0"
-              style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }}
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
+            <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
           )}
           <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
-          {tokenName && (
-            <span className="text-[#9CA3AF] text-xs ml-1">{tokenName}</span>
-          )}
-          <span 
-            className="text-[#9CA3AF] text-xs ml-1"
-            ref={(el) => {
-              if (!el || animationStarted) return;
-              animationStarted = true;
-              
-              const startTime = Date.now();
-              const duration = tradeTime * 1000; // Convert to milliseconds
-              
-              const intervalId = setInterval(() => {
-                if (!el || toastUpdated) {
-                  clearInterval(intervalId);
-                  return;
-                }
-                
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const currentTime = tradeTime * progress;
-                
-                el.textContent = `(${currentTime.toFixed(2)}s)`;
-                
-                if (progress >= 1) {
-                  el.textContent = `(${targetTime}s)`;
-                  clearInterval(intervalId);
-                  
-                  // Transform spinner to checkmark with cool animation
-                  // Only if toast hasn't been updated yet
-                  if (!toastUpdated) {
-                    animationTimeoutId = setTimeout(() => {
-                      if (toastUpdated) {
-                        return; // Toast was updated, abort animation
-                      }
-                      
-                      // Use querySelector to find elements by ID (safer than refs)
-                      const spinnerEl = document.getElementById(`spinner-${toastId}`);
-                      const checkmarkEl = document.getElementById(`checkmark-${toastId}`);
-                      
-                      if (spinnerEl && checkmarkEl && spinnerEl.parentNode && checkmarkEl.parentNode) {
-                        // Animate spinner out
-                        spinnerEl.style.transition = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
-                        spinnerEl.style.transform = 'scale(0) rotate(180deg)';
-                        spinnerEl.style.opacity = '0';
-                        
-                        // Show checkmark with bounce animation
-                        setTimeout(() => {
-                          if (!toastUpdated && checkmarkEl && checkmarkEl.parentNode) {
-                            checkmarkEl.style.opacity = '1';
-                            checkmarkEl.style.transform = 'scale(1)';
-                          }
-                        }, 250);
-                      }
-                    }, 50);
-                  }
-                }
-              }, 16); // ~60fps
-            }}
-          >
-            (0.00s)
-          </span>
-          <div className="flex items-center gap-1.5 ml-auto">
-            <FaSpinner className="text-blue-400 animate-spin flex-shrink-0" size={11} />
-            <span className="text-[#9CA3AF] text-xs">Loading tx hash...</span>
-          </div>
+          <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
+          <span id={`link-${uniqueToastId}`} style={{ display: 'none' }}></span>
         </div>
       ),
-      {
-        id: `monad-trade-${Date.now()}`,
-        duration: Infinity, // Keep open until we update it
-        icon: null, // Remove default icon - we'll show spinner that turns into checkmark
-        style: {
-          background: '#1a1b1e',
-          color: '#fff',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          borderRadius: '8px',
-          padding: '12px 16px',
-        },
-      }
+      { id: uniqueToastId, duration: Infinity }
     );
+    
+    // Random cap time between 0.40 and 0.60 seconds
+    const timerCap = 0.40 + Math.random() * 0.20;
+    let timerFinished = false;
+    
+    // Start timer animation - update every 50ms, show checkmark when cap is reached
+    const timerInterval = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+      const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+      if (timerEl) {
+        timerEl.textContent = `(${displayTime}s)`;
+      }
+      
+      // When timer reaches cap, show checkmark
+      if (!timerFinished && elapsed >= timerCap) {
+        timerFinished = true;
+        const checkEl = document.getElementById(`check-${uniqueToastId}`);
+        if (checkEl) {
+          checkEl.style.display = 'block';
+        }
+      }
+    }, 50);
+    
+    // Store pending toast info for WebSocket instant update (including timer)
+    pendingToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), startTime, timerInterval };
     
     try {
       const launchpad = getLaunchpad();
@@ -616,90 +651,35 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         );
 
         if (result.success && result.txHash) {
-          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-          
-          // Mark toast as updated to prevent animation errors
-          toastUpdated = true;
-          
-          // Clear any pending animation timeouts
-          if (animationTimeoutId) {
-            clearTimeout(animationTimeoutId);
-            animationTimeoutId = null;
-          }
-          
-          // Update toast with tx hash link (icon only) - preserve the checkmark
-          toast(
-            (t) => (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-4 h-4">
-                  <FaCheckCircle className="flex-shrink-0" size={16} style={{ color: '#31e3ac' }} />
-                </div>
-                {tokenImage && (
-                  <img 
-                    src={tokenImage} 
-                    alt={tokenName}
-                    className="w-5 h-5 rounded-full object-cover flex-shrink-0"
-                    style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                )}
-                <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
-                <span className="text-[#9CA3AF] text-xs ml-1">({targetTime}s)</span>
-                <a
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300 transition-colors duration-200 flex items-center ml-1"
-                  onClick={() => toast.dismiss(t.id)}
-                  title="View transaction on MonadVision"
-                >
-                  <FaExternalLinkAlt className="flex-shrink-0" size={13} />
-                </a>
-              </div>
-            ),
-            {
-              id: toastId,
-              duration: 10000,
-              icon: null, // Remove default icon
-              style: {
-                background: '#1a1b1e',
-                color: '#fff',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '8px',
-                padding: '12px 16px',
-              },
+          // Only update toast if WebSocket hasn't already handled it
+          if (pendingToastRef.current?.id === uniqueToastId) {
+            const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+            // Just update the link element - checkmark is controlled by timer
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 transition-colors ml-1"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" height="13" width="13"><path d="M432,320H400a16,16,0,0,0-16,16V448H64V128H208a16,16,0,0,0,16-16V80a16,16,0,0,0-16-16H48A48,48,0,0,0,0,112V464a48,48,0,0,0,48,48H400a48,48,0,0,0,48-48V336A16,16,0,0,0,432,320ZM488,0h-128c-21.37,0-32.05,25.91-17,41l35.73,35.73L135,320.37a24,24,0,0,0,0,34L157.67,377a24,24,0,0,0,34,0L435.28,133.32,471,169c15,15,41,4.5,41-17V24A24,24,0,0,0,488,0Z"></path></svg></a>`;
+              linkEl.style.display = 'inline-flex';
             }
-          );
-          
-          // Reset amount and clear loading
+            // Auto-dismiss after 10s
+            setTimeout(() => {
+              toast.dismiss(uniqueToastId);
+            }, 10000);
+            pendingToastRef.current = null;
+          }
           setAmount("");
           setIsLoading(false);
         } else {
-          toastUpdated = true;
-          if (animationTimeoutId) clearTimeout(animationTimeoutId);
-          toast.error(
-            formatMonadError((result as any).error),
-            {
-              id: toastId,
-              duration: 6000,
-            }
-          );
+          clearInterval(timerInterval);
+          pendingToastRef.current = null;
+          toast.error(formatMonadError((result as any).error), { id: uniqueToastId, duration: 6000 });
           setIsLoading(false);
         }
       } else {
-        // Sell trade - need to determine if using percentage or exact amount
+        // Sell trade
         const sellPercentage = parseFloat(amount);
         
         if (isNaN(sellPercentage) || sellPercentage <= 0 || sellPercentage > 100) {
-          toast.error(
-            "Please enter a valid percentage (1-100)",
-            {
-              id: toastId,
-              duration: 6000,
-            }
-          );
+          toast.error("Please enter a valid percentage (1-100)", { id: uniqueToastId, duration: 6000 });
           setIsLoading(false);
           return;
         }
@@ -710,97 +690,42 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             launchpad,
             percentage: sellPercentage,
             slippage: maxSlippage * 100,
-            gasPrice: gasPrice, // Gas price in gwei (optional)
+            gasPrice: gasPrice,
           },
           user.bearerToken
         );
 
         if (result.success && result.txHash) {
-          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-          
-          // Mark toast as updated to prevent animation errors
-          toastUpdated = true;
-          
-          // Clear any pending animation timeouts
-          if (animationTimeoutId) {
-            clearTimeout(animationTimeoutId);
-            animationTimeoutId = null;
-          }
-          
-          // Update toast with tx hash link (icon only) - preserve the checkmark
-          toast(
-            (t) => (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-4 h-4">
-                  <FaCheckCircle className="flex-shrink-0" size={16} style={{ color: '#31e3ac' }} />
-                </div>
-                {tokenImage && (
-                  <img 
-                    src={tokenImage} 
-                    alt={tokenName}
-                    className="w-5 h-5 rounded-full object-cover flex-shrink-0"
-                    style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                )}
-                <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
-                <span className="text-[#9CA3AF] text-xs ml-1">({targetTime}s)</span>
-                <a
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300 transition-colors duration-200 flex items-center ml-1"
-                  onClick={() => toast.dismiss(t.id)}
-                  title="View transaction on MonadVision"
-                >
-                  <FaExternalLinkAlt className="flex-shrink-0" size={13} />
-                </a>
-              </div>
-            ),
-            {
-              id: toastId,
-              duration: 10000,
-              icon: null, // Remove default icon
-              style: {
-                background: '#1a1b1e',
-                color: '#fff',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                borderRadius: '8px',
-                padding: '12px 16px',
-              },
+          // Only update toast if WebSocket hasn't already handled it
+          if (pendingToastRef.current?.id === uniqueToastId) {
+            const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+            // Just update the link element - checkmark is controlled by timer
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 transition-colors ml-1"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" height="13" width="13"><path d="M432,320H400a16,16,0,0,0-16,16V448H64V128H208a16,16,0,0,0,16-16V80a16,16,0,0,0-16-16H48A48,48,0,0,0,0,112V464a48,48,0,0,0,48,48H400a48,48,0,0,0,48-48V336A16,16,0,0,0,432,320ZM488,0h-128c-21.37,0-32.05,25.91-17,41l35.73,35.73L135,320.37a24,24,0,0,0,0,34L157.67,377a24,24,0,0,0,34,0L435.28,133.32,471,169c15,15,41,4.5,41-17V24A24,24,0,0,0,488,0Z"></path></svg></a>`;
+              linkEl.style.display = 'inline-flex';
             }
-          );
-          
-          // Reset amount and clear loading
+            // Auto-dismiss after 10s
+            setTimeout(() => {
+              toast.dismiss(uniqueToastId);
+            }, 10000);
+            pendingToastRef.current = null;
+          }
           setAmount("");
           setIsLoading(false);
         } else {
-          toastUpdated = true;
-          if (animationTimeoutId) clearTimeout(animationTimeoutId);
-          toast.error(
-            formatMonadError((result as any).error),
-            {
-              id: toastId,
-              duration: 6000,
-            }
-          );
+          clearInterval(timerInterval);
+          pendingToastRef.current = null;
+          toast.error(formatMonadError((result as any).error), { id: uniqueToastId, duration: 6000 });
           setIsLoading(false);
         }
       }
     } catch (error: any) {
       console.error("Trade error:", error);
-      toastUpdated = true;
-      if (animationTimeoutId) clearTimeout(animationTimeoutId);
+      clearInterval(timerInterval);
+      pendingToastRef.current = null;
       const errorMessage = formatMonadError(error?.message || error?.error);
-      toast.error(
-        errorMessage,
-        {
-          id: toastId,
-          duration: 6000,
-        }
-      );
+      toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
       setIsLoading(false);
     }
   };
@@ -1276,6 +1201,38 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         )}
       </div>
 
+      {/* Position summary (from DB trades) */}
+      <div className="px-3 pt-3 pb-2">
+        <div className="grid grid-cols-4 gap-2 text-[11px] text-[#9CA3AF] uppercase tracking-wide">
+          <span>Bal</span>
+          <span>Bought</span>
+          <span>Sold</span>
+          <span>PnL</span>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-[12px] mt-1">
+          <div className="flex flex-col">
+            <span className="text-[#E6E7EA] font-semibold">{positionLoading ? '…' : balUsd}</span>
+            <span className="text-[#70E0B0] text-[11px]">{positionLoading ? '…' : balMon}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[#70E0B0] font-semibold">{positionLoading ? '…' : boughtUsd}</span>
+            <span className="text-[#70E0B0] text-[11px]">{positionLoading ? '…' : boughtMon}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[#70E0B0] font-semibold">{positionLoading ? '…' : soldUsd}</span>
+            <span className="text-[#70E0B0] text-[11px]">{positionLoading ? '…' : soldMon}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className={cx("font-semibold", pos && pos.realizedPnl < 0 ? "text-[#FF4D7F]" : "text-[#70E0B0]")}>
+              {positionLoading ? '…' : pnlUsd} {pos ? `(${pnlPct})` : ""}
+            </span>
+            <span className={cx("text-[11px]", pos && pos.realizedPnlMon < 0 ? "text-[#FF4D7F]" : "text-[#70E0B0]")}>
+              {positionLoading ? '…' : pnlMon}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Primary action */}
       <div className="px-3 py-2">
         <button
@@ -1466,11 +1423,11 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             </div>
 
             {/* Dev Trading Activity - Fourth Row */}
-            {(xrayData.dev_bought_count != null || xrayData.dev_sold_count != null || xrayData.dev_bought_usd != null || xrayData.dev_sold_usd != null) && (
+            {/* Commented out - Dev Buys/Dev Sells section */}
+            {/* {(xrayData.dev_bought_count != null || xrayData.dev_sold_count != null || xrayData.dev_bought_usd != null || xrayData.dev_sold_usd != null) && (
               <>
                 <div className="h-px" style={{ backgroundColor: AX.border }}></div>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {/* Dev Buy Count */}
                   <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
                     <div className="flex flex-col items-center gap-1">
                       <div className="flex items-center gap-1.5">
@@ -1488,7 +1445,6 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                     </div>
                   </div>
 
-                  {/* Dev Sell Count */}
                   <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
                     <div className="flex flex-col items-center gap-1">
                       <div className="flex items-center gap-1.5">
@@ -1507,7 +1463,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                   </div>
                 </div>
               </>
-            )}
+            )} */}
           </>
         ) : null}
       </div>

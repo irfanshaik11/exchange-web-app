@@ -29,6 +29,8 @@ interface UseMonadTradesWebSocketOptions {
   reconnectInterval?: number;
   maxReconnectAttempts?: number;
   onNewTrade?: (trade: MonadTrade) => void;
+  addressAliases?: string[]; // Additional identifiers that should match incoming trades
+  fallbackPollIntervals?: number[]; // Additional REST fetch attempts (ms) after mount to bridge WS lag
 }
 
 interface UseMonadTradesWebSocketReturn {
@@ -52,6 +54,8 @@ export function useMonadTradesWebSocket(
     reconnectInterval = 2000,
     maxReconnectAttempts = 10,
     onNewTrade,
+    addressAliases = [],
+    fallbackPollIntervals = [500, 1500, 3000, 7000],
   } = options;
 
   const [trades, setTrades] = useState<MonadTrade[]>([]);
@@ -64,6 +68,30 @@ export function useMonadTradesWebSocket(
   const reconnectAttemptsRef = useRef(0);
   const mountedRef = useRef(true);
   const onNewTradeRef = useRef(onNewTrade);
+  const pollTimeoutsRef = useRef<NodeJS.Timeout[]>([]);
+  const tradesRef = useRef<MonadTrade[]>([]);
+  
+  // Store config in refs to avoid re-creating connect/disconnect
+  const configRef = useRef({
+    tokenAddress,
+    enabled,
+    maxTrades,
+    reconnectInterval,
+    maxReconnectAttempts,
+    addressAliases,
+  });
+  
+  // Update config ref when options change
+  useEffect(() => {
+    configRef.current = {
+      tokenAddress,
+      enabled,
+      maxTrades,
+      reconnectInterval,
+      maxReconnectAttempts,
+      addressAliases,
+    };
+  }, [tokenAddress, enabled, maxTrades, reconnectInterval, maxReconnectAttempts, addressAliases]);
 
   // Update callback ref when it changes
   useEffect(() => {
@@ -87,7 +115,28 @@ export function useMonadTradesWebSocket(
 
       const data = await response.json();
       if (data.status === 'success' && Array.isArray(data.data)) {
-        setTrades(data.data);
+        const fetched = data.data as MonadTrade[];
+        // Merge with existing trades to avoid overwriting WebSocket updates
+        setTrades((prev) => {
+          tradesRef.current = prev;
+          if (!prev || prev.length === 0) {
+            const next = fetched.slice(0, maxTrades);
+            tradesRef.current = next;
+            return next;
+          }
+          const existingHashes = new Set(prev.map((t) => t.tx_hash));
+          const combined = [...prev];
+          for (const t of fetched) {
+            if (!existingHashes.has(t.tx_hash)) {
+              combined.push(t);
+            }
+          }
+          // Keep most recent first based on block_timestamp if available, else insertion order
+          combined.sort((a, b) => (b.block_timestamp || 0) - (a.block_timestamp || 0));
+          const next = combined.slice(0, maxTrades);
+          tradesRef.current = next;
+          return next;
+        });
       }
     } catch (err) {
       console.error('[useMonadTradesWebSocket] Failed to fetch initial trades:', err);
@@ -97,13 +146,32 @@ export function useMonadTradesWebSocket(
     }
   }, [tokenAddress, maxTrades]);
 
-  // Connect to WebSocket
+  // Schedule a handful of REST refetches to bridge WS delivery delays
+  const scheduleFallbackFetches = useCallback(() => {
+    pollTimeoutsRef.current.forEach((t) => clearTimeout(t));
+    pollTimeoutsRef.current = [];
+
+    for (const delay of fallbackPollIntervals) {
+      const timeoutId = setTimeout(() => {
+        if (!mountedRef.current) return;
+        if (tradesRef.current.length === 0) {
+          fetchInitialTrades();
+        }
+      }, delay);
+      pollTimeoutsRef.current.push(timeoutId);
+    }
+  }, [fallbackPollIntervals, fetchInitialTrades]);
+
+  // Connect to WebSocket - uses refs to avoid dependency changes causing reconnects
   const connect = useCallback(() => {
+    const { enabled, maxReconnectAttempts, tokenAddress: ta, addressAliases: aa, maxTrades: mt, reconnectInterval: ri } = configRef.current;
+    
     if (!enabled) {
       return;
     }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Check if already connected or connecting
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
@@ -116,11 +184,12 @@ export function useMonadTradesWebSocket(
       const baseUrl = env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
       const wsUrl = `${baseUrl.replace(/^http/, 'ws')}/v1/stream`;
 
+      console.log('[useMonadTradesWebSocket] 🔌 Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[useMonadTradesWebSocket] Connected');
+        console.log('[useMonadTradesWebSocket] ✅ Connected');
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -128,6 +197,7 @@ export function useMonadTradesWebSocket(
 
       ws.onmessage = (event) => {
         if (!mountedRef.current) return;
+        const { tokenAddress: currentToken, addressAliases: currentAliases, maxTrades: currentMax } = configRef.current;
 
         try {
           // Handle batched messages (separated by newlines)
@@ -140,8 +210,13 @@ export function useMonadTradesWebSocket(
               if (message.type === 'new_trade' && message.data) {
                 const trade: MonadTrade = JSON.parse(message.data);
 
-                // Filter by token address if specified
-                if (tokenAddress && trade.token_address.toLowerCase() !== tokenAddress.toLowerCase()) {
+                // Filter by token address or aliases if specified
+                const allowed = new Set(
+                  [currentToken, ...currentAliases]
+                    .filter(Boolean)
+                    .map((a) => (a as string).toLowerCase())
+                );
+                if (allowed.size > 0 && !allowed.has(trade.token_address.toLowerCase())) {
                   continue;
                 }
 
@@ -150,11 +225,14 @@ export function useMonadTradesWebSocket(
 
                 // Update trades list with deduplication
                 setTrades((prev) => {
+                  tradesRef.current = prev;
                   const exists = prev.some((t) => t.tx_hash === trade.tx_hash);
                   if (exists) return prev;
 
                   const newTrades = [trade, ...prev];
-                  return newTrades.slice(0, maxTrades);
+                  const next = newTrades.slice(0, currentMax);
+                  tradesRef.current = next;
+                  return next;
                 });
               }
             } catch (parseErr) {
@@ -166,23 +244,28 @@ export function useMonadTradesWebSocket(
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (event) => {
         if (!mountedRef.current) return;
+        console.error('[useMonadTradesWebSocket] ❌ Error:', event);
         setError('WebSocket connection error');
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (!mountedRef.current) return;
+        console.log('[useMonadTradesWebSocket] 🔌 Closed:', event.code, event.reason);
         setConnected(false);
+        wsRef.current = null;
 
         // Attempt to reconnect
-        if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        const { enabled: stillEnabled, maxReconnectAttempts: maxAttempts, reconnectInterval: interval } = configRef.current;
+        if (stillEnabled && reconnectAttemptsRef.current < maxAttempts) {
           reconnectAttemptsRef.current += 1;
+          console.log(`[useMonadTradesWebSocket] Reconnecting in ${interval}ms (attempt ${reconnectAttemptsRef.current}/${maxAttempts})`);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               connect();
             }
-          }, reconnectInterval);
+          }, interval);
         }
       };
 
@@ -191,21 +274,7 @@ export function useMonadTradesWebSocket(
       console.error('[useMonadTradesWebSocket] Failed to create WebSocket:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect');
     }
-  }, [enabled, tokenAddress, maxTrades, reconnectInterval, maxReconnectAttempts]);
-
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-
-    setConnected(false);
-  }, []);
+  }, []); // Empty deps - uses refs for all config
 
   // Fetch initial trades and connect to WebSocket on mount
   useEffect(() => {
@@ -213,19 +282,37 @@ export function useMonadTradesWebSocket(
 
     if (tokenAddress) {
       fetchInitialTrades();
+      scheduleFallbackFetches();
     }
 
     if (enabled) {
-      disconnect();
+      // Close existing connection before creating new one
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
       reconnectAttemptsRef.current = 0;
       connect();
     }
 
     return () => {
       mountedRef.current = false;
-      disconnect();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      pollTimeoutsRef.current.forEach((t) => clearTimeout(t));
+      pollTimeoutsRef.current = [];
     };
-  }, [enabled, tokenAddress, fetchInitialTrades, connect, disconnect]);
+  }, [enabled, tokenAddress]); // Only reconnect when enabled or tokenAddress changes
 
   return {
     trades,
