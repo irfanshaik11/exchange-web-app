@@ -19,10 +19,19 @@ export interface MonadPosition {
   realizedPnlPct: number;
 }
 
+export interface TxHashMessage {
+  txHash: string;
+  tokenAddress: string;
+  tradeType: 'buy' | 'sell';
+  tradeId?: string;
+  explorerUrl: string;
+}
+
 interface UseMonadPositionWebSocketOptions {
   tokenAddress: string;
   enabled?: boolean;
   onUpdate?: (position: MonadPosition) => void;
+  onTxHash?: (data: TxHashMessage) => void; // INSTANT txHash callback
 }
 
 interface UseMonadPositionWebSocketReturn {
@@ -39,7 +48,7 @@ interface UseMonadPositionWebSocketReturn {
 export function useMonadPositionWebSocket(
   options: UseMonadPositionWebSocketOptions
 ): UseMonadPositionWebSocketReturn {
-  const { tokenAddress, enabled = true, onUpdate } = options;
+  const { tokenAddress, enabled = true, onUpdate, onTxHash } = options;
   const { user } = useUser();
   const [position, setPosition] = useState<MonadPosition | null>(null);
   const [connected, setConnected] = useState(false);
@@ -51,13 +60,34 @@ export function useMonadPositionWebSocket(
   const reconnectAttemptsRef = useRef(0);
   const mountedRef = useRef(true);
   const onUpdateRef = useRef(onUpdate);
+  const onTxHashRef = useRef(onTxHash);
   const maxReconnectAttempts = 10;
   const reconnectInterval = 3000;
+  
+  // Store config in refs to avoid re-creating connect/disconnect
+  const configRef = useRef({
+    tokenAddress,
+    enabled,
+    userId: user?.id,
+  });
+  
+  // Update config ref when options change
+  useEffect(() => {
+    configRef.current = {
+      tokenAddress,
+      enabled,
+      userId: user?.id,
+    };
+  }, [tokenAddress, enabled, user?.id]);
 
-  // Update callback ref when it changes
+  // Update callback refs when they change
   useEffect(() => {
     onUpdateRef.current = onUpdate;
   }, [onUpdate]);
+  
+  useEffect(() => {
+    onTxHashRef.current = onTxHash;
+  }, [onTxHash]);
 
   // Fetch initial position from REST API
   const fetchInitialPosition = useCallback(async () => {
@@ -97,13 +127,18 @@ export function useMonadPositionWebSocket(
     }
   }, [tokenAddress, user?.id, user?.bearerToken]);
 
-  // Connect to WebSocket
+  // Connect to WebSocket - uses refs to avoid dependency changes causing reconnects
   const connect = useCallback(() => {
-    if (!enabled || !tokenAddress || !user?.id) {
+    const { enabled, userId, tokenAddress: ta } = configRef.current;
+    
+    // Allow connection even without tokenAddress (for global txHash listening)
+    if (!enabled || !userId) {
+      console.log('[useMonadPositionWebSocket] ⏭️ Skipping connection - enabled:', enabled, 'userId:', userId);
       return;
     }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Check if already connected or connecting
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) {
       return;
     }
 
@@ -119,13 +154,14 @@ export function useMonadPositionWebSocket(
       }
 
       // Convert http:// to ws:// or https:// to wss://
-      const wsUrl = backendUrl.replace(/^http/, 'ws') + `/ws/monad/positions?userId=${user.id}`;
+      const wsUrl = backendUrl.replace(/^http/, 'ws') + `/ws/monad/positions?userId=${userId}`;
 
+      console.log('[useMonadPositionWebSocket] 🔌 Connecting to WebSocket:', wsUrl);
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         if (!mountedRef.current) return;
-        console.log('[useMonadPositionWebSocket] Connected');
+        console.log('[useMonadPositionWebSocket] ✅ WebSocket CONNECTED to', wsUrl);
         setConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
@@ -133,17 +169,22 @@ export function useMonadPositionWebSocket(
 
       ws.onmessage = (event) => {
         if (!mountedRef.current) return;
+        const { tokenAddress: currentToken } = configRef.current;
 
         try {
           const message = JSON.parse(event.data);
 
           if (message.type === 'connected') {
             console.log('[useMonadPositionWebSocket] Connection confirmed:', message);
+          } else if (message.type === 'tx_hash' && message.data) {
+            // INSTANT txHash push from backend - fires immediately after signing
+            console.log('[useMonadPositionWebSocket] 🚀 INSTANT txHash received:', message.data.txHash);
+            onTxHashRef.current?.(message.data as TxHashMessage);
           } else if (message.type === 'position_update' && message.data) {
             const positionData: MonadPosition = message.data;
             
             // Only update if this is for the token we're interested in
-            if (positionData.tokenAddress?.toLowerCase() === tokenAddress.toLowerCase()) {
+            if (currentToken && positionData.tokenAddress?.toLowerCase() === currentToken.toLowerCase()) {
               setPosition(positionData);
               onUpdateRef.current?.(positionData);
             }
@@ -153,18 +194,23 @@ export function useMonadPositionWebSocket(
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (event) => {
         if (!mountedRef.current) return;
+        console.error('[useMonadPositionWebSocket] ❌ WebSocket ERROR:', event);
         setError('WebSocket connection error');
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         if (!mountedRef.current) return;
+        console.log('[useMonadPositionWebSocket] 🔌 WebSocket CLOSED:', event.code, event.reason);
         setConnected(false);
+        wsRef.current = null;
 
         // Attempt to reconnect
-        if (enabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        const { enabled: stillEnabled } = configRef.current;
+        if (stillEnabled && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
+          console.log(`[useMonadPositionWebSocket] Reconnecting in ${reconnectInterval}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               connect();
@@ -178,41 +224,44 @@ export function useMonadPositionWebSocket(
       console.error('[useMonadPositionWebSocket] Failed to create WebSocket:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect');
     }
-  }, [enabled, tokenAddress, user?.id]);
-
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-
-    setConnected(false);
-  }, []);
+  }, []); // Empty deps - uses refs for all config
 
   // Fetch initial position and connect to WebSocket on mount
   useEffect(() => {
     mountedRef.current = true;
 
+    // Only fetch position if we have a specific tokenAddress
     if (tokenAddress && user?.id) {
       fetchInitialPosition();
     }
 
-    if (enabled && tokenAddress && user?.id) {
-      disconnect();
+    // Connect to WebSocket - allow without tokenAddress for global txHash listening
+    if (enabled && user?.id) {
+      // Close existing connection before creating new one
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
       reconnectAttemptsRef.current = 0;
       connect();
     }
 
     return () => {
       mountedRef.current = false;
-      disconnect();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
-  }, [enabled, tokenAddress, user?.id, fetchInitialPosition, connect, disconnect]);
+  }, [enabled, tokenAddress, user?.id]); // Only reconnect when these change
 
   return {
     position,
