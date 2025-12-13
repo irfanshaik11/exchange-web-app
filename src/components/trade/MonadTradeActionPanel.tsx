@@ -17,8 +17,26 @@ import { tradeMonadBuy, tradeMonadSell } from "~/utils/api";
 import useMonadDevTokens from "~/hooks/useMonadDevTokens";
 import useMonadXray from "~/hooks/useMonadXray";
 import { extractTokenImage } from "~/utils/images";
+import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
+
+type MonadPositionSummary = {
+  tokenAddress: string;
+  userId: number | string;
+  totalBoughtTokens: number;
+  totalBoughtUsd: number;
+  totalBoughtMon: number;
+  totalSoldTokens: number;
+  totalSoldUsd: number;
+  totalSoldMon: number;
+  balanceTokens: number;
+  balanceUsdHistorical: number;
+  balanceMon: number;
+  realizedPnl: number;
+  realizedPnlMon: number;
+  realizedPnlPct: number;
+};
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -75,6 +93,21 @@ const prettyAmt = (s: string) => {
   const n = Number(s);
   if (!Number.isFinite(n)) return "";
   return Number(n.toFixed(6)).toString();
+};
+
+const formatMiniUsd = (v?: number) => {
+  if (!Number.isFinite(v)) return "--";
+  const abs = Math.abs(v!);
+  if (abs < 1) return "<$1";
+  return `$${formatSmartNumber(abs)}`;
+};
+
+const formatMiniMon = (v?: number, symbol: string = "MON") => {
+  if (!Number.isFinite(v)) return `0${symbol}`;
+  const sign = v! < 0 ? "-" : "";
+  const abs = Math.abs(v!);
+  if (abs < 0.01) return `${sign}<0.01${symbol}`;
+  return `${sign}${formatSmartNumber(abs)}${symbol}`;
 };
 
 // Helper function to truncate address
@@ -221,6 +254,35 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   // Fetch xray data
   const { xrayData, isLoading: xrayLoading } = useMonadXray(token?.mint, { enabled: !!token?.mint });
 
+  // Use WebSocket for real-time position updates
+  const tokenAddress = token?.mint || token?.pair_address || '';
+  const { position: wsPosition, loading: positionLoading, connected: positionConnected } = useMonadPositionWebSocket({
+    tokenAddress,
+    enabled: !!tokenAddress && !!user?.id,
+    onUpdate: (pos) => {
+      // Position updated via WebSocket
+      console.log('[MonadTradeActionPanel] Position updated via WebSocket:', pos);
+    },
+  });
+
+  // Use WebSocket position if available, otherwise fallback to null (will show defaults)
+  const positionSummary: MonadPositionSummary | null = wsPosition ? {
+    tokenAddress: wsPosition.tokenAddress,
+    userId: wsPosition.userId,
+    totalBoughtTokens: wsPosition.totalBoughtTokens,
+    totalBoughtUsd: wsPosition.totalBoughtUsd,
+    totalBoughtMon: wsPosition.totalBoughtMon,
+    totalSoldTokens: wsPosition.totalSoldTokens,
+    totalSoldUsd: wsPosition.totalSoldUsd,
+    totalSoldMon: wsPosition.totalSoldMon,
+    balanceTokens: wsPosition.balanceTokens,
+    balanceUsdHistorical: wsPosition.balanceUsdHistorical,
+    balanceMon: wsPosition.balanceMon,
+    realizedPnl: wsPosition.realizedPnl,
+    realizedPnlMon: wsPosition.realizedPnlMon,
+    realizedPnlPct: wsPosition.realizedPnlPct,
+  } : null;
+
   // Sync slippage and gasPrice from active preset
   useEffect(() => {
     const preset = presets[activePreset];
@@ -343,6 +405,9 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     }
   }, [amountPresets, editingPresets]);
 
+  // Position is now fetched via WebSocket hook above (useMonadPositionWebSocket)
+  // No need for manual fetching - WebSocket handles initial fetch and real-time updates
+
   const commitPresetDrafts = () => {
     const next = presetDrafts.map((s) => {
       // Handle empty string, just ".", or whitespace as 0
@@ -397,6 +462,21 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
 
   const price = (token as any).usd_price || (token as any).price_usd || 0;
   const marketCap = token.market_cap_usd || (token as any).fully_diluted_value || 0;
+
+  const pos = positionSummary;
+  // Show 0 instead of "--" when there's no position data (no trades yet)
+  // First row: USD values, Second row: MON values (native Monad currency)
+  const balUsd = pos ? formatMiniUsd(pos.balanceUsdHistorical) : "$0";
+  const balMon = pos ? formatMiniMon(pos.balanceMon, "MON") : "0MON"; // MON net (received - spent)
+  const boughtUsd = pos ? formatMiniUsd(pos.totalBoughtUsd) : "$0";
+  const boughtMon = pos ? formatMiniMon(pos.totalBoughtMon, "MON") : "0MON"; // MON spent on buys
+  const soldUsd = pos ? formatMiniUsd(pos.totalSoldUsd) : "$0";
+  const soldMon = pos ? formatMiniMon(pos.totalSoldMon, "MON") : "0MON"; // MON received from sells
+  const pnlUsd = pos
+    ? `${pos.realizedPnl < 0 ? "-" : ""}${formatMiniUsd(Math.abs(pos.realizedPnl))}`
+    : "$0";
+  const pnlPct = pos ? `${pos.realizedPnl >= 0 ? "+" : ""}${pos.realizedPnlPct.toFixed(0)}%` : "0%";
+  const pnlMon = pos ? formatMiniMon(pos.realizedPnlMon, "MON") : "0MON"; // MON PnL (received - spent)
 
   // Get stats from token data - using same mapping as TradeHeader
   const getStatsForTimeframe = (range: TimeRange) => {
@@ -1276,6 +1356,38 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         )}
       </div>
 
+      {/* Position summary (from DB trades) */}
+      <div className="px-3 pt-3 pb-2">
+        <div className="grid grid-cols-4 gap-2 text-[11px] text-[#9CA3AF] uppercase tracking-wide">
+          <span>Bal</span>
+          <span>Bought</span>
+          <span>Sold</span>
+          <span>PnL</span>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-[12px] mt-1">
+          <div className="flex flex-col">
+            <span className="text-[#E6E7EA] font-semibold">{positionLoading ? '…' : balUsd}</span>
+            <span className="text-[#70E0B0] text-[11px]">{positionLoading ? '…' : balMon}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[#70E0B0] font-semibold">{positionLoading ? '…' : boughtUsd}</span>
+            <span className="text-[#70E0B0] text-[11px]">{positionLoading ? '…' : boughtMon}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[#70E0B0] font-semibold">{positionLoading ? '…' : soldUsd}</span>
+            <span className="text-[#70E0B0] text-[11px]">{positionLoading ? '…' : soldMon}</span>
+          </div>
+          <div className="flex flex-col">
+            <span className={cx("font-semibold", pos && pos.realizedPnl < 0 ? "text-[#FF4D7F]" : "text-[#70E0B0]")}>
+              {positionLoading ? '…' : pnlUsd} {pos ? `(${pnlPct})` : ""}
+            </span>
+            <span className={cx("text-[11px]", pos && pos.realizedPnlMon < 0 ? "text-[#FF4D7F]" : "text-[#70E0B0]")}>
+              {positionLoading ? '…' : pnlMon}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Primary action */}
       <div className="px-3 py-2">
         <button
@@ -1466,11 +1578,11 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             </div>
 
             {/* Dev Trading Activity - Fourth Row */}
-            {(xrayData.dev_bought_count != null || xrayData.dev_sold_count != null || xrayData.dev_bought_usd != null || xrayData.dev_sold_usd != null) && (
+            {/* Commented out - Dev Buys/Dev Sells section */}
+            {/* {(xrayData.dev_bought_count != null || xrayData.dev_sold_count != null || xrayData.dev_bought_usd != null || xrayData.dev_sold_usd != null) && (
               <>
                 <div className="h-px" style={{ backgroundColor: AX.border }}></div>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {/* Dev Buy Count */}
                   <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
                     <div className="flex flex-col items-center gap-1">
                       <div className="flex items-center gap-1.5">
@@ -1488,7 +1600,6 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                     </div>
                   </div>
 
-                  {/* Dev Sell Count */}
                   <div className="rounded-md p-2 border" style={{ backgroundColor: 'rgba(30, 31, 38, 0.3)', borderColor: AX.border }}>
                     <div className="flex flex-col items-center gap-1">
                       <div className="flex items-center gap-1.5">
@@ -1507,7 +1618,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
                   </div>
                 </div>
               </>
-            )}
+            )} */}
           </>
         ) : null}
       </div>
