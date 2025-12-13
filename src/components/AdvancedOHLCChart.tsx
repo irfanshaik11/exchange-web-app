@@ -270,8 +270,8 @@ const AdvancedOHLCChart: React.FC<AdvancedOHLCChartProps> = ({
 
   const selectedInterval = VALID_INTERVALS.includes(interval) ? interval : '1m';
   const [initialTokenId, setInitialTokenId] = useState<string | null>(() => (mint || pairAddress) ?? null);
-  const [displayMode, setDisplayMode] = useState<'USD' | 'MC'>('USD'); // USD/MC toggle for Monad chain
-  const displayModeRef = useRef<'USD' | 'MC'>('USD'); // Ref for fast access in callbacks
+  const [displayMode, setDisplayMode] = useState<'USD' | 'MC'>('MC'); // USD/MC toggle for Monad chain
+  const displayModeRef = useRef<'USD' | 'MC'>('MC'); // Ref for fast access in callbacks
   const latestParamsRef = useRef({
     mint,
     pairAddress,
@@ -2782,7 +2782,7 @@ Maker: ${walletAddress}`;
 
             // CRITICAL: getMarks only supports named colors, NOT hex colors!
             // Use simple named colors: "green" for buys, "red" for sells
-            const label = isBuy ? 'DB' : 'DS';
+            const label = isBuy ? '📈' : '📉';
             
             // Use named colors - getMarks does NOT support hex (#86d99f, #941839, etc.)
             // Named colors that work: "red", "green", "blue", "yellow", "orange", etc.
@@ -3245,9 +3245,9 @@ Maker: ${walletAddress}`;
           widget.headerReady().then(() => {
             const button = widget.createButton();
             const updateButtonText = (mode: 'USD' | 'MC') => {
-              button.innerHTML = mode === 'USD' 
-                ? '<span style="color: #86d99f;">USD</span>/MC'
-                : 'USD/<span style="color: #86d99f;">MC</span>';
+              button.innerHTML = mode === 'MC' 
+                ? '<span style="color: #86d99f;">MC</span>/USD'
+                : 'MC/<span style="color: #86d99f;">USD</span>';
             };
             updateButtonText(displayMode);
             button.style.cursor = 'pointer';
@@ -3257,7 +3257,7 @@ Maker: ${walletAddress}`;
             
             button.addEventListener('click', () => {
               setDisplayMode((prevMode) => {
-                const newMode = prevMode === 'USD' ? 'MC' : 'USD';
+                const newMode = prevMode === 'MC' ? 'USD' : 'MC';
                 // ✅ CRITICAL: Update ref IMMEDIATELY and SYNCHRONOUSLY before useEffect runs
                 displayModeRef.current = newMode;
                 console.log('[AdvancedOHLCChart] 🎯 Button clicked - displayMode changed to:', newMode, 'ref updated to:', displayModeRef.current);
