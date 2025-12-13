@@ -18,6 +18,7 @@ import useMonadDevTokens from "~/hooks/useMonadDevTokens";
 import useMonadXray from "~/hooks/useMonadXray";
 import { extractTokenImage } from "~/utils/images";
 import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
+import { useSolPrice } from "~/components/SolPriceContext";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -93,6 +94,47 @@ const prettyAmt = (s: string) => {
   const n = Number(s);
   if (!Number.isFinite(n)) return "";
   return Number(n.toFixed(6)).toString();
+};
+
+// Helper function to format numbers with subscript notation for very small values
+// Example: 0.00020618 -> "0.0₃20618" (3 zeros after 0.0, then 20618)
+const formatWithSubscript = (value: number): string => {
+  if (!Number.isFinite(value) || value === 0) return "0";
+  
+  const absValue = Math.abs(value);
+  
+  // For values >= 1, use standard formatting
+  if (absValue >= 1) {
+    return value.toFixed(2);
+  }
+  
+  // For values < 1, find the number of leading zeros after decimal
+  const str = value.toFixed(18); // Use enough precision
+  const match = str.match(/^0\.(0*)([1-9]\d*)/);
+  
+  if (match) {
+    const leadingZeros = match[1].length; // Count of zeros after "0."
+    const significantDigits = match[2];
+    
+    // Show up to 5-6 significant digits
+    const displayDigits = significantDigits.slice(0, 6);
+    
+    if (leadingZeros > 0) {
+      // Use subscript notation for the count of zeros
+      const subscriptMap: { [key: string]: string } = {
+        '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+        '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉'
+      };
+      const subscript = leadingZeros.toString().split('').map(d => subscriptMap[d] || d).join('');
+      return `0.0${subscript}${displayDigits}`;
+    } else {
+      // No leading zeros, just show the digits
+      return `0.${displayDigits}`;
+    }
+  }
+  
+  // Fallback to standard formatting
+  return value.toFixed(8).replace(/\.?0+$/, '');
 };
 
 const formatMiniUsd = (v?: number) => {
@@ -229,6 +271,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
   const { user } = useUser();
   const { isConnected } = useWallet();
   const { presets, activePreset, setActivePreset, setPresets } = useQuickBuy();
+  const { monPrice } = useSolPrice();
   const [mode, setMode] = useState<"buy" | "sell">("buy");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
   const [amount, setAmount] = useState("");
@@ -1274,6 +1317,49 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             </span>
           )}
         </button>
+        
+        {/* Conversion display: how much token can be bought with entered amount or 1 MON */}
+        {(() => {
+          const tokenPrice = price || (token as any)?.usd_price || (token as any)?.price_usd || 0;
+          const effectiveMonPrice = monPrice || 0.025; // Fallback to default MON price
+          
+          if (tokenPrice > 0 && effectiveMonPrice > 0) {
+            // Check if user has entered an amount (only for buy mode)
+            const enteredAmount = mode === "buy" && amount ? parseFloat(amount) : null;
+            const isValidAmount = enteredAmount !== null && !isNaN(enteredAmount) && enteredAmount > 0;
+            
+            // Calculate based on entered amount or default to 1 MON
+            const monAmount = isValidAmount ? enteredAmount : 1;
+            const tokensForAmount = (monAmount * effectiveMonPrice) / tokenPrice;
+            
+            // Format tokens for the amount (for display)
+            let tokensDisplay: string;
+            if (tokensForAmount >= 1) {
+              tokensDisplay = tokensForAmount.toFixed(2);
+            } else if (tokensForAmount >= 0.01) {
+              tokensDisplay = tokensForAmount.toFixed(4);
+            } else {
+              tokensDisplay = formatWithSubscript(tokensForAmount);
+            }
+            
+            // Format MON amount for display
+            let monAmountDisplay: string;
+            if (monAmount >= 1) {
+              monAmountDisplay = monAmount.toFixed(2);
+            } else if (monAmount >= 0.01) {
+              monAmountDisplay = monAmount.toFixed(4);
+            } else {
+              monAmountDisplay = formatWithSubscript(monAmount);
+            }
+            
+            return (
+              <div className="mt-2 text-left text-[11px] text-[#9CA3AF]">
+                {tokensDisplay} {token.symbol} ≈ {monAmountDisplay} MON
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       {/* Separator line */}
