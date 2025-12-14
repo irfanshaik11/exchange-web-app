@@ -164,8 +164,6 @@ export default function DiscoverPage() {
           return parsed;
         }
       }
-      // Clear old saved value to force fresh start
-      localStorage.removeItem('quickBuyAmount');
     }
     return 0;
   };
