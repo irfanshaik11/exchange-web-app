@@ -336,14 +336,11 @@ export default function usePaginatedTokensWithFallback({
           // Show first page immediately, then update with more tokens as they arrive
           const birdeyeLimit = 20; // Max allowed by Birdeye
           
-          // Fetch multiple pages to get enough tokens for filtering
-          // Increase to 5 pages (100 tokens) so aggressive filters still leave plenty of results
-          const pagesToFetch = 5; // 5 pages * 20 = 100 tokens
-          
           // OPTIMIZATION: Fetch first page immediately, then fetch remaining pages in parallel
           // currentChain is already defined above (line 303)
           // This shows data faster while still getting enough tokens for filtering
           let allTokens: any[] = [];
+          let totalTokens = 0; // Will be set from first page response
           
           // Fetch first page immediately (no delay)
           // CRITICAL: Use chain parameter (not ref) to ensure correct chain is used
@@ -367,16 +364,25 @@ export default function usePaginatedTokensWithFallback({
               const firstPageData = await firstResp.json();
               if (firstPageData?.data?.tokens && Array.isArray(firstPageData.data.tokens)) {
                 allTokens = allTokens.concat(firstPageData.data.tokens);
-                console.log(`[Birdeye] ✅ First page loaded: ${firstPageData.data.tokens.length} tokens`);
+                // Get total count from Birdeye response to know how many pages to fetch
+                totalTokens = firstPageData?.data?.total || firstPageData.data.tokens.length;
+                console.log(`[Birdeye] ✅ First page loaded: ${firstPageData.data.tokens.length} tokens (total available: ${totalTokens})`);
               }
             }
           } catch (e: any) {
             console.error(`[Birdeye] ❌ Failed to fetch first page:`, e?.message || e);
           }
           
+          // Calculate how many pages we actually need based on total tokens from Birdeye
+          // If total is not available, use a conservative default (10 pages for Monad, 5 for Solana)
+          const maxPagesNeeded = totalTokens > 0 
+            ? Math.ceil(totalTokens / birdeyeLimit) 
+            : (isMonad ? 10 : 5);
+          const pagesToFetch = Math.min(maxPagesNeeded, isMonad ? 10 : 5); // Cap at reasonable max
+          
           // Fetch remaining pages in PARALLEL (cache makes them fast)
           const remainingPages = Array.from({ length: pagesToFetch - 1 }, (_, i) => i + 1);
-          console.log(`[Birdeye] 🚀 Fetching remaining ${remainingPages.length} pages in parallel`);
+          console.log(`[Birdeye] 🚀 Fetching remaining ${remainingPages.length} pages in parallel (total tokens: ${totalTokens}, pages needed: ${pagesToFetch})`);
           
           const pagePromises = remainingPages.map(async (page) => {
             // CRITICAL: Use chain parameter (not ref) to ensure correct chain is used
@@ -783,20 +789,25 @@ export default function usePaginatedTokensWithFallback({
                 if (marketCap > 1_000_000_000) { // > $1B
                   return false;
                 }
-                if (marketCap < 20_000) { // < $20k (too small, likely noise)
+                // For Monad, use more lenient thresholds since it's a newer chain
+                const minMarketCap = isMonadChain ? 5_000 : 20_000; // $5k for Monad, $20k for Solana
+                if (marketCap < minMarketCap) {
                   return false;
                 }
                 
                 // Filter out tokens with effectively no trading activity
-                if (volume24h < 5_000) { // < $5k 24h volume
+                // For Monad, use more lenient volume threshold since it's a newer chain
+                const minVolume = isMonadChain ? 1_000 : 5_000; // $1k for Monad, $5k for Solana
+                if (volume24h < minVolume) {
                   return false;
                 }
                 
                 return true;
               });
               
-              // Limit to top 50 after filtering
-              tokens = tokens.slice(0, 50);
+              // Limit to top 50 after filtering (or more for Monad if we have them)
+              const maxTokens = isMonadChain ? 100 : 50; // Show up to 100 for Monad, 50 for Solana
+              tokens = tokens.slice(0, maxTokens);
               
               console.log(`[Filter] ✅ Filtered ${beforeFilter} tokens down to ${tokens.length} memecoins/degen tokens (max 50) for ${isMonadChain ? 'Monad' : 'Solana'}`);
               
