@@ -2659,19 +2659,6 @@ function MonadTable({
       color: "#31e3ac",
     },
     {
-      name: "clanker",
-      icon: (
-        <Image
-          src="/clanker.svg"
-          alt="clanker"
-          width={16}
-          height={16}
-          className="rounded-full"
-        />
-      ),
-      color: "#a855f7",
-    },
-    {
       name: "bonadfun",
       icon: (
         <Image
