@@ -2782,7 +2782,7 @@ Maker: ${walletAddress}`;
 
             // CRITICAL: getMarks only supports named colors, NOT hex colors!
             // Use simple named colors: "green" for buys, "red" for sells
-            const label = isBuy ? '📈' : '📉';
+            const label = isBuy ? 'DB' : 'DS';
             
             // Use named colors - getMarks does NOT support hex (#86d99f, #941839, etc.)
             // Named colors that work: "red", "green", "blue", "yellow", "orange", etc.
