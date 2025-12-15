@@ -2,7 +2,7 @@ name: Deploy to Multi-Region MIGs
 
 on:
   push:
-    branches: [ staging1 ]
+    branches: [ staging ]
 
 permissions:
   contents: read
@@ -51,7 +51,7 @@ jobs:
           gcloud compute instance-templates create $TEMPLATE_NAME \
             --project=$PROJECT_ID \
             --machine-type=n2-standard-4 \
-            --network-interface=network=interstate-narrative-vpc-global,network-tier=PREMIUM,stack-type=IPV4_ONLY,no-address \
+            --network-interface=network=interstate-narrative-vpc-global,network-tier=PREMIUM,stack-type=IPV4_ONLY \
             --maintenance-policy=MIGRATE \
             --provisioning-model=STANDARD \
             --service-account=486942555299-compute@developer.gserviceaccount.com \
