@@ -535,7 +535,7 @@ function TokenMetrics({
   };
 
   return (
-    <div className="relative z-10 flex items-center gap-1">
+    <div className="relative flex items-center gap-1">
       {/* Users Icon - Multiple People */}
       <div className="flex items-center gap-1">
         <div className="flex h-[18px] w-[18px] items-center justify-center rounded bg-[#111214] p-[2px]">
@@ -1097,7 +1097,7 @@ function TokenImage({
 
         {/* Dynamic protocol icon bubble - aligned to the outer border's bottom-right corner */}
         <div
-          className="pointer-events-none absolute right-0 bottom-0 z-10 flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full border-none bg-[#000000]"
+          className="pointer-events-none absolute right-0 bottom-0 z-[2] flex translate-x-1/5 translate-y-1/4 transform items-center justify-center rounded-full border-none bg-[#000000]"
           style={{
             width: 20,
             height: 20,
@@ -1144,7 +1144,7 @@ function TokenImage({
       {/* Image Preview Window */}
       {showPreview && (
         <div
-          className="pointer-events-none fixed z-[9999]"
+          className="pointer-events-none fixed z-15"
           style={{
             top: `${previewPosition.top}px`,
             left: `${previewPosition.left}px`,
@@ -3644,7 +3644,7 @@ function MonadTable({
 
                     return (
                       <div
-                        className="absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border bg-[rgba(15,16,18,0.95)] shadow-xl"
+                        className="absolute top-full left-0 z-30 mt-1 w-28 rounded-lg border bg-[rgba(15,16,18,0.95)] shadow-xl"
                         style={{
                           borderColor: AX.border,
                         }}
@@ -3729,12 +3729,12 @@ function MonadTable({
               <>
                 {/* Backdrop */}
                 <div
-                  className="fixed inset-0 z-[99998] bg-[rgba(0,0,0,0.3)]"
+                  className="fixed inset-0 z-[100] bg-[rgba(0,0,0,0.3)]"
                   onClick={() => setShowFilters(false)}
                 />
                 {/* Modal */}
                 <div
-                  className="filter-modal fixed top-1/2 left-1/2 z-[99999] max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform overflow-y-auto rounded-lg border shadow-xl"
+                  className="filter-modal fixed top-1/2 left-1/2 z-[101] max-h-[90vh] w-[95vw] max-w-[600px] -translate-x-1/2 -translate-y-1/2 transform overflow-y-auto rounded-lg border shadow-xl"
                   style={{
                     backgroundColor: AX.surface,
                     borderColor: AX.border,
@@ -5796,6 +5796,7 @@ function MonadTable({
                       popup.style.left = `${rect.left + rect.width / 2}px`;
                       popup.style.top = `${rect.top - 30}px`;
                       popup.style.transform = "translateX(-50%)";
+                      popup.style.zIndex = "10";
                     }
                     // Prefetch trade data on hover for instant navigation
                     if (pairAddress) {
@@ -5815,7 +5816,7 @@ function MonadTable({
                 >
                   {/* Subtle wave animation for top 3 final stretch tokens */}
                   {waveTokens.has(idx) && (
-                    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-lg">
+                    <div className="pointer-events-none absolute inset-0 z-[2] overflow-hidden rounded-lg">
                       <div
                         className="absolute top-0 left-0 h-full w-full"
                         style={{
@@ -5849,7 +5850,7 @@ function MonadTable({
                           backgroundColor: AX.surface,
                           borderColor: AX.border,
                           color: AX.text,
-                          zIndex: 99999,
+                          zIndex: 10,
                           left: "50%",
                           top: "100px",
                           transform: "translateX(-50%)",
@@ -6216,7 +6217,7 @@ function MonadTable({
                                     top: `${buttonPosition.top - 300}px`,
                                     transform: "translate(-50%, 0)",
                                     width: "280px",
-                                    zIndex: 999999,
+                                    zIndex: 15,
                                   }}
                                   onMouseEnter={() => {
                                     // Keep popup open when hovering over it
@@ -6500,7 +6501,7 @@ function MonadTable({
                               <div
                                 className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 transform rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
                                 style={{
-                                  zIndex: 99999,
+                                  zIndex: 4000,
                                   backgroundColor: AX.surface,
                                   color: AX.text,
                                   border: `1px solid ${AX.border}`,
@@ -6686,7 +6687,7 @@ function MonadTable({
                           </div>
                         </div>
                         <button
-                          className="z-50 flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
+                          className="z-10 flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100"
                           style={{
                             backgroundColor:
                               title.toLowerCase().includes("final") ||
@@ -6897,7 +6898,7 @@ function MonadTable({
                             color: AX.text,
                             border: `1px solid ${AX.border}`,
                             minWidth: "240px",
-                            zIndex: 99999,
+                            zIndex: 4000,
                           }}
                           onMouseEnter={() => setShowTop10Tooltip(token.id)}
                           onMouseLeave={() => setShowTop10Tooltip(null)}
@@ -6975,7 +6976,7 @@ function MonadTable({
                                 color: AX.text,
                                 border: `1px solid ${AX.border}`,
                                 minWidth: "240px",
-                                zIndex: 99999,
+                                zIndex: 4000,
                               }}
                               onMouseEnter={() => setShowDevTooltip(token.id)}
                               onMouseLeave={() => setShowDevTooltip(null)}
@@ -7273,7 +7274,7 @@ function MonadTable({
                             color: AX.text,
                             border: `1px solid ${AX.border}`,
                             minWidth: "240px",
-                            zIndex: 99999,
+                            zIndex: 4000,
                           }}
                           onMouseEnter={() => setShowSniperTooltip(token.id)}
                           onMouseLeave={() => setShowSniperTooltip(null)}
@@ -7336,7 +7337,7 @@ function MonadTable({
                             color: AX.text,
                             border: `1px solid ${AX.border}`,
                             minWidth: "240px",
-                            zIndex: 99999,
+                            zIndex: 4000,
                           }}
                           onMouseEnter={() => setShowInsiderTooltip(token.id)}
                           onMouseLeave={() => setShowInsiderTooltip(null)}
@@ -7475,7 +7476,7 @@ function MonadTable({
             id={`copy-tooltip-${idx}`}
             className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
             style={{
-              zIndex: 99999,
+              zIndex: 4000,
               backgroundColor: AX.surface,
               color: AX.text,
               border: `1px solid ${AX.border}`,
@@ -7496,7 +7497,7 @@ function MonadTable({
             id={`search-tooltip-${idx}`}
             className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
             style={{
-              zIndex: 99999,
+              zIndex: 4000,
               backgroundColor: AX.surface,
               color: AX.text,
               border: `1px solid ${AX.border}`,
@@ -7517,7 +7518,7 @@ function MonadTable({
             id={`profile-tooltip-${idx}`}
             className="pointer-events-none fixed rounded px-2 py-1 text-xs font-medium whitespace-nowrap opacity-0 transition-opacity duration-200"
             style={{
-              zIndex: 99999,
+              zIndex: 4000,
               backgroundColor: AX.surface,
               color: AX.text,
               border: `1px solid ${AX.border}`,

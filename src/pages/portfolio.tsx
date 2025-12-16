@@ -282,11 +282,33 @@ const normalizeWalletFromApi = (
   };
 };
 
+const MONAD_HEX_REGEX = /^[0-9a-fA-F]{40}$/;
+
 const getAddressForChain = (wallet: UserWallet, chain: string) => {
   if (chain === "sol") {
     return wallet.solanaAddress || wallet.address || "";
   }
-  return wallet.ethereumAddress || wallet.solanaAddress || wallet.address || "";
+
+  const normalizeMonadAddress = (addr?: string | null) => {
+    if (!addr || typeof addr !== "string") return "";
+    const trimmed = addr.trim();
+    if (!trimmed) return "";
+    if (trimmed.startsWith("0x") && trimmed.length === 42) {
+      return trimmed;
+    }
+    if (!trimmed.startsWith("0x") && MONAD_HEX_REGEX.test(trimmed)) {
+      return `0x${trimmed}`;
+    }
+    return "";
+  };
+
+  const normalizedEthereum = normalizeMonadAddress(wallet.ethereumAddress);
+  if (normalizedEthereum) return normalizedEthereum;
+
+  const normalizedAddress = normalizeMonadAddress(wallet.address);
+  if (normalizedAddress) return normalizedAddress;
+
+  return "";
 };
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
@@ -1870,26 +1892,20 @@ export default function PortfolioPage() {
     // Refresh all wallets using the batch endpoint
     const refreshAllWalletBalances = async (forceRefresh = false) => {
       // Prepare wallet addresses for batch fetch
-      const walletsWithAddresses = wallets
-        .map(wallet => {
-          const address =
-            currentChain === "sol"
-              ? wallet.solanaAddress || wallet.address
-              : wallet.ethereumAddress || null;
-          return { wallet, address };
-        })
-        .filter(({ address }) => !!address);
+      const walletAddresses = wallets
+        .map((wallet) => getAddressForChain(wallet, currentChain))
+        .filter((address): address is string => Boolean(address));
 
-      if (walletsWithAddresses.length === 0) return;
+      if (walletAddresses.length === 0) return;
 
       // Use the batch endpoint via UserContext
       // This will update contextWalletBalances, which the sync effect below will react to
       await refreshAllBalances(
-        walletsWithAddresses.map(({ address }) => ({
-          address: address!,
+        walletAddresses.map((address) => ({
+          address,
           chain: currentChain,
         })),
-        forceRefresh
+        forceRefresh,
       );
 
       // Note: Don't try to sync immediately here - React state updates are async
@@ -1930,10 +1946,7 @@ export default function PortfolioPage() {
       let hasChanges = false;
 
       for (const wallet of wallets) {
-        const address =
-          currentChain === "sol"
-            ? wallet.solanaAddress || wallet.address
-            : wallet.ethereumAddress || null;
+        const address = getAddressForChain(wallet, currentChain);
 
         if (address && contextWalletBalances[address] !== undefined) {
           if (updated[wallet.id] !== contextWalletBalances[address]) {
@@ -2046,10 +2059,7 @@ export default function PortfolioPage() {
       
       // Immediately fetch the actual balance for the new wallet from the chain
       // This ensures it shows the correct balance (which should be 0 for a new wallet)
-      const newWalletAddress =
-        currentChain === "sol"
-          ? newWallet.solanaAddress || newWallet.address
-          : newWallet.ethereumAddress || null;
+      const newWalletAddress = getAddressForChain(newWallet, currentChain);
       
       if (newWalletAddress) {
         try {
@@ -2252,10 +2262,7 @@ export default function PortfolioPage() {
         mappedWallets.find((w) => w.isPrimary) ??
         mappedWallets.find((w) => w.id === walletId);
       if (newPrimaryWallet) {
-        const newPrimaryAddress =
-          currentChain === "sol"
-            ? newPrimaryWallet.solanaAddress || newPrimaryWallet.address
-            : newPrimaryWallet.ethereumAddress || null;
+        const newPrimaryAddress = getAddressForChain(newPrimaryWallet, currentChain);
         
         if (newPrimaryAddress) {
           // Force immediate refresh to update Header balance right away
