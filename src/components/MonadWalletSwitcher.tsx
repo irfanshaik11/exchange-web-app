@@ -4,6 +4,7 @@ import { FaWallet, FaTimes, FaCopy, FaCheck } from 'react-icons/fa';
 import { useUser } from './UserContext';
 import { useSolPrice } from './SolPriceContext';
 import toast from 'react-hot-toast';
+import { normalizeMonadAddress } from '~/utils/normalizeMonadAddress';
 
 interface UserWallet {
   id: string;
@@ -33,11 +34,18 @@ const AX = {
 };
 
 const normalizeWalletFromApi = (wallet: any, index: number): UserWallet => {
+  const normalizedEthereum =
+    normalizeMonadAddress(wallet?.ethereumAddress) ||
+    normalizeMonadAddress(wallet?.address);
   return {
     id: wallet.id || wallet.walletId || `wallet-${index}`,
     label: wallet.label || wallet.name || `Wallet ${index + 1}`,
     address: wallet.address || '',
-    ethereumAddress: wallet.ethereumAddress || wallet.address || '',
+    ethereumAddress:
+      normalizedEthereum ||
+      wallet.ethereumAddress ||
+      wallet.address ||
+      '',
     solanaAddress: wallet.solanaAddress || '',
     balance: wallet.balance || 0,
     isPrimary: Boolean(wallet?.isPrimary),
@@ -61,14 +69,13 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
 
       // Normalize addresses and get balances from context
       const walletsWithBalances = monadWallets.map(wallet => {
-        const checksummedAddress = wallet.ethereumAddress.startsWith('0x')
-          ? wallet.ethereumAddress
-          : `0x${wallet.ethereumAddress}`;
-
+        const normalizedAddress = normalizeMonadAddress(wallet.ethereumAddress) || wallet.ethereumAddress;
         return {
           ...wallet,
-          ethereumAddress: checksummedAddress,
-          balance: contextWalletBalances[checksummedAddress] ?? wallet.balance ?? 0,
+          ethereumAddress: normalizedAddress,
+          balance: normalizedAddress
+            ? contextWalletBalances[normalizedAddress] ?? wallet.balance ?? 0
+            : wallet.balance ?? 0,
         };
       });
 
@@ -83,8 +90,9 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
   useEffect(() => {
     if (isOpen && wallets.length > 0 && !isUpdatingPrimaryRef.current) {
       const addressesForBatch = wallets
-        .filter(w => w.ethereumAddress)
-        .map(w => ({ address: w.ethereumAddress, chain: 'monad' }));
+        .map(w => normalizeMonadAddress(w.ethereumAddress))
+        .filter((addr): addr is string => Boolean(addr))
+        .map(address => ({ address, chain: 'monad' }));
 
       if (addressesForBatch.length > 0) {
         refreshAllBalances(addressesForBatch, true);
@@ -298,4 +306,3 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
 
   return createPortal(modalContent, document.body);
 }
-

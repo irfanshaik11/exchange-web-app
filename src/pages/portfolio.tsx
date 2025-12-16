@@ -27,6 +27,7 @@ import ExportWalletModal from "../components/ExportWalletModal";
 import { usePositionPrices } from "~/hooks/usePositionPrices";
 import { useWalletTokenBalances } from "~/hooks/useWalletTokenBalances";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 
 // Interactive Balance Chart Component
 const BalanceChart = ({ 
@@ -256,9 +257,11 @@ const normalizeWalletFromApi = (
       ? wallet.address
       : "";
   const ethereumAddress =
-    typeof wallet?.ethereumAddress === "string" && wallet.ethereumAddress.length > 0
-      ? wallet.ethereumAddress
-      : "";
+    normalizeMonadAddress(wallet?.ethereumAddress) ||
+    normalizeMonadAddress(
+      typeof wallet?.address === "string" ? wallet.address : undefined,
+    ) ||
+    "";
   const resolvedAddress = solanaAddress || ethereumAddress || "";
   let label = typeof wallet?.label === "string" ? wallet.label : undefined;
   if (!label) {
@@ -282,33 +285,15 @@ const normalizeWalletFromApi = (
   };
 };
 
-const MONAD_HEX_REGEX = /^[0-9a-fA-F]{40}$/;
-
 const getAddressForChain = (wallet: UserWallet, chain: string) => {
   if (chain === "sol") {
     return wallet.solanaAddress || wallet.address || "";
   }
-
-  const normalizeMonadAddress = (addr?: string | null) => {
-    if (!addr || typeof addr !== "string") return "";
-    const trimmed = addr.trim();
-    if (!trimmed) return "";
-    if (trimmed.startsWith("0x") && trimmed.length === 42) {
-      return trimmed;
-    }
-    if (!trimmed.startsWith("0x") && MONAD_HEX_REGEX.test(trimmed)) {
-      return `0x${trimmed}`;
-    }
-    return "";
-  };
-
-  const normalizedEthereum = normalizeMonadAddress(wallet.ethereumAddress);
-  if (normalizedEthereum) return normalizedEthereum;
-
-  const normalizedAddress = normalizeMonadAddress(wallet.address);
-  if (normalizedAddress) return normalizedAddress;
-
-  return "";
+  return (
+    normalizeMonadAddress(wallet.ethereumAddress) ||
+    normalizeMonadAddress(wallet.address) ||
+    ""
+  );
 };
 
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes in milliseconds
