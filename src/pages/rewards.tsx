@@ -250,6 +250,66 @@ export default function RewardsPage() {
                   </div>
                 </div>
 
+                {/* Share & earn with your link section */}
+            <div className="flex flex-col justify-between rounded-3xl border border-neutral-800 bg-gradient-to-br from-neutral-950/90 via-neutral-900/80 to-neutral-950/90 px-8 py-10 shadow-2xl shadow-purple-900/20">
+              <div className="space-y-6">
+                <h2 className="text-2xl font-semibold text-[#f0f5f5]">
+                  Share &amp; earn with your link
+                </h2>
+                <p className="mt-3 max-w-xl text-sm text-neutral-400">
+                  Drop your link in group chats, on X, or with your alpha group.
+                  Every trader that joins keeps fueling your rewards.
+                </p>
+                {!referralCode && (
+                  <InterstateButton
+                    className="w-full sm:w-auto"
+                    disabled={loadingReferral || isGenerating || !user?.bearerToken}
+                    onClick={() => {
+                      void handleGenerateCode();
+                    }}
+                    size="md"
+                    variant="primary"
+                  >
+                    {isGenerating ? "Generating..." : "Generate referral code"}
+                  </InterstateButton>
+                )}
+                <div className="rounded-3xl border border-neutral-800 bg-neutral-950/60 px-6 py-5 text-sm shadow-inner shadow-black/40">
+                  <p className="text-xs tracking-[0.3em] text-neutral-500 uppercase">
+                    Referral code
+                  </p>
+                  <p className="mt-3 text-3xl font-semibold text-[#f0f5f5]">
+                    {loadingReferral
+                      ? "Loading..."
+                      : referralCode ?? "------"}
+                  </p>
+                  <p className="mt-2 text-xs text-neutral-500">
+                    Generate your code to link every trader you invite directly
+                    to your rewards.
+                  </p>
+                  {referralError && (
+                    <p className="mt-3 text-xs text-red-400">{referralError}</p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+                <div className="flex flex-1 items-center justify-between gap-4 rounded-full border border-neutral-800 bg-neutral-950/60 px-5 py-3 font-mono text-sm text-neutral-200 shadow-inner shadow-black/40">
+                  <span className="truncate">
+                    {referralLink ||
+                      "Generate a referral code to unlock your link"}
+                  </span>
+                </div>
+                <InterstateButton
+                  className="sm:w-auto"
+                  disabled={!referralLink}
+                  icon={<Copy className="h-4 w-4" />}
+                  onClick={handleCopy}
+                  variant="primary"
+                >
+                  {copied ? "Copied!" : "Copy link"}
+                </InterstateButton>
+              </div>
+            </div>
+
                 <div className="space-y-6">
                   <div className="flex items-center gap-4">
                     <button className="rounded-full border border-neutral-800 bg-neutral-900/70 px-5 py-2 text-xs font-semibold tracking-[0.25em] text-neutral-200 uppercase transition hover:border-neutral-700 hover:text-[#f0f5f5]">
@@ -314,69 +374,9 @@ export default function RewardsPage() {
                     </table>
                   </div>
                 </div>
-
-            {/* Share & earn with your link section */}
-            <div className="flex flex-col justify-between rounded-3xl border border-neutral-800 bg-gradient-to-br from-neutral-950/90 via-neutral-900/80 to-neutral-950/90 px-8 py-10 shadow-2xl shadow-purple-900/20">
-              <div className="space-y-6">
-                <h2 className="text-2xl font-semibold text-[#f0f5f5]">
-                  Share &amp; earn with your link
-                </h2>
-                <p className="mt-3 max-w-xl text-sm text-neutral-400">
-                  Drop your link in group chats, on X, or with your alpha group.
-                  Every trader that joins keeps fueling your rewards.
-                </p>
-                {!referralCode && (
-                  <InterstateButton
-                    className="w-full sm:w-auto"
-                    disabled={loadingReferral || isGenerating || !user?.bearerToken}
-                    onClick={() => {
-                      void handleGenerateCode();
-                    }}
-                    size="md"
-                    variant="primary"
-                  >
-                    {isGenerating ? "Generating..." : "Generate referral code"}
-                  </InterstateButton>
-                )}
-                <div className="rounded-3xl border border-neutral-800 bg-neutral-950/60 px-6 py-5 text-sm shadow-inner shadow-black/40">
-                  <p className="text-xs tracking-[0.3em] text-neutral-500 uppercase">
-                    Referral code
-                  </p>
-                  <p className="mt-3 text-3xl font-semibold text-[#f0f5f5]">
-                    {loadingReferral
-                      ? "Loading..."
-                      : referralCode ?? "------"}
-                  </p>
-                  <p className="mt-2 text-xs text-neutral-500">
-                    Generate your code to link every trader you invite directly
-                    to your rewards.
-                  </p>
-                  {referralError && (
-                    <p className="mt-3 text-xs text-red-400">{referralError}</p>
-                  )}
-                </div>
-              </div>
-              <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-                <div className="flex flex-1 items-center justify-between gap-4 rounded-full border border-neutral-800 bg-neutral-950/60 px-5 py-3 font-mono text-sm text-neutral-200 shadow-inner shadow-black/40">
-                  <span className="truncate">
-                    {referralLink ||
-                      "Generate a referral code to unlock your link"}
-                  </span>
-                </div>
-                <InterstateButton
-                  className="sm:w-auto"
-                  disabled={!referralLink}
-                  icon={<Copy className="h-4 w-4" />}
-                  onClick={handleCopy}
-                  variant="primary"
-                >
-                  {copied ? "Copied!" : "Copy link"}
-                </InterstateButton>
-              </div>
-            </div>
           </section>
         </main>
-				
+
 				{/* Footer */}
 				<Footer />
       </div>

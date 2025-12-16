@@ -10,9 +10,17 @@ import {
   FaBell,
   FaChevronDown,
 } from "react-icons/fa";
+import { HiLightningBolt } from "react-icons/hi";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { useUser } from "./UserContext";
 import { useSolPrice } from "./SolPriceContext";
+import { useWatchlist } from "./WatchlistContext";
+import { useQuickBuy } from "./QuickBuyContext";
+import { formatSmartNumber } from "../utils/db";
+import type { Token } from "../utils/db";
+import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "../utils/api";
+import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
+import { showTransactionPendingToast, startTransactionToastTimeout, updateTransactionToast } from "../utils/toast";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
@@ -153,6 +161,39 @@ export default function Header({
   const currentChain = (router.query.chain as string) || "monad";
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
+  const { watchlist, removeFromWatchlist } = useWatchlist();
+  const { presets, activePreset } = useQuickBuy();
+  
+  // Load quickBuyAmount from localStorage
+  const getQuickBuyAmount = (): number => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('quickBuyAmount');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+    }
+    return 0;
+  };
+  const [quickBuyAmount, setQuickBuyAmount] = useState(getQuickBuyAmount);
+  
+  // Keep quickBuyAmount in sync with localStorage changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setQuickBuyAmount(getQuickBuyAmount());
+    };
+    window.addEventListener('storage', handleStorageChange);
+    // Also check periodically for same-window localStorage updates
+    const interval = setInterval(handleStorageChange, 1000);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
+  
+  const [hoveredWatchlistToken, setHoveredWatchlistToken] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositInitialTab, setDepositInitialTab] = useState<
@@ -475,6 +516,85 @@ export default function Header({
             border: "1px solid #ff6b6b",
           },
         });
+      }
+    }
+  };
+
+  // Handler for watchlist ticker quick buy
+  const handleWatchlistQuickBuy = async (token: Token) => {
+    if (!user) {
+      console.log("❌ No user found for quick buy");
+      return;
+    }
+    
+    let pendingToastId: string | null = null;
+    let clearToastTimeout = () => undefined;
+    
+    try {
+      const poolType = getPoolTypeFromToken(token);
+      const effectivePoolAddress = (token as any).migrated_pool_address || token.pair_address;
+      console.log(`🔍 Header Quick Buy ${token.symbol} - Protocol: ${(token as any).launchpad_protocol || (token as any).protocol || 'unknown'} → PoolType: ${poolType}`);
+      
+      const settings = presets[activePreset].quickBuySettings;
+      
+      // Show pending toast
+      pendingToastId = showTransactionPendingToast("Attempting transaction...");
+      clearToastTimeout = startTransactionToastTimeout(pendingToastId);
+      
+      const data = await tradeBuy({
+        poolAddress: effectivePoolAddress,
+        baseMint: (token as any).mint || '',
+        quoteMint: SOL_MINT_ADDRESS,
+        amount: quickBuyAmount,
+        mevProtection: settings.mevMode === "off" ? 0 : 1,
+        poolType: poolType,
+        originalPairAddress: token.pair_address,
+        slippage: settings.maxSlippage || 0.4,
+        priorityFee: settings.priority || 0.0001,
+        bribe: settings.bribe || 0,
+        mevMode: settings.mevMode,
+        autoFee: settings.autoFee || false,
+        maxFee: settings.maxFee || 0,
+        rpc: settings.rpc,
+        tokenName: token.name,
+        tokenSymbol: token.symbol,
+      }, user.bearerToken);
+      
+      const txHash = data?.hash || data?.txid;
+      const tokenAmount = data?.amount || data?.tokenAmount;
+
+      if (data && txHash) {
+        console.log(`✅ Header Quick Buy successful! Hash: ${txHash}`);
+        clearToastTimeout();
+        updateTransactionToast(
+          pendingToastId,
+          "success",
+          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
+        );
+      } else {
+        console.log('❌ Quick Buy failed - no transaction hash returned');
+        clearToastTimeout();
+        updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
+      }
+    } catch (e: any) {
+      console.error('Header Quick Buy error:', e);
+      clearToastTimeout();
+      
+      if (e instanceof ApiError) {
+        if (e.code === 'NO_ACTIVE_POOL') {
+          updateTransactionToast(pendingToastId, "error", `⚠️ Pool unavailable for ${token.symbol}`);
+        } else if (e.code === 'INSUFFICIENT_BALANCE') {
+          updateTransactionToast(pendingToastId, "error", `⚠️ Insufficient balance`);
+        } else if (e.code === 'TX_FAILED') {
+          updateTransactionToast(pendingToastId, "error", `❌ Trade failed. Try adjusting slippage or amount.`);
+        } else {
+          const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
+          updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
+        }
+      } else {
+        let errorMsg = e.message || "Unknown error";
+        const msg = errorMsg.length > 80 ? errorMsg.substring(0, 77) + '...' : errorMsg;
+        updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
       }
     }
   };
@@ -1437,6 +1557,7 @@ export default function Header({
               <button
                 className="relative cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
                 style={{ color: AX.muted }}
+                onClick={() => setWatchlistOpen(true)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor =
                     "rgba(24, 196, 140, 0.08)";
@@ -1484,6 +1605,108 @@ export default function Header({
                 ></div>
               </div>
             </div>
+
+            {/* Divider before watchlist tokens */}
+            {watchlist.length > 0 && (
+              <div className="h-4 border-r" style={{ borderColor: AX.border }} />
+            )}
+
+            {/* "All" dropdown for watchlist filter */}
+            {watchlist.length > 0 && (
+              <div className="flex items-center">
+                <span className="text-xs font-medium" style={{ color: AX.text }}>
+                  All
+                </span>
+                <FaChevronDown size={8} className="ml-1" style={{ color: AX.muted }} />
+              </div>
+            )}
+
+            {/* Watchlist Tokens Ticker */}
+            {watchlist.map((token) => {
+              const tokenKey = token.pair_address || (token as any).mint || token.symbol;
+              const tokenAddress = token.pair_address || (token as any).mint || '';
+              const price = (token as any).usd_price ?? (token as any).price ?? 0;
+              const priceChange = (token as any).price_percent_change_1h ?? (token as any).price_change_1h ?? 0;
+              const isHovered = hoveredWatchlistToken === tokenKey;
+              const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
+              
+              return (
+                <div
+                  key={tokenKey}
+                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200"
+                  onMouseEnter={() => setHoveredWatchlistToken(tokenKey)}
+                  onMouseLeave={() => setHoveredWatchlistToken(null)}
+                  onClick={() => {
+                    if (tokenAddress) {
+                      router.push(`/trade/${tokenAddress}`);
+                    }
+                  }}
+                >
+                  {/* Token Image */}
+                  {rawImg && (
+                    <img
+                      src={rawImg}
+                      alt={token.symbol || ''}
+                      className="w-4 h-4 rounded-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  )}
+                  
+                  {/* Token Symbol */}
+                  <span className="text-xs font-medium" style={{ color: AX.text }}>
+                    {token.symbol}
+                  </span>
+                  
+                  {/* Price */}
+                  <span className="text-xs" style={{ color: AX.muted }}>
+                    ${price > 0 ? formatSmartNumber(price) : '0'}
+                  </span>
+                  
+                  {/* Price Change */}
+                  <span 
+                    className="text-xs font-medium"
+                    style={{ color: priceChange >= 0 ? '#85d99f' : '#f26681' }}
+                  >
+                    {priceChange >= 0 ? '+' : ''}{formatSmartNumber(Math.abs(priceChange))}%
+                  </span>
+                  
+                  {/* Quick Buy Button - shown on hover */}
+                  {isHovered && (
+                    <>
+                      <button
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all duration-150"
+                        style={{
+                          backgroundColor: 'rgba(133, 217, 159, 0.15)',
+                          color: '#85d99f',
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleWatchlistQuickBuy(token);
+                        }}
+                      >
+                        <HiLightningBolt size={10} />
+                        <span>{quickBuyAmount} {currentChain === 'monad' ? 'MON' : 'SOL'}</span>
+                      </button>
+                      
+                      {/* Star icon to remove from watchlist */}
+                      <button
+                        className="p-0.5 transition-colors duration-150"
+                        style={{ color: '#f2c367' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromWatchlist(tokenAddress);
+                        }}
+                        title="Remove from watchlist"
+                      >
+                        <FaStar size={12} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
 
             <div className="h-4 border-r" style={{ borderColor: AX.border }}>
               {" "}
