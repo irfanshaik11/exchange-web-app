@@ -355,7 +355,6 @@ export default function PortfolioPage() {
     }
   }, [currentChain, monPrice, solPrice]);
   const [wallets, setWallets] = useState<UserWallet[]>([]);
-  const [loadingWallets, setLoadingWallets] = useState(false);
   const [creatingWallet, setCreatingWallet] = useState(false);
   const [editingWalletId, setEditingWalletId] = useState<string | null>(null);
   const [walletRenameValue, setWalletRenameValue] = useState("");
@@ -366,6 +365,7 @@ export default function PortfolioPage() {
   const [exportWalletId, setExportWalletId] = useState<string | null>(null);
   const [exportWalletAddress, setExportWalletAddress] = useState<string | null>(null);
   const [walletSearchQuery, setWalletSearchQuery] = useState("");
+  const isWalletsLoading = walletListLoading && wallets.length === 0;
 
   const notifyWalletsUpdated = () => {
     if (typeof window !== "undefined") {
@@ -1840,8 +1840,10 @@ export default function PortfolioPage() {
         normalizeWalletFromApi(w, index)
       );
       setWallets(mappedWallets);
-      setLoadingWallets(walletListLoading);
-    } else if (!walletListLoading && user?.id) {
+      return;
+    }
+
+    if (!walletListLoading && user?.id) {
       // Context is empty but not loading and user is logged in - clear wallets
       setWallets([]);
     }
@@ -3310,7 +3312,7 @@ export default function PortfolioPage() {
                       <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
                         Please log in to view your wallets.
                       </div>
-                    ) : loadingWallets ? (
+                    ) : isWalletsLoading ? (
                       <div className="flex h-24 flex-col items-center justify-center text-[#9CA3AF] text-xs">
                         Loading wallets...
                       </div>
