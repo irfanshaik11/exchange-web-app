@@ -1285,7 +1285,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
           type="button"
           className={cx(
             baseBtn,
-            "w-full h-10 rounded-full text-[14px] cursor-pointer",
+            "w-full h-auto min-h-[2.5rem] rounded-full text-[14px] cursor-pointer flex flex-col items-center justify-center py-2.5",
             mode === "buy"
               ? "bg-[#70E0B0] text-black hover:bg-[#58B890]"
               : "bg-[#FF4D7F] text-black hover:opacity-90"
@@ -1298,23 +1298,92 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
           ) : !isConnected ? (
             "Connect Wallet"
           ) : (
-            <span className="inline-flex items-center gap-1">
-              {mode === "buy" ? "Buy" : "Sell"} {token.symbol}
-              {prettyAmt(amount) && (
-                <>
-                  {" "}{prettyAmt(amount)}
-                  {mode === "sell" ? (
-                    <span>%</span>
-                  ) : (
-                    <img
-                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                      alt="MON"
-                      className="w-5 h-5 inline-block rounded-full object-cover"
-                    />
-                  )}
-                </>
-              )}
-            </span>
+            <div className="flex flex-col items-center gap-0.5 w-full">
+              {/* Main button text */}
+              <span className="inline-flex items-center gap-1 text-[14px] font-semibold">
+                {mode === "buy" ? "Buy" : "Sell"} {token.symbol}
+                {prettyAmt(amount) && (
+                  <>
+                    {" "}{prettyAmt(amount)}
+                    {mode === "sell" ? (
+                      <span>%</span>
+                    ) : (
+                      <img
+                        src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                        alt="MON"
+                        className="w-5 h-5 inline-block rounded-full object-cover"
+                      />
+                    )}
+                  </>
+                )}
+              </span>
+              
+              {/* Additional info row */}
+              {prettyAmt(amount) && (() => {
+                const effectiveMonPrice = monPrice || 0.025;
+                const tokenPrice = price || (token as any)?.usd_price || (token as any)?.price_usd || 0;
+                const amountValue = parseFloat(amount);
+                
+                if (mode === "buy" && !isNaN(amountValue) && amountValue > 0) {
+                  // Calculate USD value and tokens for buy
+                  const usdValue = amountValue * effectiveMonPrice;
+                  const tokensReceived = tokenPrice > 0 ? (usdValue / tokenPrice) : 0;
+                  
+                  // Format tokens
+                  let tokensDisplay: string;
+                  if (tokensReceived >= 1) {
+                    tokensDisplay = tokensReceived.toFixed(2);
+                  } else if (tokensReceived >= 0.01) {
+                    tokensDisplay = tokensReceived.toFixed(4);
+                  } else {
+                    tokensDisplay = formatWithSubscript(tokensReceived);
+                  }
+                  
+                  return (
+                    <span className="text-[11px] font-normal opacity-90">
+                      ${usdValue.toFixed(2)} • {tokensDisplay} {token.symbol}
+                    </span>
+                  );
+                } else if (mode === "sell" && !isNaN(amountValue) && amountValue > 0 && pos) {
+                  // Calculate USD value and MON received for sell
+                  const sellPercentage = amountValue / 100;
+                  const tokensSold = pos.balanceTokens * sellPercentage;
+                  
+                  // Calculate USD value based on current token price
+                  const usdValue = tokenPrice > 0 ? (tokensSold * tokenPrice) : (pos.balanceUsdHistorical * sellPercentage);
+                  
+                  // Calculate MON received based on USD value (estimate)
+                  const monReceived = effectiveMonPrice > 0 ? (usdValue / effectiveMonPrice) : 0;
+                  
+                  // Format tokens sold
+                  let tokensDisplay: string;
+                  if (tokensSold >= 1) {
+                    tokensDisplay = tokensSold.toFixed(2);
+                  } else if (tokensSold >= 0.01) {
+                    tokensDisplay = tokensSold.toFixed(4);
+                  } else {
+                    tokensDisplay = formatWithSubscript(tokensSold);
+                  }
+                  
+                  // Format MON received
+                  let monDisplay: string;
+                  if (monReceived >= 1) {
+                    monDisplay = monReceived.toFixed(2);
+                  } else if (monReceived >= 0.01) {
+                    monDisplay = monReceived.toFixed(4);
+                  } else {
+                    monDisplay = formatWithSubscript(monReceived);
+                  }
+                  
+                  return (
+                    <span className="text-[11px] font-normal opacity-90">
+                      ${usdValue.toFixed(2)} • {monDisplay} MON • {tokensDisplay} {token.symbol}
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+            </div>
           )}
         </button>
         
