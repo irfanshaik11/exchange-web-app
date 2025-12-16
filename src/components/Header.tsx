@@ -162,7 +162,37 @@ export default function Header({
   const { solPrice, monPrice } = useSolPrice();
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
   const { watchlist, removeFromWatchlist } = useWatchlist();
-  const { presets, activePreset, quickBuyAmount } = useQuickBuy();
+  const { presets, activePreset } = useQuickBuy();
+  
+  // Load quickBuyAmount from localStorage
+  const getQuickBuyAmount = (): number => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('quickBuyAmount');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+    }
+    return 0;
+  };
+  const [quickBuyAmount, setQuickBuyAmount] = useState(getQuickBuyAmount);
+  
+  // Keep quickBuyAmount in sync with localStorage changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setQuickBuyAmount(getQuickBuyAmount());
+    };
+    window.addEventListener('storage', handleStorageChange);
+    // Also check periodically for same-window localStorage updates
+    const interval = setInterval(handleStorageChange, 1000);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
+  
   const [hoveredWatchlistToken, setHoveredWatchlistToken] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
