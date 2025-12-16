@@ -295,12 +295,32 @@ const SubscriptNumber: React.FC<{ value: number | string | null | undefined; cla
   return formatNumber(num);
 };
 
+// Helper to get quickBuyAmount from localStorage
+const getQuickBuyAmount = (): number => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('quickBuyAmount');
+    if (saved) {
+      const parsed = parseFloat(saved);
+      if (!isNaN(parsed) && parsed >= 0) {
+        return parsed;
+      }
+    }
+  }
+  return 0;
+};
+
 export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   const [show, setShow] = useState(false);
   const { watchlist, removeFromWatchlist } = useWatchlist();
   const router = useRouter();
   const { user } = useUser();
-  const { presets, activePreset, quickBuyAmount } = useQuickBuy();
+  const { presets, activePreset } = useQuickBuy();
+  const [quickBuyAmount, setQuickBuyAmountState] = useState(getQuickBuyAmount);
+  
+  // Keep quickBuyAmount in sync with localStorage
+  useEffect(() => {
+    setQuickBuyAmountState(getQuickBuyAmount());
+  }, [open]);
 
   useEffect(() => {
     if (open) {
