@@ -112,20 +112,23 @@ const DepositModal: React.FC<DepositModalProps> = ({
     refreshBalance,
     solBalance,
     chainBalances,
+    walletList,
+    walletListLoading,
+    primaryWalletAddresses: contextPrimaryWalletAddresses,
   } = useUser();
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>("");
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
-  const [primaryWalletAddresses, setPrimaryWalletAddresses] = useState<{
-    solana: string | null;
-    ethereum: string | null;
-  }>({ solana: null, ethereum: null });
-  const [primaryWalletLabel, setPrimaryWalletLabel] = useState<string | null>(
-    null,
-  );
-  const [primaryWalletLoading, setPrimaryWalletLoading] = useState(false);
-  const [walletsRefreshKey, setWalletsRefreshKey] = useState(0);
+
+  // Derive primary wallet from centralized wallet list
+  const primaryWallet = walletList.find((w) => w.isPrimary) ?? walletList[0];
+  const primaryWalletAddresses = {
+    solana: contextPrimaryWalletAddresses.solana ?? primaryWallet?.solanaAddress ?? primaryWallet?.address ?? null,
+    ethereum: contextPrimaryWalletAddresses.ethereum ?? primaryWallet?.ethereumAddress ?? null,
+  };
+  const primaryWalletLabel = primaryWallet?.label ?? null;
+  const primaryWalletLoading = walletListLoading;
 
   // Withdraw tab states
   const [withdrawAmount, setWithdrawAmount] = useState("");
@@ -303,93 +306,8 @@ const DepositModal: React.FC<DepositModalProps> = ({
     }
   };
 
-  // Trigger wallet refresh whenever other parts of the app dispatch the event
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleWalletsUpdated = () => {
-      setWalletsRefreshKey((key) => key + 1);
-    };
-    window.addEventListener("wallets-updated", handleWalletsUpdated);
-    return () => {
-      window.removeEventListener("wallets-updated", handleWalletsUpdated);
-    };
-  }, []);
-
-  // Fetch the user's primary wallet so deposits go to the right address
-  useEffect(() => {
-    if (!user?.id || !user?.bearerToken) {
-      setPrimaryWalletAddresses({ solana: null, ethereum: null });
-      setPrimaryWalletLabel(null);
-      return;
-    }
-
-    let aborted = false;
-    const fetchPrimaryWallet = async () => {
-      setPrimaryWalletLoading(true);
-      try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${user.bearerToken}`,
-            },
-          },
-        );
-
-        if (!res.ok) {
-          throw new Error(`Failed to load wallets: ${res.status}`);
-        }
-
-        const data = await res.json();
-        const wallets: Array<{
-          address?: string;
-          solanaAddress?: string;
-          ethereumAddress?: string;
-          label?: string | null;
-          isPrimary?: boolean;
-        }> = Array.isArray(data?.wallets) ? data.wallets : [];
-        const primary = wallets.find((w) => w.isPrimary) ?? wallets[0];
-
-        if (!aborted) {
-          const solanaAddr =
-            typeof primary?.solanaAddress === "string" &&
-            primary.solanaAddress.length > 0
-              ? primary.solanaAddress
-              : typeof primary?.address === "string"
-                ? primary.address
-                : null;
-          const ethAddr =
-            typeof primary?.ethereumAddress === "string" &&
-            primary.ethereumAddress.length > 0
-              ? primary.ethereumAddress
-              : null;
-          setPrimaryWalletAddresses({
-            solana: solanaAddr,
-            ethereum: ethAddr,
-          });
-          setPrimaryWalletLabel(primary?.label ?? null);
-        }
-      } catch (error) {
-        console.error("Failed to fetch primary wallet:", error);
-        if (!aborted) {
-          setPrimaryWalletAddresses((prev) => ({
-            solana: prev.solana ?? user?.publicKey ?? null,
-            ethereum: prev.ethereum,
-          }));
-        }
-      } finally {
-        if (!aborted) {
-          setPrimaryWalletLoading(false);
-        }
-      }
-    };
-
-    fetchPrimaryWallet();
-    return () => {
-      aborted = true;
-    };
-  }, [user?.id, user?.bearerToken, user?.publicKey, walletsRefreshKey]);
+  // REMOVED: Redundant wallet fetching - now using centralized walletList from UserContext
+  // The wallet list is managed by UserContext with debouncing to prevent thousands of calls
 
   const fetchHistory = async () => {
     if (!user?.bearerToken) return;

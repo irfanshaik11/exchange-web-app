@@ -45,106 +45,70 @@ const normalizeWalletFromApi = (wallet: any, index: number): UserWallet => {
 };
 
 export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwitcherProps) {
-  const { user, refreshBalance } = useUser();
+  const { user, refreshBalance, refreshAllBalances, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList } = useUser();
   const { monPrice } = useSolPrice();
   const [wallets, setWallets] = useState<UserWallet[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const isUpdatingPrimaryRef = useRef(false);
 
-  // Fetch wallets
-  const fetchWallets = async () => {
-    if (!user?.id || !user?.bearerToken) {
-      setWallets([]);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
-        {
-          headers: {
-            Authorization: `Bearer ${user.bearerToken}`,
-          },
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch wallets: ${res.status}`);
-      }
-
-      const data = await res.json();
-      
-      if (Array.isArray(data?.wallets)) {
-        const normalizedWallets = data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index));
-        // Filter for Monad wallets (wallets with ethereumAddress)
-        const monadWallets = normalizedWallets.filter((w: UserWallet) => w.ethereumAddress);
-        
-        // Fetch balances for each Monad wallet using refreshBalance
-        // Force refresh to get latest balances and ensure addresses are checksummed
-        const walletsWithBalances = await Promise.all(
-          monadWallets.map(async (wallet) => {
-            try {
-              // Ensure address is checksummed (EIP-55 format)
-              const checksummedAddress = wallet.ethereumAddress.startsWith('0x') 
-                ? wallet.ethereumAddress 
-                : `0x${wallet.ethereumAddress}`;
-              
-              // Force refresh to bypass cache and get latest balance
-              const balanceResult = await refreshBalance({
-                chain: 'monad',
-                address: checksummedAddress,
-                force: true, // Force refresh to get latest balance
-              });
-              
-              if (balanceResult && typeof balanceResult.balance === 'number') {
-                return { ...wallet, balance: balanceResult.balance, ethereumAddress: checksummedAddress };
-              } else {
-                // If refreshBalance returns null (e.g., due to error), try direct API call as fallback
-                console.warn(`refreshBalance returned null for ${checksummedAddress}, trying direct API call`);
-                try {
-                  const directBalanceRes = await fetch(
-                    `/api/get-sol-bal?chain=monad&address=${encodeURIComponent(checksummedAddress)}`
-                  );
-                  if (directBalanceRes.ok) {
-                    const directBalanceData = await directBalanceRes.json();
-                    if (directBalanceData?.data?.balance !== undefined) {
-                      return { ...wallet, balance: directBalanceData.data.balance, ethereumAddress: checksummedAddress };
-                    }
-                  }
-                } catch (directError) {
-                  console.error(`Direct balance fetch also failed for ${checksummedAddress}:`, directError);
-                }
-                // If both methods failed, keep existing balance from wallet (don't overwrite with 0)
-                console.warn(`Could not fetch fresh balance for ${checksummedAddress}, using existing balance: ${wallet.balance || 0}`);
-                return { ...wallet, balance: wallet.balance || 0, ethereumAddress: checksummedAddress };
-              }
-            } catch (error) {
-              console.error(`Failed to fetch balance for wallet ${wallet.id} (${wallet.ethereumAddress}):`, error);
-              // On error, preserve existing balance
-              return { ...wallet, balance: wallet.balance || 0 };
-            }
-          })
-        );
-        
-        setWallets(walletsWithBalances);
-      } else {
-        setWallets([]);
-      }
-    } catch (error) {
-      console.error('Failed to fetch wallets:', error);
-      setWallets([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Sync wallets from centralized context - filter for Monad wallets only
   useEffect(() => {
-    if (isOpen && user?.id && !isUpdatingPrimaryRef.current) {
-      fetchWallets();
+    if (contextWalletList.length > 0) {
+      const normalizedWallets = contextWalletList.map((w: any, index: number) => normalizeWalletFromApi(w, index));
+      // Filter for Monad wallets (wallets with ethereumAddress)
+      const monadWallets = normalizedWallets.filter((w: UserWallet) => w.ethereumAddress);
+
+      // Normalize addresses and get balances from context
+      const walletsWithBalances = monadWallets.map(wallet => {
+        const checksummedAddress = wallet.ethereumAddress.startsWith('0x')
+          ? wallet.ethereumAddress
+          : `0x${wallet.ethereumAddress}`;
+
+        return {
+          ...wallet,
+          ethereumAddress: checksummedAddress,
+          balance: contextWalletBalances[checksummedAddress] ?? wallet.balance ?? 0,
+        };
+      });
+
+      setWallets(walletsWithBalances);
+      setLoading(walletListLoading);
+    } else if (!walletListLoading && user?.id) {
+      setWallets([]);
     }
-  }, [isOpen, user?.id, user?.bearerToken]);
+  }, [contextWalletList, contextWalletBalances, walletListLoading, user?.id]);
+
+  // Refresh balances when modal opens
+  useEffect(() => {
+    if (isOpen && wallets.length > 0 && !isUpdatingPrimaryRef.current) {
+      const addressesForBatch = wallets
+        .filter(w => w.ethereumAddress)
+        .map(w => ({ address: w.ethereumAddress, chain: 'monad' }));
+
+      if (addressesForBatch.length > 0) {
+        refreshAllBalances(addressesForBatch, true);
+      }
+    }
+  }, [isOpen, wallets.length, refreshAllBalances]);
+
+  // Sync balances from context whenever contextWalletBalances changes
+  useEffect(() => {
+    if (wallets.length === 0 || Object.keys(contextWalletBalances).length === 0) return;
+
+    setWallets(prev => {
+      let hasChanges = false;
+      const updated = prev.map(wallet => {
+        const contextBalance = contextWalletBalances[wallet.ethereumAddress];
+        if (contextBalance !== undefined && contextBalance !== wallet.balance) {
+          hasChanges = true;
+          return { ...wallet, balance: contextBalance };
+        }
+        return wallet;
+      });
+      return hasChanges ? updated : prev;
+    });
+  }, [contextWalletBalances, wallets.length]);
 
   const handleSetPrimaryWallet = async (walletId: string) => {
     if (!user?.id) {
@@ -152,7 +116,6 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
       return;
     }
 
-    // Set flag to prevent fetchWallets from running during update
     isUpdatingPrimaryRef.current = true;
 
     try {
@@ -174,92 +137,9 @@ export default function MonadWalletSwitcher({ isOpen, onClose }: MonadWalletSwit
         return;
       }
 
-      const data = await res.json();
-      
-      if (data.wallets) {
-        const normalizedWallets = data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index));
-        const monadWallets = normalizedWallets.filter((w: UserWallet) => w.ethereumAddress);
-        
-        // Preserve existing balances from current wallets state BEFORE updating
-        const existingBalances = new Map(
-          wallets.map(w => [w.id, w.balance])
-        );
-        
-        // Also create a map by address as fallback (in case wallet IDs change)
-        const existingBalancesByAddress = new Map(
-          wallets.map(w => [w.ethereumAddress?.toLowerCase(), w.balance])
-        );
-        
-        // Merge existing balances with new wallet data
-        const walletsWithPreservedBalances = monadWallets.map(wallet => {
-          const existingBalance = existingBalances.get(wallet.id) 
-            ?? existingBalancesByAddress.get(wallet.ethereumAddress?.toLowerCase())
-            ?? wallet.balance 
-            ?? 0;
-          return {
-            ...wallet,
-            balance: existingBalance
-          };
-        });
-        
-        // Update wallets immediately with preserved balances (no flicker)
-        setWallets(walletsWithPreservedBalances);
-        
-        // Refetch balances for all wallets in the background to ensure they're up to date
-        // Use setWallets with a function to ensure we're updating the latest state
-        Promise.all(
-          walletsWithPreservedBalances.map(async (wallet) => {
-            try {
-              const checksummedAddress = wallet.ethereumAddress.startsWith('0x') 
-                ? wallet.ethereumAddress 
-                : `0x${wallet.ethereumAddress}`;
-              
-              const balanceResult = await refreshBalance({
-                chain: 'monad',
-                address: checksummedAddress,
-                force: true,
-              });
-              
-              if (balanceResult && typeof balanceResult.balance === 'number') {
-                return { ...wallet, balance: balanceResult.balance, ethereumAddress: checksummedAddress };
-              } else {
-                // Fallback to direct API call
-                try {
-                  const directBalanceRes = await fetch(
-                    `/api/get-sol-bal?chain=monad&address=${encodeURIComponent(checksummedAddress)}`
-                  );
-                  if (directBalanceRes.ok) {
-                    const directBalanceData = await directBalanceRes.json();
-                    if (directBalanceData?.data?.balance !== undefined) {
-                      return { ...wallet, balance: directBalanceData.data.balance, ethereumAddress: checksummedAddress };
-                    }
-                  }
-                } catch (directError) {
-                  console.error(`Direct balance fetch failed for ${checksummedAddress}:`, directError);
-                }
-              }
-            } catch (error) {
-              console.error(`Failed to fetch balance for wallet ${wallet.id}:`, error);
-            }
-            // Preserve existing balance if fetch fails
-            return wallet;
-          })
-        ).then((walletsWithFreshBalances) => {
-          // Update with fresh balances, preserving any that failed to fetch
-          setWallets(prevWallets => {
-            const balanceMap = new Map(
-              walletsWithFreshBalances.map(w => [w.id, w.balance])
-            );
-            return prevWallets.map(w => ({
-              ...w,
-              balance: balanceMap.get(w.id) ?? w.balance
-            }));
-          });
-        }).catch((error) => {
-          console.error('Error refetching balances after setting primary wallet:', error);
-          // Don't clear balances on error - keep what we have
-        });
-      }
+      // Refresh wallet list from centralized context
+      // This will update local state automatically via the sync effect
+      await refreshWalletList(true);
       
       toast.success("Primary wallet updated");
       

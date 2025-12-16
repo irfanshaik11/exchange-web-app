@@ -296,7 +296,7 @@ export default function PortfolioPage() {
   const [activeSection, setActiveSection] = useState<"spot" | "wallet" | "perpetuals">("spot");
   const [activeSpotTab, setActiveSpotTab] = useState(0);
   const [activePerpetualsTab, setActivePerpetualsTab] = useState(0);
-  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, chainBalances, primaryWalletAddresses } = useUser();
+  const { user, loading: userLoading, solBalance, usdcBalance, refreshBalance, refreshAllBalances, chainBalances, primaryWalletAddresses, walletBalances: contextWalletBalances, walletList: contextWalletList, walletListLoading, refreshWalletList } = useUser();
   const { monPrice } = useSolPrice();
   const router = useRouter();
   const currentChain = (router.query.chain as string) || "monad";
@@ -1832,169 +1832,140 @@ export default function PortfolioPage() {
     document.body.removeChild(link);
   };
 
+  // Sync local wallets state from centralized context to prevent duplicate fetches
+  // Portfolio keeps its own state for local operations (editing, etc.)
+  useEffect(() => {
+    if (contextWalletList.length > 0) {
+      const mappedWallets: UserWallet[] = contextWalletList.map((w: any, index: number) =>
+        normalizeWalletFromApi(w, index)
+      );
+      setWallets(mappedWallets);
+      setLoadingWallets(walletListLoading);
+    } else if (!walletListLoading && user?.id) {
+      // Context is empty but not loading and user is logged in - clear wallets
+      setWallets([]);
+    }
+  }, [contextWalletList, walletListLoading, user?.id]);
+
+  // Wrapper to refresh wallets using centralized function
   const fetchWallets = useCallback(async () => {
     if (!user?.id) {
       setWallets([]);
       return;
     }
+    // Use centralized refresh with force to bypass debounce
+    await refreshWalletList(true);
+  }, [user?.id, refreshWalletList]);
 
-    setLoadingWallets(true);
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${user.bearerToken}`,
-          },
-        }
-      );
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch wallets: ${res.status}`);
-      }
-
-      const data = await res.json();
-      const mappedWallets: UserWallet[] = Array.isArray(data.wallets)
-        ? data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
-        : [];
-
-      setWallets(mappedWallets);
-      
-      // Preserve existing walletBalances when fetching wallets
-      // Only update balances for new wallets or if API has a valid balance and we don't have one
-      setWalletBalances((prevBalances) => {
-        const newBalances: Record<string, number> = { ...prevBalances };
-        mappedWallets.forEach((w) => {
-          // Preserve existing balance if we have one (from previous refresh)
-          if (prevBalances[w.id] !== undefined && prevBalances[w.id] !== null) {
-            // Keep existing balance - it will be refreshed by the balance refresh useEffect
-            newBalances[w.id] = prevBalances[w.id];
-          } else {
-            // New wallet or no existing balance - use API balance or 0
-            // If a wallet was just created (balance was explicitly set to 0),
-            // keep it at 0 instead of using potentially incorrect API balance
-            if (prevBalances[w.id] === 0) {
-              newBalances[w.id] = 0;
-            } else {
-              // Use API balance if it's a valid number, otherwise default to 0
-              newBalances[w.id] = typeof w.balance === "number" && w.balance >= 0 ? w.balance : 0;
-            }
-          }
-        });
-        // Remove balances for wallets that no longer exist
-        const walletIds = new Set(mappedWallets.map(w => w.id));
-        Object.keys(newBalances).forEach(id => {
-          if (!walletIds.has(id)) {
-            delete newBalances[id];
-          }
-        });
-        return newBalances;
-      });
-      notifyWalletsUpdated();
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to load wallets");
-    } finally {
-      setLoadingWallets(false);
-    }
-  }, [user?.id, user?.bearerToken]);
-
-  // Refresh all wallet balances for the current chain
+  // Refresh all wallet balances for the current chain using batch endpoint
   useEffect(() => {
     if (!user || wallets.length === 0) {
       return;
     }
 
-    const primaryWallet =
-      wallets.find((w) => w.isPrimary) ?? wallets[0] ?? null;
-
     let cancelled = false;
 
-    // Refresh all wallets that have an address for the current chain
-    const refreshAllWallets = async (forceRefresh = false) => {
-      // Refresh wallets sequentially with a small delay to avoid hammering the API
-      // Primary wallet is refreshed first to update chainBalances immediately
-      const walletsToRefresh = primaryWallet 
-        ? [primaryWallet, ...wallets.filter(w => w.id !== primaryWallet.id)]
-        : wallets;
+    // Refresh all wallets using the batch endpoint
+    const refreshAllWalletBalances = async (forceRefresh = false) => {
+      // Prepare wallet addresses for batch fetch
+      const walletsWithAddresses = wallets
+        .map(wallet => {
+          const address =
+            currentChain === "sol"
+              ? wallet.solanaAddress || wallet.address
+              : wallet.ethereumAddress || null;
+          return { wallet, address };
+        })
+        .filter(({ address }) => !!address);
 
-      for (const wallet of walletsToRefresh) {
-        if (cancelled) break;
+      if (walletsWithAddresses.length === 0) return;
 
-        const address =
-          currentChain === "sol"
-            ? wallet.solanaAddress || wallet.address
-            : wallet.ethereumAddress || null;
-        
-        if (!address) continue;
+      // Use the batch endpoint via UserContext
+      await refreshAllBalances(
+        walletsWithAddresses.map(({ address }) => ({
+          address: address!,
+          chain: currentChain,
+        })),
+        forceRefresh
+      );
 
-        try {
-          const result = await refreshBalance({
-            chain: currentChain,
-            address,
-            force: forceRefresh, // Force refresh if triggered by wallets-updated event
-          });
-          
-          if (!cancelled && result?.balance !== undefined) {
-            setWalletBalances((prev) => ({
-              ...prev,
-              [wallet.id]: result.balance,
-            }));
+      // Update local walletBalances state from context after batch fetch
+      if (!cancelled) {
+        setWalletBalances(prev => {
+          const updated = { ...prev };
+          for (const { wallet, address } of walletsWithAddresses) {
+            if (address && contextWalletBalances[address] !== undefined) {
+              updated[wallet.id] = contextWalletBalances[address];
+            }
           }
-
-          // Small delay between wallet refreshes to avoid overwhelming the API
-          if (wallet.id !== walletsToRefresh[walletsToRefresh.length - 1]?.id) {
-            await new Promise(resolve => setTimeout(resolve, 200));
-          }
-        } catch (error) {
-          console.error(`Failed to refresh balance for wallet ${wallet.id}:`, error);
-        }
+          return updated;
+        });
       }
-      
+
       // Reset force flag after refresh
       forceBalanceRefreshRef.current = false;
     };
 
     // Check if this is a forced refresh
     const shouldForce = forceBalanceRefreshRef.current;
-    
-    // Refresh immediately
-    refreshAllWallets(shouldForce);
 
-    // Set up interval to refresh all wallets periodically (not forced)
-    const interval = setInterval(() => refreshAllWallets(false), 12000);
-    
+    // Refresh immediately
+    refreshAllWalletBalances(shouldForce);
+
+    // Set up interval to refresh all wallets periodically (30 seconds instead of 12)
+    const interval = setInterval(() => refreshAllWalletBalances(false), 30000);
+
     return () => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [user?.id, wallets, currentChain, refreshBalance]);
+  }, [user?.id, wallets, currentChain, refreshAllBalances, contextWalletBalances]);
 
+  // REMOVED: fetchWallets() on mount - context handles initial fetch
+  // Wallets sync automatically from contextWalletList effect above
+
+  // Sync local walletBalances from UserContext whenever contextWalletBalances changes
   useEffect(() => {
-    fetchWallets();
-  }, [fetchWallets]);
+    if (!wallets.length || Object.keys(contextWalletBalances).length === 0) return;
 
-  // Listen for wallet updates from other components (e.g., footer wallet switcher)
+    setWalletBalances(prev => {
+      const updated = { ...prev };
+      let hasChanges = false;
+
+      for (const wallet of wallets) {
+        const address =
+          currentChain === "sol"
+            ? wallet.solanaAddress || wallet.address
+            : wallet.ethereumAddress || null;
+
+        if (address && contextWalletBalances[address] !== undefined) {
+          if (updated[wallet.id] !== contextWalletBalances[address]) {
+            updated[wallet.id] = contextWalletBalances[address];
+            hasChanges = true;
+          }
+        }
+      }
+
+      return hasChanges ? updated : prev;
+    });
+  }, [wallets, currentChain, contextWalletBalances]);
+
+  // Listen for wallet updates to trigger balance refresh
+  // UserContext handles wallet list refresh with debouncing
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     const handleWalletsUpdated = () => {
-      console.log("🔄 Wallets updated event received, refreshing wallets list and balances...");
-      // Set flag to force balance refresh
+      console.log("🔄 Wallets updated event - forcing balance refresh");
       forceBalanceRefreshRef.current = true;
-      // Fetch wallets first, which will trigger the balance refresh useEffect
-      fetchWallets().then(() => {
-        console.log("✅ Wallets refreshed, balances will update automatically with force refresh");
-      });
     };
-    
+
     window.addEventListener("wallets-updated", handleWalletsUpdated);
-    
+
     return () => {
       window.removeEventListener("wallets-updated", handleWalletsUpdated);
     };
-  }, [fetchWallets]);
+  }, []);
 
   // Filter wallets based on search query and archived status
   const filteredWallets = useMemo(() => {
