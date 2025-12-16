@@ -1048,7 +1048,7 @@ export default function Header({
                 {/* Combined Dropdown */}
                 {profileMenuOpen && (
                   <div
-                    className="absolute top-10 right-0 z-50 rounded-xl border border-[#20232b] bg-[#0a0b10] shadow-2xl"
+                    className="absolute top-10 right-0 z-[99999] rounded-xl border border-[#20232b] bg-[#0a0b10] shadow-2xl"
                     style={{
                       width: "280px",
                       minWidth: "280px",

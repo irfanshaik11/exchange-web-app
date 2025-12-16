@@ -1881,6 +1881,7 @@ export default function PortfolioPage() {
       if (walletsWithAddresses.length === 0) return;
 
       // Use the batch endpoint via UserContext
+      // This will update contextWalletBalances, which the sync effect below will react to
       await refreshAllBalances(
         walletsWithAddresses.map(({ address }) => ({
           address: address!,
@@ -1889,18 +1890,9 @@ export default function PortfolioPage() {
         forceRefresh
       );
 
-      // Update local walletBalances state from context after batch fetch
-      if (!cancelled) {
-        setWalletBalances(prev => {
-          const updated = { ...prev };
-          for (const { wallet, address } of walletsWithAddresses) {
-            if (address && contextWalletBalances[address] !== undefined) {
-              updated[wallet.id] = contextWalletBalances[address];
-            }
-          }
-          return updated;
-        });
-      }
+      // Note: Don't try to sync immediately here - React state updates are async
+      // The useEffect below (lines 1927-1951) will properly sync from contextWalletBalances
+      // when it updates, ensuring we always have the latest values
 
       // Reset force flag after refresh
       forceBalanceRefreshRef.current = false;
@@ -1919,7 +1911,10 @@ export default function PortfolioPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [user?.id, wallets, currentChain, refreshAllBalances, contextWalletBalances]);
+    // Note: contextWalletBalances is intentionally NOT in dependencies
+    // We don't want to re-fetch when balances update - the sync effect below handles that
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, wallets, currentChain, refreshAllBalances]);
 
   // REMOVED: fetchWallets() on mount - context handles initial fetch
   // Wallets sync automatically from contextWalletList effect above
@@ -3274,12 +3269,12 @@ export default function PortfolioPage() {
 
               {/* Table Headers Row - Spans Both Panels */}
               <div className="border-b border-[#2A2B33]">
-                <div className="px-4 py-2">
-                  <div className="grid grid-cols-4 gap-2 text-xs text-[#9CA3AF]">
+                <div className="py-2 -mx-4 px-4">
+                  <div className="grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 text-xs text-[#9CA3AF]">
                     <div className="font-medium truncate">Wallet</div>
-                    <div className="font-medium truncate">Balance</div>
-                    <div className="font-medium truncate">Holdings</div>
-                    <div className="font-medium truncate">Actions</div>
+                    <div className="font-medium truncate text-center">Balance</div>
+                    <div className="font-medium truncate text-center">Holdings</div>
+                    <div className="font-medium truncate text-center">Actions</div>
                   </div>
                 </div>
                 {/* <div className="px-4 py-2 border-l border-[#2A2B33]">
@@ -3318,34 +3313,42 @@ export default function PortfolioPage() {
                             : "No wallets found"}
                       </div>
                     ) : (
-                      filteredWallets.map((wallet) => {
+                      <>
+                        {filteredWallets.map((wallet) => {
                           const displayAddress = getAddressForChain(wallet, currentChain);
                           const truncated =
                             displayAddress.length > 8
                               ? `${displayAddress.slice(0, 4)}...${displayAddress.slice(-4)}`
                               : displayAddress;
                           return (
-                          <div
-                            key={wallet.id}
-                            className="border-b border-[#2A2B33] hover:bg-[#17191E] transition"
-                          >
-                            <div className="grid grid-cols-4 gap-2 items-center py-3">
+                            <div
+                              key={wallet.id}
+                              className="border-b border-[#2A2B33] hover:bg-[#17191E] transition-colors cursor-pointer -mx-4 px-4"
+                            >
+                              <div className="grid grid-cols-[2fr_1fr_1fr_1.2fr] gap-2 items-center py-3">
                               {/* Wallet + address */}
-                              <div className="flex items-center gap-2 min-w-0">
-                                <button
-                                  className={`w-3 h-3 rounded flex-shrink-0 transition ${
-                                    wallet.isPrimary ? "bg-[#FF6B35]" : "bg-[#374151]"
-                                  }`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSetPrimaryWallet(wallet.id);
-                                  }}
-                                  title={
-                                    wallet.isPrimary ? "Primary wallet" : "Set as primary wallet"
-                                  }
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <div className="font-medium text-[#f0f5f5] text-sm flex items-center gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <button
+                                    className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                                      wallet.isPrimary ? "border-[#FF6B35]" : "border-[#2A2B33]"
+                                    }`}
+                                    style={{
+                                      backgroundColor: wallet.isPrimary ? "#FF6B35" : 'transparent'
+                                    }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSetPrimaryWallet(wallet.id);
+                                    }}
+                                    title={
+                                      wallet.isPrimary ? "Primary wallet" : "Set as primary wallet"
+                                    }
+                                  >
+                                    {wallet.isPrimary && (
+                                      <div className="w-2.5 h-2.5 bg-white rounded-sm" />
+                                    )}
+                                  </button>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="font-medium text-[#f0f5f5] text-sm flex items-center gap-2">
                                     {editingWalletId === wallet.id ? (
                                       <>
                                         <input
@@ -3392,94 +3395,100 @@ export default function PortfolioPage() {
                                       </>
                                     )}
                                   </div>
-                                  <div className="text-xs text-[#9CA3AF] font-mono truncate">
-                                    {truncated || "—"}
+                                    <div className="text-xs text-[#9CA3AF] font-mono truncate flex items-center gap-1.5">
+                                      <span>{truncated || "—"}</span>
+                                      <button
+                                        className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0 ml-1"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (displayAddress) {
+                                            navigator.clipboard.writeText(displayAddress).then(
+                                              () => toast.success("Address copied"),
+                                              () => toast.error("Failed to copy address")
+                                            );
+                                          }
+                                        }}
+                                      >
+                                        <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+                                          <rect
+                                            x="9"
+                                            y="9"
+                                            width="13"
+                                            height="13"
+                                            rx="2"
+                                            ry="2"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                          />
+                                          <path
+                                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                            stroke="currentColor"
+                                            strokeWidth="2"
+                                          />
+                                        </svg>
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
-                                <button
-                                  className="text-[#9CA3AF] hover:text-[#f0f5f5] flex-shrink-0"
-                                  onClick={() => {
-                                    if (displayAddress) {
-                                      navigator.clipboard.writeText(displayAddress).then(
-                                        () => toast.success("Address copied"),
-                                        () => toast.error("Failed to copy address")
-                                      );
-                                    }
-                                  }}
-                                >
-                                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
-                                    <rect
-                                      x="9"
-                                      y="9"
-                                      width="13"
-                                      height="13"
-                                      rx="2"
-                                      ry="2"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                    />
-                                    <path
-                                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                                      stroke="currentColor"
-                                      strokeWidth="2"
-                                    />
-                                  </svg>
-                                </button>
-                              </div>
 
                               {/* Balance */}
-                              <div className="flex items-center gap-1 justify-center">
-                                {currentChain === 'monad' ? (
-                                  <img
-                                    src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
-                                    alt="Monad"
-                                    className="h-4 w-4 flex-shrink-0 rounded"
-                                    style={{ objectFit: 'contain' }}
-                                  />
-                                ) : (
-                                  <SiSolana
-                                    className="h-3 w-3 flex-shrink-0"
-                                    aria-hidden="true"
-                                    style={{
-                                      color: "unset",
-                                      fill: "url(#solana-gradient-wallets)",
-                                      filter: "none",
-                                    }}
-                                  />
-                                )}
-                                <span className="text-xs text-white">
-                                  {formatSmartNumber(
-                                    walletBalances[wallet.id] ?? wallet.balance,
+                                <div className="flex items-center gap-1 justify-center">
+                                  {currentChain === 'monad' ? (
+                                    <img
+                                      src="https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1"
+                                      alt="Monad"
+                                      className="h-4 w-4 flex-shrink-0 rounded"
+                                      style={{ objectFit: 'contain' }}
+                                    />
+                                  ) : (
+                                    <SiSolana
+                                      className="h-3 w-3 flex-shrink-0"
+                                      aria-hidden="true"
+                                      style={{
+                                        color: "unset",
+                                        fill: "url(#solana-gradient-wallets)",
+                                        filter: "none",
+                                      }}
+                                    />
                                   )}
-                                </span>
-                              </div>
+                                  <span className="text-xs text-white">
+                                    {formatSmartNumber(
+                                      walletBalances[wallet.id] ?? wallet.balance,
+                                    )}
+                                  </span>
+                                </div>
 
-                              {/* Holdings */}
-                              <div className="flex items-center justify-center">
-                                <StackedTokenBoxes count={
-                                  // Use API value if available and > 0, otherwise fallback to positions.length for primary wallet
-                                  wallet.holdingsCount > 0 
-                                    ? wallet.holdingsCount 
-                                    : (wallet.isPrimary && positions.length > 0 ? positions.length : wallet.holdingsCount)
-                                } />
-                              </div>
+                                {/* Holdings */}
+                                <div className="flex items-center justify-center">
+                                  <StackedTokenBoxes
+                                    count={
+                                      // Use API value if available and > 0, otherwise fallback to positions.length for primary wallet
+                                      wallet.holdingsCount > 0
+                                        ? wallet.holdingsCount
+                                        : wallet.isPrimary && positions.length > 0
+                                          ? positions.length
+                                          : wallet.holdingsCount
+                                    }
+                                  />
+                                </div>
 
-                              {/* Actions */}
-                              <div className="text-center">
-                                <button
-                                  className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
-                                  onClick={() => handleExportWallet(wallet.id)}
-                                  title="Export wallet"
-                                >
-                                  Export wallet
-                                </button>
+                                {/* Actions */}
+                                <div className="text-center">
+                                  <button
+                                    className="px-3 py-1 rounded-full bg-[#374151] text-xs text-[#f0f5f5] hover:bg-[#4B5563] transition-colors cursor-pointer whitespace-nowrap"
+                                    onClick={() => handleExportWallet(wallet.id)}
+                                    title="Export wallet"
+                                  >
+                                    Export wallet
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                        })
-                  )}
-                </div>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* Right Panel Content - Source wallets and Destination sections commented out */}

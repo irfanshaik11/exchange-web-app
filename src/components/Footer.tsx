@@ -286,8 +286,9 @@ export default function Footer() {
   const { solPrice, monPrice } = useSolPrice(); // Use shared price from context
   const chainPrice = currentChain === "monad" ? monPrice : solPrice;
   const { solBalance, chainBalances } = useUser();
-  const chainBalance =
-    currentChain === "monad" ? (chainBalances?.monad ?? 0) : solBalance;
+  // Use chainBalances as the primary source for consistency with Header
+  // Fallback to solBalance for Solana if chainBalances doesn't have it yet
+  const chainBalance = chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
 
   const chainLogos: Record<string, string> = {
     sol: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
