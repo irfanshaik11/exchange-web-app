@@ -37,7 +37,7 @@ import { ThemeProvider } from '../components/ThemeContext';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
-import { storeReferralCodeHint } from '~/utils/referralStorage';
+import { storeReferralCodeHint, getStoredReferralCodeHint } from '~/utils/referralStorage';
 import PagePreloader from '../components/PagePreloader';
 
 // Suppress Next.js error overlay for caught errors in development
@@ -267,10 +267,12 @@ function TurnkeySessionBridge() {
           hasProcessedRef.current = true;
 
           try {
+            const referralCode = getStoredReferralCodeHint() || undefined;
             const data = await turnkeyLogin({
               turnkeySessionToken: session.token,
               organizationId: session.organizationId,
               userId: session.userId,
+              referralCode,
             });
 
             console.log("Turnkey login response:", data);

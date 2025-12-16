@@ -17,6 +17,7 @@ import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, get
 import Cookies from "js-cookie";
 import { FaDiscord } from "react-icons/fa";
 import { shouldShowWaitlistModal } from "../utils/waitlist";
+import { getStoredReferralCodeHint } from "../utils/referralStorage";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -751,8 +752,9 @@ export function ReferralAccessGate({
       }
       
       // Send to backend for verification
-      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message);
-      
+      const referralCode = getStoredReferralCodeHint() || undefined;
+      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message, referralCode);
+
       if (token) {
         Cookies.set("token", token, { expires: 7, path: "/" });
         await refreshUser();
@@ -765,7 +767,7 @@ export function ReferralAccessGate({
       }
     } catch (error: any) {
       console.error("Phantom login error:", error);
-      
+
       if (error.message?.includes("Internal server error")) {
         setWalletError("Backend server error. Please try again later.");
       } else if (error.message?.includes("Signature verification failed")) {
@@ -820,8 +822,9 @@ export function ReferralAccessGate({
       }
       
       // Send to backend for verification
-      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message);
-      
+      const referralCode = getStoredReferralCodeHint() || undefined;
+      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message, referralCode);
+
       if (token) {
         Cookies.set("token", token, { expires: 7, path: "/" });
         await refreshUser();
