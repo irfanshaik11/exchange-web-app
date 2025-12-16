@@ -140,7 +140,7 @@ export default function RewardsPage() {
         <main className="mx-auto w-full max-w-6xl flex-1 px-6 pt-16 pb-24 sm:px-8 lg:px-10">
           <section className="space-y-12">
             {/* Hide header, stats cards, and referral table when chain is Monad */}
-            {currentChain !== "monad" && (
+            {/* {currentChain !== "monad" && ( */}
               <>
                 <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
                   <div className="space-y-3">
@@ -321,7 +321,7 @@ export default function RewardsPage() {
                   </div>
                 </div>
               </>
-            )}
+            {/* )} */}
 
             {/* Always show "Share & earn with your link" section */}
             <div className="flex flex-col justify-between rounded-3xl border border-neutral-800 bg-gradient-to-br from-neutral-950/90 via-neutral-900/80 to-neutral-950/90 px-8 py-10 shadow-2xl shadow-purple-900/20">
