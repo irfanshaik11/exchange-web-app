@@ -6898,7 +6898,8 @@ function MonadTable({
                             color: AX.text,
                             border: `1px solid ${AX.border}`,
                             minWidth: "240px",
-                            zIndex: 4000,
+                            // Keep above row controls (quick buy at z-10) but below header popout
+                            zIndex: 15,
                           }}
                           onMouseEnter={() => setShowTop10Tooltip(token.id)}
                           onMouseLeave={() => setShowTop10Tooltip(null)}
