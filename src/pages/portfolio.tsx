@@ -2218,23 +2218,37 @@ export default function PortfolioPage() {
         return;
       }
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+
+      let mappedWallets: UserWallet[] = [];
 
       // backend setPrimaryWallet returns: { success, message, wallets }
-      if (!data.wallets) {
-        toast.success("Primary wallet updated");
-        return;
+      if (Array.isArray(data.wallets)) {
+        mappedWallets = data.wallets.map((w: any, index: number) =>
+          normalizeWalletFromApi(w, index)
+        );
+      } else {
+        // API didn't include wallets - optimistically flip local state
+        mappedWallets = wallets.map((wallet) => ({
+          ...wallet,
+          isPrimary: wallet.id === walletId,
+        }));
       }
-
-      const mappedWallets: UserWallet[] = Array.isArray(data.wallets)
-        ? data.wallets.map((w: any, index: number) => normalizeWalletFromApi(w, index))
-        : [];
 
       setWallets(mappedWallets);
       notifyWalletsUpdated();
+
+      // Make sure context refreshes even if backend omitted wallets in the response
+      try {
+        await refreshWalletList(true);
+      } catch (refreshErr) {
+        console.error("Failed to refresh wallet list after setting primary:", refreshErr);
+      }
       
       // Immediately refresh the new primary wallet's balance to update Header
-      const newPrimaryWallet = mappedWallets.find((w) => w.isPrimary) ?? mappedWallets[0];
+      const newPrimaryWallet =
+        mappedWallets.find((w) => w.isPrimary) ??
+        mappedWallets.find((w) => w.id === walletId);
       if (newPrimaryWallet) {
         const newPrimaryAddress =
           currentChain === "sol"
