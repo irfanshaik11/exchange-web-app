@@ -229,31 +229,33 @@ export const login = (email: string, password: string) =>
     body: { email, password },
   });
 
-export const register = (email: string, name: string, password: string) =>
+export const register = (email: string, name: string, password: string, referralCode?: string) =>
   apiFetch<{ user: any }>("/api/users/register", {
     method: "POST",
-    body: { email, name, password },
+    body: { email, name, password, ...(referralCode && { referralCode }) },
   });
 
 export const phantomLogin = (
   publicKey: string,
   signature: string,
   message: string,
+  referralCode?: string,
 ) =>
   apiFetch<{ token: string }>("/api/users/phantom/login", {
     method: "POST",
-    body: { publicKey, signature, message },
+    body: { publicKey, signature, message, ...(referralCode && { referralCode }) },
   });
 
 export const metamaskLogin = (
   address: string,
   signature: string,
   message: string,
+  referralCode?: string,
 ) => {
 
   return apiFetch<{ token: string }>("/api/users/metamask/login", {
     method: "POST",
-    body: { address, signature, message },
+    body: { address, signature, message, ...(referralCode && { referralCode }) },
   });
 };
 
@@ -262,6 +264,7 @@ export const turnkeyLogin = (
     turnkeySessionToken: string;
     organizationId: string;
     userId: string;
+    referralCode?: string;
   }
 ) => {
   const endpoints = [
