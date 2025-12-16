@@ -1007,7 +1007,7 @@ export default function Header({
             </div>
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
-              <div ref={profileMenuRef} className="relative">
+              <div ref={profileMenuRef} className="relative z-[1000000]">
                 {/* Combined Balance + Username Button */}
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
@@ -1048,7 +1048,7 @@ export default function Header({
                 {/* Combined Dropdown */}
                 {profileMenuOpen && (
                   <div
-                    className="absolute top-10 right-0 z-[99999] rounded-xl border border-[#20232b] bg-[#0a0b10] shadow-2xl"
+                    className="absolute top-10 right-0 z-[1000001] rounded-xl border border-[#20232b] bg-[#0a0b10] shadow-2xl"
                     style={{
                       width: "280px",
                       minWidth: "280px",
