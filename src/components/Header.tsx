@@ -163,6 +163,28 @@ export default function Header({
   const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
   const { watchlist, removeFromWatchlist } = useWatchlist();
   const { presets, activePreset } = useQuickBuy();
+
+  // Watchlist ticker paging (max 8 tokens visible)
+  const WATCHLIST_TICKER_PAGE_SIZE = 8;
+  const [watchlistTickerPage, setWatchlistTickerPage] = useState(0);
+  const watchlistTickerTotalPages = Math.max(
+    1,
+    Math.ceil(watchlist.length / WATCHLIST_TICKER_PAGE_SIZE),
+  );
+  const watchlistTickerCanPrev = watchlistTickerPage > 0;
+  const watchlistTickerCanNext =
+    watchlistTickerPage < watchlistTickerTotalPages - 1;
+  const watchlistTickerVisible = watchlist.slice(
+    watchlistTickerPage * WATCHLIST_TICKER_PAGE_SIZE,
+    watchlistTickerPage * WATCHLIST_TICKER_PAGE_SIZE + WATCHLIST_TICKER_PAGE_SIZE,
+  );
+
+  // Clamp ticker page when watchlist size changes
+  useEffect(() => {
+    setWatchlistTickerPage((p) =>
+      Math.min(p, Math.max(0, watchlistTickerTotalPages - 1)),
+    );
+  }, [watchlistTickerTotalPages]);
   
   // Load quickBuyAmount from localStorage
   const getQuickBuyAmount = (): number => {
@@ -1659,7 +1681,28 @@ export default function Header({
             )}
 
             {/* Watchlist Tokens Ticker */}
-            {watchlist.map((token) => {
+            {watchlistTickerTotalPages > 1 && (
+              <button
+                className="flex items-center justify-center transition-all duration-200"
+                style={{
+                  color: watchlistTickerCanPrev ? AX.muted : "rgba(199, 201, 209, 0.35)",
+                  opacity: watchlistTickerCanPrev ? 1 : 0.6,
+                  cursor: watchlistTickerCanPrev ? "pointer" : "not-allowed",
+                }}
+                disabled={!watchlistTickerCanPrev}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (watchlistTickerCanPrev) {
+                    setWatchlistTickerPage((p) => Math.max(0, p - 1));
+                  }
+                }}
+                title="Previous"
+              >
+                <FaChevronLeft size={12} />
+              </button>
+            )}
+
+            {watchlistTickerVisible.map((token) => {
               const tokenKey = token.pair_address || (token as any).mint || token.symbol;
               const tokenAddress = token.pair_address || (token as any).mint || '';
               const price = (token as any).usd_price ?? (token as any).price ?? 0;
@@ -1744,6 +1787,29 @@ export default function Header({
                 </div>
               );
             })}
+
+            {watchlistTickerTotalPages > 1 && (
+              <button
+                className="flex items-center justify-center transition-all duration-200"
+                style={{
+                  color: watchlistTickerCanNext ? AX.muted : "rgba(199, 201, 209, 0.35)",
+                  opacity: watchlistTickerCanNext ? 1 : 0.6,
+                  cursor: watchlistTickerCanNext ? "pointer" : "not-allowed",
+                }}
+                disabled={!watchlistTickerCanNext}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (watchlistTickerCanNext) {
+                    setWatchlistTickerPage((p) =>
+                      Math.min(watchlistTickerTotalPages - 1, p + 1),
+                    );
+                  }
+                }}
+                title="Next"
+              >
+                <FaChevronRight size={12} />
+              </button>
+            )}
 
             <div className="h-4 border-r" style={{ borderColor: AX.border }}>
               {" "}

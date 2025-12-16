@@ -182,46 +182,8 @@ function resolveWatchlistStats(token: Token) {
   const volume1h = resolveWatchlistVolume1h(token);
   const price = (token as any).usd_price ?? (token as any).price ?? 0;
   const priceChange1h = (token as any).price_percent_change_1h ?? (token as any).price_change_1h ?? 0;
-  
-  // Get transaction counts
-  const buys1h = (token as any).total_buys_1h ?? 0;
-  const sells1h = (token as any).total_sells_1h ?? 0;
-  const totalTxns1h = buys1h + sells1h;
-  
-  return { marketCap, liquidity, volume1h, price, priceChange1h, buys1h, sells1h, totalTxns1h };
-}
 
-// Get token age from created_at
-function getTokenAge(token: Token): string {
-  try {
-    const createdAt = (token as any).created_at || (token as any).launch_time;
-    if (!createdAt) return '-';
-    
-    let timestamp: number | null = null;
-    if (typeof createdAt === 'string') {
-      const parsed = Date.parse(createdAt);
-      if (!isNaN(parsed)) timestamp = parsed;
-    } else if (typeof createdAt === 'number') {
-      if (createdAt > 1e12) timestamp = createdAt;
-      else if (createdAt > 1e9) timestamp = createdAt * 1000;
-    }
-    
-    if (!timestamp) return '-';
-    
-    const ageMs = Date.now() - timestamp;
-    const ageHours = ageMs / (1000 * 60 * 60);
-    
-    if (ageHours < 1) {
-      const ageMins = Math.floor(ageMs / (1000 * 60));
-      return ageMins < 1 ? '<1m' : `${ageMins}m`;
-    } else if (ageHours < 24) {
-      return `${Math.floor(ageHours)}h`;
-    } else {
-      return `${Math.floor(ageHours / 24)}d`;
-    }
-  } catch {
-    return '-';
-  }
+  return { marketCap, liquidity, volume1h, price, priceChange1h };
 }
 
 // SubscriptNumber component for price display
@@ -428,12 +390,10 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
           <thead>
             <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
               <th className="w-72 px-4 py-3 text-left text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Token</th>
-              <th className="w-24 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>1h TXs</th>
               <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>1h Vol</th>
               <th className="w-20 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>1h%</th>
               <th className="w-36 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>MKT Cap / Liq</th>
               <th className="w-28 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Price</th>
-              <th className="w-16 px-4 py-3 text-right text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Age</th>
               <th className="w-28 px-4 py-3 text-center text-xs font-medium tracking-wide uppercase" style={{ color: '#787a8d', fontWeight: '300' }}>Action</th>
             </tr>
           </thead>
@@ -448,8 +408,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
               const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
                 token.symbol || token.name || "T"
               )}&background=0f1012&color=E6E7EA&size=48`;
-              const { marketCap, liquidity, volume1h, price, priceChange1h, buys1h, sells1h, totalTxns1h } = resolveWatchlistStats(token);
-              const tokenAge = getTokenAge(token);
+              const { marketCap, liquidity, volume1h, price, priceChange1h } = resolveWatchlistStats(token);
               const tokenAddress = token.pair_address || (token as any).mint || '';
 
               return (
@@ -546,18 +505,6 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                     </div>
                   </td>
                   
-                  {/* 1h TXs Column */}
-                  <td className="w-24 px-4 py-3 align-middle text-right">
-                    <div className="text-sm font-medium mb-0.5" style={{ color: AX.text }}>
-                      {totalTxns1h > 0 ? formatSmartNumber(totalTxns1h) : '0'}
-                    </div>
-                    <div className="text-xs font-medium">
-                      <span style={{ color: '#85d99f' }}>{buys1h > 0 ? formatSmartNumber(buys1h) : '0'}</span>
-                      <span className="mx-1" style={{ color: AX.muted }}>/</span>
-                      <span style={{ color: '#f26681' }}>{sells1h > 0 ? formatSmartNumber(sells1h) : '0'}</span>
-                    </div>
-                  </td>
-                  
                   {/* 1h Vol Column */}
                   <td className="w-28 px-4 py-3 align-middle text-right">
                     <div className="text-sm font-medium" style={{ color: AX.text }}>
@@ -586,13 +533,6 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
                   <td className="w-28 px-4 py-3 align-middle text-right">
                     <div className="text-sm font-medium" style={{ color: AX.text }}>
                       $<SubscriptNumber value={price} />
-                    </div>
-                  </td>
-                  
-                  {/* Age Column */}
-                  <td className="w-16 px-4 py-3 align-middle text-right">
-                    <div className="text-xs font-bold" style={{ color: '#85d99f' }}>
-                      {tokenAge}
                     </div>
                   </td>
                   
