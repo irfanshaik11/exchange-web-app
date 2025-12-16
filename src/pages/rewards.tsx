@@ -6,24 +6,7 @@ import Header from "~/components/Header";
 import InterstateButton from "~/components/InterstateButton";
 import Footer from '~/components/Footer';
 import { useUser } from "~/components/UserContext";
-import { ensureReferralCodeForUser, fetchReferralCodeForUser } from "~/utils/referrals";
-
-const referralRows = [
-  {
-    level: "Direct",
-    summary:
-      "Friends you invite directly earn you boosted rewards on every trade.",
-    solRewards: "0 SOL",
-    xccRewards: "0 XCC",
-  },
-  {
-    level: "Indirect",
-    summary:
-      "When your referrals invite others, you keep earning from their activity too.",
-    solRewards: "0 SOL",
-    xccRewards: "0 XCC",
-  },
-];
+import { ensureReferralCodeForUser, fetchReferralCodeForUser, fetchReferrals, type ReferredUser } from "~/utils/referrals";
 
 export default function RewardsPage() {
   const router = useRouter();
@@ -34,58 +17,80 @@ export default function RewardsPage() {
   const [loadingReferral, setLoadingReferral] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [referralError, setReferralError] = useState<string | null>(null);
+  const [referrals, setReferrals] = useState<ReferredUser[]>([]);
+  const [totalVolume, setTotalVolume] = useState(0);
+  const [totalReferrals, setTotalReferrals] = useState(0);
+  const [loadingReferrals, setLoadingReferrals] = useState(false);
+  // Use window.location.origin to automatically use correct URL (localhost in dev, production URL in prod)
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.narrative.trade';
   const referralLink = referralCode
-    ? `https://app.narrative.trade?referrer=${referralCode}`
+    ? `${baseUrl}?referrer=${referralCode}`
     : "";
 
   useEffect(() => {
     let cancelled = false;
 
-    if (!user?.id) {
+    if (!user?.bearerToken) {
       setReferralCode(null);
       setReferralError(null);
       setLoadingReferral(false);
+      setReferrals([]);
+      setTotalVolume(0);
+      setTotalReferrals(0);
       return () => {
         cancelled = true;
       };
     }
 
-    const loadReferral = async () => {
+    const loadReferralData = async () => {
       try {
         setLoadingReferral(true);
+        setLoadingReferrals(true);
         setReferralError(null);
-        const record = await fetchReferralCodeForUser(user.id);
+
+        // Fetch referral code and referrals list in parallel
+        const [codeRecord, referralsData] = await Promise.all([
+          fetchReferralCodeForUser(user.bearerToken).catch(() => null),
+          fetchReferrals(user.bearerToken).catch(() => ({ referrals: [], totalVolume: 0, totalReferrals: 0 })),
+        ]);
+
         if (cancelled) return;
-        if (record) {
-          setReferralCode(record.referralCode);
+
+        if (codeRecord) {
+          setReferralCode(codeRecord.referralCode);
         } else {
           setReferralCode(null);
         }
+
+        setReferrals(referralsData.referrals);
+        setTotalVolume(referralsData.totalVolume);
+        setTotalReferrals(referralsData.totalReferrals);
         setCopied(false);
       } catch (error: any) {
         if (cancelled) return;
         const message =
           error instanceof Error
             ? error.message
-            : "Failed to load referral code";
+            : "Failed to load referral data";
         setReferralError(message);
         setReferralCode(null);
       } finally {
         if (!cancelled) {
           setLoadingReferral(false);
+          setLoadingReferrals(false);
         }
       }
     };
 
-    loadReferral();
+    loadReferralData();
 
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.bearerToken]);
 
   const handleGenerateCode = useCallback(async () => {
-    if (!user?.id) {
+    if (!user?.bearerToken) {
       setReferralError("Sign in to generate a referral code.");
       return;
     }
@@ -93,7 +98,7 @@ export default function RewardsPage() {
     try {
       setIsGenerating(true);
       setReferralError(null);
-      const record = await ensureReferralCodeForUser(user.id);
+      const record = await ensureReferralCodeForUser(user.bearerToken);
       setReferralCode(record.referralCode);
       setCopied(false);
     } catch (error: any) {
@@ -105,7 +110,7 @@ export default function RewardsPage() {
     } finally {
       setIsGenerating(false);
     }
-  }, [user?.id]);
+  }, [user?.bearerToken]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -169,21 +174,18 @@ export default function RewardsPage() {
                         Total Referrals
                       </span>
                     </div>
-                    <p className="mt-6 text-5xl font-semibold text-[#f0f5f5]">0</p>
+                    <p className="mt-6 text-5xl font-semibold text-[#f0f5f5]">
+                      {loadingReferrals ? "..." : totalReferrals}
+                    </p>
                     <div className="mt-5 grid gap-2 text-sm text-neutral-400">
                       <div className="flex items-center justify-between rounded-2xl border border-neutral-800/80 bg-neutral-900/70 px-4 py-2">
                         <span className="flex items-center gap-2 text-neutral-300">
-                          <Users className="h-4 w-4 text-fuchsia-400" />
-                          Direct
+                          <Wallet className="h-4 w-4 text-fuchsia-400" />
+                          Total Volume
                         </span>
-                        <span className="font-medium text-[#f0f5f5]">0</span>
-                      </div>
-                      <div className="flex items-center justify-between rounded-2xl border border-neutral-800/80 bg-neutral-900/70 px-4 py-2">
-                        <span className="flex items-center gap-2 text-neutral-300">
-                          <Users className="h-4 w-4 text-violet-400" />
-                          Indirect
+                        <span className="font-medium text-[#f0f5f5]">
+                          ${loadingReferrals ? "..." : totalVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
-                        <span className="font-medium text-[#f0f5f5]">0</span>
                       </div>
                     </div>
                   </div>
@@ -266,42 +268,54 @@ export default function RewardsPage() {
 
                   <div className="overflow-hidden rounded-3xl border border-neutral-800 bg-neutral-950/60 shadow-xl shadow-black/20">
                     <div className="border-b border-neutral-800 bg-neutral-900/70 px-6 py-4 text-xs tracking-[0.3em] text-neutral-500 uppercase">
-                      Referral Rewards
+                      My Referred Users
                     </div>
                     <table className="w-full text-left text-sm text-neutral-300">
                       <thead className="bg-neutral-950/60 text-neutral-500">
                         <tr>
-                          <th className="px-6 py-4 font-medium">Referral Level</th>
-                          <th className="px-6 py-4 font-medium">SOL Rewards</th>
-                          <th className="px-6 py-4 font-medium">XCC Rewards</th>
+                          <th className="px-6 py-4 font-medium">User</th>
+                          <th className="px-6 py-4 font-medium">Joined</th>
+                          <th className="px-6 py-4 font-medium">Trading Volume</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {referralRows.map((row) => (
-                          <tr
-                            key={row.level}
-                            className="border-t border-neutral-900/80 text-neutral-200"
-                          >
-                            <td className="px-6 py-5 align-top">
-                              <div className="text-base font-semibold text-[#f0f5f5]">
-                                {row.level}
-                              </div>
-                              <p className="mt-2 max-w-md text-xs text-neutral-500">
-                                {row.summary}
-                              </p>
-                            </td>
-                            <td className="px-6 py-5 align-top">
-                              <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300">
-                                {row.solRewards}
-                              </div>
-                            </td>
-                            <td className="px-6 py-5 align-top">
-                              <div className="rounded-2xl border border-fuchsia-500/40 bg-fuchsia-600/10 px-4 py-2 text-sm font-medium text-fuchsia-200">
-                                {row.xccRewards}
-                              </div>
+                        {loadingReferrals ? (
+                          <tr>
+                            <td colSpan={3} className="px-6 py-8 text-center text-neutral-500">
+                              Loading referrals...
                             </td>
                           </tr>
-                        ))}
+                        ) : referrals.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="px-6 py-8 text-center text-neutral-500">
+                              No referrals yet. Share your referral link to start earning!
+                            </td>
+                          </tr>
+                        ) : (
+                          referrals.map((referral) => (
+                            <tr
+                              key={referral.id}
+                              className="border-t border-neutral-900/80 text-neutral-200"
+                            >
+                              <td className="px-6 py-5 align-top">
+                                <div className="text-base font-semibold text-[#f0f5f5]">
+                                  {referral.name}
+                                </div>
+                                <p className="mt-1 text-xs text-neutral-500">
+                                  {referral.email}
+                                </p>
+                              </td>
+                              <td className="px-6 py-5 align-top text-neutral-400">
+                                {new Date(referral.joinedAt).toLocaleDateString()}
+                              </td>
+                              <td className="px-6 py-5 align-top">
+                                <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300">
+                                  ${referral.totalVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -322,7 +336,7 @@ export default function RewardsPage() {
                 {!referralCode && (
                   <InterstateButton
                     className="w-full sm:w-auto"
-                    disabled={loadingReferral || isGenerating || !user?.id}
+                    disabled={loadingReferral || isGenerating || !user?.bearerToken}
                     onClick={() => {
                       void handleGenerateCode();
                     }}

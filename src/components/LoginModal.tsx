@@ -13,6 +13,7 @@ import { useTurnkey, ClientState, AuthState } from '@turnkey/react-wallet-kit';
 import { GoogleOAuthProvider, GoogleLogin, type CredentialResponse } from '@react-oauth/google';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
+import { getStoredReferralCodeHint } from '../utils/referralStorage';
 
 const ENABLE_EMAIL_AUTH = false;
 const AUTH_BUTTON_WIDTH_CLASS = 'w-full max-w-[400px] mx-auto';
@@ -421,8 +422,9 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       }
       
       // Send to backend for verification
-      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message);
-      
+      const referralCode = getStoredReferralCodeHint() || undefined;
+      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message, referralCode);
+
       if (token) {
         Cookies.set('token', token, { expires: 7, path: '/' });
         await refreshUser();
@@ -492,8 +494,9 @@ async function handleGoogleSuccess(resp: CredentialResponse) {
       }
       
       // Send to backend for verification
-      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message);
-      
+      const referralCode = getStoredReferralCodeHint() || undefined;
+      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message, referralCode);
+
       if (token) {
         Cookies.set('token', token, { expires: 7, path: '/' });
         await refreshUser();

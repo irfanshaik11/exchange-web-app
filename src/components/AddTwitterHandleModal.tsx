@@ -15,6 +15,13 @@ const AddTwitterHandleModal: React.FC<AddTwitterHandleModalProps> = ({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const handleClose = () => {
+    setUsername("");
+    setError("");
+    setLoading(false);
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -67,7 +74,7 @@ const AddTwitterHandleModal: React.FC<AddTwitterHandleModalProps> = ({
             Add Twitter Handle
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="cursor-pointer text-3xl text-neutral-400 hover:text-white"
             disabled={loading}
           >
