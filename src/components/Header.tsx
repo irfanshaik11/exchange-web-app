@@ -266,8 +266,8 @@ export default function Header({
       maximumFractionDigits: 2,
     });
 
-  // Refresh the primary wallet balance and update UserContext chainBalances
-  // This ensures Header and Portfolio stay in sync since they both read from chainBalances
+  // Refresh balance when primary wallet changes - no polling here
+  // UserContext handles periodic polling (30s), Header just triggers on wallet change
   useEffect(() => {
     const address =
       currentChain === "sol"
@@ -275,34 +275,13 @@ export default function Header({
         : primaryWalletAddresses.ethereum || null;
 
     if (!address) {
-      // If no address, ensure chainBalances reflects 0 for this chain
-      // Note: We don't directly update chainBalances here as it's managed by UserContext
-      // The UserContext's refreshBalance handles updating chainBalances
       return;
     }
 
-    let cancelled = false;
-    
-    // Refresh balance immediately when primary wallet address changes (force refresh to bypass cooldown)
+    // Only refresh when primary wallet address changes (force refresh to bypass cooldown)
     // This ensures Header updates instantly when primary wallet is changed
-    refreshBalance({ chain: currentChain, address, force: true }).then((res) => {
-      if (!cancelled && res?.balance !== undefined) {
-        // Balance is already updated in UserContext's chainBalances via refreshBalance
-        // No need to update local state since we're using chainBalances directly
-      }
-    });
-    
-    // Set up periodic refresh to keep balance up to date
-    const interval = setInterval(() => {
-      if (!cancelled) {
-        refreshBalance({ chain: currentChain, address });
-      }
-    }, 12000);
-    
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    // No polling needed - UserContext handles that at 30s intervals
+    refreshBalance({ chain: currentChain, address, force: true });
   }, [
     currentChain,
     primaryWalletAddresses.solana,

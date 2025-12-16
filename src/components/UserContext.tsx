@@ -25,6 +25,17 @@ export interface UserInfo {
   bearerToken: string;
 }
 
+interface WalletInfo {
+  id: string;
+  label?: string;
+  address?: string;
+  solanaAddress?: string;
+  ethereumAddress?: string;
+  balance?: number;
+  isPrimary?: boolean;
+  isArchived?: boolean;
+}
+
 interface UserContextType {
   user: UserInfo | null;
   loading: boolean;
@@ -37,6 +48,7 @@ interface UserContextType {
     force?: boolean;
     updateChainBalance?: boolean; // Force update chainBalances[chain] regardless of isPrimaryWallet check
   }) => Promise<{ balance: number; usdBalance: number } | null>;
+  refreshAllBalances: (wallets: Array<{ address: string; chain: string }>, force?: boolean) => Promise<void>;
   setUser: (user: UserInfo | null) => void;
   logout: () => void;
   primaryWalletAddresses: {
@@ -44,6 +56,10 @@ interface UserContextType {
     ethereum: string | null;
   };
   chainBalances: Record<string, number>;
+  walletBalances: Record<string, number>; // All wallet balances by address
+  walletList: WalletInfo[]; // Centralized wallet list
+  walletListLoading: boolean;
+  refreshWalletList: (force?: boolean) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -79,11 +95,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
     solana: string | null;
     ethereum: string | null;
   }>({ solana: null, ethereum: null });
-  const [walletsRefreshKey, setWalletsRefreshKey] = useState(0);
   const [chainBalances, setChainBalances] = useState<Record<string, number>>({
     sol: 0,
   });
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [walletList, setWalletList] = useState<WalletInfo[]>([]);
+  const [walletListLoading, setWalletListLoading] = useState(false);
   const chainBalancesRef = useRef<Record<string, number>>({ sol: 0 });
+  const batchFetchInProgressRef = useRef(false);
+  const lastBatchFetchRef = useRef(0);
+  const walletListFetchInProgressRef = useRef(false);
+  const lastWalletListFetchRef = useRef(0);
+  const walletListFetchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const BATCH_FETCH_COOLDOWN_MS = 5000; // 5 seconds cooldown for batch fetches
+  const WALLET_LIST_COOLDOWN_MS = 2000; // 2 seconds cooldown for wallet list fetches
   // Cache balances by address to avoid cross-wallet contamination
   const addressBalanceCacheRef = useRef<Record<string, number>>({});
   const solUsdBalanceRef = useRef(0);
@@ -108,16 +133,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleWalletsUpdated = () => {
-      setWalletsRefreshKey((key) => key + 1);
-    };
-    window.addEventListener("wallets-updated", handleWalletsUpdated);
-    return () =>
-      window.removeEventListener("wallets-updated", handleWalletsUpdated);
-  }, []);
-
-  useEffect(() => {
     chainBalancesRef.current = chainBalances;
   }, [chainBalances]);
 
@@ -133,6 +148,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     lastNotifiedBalanceRef.current = lastNotifiedBalance;
   }, [lastNotifiedBalance]);
 
+  // Derive primary wallet addresses from Turnkey if available
   useEffect(() => {
     const deriveWalletsFromTurnkey = () => {
       console.log("Deriving wallets from Turnkey:", turnkey?.wallets);
@@ -164,18 +180,55 @@ export function UserProvider({ children }: { children: ReactNode }) {
         solana: turnkeyAddresses.solana ?? null,
         ethereum: turnkeyAddresses.ethereum ?? null,
       });
-      return;
     }
+    // REMOVED: Redundant fetchPrimaryWallets - now handled by refreshWalletList
+  }, [turnkey?.wallets]);
 
-    const fetchPrimaryWallets = async () => {
+  const setUser = useCallback(
+    (value: UserInfo | null) => {
+      setUserState(value);
+      persistUser(value);
+    },
+    [persistUser]
+  );
+
+  // Centralized wallet list fetch with debouncing to prevent thousands of calls
+  const refreshWalletList = useCallback(
+    async (force = false): Promise<void> => {
       if (!user?.id || !user?.bearerToken) {
-        setPrimaryWalletAddresses({ solana: null, ethereum: null });
+        setWalletList([]);
         return;
       }
+
       if (!process.env.NEXT_PUBLIC_BACKEND_URL) {
-        // No backend configured; avoid throwing noisy errors in dev
         return;
       }
+
+      // Debounce: Clear any pending fetch
+      if (walletListFetchDebounceRef.current) {
+        clearTimeout(walletListFetchDebounceRef.current);
+        walletListFetchDebounceRef.current = null;
+      }
+
+      // Check cooldown unless force is true
+      if (!force) {
+        const timeSinceLastFetch = Date.now() - lastWalletListFetchRef.current;
+        if (timeSinceLastFetch < WALLET_LIST_COOLDOWN_MS) {
+          console.log(`⏸️ Wallet list fetch on cooldown, skipping (${timeSinceLastFetch}ms)`);
+          return;
+        }
+      }
+
+      // Prevent multiple simultaneous fetches
+      if (walletListFetchInProgressRef.current) {
+        console.log("⏸️ Wallet list fetch already in progress, skipping");
+        return;
+      }
+
+      walletListFetchInProgressRef.current = true;
+      lastWalletListFetchRef.current = Date.now();
+      setWalletListLoading(true);
+
       try {
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/wallet`,
@@ -186,46 +239,64 @@ export function UserProvider({ children }: { children: ReactNode }) {
             },
           }
         );
+
         if (!res.ok) {
           throw new Error(`Failed to fetch wallets: ${res.status}`);
         }
+
         const data = await res.json();
         if (Array.isArray(data?.wallets)) {
-          const primary =
-            data.wallets.find((w: any) => w.isPrimary) ?? data.wallets[0];
-          setPrimaryWalletAddresses({
-            solana:
-              typeof primary?.solanaAddress === "string" &&
-              primary.solanaAddress.length > 0
-                ? primary.solanaAddress
-                : typeof primary?.address === "string"
-                ? primary.address
-                : null,
-            ethereum:
-              typeof primary?.ethereumAddress === "string" &&
-              primary.ethereumAddress.length > 0
-                ? primary.ethereumAddress
-                : null,
-          });
+          setWalletList(data.wallets);
+
+          // Also update primary wallet addresses
+          const primary = data.wallets.find((w: any) => w.isPrimary) ?? data.wallets[0];
+          if (primary) {
+            setPrimaryWalletAddresses({
+              solana:
+                typeof primary?.solanaAddress === "string" && primary.solanaAddress.length > 0
+                  ? primary.solanaAddress
+                  : typeof primary?.address === "string"
+                  ? primary.address
+                  : null,
+              ethereum:
+                typeof primary?.ethereumAddress === "string" && primary.ethereumAddress.length > 0
+                  ? primary.ethereumAddress
+                  : null,
+            });
+          }
         }
       } catch (error) {
-        // Swallow network errors to avoid noisy overlay in dev
-        console.warn(
-          "Failed to fetch primary wallets for balance refresh:",
-          error
-        );
+        console.warn("Failed to fetch wallet list:", error);
+      } finally {
+        walletListFetchInProgressRef.current = false;
+        setWalletListLoading(false);
+      }
+    },
+    [user?.id, user?.bearerToken]
+  );
+
+  // Listen for wallets-updated event with debouncing
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleWalletsUpdated = () => {
+      // Debounce: Schedule wallet list refresh after 300ms
+      // This prevents cascade of fetches when multiple events fire rapidly
+      if (walletListFetchDebounceRef.current) {
+        clearTimeout(walletListFetchDebounceRef.current);
+      }
+      walletListFetchDebounceRef.current = setTimeout(() => {
+        refreshWalletList(true); // Force refresh on explicit event
+        walletListFetchDebounceRef.current = null;
+      }, 300);
+    };
+    window.addEventListener("wallets-updated", handleWalletsUpdated);
+    return () => {
+      window.removeEventListener("wallets-updated", handleWalletsUpdated);
+      if (walletListFetchDebounceRef.current) {
+        clearTimeout(walletListFetchDebounceRef.current);
       }
     };
-    fetchPrimaryWallets().catch(() => {});
-  }, [turnkey?.wallets, user?.id, user?.bearerToken, walletsRefreshKey]);
-
-  const setUser = useCallback(
-    (value: UserInfo | null) => {
-      setUserState(value);
-      persistUser(value);
-    },
-    [persistUser]
-  );
+  }, [refreshWalletList]);
 
   const refreshBalance = useCallback(
     async (
@@ -409,6 +480,108 @@ export function UserProvider({ children }: { children: ReactNode }) {
     ]
   );
 
+  // Batch refresh all wallet balances using the optimized batch endpoint
+  const refreshAllBalances = useCallback(
+    async (
+      wallets: Array<{ address: string; chain: string }>,
+      force = false
+    ): Promise<void> => {
+      if (!wallets || wallets.length === 0) return;
+
+      // Prevent rapid consecutive batch fetches
+      if (!force) {
+        const timeSinceLastFetch = Date.now() - lastBatchFetchRef.current;
+        if (timeSinceLastFetch < BATCH_FETCH_COOLDOWN_MS) {
+          console.log(`⏸️ Batch fetch on cooldown, skipping (${timeSinceLastFetch}ms since last fetch)`);
+          return;
+        }
+      }
+
+      // Prevent multiple simultaneous batch fetches
+      if (batchFetchInProgressRef.current) {
+        console.log("⏸️ Batch fetch already in progress, skipping");
+        return;
+      }
+
+      batchFetchInProgressRef.current = true;
+      lastBatchFetchRef.current = Date.now();
+
+      try {
+        // Prepare addresses for batch fetch - deduplicate by address
+        const seenAddresses = new Set<string>();
+        const addressesPayload = wallets
+          .filter(w => {
+            if (!w.address || seenAddresses.has(w.address)) return false;
+            seenAddresses.add(w.address);
+            return true;
+          })
+          .map(w => ({
+            address: w.address,
+            chain: (w.chain === "sol" ? "sol" : "monad") as "sol" | "monad",
+          }));
+
+        if (addressesPayload.length === 0) {
+          return;
+        }
+
+        console.log(`📦 Batch fetching ${addressesPayload.length} unique wallet balances...`);
+
+        const response = await fetch("/api/get-batch-balances", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ addresses: addressesPayload }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Batch balance fetch failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.ok || !data.balances) {
+          throw new Error("Invalid batch balance response");
+        }
+
+        // Update walletBalances state with all fetched balances
+        const newWalletBalances: Record<string, number> = {};
+        for (const [address, balanceData] of Object.entries(data.balances)) {
+          const { balance } = balanceData as { balance: number; usdBalance: number };
+          newWalletBalances[address] = balance;
+
+          // Also update the address cache
+          const wallet = wallets.find(w => w.address === address);
+          if (wallet) {
+            const checkKey = `${wallet.chain}:${address}`;
+            addressBalanceCacheRef.current[checkKey] = balance;
+            lastBalanceFetchRef.current[checkKey] = Date.now();
+          }
+        }
+
+        setWalletBalances(prev => ({ ...prev, ...newWalletBalances }));
+
+        // Update chainBalances for primary wallets
+        if (primaryWalletAddresses.solana && data.balances[primaryWalletAddresses.solana]) {
+          const solData = data.balances[primaryWalletAddresses.solana] as { balance: number; usdBalance: number };
+          setChainBalances(prev => ({ ...prev, sol: solData.balance }));
+          setSolBalance(solData.balance);
+          setUsdcBalance(solData.usdBalance);
+        }
+
+        if (primaryWalletAddresses.ethereum && data.balances[primaryWalletAddresses.ethereum]) {
+          const monadData = data.balances[primaryWalletAddresses.ethereum] as { balance: number };
+          setChainBalances(prev => ({ ...prev, monad: monadData.balance }));
+        }
+
+        console.log(`✅ Batch fetch complete: ${Object.keys(newWalletBalances).length} balances updated`);
+      } catch (error) {
+        console.error("Failed to batch fetch balances:", error);
+      } finally {
+        batchFetchInProgressRef.current = false;
+      }
+    },
+    [primaryWalletAddresses.solana, primaryWalletAddresses.ethereum]
+  );
+
   useEffect(() => {
     if (!user) return;
 
@@ -564,9 +737,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setSolBalance(0);
       setUsdcBalance(0);
       setChainBalances({ sol: 0 });
+      setWalletBalances({});
+      setWalletList([]);
       setLastNotifiedBalance({});
       chainBalancesRef.current = { sol: 0 };
       addressBalanceCacheRef.current = {}; // Clear address-specific cache on logout
+      batchFetchInProgressRef.current = false;
+      lastBatchFetchRef.current = 0;
+      walletListFetchInProgressRef.current = false;
+      lastWalletListFetchRef.current = 0;
       solUsdBalanceRef.current = 0;
       solBalanceRef.current = 0;
       lastNotifiedBalanceRef.current = {};
@@ -589,6 +768,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     // initial refresh when provider mounts (and when turnkey data changes)
     refreshUser();
   }, [refreshUser]);
+
+  // Fetch wallet list when user logs in
+  useEffect(() => {
+    if (user?.id && user?.bearerToken) {
+      refreshWalletList();
+    }
+  }, [user?.id, user?.bearerToken, refreshWalletList]);
 
   useEffect(() => {
     if (user) {
@@ -639,7 +825,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           const address = primaryWalletAddresses.solana || user.publicKey;
           if (!address) return;
           refreshBalance({ chain: "sol", address });
-        }, 10000);
+        }, 30000); // Reduced from 10s to 30s - Portfolio/Header use batch endpoint
       }, 2000);
 
       return () => {
@@ -660,10 +846,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
         usdcBalance,
         refreshUser,
         refreshBalance,
+        refreshAllBalances,
         setUser,
         logout,
         primaryWalletAddresses,
         chainBalances,
+        walletBalances,
+        walletList,
+        walletListLoading,
+        refreshWalletList,
       }}
     >
       {children}
