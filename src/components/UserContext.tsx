@@ -16,6 +16,7 @@ const USER_CACHE_KEY = "codex_user_info_cache";
 import { clearStoredReferralAccess, getStoredReferralCodeHint, clearStoredReferralCodeHint } from "../utils/referralStorage";
 import { useTurnkey } from "@turnkey/react-wallet-kit";
 import next from "next";
+import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
 
 export interface UserInfo {
   id: string;
@@ -109,6 +110,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const walletListFetchDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const BATCH_FETCH_COOLDOWN_MS = 5000; // 5 seconds cooldown for batch fetches
   const WALLET_LIST_COOLDOWN_MS = 2000; // 2 seconds cooldown for wallet list fetches
+  const normalizeAddressForChain = (
+    address?: string | null,
+    chain: "sol" | "monad" = "sol"
+  ): string => {
+    if (!address || typeof address !== "string") return "";
+    if (chain === "monad") {
+      return normalizeMonadAddress(address);
+    }
+    return address.trim();
+  };
   // Cache balances by address to avoid cross-wallet contamination
   const addressBalanceCacheRef = useRef<Record<string, number>>({});
   const solUsdBalanceRef = useRef(0);
@@ -168,9 +179,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
           : String(acct?.address || "").startsWith("0x")
       );
 
+      const solanaAddress =
+        (typeof solAccount?.address === "string" && solAccount.address.trim().length > 0
+          ? solAccount.address.trim()
+          : typeof solAccount?.publicKey === "string" && solAccount.publicKey.trim().length > 0
+          ? solAccount.publicKey.trim()
+          : null) ?? null;
+      const ethereumAddress = normalizeMonadAddress(evmAccount?.address) || null;
+
       return {
-        solana: solAccount?.address || solAccount?.publicKey || null,
-        ethereum: evmAccount?.address || null,
+        solana: solanaAddress,
+        ethereum: ethereumAddress,
       };
     };
 
@@ -246,22 +265,36 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         const data = await res.json();
         if (Array.isArray(data?.wallets)) {
-          setWalletList(data.wallets);
+          const normalizedWallets = data.wallets.map((wallet: any) => {
+            const normalizedEthereum =
+              normalizeMonadAddress(wallet?.ethereumAddress) ||
+              normalizeMonadAddress(wallet?.address);
+            return {
+              ...wallet,
+              ethereumAddress:
+                normalizedEthereum ||
+                (typeof wallet?.ethereumAddress === "string"
+                  ? wallet.ethereumAddress
+                  : undefined),
+            };
+          });
+
+          setWalletList(normalizedWallets);
 
           // Also update primary wallet addresses
-          const primary = data.wallets.find((w: any) => w.isPrimary) ?? data.wallets[0];
+          const primary = normalizedWallets.find((w: any) => w.isPrimary) ?? normalizedWallets[0];
           if (primary) {
+            const primarySolana =
+              typeof primary?.solanaAddress === "string" && primary.solanaAddress.trim().length > 0
+                ? primary.solanaAddress.trim()
+                : typeof primary?.address === "string" && primary.address.trim().length > 0
+                ? primary.address.trim()
+                : null;
+            const primaryEthereum = normalizeMonadAddress(primary?.ethereumAddress) || null;
+
             setPrimaryWalletAddresses({
-              solana:
-                typeof primary?.solanaAddress === "string" && primary.solanaAddress.length > 0
-                  ? primary.solanaAddress
-                  : typeof primary?.address === "string"
-                  ? primary.address
-                  : null,
-              ethereum:
-                typeof primary?.ethereumAddress === "string" && primary.ethereumAddress.length > 0
-                  ? primary.ethereumAddress
-                  : null,
+              solana: primarySolana,
+              ethereum: primaryEthereum,
             });
           }
         }
@@ -302,21 +335,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
     async (
       options?: { chain?: string; address?: string; force?: boolean; updateChainBalance?: boolean }
     ): Promise<{ balance: number; usdBalance: number } | null> => {
-      const chain = options?.chain || "sol";
+      const chain = options?.chain === "monad" ? "monad" : "sol";
       const overrideAddress = options?.address;
-      const targetAddress =
-        overrideAddress ||
-        (chain === "sol"
-          ? primaryWalletAddresses.solana
-          : primaryWalletAddresses.ethereum) ||
-        (chain === "sol" ? user?.publicKey : null);
+      const fallbackAddress =
+        chain === "sol"
+          ? primaryWalletAddresses.solana || user?.publicKey
+          : primaryWalletAddresses.ethereum;
+      const targetAddress = normalizeAddressForChain(
+        overrideAddress || fallbackAddress,
+        chain
+      );
 
       if (!targetAddress) return null;
 
       const checkKey = `${chain}:${targetAddress}`;
-      const isPrimaryWallet = !overrideAddress || 
+      const isPrimaryWallet =
+        !overrideAddress ||
         (chain === "sol" && targetAddress === primaryWalletAddresses.solana) ||
-        (chain !== "sol" && targetAddress === primaryWalletAddresses.ethereum);
+        (chain === "monad" && targetAddress === primaryWalletAddresses.ethereum);
 
       if (!options?.force) {
         const lastFetch = lastBalanceFetchRef.current[checkKey];
@@ -488,6 +524,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
     ): Promise<void> => {
       if (!wallets || wallets.length === 0) return;
 
+      const normalizedWallets = wallets
+        .map((wallet) => {
+          const chain: "sol" | "monad" = wallet.chain === "monad" ? "monad" : "sol";
+          const normalizedAddress = normalizeAddressForChain(wallet.address, chain);
+          if (!normalizedAddress) return null;
+          return { address: normalizedAddress, chain };
+        })
+        .filter((wallet): wallet is { address: string; chain: "sol" | "monad" } => Boolean(wallet));
+
+      if (normalizedWallets.length === 0) return;
+
+      // Deduplicate addresses per chain
+      const seenAddresses = new Set<string>();
+      const uniqueWallets: Array<{ address: string; chain: "sol" | "monad" }> = [];
+      normalizedWallets.forEach((wallet) => {
+        const key = `${wallet.chain}:${wallet.address}`;
+        if (seenAddresses.has(key)) return;
+        seenAddresses.add(key);
+        uniqueWallets.push(wallet);
+      });
+
       // Prevent rapid consecutive batch fetches
       if (!force) {
         const timeSinceLastFetch = Date.now() - lastBatchFetchRef.current;
@@ -507,29 +564,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
       lastBatchFetchRef.current = Date.now();
 
       try {
-        // Prepare addresses for batch fetch - deduplicate by address
-        const seenAddresses = new Set<string>();
-        const addressesPayload = wallets
-          .filter(w => {
-            if (!w.address || seenAddresses.has(w.address)) return false;
-            seenAddresses.add(w.address);
-            return true;
-          })
-          .map(w => ({
-            address: w.address,
-            chain: (w.chain === "sol" ? "sol" : "monad") as "sol" | "monad",
-          }));
-
-        if (addressesPayload.length === 0) {
+        if (uniqueWallets.length === 0) {
           return;
         }
 
-        console.log(`📦 Batch fetching ${addressesPayload.length} unique wallet balances...`);
+        console.log(`📦 Batch fetching ${uniqueWallets.length} unique wallet balances...`);
+
+        const addressChainMap = new Map<string, "sol" | "monad">();
+        uniqueWallets.forEach(({ address, chain }) => {
+          addressChainMap.set(address, chain);
+        });
 
         const response = await fetch("/api/get-batch-balances", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ addresses: addressesPayload }),
+          body: JSON.stringify({ addresses: uniqueWallets }),
         });
 
         if (!response.ok) {
@@ -544,31 +593,48 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         // Update walletBalances state with all fetched balances
         const newWalletBalances: Record<string, number> = {};
-        for (const [address, balanceData] of Object.entries(data.balances)) {
-          const { balance } = balanceData as { balance: number; usdBalance: number };
-          newWalletBalances[address] = balance;
+        for (const [rawAddress, balanceData] of Object.entries(data.balances)) {
+          const inferredChain =
+            addressChainMap.get(rawAddress) ||
+            (rawAddress.startsWith("0x")
+              ? addressChainMap.get(normalizeMonadAddress(rawAddress))
+              : addressChainMap.get(rawAddress.trim()));
 
-          // Also update the address cache
-          const wallet = wallets.find(w => w.address === address);
-          if (wallet) {
-            const checkKey = `${wallet.chain}:${address}`;
-            addressBalanceCacheRef.current[checkKey] = balance;
-            lastBalanceFetchRef.current[checkKey] = Date.now();
-          }
+          const chain: "sol" | "monad" =
+            inferredChain || (rawAddress.startsWith("0x") ? "monad" : "sol");
+
+          const normalizedAddress =
+            chain === "monad"
+              ? normalizeMonadAddress(rawAddress)
+              : rawAddress.trim();
+
+          if (!normalizedAddress) continue;
+
+          const { balance } = balanceData as { balance: number; usdBalance: number };
+          newWalletBalances[normalizedAddress] = balance;
+
+          const cacheKey = `${chain}:${normalizedAddress}`;
+          addressBalanceCacheRef.current[cacheKey] = balance;
+          lastBalanceFetchRef.current[cacheKey] = Date.now();
         }
 
-        setWalletBalances(prev => ({ ...prev, ...newWalletBalances }));
+        if (Object.keys(newWalletBalances).length > 0) {
+          setWalletBalances((prev) => ({ ...prev, ...newWalletBalances }));
+        }
 
         // Update chainBalances for primary wallets
-        if (primaryWalletAddresses.solana && data.balances[primaryWalletAddresses.solana]) {
-          const solData = data.balances[primaryWalletAddresses.solana] as { balance: number; usdBalance: number };
+        const normalizedSolAddress =
+          primaryWalletAddresses.solana?.trim() || primaryWalletAddresses.solana || null;
+        if (normalizedSolAddress && data.balances[normalizedSolAddress]) {
+          const solData = data.balances[normalizedSolAddress] as { balance: number; usdBalance: number };
           setChainBalances(prev => ({ ...prev, sol: solData.balance }));
           setSolBalance(solData.balance);
           setUsdcBalance(solData.usdBalance);
         }
 
-        if (primaryWalletAddresses.ethereum && data.balances[primaryWalletAddresses.ethereum]) {
-          const monadData = data.balances[primaryWalletAddresses.ethereum] as { balance: number };
+        const normalizedMonAddress = normalizeMonadAddress(primaryWalletAddresses.ethereum);
+        if (normalizedMonAddress && data.balances[normalizedMonAddress]) {
+          const monadData = data.balances[normalizedMonAddress] as { balance: number };
           setChainBalances(prev => ({ ...prev, monad: monadData.balance }));
         }
 
