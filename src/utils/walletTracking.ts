@@ -271,7 +271,7 @@ export async function addTrackedWalletsBulk(
   }
 }
 
-export async function getWalletsLastActive(wallets: string[]): Promise<WalletLastActiveResult[]> {
+export async function getWalletsLastActive(wallets: string[], chain: 'sol' | 'monad' = 'sol'): Promise<WalletLastActiveResult[]> {
 	try {
 		if (!Array.isArray(wallets) || wallets.length === 0) {
 			return [];
@@ -280,7 +280,7 @@ export async function getWalletsLastActive(wallets: string[]): Promise<WalletLas
 		const response = await fetch(`${WALLET_TRACKER_API_URL}/api/wallets/last-active`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ wallets }),
+			body: JSON.stringify({ wallets, chain }),
 		});
 
 		const payload = await response.json().catch(() => null);
