@@ -1270,43 +1270,6 @@ export default function Header({
                           </button>
                         </div>
 
-                        {/* Referral Button */}
-                        <button
-                          onClick={() => {
-                            setProfileMenuOpen(false);
-                            router.push("/rewards");
-                          }}
-                          className="mt-2 flex w-full items-center gap-2 rounded-lg border-t border-[#20232b] bg-transparent px-3 py-2 pt-3 text-sm font-medium transition-all duration-200"
-                          style={{
-                            color: AX.text,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "rgba(24, 196, 140, 0.1)";
-                            e.currentTarget.style.color = AX.mint;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                            e.currentTarget.style.color = AX.text;
-                          }}
-                        >
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                            />
-                          </svg>
-                          Referral
-                        </button>
-
                         {/* Feature Updates Button */}
                         <button
                           onClick={() => {

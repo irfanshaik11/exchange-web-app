@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import Head from "next/head";
-import { useRouter } from "next/router";
 import { Copy, Gift, Users, Wallet } from "lucide-react";
 import Header from "~/components/Header";
 import InterstateButton from "~/components/InterstateButton";
@@ -9,8 +8,6 @@ import { useUser } from "~/components/UserContext";
 import { ensureReferralCodeForUser, fetchReferralCodeForUser, fetchReferrals, type ReferredUser } from "~/utils/referrals";
 
 export default function RewardsPage() {
-  const router = useRouter();
-  const currentChain = (router.query.chain as string) || "sol";
   const { user } = useUser();
   const [copied, setCopied] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
@@ -139,9 +136,6 @@ export default function RewardsPage() {
         <Header />
         <main className="mx-auto w-full max-w-6xl flex-1 px-6 pt-16 pb-24 sm:px-8 lg:px-10">
           <section className="space-y-12">
-            {/* Hide header, stats cards, and referral table when chain is Monad */}
-            {currentChain !== "monad" && (
-              <>
                 <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
                   <div className="space-y-3">
                     <p className="text-xs tracking-[0.35em] text-neutral-500 uppercase">
@@ -320,10 +314,8 @@ export default function RewardsPage() {
                     </table>
                   </div>
                 </div>
-              </>
-            )}
 
-            {/* Always show "Share & earn with your link" section */}
+            {/* Share & earn with your link section */}
             <div className="flex flex-col justify-between rounded-3xl border border-neutral-800 bg-gradient-to-br from-neutral-950/90 via-neutral-900/80 to-neutral-950/90 px-8 py-10 shadow-2xl shadow-purple-900/20">
               <div className="space-y-6">
                 <h2 className="text-2xl font-semibold text-[#f0f5f5]">
