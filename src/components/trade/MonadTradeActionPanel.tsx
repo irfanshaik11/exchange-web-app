@@ -640,6 +640,13 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
         toast.error(clientValidation.errorMessage || 'Insufficient MON balance', { duration: 5000 });
         return;
       }
+    } else if (mode === "sell") {
+      // Check if user has any tokens to sell
+      const currentTokenBalance = positionSummary?.balanceTokens ?? 0;
+      if (currentTokenBalance <= 0) {
+        toast.error('Insufficient token balance. Your balance is 0 tokens. Cannot sell.', { duration: 5000 });
+        return;
+      }
     }
     // ============================================
     // END PRE-VALIDATION

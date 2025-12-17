@@ -880,6 +880,18 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
     const sellSettings = presets[activePreset].quickSellSettings;
 
+    // ============================================
+    // PRE-VALIDATION: Check token balance BEFORE showing any toast
+    // This prevents the misleading "Trade placed!" toast when token balance is 0
+    // ============================================
+    if (tokenBalance <= 0) {
+      toast.error('Insufficient token balance. Your balance is 0 tokens. Cannot sell.', { duration: 5000 });
+      return;
+    }
+    // ============================================
+    // END PRE-VALIDATION
+    // ============================================
+
     // Check slippage warning (same as TradeActionPanel)
     const slippagePercent = getEffectiveSlippage(sellSettings.maxSlippage, false) * 100;
     if (slippagePercent >= HIGH_SLIPPAGE_WARNING_THRESHOLD) {
@@ -889,7 +901,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     }
 
     setIsLoading(true);
-    
+
     try {
       if (isMonad) {
         // Use Monad sell API - match MonadTradeActionPanel exactly
