@@ -2028,7 +2028,7 @@ export default function DiscoverPage() {
         ].map(addr => addr.toLowerCase());
         
         safeArr = safeArr.filter(t => {
-          const tokenAddress = (t.mint || t.address || '').toLowerCase();
+          const tokenAddress = (t.mint || (t as any).address || '').toLowerCase();
           return !blacklistedAddresses.includes(tokenAddress);
         });
       }
