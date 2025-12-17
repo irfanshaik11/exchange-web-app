@@ -310,26 +310,36 @@ export default function TwitterTrackerContent() {
                             key={idx}
                             src={imageUrl}
                             alt={`Tweet image ${idx + 1}`}
-                            className="max-h-64 w-full rounded-lg object-cover"
+                            className="h-auto max-h-96 w-full cursor-pointer rounded-lg border border-neutral-700/50 object-cover transition-opacity hover:opacity-90"
+                            onClick={() =>
+                              window.open(imageUrl, "_blank")
+                            }
                             onError={(e) => {
-                              e.currentTarget.style.display = 'none';
+                              (
+                                e.target as HTMLImageElement
+                              ).style.display = "none";
                             }}
                           />
                         ))}
                       </div>
                     )}
 
-                    {/* Tweet Link */}
-                    {tweet.url && (
-                      <a
-                        href={tweet.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-emerald-400 hover:text-emerald-300"
-                      >
-                        View on X →
-                      </a>
-                    )}
+                    {/* Tweet Stats */}
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-neutral-400">
+                      <span>💬 {tweet.replyCount || 0}</span>
+                      <span>🔁 {tweet.retweetCount || 0}</span>
+                      <span>❤️ {tweet.likeCount || 0}</span>
+                      {tweet.url && (
+                        <a
+                          href={tweet.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-auto text-emerald-400 hover:text-emerald-300"
+                        >
+                          View on X →
+                        </a>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

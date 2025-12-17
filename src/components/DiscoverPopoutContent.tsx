@@ -14,10 +14,12 @@ import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import { useUser } from "~/components/UserContext";
 import PumpLive, { type PumpItem, demoLeft as demoLeftPump, demoRight as demoRightPump } from '../components/PumpLive';
-import { FaRunning, FaGasPump, FaCoins, FaBan } from "react-icons/fa";
+import { FaRunning, FaGasPump, FaCoins, FaBan, FaCheckCircle } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 import { prefetchTradeData } from "~/utils/tokenCache";
+import toast from "react-hot-toast";
+import { extractTokenImage } from "~/utils/images";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -175,6 +177,10 @@ export default function DiscoverPopoutContent() {
   const [quickBuyAmount, setQuickBuyAmount] = useState(getInitialQuickBuyAmount().toString());
   const [selectedPill, setSelectedPill] = useState('P1'); // Local preset selection for discover page
   const [showPillTooltip, setShowPillTooltip] = useState<string | null>(null);
+  
+  // Ref for pending quick buy toast (for WebSocket updates)
+  const pendingQuickBuyToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; tokenAddress: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
+  
   const tokenMapRef = useRef<Map<string, TokenWithDexPaid>>(new Map());
   const [filteredTokens, setFilteredTokens] = useState<TokenWithDexPaid[]>([]);
   const [displayed, setDisplayed] = useState<TokenWithDexPaid[]>([]);
@@ -1517,23 +1523,79 @@ export default function DiscoverPopoutContent() {
 
   // Helper to determine Monad launchpad (same logic as MonadTable)
   const getMonadLaunchpad = useCallback((token: Token): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
-    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || '';
+    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || "";
     
-    if (protocol.includes('nad.fun') || protocol.includes('nadfun')) {
-      return 'nadfun';
-    } else if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
-      // Check if it's devs portal (usually has 'dev' in the name or specific identifier)
-      if (protocol.includes('dev')) {
-        return 'flapsh-devs';
-      }
-      return 'flapsh-simple';
+    // Also check token.protocol for "flap"
+    if ((token as any)?.protocol?.toLowerCase()?.includes("flap")) {
+      return "flapsh-simple";
     }
-    
+
+    if (protocol.includes("nad.fun") || protocol.includes("nadfun")) {
+      return "nadfun";
+    } else if (protocol.includes("flap.sh") || protocol.includes("flapsh")) {
+      // Check if it's devs portal (usually has 'dev' in the name or specific identifier)
+      if (protocol.includes("dev")) {
+        return "flapsh-devs";
+      }
+      return "flapsh-simple";
+    }
+
     // Default to nadfun if unknown
-    return 'nadfun';
+    return "nadfun";
   }, []);
 
-  // QUICK BUY handler – using enhanced trade flow for Solana, Monad logic for Monad chain
+  // Helper function to format user-friendly error messages
+  const formatMonadError = useCallback((error: string | undefined | null): string => {
+    if (!error) return "Trade failed. Please try again.";
+    
+    const errorLower = error.toLowerCase();
+    
+    // Check for specific error patterns
+    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
+        errorLower.includes('bonding_curve_library_invalid_inputs')) {
+      return "This token has no liquidity or has graduated to DEX. Try a different token.";
+    }
+    
+    if (errorLower.includes('insufficient liquidity') || 
+        errorLower.includes('expected output is 0') ||
+        errorLower.includes('no liquidity')) {
+      return "Insufficient liquidity. This token may not be available for trading.";
+    }
+    
+    if (errorLower.includes('token does not exist') || 
+        errorLower.includes('token may not exist')) {
+      return "Token not found. Please check the token address.";
+    }
+    
+    if (errorLower.includes('token has graduated') || 
+        errorLower.includes('graduated to dex')) {
+      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
+    }
+    
+    if (errorLower.includes('insufficient balance') || 
+        errorLower.includes('missing')) {
+      return "Insufficient balance. Please add more MON to your wallet.";
+    }
+    
+    if (errorLower.includes('locked') || 
+        errorLower.includes('cannot be traded')) {
+      return "This token is locked and cannot be traded.";
+    }
+    
+    if (errorLower.includes('execution reverted') || 
+        errorLower.includes('revert')) {
+      return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
+    }
+    
+    // Return original error if it's short and user-friendly, otherwise return generic message
+    if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
+      return error;
+    }
+    
+    return "Trade failed. Please try again.";
+  }, []);
+
+  // QUICK BUY handler – using MonadTable logic for Monad, enhanced trade flow for Solana
   const handleQuickBuy = async (token: Token) => {
     console.log("🎯 Quick Buy called for token:", token.symbol, "on chain:", currentChain);
     
@@ -1555,7 +1617,7 @@ export default function DiscoverPopoutContent() {
       return;
     }
 
-    // Get preset based on selected pill (local state) or activePreset (global)
+    // Get preset based on selected pill (local state)
     const presetIndex = parseInt(selectedPill.replace('P', '')) - 1;
     const preset = presets[presetIndex];
     if (!preset) {
@@ -1567,7 +1629,7 @@ export default function DiscoverPopoutContent() {
       return;
     }
 
-    // For Monad chain, use Monad-specific quick buy logic (same as MonadTable)
+    // For Monad chain, use MonadTable quick buy logic
     if (currentChain === 'monad') {
       if (!token.mint) {
         console.log("❌ Invalid token - missing mint address");
@@ -1580,19 +1642,75 @@ export default function DiscoverPopoutContent() {
       const settings = (preset.quickBuySettings || {}) as any;
       const launchpad = getMonadLaunchpad(token);
       const tokenAddress = token.mint; // Monad uses mint address (0x format)
-      const slippage = settings?.maxSlippage ? (settings.maxSlippage * 100) : 15;
+
+      // Get slippage from preset or use default (15%)
+      const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
+      // Get gas price from preset (optional, undefined if not set)
+      const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
 
       console.log("📤 Monad Quick Buy params:", {
         tokenAddress,
         amountMON: buyAmount,
         launchpad,
         slippage,
+        gasPrice: gasPrice !== undefined ? `${gasPrice} gwei` : 'network suggestion',
       });
 
-      const toastId = showEnhancedToast('loading', 'Executing Monad buy...', {
-        title: 'Processing Trade',
-        description: `${buyAmount} MON → ${token.symbol}`,
-      });
+      // Get token image and name
+      const tokenImage = token ? extractTokenImage(token as any) : null;
+      const tokenName = token?.name || token?.symbol || '';
+      
+      // Generate unique toast ID and fake fast time (0.40-0.60s)
+      const uniqueToastId = `monad-quickbuy-${Date.now()}`;
+      const startTime = Date.now();
+      
+      // Random cap time between 0.40 and 0.60 seconds
+      const timerCap = 0.40 + Math.random() * 0.20;
+      let timerFinished = false;
+      
+      // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
+      toast.custom(
+        (t) => (
+          <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
+            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+            {tokenImage && (
+              <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            )}
+            <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+            <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
+            <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
+              <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+            </span>
+          </div>
+        ),
+        { id: uniqueToastId, duration: Infinity }
+      );
+      
+      // Start timer animation - update every 50ms, show checkmark when cap is reached
+      const timerInterval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+        const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+        if (timerEl) {
+          timerEl.textContent = `(${displayTime}s)`;
+        }
+        
+        // When timer reaches cap, show checkmark and Monad logo
+        if (!timerFinished && elapsed >= timerCap) {
+          timerFinished = true;
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) {
+            checkEl.style.display = 'block';
+          }
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            linkEl.style.display = 'inline-flex';
+          }
+        }
+      }, 50);
+      
+      // Store pending toast info for WebSocket instant update (including timer)
+      pendingQuickBuyToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), tokenAddress, startTime, timerInterval };
 
       try {
         const result = await tradeMonadBuy(
@@ -1601,51 +1719,41 @@ export default function DiscoverPopoutContent() {
             amountMON: buyAmount,
             launchpad,
             slippage,
+            gasPrice,
           },
-          user.bearerToken
+          user.bearerToken,
         );
 
         if (result.success && result.txHash) {
-          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
-          updateEnhancedToast(toastId, 'success', 'Buy successful!', {
-            title: 'Trade Executed',
-            description: `Transaction confirmed`,
-            customContent: (
-              <div className="flex flex-col gap-2">
-                <div className="text-sm text-[#E6E7EA]">
-                  ✅ Buy successful!
-                </div>
-                <a
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:text-blue-300 underline text-xs flex items-center gap-1"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  View on MonadVision: {result.txHash.slice(0, 8)}...{result.txHash.slice(-6)}
-                  <span>→</span>
-                </a>
-              </div>
-            ),
-            duration: 10000,
-          });
-          console.log('✅ Monad Quick Buy successful:', result);
+          // Only update toast if WebSocket hasn't already handled it
+          if (pendingQuickBuyToastRef.current?.id === uniqueToastId) {
+            const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+            // Update the link element - wrap Monad logo in anchor to make clickable
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+            }
+            // Auto-dismiss after 10s
+            setTimeout(() => {
+              toast.dismiss(uniqueToastId);
+            }, 10000);
+            pendingQuickBuyToastRef.current = null;
+          }
+          console.log("✅ Monad Quick Buy successful:", result);
           return { success: true, txHash: result.txHash };
         } else {
-          const errorMsg = (result as any)?.error || 'Unknown error';
-          updateEnhancedToast(toastId, 'error', 'Buy failed', {
-            title: 'Trade Failed',
-            description: errorMsg,
-          });
+          clearInterval(timerInterval);
+          pendingQuickBuyToastRef.current = null;
+          const errorMsg = formatMonadError((result as any)?.error);
+          toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
           return { success: false, error: errorMsg };
         }
       } catch (error: any) {
-        console.error('❌ Monad Quick Buy failed:', error);
-        const errorMessage = error?.message || error?.error || 'Trade failed. Please try again.';
-        updateEnhancedToast(toastId, 'error', 'Buy failed', {
-          title: 'Trade Failed',
-          description: errorMessage,
-        });
+        console.error("❌ Monad Quick Buy failed:", error);
+        clearInterval(timerInterval);
+        pendingQuickBuyToastRef.current = null;
+        const errorMessage = formatMonadError(error?.message || error?.error);
+        toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
         return { success: false, error: errorMessage };
       }
     }
@@ -1889,7 +1997,23 @@ export default function DiscoverPopoutContent() {
       const arr = Array.from(tokenMapRef.current.values());
       
       // Safety check: filter out wrapped SOL before processing
-      const safeArr = arr.filter(t => t && t.mint && !isWrappedSol(t));
+      let safeArr = arr.filter(t => t && t.mint && !isWrappedSol(t));
+      
+      // Filter out specific blacklisted tokens for Monad trending section
+      if (currentChain === 'monad') {
+        const blacklistedAddresses = [
+          '0x6a7E3F839382FBb6A6131D4Aae864AAEb362292d',
+          '0x01bFF41798a0BcF287b996046Ca68b395DbC1071',
+          '0x0a332311633C0625f63CFc51EE33fC49826E0a3C',
+          '0x22Cd99EC337a2811F594340a4A6E41e4A3022b07',
+          '0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3'
+        ].map(addr => addr.toLowerCase());
+        
+        safeArr = safeArr.filter(t => {
+          const tokenAddress = (t.mint || (t as any).address || '').toLowerCase();
+          return !blacklistedAddresses.includes(tokenAddress);
+        });
+      }
       
       // Apply filters - this will re-run when filter context changes
       // CRITICAL: applyFilters uses filter context, so when filters change, this will re-run
@@ -1994,6 +2118,69 @@ export default function DiscoverPopoutContent() {
         uniqueSafe.push(token);
       }
       
+      // If we have fewer than 10 trending tokens, supplement with top tokens from new pairs
+      if (uniqueSafe.length < 10 && newPairsRaw && newPairsRaw.length > 0) {
+        console.log(`[Trending] Only ${uniqueSafe.length} trending tokens, supplementing with top tokens from new pairs`);
+        
+        // Get top tokens from new pairs, sorted by volume (for selected timeframe)
+        const topNewPairs = newPairsRaw
+          .filter((token: any) => {
+            // Skip if already in trending list
+            const tokenMint = (token.mint || token.address || '').toLowerCase();
+            if (tokenMint && seenMints.has(tokenMint)) return false;
+            
+            // Skip wrapped SOL and blacklisted tokens
+            if (isWrappedSol(token)) return false;
+            if (currentChain === 'monad') {
+              const blacklistedAddresses = [
+                '0x6a7E3F839382FBb6A6131D4Aae864AAEb362292d',
+                '0x01bFF41798a0BcF287b996046Ca68b395DbC1071',
+                '0x0a332311633C0625f63CFc51EE33fC49826E0a3C',
+                '0x22Cd99EC337a2811F594340a4A6E41e4A3022b07',
+                '0xF59D81cd43f620E722E07f9Cb3f6E41B031017a3'
+              ].map(addr => addr.toLowerCase());
+              const tokenAddress = tokenMint;
+              if (blacklistedAddresses.includes(tokenAddress)) return false;
+            }
+            
+            // Skip zero liquidity tokens
+            if (isZeroLiquidityToken(token)) return false;
+            
+            return true;
+          })
+          .map((token: any) => ({
+            ...token,
+            // Calculate volume for sorting
+            sortVolume: getVolumeForTimeframe(token, selectedTimeframe),
+          }))
+          .sort((a: any, b: any) => {
+            // Sort by volume descending, then by market cap
+            const volumeDiff = b.sortVolume - a.sortVolume;
+            if (Math.abs(volumeDiff) > 0.01) return volumeDiff;
+            const aMc = Number((a as any).fully_diluted_value || (a as any).market_cap_usd || 0);
+            const bMc = Number((b as any).fully_diluted_value || (b as any).market_cap_usd || 0);
+            return bMc - aMc;
+          })
+          .slice(0, 10) // Take top 10 from new pairs
+          .map((token: any) => {
+            // Remove the sortVolume property we added
+            const { sortVolume, ...rest } = token;
+            return rest;
+          });
+        
+        // Add to uniqueSafe, tracking their mints to avoid duplicates
+        for (const token of topNewPairs) {
+          const mint = (token.mint || token.address || '').toLowerCase();
+          if (mint && !seenMints.has(mint)) {
+            seenMints.add(mint);
+            uniqueSafe.push(token);
+            if (uniqueSafe.length >= 20) break; // Cap at 20 total tokens
+          }
+        }
+        
+        console.log(`[Trending] Added ${topNewPairs.length} top tokens from new pairs, total now: ${uniqueSafe.length}`);
+      }
+      
       setDisplayed(uniqueSafe);
     } else if (activeTab === "dex") {
       // dex tab → show limited slice
@@ -2002,7 +2189,7 @@ export default function DiscoverPopoutContent() {
     } else {
       setDisplayed([]);
     }
-  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount]); // Ensure filters are reapplied when they change
+  }, [activeTab, filteredTokens, sortKey, sortDirection, selectedTimeframe, applyFilters, getVolumeForTimeframe, isWrappedSol, filter, activeFilterCount, newPairsRaw, currentChain, isZeroLiquidityToken]); // Ensure filters are reapplied when they change
 
   const processedNewPairs = useMemo(() => {
     if (!newPairsRaw || newPairsRaw.length === 0) {
@@ -2348,7 +2535,7 @@ export default function DiscoverPopoutContent() {
   }, [displayed]);
 
   return (
-    <div className="flex h-full flex-col text-[#E6E7EA] overflow-hidden" style={{ backgroundColor: '#111214' }}>
+    <div className="flex h-full flex-col text-[#E6E7EA]" style={{ backgroundColor: '#111214' }}>
 
         {/* Tab Navigation */}
         <div className="flex flex-col gap-4 px-4 pt-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-6 lg:px-8">
