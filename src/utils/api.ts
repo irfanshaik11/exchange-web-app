@@ -259,23 +259,6 @@ export const metamaskLogin = (
   });
 };
 
-export const getTurnkeySessionInfo = (authToken?: string) => {
-  // Get token from cookies if not provided
-  let token = authToken;
-  if (!token && typeof window !== 'undefined') {
-    const cookies = document.cookie.split(';');
-    const tokenCookie = cookies.find(c => c.trim().startsWith('token='));
-    if (tokenCookie) {
-      token = tokenCookie.split('=')[1];
-    }
-  }
-  
-  return apiFetch<{ organizationId: string; userId: string; walletId: string }>("/api/users/turnkey/session-info", {
-    method: "GET",
-    authToken: token,
-  });
-};
-
 export const turnkeyLogin = (
   params: {
     turnkeySessionToken: string;
