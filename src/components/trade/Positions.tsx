@@ -80,8 +80,51 @@ const Positions: React.FC<PositionsProps> = ({
   isCacheValid,
   fallbackPositions
 }) => {
-  const [positions, setPositions] = useState<PositionRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const currentChain = (router.query.chain as string) || 'sol';
+  const blockchain = useMemo(() => {
+    if (currentChain === 'monad') return 'monad';
+    if (currentChain === 'sol' || currentChain === 'solana') return 'solana';
+    return undefined;
+  }, [currentChain]);
+
+  // Cache key for positions (user-specific and chain-specific)
+  const positionsCacheKey = useMemo(() => {
+    const chainSuffix = blockchain || 'all';
+    return `positions_cache_${userId}_${chainSuffix}`;
+  }, [userId, blockchain]);
+
+  // Cache TTL: 30 seconds (short to prevent stale data, but long enough for instant display)
+  const POSITIONS_CACHE_TTL_MS = 30 * 1000;
+
+  // Initialize positions from localStorage cache for instant display
+  const [positions, setPositions] = useState<PositionRow[]>(() => {
+    if (skipFetch || !userId || typeof window === 'undefined') return [];
+    try {
+      // Compute cache key inline for initializer (before useMemo runs)
+      const chain = router.query.chain as string || 'sol';
+      const chainSuffix = (chain === 'monad' ? 'monad' : chain === 'sol' || chain === 'solana' ? 'solana' : undefined) || 'all';
+      const cacheKey = `positions_cache_${userId}_${chainSuffix}`;
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (
+          parsed &&
+          Array.isArray(parsed.data) &&
+          typeof parsed.timestamp === 'number' &&
+          Date.now() - parsed.timestamp <= POSITIONS_CACHE_TTL_MS
+        ) {
+          console.log(`[Positions] ✅ Restored ${parsed.data.length} positions from cache for instant display`);
+          return parsed.data as PositionRow[];
+        }
+      }
+    } catch (error) {
+      console.warn(`[Positions] Failed to restore cache:`, error);
+    }
+    return [];
+  });
+  
+  const [loading, setLoading] = useState(true); // Start with loading, will be set based on cache in useEffect
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [hiddenTokens, setHiddenTokens] = useState<Set<string>>(new Set());
   const [showSellPopup, setShowSellPopup] = useState(false);
@@ -126,10 +169,6 @@ const Positions: React.FC<PositionsProps> = ({
       </span>
     );
   };
-
-  const router = useRouter();
-  const currentChain = (router.query.chain as string) || 'sol';
-  const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
 
   // Get unique token addresses from positions with remaining > 0
   const activeTokenAddresses = useMemo(() => {
@@ -188,6 +227,20 @@ const Positions: React.FC<PositionsProps> = ({
         const reversedPositions = [...updatedPositions].reverse();
         setPositions(reversedPositions);
         onPositionsChange(reversedPositions);
+        
+        // Save to localStorage cache after refresh (e.g., after sell)
+        if (!skipFetch && typeof window !== 'undefined') {
+          try {
+            const payload = {
+              data: reversedPositions,
+              timestamp: Date.now(),
+            };
+            window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
+            console.log(`[Positions] 💾 Cached ${reversedPositions.length} positions after refresh`);
+          } catch (error) {
+            console.warn(`[Positions] Failed to cache positions after refresh:`, error);
+          }
+        }
       } catch (error) {
         console.error('Failed to refresh positions:', error);
       }
@@ -450,6 +503,30 @@ const Positions: React.FC<PositionsProps> = ({
     [isCacheValid, onTokenNamesChange, onUpdateCache],
   );
 
+  // Load from cache when cache key changes (e.g., user or chain changes)
+  useEffect(() => {
+    if (skipFetch || !userId || typeof window === 'undefined') return;
+    
+    try {
+      const cached = window.localStorage.getItem(positionsCacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (
+          parsed &&
+          Array.isArray(parsed.data) &&
+          typeof parsed.timestamp === 'number' &&
+          Date.now() - parsed.timestamp <= POSITIONS_CACHE_TTL_MS
+        ) {
+          console.log(`[Positions] ✅ Loaded ${parsed.data.length} positions from cache (cache key changed)`);
+          setPositions(parsed.data as PositionRow[]);
+          setLoading(false);
+        }
+      }
+    } catch (error) {
+      console.warn(`[Positions] Failed to load cache:`, error);
+    }
+  }, [positionsCacheKey, skipFetch, userId, POSITIONS_CACHE_TTL_MS]);
+
   // If preloaded positions are provided, use them
   useEffect(() => {
     if (preloadedPositions && skipFetch) {
@@ -473,8 +550,34 @@ const Positions: React.FC<PositionsProps> = ({
     
     const fetchPositions = async () => {
       console.log(`🔍 Fetching positions for userId: ${userId}`);
-      if (isInitialLoad) {
+      
+      // Check cache to determine if we should show loading
+      let hasValidCache = false;
+      if (typeof window !== 'undefined') {
+        try {
+          const cached = window.localStorage.getItem(positionsCacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (
+              parsed &&
+              Array.isArray(parsed.data) &&
+              parsed.data.length > 0 &&
+              typeof parsed.timestamp === 'number' &&
+              Date.now() - parsed.timestamp <= POSITIONS_CACHE_TTL_MS
+            ) {
+              hasValidCache = true;
+            }
+          }
+        } catch (error) {
+          // Ignore cache errors
+        }
+      }
+
+      // Only show loading if we don't have valid cache (for instant display)
+      if (isInitialLoad && !hasValidCache) {
         setLoading(true);
+      } else if (hasValidCache) {
+        console.log(`[Positions] 🔄 Refreshing positions in background (cache available for instant display)`);
       }
       try {
         console.log(`🔍 [Positions] Fetching with blockchain: ${blockchain || 'all'}`);
@@ -489,6 +592,21 @@ const Positions: React.FC<PositionsProps> = ({
         const reversedPositions = [...fetchedPositions].reverse();
         setPositions(reversedPositions);
         onPositionsChange(reversedPositions);
+        
+        // Save to localStorage cache for instant loading when navigating back
+        if (!skipFetch && typeof window !== 'undefined') {
+          try {
+            const payload = {
+              data: reversedPositions,
+              timestamp: Date.now(),
+            };
+            window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
+            console.log(`[Positions] 💾 Cached ${reversedPositions.length} positions to localStorage`);
+          } catch (error) {
+            console.warn(`[Positions] Failed to cache positions:`, error);
+          }
+        }
+        
         requestMetadataForTokens(fetchedPositions);
       } catch (error) {
         console.error('❌ Error fetching positions:', error);
@@ -508,7 +626,7 @@ const Positions: React.FC<PositionsProps> = ({
     }, 5000);
     
     return () => clearInterval(intervalId);
-  }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens]);
+  }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey, POSITIONS_CACHE_TTL_MS]);
 
   return (
     <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
