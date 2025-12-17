@@ -98,45 +98,6 @@ export async function fetchReferralCodeForUser(
 }
 
 /**
- * Get or generate a referral code for the current user
- */
-export async function ensureReferralCodeForUser(
-  authToken: string,
-): Promise<ReferralRecord> {
-  const url = `${BACKEND_URL}/api/users/referral-code`;
-
-  try {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-      },
-    });
-
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      const message = buildErrorMessage(
-        response.status,
-        response.statusText,
-        payload,
-        "Failed to generate referral code",
-      );
-      throw new Error(message);
-    }
-
-    const payload = await response.json();
-
-    if (!payload?.referralCode) {
-      throw new Error("No referral code in response");
-    }
-
-    return { referralCode: payload.referralCode };
-  } catch (error) {
-    console.error("Error generating referral code:", error);
-    throw error;
-  }
-}
-
-/**
  * Fetch the list of users referred by the current user, including their trading volume
  */
 export async function fetchReferrals(

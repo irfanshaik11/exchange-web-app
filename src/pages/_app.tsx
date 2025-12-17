@@ -37,7 +37,7 @@ import { ThemeProvider } from '../components/ThemeContext';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
-import { storeReferralCodeHint, getStoredReferralCodeHint } from '~/utils/referralStorage';
+import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCodeHint } from '~/utils/referralStorage';
 import PagePreloader from '../components/PagePreloader';
 
 // Suppress Next.js error overlay for caught errors in development
@@ -286,6 +286,8 @@ function TurnkeySessionBridge() {
             }
 
             Cookies.set("token", appToken, { expires: 7, path: "/" });
+            // Clear referral code hint after successful login (it's been sent to backend)
+            clearStoredReferralCodeHint();
 
             pendingRefreshRef.current = true;
             if (user?.userEmail || user?.userName) {

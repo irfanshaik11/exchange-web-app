@@ -13,7 +13,7 @@ import { useRouter } from "next/router";
 import { getUserById, ApiError, updateUser } from "../utils/api";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 const USER_CACHE_KEY = "codex_user_info_cache";
-import { clearStoredReferralAccess, getStoredReferralCodeHint, clearStoredReferralCodeHint } from "../utils/referralStorage";
+import { clearStoredReferralAccess } from "../utils/referralStorage";
 import { useTurnkey } from "@turnkey/react-wallet-kit";
 import next from "next";
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
@@ -737,12 +737,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
 
         setUser({ bearerToken: token, ...nextUser });
-        // Clear stored referral code hint after successful login
-        // (referral tracking is now handled by exchange-backend during user creation)
-        const referralCode = getStoredReferralCodeHint();
-        if (referralCode) {
-          clearStoredReferralCodeHint();
-        }
       } else {
         Cookies.remove("token");
         setUser(null);
