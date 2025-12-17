@@ -17,7 +17,6 @@ import {
   getTrackedWallets,
   getWalletHistory,
   getWalletBalance,
-  getWalletsLastActive,
   toggleWalletNotifications,
   type WatchWallet,
   type WalletEvent,
@@ -166,6 +165,28 @@ const MAX_WALLETS = 500;
 const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
 
 const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+
+const BLOCKVISION_API_KEY = process.env.NEXT_PUBLIC_BLOCKVISION_API_KEY;
+
+const ensureMs = (ts: unknown): number | null => {
+  if (typeof ts !== "number" || !Number.isFinite(ts) || ts <= 0) return null;
+  // Blockvision returns ms, but be defensive in case it ever returns seconds.
+  return ts < 1_000_000_000_000 ? ts * 1000 : ts;
+};
+
+const fetchWithTimeout = async (
+  url: string,
+  init: RequestInit,
+  timeoutMs = 10_000,
+) => {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+};
 
 export default function TrackersPage() {
   const router = useRouter();
@@ -677,7 +698,14 @@ export default function TrackersPage() {
     setWatchedWallets(globalWatchedWallets);
   }, [globalWatchedWallets]);
   useEffect(() => {
-    if (watchedWallets.length === 0) {
+    const addresses = watchedWallets
+      .map((wallet) => wallet.address)
+      .filter(
+        (address): address is string =>
+          typeof address === "string" && address.length > 0,
+      );
+
+    if (addresses.length === 0) {
       setLastActiveMap({});
       return;
     }
@@ -686,75 +714,121 @@ export default function TrackersPage() {
 
     const fetchLastActive = async () => {
       try {
-        // Group wallets by chain
-        const walletsByChain: Record<'sol' | 'monad', string[]> = {
-          sol: [],
-          monad: [],
-        };
+        console.log(
+          "[trackers:lastActive] fetching Blockvision timestamps for wallets:",
+          addresses,
+        );
 
-        watchedWallets.forEach((wallet) => {
-          const address = wallet.address;
-          if (typeof address === "string" && address.length > 0) {
-            const chain = (wallet.chain === 'monad' || wallet.chain === 'sol') ? wallet.chain : 'sol';
-            walletsByChain[chain].push(address);
-          }
-        });
+        const settled = await Promise.allSettled(
+          addresses.map(async (address) => {
+            if (!BLOCKVISION_API_KEY) {
+              throw new Error("NEXT_PUBLIC_BLOCKVISION_API_KEY is not set");
+            }
+            const url = `https://api.blockvision.org/v2/monad/account/transactions?address=${encodeURIComponent(
+              address,
+            )}&limit=20&ascendingOrder=false`;
 
-        // Initialize map - will be populated as API calls complete
-        const map: Record<string, number | null> = {};
+            const resp = await fetchWithTimeout(
+              url,
+              {
+                method: "GET",
+                headers: {
+                  accept: "application/json",
+                  "x-api-key": BLOCKVISION_API_KEY,
+                },
+              },
+              10_000,
+            );
 
-        // Fetch last active for each chain in parallel
-        const fetchPromises: Promise<void>[] = [];
+            const text = await resp.text();
+            let payload: any = null;
+            try {
+              payload = JSON.parse(text);
+            } catch {
+              payload = null;
+            }
 
-        if (walletsByChain.sol.length > 0) {
-          fetchPromises.push(
-            getWalletsLastActive(walletsByChain.sol, 'sol')
-              .then((results) => {
-                if (cancelled) return;
-                results.forEach((item) => {
-                  map[item.wallet] =
-                    typeof item.lastActive === "number" ? item.lastActive : null;
-                });
-              })
-              .catch((error) => {
-                if (!cancelled) {
-                  console.error("Failed to fetch last active for Solana wallets:", error);
-                }
-              })
-          );
-        }
+            if (!resp.ok) {
+              const msg =
+                (payload && (payload.message || payload.error)) ||
+                `HTTP ${resp.status} ${resp.statusText}`;
+              throw new Error(msg);
+            }
 
-        if (walletsByChain.monad.length > 0) {
-          fetchPromises.push(
-            getWalletsLastActive(walletsByChain.monad, 'monad')
-              .then((results) => {
-                if (cancelled) return;
-                results.forEach((item) => {
-                  map[item.wallet] =
-                    typeof item.lastActive === "number" ? item.lastActive : null;
-                });
-              })
-              .catch((error) => {
-                if (!cancelled) {
-                  console.error("Failed to fetch last active for Monad wallets:", error);
-                }
-              })
-          );
-        }
+            const newestRaw = payload?.result?.data?.[0]?.timestamp;
+            const newest = ensureMs(newestRaw);
 
-        // Wait for all requests to complete
-        await Promise.all(fetchPromises);
+            console.log("[trackers:lastActive] wallet result", {
+              address,
+              newestRaw,
+              newest,
+              newestIso: newest ? new Date(newest).toISOString() : null,
+              txCount: Array.isArray(payload?.result?.data)
+                ? payload.result.data.length
+                : 0,
+              code: payload?.code,
+            });
+
+            return { address, lastActive: newest };
+          }),
+        );
 
         if (cancelled) return;
 
-        // Ensure we have entries for every requested address
-        watchedWallets.forEach((wallet) => {
-          if (typeof wallet.address === "string" && wallet.address.length > 0) {
-            if (!(wallet.address in map)) {
-              map[wallet.address] = null;
-            }
-          }
+        // If the browser blocks Blockvision (CORS), fetch will often fail with a TypeError("Failed to fetch").
+        // In that case, fall back to our Next API proxy (still initiated from the frontend).
+        const allFailed = settled.every((r) => r.status === "rejected");
+        const likelyCors = settled.every((r) => {
+          if (r.status !== "rejected") return false;
+          const msg = r.reason?.message || String(r.reason);
+          return /failed to fetch/i.test(msg) || /networkerror/i.test(msg);
         });
+
+        let map: Record<string, number | null> = {};
+
+        if (allFailed && likelyCors) {
+          console.warn(
+            "[trackers:lastActive] direct Blockvision fetch failed for all wallets (likely CORS). Falling back to /api/blockvision/monad/last-active",
+          );
+          const proxyResp = await fetch("/api/blockvision/monad/last-active", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallets: addresses, limit: 20 }),
+          });
+          const proxyPayload = await proxyResp.json().catch(() => null);
+          if (
+            !proxyResp.ok ||
+            proxyPayload?.ok !== true ||
+            !Array.isArray(proxyPayload?.data)
+          ) {
+            throw new Error(
+              proxyPayload?.error ||
+                `Proxy HTTP ${proxyResp.status} ${proxyResp.statusText}`,
+            );
+          }
+          for (const item of proxyPayload.data) {
+            if (!item?.wallet) continue;
+            map[item.wallet] = typeof item.lastActive === "number" ? item.lastActive : null;
+          }
+          // Ensure map has all requested
+          for (const address of addresses) {
+            if (!(address in map)) map[address] = null;
+          }
+          console.log("[trackers:lastActive] proxy results map:", map);
+        } else {
+          settled.forEach((res, idx) => {
+            const address = addresses[idx];
+            if (res.status === "fulfilled") {
+              map[address] = res.value.lastActive;
+            } else {
+              map[address] = null;
+              console.warn("[trackers:lastActive] wallet fetch failed", {
+                address,
+                error: res.reason?.message || String(res.reason),
+              });
+            }
+          });
+        }
 
         setLastActiveMap(map);
       } catch (error) {
@@ -762,10 +836,8 @@ export default function TrackersPage() {
         if (!cancelled) {
           // Initialize with null values on error to avoid "Loading..." state
           const errorMap: Record<string, number | null> = {};
-          watchedWallets.forEach((wallet) => {
-            if (typeof wallet.address === "string" && wallet.address.length > 0) {
-              errorMap[wallet.address] = null;
-            }
+          addresses.forEach((address) => {
+            errorMap[address] = null;
           });
           setLastActiveMap(errorMap);
         }
