@@ -6,7 +6,6 @@ import InterstateButton from "~/components/InterstateButton";
 import Footer from "~/components/Footer";
 import { useUser } from "~/components/UserContext";
 import {
-  ensureReferralCodeForUser,
   fetchReferralCodeForUser,
   fetchReferrals,
   type ReferredUser,
@@ -17,7 +16,6 @@ export default function RewardsPage() {
   const [copied, setCopied] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [loadingReferral, setLoadingReferral] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [referralError, setReferralError] = useState<string | null>(null);
   const [referrals, setReferrals] = useState<ReferredUser[]>([]);
   const [totalVolume, setTotalVolume] = useState(0);
@@ -98,33 +96,10 @@ export default function RewardsPage() {
     };
   }, [user?.bearerToken]);
 
-  const handleGenerateCode = useCallback(async () => {
-    if (!user?.bearerToken) {
-      setReferralError("Sign in to generate a referral code.");
-      return;
-    }
-
-    try {
-      setIsGenerating(true);
-      setReferralError(null);
-      const record = await ensureReferralCodeForUser(user.bearerToken);
-      setReferralCode(record.referralCode);
-      setCopied(false);
-    } catch (error: any) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to generate referral code";
-      setReferralError(message);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [user?.bearerToken]);
-
   const handleCopy = useCallback(async () => {
     try {
       if (!referralLink) {
-        console.warn("Generate a referral code before copying the link.");
+        console.warn("No referral link available to copy.");
         return;
       }
       if (typeof navigator === "undefined" || !navigator.clipboard) {
@@ -275,23 +250,6 @@ export default function RewardsPage() {
                     Drop your link in group chats, on X, or with your alpha
                     group. Every trader that joins keeps fueling your rewards.
                   </p>
-                  {!referralCode && (
-                    <InterstateButton
-                      className="w-full sm:w-auto"
-                      disabled={
-                        loadingReferral || isGenerating || !user?.bearerToken
-                      }
-                      onClick={() => {
-                        void handleGenerateCode();
-                      }}
-                      size="md"
-                      variant="primary"
-                    >
-                      {isGenerating
-                        ? "Generating..."
-                        : "Generate referral code"}
-                    </InterstateButton>
-                  )}
                   <div className="rounded-3xl border border-neutral-800 bg-neutral-950/60 px-6 py-5 text-sm shadow-inner shadow-black/40">
                     <p className="text-xs tracking-[0.3em] text-neutral-500 uppercase">
                       Referral code
@@ -302,7 +260,7 @@ export default function RewardsPage() {
                         : (referralCode ?? "------")}
                     </p>
                     <p className="mt-2 text-xs text-neutral-500">
-                      Generate your code to link every trader you invite
+                      Share your code to link every trader you invite
                       directly to your rewards.
                     </p>
                     {referralError && (
@@ -316,7 +274,7 @@ export default function RewardsPage() {
                   <div className="flex flex-1 items-center justify-between gap-4 rounded-full border border-neutral-800 bg-neutral-950/60 px-5 py-3 font-mono text-sm text-neutral-200 shadow-inner shadow-black/40">
                     <span className="truncate">
                       {referralLink ||
-                        "Generate a referral code to unlock your link"}
+                        "Sign in to get your referral link"}
                     </span>
                   </div>
                   <InterstateButton
