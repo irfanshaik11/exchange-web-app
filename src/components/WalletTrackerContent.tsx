@@ -157,11 +157,7 @@ export default function WalletTrackerContent() {
 
   // Load last active timestamps
   useEffect(() => {
-    const addresses = watchedWallets
-      .map((wallet) => wallet.address)
-      .filter((address): address is string => typeof address === "string" && address.length > 0);
-
-    if (addresses.length === 0) {
+    if (watchedWallets.length === 0) {
       setLastActiveMap({});
       return;
     }
@@ -170,23 +166,89 @@ export default function WalletTrackerContent() {
 
     const fetchLastActive = async () => {
       try {
-        const results = await getWalletsLastActive(addresses);
-        if (cancelled) return;
+        // Group wallets by chain
+        const walletsByChain: Record<'sol' | 'monad', string[]> = {
+          sol: [],
+          monad: [],
+        };
 
-        const map: Record<string, number | null> = {};
-        results.forEach((item) => {
-          map[item.wallet] = typeof item.lastActive === "number" ? item.lastActive : null;
+        watchedWallets.forEach((wallet) => {
+          const address = wallet.address;
+          if (typeof address === "string" && address.length > 0) {
+            const chain = (wallet.chain === 'monad' || wallet.chain === 'sol') ? wallet.chain : 'sol';
+            walletsByChain[chain].push(address);
+          }
         });
 
-        addresses.forEach((address) => {
-          if (!(address in map)) {
-            map[address] = null;
+        // Initialize map - will be populated as API calls complete
+        const map: Record<string, number | null> = {};
+
+        // Fetch last active for each chain in parallel
+        const fetchPromises: Promise<void>[] = [];
+
+        if (walletsByChain.sol.length > 0) {
+          fetchPromises.push(
+            getWalletsLastActive(walletsByChain.sol, 'sol')
+              .then((results) => {
+                if (cancelled) return;
+                results.forEach((item) => {
+                  map[item.wallet] =
+                    typeof item.lastActive === "number" ? item.lastActive : null;
+                });
+              })
+              .catch((error) => {
+                if (!cancelled) {
+                  console.error("Failed to fetch last active for Solana wallets:", error);
+                }
+              })
+          );
+        }
+
+        if (walletsByChain.monad.length > 0) {
+          fetchPromises.push(
+            getWalletsLastActive(walletsByChain.monad, 'monad')
+              .then((results) => {
+                if (cancelled) return;
+                results.forEach((item) => {
+                  map[item.wallet] =
+                    typeof item.lastActive === "number" ? item.lastActive : null;
+                });
+              })
+              .catch((error) => {
+                if (!cancelled) {
+                  console.error("Failed to fetch last active for Monad wallets:", error);
+                }
+              })
+          );
+        }
+
+        // Wait for all requests to complete
+        await Promise.all(fetchPromises);
+
+        if (cancelled) return;
+
+        // Ensure we have entries for every requested address
+        watchedWallets.forEach((wallet) => {
+          if (typeof wallet.address === "string" && wallet.address.length > 0) {
+            if (!(wallet.address in map)) {
+              map[wallet.address] = null;
+            }
           }
         });
 
         setLastActiveMap(map);
       } catch (error) {
         console.error("Failed to fetch last active timestamps:", error);
+        if (!cancelled) {
+          // Initialize with null values on error to avoid "Loading..." state
+          const errorMap: Record<string, number | null> = {};
+          watchedWallets.forEach((wallet) => {
+            if (typeof wallet.address === "string" && wallet.address.length > 0) {
+              errorMap[wallet.address] = null;
+            }
+          });
+          setLastActiveMap(errorMap);
+        }
       }
     };
 

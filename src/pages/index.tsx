@@ -26,7 +26,6 @@ import InterstateButton from "../components/InterstateButton";
 import InterstateTable from "../components/InterstateTable";
 import toast from "react-hot-toast";
 import { formatSmartNumber } from "~/utils/db";
-import { showTransactionPendingToast, startTransactionToastTimeout, updateTransactionToast } from "~/utils/toast";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import QuickBuySettingsModal from '../components/QuickBuySettingsModal';
 import { FilterProvider, useFilter } from '../components/FilterContext';
@@ -34,9 +33,8 @@ import InterstatePopout from '../components/InterstatePopout';
 import FilterPopout from '../components/FilterPopout';
 import throttle from 'lodash.throttle';
 import usePaginatedTokensWithFallback from '../hooks/usePaginatedTokensWithFallback';
-import { tradeBuy, SOL_MINT_ADDRESS, ApiError } from "../utils/api";
+import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { env } from "../env";
-import { getPoolTypeFromToken } from "../utils/poolTypeDetection";
 
 const navLinks = [
   { name: "Discover", href: "/discover" },
@@ -295,109 +293,37 @@ export default function Home() {
   async function handleQuickBuy(token: Token) {
     console.log("🎯 handleQuickBuy called for token:", token.symbol);
     
-    if (!user) {
+    if (!user?.bearerToken || !user?.id) {
       console.log("❌ No user found");
       return;
     }
     
-    let pendingToastId: string | null = null;
-    let clearToastTimeout = () => undefined;
-    
-    try {
-      const poolType = getPoolTypeFromToken(token);
-      const effectivePoolAddress = token.migrated_pool_address || token.pair_address;
-      console.log(`🔍 Quick Buy ${token.symbol} - Protocol: ${token.launchpad_protocol || token.protocol || 'unknown'} → PoolType: ${poolType}`);
-      console.log(`🔍 Pool Address: ${effectivePoolAddress} ${token.migrated_pool_address ? '(using migrated_pool_address)' : '(using pair_address)'}`);
-      
-      const settings = presets[activePreset].quickBuySettings;
-      
-      // Show pending toast and start timeout
-      pendingToastId = showTransactionPendingToast("Attempting transaction...");
-      clearToastTimeout = startTransactionToastTimeout(pendingToastId);
-      
-      const data = await tradeBuy({
-        poolAddress: effectivePoolAddress,
-        baseMint: token.mint,
-        quoteMint: SOL_MINT_ADDRESS,
-        amount: quickBuyAmount,
-        mevProtection: settings.mevMode === "off" ? 0 : 1,
-        poolType: poolType,
-        originalPairAddress: token.pair_address, // Original pair address from token-service
-        // Preset trading parameters
-        slippage: settings.maxSlippage || 0.4,
-        priorityFee: settings.priority || 0.0001,
-        bribe: settings.bribe || 0,
-        mevMode: settings.mevMode,
-        autoFee: settings.autoFee || false,
-        maxFee: settings.maxFee || 0,
-        rpc: settings.rpc,
-        // Debugging metadata
-        tokenName: token.name,
-        tokenSymbol: token.symbol,
-      }, user.bearerToken);
-      
-      // Handle different response formats from backend
-      const txHash = data?.hash || data?.txid;
-      const tokenAmount = data?.amount || data?.tokenAmount;
-
-      if (data && txHash) {
-        console.log(`✅ Quick Buy successful! Hash: ${txHash}`);
-        clearToastTimeout();
-        updateTransactionToast(
-          pendingToastId,
-          "success",
-          `✅ Quick Buy successful! Bought ${tokenAmount || 'tokens'} ${token.symbol}. Tx: ${txHash.slice(0, 8)}...`
-        );
-      } else {
-        console.log('❌ Quick Buy failed - no transaction hash returned');
-        clearToastTimeout();
-        updateTransactionToast(pendingToastId, "error", "❌ Quick Buy failed - no transaction hash returned");
-      }
-    } catch (e: any) {
-      console.error('Quick Buy error:', e);
-      console.error('Error details:', {
-        message: e?.message,
-        code: e?.code,
-        status: e?.status,
-        details: e?.details,
-        fullError: e
+    if (!quickBuyAmount || quickBuyAmount <= 0) {
+      toast.error("Set a buy amount first (use the preset buttons)", {
+        duration: 3000,
+        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
       });
-      
-      // Always clear timeout and update pending toast on error
-      clearToastTimeout();
-      
-      // Handle structured API errors
-      if (e instanceof ApiError) {
-        if (e.code === 'NO_ACTIVE_POOL') {
-          updateTransactionToast(pendingToastId, "error", `⚠️ Pool unavailable for ${token.symbol}`);
-        } else if (e.code === 'INSUFFICIENT_BALANCE') {
-          updateTransactionToast(pendingToastId, "error", `⚠️ Insufficient balance`);
-        } else if (e.code === 'TX_FAILED') {
-          updateTransactionToast(pendingToastId, "error", `❌ Trade failed. Try adjusting slippage or amount.`);
-        } else if (e.code === 'NO_HOLDINGS') {
-          updateTransactionToast(pendingToastId, "error", `❌ No ${token.symbol} to sell`);
-        } else if (e.code === 'AMOUNT_TOO_SMALL') {
-          updateTransactionToast(pendingToastId, "error", `❌ Amount too small (min 0.001 SOL)`);
-        } else if (e.code === 'POOL_UNAVAILABLE') {
-          updateTransactionToast(pendingToastId, "error", `⚠️ Pool has insufficient liquidity`);
-        } else if (e.code === 'POOL_GRADUATED') {
-          updateTransactionToast(pendingToastId, "error", `🎓 Pool graduated. Token may have migrated to a new pool.`);
-        } else {
-          const msg = e.message.length > 80 ? e.message.substring(0, 77) + '...' : e.message;
-          updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
-        }
-      } else {
-        // Handle generic errors with better messages
-        let errorMsg = e.message || "Unknown error";
-        if (errorMsg.includes("Pool is completed") || errorMsg.includes("graduated")) {
-          errorMsg = `Pool has graduated. Try refreshing to find the new pool.`;
-        } else if (errorMsg.includes("TokenAccountNotFoundError") || errorMsg.includes("Pool account does not exist")) {
-          errorMsg = `Pool not found. The token may not have an active trading pool.`;
-        }
-        const msg = errorMsg.length > 80 ? errorMsg.substring(0, 77) + '...' : errorMsg;
-        updateTransactionToast(pendingToastId, "error", `❌ ${msg}`);
-      }
+      return;
     }
+    
+    const settings = presets[activePreset].quickBuySettings;
+    
+    // Use enhanced trade handler for consistent behavior with rest of application
+    await executeEnhancedTrade({
+      token,
+      amount: quickBuyAmount,
+      side: 'buy',
+      settings,
+      user: { bearerToken: user.bearerToken, id: user.id },
+      solBalance: 0, // Will be fetched by executeEnhancedTrade
+      solPriceUsd: 150,
+      onSuccess: (txHash, stats) => {
+        console.log('✅ Home Quick Buy successful:', { txHash, stats });
+      },
+      onError: (error) => {
+        console.error('❌ Home Quick Buy failed:', error);
+      },
+    });
   }
 
   // Helper to compute volume by timeframe for sorting in trending view
