@@ -19,8 +19,11 @@ import { useQuickBuy } from "./QuickBuyContext";
 import { formatSmartNumber } from "../utils/db";
 import type { Token } from "../utils/db";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
+import { tradeMonadBuy } from "~/utils/api";
+import { extractTokenImage } from "~/utils/images";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
+import { FaCheckCircle } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiChevronDown, FiStar } from "react-icons/fi";
@@ -519,6 +522,71 @@ export default function Header({
     }
   };
 
+  // Helper function to get Monad launchpad from token
+  const getMonadLaunchpad = (token: Token): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
+    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || '';
+    
+    if (protocol.includes('nad.fun') || protocol.includes('nadfun')) {
+      return 'nadfun';
+    } else if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
+      if (protocol.includes('dev')) {
+        return 'flapsh-devs';
+      }
+      return 'flapsh-simple';
+    }
+    
+    return 'nadfun';
+  };
+
+  // Helper function to format user-friendly error messages
+  const formatMonadError = (error: string | undefined | null): string => {
+    if (!error) return "Trade failed. Please try again.";
+    
+    const errorLower = error.toLowerCase();
+    
+    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
+        errorLower.includes('bonding_curve_library_invalid_inputs')) {
+      return "This token has no liquidity or has graduated to DEX. Try a different token.";
+    }
+    
+    if (errorLower.includes('insufficient liquidity') || 
+        errorLower.includes('expected output is 0') ||
+        errorLower.includes('no liquidity')) {
+      return "Insufficient liquidity. This token may not be available for trading.";
+    }
+    
+    if (errorLower.includes('token does not exist') || 
+        errorLower.includes('token may not exist')) {
+      return "Token not found. Please check the token address.";
+    }
+    
+    if (errorLower.includes('token has graduated') || 
+        errorLower.includes('graduated to dex')) {
+      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
+    }
+    
+    if (errorLower.includes('insufficient balance') || 
+        errorLower.includes('missing')) {
+      return "Insufficient balance. Please add more MON to your wallet.";
+    }
+    
+    if (errorLower.includes('locked') || 
+        errorLower.includes('cannot be traded')) {
+      return "This token is locked and cannot be traded.";
+    }
+    
+    if (errorLower.includes('execution reverted') || 
+        errorLower.includes('revert')) {
+      return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
+    }
+    
+    if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
+      return error;
+    }
+    
+    return "Trade failed. Please try again.";
+  };
+
   // Handler for watchlist ticker quick buy
   const handleWatchlistQuickBuy = async (token: Token) => {
     // Validation checks with user feedback
@@ -531,13 +599,122 @@ export default function Header({
     }
     
     if (!quickBuyAmount || quickBuyAmount <= 0) {
-      toast.error("Set a buy amount first (use the preset buttons)", {
+      const currency = currentChain === 'monad' ? 'MON' : 'SOL';
+      toast.error(`Set a buy amount first (use the preset buttons)`, {
         duration: 3000,
         style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
       });
       return;
     }
     
+    // For Monad chain, use Monad-specific quick buy logic (same as MonadTable)
+    if (currentChain === 'monad') {
+      if (!token.mint) {
+        toast.error("Invalid token - missing mint address", {
+          duration: 3000,
+          style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+        });
+        return;
+      }
+
+      const preset = presets[activePreset];
+      const settings = (preset?.quickBuySettings || {}) as any;
+      const launchpad = getMonadLaunchpad(token);
+      const tokenAddress = token.mint;
+      const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
+      const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
+
+      // Get token image and name
+      const tokenImage = token ? extractTokenImage(token as any) : null;
+      const tokenName = token?.name || token?.symbol || '';
+      
+      // Generate unique toast ID and fake fast time
+      const uniqueToastId = `header-quickbuy-${Date.now()}`;
+      const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
+      const startTime = Date.now();
+      const timerCap = 0.40 + Math.random() * 0.20;
+      let timerFinished = false;
+      
+      // Show initial loading toast with timer
+      toast.custom(
+        (t) => (
+          <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
+            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+            {tokenImage && (
+              <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            )}
+            <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+            <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
+            <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
+              <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+            </span>
+          </div>
+        ),
+        { id: uniqueToastId, duration: Infinity }
+      );
+      
+      // Start timer animation
+      const timerInterval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+        const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+        if (timerEl) {
+          timerEl.textContent = `(${displayTime}s)`;
+        }
+        
+        if (!timerFinished && elapsed >= timerCap) {
+          timerFinished = true;
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) {
+            checkEl.style.display = 'block';
+          }
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            linkEl.style.display = 'inline-flex';
+          }
+        }
+      }, 50);
+
+      try {
+        const result = await tradeMonadBuy(
+          {
+            tokenAddress,
+            amountMON: quickBuyAmount,
+            launchpad,
+            slippage,
+            gasPrice,
+          },
+          user.bearerToken,
+        );
+
+        if (result.success && result.txHash) {
+          clearInterval(timerInterval);
+          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          }
+          setTimeout(() => {
+            toast.dismiss(uniqueToastId);
+          }, 10000);
+          console.log('✅ Header Watchlist Quick Buy successful:', result);
+          return { success: true, txHash: result.txHash };
+        } else {
+          clearInterval(timerInterval);
+          const errorMsg = formatMonadError((result as any)?.error);
+          toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
+          return { success: false, error: errorMsg };
+        }
+      } catch (error: any) {
+        console.error('❌ Header Watchlist Quick Buy failed:', error);
+        clearInterval(timerInterval);
+        const errorMessage = formatMonadError(error?.message || error?.error);
+        toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+        return { success: false, error: errorMessage };
+      }
+    }
+    
+    // For Solana chain, use enhanced trade handler
     const tokenMint = (token as any).mint || '';
     if (!tokenMint) {
       toast.error("Token mint address not found", {
@@ -549,7 +726,6 @@ export default function Header({
     
     const settings = presets[activePreset].quickBuySettings;
     
-    // Use enhanced trade handler for consistent behavior with rest of application
     await executeEnhancedTrade({
       token,
       amount: quickBuyAmount,
