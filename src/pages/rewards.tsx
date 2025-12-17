@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Head from "next/head";
+import { useRouter } from "next/router";
 import { Copy, Gift, Users, Wallet } from "lucide-react";
 import Header from "~/components/Header";
 import InterstateButton from "~/components/InterstateButton";
@@ -13,7 +14,12 @@ import {
 } from "~/utils/referrals";
 
 export default function RewardsPage() {
+  const router = useRouter();
   const { user } = useUser();
+  
+  // Get current chain from query parameter, default to 'sol'
+  const currentChain = (router.query.chain as string) || 'sol';
+  const currencySymbol = currentChain === 'monad' ? 'MON' : 'SOL';
   const [copied, setCopied] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [loadingReferral, setLoadingReferral] = useState(false);
@@ -169,7 +175,7 @@ export default function RewardsPage() {
                   className="w-full max-w-xs md:w-auto"
                   variant="primary"
                 >
-                  Claim SOL
+                  Claim {currencySymbol}
                 </InterstateButton>
               </div>
 
@@ -211,7 +217,7 @@ export default function RewardsPage() {
                     <div className="mt-6 space-y-4">
                       <div>
                         <p className="text-4xl font-semibold text-[#f0f5f5]">
-                          0 <span className="text-xl text-neutral-500">SOL</span>
+                          0 <span className="text-xl text-neutral-500">{currencySymbol}</span>
                         </p>
                         <p className="text-sm text-neutral-500">$0.00</p>
                       </div>
@@ -238,7 +244,7 @@ export default function RewardsPage() {
                         <div>
                           <p className="text-3xl font-semibold text-[#f0f5f5]">
                             0{" "}
-                            <span className="text-base text-neutral-500">SOL</span>
+                            <span className="text-base text-neutral-500">{currencySymbol}</span>
                           </p>
                           <p className="text-xs text-neutral-500">
                             Locked until rewards settle
@@ -260,7 +266,7 @@ export default function RewardsPage() {
                       size="md"
                       variant="secondary"
                     >
-                      Claim SOL
+                      Claim {currencySymbol}
                     </InterstateButton>
                   </div>
                 </div>
