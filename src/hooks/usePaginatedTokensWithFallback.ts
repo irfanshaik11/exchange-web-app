@@ -51,14 +51,41 @@ export default function usePaginatedTokensWithFallback({
   //   BACKEND_URL: env.NEXT_PUBLIC_BACKEND_URL
   // });
   
-  const [state, setState] = useState<TokensState>({
-    data: [],
-    loading: true,
-    isConnected: false,
-    isReconnecting: false,
-    error: null,
-    usingFallback: false,
-  });
+  // Initialize state from localStorage cache for instant display (similar to MonadTable)
+  const getInitialStateFromCache = (): TokensState => {
+    // Only check cache for trending filter (Birdeye data)
+    if (filter === 'trending' || chain === 'monad') {
+      try {
+        const cacheChain = chain || 'sol';
+        const cacheKey = `trending_${cacheChain}_${timeframe || '1h'}_${TRENDING_CACHE_VERSION}`;
+        const cached = getCached<any[]>(cacheKey);
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          console.log(`[Trending Cache] ✅ Restored ${cached.length} tokens from cache for instant display`);
+          return {
+            data: cached,
+            loading: false, // Don't show loading if we have cache
+            isConnected: false,
+            isReconnecting: false,
+            error: null,
+            usingFallback: false,
+          };
+        }
+      } catch (error) {
+        console.warn(`[Trending Cache] Failed to restore cache:`, error);
+      }
+    }
+    // No cache available - show loading
+    return {
+      data: [],
+      loading: true,
+      isConnected: false,
+      isReconnecting: false,
+      error: null,
+      usingFallback: false,
+    };
+  };
+
+  const [state, setState] = useState<TokensState>(getInitialStateFromCache);
 
   // console.log('🔧 Current state:', { dataLength: state.data.length, loading: state.loading, usingFallback: state.usingFallback });
 

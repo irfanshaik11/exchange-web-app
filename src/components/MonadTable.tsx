@@ -1616,9 +1616,41 @@ function MonadTable({
   const [waveTokens, setWaveTokens] = useState<Set<number>>(new Set()); // Wave animation for migrating tokens
   const { solPrice } = useSolPrice(); // Use shared SOL price from Footer context
 
+  // Cache key for HTTP-fetched tokens (separate from WebSocket cache)
+  const httpCacheStorageKey = useMemo(() => {
+    const lowerTitle = title.toLowerCase();
+    if (lowerTitle.includes("final")) return "monad_table_cache_final_stretch";
+    if (lowerTitle.includes("migrated")) return "monad_table_cache_migrated";
+    if (lowerTitle.includes("new")) return "monad_table_cache_new";
+    return `monad_table_cache_${lowerTitle}`;
+  }, [title]);
+
+  // Cache TTL: 60 seconds (same as discover page)
+  const HTTP_CACHE_TTL_MS = 60 * 1000;
+
   // State for Monad tokens fetched directly from Monad token service
-  const [monadTokens, setMonadTokens] = useState<Token[]>([]);
-  const [isFetchingMonad, setIsFetchingMonad] = useState(true);
+  // Initialize from localStorage cache for instant display when navigating back
+  const [monadTokens, setMonadTokens] = useState<Token[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const cached = window.localStorage.getItem(httpCacheStorageKey);
+      if (!cached) return [];
+      const parsed = JSON.parse(cached);
+      if (
+        parsed &&
+        Array.isArray(parsed.data) &&
+        typeof parsed.timestamp === "number" &&
+        Date.now() - parsed.timestamp <= HTTP_CACHE_TTL_MS
+      ) {
+        console.log(`[MonadTable ${title}] ✅ Restored ${parsed.data.length} tokens from cache`);
+        return parsed.data as Token[];
+      }
+    } catch (error) {
+      console.warn(`[MonadTable ${title}] Failed to restore cache:`, error);
+    }
+    return [];
+  });
+  const [isFetchingMonad, setIsFetchingMonad] = useState(monadTokens.length === 0); // Only show loading if no cache
   // Legacy state for filtered tokens (not used for Monad, kept for compatibility)
   const [filteredTokens, setFilteredTokens] = useState<Token[]>([]);
   const [isFetchingFiltered, setIsFetchingFiltered] = useState(false);
@@ -1803,7 +1835,35 @@ function MonadTable({
   // Fetch Monad tokens directly from Monad token service on mount and when title changes
   const fetchMonadTokens = useCallback(
     async (protocols?: string[]) => {
-      setIsFetchingMonad(true);
+      // Check localStorage cache to determine if we should show loading
+      let hasValidCache = false;
+      if (typeof window !== "undefined") {
+        try {
+          const cached = window.localStorage.getItem(httpCacheStorageKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (
+              parsed &&
+              Array.isArray(parsed.data) &&
+              parsed.data.length > 0 &&
+              typeof parsed.timestamp === "number" &&
+              Date.now() - parsed.timestamp <= HTTP_CACHE_TTL_MS
+            ) {
+              hasValidCache = true;
+            }
+          }
+        } catch (error) {
+          // Ignore cache errors
+        }
+      }
+
+      // Only show loading if we don't have valid cache (for instant display)
+      if (!hasValidCache) {
+        setIsFetchingMonad(true);
+      } else {
+        console.log(`[MonadTable ${title}] 🔄 Refreshing tokens in background (cache available for instant display)`);
+      }
+      
       try {
         // Call Monad token service directly (bypasses Next.js proxy for Redis cache benefits)
         const monadServiceUrl =
@@ -1843,6 +1903,19 @@ function MonadTable({
           // Transform backend response using normalizeMonadToken helper
           const tokens = rawTokens.map(normalizeMonadToken);
           setMonadTokens(tokens);
+          
+          // Save to localStorage cache for instant loading when navigating back
+          try {
+            const payload = {
+              data: tokens,
+              timestamp: Date.now(),
+            };
+            window.localStorage.setItem(httpCacheStorageKey, JSON.stringify(payload));
+            console.log(`[MonadTable ${title}] 💾 Cached ${tokens.length} tokens to localStorage`);
+          } catch (error) {
+            console.warn(`[MonadTable ${title}] Failed to cache tokens:`, error);
+          }
+          
           console.log(
             `[MonadTable ${title}] ✅ Fetched ${tokens.length} Monad tokens from backend (Redis cache)`,
           );
@@ -1862,14 +1935,14 @@ function MonadTable({
         setIsFetchingMonad(false);
       }
     },
-    [title, mapProtocolToBackend],
+    [title, mapProtocolToBackend, httpCacheStorageKey],
   );
 
   // Fetch Monad tokens on mount, when title changes, or when protocols change
   useEffect(() => {
     fetchMonadTokens(filters.protocols);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, filters.protocols]); // Re-fetch when title or protocols change
+  }, [title, filters.protocols, httpCacheStorageKey]); // Re-fetch when title, protocols, or cache key changes
 
   // Fetch filtered tokens from API when protocols are selected (for protocol filtering only)
   const fetchFilteredTokens = useCallback(
