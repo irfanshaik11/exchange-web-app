@@ -95,7 +95,7 @@ export default function Home() {
     console.log('🔍 [INDEX] selectedTimeframe changed to:', selectedTimeframe);
   }, [selectedTimeframe]);
   
-  const { user, loading: userLoading, refreshUser } = useUser();
+  const { user, loading: userLoading, refreshUser, refreshBalance } = useUser();
   const [selectedTab, setSelectedTab] = useState<"dex" | "trending">("trending");
   const [sortKey, setSortKey] = useState<"market_cap_total" | "liquidity" | "volume" | "txns" | "name">("volume");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -317,6 +317,7 @@ export default function Home() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Home Quick Buy successful:', { txHash, stats });
       },

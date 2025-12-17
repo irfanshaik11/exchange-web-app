@@ -9,6 +9,7 @@ import {
   FaChevronRight,
   FaBell,
   FaChevronDown,
+  FaSync,
 } from "react-icons/fa";
 import { HiLightningBolt } from "react-icons/hi";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
@@ -231,9 +232,25 @@ export default function Header({
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
+
+  // Manual balance refresh handler
+  const handleManualBalanceRefresh = async (e?: React.MouseEvent) => {
+    e?.stopPropagation(); // Prevent dropdown toggle
+    if (isRefreshingBalance) return;
+
+    setIsRefreshingBalance(true);
+    try {
+      await refreshBalance({ chain: currentChain, force: true });
+    } catch (error) {
+      console.error('Failed to refresh balance:', error);
+    } finally {
+      setIsRefreshingBalance(false);
+    }
+  };
 
   // State for clipboard token detection
   const [clipboardToken, setClipboardToken] = useState<{
@@ -697,6 +714,12 @@ export default function Header({
           setTimeout(() => {
             toast.dismiss(uniqueToastId);
           }, 10000);
+          // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
           console.log('✅ Header Watchlist Quick Buy successful:', result);
           return { success: true, txHash: result.txHash };
         } else {
@@ -734,6 +757,7 @@ export default function Header({
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Header Watchlist Quick Buy successful:', { txHash, stats });
       },
@@ -1313,9 +1337,21 @@ export default function Header({
                     {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                   </div>
                   <div className="items-left flex flex-col gap-0 text-left">
-                    <div className="text-sm text-white">
-                      {formatBalance(chainBalance)}{" "}
-                      {chainSymbols[currentChain] ?? "SOL"}
+                    <div className="flex items-center gap-1 text-sm text-white">
+                      <span>
+                        {formatBalance(chainBalance)}{" "}
+                        {chainSymbols[currentChain] ?? "SOL"}
+                      </span>
+                      <button
+                        onClick={handleManualBalanceRefresh}
+                        className="p-0.5 rounded-full hover:bg-white/10 transition-colors"
+                        title="Refresh balance"
+                      >
+                        <FaSync
+                          size={10}
+                          className={`text-neutral-500 hover:text-white ${isRefreshingBalance ? 'animate-spin' : ''}`}
+                        />
+                      </button>
                     </div>
                     <div className="text-xs text-neutral-500">
                       {user.name

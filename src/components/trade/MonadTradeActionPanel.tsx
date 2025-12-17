@@ -14,6 +14,7 @@ import { GoPeople } from "react-icons/go";
 import InterstateTooltip from "../InterstateTooltip";
 import toast from "react-hot-toast";
 import { tradeMonadBuy, tradeMonadSell } from "~/utils/api";
+import { validateMonadBalance } from "~/utils/tradeBalanceValidation";
 import useMonadDevTokens from "~/hooks/useMonadDevTokens";
 import useMonadXray from "~/hooks/useMonadXray";
 import { extractTokenImage } from "~/utils/images";
@@ -268,7 +269,7 @@ const formatMonadError = (error: string | undefined | null): string => {
 };
 
 const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) => {
-  const { user } = useUser();
+  const { user, refreshBalance, chainBalances } = useUser();
   const { isConnected } = useWallet();
   const { presets, activePreset, setActivePreset, setPresets } = useQuickBuy();
   const { monPrice } = useSolPrice();
@@ -621,8 +622,38 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
       return;
     }
 
+    // ============================================
+    // PRE-VALIDATION: Check balance BEFORE showing any toast
+    // This prevents the misleading "Trade placed!" toast when balance is insufficient
+    // ============================================
+    if (mode === "buy") {
+      const monadBalance = chainBalances['monad'] ?? 0;
+      const tradeAmount = parseFloat(amount);
+
+      const clientValidation = validateMonadBalance({
+        balance: monadBalance,
+        tradeAmount: tradeAmount,
+        gasPrice: gasPrice || undefined,
+      });
+
+      if (!clientValidation.isValid) {
+        toast.error(clientValidation.errorMessage || 'Insufficient MON balance', { duration: 5000 });
+        return;
+      }
+    } else if (mode === "sell") {
+      // Check if user has any tokens to sell
+      const currentTokenBalance = positionSummary?.balanceTokens ?? 0;
+      if (currentTokenBalance <= 0) {
+        toast.error('Insufficient token balance. Your balance is 0 tokens. Cannot sell.', { duration: 5000 });
+        return;
+      }
+    }
+    // ============================================
+    // END PRE-VALIDATION
+    // ============================================
+
     setIsLoading(true);
-    
+
     // Get token image and name
     const tokenImage = token ? extractTokenImage(token) : null;
     const tokenName = token?.name || token?.symbol || '';
@@ -713,7 +744,13 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             }, 10000);
             pendingToastRef.current = null;
           }
-          setAmount("");
+          // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
+          // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {
           clearInterval(timerInterval);
@@ -757,7 +794,13 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             }, 10000);
             pendingToastRef.current = null;
           }
-          setAmount("");
+          // Refresh balance immediately after successful sell (with small delay for on-chain confirmation)
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
+          // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {
           clearInterval(timerInterval);

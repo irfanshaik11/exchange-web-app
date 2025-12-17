@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   FaCopy,
   FaTimes,
@@ -10,11 +10,13 @@ import {
   FaCheckCircle,
   FaClock,
   FaExclamationCircle,
+  FaSync,
 } from "react-icons/fa";
 import Cookies from "js-cookie";
 import QRCode from "qrcode";
 import { useUser } from "./UserContext";
 import toast from "react-hot-toast";
+import { useBalancePolling } from "~/hooks/useBalancePolling";
 import {
   withdrawSOL,
   getWithdrawalHistory,
@@ -148,6 +150,9 @@ const DepositModal: React.FC<DepositModalProps> = ({
   const MIN_WITHDRAWAL = 0.001;
   const MAX_WITHDRAWAL = 100;
 
+  // State for balance polling (hook and effect defined after depositAddress)
+  const [isPollingBalance, setIsPollingBalance] = useState(false);
+
   const chainConfig = CHAIN_CONFIG[selectedChain] ?? CHAIN_CONFIG.sol;
   const tokenSymbol = chainConfig.tokenSymbol;
   const networkName = chainConfig.networkName;
@@ -211,6 +216,59 @@ const DepositModal: React.FC<DepositModalProps> = ({
       setQrCodeDataUrl("");
     }
   }, [depositAddress]);
+
+  // Balance polling for deposit detection (must be after depositAddress is defined)
+  const { startPolling, stopPolling } = useBalancePolling({
+    chain: selectedChain === "monad" ? "monad" : "sol",
+    intervalMs: 3000, // Poll every 3 seconds
+    maxDurationMs: 120000, // Poll for up to 2 minutes
+    onBalanceChange: (oldBalance, newBalance) => {
+      const change = newBalance - oldBalance;
+      if (change > 0) {
+        toast.success(`Deposit received: +${change.toFixed(4)} ${chainConfig.tokenSymbol}`, {
+          duration: 5000,
+          style: {
+            background: "#1E1F26",
+            color: "#E6E7EA",
+            border: "1px solid #18c48c",
+          },
+        });
+      }
+      setIsPollingBalance(false);
+    },
+  });
+
+  // Start polling when deposit tab is active
+  useEffect(() => {
+    if (open && activeTab === "deposit" && depositAddress) {
+      setIsPollingBalance(true);
+      startPolling();
+    } else {
+      stopPolling();
+      setIsPollingBalance(false);
+    }
+
+    return () => {
+      stopPolling();
+    };
+  }, [open, activeTab, depositAddress, startPolling, stopPolling]);
+
+  // Manual balance refresh handler
+  const handleManualRefresh = async () => {
+    try {
+      await refreshBalance({ chain: selectedChain, force: true });
+      toast.success("Balance refreshed", {
+        duration: 2000,
+        style: {
+          background: "#1E1F26",
+          color: "#E6E7EA",
+          border: "1px solid #18c48c",
+        },
+      });
+    } catch (error) {
+      console.error("Failed to refresh balance:", error);
+    }
+  };
 
   const copyToClipboard = (text: string) => {
     if (!text) {
@@ -746,9 +804,24 @@ const DepositModal: React.FC<DepositModalProps> = ({
                               </div>
                             )}
                             {chainBalance.toFixed(4)}
+                            <button
+                              onClick={handleManualRefresh}
+                              className="ml-1 p-1 rounded-full hover:bg-white/10 transition-colors"
+                              title="Refresh balance"
+                            >
+                              <FaSync
+                                size={12}
+                                className={`text-neutral-400 hover:text-white ${isPollingBalance ? 'animate-spin' : ''}`}
+                              />
+                            </button>
                           </div>
-                          <div className="mt-1 text-xs text-neutral-400">
+                          <div className="mt-1 flex items-center gap-2 text-xs text-neutral-400">
                             {chainConfig.tokenSymbol} Balance
+                            {isPollingBalance && (
+                              <span className="text-[#18c48c] text-[10px]">
+                                • Monitoring for deposits
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>

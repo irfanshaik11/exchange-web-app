@@ -97,6 +97,7 @@ import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { showEnhancedToast, updateEnhancedToast } from "~/utils/enhancedToast";
 import toast from "react-hot-toast";
 import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
+import { validateMonadBalance, validateSolanaBalance } from "~/utils/tradeBalanceValidation";
 
 /* ---- Enhanced Monad Green Palette (matching PulseTable) ---- */
 const AX = {
@@ -2399,7 +2400,7 @@ function MonadTable({
   const router = useRouter();
 
   // Quick buy functionality
-  const { user, solBalance } = useUser();
+  const { user, solBalance, refreshBalance, chainBalances } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   
   // Ref to track pending toast for WebSocket txHash update
@@ -2566,6 +2567,29 @@ function MonadTable({
     // Get gas price from preset (optional, undefined if not set)
     const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
 
+    // ============================================
+    // PRE-VALIDATION: Check balance BEFORE showing any toast
+    // This prevents the misleading "Trade placed!" toast when balance is insufficient
+    // ============================================
+    const monadBalance = chainBalances['monad'] ?? 0;
+
+    const clientValidation = validateMonadBalance({
+      balance: monadBalance,
+      tradeAmount: buyAmount,
+      gasPrice: gasPrice,
+    });
+
+    if (!clientValidation.isValid) {
+      showEnhancedToast("error", clientValidation.errorMessage || 'Insufficient MON balance', {
+        title: "Insufficient Balance",
+        duration: 5000,
+      });
+      return;
+    }
+    // ============================================
+    // END PRE-VALIDATION
+    // ============================================
+
     console.log("📤 Monad Quick Buy params:", {
       tokenAddress,
       amountMON: buyAmount,
@@ -2658,6 +2682,12 @@ function MonadTable({
           }, 10000);
           pendingQuickBuyToastRef.current = null;
         }
+        // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+        setTimeout(() => {
+          refreshBalance({ chain: "monad", force: true }).catch((err) => {
+            console.warn('Failed to refresh balance:', err);
+          });
+        }, 1000);
         console.log("✅ Monad Quick Buy successful:", result);
         return { success: true, txHash: result.txHash };
       } else {

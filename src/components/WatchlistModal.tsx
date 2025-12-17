@@ -274,7 +274,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
   const [show, setShow] = useState(false);
   const { watchlist, removeFromWatchlist } = useWatchlist();
   const router = useRouter();
-  const { user } = useUser();
+  const { user, refreshBalance } = useUser();
   const { presets, activePreset } = useQuickBuy();
   const [quickBuyAmount, setQuickBuyAmountState] = useState(getQuickBuyAmount);
   
@@ -340,6 +340,7 @@ export default function WatchlistModal({ open, onClose }: WatchlistModalProps) {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Watchlist Quick Buy successful:', { txHash, stats });
       },

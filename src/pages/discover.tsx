@@ -154,7 +154,7 @@ export default function DiscoverPage() {
   }, [router.isReady, router.query.search]);
 
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const { user, solBalance } = useUser();
+  const { user, solBalance, refreshBalance } = useUser();
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -1759,6 +1759,12 @@ export default function DiscoverPage() {
           setTimeout(() => {
             toast.dismiss(uniqueToastId);
           }, 10000);
+          // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
           console.log('✅ Monad Quick Buy successful:', result);
           return { success: true, txHash: result.txHash };
         } else {
@@ -1788,6 +1794,7 @@ export default function DiscoverPage() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
       solPriceUsd: 150, // TODO: Get real SOL price
+      refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });
       },
