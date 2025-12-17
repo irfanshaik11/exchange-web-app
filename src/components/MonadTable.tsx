@@ -2399,7 +2399,7 @@ function MonadTable({
   const router = useRouter();
 
   // Quick buy functionality
-  const { user, solBalance } = useUser();
+  const { user, solBalance, refreshBalance } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   
   // Ref to track pending toast for WebSocket txHash update
@@ -2658,6 +2658,12 @@ function MonadTable({
           }, 10000);
           pendingQuickBuyToastRef.current = null;
         }
+        // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+        setTimeout(() => {
+          refreshBalance({ chain: "monad", force: true }).catch((err) => {
+            console.warn('Failed to refresh balance:', err);
+          });
+        }, 1000);
         console.log("✅ Monad Quick Buy successful:", result);
         return { success: true, txHash: result.txHash };
       } else {

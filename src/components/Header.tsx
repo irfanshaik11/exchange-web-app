@@ -697,6 +697,12 @@ export default function Header({
           setTimeout(() => {
             toast.dismiss(uniqueToastId);
           }, 10000);
+          // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
           console.log('✅ Header Watchlist Quick Buy successful:', result);
           return { success: true, txHash: result.txHash };
         } else {
@@ -734,6 +740,7 @@ export default function Header({
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: 0, // Will be fetched by executeEnhancedTrade
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Header Watchlist Quick Buy successful:', { txHash, stats });
       },

@@ -29,7 +29,7 @@ const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
 
 const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, token }) => {
   const router = useRouter();
-  const { user, solBalance } = useUser();
+  const { user, solBalance, refreshBalance } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   
   // Check if we're on a Monad trade page
@@ -771,6 +771,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance),
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: async (txHash, stats) => {
         console.log("✅ Enhanced Trade successful:", { txHash, stats });
         // Refresh token balance after trade
@@ -1000,6 +1001,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance),
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: async (txHash, stats) => {
         console.log("✅ Enhanced Trade successful:", { txHash, stats });
         // Refresh token balance after trade
@@ -1175,6 +1177,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
           user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance),
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: async (txHash, stats) => {
         console.log("✅ Enhanced Trade successful:", { txHash, stats });
         // Refresh token balance after trade
@@ -1312,6 +1315,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
           user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance),
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: async (txHash, stats) => {
         console.log("✅ Enhanced Trade successful:", { txHash, stats });
         // Refresh token balance after trade

@@ -771,7 +771,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }, [mode, tab, timeRange, amount, targetMC, sliderPct, updateExternalParams]);
 
   const { presets: qbPresets, activePreset } = useQuickBuy();
-  const { user, solBalance } = useUser();
+  const { user, solBalance, refreshBalance } = useUser();
   
   // Calculate position data from trade activity (like Activity tab does)
   useEffect(() => {
@@ -1941,6 +1941,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         user: { bearerToken: user.bearerToken, id: user.id },
         solBalance: Number(solBalance),
         solPriceUsd: 150,
+        refreshBalance,
         onSuccess: async (txHash, stats) => {
           console.log("✅ Enhanced Trade successful:", { txHash, stats });
           setSuccessMessage(

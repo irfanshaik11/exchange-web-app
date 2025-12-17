@@ -86,6 +86,7 @@ export interface EnhancedTradeParams {
   onSuccess?: (txHash: string, stats: TradeStats) => void;
   onError?: (error: EnhancedError) => void;
   onWarning?: (warnings: ValidationWarning[]) => void;
+  refreshBalance?: (opts?: { chain?: string; address?: string; force?: boolean }) => Promise<{ balance: number; usdBalance: number } | null>;
 }
 
 export interface TradeStats {
@@ -122,6 +123,7 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
     onSuccess,
     onError,
     onWarning,
+    refreshBalance,
   } = params;
 
   let toastId: string | null = null;
@@ -442,6 +444,15 @@ export async function executeEnhancedTrade(params: EnhancedTradeParams): Promise
         });
       }
 
+      // Refresh balance immediately after successful trade (with small delay for on-chain confirmation)
+      if (refreshBalance) {
+        setTimeout(() => {
+          refreshBalance({ chain: "sol", force: true }).catch((err) => {
+            console.warn('[EnhancedTrade] Failed to refresh balance:', err);
+          });
+        }, 1000);
+      }
+      
       if (onSuccess) onSuccess(txHash, stats);
       
       if (isPending && txHash) {

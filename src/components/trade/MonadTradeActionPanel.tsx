@@ -268,7 +268,7 @@ const formatMonadError = (error: string | undefined | null): string => {
 };
 
 const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) => {
-  const { user } = useUser();
+  const { user, refreshBalance } = useUser();
   const { isConnected } = useWallet();
   const { presets, activePreset, setActivePreset, setPresets } = useQuickBuy();
   const { monPrice } = useSolPrice();
@@ -713,7 +713,13 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             }, 10000);
             pendingToastRef.current = null;
           }
-          setAmount("");
+          // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
+          // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {
           clearInterval(timerInterval);
@@ -757,7 +763,13 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
             }, 10000);
             pendingToastRef.current = null;
           }
-          setAmount("");
+          // Refresh balance immediately after successful sell (with small delay for on-chain confirmation)
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
+          // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {
           clearInterval(timerInterval);

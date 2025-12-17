@@ -158,7 +158,7 @@ export default function DiscoverPopoutContent() {
   }, [router.isReady, router.query.search]);
 
   const { presets, activePreset, setActivePreset } = useQuickBuy();
-  const { user, solBalance } = useUser();
+  const { user, solBalance, refreshBalance } = useUser();
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -1770,6 +1770,7 @@ export default function DiscoverPopoutContent() {
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance || 0),
       solPriceUsd: 150, // TODO: Get real SOL price
+      refreshBalance,
       onSuccess: (txHash, stats) => {
         console.log('✅ Enhanced Quick Buy successful:', { txHash, stats });
       },
