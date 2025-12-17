@@ -8,7 +8,8 @@ import { LuPencil, LuCheck } from 'react-icons/lu';
 import { useUser } from '~/components/UserContext';
 import { useQuickBuy } from '~/components/QuickBuyContext';
 import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
-import { tradeMonadBuy, tradeMonadSell } from '~/utils/api';
+import { tradeMonadBuy, tradeMonadSell, preCheckMonadBalance } from '~/utils/api';
+import { validateMonadBalance, validateSolanaBalance } from '~/utils/tradeBalanceValidation';
 import { getTradeActivityByUser } from '~/utils/functions';
 import { formatSmartNumber } from '~/utils/db';
 import { extractTokenImage } from '~/utils/images';
@@ -29,7 +30,7 @@ const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
 
 const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, token }) => {
   const router = useRouter();
-  const { user, solBalance, refreshBalance } = useUser();
+  const { user, solBalance, refreshBalance, chainBalances } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   
   // Check if we're on a Monad trade page
@@ -586,11 +587,52 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       return;
     }
 
+    // ============================================
+    // PRE-VALIDATION: Check balance BEFORE showing any toast
+    // This prevents the misleading "Trade placed!" toast when balance is insufficient
+    // ============================================
+    if (isMonad) {
+      // Get current Monad balance from chainBalances
+      const monadBalance = chainBalances['monad'] ?? 0;
+      const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
+
+      // Client-side validation first (fast, no network call)
+      const clientValidation = validateMonadBalance({
+        balance: monadBalance,
+        tradeAmount: requested,
+        gasPrice: gasPrice,
+      });
+
+      if (!clientValidation.isValid) {
+        toast.error(clientValidation.errorMessage || 'Insufficient balance', { duration: 5000 });
+        return;
+      }
+    } else {
+      // Solana validation
+      const priorityFee = settings?.priority ?? 0.001;
+      const bribe = settings?.bribe ?? 0;
+
+      const clientValidation = validateSolanaBalance({
+        balance: solBalance,
+        tradeAmount: requested,
+        priorityFee,
+        bribe,
+      });
+
+      if (!clientValidation.isValid) {
+        toast.error(clientValidation.errorMessage || 'Insufficient balance', { duration: 5000 });
+        return;
+      }
+    }
+    // ============================================
+    // END PRE-VALIDATION
+    // ============================================
+
     // Skip liquidity warning for Monad (same as MonadTable)
     if (!isMonad) {
     const liquidityValue = Number(liquidityUsd) || 0;
     const isLowLiquidity = liquidityValue <= 0 || liquidityValue < LOW_LIQUIDITY_WARNING_THRESHOLD;
-    
+
       // Check liquidity warning (only for Solana)
     if (isLowLiquidity) {
       setPendingTradeOptions({ skipLiquidity: false, skipSlippage: false, amount, side: 'buy' });
@@ -608,7 +650,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     }
 
     setIsLoading(true);
-    
+
     try {
       if (isMonad) {
         // Use Monad buy API - match MonadTable exactly

@@ -723,6 +723,58 @@ export const tradeMonadSell = (params: MonadSellParams, authToken: string) =>
   });
 
 /* -------------------------------------------------------------------------- */
+/*                       Pre-check Trade Balance Endpoints                     */
+/* -------------------------------------------------------------------------- */
+
+export interface PreCheckBalanceResult {
+  valid: boolean;
+  error?: string;
+  code?: string;
+  message?: string;
+  balance?: number;
+  totalRequired?: number;
+  remaining?: number;
+  details?: {
+    currentBalance: number;
+    tradeAmount: number;
+    priorityFee?: number;
+    bribe?: number;
+    gasCost?: number;
+    safetyBuffer: number;
+    totalRequired: number;
+    shortage: number;
+  };
+}
+
+/**
+ * Pre-check Solana trade balance BEFORE showing any toast
+ * This prevents the misleading "Trade placed!" toast when balance is insufficient
+ */
+export const preCheckSolanaBalance = (
+  params: { amount: number; priorityFee?: number; bribe?: number },
+  authToken: string
+) =>
+  apiFetch<PreCheckBalanceResult>("/api/trade/precheck", {
+    method: "POST",
+    body: { ...params, chain: "sol" },
+    authToken,
+  });
+
+/**
+ * Pre-check Monad trade balance BEFORE showing any toast
+ * This prevents the misleading "Trade placed!" toast when balance is insufficient
+ */
+export const preCheckMonadBalance = (
+  params: { amount: number; gasPrice?: number },
+  authToken: string
+) =>
+  apiFetch<PreCheckBalanceResult>("/api/trade/monad/precheck", {
+    method: "POST",
+    body: params,
+    authToken,
+  });
+
+/* -------------------------------------------------------------------------- */
 /*                       Token Analytics endpoints (Rust)                     */
 /* -------------------------------------------------------------------------- */
 
