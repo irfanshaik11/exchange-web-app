@@ -1588,10 +1588,28 @@ export default function InterstateTable({
                   // Continue with navigation even if backfill fails
                 }
 
-                // Navigate immediately with pair_address or mint - trade page will handle resolution
+                // Navigate with proper format based on chain
                 const address = token.pair_address || token.mint;
                 if (address) {
-                  router.push(`/trade/${address}`);
+                  // Check if this is a Monad token
+                  const isMonad = chain === 'monad';
+                  
+                  if (isMonad) {
+                    // Build Monad trade URL with query parameters
+                    const queryParams = new URLSearchParams();
+                    if (token.name) queryParams.set('_name', token.name);
+                    if (token.symbol) queryParams.set('_symbol', token.symbol);
+                    if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+                    if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
+                    queryParams.set('_mint', address);
+                    queryParams.set('chain', 'monad');
+                    
+                    const url = `/trade/monad/${address}?${queryParams.toString()}`;
+                    router.push(url);
+                  } else {
+                    // For Solana, use regular format
+                    router.push(`/trade/${address}`);
+                  }
                 }
               };
               
