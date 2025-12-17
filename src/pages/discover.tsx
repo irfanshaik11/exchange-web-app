@@ -2935,7 +2935,26 @@ export default function DiscoverPage() {
                     console.error('[Discover] Prefetch failed:', err);
                   }
                   // Navigate to trade page
-                  router.push(`/trade/${id}`);
+                  // Check if this is a Monad token
+                  const isMonad = currentChain === 'monad';
+                  
+                  if (isMonad && rawToken) {
+                    // Build Monad trade URL with query parameters
+                    const queryParams = new URLSearchParams();
+                    if (rawToken.name) queryParams.set('_name', rawToken.name);
+                    if (rawToken.symbol) queryParams.set('_symbol', rawToken.symbol);
+                    if (rawToken.market_cap_usd) queryParams.set('_mcap', rawToken.market_cap_usd.toString());
+                    if (rawToken.uri || rawToken.image || rawToken.imageUrl) {
+                      queryParams.set('_image', rawToken.uri || rawToken.image || rawToken.imageUrl || '');
+                    }
+                    queryParams.set('_mint', id);
+                    queryParams.set('chain', 'monad');
+                    
+                    const url = `/trade/monad/${id}?${queryParams.toString()}`;
+                    router.push(url);
+                  } else {
+                    router.push(`/trade/${id}`);
+                  }
                 }}
                 quickBuyAmount={Number(quickBuyAmount) || 0}
                 onQuickBuy={handleQuickBuy}

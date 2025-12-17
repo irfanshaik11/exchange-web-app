@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import { useRouter } from "next/router";
 import { formatSmartNumber, formatMarketCap } from "~/utils/db";
 import { FaBolt, FaClock, FaChartLine, FaSearch, FaUser, FaRegCopy } from "react-icons/fa";
 import { FaRocket, FaFire, FaCrown, FaGraduationCap } from "react-icons/fa";
@@ -494,6 +495,8 @@ const SearchModalContent = React.memo(function SearchModalContent({
     }
   }, [chain]);
 
+  const router = useRouter();
+  
   const handleSelectToken = useCallback(
     async (token: Token) => {
       try {
@@ -522,17 +525,51 @@ const SearchModalContent = React.memo(function SearchModalContent({
           console.warn('⚠️ Token backfill failed, but continuing with navigation');
         }
 
-        // Navigate to trade page
-        onSubmit?.(token.pair_address);
+        // Build URL based on chain and navigate directly
+        const address = token.pair_address || token.mint;
+        const isMonad = chain === 'monad';
+        
+        if (isMonad && address) {
+          // Build Monad trade URL with query parameters
+          const queryParams = new URLSearchParams();
+          if (token.name) queryParams.set('_name', token.name);
+          if (token.symbol) queryParams.set('_symbol', token.symbol);
+          if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+          if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
+          queryParams.set('_mint', address);
+          queryParams.set('chain', 'monad');
+          
+          const url = `/trade/monad/${address}?${queryParams.toString()}`;
+          router.push(url);
+        } else {
+          // Navigate to trade page for Solana
+          onSubmit?.(token.pair_address);
+        }
         onClose();
       } catch (error) {
         console.error('❌ Error backfilling token:', error);
         // Still navigate even if backfill fails
-        onSubmit?.(token.pair_address);
+        const address = token.pair_address || token.mint;
+        const isMonad = chain === 'monad';
+        
+        if (isMonad && address) {
+          const queryParams = new URLSearchParams();
+          if (token.name) queryParams.set('_name', token.name);
+          if (token.symbol) queryParams.set('_symbol', token.symbol);
+          if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+          if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
+          queryParams.set('_mint', address);
+          queryParams.set('chain', 'monad');
+          
+          const url = `/trade/monad/${address}?${queryParams.toString()}`;
+          router.push(url);
+        } else {
+          onSubmit?.(token.pair_address);
+        }
         onClose();
       }
     },
-    [onSubmit, onClose],
+    [onSubmit, onClose, chain, router],
   );
 
   const handleQueryChange = useCallback((newQuery: string) => {
