@@ -13,7 +13,7 @@ import { useRouter } from "next/router";
 import { getUserById, ApiError, updateUser } from "../utils/api";
 import { showEnhancedToast } from "~/utils/enhancedToast";
 const USER_CACHE_KEY = "codex_user_info_cache";
-import { clearStoredReferralAccess } from "../utils/referralStorage";
+import { clearStoredReferralAccess, getStoredReferralCodeHint, clearStoredReferralCodeHint } from "../utils/referralStorage";
 import { useTurnkey } from "@turnkey/react-wallet-kit";
 import next from "next";
 import { normalizeMonadAddress } from "~/utils/normalizeMonadAddress";
