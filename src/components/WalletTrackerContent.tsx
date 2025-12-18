@@ -769,7 +769,11 @@ export default function WalletTrackerContent() {
                           balance={balance}
                           lastActive={lastActiveMap[wallet.address]}
                           onRemove={handleRemoveWallet}
-                          onClick={() => {}}
+                          onClick={(wallet) => {
+                            // Open wallet transactions page in a new tab
+                            const url = `/wallet/${wallet.address}`;
+                            window.open(url, "_blank");
+                          }}
                           onNotificationToggle={async (address, enabled) => {
                             await refreshWatchedWallets();
                           }}
