@@ -1,36 +1,40 @@
-import { WALLET_TRACKER_API_URL } from "./walletTracking";
+import { env } from "../env";
+
+// Resolve backend URL (exchange-backend)
+function resolveBackendUrl(): string {
+  const envUrl = env.NEXT_PUBLIC_BACKEND_URL || "";
+  if (typeof window === "undefined") {
+    return envUrl.endsWith("/") ? envUrl.slice(0, -1) : envUrl;
+  }
+  try {
+    const url = new URL(envUrl || window.location.origin);
+    if (window.location.protocol === "https:" && url.protocol === "http:") {
+      url.protocol = "https:";
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return window.location.origin;
+  }
+}
+
+const BACKEND_URL = resolveBackendUrl();
 
 export interface ReferralRecord {
-  id: number;
-  userId: string;
   referralCode: string;
-  referredCount: number;
-  createdOn: string;
-  updatedOn: string;
 }
 
-export interface ReferralUsageRecord {
+export interface ReferredUser {
   id: number;
-  referredUser: string;
-  referralCode: string;
-  referredOn: string;
+  name: string;
+  email: string;
+  joinedAt: string;
+  totalVolume: number;
 }
 
-interface ReferralCodeResponse {
-  ok: boolean;
-  data: ReferralRecord;
-  alreadyExisted?: boolean;
-  error?: string;
-  message?: string;
-}
-
-interface ReferralUsageResponse {
-  ok: boolean;
-  data: ReferralRecord;
-  usage: ReferralUsageRecord;
-  alreadyRecorded?: boolean;
-  error?: string;
-  message?: string;
+export interface ReferralsResponse {
+  referrals: ReferredUser[];
+  totalVolume: number;
+  totalReferrals: number;
 }
 
 function buildErrorMessage(
@@ -50,17 +54,22 @@ function buildErrorMessage(
   return statusText ? `HTTP ${status} ${statusText}` : fallback;
 }
 
+/**
+ * Fetch the current user's referral code (if they have one)
+ */
 export async function fetchReferralCodeForUser(
-  userId: string,
+  authToken: string,
 ): Promise<ReferralRecord | null> {
-  const url = `${WALLET_TRACKER_API_URL}/api/referrals/code?userId=${encodeURIComponent(
-    userId,
-  )}`;
+  const url = `${BACKEND_URL}/api/users/referral-code`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+    });
 
-    if (response.status === 404) {
+    if (response.status === 404 || response.status === 401) {
       return null;
     }
 
@@ -75,87 +84,54 @@ export async function fetchReferralCodeForUser(
       throw new Error(message);
     }
 
-    const payload = (await response.json()) as ReferralCodeResponse;
+    const payload = await response.json();
 
-    if (!payload?.ok || !payload.data?.referralCode) {
-      throw new Error("Unexpected response while fetching referral code");
+    if (!payload?.referralCode) {
+      return null;
     }
 
-    return payload.data;
+    return { referralCode: payload.referralCode };
   } catch (error) {
     console.error("Error fetching referral code:", error);
     throw error;
   }
 }
 
-export async function ensureReferralCodeForUser(
-  userId: string,
-): Promise<ReferralRecord> {
+/**
+ * Fetch the list of users referred by the current user, including their trading volume
+ */
+export async function fetchReferrals(
+  authToken: string,
+): Promise<ReferralsResponse> {
+  const url = `${BACKEND_URL}/api/users/referrals`;
+
   try {
-    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/referrals/code`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
     });
 
-    const payload = (await response.json().catch(() => null)) as
-      | ReferralCodeResponse
-      | null;
-
-    if (!response.ok || !payload?.ok || !payload.data?.referralCode) {
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
       const message = buildErrorMessage(
         response.status,
         response.statusText,
         payload,
-        "Failed to generate referral code",
+        "Failed to fetch referrals",
       );
       throw new Error(message);
     }
 
-    return payload.data;
+    const payload = await response.json();
+
+    return {
+      referrals: payload.referrals || [],
+      totalVolume: payload.totalVolume || 0,
+      totalReferrals: payload.totalReferrals || 0,
+    };
   } catch (error) {
-    console.error("Error generating referral code:", error);
+    console.error("Error fetching referrals:", error);
     throw error;
   }
 }
-
-export async function recordReferralUsage(
-  referredUserId: string,
-  referralCode: string,
-): Promise<ReferralUsageResponse> {
-  const normalizedCode = referralCode.trim().toUpperCase();
-  if (!normalizedCode || !referredUserId) {
-    throw new Error("Referral code and referred user are required");
-  }
-
-  try {
-    const response = await fetch(`${WALLET_TRACKER_API_URL}/api/referrals/usage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        referralCode: normalizedCode,
-        referredUserId,
-      }),
-    });
-
-    const payload = (await response.json().catch(() => null)) as
-      | ReferralUsageResponse
-      | null;
-
-    if (!response.ok || !payload?.ok) {
-      const message = buildErrorMessage(
-        response.status,
-        response.statusText,
-        payload,
-        "Failed to record referral usage",
-      );
-      throw new Error(message);
-    }
-
-    return payload;
-  } catch (error) {
-    console.error("Error recording referral usage:", error);
-    throw error;
-  }
-}
-

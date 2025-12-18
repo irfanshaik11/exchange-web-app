@@ -17,6 +17,7 @@ import { phantomLogin as apiPhantomLogin, metamaskLogin as apiMetamaskLogin, get
 import Cookies from "js-cookie";
 import { FaDiscord } from "react-icons/fa";
 import { shouldShowWaitlistModal } from "../utils/waitlist";
+import { getStoredReferralCodeHint, clearStoredReferralCodeHint } from "../utils/referralStorage";
 
 type ReferralGateStatus = "checking" | "prompt" | "validating" | "granted";
 
@@ -146,7 +147,7 @@ export function ReferralAccessGate({
   const requireReferralAccess =
     env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS !== undefined
       ? env.NEXT_PUBLIC_REQUIRE_REFERRAL_ACCESS
-      : true;
+      : false; // default to false to bypass referral gate for now
 
   const [status, setStatus] = useState<ReferralGateStatus>(() => {
     if (!requireReferralAccess) return "granted";
@@ -312,6 +313,8 @@ export function ReferralAccessGate({
   useEffect(() => {
     if (!requireReferralAccess) return;
     if (userLoading || !user) return;
+    // Only check once per user session
+    if (status === "granted" || status === "checking") return;
     let cancelled = false;
     (async () => {
       try {
@@ -324,6 +327,9 @@ export function ReferralAccessGate({
           persistAccess(user.id);
           setStatus("granted");
           setInfo("Access restored.");
+        } else if (!wl) {
+          // Not on waitlist; avoid retry loop
+          setStatus("prompt");
         }
       } catch {
         // ignore
@@ -384,9 +390,8 @@ export function ReferralAccessGate({
       setError(null);
       setInfo(null);
 
-      // Special handling for admin code - always grant access
-      const isAdminCode = normalized === 'NARRATIVE-ADMIN-247';
-      
+      // SECURITY: All access code validation happens server-side only.
+      // No hardcoded secrets in client-side code. Backend validates all codes including admin codes.
       // Validate with backend and mark waitlist as activated (number -> 0) on success.
       // If the user has no waitlist row yet, create it and retry once.
       (async () => {
@@ -397,26 +402,19 @@ export function ReferralAccessGate({
             return;
           }
           
-          // For admin code, grant access immediately as fallback
-          if (isAdminCode) {
-            try {
-              await redeemAccessCode({
-                userId: Number(user.id),
-                accessCode: normalized,
-              });
-            } catch (adminErr: any) {
-              // Even if backend fails, grant access for admin code
-              console.warn('Admin code backend validation failed, granting access anyway:', adminErr);
-            }
-            persistAccess(user.id);
-            grantAccess();
+          // All codes (including admin codes) are validated server-side only
+          // Backend is the single source of truth for access control
+          // SECURITY: userId is no longer sent - backend uses authenticated user from JWT token
+          if (!user?.bearerToken) {
+            setStatus("prompt");
+            setError("Please login to activate Early Access.");
             return;
           }
           
           try {
             await redeemAccessCode({
-              userId: Number(user.id),
               accessCode: normalized,
+              authToken: user.bearerToken,
             });
           } catch (err: any) {
             // If no waitlist row, create it, then retry redeem once
@@ -424,8 +422,8 @@ export function ReferralAccessGate({
             if (statusCode === 404) {
               await completeAllQuests({ userId: Number(user.id) });
               await redeemAccessCode({
-                userId: Number(user.id),
                 accessCode: normalized,
+                authToken: user.bearerToken,
               });
             } else {
               throw err;
@@ -754,10 +752,13 @@ export function ReferralAccessGate({
       }
       
       // Send to backend for verification
-      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message);
-      
+      const referralCode = getStoredReferralCodeHint() || undefined;
+      const { token } = await apiPhantomLogin(signResult.publicKey, signResult.signature, signResult.message, referralCode);
+
       if (token) {
         Cookies.set("token", token, { expires: 7, path: "/" });
+        // Clear referral code hint after successful login (it's been sent to backend)
+        clearStoredReferralCodeHint();
         await refreshUser();
         setInfo("Phantom login successful!");
         // Show waitlist modal after successful wallet login
@@ -768,7 +769,7 @@ export function ReferralAccessGate({
       }
     } catch (error: any) {
       console.error("Phantom login error:", error);
-      
+
       if (error.message?.includes("Internal server error")) {
         setWalletError("Backend server error. Please try again later.");
       } else if (error.message?.includes("Signature verification failed")) {
@@ -823,8 +824,9 @@ export function ReferralAccessGate({
       }
       
       // Send to backend for verification
-      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message);
-      
+      const referralCode = getStoredReferralCodeHint() || undefined;
+      const { token } = await apiMetamaskLogin(signResult.address, signResult.signature, signResult.message, referralCode);
+
       if (token) {
         Cookies.set("token", token, { expires: 7, path: "/" });
         await refreshUser();
@@ -871,7 +873,14 @@ export function ReferralAccessGate({
 
   // Don't show referral overlay if Twitter OAuth just completed (twitter_success in URL)
   const hasTwitterSuccess = router.isReady && router.query.twitter_success === 'true';
-  const showOverlay = !!user && !userLoading && (status === "prompt" || status === "validating") && !showQuests && !showWaitlist && !hasTwitterSuccess;
+  // Show referral overlay after the user has signed in and referral access is not yet granted
+  const showOverlay =
+    !!user &&
+    !userLoading &&
+    (status === "prompt" || status === "validating") &&
+    !showQuests &&
+    !showWaitlist &&
+    !hasTwitterSuccess;
 
   return (
     <ReferralAccessContext.Provider value={contextValue}>

@@ -3,16 +3,22 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
-import { FaTimes, FaRunning, FaGasPump, FaEye, FaBan } from 'react-icons/fa';
+import { FaTimes, FaRunning, FaGasPump, FaEye, FaBan, FaSpinner, FaCheckCircle, FaExternalLinkAlt } from 'react-icons/fa';
 import { LuPencil, LuCheck } from 'react-icons/lu';
 import { useUser } from '~/components/UserContext';
 import { useQuickBuy } from '~/components/QuickBuyContext';
 import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
+import { tradeMonadBuy, tradeMonadSell, preCheckMonadBalance } from '~/utils/api';
+import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
+import { validateMonadBalance, validateSolanaBalance } from '~/utils/tradeBalanceValidation';
 import { getTradeActivityByUser } from '~/utils/functions';
 import { formatSmartNumber } from '~/utils/db';
+import { extractTokenImage } from '~/utils/images';
 import HighSlippageWarningDialog from '../HighSlippageWarningDialog';
 import LowLiquidityWarningDialog from '../LowLiquidityWarningDialog';
 import type { Token } from '~/utils/db';
+import toast from 'react-hot-toast';
+import useMonadPositionWebSocket from '~/hooks/useMonadPositionWebSocket';
 
 interface InstantTradeModalProps {
   isOpen: boolean;
@@ -25,11 +31,44 @@ const HIGH_SLIPPAGE_WARNING_THRESHOLD = 50; // Percent
 
 const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, token }) => {
   const router = useRouter();
-  const { user, solBalance } = useUser();
+  const { user, solBalance, refreshBalance, chainBalances } = useUser();
   const { presets, activePreset, setActivePreset } = useQuickBuy();
   
   // Check if we're on a Monad trade page
   const isMonad = router.pathname?.includes('/trade/monad/') || false;
+  
+  // Ref to track pending toast for WebSocket txHash update
+  const pendingToastRef = useRef<{ id: string; tokenImage: string | null; tokenName: string; fakeTime: string; startTime: number; timerInterval?: NodeJS.Timeout } | null>(null);
+  
+  // Callback for instant txHash update via WebSocket (fires before HTTP response)
+  const handleWsTxHash = useCallback((data: { txHash: string; tokenAddress: string; tradeType: 'buy' | 'sell'; explorerUrl: string }) => {
+    const pending = pendingToastRef.current;
+    if (!pending) return;
+    
+    console.log('[InstantTradeModal] 🚀 INSTANT txHash via WebSocket:', data.txHash);
+    
+    // Update the link element - wrap Monad logo in anchor to make clickable
+    const linkEl = document.getElementById(`link-${pending.id}`);
+    if (linkEl) {
+      linkEl.innerHTML = `<a href="${data.explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+    }
+    
+    // Set duration for auto-dismiss after 10s
+    setTimeout(() => {
+      if (pendingToastRef.current?.id === pending.id) {
+        toast.dismiss(pending.id);
+        pendingToastRef.current = null;
+      }
+    }, 10000);
+  }, []);
+  
+  // WebSocket for instant txHash (only for Monad) - connect even without tokenAddress
+  const tokenAddress = token?.mint || token?.pair_address || '';
+  useMonadPositionWebSocket({
+    tokenAddress,
+    enabled: isMonad && !!user?.id, // Don't require tokenAddress - we want to receive any txHash
+    onTxHash: handleWsTxHash,
+  });
   // Load position from localStorage
   const getInitialPosition = (): { x: number; y: number } => {
     if (typeof window === 'undefined') return { x: 0, y: 0 };
@@ -484,6 +523,59 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     return slippage || 0.2;
   };
 
+  // Helper function to map launchpad protocol to backend format (same as MonadTradeActionPanel)
+  const getLaunchpad = (): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
+    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || '';
+    
+    if (protocol.includes('nad.fun') || protocol.includes('nadfun')) {
+      return 'nadfun';
+    } else if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
+      // Check if it's devs portal (usually has 'dev' in the name or specific identifier)
+      if (protocol.includes('dev')) {
+        return 'flapsh-devs';
+      }
+      return 'flapsh-simple';
+    }
+    
+    // Default to nadfun if unknown
+    return 'nadfun';
+  };
+
+  // Helper function to format user-friendly error messages (same as MonadTable)
+  const formatMonadError = (error: string | undefined | null): string => {
+    if (!error) return "Trade failed. Please try again.";
+    
+    const errorLower = error.toLowerCase();
+    
+    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
+        errorLower.includes('bonding_curve_library_invalid_inputs')) {
+      return "This token has no liquidity or has graduated to DEX. Try a different token.";
+    }
+    
+    if (errorLower.includes('insufficient liquidity') || 
+        errorLower.includes('expected output is 0') ||
+        errorLower.includes('no liquidity')) {
+      return "Insufficient liquidity. This token may not be available for trading.";
+    }
+    
+    if (errorLower.includes('token does not exist') || 
+        errorLower.includes('token may not exist')) {
+      return "Token not found. Please check the token address.";
+    }
+    
+    if (errorLower.includes('token has graduated') || 
+        errorLower.includes('graduated to dex')) {
+      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
+    }
+    
+    if (errorLower.includes('insufficient balance') || 
+        errorLower.includes('missing')) {
+      return "Insufficient balance. Please check your wallet.";
+    }
+    
+    return error;
+  };
+
   // Handle quick buy - using same logic as TradeActionPanel
   const handleQuickBuy = async (amount: number) => {
     if (!user || !token) {
@@ -496,14 +588,58 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       return;
     }
 
+    // ============================================
+    // PRE-VALIDATION: Check balance BEFORE showing any toast
+    // This prevents the misleading "Trade placed!" toast when balance is insufficient
+    // ============================================
+    if (isMonad) {
+      // Get current Monad balance from chainBalances
+      const monadBalance = chainBalances['monad'] ?? 0;
+      const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
+
+      // Client-side validation first (fast, no network call)
+      const clientValidation = validateMonadBalance({
+        balance: monadBalance,
+        tradeAmount: requested,
+        gasPrice: gasPrice,
+      });
+
+      if (!clientValidation.isValid) {
+        toast.error(clientValidation.errorMessage || 'Insufficient balance', { duration: 5000 });
+        return;
+      }
+    } else {
+      // Solana validation
+      const priorityFee = settings?.priority ?? 0.001;
+      const bribe = settings?.bribe ?? 0;
+
+      const clientValidation = validateSolanaBalance({
+        balance: solBalance,
+        tradeAmount: requested,
+        priorityFee,
+        bribe,
+      });
+
+      if (!clientValidation.isValid) {
+        toast.error(clientValidation.errorMessage || 'Insufficient balance', { duration: 5000 });
+        return;
+      }
+    }
+    // ============================================
+    // END PRE-VALIDATION
+    // ============================================
+
+    // Skip liquidity warning for Monad (same as MonadTable)
+    if (!isMonad) {
     const liquidityValue = Number(liquidityUsd) || 0;
     const isLowLiquidity = liquidityValue <= 0 || liquidityValue < LOW_LIQUIDITY_WARNING_THRESHOLD;
-    
-    // Check liquidity warning (same as TradeActionPanel)
+
+      // Check liquidity warning (only for Solana)
     if (isLowLiquidity) {
       setPendingTradeOptions({ skipLiquidity: false, skipSlippage: false, amount, side: 'buy' });
       setShowLiquidityWarning(true);
       return;
+      }
     }
 
     // Check slippage warning (same as TradeActionPanel)
@@ -514,10 +650,158 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       return;
     }
 
-    // Execute trade with enhanced handler - same as TradeActionPanel
     setIsLoading(true);
-    
-    // Use effective slippage for Monad
+
+    try {
+      if (isMonad) {
+        // Use Monad buy API - match MonadTable exactly
+        const launchpad = getLaunchpad();
+        const tokenAddress = token.mint; // Monad uses mint address (0x format)
+        
+        // Get slippage from preset or use default (15%) - same as MonadTable
+        const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
+        // Get gas price from preset (optional, undefined if not set) - same as MonadTable
+        // Note: MonadTable uses gasPrice directly from settings, not converted from priority
+        const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
+        
+        // Get token image and name
+        const tokenImage = token ? extractTokenImage(token as any) : null;
+        const tokenName = token?.name || token?.symbol || '';
+        
+        // Generate unique toast ID and fake fast time (0.40-0.60s)
+        const uniqueToastId = `monad-quickbuy-${Date.now()}`;
+        const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
+        const startTime = Date.now();
+        
+        // Random cap time between 0.40 and 0.60 seconds
+        const timerCap = 0.40 + Math.random() * 0.20;
+        let timerFinished = false;
+        
+        // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
+        toast.custom(
+          (t) => (
+            <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
+              <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+              {tokenImage && (
+                <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              )}
+              <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+              <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
+              <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
+                <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+              </span>
+            </div>
+          ),
+          { id: uniqueToastId, duration: Infinity }
+        );
+        
+        // Start timer animation - update every 50ms, show checkmark when cap is reached
+        const timerInterval = setInterval(() => {
+          const elapsed = (Date.now() - startTime) / 1000;
+          const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+          const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+          if (timerEl) {
+            timerEl.textContent = `(${displayTime}s)`;
+          }
+          
+          // When timer reaches cap, show checkmark and Monad logo
+          if (!timerFinished && elapsed >= timerCap) {
+            timerFinished = true;
+            const checkEl = document.getElementById(`check-${uniqueToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
+            }
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              linkEl.style.display = 'inline-flex';
+            }
+          }
+        }, 50);
+        
+        // Store pending toast info for WebSocket instant update (including timer)
+        pendingToastRef.current = { id: uniqueToastId, tokenImage, tokenName, fakeTime: timerCap.toFixed(2), startTime, timerInterval };
+
+        let result;
+        try {
+          console.log("📤 Calling tradeMonadBuy with params:", { tokenAddress, amountMON: requested, launchpad, slippage, gasPrice });
+          result = await tradeMonadBuy(
+            {
+              tokenAddress,
+              amountMON: requested,
+              launchpad,
+              slippage,
+              gasPrice,
+            },
+            user.bearerToken
+          );
+          console.log("✅ Monad buy API response:", result);
+          console.log("✅ Response check - success:", result?.success, "txHash:", result?.txHash);
+        } catch (error: any) {
+          console.error("❌ Monad buy API error:", error);
+          const errorMessage = formatMonadError(error?.message || error?.error || "Trade failed. Please try again.");
+          toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+          setIsLoading(false);
+          return;
+        }
+
+        if (result && result.success && result.txHash) {
+          console.log("✅ Trade successful, updating toast with txHash:", result.txHash);
+          
+          // Only update toast if WebSocket hasn't already handled it
+          if (pendingToastRef.current?.id === uniqueToastId) {
+            const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+            // Update the link element - wrap Monad logo in anchor to make clickable
+            const linkEl = document.getElementById(`link-${uniqueToastId}`);
+            if (linkEl) {
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+            }
+            // Auto-dismiss after 10s
+            setTimeout(() => {
+              toast.dismiss(uniqueToastId);
+            }, 10000);
+            pendingToastRef.current = null;
+          }
+          
+          // Refresh token balance after trade
+          setTimeout(async () => {
+            try {
+              const trades = await getTradeActivityByUser(user.id.toString());
+              const tokenTrades = trades.filter(
+                (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+              );
+
+              if (tokenTrades.length > 0) {
+                let bought = 0;
+                let sold = 0;
+
+                tokenTrades.forEach((trade: any) => {
+                  if (trade.type === "Buy") {
+                    bought += Number(trade.tokenAmount) || 0;
+                  } else if (trade.type === "Sell") {
+                    sold += Number(trade.tokenAmount) || 0;
+                  }
+                });
+
+                const remaining = bought - sold;
+                setTokenBalance(Math.max(0, remaining));
+              } else {
+                setTokenBalance(0);
+              }
+            } catch (error) {
+              console.error('Error refreshing token balance:', error);
+            }
+          }, 2000);
+          broadcastMonadQuickTrade(tokenAddress, 'buy');
+        } else {
+          console.error("❌ Monad buy failed - result:", result);
+          const errorMsg = formatMonadError((result as any)?.error || "Trade failed. Please try again.");
+          toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
+        }
+        
+        setIsLoading(false);
+        return result;
+      } else {
+        // Use Solana enhanced trade handler for Solana tokens
     const effectiveSettings = {
       ...settings,
       maxSlippage: getEffectiveSlippage(settings.maxSlippage, true),
@@ -531,6 +815,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance),
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: async (txHash, stats) => {
         console.log("✅ Enhanced Trade successful:", { txHash, stats });
         // Refresh token balance after trade
@@ -573,6 +858,12 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
     setIsLoading(false);
     return result;
+      }
+    } catch (error: any) {
+      console.error("Trade error:", error);
+      setIsLoading(false);
+      throw error;
+    }
   };
 
   // Handle quick sell - using same logic as TradeActionPanel
@@ -591,6 +882,18 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
     const sellSettings = presets[activePreset].quickSellSettings;
 
+    // ============================================
+    // PRE-VALIDATION: Check token balance BEFORE showing any toast
+    // This prevents the misleading "Trade placed!" toast when token balance is 0
+    // ============================================
+    if (tokenBalance <= 0) {
+      toast.error('Insufficient token balance. Your balance is 0 tokens. Cannot sell.', { duration: 5000 });
+      return;
+    }
+    // ============================================
+    // END PRE-VALIDATION
+    // ============================================
+
     // Check slippage warning (same as TradeActionPanel)
     const slippagePercent = getEffectiveSlippage(sellSettings.maxSlippage, false) * 100;
     if (slippagePercent >= HIGH_SLIPPAGE_WARNING_THRESHOLD) {
@@ -599,10 +902,149 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       return;
     }
 
-    // Execute trade with enhanced handler - same as TradeActionPanel
     setIsLoading(true);
-    
-    // Use effective slippage for Monad
+
+    try {
+      if (isMonad) {
+        // Use Monad sell API - match MonadTradeActionPanel exactly
+        const launchpad = getLaunchpad();
+        const tokenAddress = token.mint; // Monad uses mint address (0x format)
+        const maxSlippage = getEffectiveSlippage(sellSettings.maxSlippage, false);
+        const gasPrice = sellSettings.gasPrice !== undefined && sellSettings.gasPrice > 0 ? sellSettings.gasPrice : undefined;
+        
+        // Get token image and name
+        const tokenImage = token ? extractTokenImage(token as any) : null;
+        const tokenName = token?.name || token?.symbol || '';
+        
+        // Generate unique toast ID and fake fast time (0.40-0.60s)
+        const uniqueSellToastId = `monad-sell-${Date.now()}`;
+        const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
+        const sellStartTime = Date.now();
+        
+        // Random cap time between 0.40 and 0.60 seconds
+        const sellTimerCap = 0.40 + Math.random() * 0.20;
+        let sellTimerFinished = false;
+        
+        // Show initial loading toast with timer - checkmark hidden until timer finishes, link icon grayed out
+        toast.custom(
+          (t) => (
+            <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
+              <FaCheckCircle id={`check-${uniqueSellToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+              {tokenImage && (
+                <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+              )}
+              <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+              <span id={`timer-${uniqueSellToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
+              <span id={`link-${uniqueSellToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
+                <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+              </span>
+            </div>
+          ),
+          { id: uniqueSellToastId, duration: Infinity }
+        );
+        
+        // Start timer animation - update every 50ms, show checkmark when cap is reached
+        const sellTimerInterval = setInterval(() => {
+          const elapsed = (Date.now() - sellStartTime) / 1000;
+          const displayTime = Math.min(elapsed, sellTimerCap).toFixed(2);
+          const timerEl = document.getElementById(`timer-${uniqueSellToastId}`);
+          if (timerEl) {
+            timerEl.textContent = `(${displayTime}s)`;
+          }
+          
+          // When timer reaches cap, show checkmark and Monad logo
+          if (!sellTimerFinished && elapsed >= sellTimerCap) {
+            sellTimerFinished = true;
+            const checkEl = document.getElementById(`check-${uniqueSellToastId}`);
+            if (checkEl) {
+              checkEl.style.display = 'block';
+            }
+            const linkEl = document.getElementById(`link-${uniqueSellToastId}`);
+            if (linkEl) {
+              linkEl.style.display = 'inline-flex';
+            }
+          }
+        }, 50);
+        
+        // Store pending toast info for WebSocket instant update (including timer)
+        pendingToastRef.current = { id: uniqueSellToastId, tokenImage, tokenName, fakeTime: sellTimerCap.toFixed(2), startTime: sellStartTime, timerInterval: sellTimerInterval };
+
+        // Add timeout wrapper to prevent hanging
+        const sellPromise = tradeMonadSell(
+          {
+            tokenAddress,
+            launchpad,
+            percentage: percentage,
+            slippage: maxSlippage * 100,
+            gasPrice: gasPrice,
+          },
+          user.bearerToken
+        );
+
+        // Race the API call against a 30-second timeout (backend has 45s, but we want to fail faster)
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('Request timed out. The sell is taking longer than expected. Please check if the transaction went through on the blockchain.'));
+          }, 30000); // 30 second timeout
+        });
+
+        const result = await Promise.race([sellPromise, timeoutPromise]);
+
+        if (result.success && result.txHash) {
+          // Only update toast if WebSocket hasn't already handled it
+          if (pendingToastRef.current?.id === uniqueSellToastId) {
+            const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+            // Update the link element - wrap Monad logo in anchor to make clickable
+            const linkEl = document.getElementById(`link-${uniqueSellToastId}`);
+            if (linkEl) {
+              linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+            }
+            // Auto-dismiss after 10s
+            setTimeout(() => {
+              toast.dismiss(uniqueSellToastId);
+            }, 10000);
+            pendingToastRef.current = null;
+          }
+          
+          // Refresh token balance after trade
+          setTimeout(async () => {
+            try {
+              const trades = await getTradeActivityByUser(user.id.toString());
+              const tokenTrades = trades.filter(
+                (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+              );
+
+              if (tokenTrades.length > 0) {
+                let bought = 0;
+                let sold = 0;
+
+                tokenTrades.forEach((trade: any) => {
+                  if (trade.type === "Buy") {
+                    bought += Number(trade.tokenAmount) || 0;
+                  } else if (trade.type === "Sell") {
+                    sold += Number(trade.tokenAmount) || 0;
+                  }
+                });
+
+                const remaining = bought - sold;
+                setTokenBalance(Math.max(0, remaining));
+              } else {
+                setTokenBalance(0);
+              }
+            } catch (error) {
+              console.error('Error refreshing token balance:', error);
+            }
+          }, 2000);
+          broadcastMonadQuickTrade(tokenAddress, 'sell');
+        } else {
+          toast.error(formatMonadError((result as any).error), { id: uniqueSellToastId, duration: 6000 });
+          setIsLoading(false);
+        }
+        
+        setIsLoading(false);
+        return result;
+      } else {
+        // Use Solana enhanced trade handler for Solana tokens
     const effectiveSellSettings = {
       ...sellSettings,
       maxSlippage: getEffectiveSlippage(sellSettings.maxSlippage, false),
@@ -616,6 +1058,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance),
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: async (txHash, stats) => {
         console.log("✅ Enhanced Trade successful:", { txHash, stats });
         // Refresh token balance after trade
@@ -658,40 +1101,148 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
 
     setIsLoading(false);
     return result;
+      }
+    } catch (error: any) {
+      console.error("Trade error:", error);
+      setIsLoading(false);
+      throw error;
+    }
   };
 
   // Warning dialog handlers - same as TradeActionPanel
-  const handleSlippageWarningContinue = useCallback(() => {
+  const handleSlippageWarningContinue = useCallback(async () => {
     setShowSlippageWarning(false);
-    if (!pendingTradeOptions || !token) return;
+    if (!pendingTradeOptions || !token || !user) return;
     
     setIsLoading(true);
     const { amount, side } = pendingTradeOptions;
     
+    try {
+      if (isMonad) {
+        // Use Monad buy/sell API for Monad tokens
+        const launchpad = getLaunchpad();
+        const tokenAddress = token.mint; // Monad uses mint address (0x format)
     const currentSettings = side === 'buy' 
       ? presets[activePreset].quickBuySettings 
       : presets[activePreset].quickSellSettings;
-    
-    // Use effective slippage for Monad
+        const maxSlippage = getEffectiveSlippage(currentSettings.maxSlippage, side === 'buy');
+        const gasPrice = currentSettings.priority ? currentSettings.priority * 1e9 : undefined; // Convert SOL to gwei
+        
+        if (side === 'buy') {
+          const result = await tradeMonadBuy(
+            {
+              tokenAddress,
+              amountMON: amount,
+              launchpad,
+              slippage: maxSlippage * 100, // Convert to percentage (0.15 -> 15)
+              gasPrice: gasPrice,
+            },
+            user.bearerToken
+          );
+          
+          if (result.success && result.txHash) {
+            // Refresh token balance after trade
+            setTimeout(async () => {
+              try {
+                const trades = await getTradeActivityByUser(user.id.toString());
+                const tokenTrades = trades.filter(
+                  (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+                );
+
+                if (tokenTrades.length > 0) {
+                  let bought = 0;
+                  let sold = 0;
+
+                  tokenTrades.forEach((trade: any) => {
+                    if (trade.type === "Buy") {
+                      bought += Number(trade.tokenAmount) || 0;
+                    } else if (trade.type === "Sell") {
+                      sold += Number(trade.tokenAmount) || 0;
+                    }
+                  });
+
+                  const remaining = bought - sold;
+                  setTokenBalance(Math.max(0, remaining));
+                } else {
+                  setTokenBalance(0);
+                }
+              } catch (error) {
+                console.error('Error refreshing token balance:', error);
+              }
+            }, 2000);
+            broadcastMonadQuickTrade(tokenAddress, 'buy');
+          }
+        } else {
+          const result = await tradeMonadSell(
+            {
+              tokenAddress,
+              launchpad,
+              percentage: amount,
+              slippage: maxSlippage * 100, // Convert to percentage (0.15 -> 15)
+              gasPrice: gasPrice,
+            },
+            user.bearerToken
+          );
+          
+          if (result.success && result.txHash) {
+            // Refresh token balance after trade
+            setTimeout(async () => {
+              try {
+                const trades = await getTradeActivityByUser(user.id.toString());
+                const tokenTrades = trades.filter(
+                  (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+                );
+
+                if (tokenTrades.length > 0) {
+                  let bought = 0;
+                  let sold = 0;
+
+                  tokenTrades.forEach((trade: any) => {
+                    if (trade.type === "Buy") {
+                      bought += Number(trade.tokenAmount) || 0;
+                    } else if (trade.type === "Sell") {
+                      sold += Number(trade.tokenAmount) || 0;
+                    }
+                  });
+
+                  const remaining = bought - sold;
+                  setTokenBalance(Math.max(0, remaining));
+                } else {
+                  setTokenBalance(0);
+                }
+              } catch (error) {
+                console.error('Error refreshing token balance:', error);
+              }
+            }, 2000);
+            broadcastMonadQuickTrade(tokenAddress, 'sell');
+          }
+        }
+      } else {
+        // Use Solana enhanced trade handler for Solana tokens
+        const currentSettings = side === 'buy' 
+          ? presets[activePreset].quickBuySettings 
+          : presets[activePreset].quickSellSettings;
+        
     const effectiveCurrentSettings = {
       ...currentSettings,
       maxSlippage: getEffectiveSlippage(currentSettings.maxSlippage, side === 'buy'),
     };
     
-    executeEnhancedTrade({
+        await executeEnhancedTrade({
       token,
       amount: amount,
       side: side,
       settings: effectiveCurrentSettings,
-      user: { bearerToken: user!.bearerToken, id: user!.id },
+          user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance),
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: async (txHash, stats) => {
         console.log("✅ Enhanced Trade successful:", { txHash, stats });
         // Refresh token balance after trade
         setTimeout(async () => {
           try {
-            const trades = await getTradeActivityByUser(user!.id.toString());
+                const trades = await getTradeActivityByUser(user.id.toString());
             const tokenTrades = trades.filter(
               (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
             );
@@ -724,11 +1275,15 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       onWarning: (warnings) => {
         console.warn("⚠️ Pre-transaction warnings:", warnings);
       },
-    }).finally(() => {
+        });
+      }
+    } catch (error) {
+      console.error("Trade error:", error);
+    } finally {
       setIsLoading(false);
       setPendingTradeOptions(null);
-    });
-  }, [pendingTradeOptions, token, user, solBalance, presets, activePreset]);
+    }
+  }, [pendingTradeOptions, token, user, solBalance, presets, activePreset, isMonad]);
 
   const handleSlippageWarningCancel = useCallback(() => {
     setShowSlippageWarning(false);
@@ -736,9 +1291,9 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
     setIsLoading(false);
   }, []);
 
-  const handleLiquidityWarningContinue = useCallback(() => {
+  const handleLiquidityWarningContinue = useCallback(async () => {
     setShowLiquidityWarning(false);
-    if (!pendingTradeOptions || !token) return;
+    if (!pendingTradeOptions || !token || !user) return;
     
     setIsLoading(true);
     const { amount } = pendingTradeOptions;
@@ -754,26 +1309,79 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       return;
     }
     
-    // Use effective slippage for Monad
+    try {
+      if (isMonad) {
+        // Use Monad buy API for Monad tokens
+        const launchpad = getLaunchpad();
+        const tokenAddress = token.mint; // Monad uses mint address (0x format)
+        const maxSlippage = getEffectiveSlippage(currentSettings.maxSlippage, true);
+        const gasPrice = currentSettings.priority ? currentSettings.priority * 1e9 : undefined; // Convert SOL to gwei
+        
+        const result = await tradeMonadBuy(
+          {
+            tokenAddress,
+            amountMON: amount,
+            launchpad,
+            slippage: maxSlippage * 100, // Convert to percentage (0.15 -> 15)
+            gasPrice: gasPrice,
+          },
+          user.bearerToken
+        );
+        
+        if (result.success && result.txHash) {
+          // Refresh token balance after trade
+          setTimeout(async () => {
+            try {
+              const trades = await getTradeActivityByUser(user.id.toString());
+              const tokenTrades = trades.filter(
+                (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
+              );
+
+              if (tokenTrades.length > 0) {
+                let bought = 0;
+                let sold = 0;
+
+                tokenTrades.forEach((trade: any) => {
+                  if (trade.type === "Buy") {
+                    bought += Number(trade.tokenAmount) || 0;
+                  } else if (trade.type === "Sell") {
+                    sold += Number(trade.tokenAmount) || 0;
+                  }
+                });
+
+                const remaining = bought - sold;
+                setTokenBalance(Math.max(0, remaining));
+              } else {
+                setTokenBalance(0);
+              }
+            } catch (error) {
+              console.error('Error refreshing token balance:', error);
+            }
+          }, 2000);
+          broadcastMonadQuickTrade(tokenAddress, 'buy');
+        }
+      } else {
+        // Use Solana enhanced trade handler for Solana tokens
     const effectiveCurrentSettings = {
       ...currentSettings,
       maxSlippage: getEffectiveSlippage(currentSettings.maxSlippage, true),
     };
     
-    executeEnhancedTrade({
+        await executeEnhancedTrade({
       token,
       amount: amount,
       side: 'buy',
       settings: effectiveCurrentSettings,
-      user: { bearerToken: user!.bearerToken, id: user!.id },
+          user: { bearerToken: user.bearerToken, id: user.id },
       solBalance: Number(solBalance),
       solPriceUsd: 150,
+      refreshBalance,
       onSuccess: async (txHash, stats) => {
         console.log("✅ Enhanced Trade successful:", { txHash, stats });
         // Refresh token balance after trade
         setTimeout(async () => {
           try {
-            const trades = await getTradeActivityByUser(user!.id.toString());
+                const trades = await getTradeActivityByUser(user.id.toString());
             const tokenTrades = trades.filter(
               (trade: any) => trade.tokenAddress?.toLowerCase() === (token.mint || "").toLowerCase()
             );
@@ -806,10 +1414,14 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
       onWarning: (warnings) => {
         console.warn("⚠️ Pre-transaction warnings:", warnings);
       },
-    }).finally(() => {
+        });
+      }
+    } catch (error) {
+      console.error("Trade error:", error);
+    } finally {
       setIsLoading(false);
       setPendingTradeOptions(null);
-    });
+    }
   }, [pendingTradeOptions, token, user, solBalance, presets, activePreset]);
 
   const handleLiquidityWarningCancel = useCallback(() => {

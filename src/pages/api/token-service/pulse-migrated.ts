@@ -48,6 +48,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (data && Array.isArray(data)) {
         data.forEach((token: any) => {
           if (token && typeof token === 'object') {
+            // Add backward compatibility: mint field (frontend expects this)
+            token.mint = token.mint_address || token.mint;
+
             // Map field names to match what the frontend expects
             token.usd_price = token.price_usd ?? 0;
             token.fully_diluted_value = token.market_cap_usd ?? 0;

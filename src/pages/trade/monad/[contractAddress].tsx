@@ -12,9 +12,17 @@ import dynamic from "next/dynamic";
 import { useQuickBuyQueryParams } from "../../../components/QuickBuy";
 import { useTradePageQueryParams } from "../../../utils/queryParams";
 import { useComponentCache } from "../../../hooks/useComponentCache";
+import { useMonadTokenMetrics, type TokenMetrics } from "../../../hooks/useMonadTokenMetrics";
+// Eager load AdvancedOHLCChart on trade pages - always needed, so no point in lazy loading
+import AdvancedOHLCChart from "../../../components/AdvancedOHLCChart";
+import MonadTopTradersTable from "../../../components/trade/MonadTopTradersTable";
+import MonadHoldersTable from "../../../components/trade/MonadHoldersTable";
+import MonadDevTokensTable from "../../../components/trade/MonadDevTokensTable";
+import { useMonadTradesWebSocket } from "../../../hooks/useMonadTradesWebSocket";
+import useMonadDevTokens from "../../../hooks/useMonadDevTokens";
 
-// Lazy load chart component
-const AdvancedOHLCChart = dynamic(() => import("../../../components/AdvancedOHLCChart"), { ssr: false });
+// Lazy load other components
+const MonadTrades = dynamic(() => import("../../../components/trade/MonadTrades"), { ssr: false });
 
 /* ---------- AXIOM palette ---------- */
 const AX = {
@@ -24,9 +32,9 @@ const AX = {
   border: "#2A2B33",
   text: "#f0f5f5",
   muted: "#9CA3AF",
-  mint: "#70E0B0",
-  mintHover: "#58B890",
-  sell: "#FF4D7F",
+  mint: "#86d99f", // Monad green (matches candle up color)
+  mintHover: "#70c387",
+  sell: "#f26682", // Monad red (matches candle down color)
 };
 
 interface MonadTokenData {
@@ -94,6 +102,20 @@ export default function MonadTradePage() {
   const { settings: quickBuySettings, side: quickBuySide } = useQuickBuyQueryParams();
   const { params: tradeParams, setParams: setTradeParams, isReady: tradeParamsReady } = useTradePageQueryParams();
 
+  // Streams are keyed by token/mint address; seed with URL/_mint and update once token loads
+  const [tokenMintForLive, setTokenMintForLive] = useState<string>(() => {
+    if (typeof _mint === "string" && _mint.trim()) return _mint;
+    return typeof contractAddress === "string" ? contractAddress : "";
+  });
+
+  // Real-time token metrics via WebSocket
+  const [liveMetrics, setLiveMetrics] = useState<TokenMetrics | null>(null);
+  const { metrics: wsMetrics, connected: wsMetricsConnected } = useMonadTokenMetrics({
+    tokenAddress: tokenMintForLive,
+    enabled: !!tokenMintForLive,
+    onUpdate: (metrics) => setLiveMetrics(metrics),
+  });
+
   // Optimistic token data from query params
   const optimisticToken = React.useMemo(() => {
     if (_name || _symbol) {
@@ -120,22 +142,59 @@ export default function MonadTradePage() {
       setError(null);
 
       try {
-        // Try to fetch from Monad token service
+        // Call Monad backend directly (bypasses proxy for Redis cache)
+        const monadServiceUrl = process.env.NEXT_PUBLIC_MONAD_TOKEN_SERVICE_URL!;
         const endpoints = [
-          `/api/token-service/pulse-new-monad?limit=100`,
-          `/api/token-service/pulse-final-stretch-monad?limit=100`,
-          `/api/token-service/pulse-migrated-monad?limit=100`,
+          `${monadServiceUrl}/v1/pulse/new?limit=100`,
+          `${monadServiceUrl}/v1/pulse/final-stretch?limit=100`,
+          `${monadServiceUrl}/v1/pulse/migrated?limit=100`,
         ];
 
         let foundToken: MonadTokenData | null = null;
 
         for (const endpoint of endpoints) {
           try {
-            const response = await fetch(endpoint);
+            const response = await fetch(endpoint, {
+              headers: { 'Accept': 'application/json' }
+            });
             if (response.ok) {
-              const tokens = await response.json();
+              const result = await response.json();
+              // Backend returns { status: "success", count: N, data: [...] }
+              const rawTokens = result.data || (Array.isArray(result) ? result : []);
+              // Transform backend response: map 'address' to 'mint' for frontend compatibility
+              const tokens = rawTokens.map((t: any) => {
+                const normalizedPrice =
+                  typeof t.usd_price === 'number' ? t.usd_price :
+                  typeof t.price_usd === 'number' ? t.price_usd :
+                  typeof t.priceUsd === 'number' ? t.priceUsd :
+                  0;
+                const normalizedMarketCap =
+                  typeof t.market_cap_usd === 'number' ? t.market_cap_usd :
+                  typeof t.marketCapUSD === 'number' ? t.marketCapUSD :
+                  typeof t.fully_diluted_value === 'number' ? t.fully_diluted_value :
+                  0;
+                // Normalize bonding curve progress (backend sends as 0-1 decimal)
+                const bondingCurveProgress =
+                  t.bonding_curve_progress ?? t.graduation_percent ?? t.graduationPercent ?? 0;
+                // Convert to percentage if needed (backend sends 0-1, we want 0-100)
+                const normalizedBondingPct = bondingCurveProgress > 1
+                  ? bondingCurveProgress
+                  : bondingCurveProgress * 100;
+                return {
+                  ...t,
+                  mint: t.address || t.mint,  // Backend uses 'address', frontend expects 'mint'
+                  usd_price: t.usd_price ?? t.price_usd ?? t.priceUsd ?? normalizedPrice,
+                  price_usd: t.price_usd ?? t.usd_price ?? t.priceUsd ?? normalizedPrice,
+                  market_cap_usd: t.market_cap_usd ?? t.marketCapUSD ?? normalizedMarketCap,
+                  fully_diluted_value: t.fully_diluted_value ?? t.market_cap_usd ?? t.marketCapUSD ?? normalizedMarketCap,
+                  // Include bonding curve progress
+                  bonding_curve_progress: bondingCurveProgress,
+                  graduation_percent: normalizedBondingPct,
+                  bonding_pct: normalizedBondingPct,
+                };
+              });
               const token = tokens.find(
-                (t: any) => t.mint === contractAddress || t.pair_address === contractAddress
+                (t: any) => t.mint === contractAddress || t.pair_address === contractAddress || t.address === contractAddress
               );
               if (token) {
                 foundToken = token;
@@ -193,40 +252,87 @@ export default function MonadTradePage() {
   }, [contractAddress, optimisticToken]);
 
   // Convert Monad token data to Token format for components
+  // Merges live WebSocket metrics when available for real-time updates
   const displayToken = React.useMemo(() => {
+    const live = liveMetrics || wsMetrics;
+    const tokenPriceUsd = (tokenData as any)?.usd_price ?? (tokenData as any)?.price_usd ?? (tokenData as any)?.priceUsd ?? 0;
+    const tokenMarketCap =
+      (tokenData as any)?.market_cap_usd ??
+      (tokenData as any)?.marketCapUSD ??
+      (tokenData as any)?.fully_diluted_value ??
+      0;
+    const tokenSupply =
+      (tokenData as any)?.total_supply ??
+      (tokenData as any)?.supply ??
+      1_000_000_000;
+
     if (!tokenData) return optimisticToken ? {
       mint: contractAddress as string,
       name: optimisticToken.name,
       symbol: optimisticToken.symbol,
-      usd_price: optimisticToken.price_usd || 0,
-      market_cap_usd: optimisticToken.market_cap_usd || 0,
+      usd_price: live?.price_usd ?? optimisticToken.price_usd ?? 0,
+      price_usd: live?.price_usd ?? optimisticToken.price_usd ?? 0,
+      market_cap_usd: live?.market_cap_usd ?? optimisticToken.market_cap_usd ?? 0,
       pair_address: contractAddress as string,
       logo: optimisticToken.image || "",
       decimals: 18,
+      total_supply: 1_000_000_000,
       creator_address: null,
       dev_address: null,
       owner: null,
+      // Live metrics
+      liquidity_usd: live?.liquidity_usd ?? 0,
+      graduation_percent: live?.graduation_percent ?? 0,
+      volume_24h: live?.volume_24h_usd ?? 0,
+      total_buys: live?.total_buys ?? 0,
+      total_sells: live?.total_sells ?? 0,
+      total_buy_volume_usd: live?.total_buy_volume_usd ?? 0,
+      total_sell_volume_usd: live?.total_sell_volume_usd ?? 0,
+      net_volume_usd: live?.net_volume_usd ?? 0,
     } : null;
 
     return {
       mint: tokenData.mint || (contractAddress as string),
       name: tokenData.name,
       symbol: tokenData.symbol,
-      usd_price: tokenData.usd_price,
-      market_cap_usd: tokenData.market_cap_usd || tokenData.fully_diluted_value,
-      fully_diluted_value: tokenData.fully_diluted_value,
+      // Price: prefer live metrics, fallback to fetched data
+      usd_price: live?.price_usd ?? tokenPriceUsd,
+      price_usd: live?.price_usd ?? tokenPriceUsd,
+      market_cap_usd: live?.market_cap_usd ?? tokenMarketCap,
+      fully_diluted_value: live?.market_cap_usd ?? tokenData.fully_diluted_value ?? tokenMarketCap,
       pair_address: tokenData.pair_address || tokenData.mint || (contractAddress as string),
       logo: tokenData.image_url || "",
       decimals: tokenData.decimals || 18,
+      total_supply: tokenSupply,
       created_at: tokenData.created_at || tokenData.launch_time || null,
-      total_liquidity_usd: 0, // Monad may not have this
+      // Live metrics (real-time via WebSocket, fallback to HTTP API data)
+      liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
+      total_liquidity_usd: live?.liquidity_usd ?? (tokenData as any)?.liquidity_usd ?? 0,
+      graduation_percent: live?.graduation_percent ?? (tokenData as any)?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? 0,
+      bonding_pct: live?.graduation_percent ?? (tokenData as any)?.bonding_curve_progress ?? (tokenData as any)?.graduation_percent ?? 0,
+      volume_24h: live?.volume_24h_usd ?? tokenData.volume_24h ?? 0,
+      total_buys: live?.total_buys ?? tokenData.total_buys ?? 0,
+      total_sells: live?.total_sells ?? tokenData.total_sells ?? 0,
+      total_transactions: live?.total_transactions ?? tokenData.total_transactions ?? 0,
+      unique_traders: live?.unique_traders ?? tokenData.unique_traders ?? 0,
+      // USD volumes: prefer WebSocket, fallback to calculated from MON volume (MON price ~$0.25)
+      total_buy_volume_usd: live?.total_buy_volume_usd ?? ((tokenData as any)?.total_buy_volume_mon ? (tokenData as any).total_buy_volume_mon * 0.25 : 0),
+      total_sell_volume_usd: live?.total_sell_volume_usd ?? ((tokenData as any)?.total_sell_volume_mon ? (tokenData as any).total_sell_volume_mon * 0.25 : 0),
+      net_volume_usd: live?.net_volume_usd ?? (((tokenData as any)?.total_buy_volume_mon ?? 0) - ((tokenData as any)?.total_sell_volume_mon ?? 0)) * 0.25,
       launchpad_protocol: tokenData.launchpad_protocol || "nad.fun",
       // Dev/creator address fields
       creator_address: (tokenData as any)?.creator_address || (tokenData as any)?.creator_wallet || (tokenData as any)?.dev_address || (tokenData as any)?.owner || null,
       dev_address: (tokenData as any)?.dev_address || (tokenData as any)?.creator_wallet || (tokenData as any)?.creator_address || (tokenData as any)?.owner || null,
       owner: (tokenData as any)?.owner || (tokenData as any)?.creator_wallet || (tokenData as any)?.creator_address || (tokenData as any)?.dev_address || null,
     };
-  }, [tokenData, optimisticToken, contractAddress]);
+  }, [tokenData, optimisticToken, contractAddress, liveMetrics, wsMetrics]);
+
+  // Once token data resolves, align live stream identifier to the mint
+  useEffect(() => {
+    if (displayToken?.mint && displayToken.mint !== tokenMintForLive) {
+      setTokenMintForLive(displayToken.mint);
+    }
+  }, [displayToken?.mint, tokenMintForLive]);
 
   const tokenNameForTitle =
     (displayToken?.name && displayToken.name.trim()) ||
@@ -238,36 +344,19 @@ export default function MonadTradePage() {
     ? `${tokenNameForTitle} | Monad Trade`
     : "Monad Trade";
 
-  // OHLC params based on token age
+  // OHLC params - Monad uses 1s (1-second) candles as default for all tokens
+  // TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
   const getOHLCParams = useComponentCache(
     "ohlc-params-monad",
     [tokenData, displayToken],
     () => {
-      const createdAt = tokenData?.created_at || tokenData?.launch_time;
-      if (!createdAt) return { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
-
-      let timestamp = createdAt as any;
-      if (typeof createdAt === "number" && createdAt < 10000000000) timestamp = createdAt * 1000;
-
-      const createdDate = new Date(timestamp);
-      const diffMs = Date.now() - createdDate.getTime();
-      const ageInHours = diffMs / (1000 * 60 * 60);
-      const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-      if (ageInHours < 1) return { interval: "1m", timeframe: "1h", optimize: false } as const;
-      if (ageInHours < 6) return { interval: "1h", timeframe: "4h", optimize: false } as const;
-      if (ageInDays < 1) return { interval: "1h", timeframe: "24h", optimize: false } as const;
-      if (ageInDays < 7) return { interval: "1h", timeframe: "7d", optimize: false } as const;
-      if (ageInDays < 30) return { interval: "1h", timeframe: "30d", optimize: false } as const;
-      if (ageInDays < 90) return { interval: "1d", timeframe: "90d", optimize: true } as const;
-      if (ageInDays < 180) return { interval: "1d", timeframe: "180d", optimize: true } as const;
-      if (ageInDays < 365) return { interval: "1d", timeframe: "365d", optimize: true } as const;
-      return { interval: "7d", timeframe: "365d", optimize: true } as const;
+      // Always use 1s interval with 1d (24h) timeframe for all tokens regardless of age
+      return { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
     }
   );
 
   const ohlcParams = getOHLCParams;
-  const defaultOHLCParams = { interval: "1h" as const, timeframe: "30d" as const, optimize: false };
+  const defaultOHLCParams = { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
   const currentOHLCParams = React.useMemo(
     () => ohlcParams || defaultOHLCParams,
     [ohlcParams?.interval, ohlcParams?.timeframe, ohlcParams?.optimize]
@@ -276,7 +365,7 @@ export default function MonadTradePage() {
   // Chart container refs and resizing
   const containerRef = useRef<HTMLDivElement | null>(null);
   const MIN_CHART_HEIGHT = 350;
-  const DEFAULT_CHART_HEIGHT_RATIO = 0.65;
+  const DEFAULT_CHART_HEIGHT_RATIO = 0.45; // Reduced from 0.65 to 0.45 (45% of viewport height)
   const SSR_DEFAULT_CHART_HEIGHT = 900;
 
   const getResponsiveLimits = useCallback(() => {
@@ -412,14 +501,62 @@ export default function MonadTradePage() {
     };
   }, [showMobileTradeModal, handleDragMove, handleDragEnd]);
 
-  const pairAddress = displayToken?.pair_address || (contractAddress as string);
+  // Memoize pairAddress to prevent unnecessary changes that cause component remounts
+  // Only recalculate when the actual pair_address changes, not on every displayToken update
+  const pairAddress = React.useMemo(() => {
+    return displayToken?.pair_address || (contractAddress as string);
+  }, [displayToken?.pair_address, contractAddress]);
+
+  // Get dev address from dev token data
+  const { devTokenData: devData } = useMonadDevTokens(
+    (contractAddress as string) || undefined,
+    { enabled: !!contractAddress && typeof contractAddress === "string" }
+  );
+  const devAddress = React.useMemo(() => {
+    return devData?.dev_wallet || (displayToken as any)?.dev_address || (displayToken as any)?.creator_address || null;
+  }, [devData?.dev_wallet, displayToken]);
+
+  // Get trades for dev marker detection
+  const { trades: allTrades } = useMonadTradesWebSocket({
+    tokenAddress: tokenMintForLive,
+    addressAliases: pairAddress ? [pairAddress] : [],
+    enabled: !!tokenMintForLive && !!devAddress,
+    maxTrades: 200,
+  });
+
+  // Filter trades to find dev buys/sells
+  const devTrades = React.useMemo(() => {
+    if (!devAddress || !allTrades.length) return [];
+    return allTrades.filter(trade => 
+      trade.trader_address?.toLowerCase() === devAddress.toLowerCase()
+    ).map(trade => ({
+      id: trade.tx_hash,
+      transactionHash: trade.tx_hash,
+      timestamp: trade.block_timestamp,
+      is_buy: trade.is_buy,
+      side: trade.is_buy ? 'buy' : 'sell',
+      type: trade.is_buy ? 'buy' : 'sell',
+      eventDisplayType: trade.is_buy ? 'Buy' : 'Sell',
+      price: String(trade.price_mon),
+      amount: String(trade.token_amount),
+      totalUSD: String(Number(trade.mon_amount) * 0.25), // Approximate USD conversion
+      maker: trade.trader_address,
+      wallet_address: trade.trader_address,
+      user: trade.trader_address,
+      data: {
+        priceUsd: String(trade.price_mon),
+        amountNonLiquidityToken: String(trade.token_amount),
+        priceUsdTotal: String(Number(trade.mon_amount) * 0.25),
+      },
+    }));
+  }, [allTrades, devAddress]);
 
   return (
     <>
       <Head><title>{pageTitle}</title></Head>
 
       <div
-        className="min-h-screen w-full flex flex-col"
+        className="h-screen w-full flex flex-col overflow-hidden"
         style={{
           backgroundColor: "#0f1012",
           color: AX.text,
@@ -429,14 +566,14 @@ export default function MonadTradePage() {
         <Header search={search} setSearch={setSearch} />
 
         {loading && !displayToken && (
-          <div className="text-center text-xs px-2 py-1.5"
+          <div className="text-center text-xs px-2 py-1.5 flex-shrink-0"
                style={{ color: AX.text, backgroundColor: "#2A2414", borderTop: `1px solid ${AX.border}`, borderBottom: `1px solid ${AX.border}` }}>
             Loading Monad token data…
           </div>
         )}
 
         <div
-          className="flex flex-1 w-full max-w-full overflow-hidden"
+          className="flex flex-1 w-full max-w-full overflow-hidden min-h-0"
           style={{
             minHeight: 0,
             flex: '1 1 auto',
@@ -482,7 +619,7 @@ export default function MonadTradePage() {
               >
                 {pairAddress && pairAddress.length >= 20 ? (
                   <AdvancedOHLCChart
-                    key={`chart-monad-${pairAddress}`}
+                    key={`monad-chart-${pairAddress}`} // Force remount when token changes during client-side navigation
                     mint={typeof _mint === "string" ? _mint : displayToken?.mint}
                     pairAddress={pairAddress}
                     interval={currentOHLCParams.interval}
@@ -492,11 +629,12 @@ export default function MonadTradePage() {
                     width="100%"
                     baseRefreshMs={10000}
                     className="relative"
-                    tradeData={[]} // Monad may not have trade data yet
-                    creatorAddress={null}
+                    tradeData={devTrades}
+                    creatorAddress={devAddress}
                     tokenSymbol={displayToken?.symbol || null}
                     tokenName={displayToken?.name || null}
                     tokenDecimals={displayToken?.decimals || null}
+                    network="monad"
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full" style={{ color: AX.muted }}>
@@ -555,18 +693,58 @@ export default function MonadTradePage() {
             </div>
 
             {/* BOTTOM pane (tabs + tables) */}
-            <div id="tabs-pane" className="flex-1 min-h-[120px] flex flex-col overflow-y-auto">
-              {/* Transactions Tab Header */}
-              <div className="flex gap-4 pt-2 px-3 text-xs items-center justify-between">
+            <div id="tabs-pane" className="flex-1 flex flex-col min-h-0" style={{ overflow: 'hidden' }}>
+              {/* Tab Header */}
+              <div className="flex gap-4 pt-2 px-3 text-xs items-center justify-between flex-shrink-0">
                 <div className="flex gap-4 items-center">
                   <button
-                    className="px-3 py-1 font-semibold border-b-4 border-[#70E0B0] text-white"
+                    onClick={() => setSelectedTab("Transactions")}
+                    className={`px-3 py-1 font-semibold transition-colors ${
+                      selectedTab === "Transactions"
+                        ? "border-b-4 text-white"
+                        : "text-neutral-400 hover:text-neutral-300"
+                    }`}
+                    style={selectedTab === "Transactions" ? { borderBottomColor: AX.mint } : undefined}
                   >
                     Transactions
                   </button>
+                  <button
+                    onClick={() => setSelectedTab("Top Traders")}
+                    className={`px-3 py-1 font-semibold transition-colors ${
+                      selectedTab === "Top Traders"
+                        ? "border-b-4 text-white"
+                        : "text-neutral-400 hover:text-neutral-300"
+                    }`}
+                    style={selectedTab === "Top Traders" ? { borderBottomColor: AX.mint } : undefined}
+                  >
+                    Top Traders
+                  </button>
+                  <button
+                    onClick={() => setSelectedTab("Holders")}
+                    className={`px-3 py-1 font-semibold transition-colors ${
+                      selectedTab === "Holders"
+                        ? "border-b-4 text-white"
+                        : "text-neutral-400 hover:text-neutral-300"
+                    }`}
+                    style={selectedTab === "Holders" ? { borderBottomColor: AX.mint } : undefined}
+                  >
+                    Holders
+                  </button>
+                  <button
+                    onClick={() => setSelectedTab("Dev Tokens")}
+                    className={`px-3 py-1 font-semibold transition-colors ${
+                      selectedTab === "Dev Tokens"
+                        ? "border-b-4 text-white"
+                        : "text-neutral-400 hover:text-neutral-300"
+                    }`}
+                    style={selectedTab === "Dev Tokens" ? { borderBottomColor: AX.mint } : undefined}
+                  >
+                    Dev Tokens
+                  </button>
                 </div>
                 <button
-                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full bg-[#101114] text-[#70E0B0] ml-auto"
+                  className="px-4 py-1.5 font-semibold flex items-center gap-2 transition-colors rounded-full ml-auto"
+                  style={{ backgroundColor: AX.bg, color: AX.mint }}
                   onClick={() => setIsInstantTradeOpen(true)}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3 h-3">
@@ -575,31 +753,28 @@ export default function MonadTradePage() {
                   <span>Instant Trade</span>
                 </button>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto">
-                {/* Transactions Table */}
-                <div className="w-full overflow-x-auto">
-                  <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
-                    <thead className="sticky top-0" style={{ backgroundColor: '#1E1F26', zIndex: 10 }}>
-                      <tr className="border-b" style={{ borderColor: AX.border }}>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">Time</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">Address</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">Action</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">USD</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">MON</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">$NTEST43</th>
-                        <th className="px-3 py-2 text-left text-[#9CA3AF] font-semibold uppercase tracking-wide text-[10px]">Txn</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td colSpan={7} className="px-3 py-8 text-center" style={{ color: AX.muted }}>
-                          <p className="text-sm mb-2">Transaction data not yet available for Monad tokens</p>
-                          <p className="text-xs">This feature will be available soon</p>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+              <div className="flex-1 min-h-0" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: '2rem' }}>
+                {selectedTab === "Transactions" ? (
+                  <MonadTrades
+                    tokenAddress={tokenMintForLive}
+                    cachedTrades={(tokenData as any)?.recent_trades || []}
+                  />
+                ) : selectedTab === "Top Traders" ? (
+                  <MonadTopTradersTable 
+                    tokenAddress={contractAddress as string}
+                    enabled={true}
+                  />
+                ) : selectedTab === "Holders" ? (
+                  <MonadHoldersTable 
+                    tokenAddress={contractAddress as string}
+                    enabled={true}
+                  />
+                ) : (
+                  <MonadDevTokensTable 
+                    tokenAddress={contractAddress as string}
+                    enabled={true}
+                  />
+                )}
               </div>
             </div>
           </div>

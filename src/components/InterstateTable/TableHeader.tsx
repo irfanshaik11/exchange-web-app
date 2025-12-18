@@ -2,9 +2,13 @@ interface TableHeaderProps {
   sortKey: string;
   sortDirection: 'asc' | 'desc';
   onSort: (key: string) => void;
+  isTrending?: boolean; // New prop to indicate if showing trending/Birdeye data
 }
 
-export default function TableHeader({ sortKey, sortDirection, onSort }: TableHeaderProps) {
+export default function TableHeader({ sortKey, sortDirection, onSort, isTrending = false }: TableHeaderProps) {
+  // Use "Rank" instead of "TXNS" for trending filter
+  const txnsLabel = isTrending ? 'Rank' : 'TXNS';
+  
   return (
     <thead>
       <tr className="bg-neutral-800/80">
@@ -21,7 +25,7 @@ export default function TableHeader({ sortKey, sortDirection, onSort }: TableHea
           Volume {sortKey === 'volume' && (sortDirection === 'asc' ? '▲' : '▼')}
         </th>
         <th className="flex items-center gap-1 px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase cursor-pointer" onClick={() => onSort('txns')}>
-          TXNS {sortKey === 'txns' && (sortDirection === 'asc' ? '▲' : '▼')}
+          {txnsLabel} {sortKey === 'txns' && (sortDirection === 'asc' ? '▲' : '▼')}
         </th>
         <th className="px-3 py-4 text-left text-xs font-bold tracking-wide text-neutral-200 uppercase">
           Audit Log

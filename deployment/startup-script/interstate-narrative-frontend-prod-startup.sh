@@ -18,6 +18,7 @@ set -euo pipefail
 PROJECT_DIR="/home/ubuntu/exchange-web-app"
 BRANCH="prod"
 APP_NAME="nextjs-app"
+ENV_SOURCE="$PROJECT_DIR/deployment/env/.env.production"
 ENV_FILE="$PROJECT_DIR/.env"
 LOG_DIR="/home/ubuntu/logs"
 TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
@@ -58,13 +59,16 @@ git fetch origin || DEPLOY_STATUS="failure"
 git reset --hard origin/"$BRANCH" || DEPLOY_STATUS="failure"
 
 ########################################
-# Fetch .env from GCS bucket
+# Copy .env from Repo (instead of GCS)
 ########################################
-echo "📥 Fetching .env file from GCS bucket..."
-gsutil cp gs://github-deployment/prod/env-file/frontend/.env "$PROJECT_DIR/.env" || {
-  echo "⚠️ Failed to copy .env file from GCS bucket"
-  DEPLOY_STATUS="failure"
-}
+echo "📥 Copying .env.production from repo..."
+if [ -f "$ENV_SOURCE" ]; then
+    cp "$ENV_SOURCE" "$ENV_FILE"
+    echo "✅ .env copied successfully"
+else
+    echo "❌ ERROR: .env.production not found at $ENV_SOURCE"
+    DEPLOY_STATUS="failure"
+fi
 
 ########################################
 # Install dependencies
@@ -104,10 +108,30 @@ pm2 save || true
 pm2 status || true
 
 ########################################
+# Collect Deployment Info
+########################################
+HOSTNAME=$(hostname)
+COMMIT_ID=$(git rev-parse --short HEAD)
+COMMIT_AUTHOR=$(git log -1 --format='%an <%ae>')
+COMMIT_MESSAGE=$(git log -1 --format='%s')
+
+# Fetch GCP region from metadata service
+ZONE=$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone 2>/dev/null | awk -F'/' '{print $NF}')
+if [ -n "$ZONE" ]; then
+  # Extract region from zone (e.g., us-east1-b -> us-east1)
+  REGION=$(echo "$ZONE" | sed 's/-[a-z]$//')
+else
+  REGION="unknown"
+fi
+
+########################################
 # Final Status
 ########################################
 echo "🚀 Deployment completed at $(date)"
 echo "📄 Logs saved at: $LOG_FILE"
+echo "🖥️  Hostname: $HOSTNAME"
+echo "🌍 Region: $REGION"
+echo "📌 Commit: $COMMIT_ID by $COMMIT_AUTHOR"
 
 if [ "$DEPLOY_STATUS" = "success" ]; then
   echo "✅ Frontend deployment successful!"
@@ -133,8 +157,13 @@ if [ -n "$SLACK_WEBHOOK_URL" ]; then
         {
           \"color\": \"$COLOR\",
           \"fields\": [
-            { \"title\": \"Project\", \"value\": \"$APP_NAME\", \"short\": true },
+            { \"title\": \"Instance\", \"value\": \"$HOSTNAME\", \"short\": true },
+            { \"title\": \"Region\", \"value\": \"$REGION\", \"short\": true },
             { \"title\": \"Branch\", \"value\": \"$BRANCH\", \"short\": true },
+            { \"title\": \"Commit ID\", \"value\": \"$COMMIT_ID\", \"short\": true },
+            { \"title\": \"Commit Author\", \"value\": \"$COMMIT_AUTHOR\", \"short\": true },
+            { \"title\": \"Commit Message\", \"value\": \"$COMMIT_MESSAGE\", \"short\": false },
+            { \"title\": \"Project\", \"value\": \"$APP_NAME\", \"short\": true },
             { \"title\": \"Log File\", \"value\": \"$LOG_FILE\", \"short\": false }
           ]
         }

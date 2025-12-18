@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FaTimes } from 'react-icons/fa';
-import DiscoverContent from './DiscoverContent';
+import DiscoverPopoutContent from './DiscoverPopoutContent';
 
 interface DiscoverPopupProps {
   isOpen: boolean;
@@ -298,8 +298,8 @@ const DiscoverPopup: React.FC<DiscoverPopupProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Content - Discover Page */}
-        <div className="flex-1 overflow-hidden min-h-0">
-          <DiscoverContent />
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <DiscoverPopoutContent />
         </div>
 
         {/* Resize Handle - Bottom Right Corner */}

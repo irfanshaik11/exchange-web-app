@@ -64,6 +64,7 @@ interface InterstateTableProps {
   quickBuyAmount?: number | string;
   skeletonRowCount?: number;
   isDiscoverPage?: boolean;
+  chain?: string; // 'sol' | 'monad' - chain identifier
 }
 
 interface HeaderConfig {
@@ -321,26 +322,43 @@ const TableHeader: React.FC<{
   sortDirection?: 'asc' | 'desc';
   onSort?: (key: string) => void;
   isDiscoverPage?: boolean;
-}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false }) => (
+  isTrending?: boolean; // New prop to indicate if showing trending/Birdeye data
+}> = ({ sortKey, sortDirection, onSort, isDiscoverPage = false, isTrending = false }) => (
   <thead>
     <tr style={{ backgroundColor: 'transparent', borderBottom: `1px solid ${AX.border}` }}>
-      {TABLE_HEADERS.map((header, idx) => (
-        <th
-          key={idx}
-          className={`${header.width} px-4 ${isDiscoverPage ? 'py-2' : 'py-4'} text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
-            header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
-          }`}
-          style={{ color: '#787a8d', fontWeight: '300' }}
-          onClick={header.key && onSort ? () => onSort(header.key!) : undefined}
-        >
-          {header.label}
-          {header.key && sortKey === header.key && (
-            <span className="ml-1">{sortDirection === 'asc' ? '▲' : '▼'}</span>
-          )}
-        </th>
-      ))}
+      {TABLE_HEADERS.map((header, idx) => {
+        // Use "Rank" instead of "TXNS" for trending filter
+        const label = (header.key === 'txns' && isTrending) ? 'Rank' : header.label;
+        return (
+          <th
+            key={idx}
+            className={`${header.width} px-4 ${isDiscoverPage ? 'py-2' : 'py-4'} text-${header.align} ${isDiscoverPage ? 'text-[10px]' : 'text-xs'} font-medium tracking-wide uppercase ${
+              header.key ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''
+            }`}
+            style={{ color: '#787a8d', fontWeight: '300' }}
+            onClick={header.key && onSort ? () => onSort(header.key!) : undefined}
+          >
+            {label}
+            {header.key && sortKey === header.key && (
+              <span className="ml-1">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+            )}
+          </th>
+        );
+      })}
     </tr>
   </thead>
+);
+
+// Monad Icon Component - uses Monad favicon
+const MonadIcon = ({ size = 16 }: { size?: number }) => (
+  <img
+    src="https://monad.xyz/favicon.ico"
+    alt="Monad"
+    width={size}
+    height={size}
+    style={{ width: size, height: size, objectFit: 'contain' }}
+    className="rounded-full"
+  />
 );
 
 // Token Avatar Component
@@ -349,7 +367,8 @@ const TokenAvatar: React.FC<{
   meta: any;
   loading: boolean;
   showInitial: boolean;
-}> = ({ token, meta, loading, showInitial }) => {
+  chain?: string; // 'sol' | 'monad' - chain identifier
+}> = ({ token, meta, loading, showInitial, chain = 'sol' }) => {
   const initial = token.name?.charAt(0)?.toUpperCase() || '?';
   
   // Protocol color mapping - matches PulseTable
@@ -441,15 +460,25 @@ const TokenAvatar: React.FC<{
         )}
       </div>
       
-      {/* Solana logo bubble - positioned at bottom right */}
-      <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
-           style={{ 
-             width: 14, 
-             height: 14,
-             padding: '1px'
-           }}>
-        <SolanaIcon size={12} />
-      </div>
+      {/* Chain logo bubble - positioned at bottom right (Solana or Monad) */}
+      {chain === 'monad' ? (
+        <div className="absolute bottom-0 right-0 flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
+             style={{ 
+               width: 20, 
+               height: 20
+             }}>
+          <MonadIcon size={20} />
+        </div>
+      ) : (
+        <div className="absolute bottom-0 right-0 bg-white rounded-full flex items-center justify-center transform translate-x-1/2 translate-y-1/2 z-10"
+             style={{ 
+               width: 14, 
+               height: 14,
+               padding: '1px'
+             }}>
+          <SolanaIcon size={12} />
+        </div>
+      )}
     </div>
   );
 };
@@ -460,7 +489,8 @@ const TokenInfo: React.FC<{
   i: number; 
   sortedRows: InterstateTableRow[];
   isDiscoverPage?: boolean;
-}> = ({ token, i, sortedRows, isDiscoverPage = false }) => {
+  chain?: string; // 'sol' | 'monad' - chain identifier
+}> = ({ token, i, sortedRows, isDiscoverPage = false, chain = 'sol' }) => {
   const { meta, loading, showInitial } = useTokenMetadata(token.uri);
   const timeLabel = TIME_LABELS[i % TIME_LABELS.length];
   const [showXPreview, setShowXPreview] = useState(false);
@@ -565,7 +595,7 @@ const TokenInfo: React.FC<{
   const tooltipContent = (
     <div className="p-3 min-w-[240px]">
       <div className="mb-3 flex justify-center">
-        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} />
+        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
       </div>
       <div className="mb-3 text-center">
         <div className="text-lg font-bold mb-1" style={{ color: AX.text }}>{token.name}</div>
@@ -625,7 +655,7 @@ const TokenInfo: React.FC<{
         label={tooltipContent}
         className="bg-neutral-900/100"
       >
-        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} />
+        <TokenAvatar token={token} meta={meta} loading={loading} showInitial={showInitial} chain={chain} />
       </InterstateTooltip>
       
       <div className="flex flex-col min-w-0 flex-1">
@@ -1073,9 +1103,48 @@ const TxnsCell: React.FC<{
   selectedTimeframe: string;
   isDiscoverPage?: boolean;
 }> = ({ token, selectedTimeframe, isDiscoverPage = false }) => {
-  const { total, buys, sells } = getTxns(token, selectedTimeframe);
-
+  // Check if this is a Birdeye token (has rank)
+  const birdeyeRank = (token as any).birdeye_rank || (token as any).rank;
+  const volumeChangePercent = (token as any).volume24hChangePercent;
+  
   const monospaceFont = 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace';
+  
+  // For Birdeye tokens, show rank and volume change % instead of transaction counts
+  if (birdeyeRank && birdeyeRank > 0) {
+    const formatPercentChange = (val: number | null | undefined): string => {
+      if (val == null) return '';
+      const sign = val > 0 ? '+' : '';
+      return sign + formatSmartNumber(val);
+    };
+    
+    return (
+      <div className="text-right">
+        <div className={`text-sm font-medium mb-1 ${isDiscoverPage ? 'number-font' : ''}`} style={{ 
+          color: AX.text,
+          ...(isDiscoverPage ? {} : {
+            fontFamily: monospaceFont,
+            fontWeight: '400'
+          })
+        }}>
+          #{birdeyeRank}
+        </div>
+        {volumeChangePercent != null && (
+          <div className={`text-xs font-medium ${isDiscoverPage ? 'number-font' : ''}`} style={{
+            color: volumeChangePercent >= 0 ? (isDiscoverPage ? '#85d99f' : '#10b981') : (isDiscoverPage ? '#f26681' : '#ef4444'),
+            ...(isDiscoverPage ? {} : {
+              fontFamily: monospaceFont,
+              fontWeight: '400'
+            })
+          }}>
+            {formatPercentChange(volumeChangePercent)}% vol
+          </div>
+        )}
+      </div>
+    );
+  }
+  
+  // Default: show transaction counts for non-Birdeye tokens
+  const { total, buys, sells } = getTxns(token, selectedTimeframe);
   
   // For discover page (xStocks), show "0" instead of "-" when value is 0
   const formatTxnValue = (value: number) => {
@@ -1159,6 +1228,7 @@ const TableRow: React.FC<{
   sortedRows: InterstateTableRow[];
   onClick: () => void;
   isDiscoverPage?: boolean;
+  chain?: string; // 'sol' | 'monad' - chain identifier
 }> = React.memo(({ 
   token, 
   i, 
@@ -1168,7 +1238,8 @@ const TableRow: React.FC<{
   animationState, 
   sortedRows, 
   onClick,
-  isDiscoverPage = false
+  isDiscoverPage = false,
+  chain = 'sol'
 }) => {
   const handleQuickBuy = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1219,7 +1290,7 @@ const TableRow: React.FC<{
       onClick={onClick}
     >
       <td className="w-80 px-4 py-4 align-middle">
-        <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} />
+        <TokenInfo token={token} i={i} sortedRows={sortedRows} isDiscoverPage={isDiscoverPage} chain={chain} />
       </td>
       
       <td className="w-32 px-4 py-4 align-middle">
@@ -1306,7 +1377,7 @@ const TableRow: React.FC<{
             }}
           >
             <HiLightningBolt size={14} style={{ color: '#85d99f' }} />
-            <span style={{ color: '#85d99f' }}>{quickBuyAmount} SOL</span>
+            <span style={{ color: '#85d99f' }}>{quickBuyAmount} {chain === 'monad' ? 'MON' : 'SOL'}</span>
           </button>
         ) : (
           <InterstateButton
@@ -1315,7 +1386,7 @@ const TableRow: React.FC<{
             className="!px-3 !py-2 text-xs font-medium w-full"
             onClick={handleQuickBuy}
           >
-            Buy {quickBuyAmount} SOL
+            Buy {quickBuyAmount} {chain === 'monad' ? 'MON' : 'SOL'}
           </InterstateButton>
         )}
       </td>
@@ -1335,7 +1406,8 @@ export default function InterstateTable({
   selectedTimeframe, 
   quickBuyAmount = 0.44, 
   skeletonRowCount = 6,
-  isDiscoverPage: isDiscoverPageProp
+  isDiscoverPage: isDiscoverPageProp,
+  chain = 'sol'
 }: InterstateTableProps) {
   const router = useRouter();
   const { filter } = useFilter();
@@ -1414,6 +1486,12 @@ export default function InterstateTable({
 
   const isDiscoverPage = isDiscoverPageProp !== undefined ? isDiscoverPageProp : router.pathname === '/discover';
   
+  // Check if we're showing trending/Birdeye data (any token has birdeye_rank)
+  const isTrending = rows.length > 0 && rows.some(({ token }) => {
+    const birdeyeRank = (token as any).birdeye_rank || (token as any).rank;
+    return birdeyeRank && birdeyeRank > 0;
+  });
+  
   return (
     <div className="overflow-x-auto shadow-lg" style={{ 
       backgroundColor: isDiscoverPage ? '#111214' : 'rgba(30, 31, 38, 0.3)', 
@@ -1469,6 +1547,7 @@ export default function InterstateTable({
           sortDirection={sortDirection} 
           onSort={setSort}
           isDiscoverPage={isDiscoverPage}
+          isTrending={isTrending}
         />
         
         <tbody>
@@ -1509,10 +1588,28 @@ export default function InterstateTable({
                   // Continue with navigation even if backfill fails
                 }
 
-                // Navigate immediately with pair_address or mint - trade page will handle resolution
+                // Navigate with proper format based on chain
                 const address = token.pair_address || token.mint;
                 if (address) {
-                  router.push(`/trade/${address}`);
+                  // Check if this is a Monad token
+                  const isMonad = chain === 'monad';
+                  
+                  if (isMonad) {
+                    // Build Monad trade URL with query parameters
+                    const queryParams = new URLSearchParams();
+                    if (token.name) queryParams.set('_name', token.name);
+                    if (token.symbol) queryParams.set('_symbol', token.symbol);
+                    if (token.fully_diluted_value) queryParams.set('_mcap', token.fully_diluted_value.toString());
+                    if (token.uri || token.logo) queryParams.set('_image', token.uri || token.logo || '');
+                    queryParams.set('_mint', address);
+                    queryParams.set('chain', 'monad');
+                    
+                    const url = `/trade/monad/${address}?${queryParams.toString()}`;
+                    router.push(url);
+                  } else {
+                    // For Solana, use regular format
+                    router.push(`/trade/${address}`);
+                  }
                 }
               };
               
@@ -1528,6 +1625,7 @@ export default function InterstateTable({
                   sortedRows={sortedRows}
                   onClick={handleTokenClick}
                   isDiscoverPage={isDiscoverPage}
+                  chain={chain}
                 />
               );
             })

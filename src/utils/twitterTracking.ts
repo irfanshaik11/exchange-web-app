@@ -8,9 +8,9 @@ import { env } from '../env';
 // Get wallet tracker backend URL
 const getWalletTrackerUrl = () => {
   if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+    return process.env.NEXT_PUBLIC_WALLET_TRACKER_URL || '';
   }
-  return env.NEXT_PUBLIC_WALLET_TRACKER_URL || 'http://localhost:8081';
+  return env.NEXT_PUBLIC_WALLET_TRACKER_URL || '';
 };
 
 const WALLET_TRACKER_API_URL = getWalletTrackerUrl();
@@ -53,10 +53,11 @@ export interface Tweet {
 
 /**
  * Add a Twitter account to track
+ * SECURITY FIX: Now requires authentication token - ownerId parameter is ignored by backend
  */
 export async function addTrackedTwitterAccount(
   username: string,
-  ownerId?: string | null
+  authToken: string
 ): Promise<TwitterAccountDb> {
   try {
     // First, validate the username exists on Twitter
@@ -67,12 +68,17 @@ export async function addTrackedTwitterAccount(
     }
 
     // Add to backend (only username)
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    };
+    
     const response = await fetch(`${WALLET_TRACKER_API_URL}/api/twitter`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         username: userInfo.username, // Use normalized username from Twitter
-        userId: ownerId || undefined,
+        // SECURITY: ownerId is no longer sent - backend uses authenticated user from JWT token
       }),
     });
 
@@ -92,18 +98,21 @@ export async function addTrackedTwitterAccount(
 
 /**
  * Remove a tracked Twitter account
+ * SECURITY FIX: Now requires authentication token - ownerId parameter is ignored by backend
  */
 export async function removeTrackedTwitterAccount(
   username: string,
-  ownerId?: string | null
+  authToken: string
 ): Promise<void> {
   try {
-    const url = ownerId
-      ? `${WALLET_TRACKER_API_URL}/api/twitter/${encodeURIComponent(username)}?userId=${encodeURIComponent(ownerId)}`
-      : `${WALLET_TRACKER_API_URL}/api/twitter/${encodeURIComponent(username)}`;
+    const url = `${WALLET_TRACKER_API_URL}/api/twitter/${encodeURIComponent(username)}`;
+    const headers: HeadersInit = {
+      'Authorization': `Bearer ${authToken}`
+    };
 
     const response = await fetch(url, {
       method: 'DELETE',
+      headers
     });
 
     if (!response.ok) {
@@ -119,14 +128,16 @@ export async function removeTrackedTwitterAccount(
 
 /**
  * Get all tracked Twitter accounts (from database)
+ * SECURITY FIX: Now requires authentication token - ownerId parameter is ignored by backend
  */
-export async function getTrackedTwitterAccountsDb(ownerId?: string | null): Promise<TwitterAccountDb[]> {
+export async function getTrackedTwitterAccountsDb(authToken: string): Promise<TwitterAccountDb[]> {
   try {
-    const url = ownerId
-      ? `${WALLET_TRACKER_API_URL}/api/twitter?userId=${encodeURIComponent(ownerId)}`
-      : `${WALLET_TRACKER_API_URL}/api/twitter`;
+    const url = `${WALLET_TRACKER_API_URL}/api/twitter`;
+    const headers: HeadersInit = {
+      'Authorization': `Bearer ${authToken}`
+    };
 
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -144,11 +155,12 @@ export async function getTrackedTwitterAccountsDb(ownerId?: string | null): Prom
 
 /**
  * Get all tracked Twitter accounts with enriched data from Twitter API
+ * SECURITY FIX: Now requires authentication token - ownerId parameter is ignored by backend
  */
-export async function getTrackedTwitterAccounts(ownerId?: string | null): Promise<TwitterAccount[]> {
+export async function getTrackedTwitterAccounts(authToken: string): Promise<TwitterAccount[]> {
   try {
     // Get stored accounts (just usernames)
-    const dbAccounts = await getTrackedTwitterAccountsDb(ownerId);
+    const dbAccounts = await getTrackedTwitterAccountsDb(authToken);
     
     if (dbAccounts.length === 0) {
       return [];

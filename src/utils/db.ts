@@ -102,7 +102,7 @@ export type Token = {
 /**
  * Formats very small prices with subscript notation for leading zeros.
  * Examples:
- *   0.00035268 => "0.0₃52268"
+ *   0.00035268 => "0.0₃52"
  *   0.00000012 => "0.0₆12"
  *   0.123456   => "0.123"
  *   0.5        => "0.5"
@@ -152,8 +152,8 @@ export function formatSmallPrice(val: string | number | null | undefined): strin
   const [, leadingZeros, significantDigits] = match;
   const zeroCount = leadingZeros.length;
 
-  // Format significant digits (take first 6-7 digits)
-  const formattedDigits = significantDigits.slice(0, 6);
+  // Format significant digits (take first 2 digits)
+  const formattedDigits = significantDigits.slice(0, 2);
   
   // Convert zero count to subscript
   const subscript = zeroCount.toString().split('').map(d => 

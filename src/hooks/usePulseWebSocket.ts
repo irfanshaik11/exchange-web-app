@@ -64,9 +64,13 @@ export function usePulseWebSocket(
     onPriceUpdate,
   } = options;
 
+  // Extract custom url from options
+  const { url: customUrl } = options;
+
   // Build WebSocket URL with query parameters for filtering
   const buildWebSocketUrl = () => {
-    const baseUrl = `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/stream`;
+    // Use custom URL if provided, otherwise fall back to default
+    const baseUrl = customUrl || `${env.NEXT_PUBLIC_WEBSOCKET_URL.replace(/^http/, 'ws')}/v1/stream`;
     const params = new URLSearchParams();
     if (channel) params.append('channel', channel);
 
@@ -80,6 +84,10 @@ export function usePulseWebSocket(
     }
 
     const queryString = params.toString();
+    // If custom URL already includes query params, append with &, otherwise with ?
+    if (customUrl && queryString) {
+      return customUrl.includes('?') ? `${baseUrl}&${queryString}` : `${baseUrl}?${queryString}`;
+    }
     return queryString ? `${baseUrl}?${queryString}` : baseUrl;
   };
 
@@ -166,7 +174,12 @@ export function usePulseWebSocket(
               const message: WebSocketMessage = JSON.parse(msgStr);
 
               if (message.type === 'new_token' && message.data && !Array.isArray(message.data)) {
-                const token = message.data as PulseToken;
+                // Transform backend response: map 'address' to 'mint' for frontend compatibility
+                const rawToken = message.data as any;
+                const token: PulseToken = {
+                  ...rawToken,
+                  mint: rawToken.address || rawToken.mint,  // Backend uses 'address', frontend expects 'mint'
+                };
 
                 // Use flushSync to combine callback + state update in one synchronous render
                 // This ensures tokens appear instantly without any delay
@@ -188,7 +201,12 @@ export function usePulseWebSocket(
                   });
                 });
               } else if (message.type === 'final_stretch_token' && message.data && !Array.isArray(message.data)) {
-                const token = message.data as PulseToken;
+                // Transform backend response: map 'address' to 'mint' for frontend compatibility
+                const rawToken = message.data as any;
+                const token: PulseToken = {
+                  ...rawToken,
+                  mint: rawToken.address || rawToken.mint,  // Backend uses 'address', frontend expects 'mint'
+                };
 
                 flushSync(() => {
                   onFinalStretchTokenRef.current?.(token);
@@ -205,7 +223,12 @@ export function usePulseWebSocket(
                   });
                 });
               } else if (message.type === 'migrated_token' && message.data && !Array.isArray(message.data)) {
-                const token = message.data as PulseToken;
+                // Transform backend response: map 'address' to 'mint' for frontend compatibility
+                const rawToken = message.data as any;
+                const token: PulseToken = {
+                  ...rawToken,
+                  mint: rawToken.address || rawToken.mint,  // Backend uses 'address', frontend expects 'mint'
+                };
 
                 flushSync(() => {
                   onMigratedTokenRef.current?.(token);
@@ -224,7 +247,12 @@ export function usePulseWebSocket(
               } else if (message.type === 'price_update' && message.data) {
                 // Price updates can be batched, so don't use flushSync (less critical)
                 if (onPriceUpdateRef.current) {
-                  const updates = Array.isArray(message.data) ? message.data : [message.data];
+                  const rawUpdates = Array.isArray(message.data) ? message.data : [message.data];
+                  // Transform backend response: map 'address' to 'mint' for frontend compatibility
+                  const updates = rawUpdates.map((u: any) => ({
+                    ...u,
+                    mint: u.address || u.mint,  // Backend uses 'address', frontend expects 'mint'
+                  }));
                   onPriceUpdateRef.current(updates);
                 }
               }

@@ -9,17 +9,30 @@ import {
   FaChevronRight,
   FaBell,
   FaChevronDown,
+  FaSync,
 } from "react-icons/fa";
+import { HiLightningBolt } from "react-icons/hi";
 import { IoShieldCheckmarkOutline } from "react-icons/io5";
 import { useUser } from "./UserContext";
+import { useSolPrice } from "./SolPriceContext";
+import { useWatchlist } from "./WatchlistContext";
+import { useQuickBuy } from "./QuickBuyContext";
+import { formatSmartNumber } from "../utils/db";
+import type { Token } from "../utils/db";
+import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
+import { tradeMonadBuy } from "~/utils/api";
+import { extractTokenImage } from "~/utils/images";
+import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
+import { FaCheckCircle } from "react-icons/fa";
 import dynamic from "next/dynamic";
 import InterstateButton from "./InterstateButton";
 import { FiBarChart, FiChevronDown, FiStar } from "react-icons/fi";
 import SearchModal from "./SearchModal";
 import BlockchainSwitcher from "./BlockchainSwitcher";
 import UpdatesModal from "./UpdatesModal";
+import NotificationDropdown from "./NotificationDropdown";
 import type { Timeframe } from "../pages/index";
 import { CiBellOn, CiStar } from "react-icons/ci";
 
@@ -75,7 +88,7 @@ const navLinks = [
   { name: "Trackers", href: "/trackers" },
   // { name: "Perpetuals", href: "/construction" },
   // { name: "Yield", href: "/construction" },
-  { name: "Rewards", href: "/rewards" },
+  { name: "Referral", href: "/rewards" },
 ];
 
 interface HeaderProps {
@@ -146,8 +159,66 @@ export default function Header({
     refreshBalance,
     primaryWalletAddresses,
     chainBalances,
+    logout,
   } = useUser();
-  const currentChain = (router.query.chain as string) || "sol";
+  const currentChain = (router.query.chain as string) || "monad";
+  const { solPrice, monPrice } = useSolPrice();
+  const chainPrice = currentChain === 'monad' ? monPrice : solPrice;
+  const { watchlist, removeFromWatchlist } = useWatchlist();
+  const { presets, activePreset } = useQuickBuy();
+
+  // Watchlist ticker paging (max 8 tokens visible)
+  const WATCHLIST_TICKER_PAGE_SIZE = 8;
+  const [watchlistTickerPage, setWatchlistTickerPage] = useState(0);
+  const watchlistTickerTotalPages = Math.max(
+    1,
+    Math.ceil(watchlist.length / WATCHLIST_TICKER_PAGE_SIZE),
+  );
+  const watchlistTickerCanPrev = watchlistTickerPage > 0;
+  const watchlistTickerCanNext =
+    watchlistTickerPage < watchlistTickerTotalPages - 1;
+  const watchlistTickerVisible = watchlist.slice(
+    watchlistTickerPage * WATCHLIST_TICKER_PAGE_SIZE,
+    watchlistTickerPage * WATCHLIST_TICKER_PAGE_SIZE + WATCHLIST_TICKER_PAGE_SIZE,
+  );
+
+  // Clamp ticker page when watchlist size changes
+  useEffect(() => {
+    setWatchlistTickerPage((p) =>
+      Math.min(p, Math.max(0, watchlistTickerTotalPages - 1)),
+    );
+  }, [watchlistTickerTotalPages]);
+  
+  // Load quickBuyAmount from localStorage
+  const getQuickBuyAmount = (): number => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('quickBuyAmount');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+    }
+    return 0;
+  };
+  const [quickBuyAmount, setQuickBuyAmount] = useState(getQuickBuyAmount);
+  
+  // Keep quickBuyAmount in sync with localStorage changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setQuickBuyAmount(getQuickBuyAmount());
+    };
+    window.addEventListener('storage', handleStorageChange);
+    // Also check periodically for same-window localStorage updates
+    const interval = setInterval(handleStorageChange, 1000);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, []);
+  
+  const [hoveredWatchlistToken, setHoveredWatchlistToken] = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [depositInitialTab, setDepositInitialTab] = useState<
@@ -162,9 +233,25 @@ export default function Header({
   const [isFirstLogin, setIsFirstLogin] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
   const navScrollRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
+
+  // Manual balance refresh handler
+  const handleManualBalanceRefresh = async (e?: React.MouseEvent) => {
+    e?.stopPropagation(); // Prevent dropdown toggle
+    if (isRefreshingBalance) return;
+
+    setIsRefreshingBalance(true);
+    try {
+      await refreshBalance({ chain: currentChain, force: true });
+    } catch (error) {
+      console.error('Failed to refresh balance:', error);
+    } finally {
+      setIsRefreshingBalance(false);
+    }
+  };
 
   // State for clipboard token detection
   const [clipboardToken, setClipboardToken] = useState<{
@@ -182,8 +269,25 @@ export default function Header({
     bnb: "BNB",
     base: "BASE",
   };
-  const [chainBalance, setChainBalance] = useState<number>(
-    chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0),
+  
+  const chainLogos: Record<string, string> = {
+    sol: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+    monad: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+    eth: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+    bnb: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+    base: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png", // Fallback to Solana for now
+  };
+  
+  // Use chainBalances from UserContext as the single source of truth
+  // Derive chainBalance from chainBalances instead of maintaining separate state
+  const chainBalance = chainBalances[currentChain] ?? (currentChain === "sol" ? solBalance : 0);
+
+  const chainAwareHref = useCallback(
+    (href: string) => ({
+      pathname: href,
+      query: { ...router.query, chain: currentChain },
+    }),
+    [router.query, currentChain],
   );
   const formatBalance = (value: number, digits = 3) => {
     if (value === 0) return "0";
@@ -203,6 +307,8 @@ export default function Header({
       maximumFractionDigits: 2,
     });
 
+  // Refresh balance when primary wallet changes - no polling here
+  // UserContext handles periodic polling (30s), Header just triggers on wallet change
   useEffect(() => {
     const address =
       currentChain === "sol"
@@ -210,27 +316,13 @@ export default function Header({
         : primaryWalletAddresses.ethereum || null;
 
     if (!address) {
-      if (currentChain === "sol" && user?.publicKey) {
-        refreshBalance({ chain: "sol", address: user.publicKey }).then((res) => {
-          if (res?.balance !== undefined) {
-            setChainBalance(res.balance);
-          }
-        });
-      } else {
-        setChainBalance(0);
-      }
       return;
     }
 
-    let cancelled = false;
-    refreshBalance({ chain: currentChain, address }).then((res) => {
-      if (!cancelled && res?.balance !== undefined) {
-        setChainBalance(res.balance);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+    // Only refresh when primary wallet address changes (force refresh to bypass cooldown)
+    // This ensures Header updates instantly when primary wallet is changed
+    // No polling needed - UserContext handles that at 30s intervals
+    refreshBalance({ chain: currentChain, address, force: true });
   }, [
     currentChain,
     primaryWalletAddresses.solana,
@@ -345,6 +437,7 @@ export default function Header({
     return () => clearInterval(interval);
   }, [checkClipboard]);
 
+  
   useEffect(() => {
     if (typeof document === "undefined") return;
 
@@ -445,6 +538,235 @@ export default function Header({
         });
       }
     }
+  };
+
+  // Helper function to get Monad launchpad from token
+  const getMonadLaunchpad = (token: Token): 'nadfun' | 'flapsh-simple' | 'flapsh-devs' => {
+    const protocol = (token as any)?.launchpad_protocol?.toLowerCase() || '';
+    
+    if (protocol.includes('nad.fun') || protocol.includes('nadfun')) {
+      return 'nadfun';
+    } else if (protocol.includes('flap.sh') || protocol.includes('flapsh')) {
+      if (protocol.includes('dev')) {
+        return 'flapsh-devs';
+      }
+      return 'flapsh-simple';
+    }
+    
+    return 'nadfun';
+  };
+
+  // Helper function to format user-friendly error messages
+  const formatMonadError = (error: string | undefined | null): string => {
+    if (!error) return "Trade failed. Please try again.";
+    
+    const errorLower = error.toLowerCase();
+    
+    if (errorLower.includes('err_bonding_curve_library_invalid_inputs') || 
+        errorLower.includes('bonding_curve_library_invalid_inputs')) {
+      return "This token has no liquidity or has graduated to DEX. Try a different token.";
+    }
+    
+    if (errorLower.includes('insufficient liquidity') || 
+        errorLower.includes('expected output is 0') ||
+        errorLower.includes('no liquidity')) {
+      return "Insufficient liquidity. This token may not be available for trading.";
+    }
+    
+    if (errorLower.includes('token does not exist') || 
+        errorLower.includes('token may not exist')) {
+      return "Token not found. Please check the token address.";
+    }
+    
+    if (errorLower.includes('token has graduated') || 
+        errorLower.includes('graduated to dex')) {
+      return "This token has graduated to DEX. Trading on bonding curve is no longer available.";
+    }
+    
+    if (errorLower.includes('insufficient balance') || 
+        errorLower.includes('missing')) {
+      return "Insufficient balance. Please add more MON to your wallet.";
+    }
+    
+    if (errorLower.includes('locked') || 
+        errorLower.includes('cannot be traded')) {
+      return "This token is locked and cannot be traded.";
+    }
+    
+    if (errorLower.includes('execution reverted') || 
+        errorLower.includes('revert')) {
+      return "Transaction failed. The token may not be available or there may be insufficient liquidity.";
+    }
+    
+    if (error.length < 100 && !error.includes('0x') && !error.includes('data:')) {
+      return error;
+    }
+    
+    return "Trade failed. Please try again.";
+  };
+
+  // Handler for watchlist ticker quick buy
+  const handleWatchlistQuickBuy = async (token: Token) => {
+    // Validation checks with user feedback
+    if (!user?.bearerToken || !user?.id) {
+      toast.error("Please log in to trade", {
+        duration: 3000,
+        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+      });
+      return;
+    }
+    
+    if (!quickBuyAmount || quickBuyAmount <= 0) {
+      const currency = currentChain === 'monad' ? 'MON' : 'SOL';
+      toast.error(`Set a buy amount first (use the preset buttons)`, {
+        duration: 3000,
+        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+      });
+      return;
+    }
+    
+    // For Monad chain, use Monad-specific quick buy logic (same as MonadTable)
+    if (currentChain === 'monad') {
+      if (!token.mint) {
+        toast.error("Invalid token - missing mint address", {
+          duration: 3000,
+          style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+        });
+        return;
+      }
+
+      const preset = presets[activePreset];
+      const settings = (preset?.quickBuySettings || {}) as any;
+      const launchpad = getMonadLaunchpad(token);
+      const tokenAddress = token.mint;
+      const slippage = settings?.maxSlippage ? settings.maxSlippage * 100 : 15;
+      const gasPrice = settings?.gasPrice !== undefined && settings.gasPrice > 0 ? settings.gasPrice : undefined;
+
+      // Get token image and name
+      const tokenImage = token ? extractTokenImage(token as any) : null;
+      const tokenName = token?.name || token?.symbol || '';
+      
+      // Generate unique toast ID and fake fast time
+      const uniqueToastId = `header-quickbuy-${Date.now()}`;
+      const fakeTime = (Math.random() * 0.2 + 0.4).toFixed(2);
+      const startTime = Date.now();
+      const timerCap = 0.40 + Math.random() * 0.20;
+      let timerFinished = false;
+      
+      // Show initial loading toast with timer
+      toast.custom(
+        (t) => (
+          <div className="flex items-center gap-2 bg-[#1a1b1e] text-white border border-white/10 rounded-lg px-4 py-3">
+            <FaCheckCircle id={`check-${uniqueToastId}`} className="flex-shrink-0" size={16} style={{ color: '#31e3ac', display: 'none' }} />
+            {tokenImage && (
+              <img src={tokenImage} alt={tokenName} className="w-5 h-5 rounded-full object-cover flex-shrink-0" style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            )}
+            <span className="font-semibold text-sm" style={{ color: '#31e3ac' }}>Trade placed!</span>
+            <span id={`timer-${uniqueToastId}`} className="text-[#9CA3AF] text-xs ml-1">(0.00s)</span>
+            <span id={`link-${uniqueToastId}`} className="inline-flex items-center ml-1" style={{ display: 'none' }}>
+              <img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" className="w-4 h-4 rounded-full" style={{ cursor: 'default' }} />
+            </span>
+          </div>
+        ),
+        { id: uniqueToastId, duration: Infinity }
+      );
+      
+      // Start timer animation
+      const timerInterval = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        const displayTime = Math.min(elapsed, timerCap).toFixed(2);
+        const timerEl = document.getElementById(`timer-${uniqueToastId}`);
+        if (timerEl) {
+          timerEl.textContent = `(${displayTime}s)`;
+        }
+        
+        if (!timerFinished && elapsed >= timerCap) {
+          timerFinished = true;
+          const checkEl = document.getElementById(`check-${uniqueToastId}`);
+          if (checkEl) {
+            checkEl.style.display = 'block';
+          }
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            linkEl.style.display = 'inline-flex';
+          }
+        }
+      }, 50);
+
+      try {
+        const result = await tradeMonadBuy(
+          {
+            tokenAddress,
+            amountMON: quickBuyAmount,
+            launchpad,
+            slippage,
+            gasPrice,
+          },
+          user.bearerToken,
+        );
+
+        if (result.success && result.txHash) {
+          clearInterval(timerInterval);
+          const explorerUrl = `https://monadvision.com/tx/${result.txHash}`;
+          const linkEl = document.getElementById(`link-${uniqueToastId}`);
+          if (linkEl) {
+            linkEl.innerHTML = `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" class="hover:opacity-80 transition-opacity"><img src="https://pbs.twimg.com/profile_images/1749618187489206272/rDaFjEhN_400x400.jpg" alt="Monad" class="w-4 h-4 rounded-full" style="cursor: pointer;" /></a>`;
+          }
+          setTimeout(() => {
+            toast.dismiss(uniqueToastId);
+          }, 10000);
+          // Refresh balance immediately after successful buy (with small delay for on-chain confirmation)
+          setTimeout(() => {
+            refreshBalance({ chain: "monad", force: true }).catch((err) => {
+              console.warn('Failed to refresh balance:', err);
+            });
+          }, 1000);
+          broadcastMonadQuickTrade(tokenAddress, 'buy');
+          console.log('✅ Header Watchlist Quick Buy successful:', result);
+          return { success: true, txHash: result.txHash };
+        } else {
+          clearInterval(timerInterval);
+          const errorMsg = formatMonadError((result as any)?.error);
+          toast.error(errorMsg, { id: uniqueToastId, duration: 6000 });
+          return { success: false, error: errorMsg };
+        }
+      } catch (error: any) {
+        console.error('❌ Header Watchlist Quick Buy failed:', error);
+        clearInterval(timerInterval);
+        const errorMessage = formatMonadError(error?.message || error?.error);
+        toast.error(errorMessage, { id: uniqueToastId, duration: 6000 });
+        return { success: false, error: errorMessage };
+      }
+    }
+    
+    // For Solana chain, use enhanced trade handler
+    const tokenMint = (token as any).mint || '';
+    if (!tokenMint) {
+      toast.error("Token mint address not found", {
+        duration: 3000,
+        style: { background: "#1E1F26", color: "#E6E7EA", border: "1px solid #ff6b6b" },
+      });
+      return;
+    }
+    
+    const settings = presets[activePreset].quickBuySettings;
+    
+    await executeEnhancedTrade({
+      token,
+      amount: quickBuyAmount,
+      side: 'buy',
+      settings,
+      user: { bearerToken: user.bearerToken, id: user.id },
+      solBalance: 0, // Will be fetched by executeEnhancedTrade
+      solPriceUsd: 150,
+      refreshBalance,
+      onSuccess: (txHash, stats) => {
+        console.log('✅ Header Watchlist Quick Buy successful:', { txHash, stats });
+      },
+      onError: (error) => {
+        console.error('❌ Header Watchlist Quick Buy failed:', error);
+      },
+    });
   };
 
   // Toggle Search modal with Tab and '/' (outside of inputs)
@@ -642,7 +964,7 @@ export default function Header({
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden md:gap-3">
             <Link
-              href="/pulse"
+              href={chainAwareHref("/pulse")}
               className="flex flex-shrink-0 items-center text-xl tracking-tight select-none"
               style={{ color: AX.text }}
               title="Go to Trenches"
@@ -690,18 +1012,7 @@ export default function Header({
                   return (
                     <Link
                       key={link.name}
-                      href={link.href}
-                      onClick={(e) => {
-                        // Use router.push for client-side navigation with fallback
-                        router.push(link.href).catch((err: any) => {
-                          // Fallback to full page navigation if router.push fails
-                          console.error(
-                            "Router.push failed, using fallback:",
-                            err,
-                          );
-                          window.location.href = link.href;
-                        });
-                      }}
+                      href={chainAwareHref(link.href)}
                       className={`flex-shrink-0 rounded px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-all duration-300 ease-out sm:px-3 xl:px-4`}
                       style={{
                         color: isActive ? AX.mint : AX.text,
@@ -1000,85 +1311,18 @@ export default function Header({
               </button>
 
               {/* Notifications Panel */}
-              {notificationsOpen && (
-                <div
-                  className="fixed top-16 right-4 z-50 rounded-xl border shadow-2xl"
-                  style={{
-                    backgroundColor: "#1a1b20",
-                    borderColor: "#2A2B33",
-                    width: "280px",
-                    minWidth: "280px",
-                    maxWidth: "280px",
-                    maxHeight: "70vh",
-                  }}
-                >
-                  {/* Header */}
-                  <div
-                    className="flex items-center justify-between border-b p-4"
-                    style={{ borderColor: "#2A2B33" }}
-                  >
-                    <h3 className="text-sm font-semibold text-[#f0f5f5]">
-                      Notifications
-                    </h3>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => {
-                          // Clear all notifications logic here
-                          toast.success("All notifications cleared");
-                        }}
-                        className="text-sm text-neutral-400 transition-colors hover:text-[#f0f5f5]"
-                      >
-                        Clear All
-                      </button>
-                      <button
-                        onClick={() => setNotificationsOpen(false)}
-                        className="text-neutral-400 transition-colors hover:text-white"
-                      >
-                        <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path d="M18 6L6 18M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div
-                    className="flex flex-col items-center justify-center p-8"
-                    style={{ minHeight: "300px" }}
-                  >
-                    <div className="mb-4 opacity-50">
-                      <svg
-                        width="80"
-                        height="80"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                      </svg>
-                    </div>
-                    <p className="text-base text-neutral-400">No Data</p>
-                  </div>
-                </div>
-              )}
+              <NotificationDropdown
+                open={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+              />
             </div>
-
             {/* User profile/login - visible on all screens */}
             {user && !userLoading ? (
-              <div ref={profileMenuRef} className="relative">
+              <div ref={profileMenuRef} className="relative z-[1000000]">
                 {/* Combined Balance + Username Button */}
                 <button
                   onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-                  className="group/account flex h-10 cursor-pointer flex-row items-center justify-center rounded-3xl border transition-all duration-300 ease-out lg:gap-2 px-1"
+                  className="group/account flex h-10 cursor-pointer flex-row items-center justify-center rounded-3xl border px-1 transition-all duration-300 ease-out lg:gap-2"
                   style={{
                     borderColor: AX.border,
                     color: AX.text,
@@ -1091,29 +1335,44 @@ export default function Header({
                   }}
                   title="Click to view account & wallet"
                 >
-                  <div
-                    className="hidden h-8 w-8 items-center justify-center rounded-[125px] bg-emerald-400 text-black text-xs font-bold select-none sm:flex"
-                  >
+                  <div className="hidden h-8 w-8 items-center justify-center rounded-[125px] bg-emerald-400 text-xs font-bold text-black select-none sm:flex">
                     {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                   </div>
-                    <div className="flex flex-col text-left items-left gap-0">
-                    <div className="text-sm text-white">
-                      {formatBalance(chainBalance)} {chainSymbols[currentChain] ?? "SOL"}
-                    </div> 
+                  <div className="items-left flex flex-col gap-0 text-left">
+                    <div className="flex items-center gap-1 text-sm text-white">
+                      <span>
+                        {formatBalance(chainBalance)}{" "}
+                        {chainSymbols[currentChain] ?? "SOL"}
+                      </span>
+                      <button
+                        onClick={handleManualBalanceRefresh}
+                        className="p-0.5 rounded-full hover:bg-white/10 transition-colors"
+                        title="Refresh balance"
+                      >
+                        <FaSync
+                          size={10}
+                          className={`text-neutral-500 hover:text-white ${isRefreshingBalance ? 'animate-spin' : ''}`}
+                        />
+                      </button>
+                    </div>
                     <div className="text-xs text-neutral-500">
-                      {user.name ? user.name : user.publicKey.slice(0,4).concat(user.name.slice(-4))}
+                      {user.name
+                        ? user.name
+                        : user.publicKey
+                            .slice(0, 4)
+                            .concat(user.name.slice(-4))}
                     </div>
                   </div>
-                  <FiChevronDown className="text-neutral-500 hover:text-neutral-200" size={16} />
+                  <FiChevronDown
+                    className="text-neutral-500 hover:text-neutral-200"
+                    size={16}
+                  />
                 </button>
-
                 {/* Combined Dropdown */}
                 {profileMenuOpen && (
                   <div
-                    className="absolute top-10 right-0 z-50 rounded-xl border shadow-2xl"
+                    className="absolute top-10 right-0 z-[1000001] rounded-xl border border-[#20232b] bg-[#0a0b10] shadow-2xl"
                     style={{
-                      backgroundColor: "#0a0b10",
-                      borderColor: "#20232b",
                       width: "280px",
                       minWidth: "280px",
                       maxWidth: "280px",
@@ -1143,27 +1402,34 @@ export default function Header({
 
                       {/* Total Value */}
                       <div className="mb-3">
-                      <div className="mb-1 text-xs text-neutral-400">
+                        <div className="mb-1 text-xs text-neutral-400">
                           Total Value
                         </div>
                         <div className="text-2xl font-bold text-white">
-                          ${formatCurrency(chainBalance * 100)}
+                          ${formatCurrency(chainBalance * chainPrice)}
                         </div>
                       </div>
 
                       {/* Balance Display */}
-                      <div
-                        className="mb-4 flex items-center justify-between rounded-lg p-2"
-                        style={{ backgroundColor: "#17191e" }}
-                      >
+                      <div className="mb-4 flex items-center justify-between rounded-lg bg-[#17191e] p-2">
                         <div className="flex items-center gap-2">
                           <img
-                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                            alt="SOL"
-                            className="h-4 w-4 rounded-md"
+                            src={chainLogos[currentChain] ?? chainLogos.monad}
+                            alt={chainSymbols[currentChain] ?? "MON"}
+                            className={
+                              currentChain === "monad"
+                                ? "h-10 w-8 rounded-md object-contain"
+                                : "h-4 w-4 rounded-md object-contain"
+                            }
+                            style={
+                              currentChain === "monad"
+                                ? { minWidth: "32px", minHeight: "40px" }
+                                : { minWidth: "16px", minHeight: "16px" }
+                            }
                           />
                           <span className="text-sm text-[#f0f5f5]">
-                            ≈ {formatBalance(chainBalance)} {chainSymbols[currentChain] ?? "SOL"}
+                            ≈ {formatBalance(chainBalance)}{" "}
+                            {chainSymbols[currentChain] ?? "MON"}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1181,9 +1447,18 @@ export default function Header({
                             />
                           </svg>
                           <img
-                            src="https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png"
-                            alt="SOL"
-                            className="h-4 w-4 rounded-md"
+                            src={chainLogos[currentChain] ?? chainLogos.monad}
+                            alt={chainSymbols[currentChain] ?? "MON"}
+                            className={
+                              currentChain === "monad"
+                                ? "h-10 w-8 rounded-md object-contain"
+                                : "h-4 w-4 rounded-md object-contain"
+                            }
+                            style={
+                              currentChain === "monad"
+                                ? { minWidth: "32px", minHeight: "40px" }
+                                : { minWidth: "16px", minHeight: "16px" }
+                            }
                           />
                           <span className="text-sm text-[#f0f5f5]">
                             {formatMultiDigitBalance(chainBalance)}
@@ -1244,12 +1519,7 @@ export default function Header({
                               setProfileMenuOpen(false);
                               handleConvertClick();
                             }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0f1012] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
                             onMouseEnter={(e) => {
                               e.currentTarget.style.backgroundColor = "#1A1B1F";
                             }}
@@ -1277,12 +1547,7 @@ export default function Header({
                               setProfileMenuOpen(false);
                               handleBuyClick();
                             }}
-                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
-                            style={{
-                              backgroundColor: "#0f1012",
-                              color: "#ffffff",
-                              border: "1px solid #2A2B33",
-                            }}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#2A2B33] bg-[#0f1012] px-3 py-2 text-sm font-medium text-[#ffffff] transition-all duration-200"
                             onMouseEnter={(e) => {
                               e.currentTarget.style.backgroundColor = "#1A1B1F";
                             }}
@@ -1307,45 +1572,6 @@ export default function Header({
                           </button>
                         </div>
 
-                        {/* Referral Button */}
-                        <button
-                          onClick={() => {
-                            setProfileMenuOpen(false);
-                            router.push("/rewards");
-                          }}
-                          className="mt-2 flex w-full items-center gap-2 rounded-lg border-t px-3 py-2 pt-3 text-sm font-medium transition-all duration-200"
-                          style={{
-                            backgroundColor: "transparent",
-                            color: AX.text,
-                            borderColor: "#20232b",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "rgba(24, 196, 140, 0.1)";
-                            e.currentTarget.style.color = AX.mint;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor =
-                              "transparent";
-                            e.currentTarget.style.color = AX.text;
-                          }}
-                        >
-                          <svg
-                            className="h-4 w-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                            />
-                          </svg>
-                          Referral
-                        </button>
-
                         {/* Feature Updates Button */}
                         <button
                           onClick={() => {
@@ -1353,9 +1579,8 @@ export default function Header({
                             setIsFirstLogin(false);
                             setShowUpdatesModal(true);
                           }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
                           style={{
-                            backgroundColor: "transparent",
                             color: AX.text,
                           }}
                           onMouseEnter={(e) => {
@@ -1389,22 +1614,10 @@ export default function Header({
                         <button
                           onClick={() => {
                             setProfileMenuOpen(false);
-                            if (typeof window !== "undefined") {
-                              document.cookie = "token=; Max-Age=0; path=/;";
-                            }
-                            if (
-                              typeof window !== "undefined" &&
-                              window.localStorage
-                            ) {
-                              window.localStorage.removeItem("token");
-                            }
-                            if (typeof window !== "undefined") {
-                              window.location.reload();
-                            }
+                            logout();
                           }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200"
+                          className="flex w-full items-center gap-2 rounded-lg bg-transparent px-3 py-2 text-sm font-medium transition-all duration-200"
                           style={{
-                            backgroundColor: "transparent",
                             color: "#ef4444",
                           }}
                           onMouseEnter={(e) => {
@@ -1439,11 +1652,9 @@ export default function Header({
             ) : (
               !userLoading && (
                 <button
-                  className="ml-0.5 flex-shrink-0 rounded-md px-2.5 py-1.5 text-sm font-medium transition-all duration-300 ease-out sm:ml-1 md:ml-1.5 md:px-3 lg:ml-2"
+                  className="ml-0.5 flex-shrink-0 rounded-md border-none px-2.5 py-1.5 text-sm font-medium text-black transition-all duration-300 ease-out sm:ml-1 md:ml-1.5 md:px-3 lg:ml-2"
                   style={{
                     backgroundColor: AX.mint,
-                    color: "#000000",
-                    border: "none",
                   }}
                   onClick={() => {
                     const event = new CustomEvent("open-login-modal");
@@ -1468,10 +1679,7 @@ export default function Header({
           </div>
         </div>
         {headerBarVisible && (
-          <div
-            className="flex items-center gap-2 px-3 py-0.5"
-            style={{ backgroundColor: "#06070b" }}
-          >
+          <div className="flex items-center gap-2 bg-[#06070b] px-3 py-0.5">
             {/* extra toolbar section */}
             <div className="group relative">
               <button
@@ -1531,6 +1739,7 @@ export default function Header({
               <button
                 className="relative cursor-pointer rounded p-0.5 transition-all duration-300 ease-out"
                 style={{ color: AX.muted }}
+                onClick={() => setWatchlistOpen(true)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor =
                     "rgba(24, 196, 140, 0.08)";
@@ -1579,6 +1788,152 @@ export default function Header({
               </div>
             </div>
 
+            {/* Divider before watchlist tokens */}
+            {watchlist.length > 0 && (
+              <div className="h-4 border-r" style={{ borderColor: AX.border }} />
+            )}
+
+            {/* "All" dropdown for watchlist filter */}
+            {watchlist.length > 0 && (
+              <div className="flex items-center">
+                <span className="text-xs font-medium" style={{ color: AX.text }}>
+                  All
+                </span>
+                <FaChevronDown size={8} className="ml-1" style={{ color: AX.muted }} />
+              </div>
+            )}
+
+            {/* Watchlist Tokens Ticker */}
+            {watchlistTickerTotalPages > 1 && (
+              <button
+                className="flex items-center justify-center transition-all duration-200"
+                style={{
+                  color: watchlistTickerCanPrev ? AX.muted : "rgba(199, 201, 209, 0.35)",
+                  opacity: watchlistTickerCanPrev ? 1 : 0.6,
+                  cursor: watchlistTickerCanPrev ? "pointer" : "not-allowed",
+                }}
+                disabled={!watchlistTickerCanPrev}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (watchlistTickerCanPrev) {
+                    setWatchlistTickerPage((p) => Math.max(0, p - 1));
+                  }
+                }}
+                title="Previous"
+              >
+                <FaChevronLeft size={12} />
+              </button>
+            )}
+
+            {watchlistTickerVisible.map((token) => {
+              const tokenKey = token.pair_address || (token as any).mint || token.symbol;
+              const tokenAddress = token.pair_address || (token as any).mint || '';
+              const price = (token as any).usd_price ?? (token as any).price ?? 0;
+              const priceChange = (token as any).price_percent_change_1h ?? (token as any).price_change_1h ?? 0;
+              const isHovered = hoveredWatchlistToken === tokenKey;
+              const rawImg = (token as any).uri || (token as any).image || (token as any).logo;
+              
+              return (
+                <div
+                  key={tokenKey}
+                  className="flex items-center gap-1.5 cursor-pointer transition-all duration-200"
+                  onMouseEnter={() => setHoveredWatchlistToken(tokenKey)}
+                  onMouseLeave={() => setHoveredWatchlistToken(null)}
+                  onClick={() => {
+                    if (tokenAddress) {
+                      router.push(`/trade/${tokenAddress}`);
+                    }
+                  }}
+                >
+                  {/* Token Image */}
+                  {rawImg && (
+                    <img
+                      src={rawImg}
+                      alt={token.symbol || ''}
+                      className="w-4 h-4 rounded-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  )}
+                  
+                  {/* Token Symbol */}
+                  <span className="text-xs font-medium" style={{ color: AX.text }}>
+                    {token.symbol}
+                  </span>
+                  
+                  {/* Price */}
+                  <span className="text-xs" style={{ color: AX.muted }}>
+                    ${price > 0 ? formatSmartNumber(price) : '0'}
+                  </span>
+                  
+                  {/* Price Change */}
+                  <span 
+                    className="text-xs font-medium"
+                    style={{ color: priceChange >= 0 ? '#85d99f' : '#f26681' }}
+                  >
+                    {priceChange >= 0 ? '+' : ''}{formatSmartNumber(Math.abs(priceChange))}%
+                  </span>
+                  
+                  {/* Quick Buy Button - shown on hover */}
+                  {isHovered && (
+                    <>
+                      <button
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-all duration-150"
+                        style={{
+                          backgroundColor: 'rgba(133, 217, 159, 0.15)',
+                          color: '#85d99f',
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleWatchlistQuickBuy(token);
+                        }}
+                      >
+                        <HiLightningBolt size={10} />
+                        <span>{quickBuyAmount} {currentChain === 'monad' ? 'MON' : 'SOL'}</span>
+                      </button>
+                      
+                      {/* Star icon to remove from watchlist */}
+                      <button
+                        className="p-0.5 transition-colors duration-150"
+                        style={{ color: '#f2c367' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromWatchlist(tokenAddress);
+                        }}
+                        title="Remove from watchlist"
+                      >
+                        <FaStar size={12} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+
+            {watchlistTickerTotalPages > 1 && (
+              <button
+                className="flex items-center justify-center transition-all duration-200"
+                style={{
+                  color: watchlistTickerCanNext ? AX.muted : "rgba(199, 201, 209, 0.35)",
+                  opacity: watchlistTickerCanNext ? 1 : 0.6,
+                  cursor: watchlistTickerCanNext ? "pointer" : "not-allowed",
+                }}
+                disabled={!watchlistTickerCanNext}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (watchlistTickerCanNext) {
+                    setWatchlistTickerPage((p) =>
+                      Math.min(watchlistTickerTotalPages - 1, p + 1),
+                    );
+                  }
+                }}
+                title="Next"
+              >
+                <FaChevronRight size={12} />
+              </button>
+            )}
+
             <div className="h-4 border-r" style={{ borderColor: AX.border }}>
               {" "}
             </div>
@@ -1604,17 +1959,56 @@ export default function Header({
         open={searchModalOpen}
         onClose={() => setSearchModalOpen(false)}
         selectedTimeframe={selectedTimeframe}
+        chain={currentChain}
         onSubmit={(q) => {
           const trimmed = q.trim();
           // If it's likely a token address navigate directly to trade page
           if (trimmed.length >= 10) {
-            router.push(`/trade/${trimmed}`);
+            // Check if it's a Monad address (starts with 0x)
+            const isMonadAddress =
+              trimmed.startsWith("0x") || trimmed.startsWith("0X");
+            // For Monad tokens, use the Monad trade page route
+            if (isMonadAddress) {
+              router.push(`/trade/monad/${trimmed}`);
+            } else {
+              // For Solana or other chains, use the regular trade page with chain query param
+              router.push({
+                pathname: `/trade/${trimmed}`,
+                query:
+                  currentChain && currentChain !== "sol"
+                    ? { chain: currentChain }
+                    : {},
+              });
+            }
             setSearch?.("");
             return;
           }
 
           // Otherwise treat as name search and stay on Discover
-          if (setSearch) setSearch(trimmed);
+          if (setSearch) {
+            setSearch(trimmed);
+            if (router.pathname.startsWith("/trade/")) {
+              router.push({
+                pathname: "/",
+                query: trimmed ? { search: trimmed } : {},
+              });
+              return;
+            }
+
+            const nextQuery = { ...router.query };
+            if (trimmed) {
+              nextQuery.search = trimmed;
+            } else {
+              delete nextQuery.search;
+            }
+            router.replace(
+              { pathname: router.pathname, query: nextQuery },
+              undefined,
+              { shallow: true },
+            );
+            return;
+          }
+
           if (
             router.pathname !== "/" &&
             !router.pathname.startsWith("/trade/")
@@ -1633,17 +2027,45 @@ export default function Header({
 
           // Skip routing updates for short queries (<3 chars)
           if (trimmed.length < 3) {
-            if (
+            if (setSearch) {
+              setSearch(trimmed);
+              if (!router.pathname.startsWith("/trade/")) {
+                const { search: _qSearch, ...restQuery } = router.query;
+                router.replace(
+                  { pathname: router.pathname, query: restQuery },
+                  undefined,
+                  { shallow: true },
+                );
+              }
+            } else if (
               router.pathname === "/" &&
               Object.keys(router.query).includes("search")
             ) {
               router.replace({ pathname: "/" }, undefined, { shallow: true });
             }
-            if (setSearch) setSearch(trimmed);
             return;
           }
 
           // Live updates for longer queries - only redirect to home if not on a trade page
+          if (setSearch) {
+            setSearch(trimmed);
+            if (router.pathname.startsWith("/trade/")) {
+              router.push(
+                { pathname: "/", query: { search: trimmed } },
+                undefined,
+                { shallow: true },
+              );
+            } else {
+              const nextQuery = { ...router.query, search: trimmed };
+              router.replace(
+                { pathname: router.pathname, query: nextQuery },
+                undefined,
+                { shallow: true },
+              );
+            }
+            return;
+          }
+
           if (
             router.pathname !== "/" &&
             !router.pathname.startsWith("/trade/")
@@ -1660,7 +2082,6 @@ export default function Header({
               { shallow: true },
             );
           }
-          if (setSearch) setSearch(trimmed);
         }}
       />
       {/* Updates Modal */}

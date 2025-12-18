@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { formatSmartNumber } from '~/utils/db';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
 import { getActivePositionsByUser } from '~/utils/functions';
 import type { PositionRow } from '~/utils/functions';
 import { useRouter } from 'next/router';
@@ -9,15 +10,14 @@ import { FaArrowUp, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
 import Image from 'next/image';
 import SellPopup from '../SellPopup';
+import { fetchChainTokenMetadata, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
+import { getProtocolBranding } from '~/utils/protocolBranding';
+import { usePositionPrices } from '~/hooks/usePositionPrices';
+import PositionDetailModal from './PositionDetailModal';
 
-interface TokenMetadata {
-  imageUrl?: string;
-  protocol?: string;
-  name?: string;
-  symbol?: string;
+type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
-  migrated_pool_address?: string; // For graduated tokens (Meteora DBC -> permanent pool)
-}
+};
 
 interface PositionsProps {
   userId: string;
@@ -25,19 +25,23 @@ interface PositionsProps {
   onPositionsChange: (positions: PositionRow[]) => void;
   preloadedPositions?: PositionRow[]; // Optional: use provided positions instead of fetching
   skipFetch?: boolean; // Optional: skip the API fetch if positions are provided
-  onTokenNamesChange?: (tokenNames: Record<string, string>) => void; // Optional: callback to pass token names to parent
+  onTokenNamesChange?: Dispatch<SetStateAction<Record<string, string>>>; // Optional: callback to pass token names to parent
   showHidden?: boolean; // Optional: whether to show hidden tokens
   onHiddenTokensChange?: (hiddenTokens: Set<string>) => void; // Optional: callback to pass hidden tokens to parent
   showInSOL?: boolean; // Optional: whether to show values in SOL instead of USD
   tokenMetadataCache?: Record<string, TokenMetadata>; // Optional: shared cache
   onUpdateCache?: (tokenAddress: string, metadata: Omit<TokenMetadata, 'timestamp'>) => void; // Optional: update cache callback
   isCacheValid?: (tokenAddress: string) => boolean; // Optional: check if cache entry is valid
+  fallbackPositions?: Record<string, PositionRow>; // Optional: overrides for incomplete backend data (Monad)
 }
 
 function shortAddr(addr: string) {
   if (!addr) return '';
   return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
+
+const toNumericValue = (value: any) => (typeof value === 'number' ? value : Number(value)) || 0;
+const isZeroishValue = (value: any) => !Number.isFinite(Number(value)) || Math.abs(Number(value)) < 1e-12;
 
 // SOL icon component
 const SolIcon = () => (
@@ -74,24 +78,172 @@ const Positions: React.FC<PositionsProps> = ({
   showInSOL = false,
   tokenMetadataCache,
   onUpdateCache,
-  isCacheValid
+  isCacheValid,
+  fallbackPositions
 }) => {
-  const [positions, setPositions] = useState<PositionRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const currentChain = (router.query.chain as string) || 'sol';
+  const blockchain = useMemo(() => {
+    if (currentChain === 'monad') return 'monad';
+    if (currentChain === 'sol' || currentChain === 'solana') return 'solana';
+    return undefined;
+  }, [currentChain]);
+
+  // Cache key for positions (user-specific and chain-specific)
+  const positionsCacheKey = useMemo(() => {
+    const chainSuffix = blockchain || 'all';
+    return `positions_cache_${userId}_${chainSuffix}`;
+  }, [userId, blockchain]);
+
+  // Cache TTL: 30 seconds (short to prevent stale data, but long enough for instant display)
+  const POSITIONS_CACHE_TTL_MS = 30 * 1000;
+
+  // Initialize positions from localStorage cache for instant display
+  const [positions, setPositions] = useState<PositionRow[]>(() => {
+    if (skipFetch || !userId || typeof window === 'undefined') return [];
+    try {
+      // Compute cache key inline for initializer (before useMemo runs)
+      const chain = router.query.chain as string || 'sol';
+      const chainSuffix = (chain === 'monad' ? 'monad' : chain === 'sol' || chain === 'solana' ? 'solana' : undefined) || 'all';
+      const cacheKey = `positions_cache_${userId}_${chainSuffix}`;
+      const cached = window.localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (
+          parsed &&
+          Array.isArray(parsed.data) &&
+          typeof parsed.timestamp === 'number' &&
+          Date.now() - parsed.timestamp <= POSITIONS_CACHE_TTL_MS
+        ) {
+          console.log(`[Positions] ✅ Restored ${parsed.data.length} positions from cache for instant display`);
+          return parsed.data as PositionRow[];
+        }
+      }
+    } catch (error) {
+      console.warn(`[Positions] Failed to restore cache:`, error);
+    }
+    return [];
+  });
+  
+  const [loading, setLoading] = useState(true); // Start with loading, will be set based on cache in useEffect
   const [tokenMetadata, setTokenMetadata] = useState<Record<string, TokenMetadata>>({});
   const [hiddenTokens, setHiddenTokens] = useState<Set<string>>(new Set());
   const [showSellPopup, setShowSellPopup] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<PositionRow | null>(null);
   const [solPrice, setSolPrice] = useState<number>(0);
-  const router = useRouter();
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [detailModalPosition, setDetailModalPosition] = useState<PositionRow | null>(null);
+  const trimTrailingZeros = (value: string) => value.replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
+
+  const renderTokenAmount = (value: number) => {
+    if (!isFinite(value)) {
+      return <span className="font-mono text-xs text-neutral-300">—</span>;
+    }
+
+    if (value === 0) {
+      return <span className="font-mono text-xs text-neutral-300">0</span>;
+    }
+
+    const abs = Math.abs(value);
+    let display: string;
+    let isTiny = false;
+
+    if (abs >= 1) {
+      display = value.toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 4,
+      });
+    } else {
+      const digits = Math.min(
+        12,
+        Math.max(4, Math.ceil(Math.abs(Math.log10(abs))) + 2),
+      );
+      const fixed = value.toFixed(digits);
+      display = trimTrailingZeros(fixed);
+      isTiny = true;
+    }
+
+    return (
+      <span
+        className={`font-mono ${isTiny ? 'text-[11px] text-neutral-200' : 'text-xs text-neutral-100'}`}
+        title={value.toString()}
+      >
+        {display}
+      </span>
+    );
+  };
+
+  // Get unique token addresses from positions with remaining > 0
+  const activeTokenAddresses = useMemo(() => {
+    return Array.from(
+      new Set(
+        positions
+          .filter((pos) => pos.remaining > 0)
+          .map((pos) => pos.tokenAddress)
+          .filter(Boolean)
+      )
+    );
+  }, [positions]);
+
+  // Fetch live prices for active positions
+  const { prices: livePrices } = usePositionPrices(activeTokenAddresses, {
+    enabled: activeTokenAddresses.length > 0,
+    refreshInterval: 2000, // Update every 2 seconds for faster updates
+    chain: currentChain,
+  });
+
+  const mergeWithFallback = useCallback(
+    (position: PositionRow): PositionRow => {
+      if (!fallbackPositions) return position;
+
+      const normalizedAddress = (position.tokenAddress || '').toLowerCase();
+      const fallback = fallbackPositions[normalizedAddress];
+      if (!fallback) return position;
+      if ((position.blockchain || '').toLowerCase() !== 'monad') return position;
+
+      const pickValue = (primary: number, backup: number) =>
+        !isZeroishValue(primary) || isZeroishValue(backup) ? primary : backup;
+
+      return {
+        ...position,
+        pairAddress: position.pairAddress || fallback.pairAddress,
+        bought: pickValue(position.bought, fallback.bought),
+        boughtUsdValue: pickValue(position.boughtUsdValue, fallback.boughtUsdValue),
+        sold: pickValue(position.sold, fallback.sold),
+        soldUsdValue: pickValue(position.soldUsdValue, fallback.soldUsdValue),
+        remaining: pickValue(position.remaining, fallback.remaining),
+        remainingUsdValue: pickValue(position.remainingUsdValue, fallback.remainingUsdValue),
+        pnl: pickValue(position.pnl, fallback.pnl),
+        pnlPercentage: pickValue(position.pnlPercentage, fallback.pnlPercentage),
+        launchpad: position.launchpad || fallback.launchpad,
+      };
+    },
+    [fallbackPositions],
+  );
 
   // Function to refresh positions after a successful sell
   const refreshPositions = async () => {
     if (userId) {
       try {
-        const updatedPositions = await getActivePositionsByUser(userId);
-        setPositions(updatedPositions);
-        onPositionsChange(updatedPositions);
+        const updatedPositions = await getActivePositionsByUser(userId, blockchain);
+        // Reverse so newest positions appear at the top
+        const reversedPositions = [...updatedPositions].reverse();
+        setPositions(reversedPositions);
+        onPositionsChange(reversedPositions);
+        
+        // Save to localStorage cache after refresh (e.g., after sell)
+        if (!skipFetch && typeof window !== 'undefined') {
+          try {
+            const payload = {
+              data: reversedPositions,
+              timestamp: Date.now(),
+            };
+            window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
+            console.log(`[Positions] 💾 Cached ${reversedPositions.length} positions after refresh`);
+          } catch (error) {
+            console.warn(`[Positions] Failed to cache positions after refresh:`, error);
+          }
+        }
       } catch (error) {
         console.error('Failed to refresh positions:', error);
       }
@@ -207,112 +359,187 @@ const Positions: React.FC<PositionsProps> = ({
     });
   };
 
+  const requestMetadataForTokens = useCallback(
+    async (positionsSource: PositionRow[]) => {
+      if (!positionsSource || positionsSource.length === 0) {
+        return;
+      }
+
+      const uniqueTokens = Array.from(new Set(positionsSource.map((p) => p.tokenAddress))).filter(Boolean);
+      const tokensToFetch = uniqueTokens.filter((token) => !isCacheValid || !isCacheValid(token));
+
+      if (tokensToFetch.length === 0) {
+        console.log("✅ All position tokens loaded from cache");
+        return;
+      }
+
+      console.log(`🔄 Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
+
+      await Promise.allSettled(
+        tokensToFetch.map(async (tokenAddress) => {
+          const position = positionsSource.find((p) => p.tokenAddress === tokenAddress);
+          if (!position) return;
+
+          const controller = new AbortController();
+          // Increase timeout for Monad tokens (they may need more time)
+          const isMonadToken = position.blockchain === 'monad' || tokenAddress.toLowerCase().startsWith('0x');
+          const timeoutMs = isMonadToken ? 10000 : 3000;
+          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+          try {
+            // Normalize Monad addresses to lowercase for consistency
+            const normalizedAddress = isMonadToken 
+              ? tokenAddress.toLowerCase() 
+              : tokenAddress;
+            
+            console.log(`🔍 [Positions] Fetching metadata for ${isMonadToken ? 'Monad' : 'Solana'} token:`, {
+              original: tokenAddress,
+              normalized: normalizedAddress,
+              blockchain: position.blockchain,
+            });
+            
+            const metadata = await fetchChainTokenMetadata(normalizedAddress, {
+              signal: controller.signal,
+              pairAddress: position.pairAddress,
+            });
+
+            if (!metadata) {
+              console.log(`ℹ️ [Positions] No metadata returned for ${normalizedAddress} - using fallback`, {
+                positionImageUrl: position.imageUrl ? 'present' : 'missing',
+              });
+              // Don't throw - create fallback metadata instead
+              // Use imageUrl from position if available (saved during buy)
+              const fallbackMetadata: TokenMetadata = {
+                address: normalizedAddress,
+                name: `Token ${shortAddr(normalizedAddress)}`, // Better than just address
+                symbol: position.blockchain === "monad" ? "MON" : "???",
+                protocol: position.launchpad || "",
+                launchpad: position.launchpad || "",
+                imageUrl: position.imageUrl || undefined, // Use saved imageUrl from position
+              };
+              
+              console.log(`📸 [Positions] Fallback imageUrl for ${normalizedAddress}:`, fallbackMetadata.imageUrl || 'NONE');
+              
+              setTokenMetadata((prev) => ({
+                ...prev,
+                [tokenAddress]: fallbackMetadata,
+              }));
+
+              if (onTokenNamesChange) {
+                onTokenNamesChange((prev) => ({
+                  ...prev,
+                  [tokenAddress]: fallbackMetadata.name || shortAddr(tokenAddress),
+                }));
+              }
+              return; // Exit early, don't process as success
+            }
+            
+            console.log(`✅ [Positions] Metadata fetched for ${normalizedAddress}:`, {
+              name: metadata.name,
+              symbol: metadata.symbol,
+              imageUrl: metadata.imageUrl ? 'present' : 'missing',
+              positionImageUrl: position.imageUrl ? 'present' : 'missing',
+            });
+
+            const enriched: TokenMetadata = {
+              ...metadata,
+              protocol: metadata.protocol || metadata.launchpad || position.launchpad || "",
+              launchpad: metadata.launchpad || metadata.protocol || position.launchpad || "",
+              migrated_pool_address: metadata.migrated_pool_address,
+              // Prefer saved imageUrl from position (saved during buy) over fetched metadata
+              imageUrl: position.imageUrl || metadata.imageUrl,
+            };
+            
+            console.log(`📸 [Positions] Final imageUrl for ${normalizedAddress}:`, enriched.imageUrl || 'NONE');
+
+            setTokenMetadata((prev) => ({
+              ...prev,
+              [tokenAddress]: enriched,
+            }));
+
+            if (onUpdateCache) {
+              onUpdateCache(tokenAddress, enriched);
+            }
+
+            if (onTokenNamesChange) {
+              onTokenNamesChange((prev) => ({
+                ...prev,
+                [tokenAddress]: enriched.name || shortAddr(tokenAddress),
+              }));
+            }
+          } catch (error: any) {
+            console.warn(`❌ [Positions] Failed to fetch metadata for ${tokenAddress}:`, error?.message || error);
+            console.warn(`   Error details:`, {
+              tokenAddress,
+              normalized: isMonadToken ? tokenAddress.toLowerCase() : tokenAddress,
+              blockchain: position.blockchain,
+              error: error?.message,
+            });
+            
+            // Create a better fallback with a more descriptive name
+            // Use imageUrl from position if available (saved during buy)
+            const fallback: TokenMetadata = {
+              imageUrl: position.imageUrl || "", // Use saved imageUrl from position
+              protocol: position.launchpad || "",
+              launchpad: position.launchpad || "",
+              name: `Token ${shortAddr(tokenAddress)}`, // Shows as "Token 0xc4...7777" instead of just address
+              symbol: position.blockchain === "monad" ? "MON" : "???",
+            };
+
+            setTokenMetadata((prev) => ({
+              ...prev,
+              [tokenAddress]: fallback,
+            }));
+
+            if (onTokenNamesChange) {
+              onTokenNamesChange((prev) => ({
+                ...prev,
+                [tokenAddress]: fallback.name || shortAddr(tokenAddress),
+              }));
+            }
+          } finally {
+            clearTimeout(timeoutId);
+          }
+        }),
+      );
+    },
+    [isCacheValid, onTokenNamesChange, onUpdateCache],
+  );
+
+  // Load from cache when cache key changes (e.g., user or chain changes)
+  useEffect(() => {
+    if (skipFetch || !userId || typeof window === 'undefined') return;
+    
+    try {
+      const cached = window.localStorage.getItem(positionsCacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (
+          parsed &&
+          Array.isArray(parsed.data) &&
+          typeof parsed.timestamp === 'number' &&
+          Date.now() - parsed.timestamp <= POSITIONS_CACHE_TTL_MS
+        ) {
+          console.log(`[Positions] ✅ Loaded ${parsed.data.length} positions from cache (cache key changed)`);
+          setPositions(parsed.data as PositionRow[]);
+          setLoading(false);
+        }
+      }
+    } catch (error) {
+      console.warn(`[Positions] Failed to load cache:`, error);
+    }
+  }, [positionsCacheKey, skipFetch, userId, POSITIONS_CACHE_TTL_MS]);
+
   // If preloaded positions are provided, use them
   useEffect(() => {
     if (preloadedPositions && skipFetch) {
-      setPositions(preloadedPositions);
+      // Reverse so newest positions appear at the top
+      const reversedPositions = [...preloadedPositions].reverse();
+      setPositions(reversedPositions);
       setLoading(false);
-      
-      // Fetch token metadata for preloaded positions in parallel
-      const fetchAllMetadata = async () => {
-        // Deduplicate tokens before fetching to avoid race conditions
-        const uniqueTokens = Array.from(new Set(preloadedPositions.map(p => p.tokenAddress)));
-        
-        // Filter out tokens that are already cached and valid
-        const tokensToFetch = uniqueTokens.filter(token => 
-          !isCacheValid || !isCacheValid(token)
-        );
-        
-        if (tokensToFetch.length === 0) {
-          console.log('✅ All tokens loaded from cache');
-          return;
-        }
-        
-        console.log(`🔄 Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
-        
-        // Fetch all tokens in parallel for maximum speed
-        await Promise.allSettled(
-          tokensToFetch.map(async (tokenAddress) => {
-            // Find the position to get the pair address
-            const pos = preloadedPositions.find(p => p.tokenAddress === tokenAddress);
-            if (!pos) return;
-
-            try {
-              // Reduced timeout to 3s for faster failures
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-              // IMPORTANT: Query by mint address (token address) instead of pair address
-              // This ensures we get the correct migrated_pool_address for graduated tokens
-              const response = await fetch(`/api/token-service/trade-view?mint_address=${tokenAddress}`, {
-                signal: controller.signal
-              });
-              clearTimeout(timeoutId);
-              
-              if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-              }
-              
-              const data = await response.json();
-              const tokenData = data?.token;
-              
-              if (tokenData) {
-                const migratedPool = tokenData.migrated_pool_address || '';
-
-                // Debug logging for migrated pool address
-                if (migratedPool && migratedPool !== '') {
-                  console.log(`🔄 [Positions] Token ${tokenData.symbol} has migrated pool: ${migratedPool}`);
-                } else {
-                  console.log(`📍 [Positions] Token ${tokenData.symbol} - no migrated pool (using pair_address)`);
-                }
-
-                const metadata = {
-                  imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
-                  protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
-                  name: tokenData.name || '',
-                  symbol: tokenData.symbol || '',
-                  migrated_pool_address: migratedPool, // For graduated tokens
-                };
-                
-                // Update local state
-                setTokenMetadata(prev => ({
-                  ...prev,
-                  [tokenAddress]: metadata
-                }));
-                
-                // Update shared cache
-                if (onUpdateCache) {
-                  onUpdateCache(tokenAddress, metadata);
-                }
-                
-                // Pass token names to parent if callback is provided
-                if (onTokenNamesChange) {
-                  const tokenNames: Record<string, string> = { [tokenAddress]: metadata.name || '' };
-                  onTokenNamesChange(tokenNames);
-                }
-              }
-            } catch (error) {
-              // Set fallback metadata immediately so token doesn't stay at "Loading..."
-              const fallback = {
-                imageUrl: '',
-                protocol: '',
-                name: shortAddr(tokenAddress),
-                symbol: '???',
-              };
-              setTokenMetadata(prev => ({
-                ...prev,
-                [tokenAddress]: fallback
-              }));
-              // Don't cache failed fetches
-            }
-          })
-        );
-      };
-      
-      // Don't await - let it load in background
-      fetchAllMetadata();
+      requestMetadataForTokens(reversedPositions);
     }
-  }, [preloadedPositions, skipFetch, onTokenNamesChange]);
+  }, [preloadedPositions, skipFetch, requestMetadataForTokens]);
 
   useEffect(() => {
     if (skipFetch) return; // Skip fetch if using preloaded positions
@@ -326,108 +553,64 @@ const Positions: React.FC<PositionsProps> = ({
     
     const fetchPositions = async () => {
       console.log(`🔍 Fetching positions for userId: ${userId}`);
-      // Only show loading state on initial load, not on refreshes
-      if (isInitialLoad) {
+      
+      // Check cache to determine if we should show loading
+      let hasValidCache = false;
+      if (typeof window !== 'undefined') {
+        try {
+          const cached = window.localStorage.getItem(positionsCacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (
+              parsed &&
+              Array.isArray(parsed.data) &&
+              parsed.data.length > 0 &&
+              typeof parsed.timestamp === 'number' &&
+              Date.now() - parsed.timestamp <= POSITIONS_CACHE_TTL_MS
+            ) {
+              hasValidCache = true;
+            }
+          }
+        } catch (error) {
+          // Ignore cache errors
+        }
+      }
+
+      // Only show loading if we don't have valid cache (for instant display)
+      if (isInitialLoad && !hasValidCache) {
         setLoading(true);
+      } else if (hasValidCache) {
+        console.log(`[Positions] 🔄 Refreshing positions in background (cache available for instant display)`);
       }
       try {
-        const positions = await getActivePositionsByUser(userId);
-        console.log(`✅ Positions received:`, positions);
-        console.log(`   Count: ${positions.length}`);
-        if (positions.length > 0) {
-          console.log(`   First position:`, positions[0]);
+        console.log(`🔍 [Positions] Fetching with blockchain: ${blockchain || 'all'}`);
+        const fetchedPositions = await getActivePositionsByUser(userId, blockchain);
+
+        console.log(`✅ [Positions] Received ${fetchedPositions.length} positions`);
+        if (fetchedPositions.length === 0) {
+          console.log(`   ⚠️  No positions found for blockchain: ${blockchain || 'all'}`);
         }
-        setPositions(positions);
-        onPositionsChange(positions);
 
-        // Fetch token data from token-service using pairAddress (originalPairAddress)
-        const fetchAllMetadata = async () => {
-          // Deduplicate tokens before fetching to avoid race conditions
-          const uniqueTokens = Array.from(new Set(positions.map(p => p.tokenAddress)));
-          
-          // Filter out tokens that are already cached and valid
-          const tokensToFetch = uniqueTokens.filter(token => 
-            !isCacheValid || !isCacheValid(token)
-          );
-          
-          if (tokensToFetch.length === 0) {
-            console.log('✅ All tokens loaded from cache');
-            return;
-          }
-          
-          console.log(`🔄 Fetching ${tokensToFetch.length} tokens (${uniqueTokens.length - tokensToFetch.length} from cache)`);
-          
-          // Fetch all tokens in parallel using Promise.all for maximum speed
-          await Promise.allSettled(
-            tokensToFetch.map(async (tokenAddress) => {
-              // Find the position to get the pair address
-              const pos = positions.find(p => p.tokenAddress === tokenAddress);
-              if (!pos) return;
-
-              try {
-                // Reduced timeout to 3s for faster failures
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-                // IMPORTANT: Query by mint address (token address) instead of pair address
-                // This ensures we get the correct migrated_pool_address for graduated tokens
-                const response = await fetch(`/api/token-service/trade-view?mint_address=${tokenAddress}`, {
-                  signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-                
-                if (!response.ok) {
-                  throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const data = await response.json();
-                const tokenData = data?.token;
-                
-                if (tokenData) {
-                  const metadata = {
-                    imageUrl: tokenData.uri || tokenData.image || tokenData.logo || '',
-                    protocol: tokenData.launchpad_protocol || tokenData.protocol || '',
-                    name: tokenData.name || '',
-                    symbol: tokenData.symbol || '',
-                  };
-                  
-                  // Update local state
-                  setTokenMetadata(prev => ({
-                    ...prev,
-                    [tokenAddress]: metadata
-                  }));
-                  
-                  // Update shared cache
-                  if (onUpdateCache) {
-                    onUpdateCache(tokenAddress, metadata);
-                  }
-                  
-                  // Pass token names to parent if callback is provided
-                  if (onTokenNamesChange) {
-                    const tokenNames: Record<string, string> = { [tokenAddress]: metadata.name || '' };
-                    onTokenNamesChange(tokenNames);
-                  }
-                }
-              } catch (error) {
-                // Set fallback metadata immediately so token doesn't stay at "Loading..."
-                const fallback = {
-                  imageUrl: '',
-                  protocol: '',
-                  name: shortAddr(tokenAddress),
-                  symbol: '???',
-                };
-                setTokenMetadata(prev => ({
-                  ...prev,
-                  [tokenAddress]: fallback
-                }));
-                // Don't cache failed fetches
-              }
-            })
-          );
-        };
+        // Reverse so newest positions appear at the top
+        const reversedPositions = [...fetchedPositions].reverse();
+        setPositions(reversedPositions);
+        onPositionsChange(reversedPositions);
         
-        // Don't await - let it load in background
-        fetchAllMetadata();
+        // Save to localStorage cache for instant loading when navigating back
+        if (!skipFetch && typeof window !== 'undefined') {
+          try {
+            const payload = {
+              data: reversedPositions,
+              timestamp: Date.now(),
+            };
+            window.localStorage.setItem(positionsCacheKey, JSON.stringify(payload));
+            console.log(`[Positions] 💾 Cached ${reversedPositions.length} positions to localStorage`);
+          } catch (error) {
+            console.warn(`[Positions] Failed to cache positions:`, error);
+          }
+        }
+        
+        requestMetadataForTokens(fetchedPositions);
       } catch (error) {
         console.error('❌ Error fetching positions:', error);
       } finally {
@@ -446,7 +629,7 @@ const Positions: React.FC<PositionsProps> = ({
     }, 5000);
     
     return () => clearInterval(intervalId);
-  }, [userId, onPositionsChange, skipFetch, onTokenNamesChange]);
+  }, [userId, onPositionsChange, skipFetch, blockchain, requestMetadataForTokens, positionsCacheKey, POSITIONS_CACHE_TTL_MS]);
 
   return (
     <div className="w-full overflow-y-scroll scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800" style={{ maxHeight: '500px' }}>
@@ -467,50 +650,54 @@ const Positions: React.FC<PositionsProps> = ({
           ) : positions.length === 0 ? (
             <tr><td colSpan={6} className="text-center py-6 text-neutral-500">No positions found.</td></tr>
           ) : (
-            [...positions]
-              .reverse() // Reverse so newest/most recent positions appear at the top
-              .filter(pos => showHidden || !hiddenTokens.has(pos.tokenAddress))
+            positions
+              .filter(pos => (pos.remaining > 0) && (showHidden || !hiddenTokens.has(pos.tokenAddress)))
               .map((pos, idx) => {
+              const sourcePosition = mergeWithFallback(pos);
+
               // Helper function to calculate corrected values for this position
               const getCorrectedValues = () => {
                 // Apply unit correction for token amounts
-                let correctedSold = pos.sold;
-                if (pos.sold > pos.bought * 1000) {
-                  correctedSold = pos.sold / 1000000; // Scale down by 1 million
+                let correctedBought = toNumericValue(sourcePosition.bought);
+                let correctedSold = toNumericValue(sourcePosition.sold);
+
+                if (correctedSold > correctedBought * 1000) {
+                  correctedSold = correctedSold / 1000000; // Scale down by 1 million
                 }
-                const correctedBought = pos.bought;
+
                 const correctedRemaining = correctedBought - correctedSold;
                 
                 // Correct soldUsdValue
-                let correctedSoldUsdValue = pos.soldUsdValue;
+                let correctedSoldUsdValue = toNumericValue(sourcePosition.soldUsdValue);
+                const boughtUsdValue = toNumericValue(sourcePosition.boughtUsdValue);
                 
                 // Check if soldUsdValue is suspiciously high compared to boughtUsdValue
-                if (correctedSoldUsdValue > 10000 && pos.boughtUsdValue > 0 && pos.boughtUsdValue < 1000) {
+                if (correctedSoldUsdValue > 10000 && boughtUsdValue > 0 && boughtUsdValue < 1000) {
                   // Check if sold amount is impossible (> bought)
-                  if (pos.sold > pos.bought) {
+                  if (correctedSold > correctedBought) {
                     if (correctedBought > 0) {
                       const sellRatio = Math.min(correctedSold / correctedBought, 1);
-                      correctedSoldUsdValue = pos.boughtUsdValue * sellRatio;
+                      correctedSoldUsdValue = boughtUsdValue * sellRatio;
                       
                       console.warn('⚠️ DETECTED: Invalid soldUsdValue in Positions (sold > bought) - fixing:', {
                         tokenAddress: pos.tokenAddress,
                         originalSoldUsdValue: pos.soldUsdValue,
-                        boughtUsdValue: pos.boughtUsdValue,
-                        sold: pos.sold,
-                        bought: pos.bought,
+                        boughtUsdValue: boughtUsdValue,
+                        sold: correctedSold,
+                        bought: correctedBought,
                         correctedSold: correctedSold,
                         sellRatio: sellRatio,
                         correctedSoldUsdValue: correctedSoldUsdValue
                       });
                     }
-                  } else if (correctedSoldUsdValue > pos.boughtUsdValue * 100) {
-                    const sellRatio = pos.sold / pos.bought;
-                    correctedSoldUsdValue = pos.boughtUsdValue * Math.min(sellRatio, 1);
+                  } else if (correctedSoldUsdValue > boughtUsdValue * 100) {
+                    const sellRatio = correctedSold / correctedBought;
+                    correctedSoldUsdValue = boughtUsdValue * Math.min(sellRatio, 1);
                     
                     console.warn('⚠️ DETECTED: soldUsdValue is way too high in Positions - fixing:', {
                       tokenAddress: pos.tokenAddress,
                       originalSoldUsdValue: pos.soldUsdValue,
-                      boughtUsdValue: pos.boughtUsdValue,
+                      boughtUsdValue: boughtUsdValue,
                       sellRatio: sellRatio,
                       correctedSoldUsdValue: correctedSoldUsdValue
                     });
@@ -518,29 +705,29 @@ const Positions: React.FC<PositionsProps> = ({
                 }
                 
                 // Final sanity check: if sold > bought (impossible), cap soldUsdValue at boughtUsdValue
-                if (pos.sold > pos.bought && correctedSoldUsdValue > pos.boughtUsdValue) {
-                  correctedSoldUsdValue = pos.boughtUsdValue;
+                if (correctedSold > correctedBought && correctedSoldUsdValue > boughtUsdValue) {
+                  correctedSoldUsdValue = boughtUsdValue;
                   console.warn('⚠️ Capping soldUsdValue at boughtUsdValue (sold > bought is impossible):', {
                     tokenAddress: pos.tokenAddress,
-                    sold: pos.sold,
-                    bought: pos.bought,
+                    sold: correctedSold,
+                    bought: correctedBought,
                     correctedSoldUsdValue: correctedSoldUsdValue
                   });
                 }
                 
                 // Correct remainingUsdValue
-                let correctedRemainingUsdValue = pos.remainingUsdValue;
+                let correctedRemainingUsdValue = toNumericValue(sourcePosition.remainingUsdValue);
                 
                 // If remaining is negative (impossible - can't sell more than bought), fix remainingUsdValue
-                if (pos.remaining < 0 || pos.sold > pos.bought) {
+                if (correctedRemaining < 0 || correctedSold > correctedBought) {
                   if (correctedBought > 0 && correctedRemaining >= 0) {
-                    const avgBuyPrice = pos.boughtUsdValue / correctedBought;
+                    const avgBuyPrice = boughtUsdValue / correctedBought;
                     correctedRemainingUsdValue = correctedRemaining * avgBuyPrice;
                     
                     console.warn('⚠️ DETECTED: Invalid remainingUsdValue in Positions - fixing:', {
                       tokenAddress: pos.tokenAddress,
-                      originalRemainingUsdValue: pos.remainingUsdValue,
-                      remaining: pos.remaining,
+                      originalRemainingUsdValue: sourcePosition.remainingUsdValue,
+                      remaining: correctedRemaining,
                       correctedRemaining: correctedRemaining,
                       avgBuyPrice: avgBuyPrice,
                       correctedRemainingUsdValue: correctedRemainingUsdValue
@@ -551,10 +738,10 @@ const Positions: React.FC<PositionsProps> = ({
                 }
                 
                 // If remainingUsdValue is suspiciously large, recalculate
-                if (Math.abs(correctedRemainingUsdValue) > 10000 && pos.boughtUsdValue > 0 && pos.boughtUsdValue < 1000) {
+                if (Math.abs(correctedRemainingUsdValue) > 10000 && boughtUsdValue > 0 && boughtUsdValue < 1000) {
                   const safeRemaining = Math.max(0, correctedRemaining);
                   if (correctedBought > 0) {
-                    const avgBuyPrice = pos.boughtUsdValue / correctedBought;
+                    const avgBuyPrice = boughtUsdValue / correctedBought;
                     correctedRemainingUsdValue = safeRemaining * avgBuyPrice;
                     
                     console.warn('⚠️ DETECTED: remainingUsdValue is suspiciously large - fixing:', {
@@ -567,9 +754,9 @@ const Positions: React.FC<PositionsProps> = ({
                 }
                 
                 // Recalculate PnL using corrected values
-                const correctedPnl = (correctedSoldUsdValue + correctedRemainingUsdValue) - pos.boughtUsdValue;
-                const correctedPnlPercentage = pos.boughtUsdValue > 0 
-                  ? (correctedPnl / pos.boughtUsdValue) * 100 
+                const correctedPnl = (correctedSoldUsdValue + correctedRemainingUsdValue) - boughtUsdValue;
+                const correctedPnlPercentage = boughtUsdValue > 0 
+                  ? (correctedPnl / boughtUsdValue) * 100 
                   : 0;
                 
                 return {
@@ -585,84 +772,62 @@ const Positions: React.FC<PositionsProps> = ({
               
               const corrected = getCorrectedValues();
               
+              // Calculate live PNL using current token price
+              const currentPrice = livePrices[pos.tokenAddress] || 0;
+              const liveRemainingValue = currentPrice > 0 
+                ? corrected.correctedRemaining * currentPrice 
+                : corrected.correctedRemainingUsdValue; // Fallback to stored value if no live price
+              
+              const livePnl = corrected.correctedSoldUsdValue + liveRemainingValue - sourcePosition.boughtUsdValue;
+              const livePnlPercentage = sourcePosition.boughtUsdValue > 0 
+                ? (livePnl / sourcePosition.boughtUsdValue) * 100 
+                : 0;
+              
+              // Use live PNL if we have a current price, otherwise use corrected PNL
+              const displayPnl = currentPrice > 0 ? livePnl : corrected.correctedPnl;
+              const displayPnlPercentage = currentPrice > 0 ? livePnlPercentage : corrected.correctedPnlPercentage;
+              
               // For positions: backend stores originalPairAddress value in pairAddress field
-              const navigateAddress = pos.pairAddress || pos.tokenAddress;
-              const displayAddress = pos.pairAddress || pos.tokenAddress;
+              const navigateAddress = sourcePosition.pairAddress || pos.tokenAddress;
+              const displayAddress = sourcePosition.pairAddress || pos.tokenAddress;
               
               const handleRowClick = () => {
-                // Navigate immediately with pair_address or mint - trade page will handle resolution
-                if (navigateAddress) {
-                  router.push(`/trade/${navigateAddress}`);
-                }
+                // Open detail modal with corrected values
+                const correctedPosition = {
+                  ...sourcePosition,
+                  // Override with corrected values
+                  bought: corrected.correctedBought,
+                  sold: corrected.correctedSold,
+                  remaining: corrected.correctedRemaining,
+                  soldUsdValue: corrected.correctedSoldUsdValue,
+                  remainingUsdValue: liveRemainingValue, // Use live remaining value
+                  pnl: displayPnl,
+                  pnlPercentage: displayPnlPercentage,
+                };
+                setDetailModalPosition(correctedPosition);
+                setShowDetailModal(true);
               };
               
               const metadata = tokenMetadata[pos.tokenAddress];
-              
-              // Protocol color mapping - matches PulseTable
-              const getProtocolColor = (protocol?: string) => {
-                const p = protocol?.toLowerCase() || '';
-                if (p.includes('pump')) return '#22c55e'; // Green for Pump.fun
-                if (p.includes('raydium')) return '#5c51f7'; // Purple for Raydium
-                if (p.includes('meteora')) return '#ff4662'; // Pink-red for Meteora
-                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) return '#eab308'; // Yellow for Moonit/Moonshot
-                if (p.includes('boop')) return '#134577'; // Dark blue for Boop
-                if (p.includes('bonk')) return '#ff6b35'; // Orange for Bonk
-                if (p.includes('bags')) return '#22c55e'; // Green for Bags
-                if (p.includes('launch')) return '#3b82f6'; // Blue for LaunchLab (portfolio doesn't have column type, use default blue)
-                return '#22c55e'; // Default to green
-              };
-
-              const protocolColor = getProtocolColor(metadata?.protocol);
-              
-              // Protocol icon mapping - returns image URL
-              const getProtocolIcon = (protocol?: string): string => {
-                const p = protocol?.toLowerCase() || '';
-                
-                if (p.includes('pump')) {
-                  return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
-                }
-                
-                if (p.includes('meteora')) {
-                  return 'https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013';
-                }
-                
-                if (p.includes('raydium')) {
-                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
-                }
-                
-                if (p.includes('boop')) {
-                  return 'https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true';
-                }
-                
-                if (p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot')) {
-                  return 'https://avatars.githubusercontent.com/u/174132191?s=280&v=4';
-                }
-                
-                if (p.includes('bonk')) {
-                  return 'https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png';
-                }
-                
-                if (p.includes('bags')) {
-                  return 'https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw';
-                }
-                
-                if (p.includes('launch')) {
-                  // LaunchLab uses Raydium icon
-                  return 'https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png';
-                }
-                
-                // Default to pump.fun icon for unknown protocols
-                return 'https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png';
-              };
-
-              const tokenIcon = getProtocolIcon(metadata?.protocol);
-              const p = metadata?.protocol?.toLowerCase() || '';
-              const isMeteora = p.includes('meteora');
-              const isBonk = p.includes('bonk');
-              const isBags = p.includes('bags');
-              const isMoonit = p.includes('moonit') || p.includes('moonshot') || p.includes('moonshoot');
-              const isFullCircleImage = isMeteora || isBonk || isBags || isMoonit;
+              const protocolSource = metadata?.protocol || metadata?.launchpad || sourcePosition.launchpad || '';
+              const branding = getProtocolBranding(protocolSource);
+              const protocolColor = branding.color;
+              const tokenIcon = branding.iconUrl;
+              const isFullCircleImage = branding.isFullCircle;
               const isHidden = hiddenTokens.has(pos.tokenAddress);
+              
+              // Use position.imageUrl as final fallback if metadata doesn't have it
+              const finalImageUrl = metadata?.imageUrl || sourcePosition.imageUrl || '';
+              
+              // Debug logging for missing images
+              if (!finalImageUrl && (metadata?.symbol || sourcePosition.tokenAddress)) {
+                console.log(`⚠️ [Positions Render] No imageUrl for token:`, {
+                  tokenAddress: pos.tokenAddress,
+                  symbol: metadata?.symbol,
+                  metadataImageUrl: metadata?.imageUrl,
+                  positionImageUrl: sourcePosition.imageUrl,
+                });
+              }
               
               return (
               <tr 
@@ -693,7 +858,7 @@ const Positions: React.FC<PositionsProps> = ({
                         >
                           <div className="relative rounded-lg overflow-hidden w-10 h-10">
                             <FastImage
-                              src={metadata?.imageUrl || ''}
+                              src={finalImageUrl}
                               alt={metadata?.name || metadata?.symbol || "Token"}
                               symbol={metadata?.symbol}
                               name={metadata?.name}
@@ -725,7 +890,7 @@ const Positions: React.FC<PositionsProps> = ({
                     </div>
                     <div className="flex flex-col min-w-0">
                       <div className="font-medium text-sm text-neutral-100 truncate">
-                        {metadata?.name || 'Loading...'}
+                        {metadata?.name || shortAddr(displayAddress)}
                       </div>
                       <div className="text-xs text-neutral-400 font-mono truncate" title={displayAddress}>
                         {shortAddr(displayAddress)}
@@ -734,38 +899,49 @@ const Positions: React.FC<PositionsProps> = ({
                   </div>
                 </td>
                 <td className="px-2 py-2">
-                  {formatSmartNumber(corrected.correctedBought)}
-                  <span className="ml-1 text-neutral-400">
-                    {showInSOL && solPrice > 0
-                      ? <>(<SolIcon />{formatSmartNumber(pos.boughtUsdValue / solPrice)})</>
-                      : `($${formatSmartNumber(pos.boughtUsdValue)})`
-                    }
-                  </span>
+                  <div className="flex items-baseline gap-1">
+                    {renderTokenAmount(corrected.correctedBought)}
+                    <span className="text-neutral-400">
+                      {showInSOL && solPrice > 0
+                        ? <>(<SolIcon />{formatSmartNumber(sourcePosition.boughtUsdValue / solPrice)})</>
+                        : `($${formatSmallPrice(Math.max(0, sourcePosition.boughtUsdValue || 0))})`
+                      }
+                    </span>
+                  </div>
                 </td>
                 <td className="px-2 py-2">
-                  {formatSmartNumber(corrected.correctedSold)}
-                  <span className="ml-1 text-neutral-400">
-                    {showInSOL && solPrice > 0
-                      ? <>(<SolIcon />{formatSmartNumber(corrected.correctedSoldUsdValue / solPrice)})</>
-                      : `($${formatSmartNumber(corrected.correctedSoldUsdValue)})`
-                    }
-                  </span>
+                  <div className="flex items-baseline gap-1">
+                    {renderTokenAmount(corrected.correctedSold)}
+                    <span className="text-neutral-400">
+                      {showInSOL && solPrice > 0
+                        ? <>(<SolIcon />{formatSmartNumber(corrected.correctedSoldUsdValue / solPrice)})</>
+                        : `($${formatSmallPrice(corrected.correctedSoldUsdValue)})`
+                      }
+                    </span>
+                  </div>
                 </td>
                 <td className="px-2 py-2">
-                  {formatSmartNumber(corrected.correctedRemaining)}
-                  <span className="ml-1 text-neutral-400">
-                    {showInSOL && solPrice > 0
-                      ? <>(<SolIcon />{formatSmartNumber(corrected.correctedRemainingUsdValue / solPrice)})</>
-                      : `($${formatSmartNumber(corrected.correctedRemainingUsdValue)})`
-                    }
-                  </span>
+                  <div className="flex items-baseline gap-1">
+                    {renderTokenAmount(corrected.correctedRemaining)}
+                    <span className="text-neutral-400">
+                      {showInSOL && solPrice > 0
+                        ? <>(<SolIcon />{formatSmartNumber(corrected.correctedRemainingUsdValue / solPrice)})</>
+                        : `($${formatSmallPrice(corrected.correctedRemainingUsdValue)})`
+                      }
+                    </span>
+                  </div>
                 </td>
-                <td className={`px-2 py-2 font-semibold ${corrected.correctedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
+                <td className={`px-2 py-2 font-semibold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}> 
                   {showInSOL && solPrice > 0
-                    ? <>{corrected.correctedPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(corrected.correctedPnl) / solPrice)}</>
-                    : `${corrected.correctedPnl >= 0 ? '+' : ''}$${formatSmartNumber(Math.abs(corrected.correctedPnl))}`
+                    ? <>{displayPnl >= 0 ? '+' : ''}<SolIcon />{formatSmartNumber(Math.abs(displayPnl) / solPrice)}</>
+                    : `${displayPnl >= 0 ? '+' : ''}$${formatSmallPrice(Math.abs(displayPnl))}`
                   }
-                  <span className="ml-1 text-xs">({corrected.correctedPnlPercentage.toFixed(2)}%)</span>
+                  <span className="ml-1 text-xs">({formatSmallPrice(displayPnlPercentage)}%)</span>
+                  {currentPrice > 0 && (
+                    <span className="ml-1 text-[10px] text-neutral-500" title="Live price update">
+                      ●
+                    </span>
+                  )}
                 </td>
                 <td className="px-2 py-2">
                   <div className="flex items-center gap-2">
@@ -829,6 +1005,19 @@ const Positions: React.FC<PositionsProps> = ({
           onSellSuccess={refreshPositions}
         />
       )}
+      
+      {/* Position Detail Modal */}
+      <PositionDetailModal
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false);
+          setDetailModalPosition(null);
+        }}
+        position={detailModalPosition}
+        tokenMetadata={detailModalPosition ? tokenMetadata[detailModalPosition.tokenAddress] : undefined}
+        currentPrice={detailModalPosition ? livePrices[detailModalPosition.tokenAddress] : undefined}
+        chain={currentChain}
+      />
     </div>
   );
 };
