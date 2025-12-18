@@ -1,5 +1,5 @@
 import React from 'react';
-import { MonadWalletTrade } from '../hooks/useMonadWalletTransactions';
+import type { MonadWalletTrade } from '../hooks/useMonadWalletTransactions';
 
 interface MonadTransactionRowProps {
   trade: MonadWalletTrade;

@@ -1853,9 +1853,9 @@ export default function TrackersPage() {
                                 className="rounded-lg border border-neutral-800/50 bg-neutral-900/30 p-3"
                               >
                                 <div className="mb-2 flex items-center gap-2">
-                                  {tweet.authorAvatar ? (
+                                  {tweet.authorProfileImage ? (
                                     <img
-                                      src={tweet.authorAvatar}
+                                      src={tweet.authorProfileImage}
                                       alt={tweet.authorName}
                                       className="h-8 w-8 rounded-full"
                                     />
@@ -1941,18 +1941,17 @@ export default function TrackersPage() {
       <AddTwitterHandleModal
         isOpen={showAddTwitterModal}
         onClose={() => setShowAddTwitterModal(false)}
-        onAdd={handleAddTwitterAccount}
+        onAddTwitterHandle={handleAddTwitterAccount}
       />
-      {isFilterPopoutOpen && (
-        <FilterPopout
-          onClose={() => setIsFilterPopoutOpen(false)}
-          onApply={(filters) => {
-            setLocalFilters(filters);
-            setIsFilterPopoutOpen(false);
-          }}
-          currentFilters={localFilters}
-        />
-      )}
+      <FilterPopout
+        open={isFilterPopoutOpen}
+        onClose={() => setIsFilterPopoutOpen(false)}
+        onApplyFilters={(filters) => {
+          setLocalFilters(filters);
+          setIsFilterPopoutOpen(false);
+        }}
+        currentFilters={localFilters}
+      />
 
       <Footer />
     </>
