@@ -25,6 +25,16 @@ export interface TradeRow {
   costBasis?: number; // For Sell trades: what we paid for the tokens
   realizedPnl?: number; // For Sell trades: profit/loss (stored in DB)
   realizedPnlPercentage?: number; // PNL as percentage of cost basis
+  walletAddress?: string | null; // Wallet recorded for the trade (if available)
+  wallet?: string | null; // Legacy wallet field name (if available)
+  walletLabel?: string | null;
+  walletEmoji?: string | null;
+  walletId?: string | number | null;
+  maker?: string | null;
+  owner?: string | null;
+  userWallet?: string | null;
+  userWalletAddress?: string | null;
+  fromAddress?: string | null;
   id: number;
   tokenAddress: string;
   pairAddress?: string; // Pool/pair address

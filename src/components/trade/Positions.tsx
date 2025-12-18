@@ -13,6 +13,7 @@ import SellPopup from '../SellPopup';
 import { fetchChainTokenMetadata, type UnifiedTokenMetadata } from '~/utils/tokenMetadata';
 import { getProtocolBranding } from '~/utils/protocolBranding';
 import { usePositionPrices } from '~/hooks/usePositionPrices';
+import PositionDetailModal from './PositionDetailModal';
 
 type TokenMetadata = UnifiedTokenMetadata & {
   timestamp?: number;
@@ -130,6 +131,8 @@ const Positions: React.FC<PositionsProps> = ({
   const [showSellPopup, setShowSellPopup] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<PositionRow | null>(null);
   const [solPrice, setSolPrice] = useState<number>(0);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [detailModalPosition, setDetailModalPosition] = useState<PositionRow | null>(null);
   const trimTrailingZeros = (value: string) => value.replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
 
   const renderTokenAmount = (value: number) => {
@@ -789,18 +792,20 @@ const Positions: React.FC<PositionsProps> = ({
               const displayAddress = sourcePosition.pairAddress || pos.tokenAddress;
               
               const handleRowClick = () => {
-                const isMonadPosition =
-                  (sourcePosition.blockchain || '').toLowerCase() === 'monad' ||
-                  currentChain === 'monad';
-
-                if (isMonadPosition && sourcePosition.tokenAddress) {
-                  router.push(`/trade/monad/${sourcePosition.tokenAddress}`);
-                  return;
-                }
-
-                if (navigateAddress) {
-                  router.push(`/trade/${navigateAddress}`);
-                }
+                // Open detail modal with corrected values
+                const correctedPosition = {
+                  ...sourcePosition,
+                  // Override with corrected values
+                  bought: corrected.correctedBought,
+                  sold: corrected.correctedSold,
+                  remaining: corrected.correctedRemaining,
+                  soldUsdValue: corrected.correctedSoldUsdValue,
+                  remainingUsdValue: liveRemainingValue, // Use live remaining value
+                  pnl: displayPnl,
+                  pnlPercentage: displayPnlPercentage,
+                };
+                setDetailModalPosition(correctedPosition);
+                setShowDetailModal(true);
               };
               
               const metadata = tokenMetadata[pos.tokenAddress];
@@ -1000,6 +1005,19 @@ const Positions: React.FC<PositionsProps> = ({
           onSellSuccess={refreshPositions}
         />
       )}
+      
+      {/* Position Detail Modal */}
+      <PositionDetailModal
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false);
+          setDetailModalPosition(null);
+        }}
+        position={detailModalPosition}
+        tokenMetadata={detailModalPosition ? tokenMetadata[detailModalPosition.tokenAddress] : undefined}
+        currentPrice={detailModalPosition ? livePrices[detailModalPosition.tokenAddress] : undefined}
+        chain={currentChain}
+      />
     </div>
   );
 };
