@@ -211,6 +211,16 @@ export const getUserById = (token: string) =>
     method: "GET",
   });
 
+export const acknowledgeWalletExport = (token: string) =>
+  apiFetch<{
+    ok: boolean;
+    hasExportedWallet: boolean;
+    walletExportedAt: string | null;
+  }>("/api/users/wallet/export/acknowledge", {
+    authToken: token,
+    method: "POST",
+  });
+
 export const updateUser = (
   token: string,
   email: string,
