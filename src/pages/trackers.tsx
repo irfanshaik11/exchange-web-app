@@ -47,7 +47,7 @@ import { HiLightningBolt } from "react-icons/hi";
 import { useFilter } from "../components/FilterContext";
 import FilterPopout from "../components/FilterPopout";
 
-const TABS = ["Wallet Manager", "Live Trades"];
+const TABS = ["Wallet Manager"];
 const TWITTER_TABS = ["Tracked Accounts", "X Feed"];
 const LIVE_TRADES_CACHE_PREFIX = "walletTracker:liveTrades";
 const getLiveTradesCacheKey = (userId?: string) =>
@@ -684,13 +684,6 @@ export default function TrackersPage() {
   const loadTrackedWallets = loadWalletsFromBackend;
 
   useEffect(() => {
-    if (activeTab === 1) {
-      setLoading(true);
-      // Use a hardcoded userId for now
-      getActivePositionsByUser("demo-user")
-        .then(setPositions)
-        .finally(() => setLoading(false));
-    }
   }, [activeTab]);
 
   // Sync local watchedWallets state with global context
@@ -1549,11 +1542,6 @@ export default function TrackersPage() {
                               onClick={() => setActiveTab(i)}
                             >
                               {tab}
-                              {tab === "Live Trades" && (
-                                <span className="ml-0.5 animate-pulse text-xs text-pink-400 sm:ml-1 sm:text-sm">
-                                  •
-                                </span>
-                              )}
                             </button>
                           ))}
                           <div className="flex items-center rounded-full bg-[#111111] px-2 py-0.5 text-[10px] text-neutral-300 sm:px-3 sm:py-1 sm:text-[11px]">
@@ -1576,7 +1564,7 @@ export default function TrackersPage() {
                             type="text"
                             placeholder="Search by address"
                             className="w-full max-w-md rounded-full border border-neutral-800 bg-[#050608] px-3 py-1 text-[10px] text-neutral-200 transition-all duration-300 focus:border-[#70E0B0]/60 focus:outline-none sm:px-4 sm:text-xs"
-                            disabled={activeTab === 1}
+                            disabled={false}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                           />
@@ -1718,7 +1706,11 @@ export default function TrackersPage() {
                                             lastActiveMap[wallet.address]
                                           }
                                           onRemove={handleRemoveWallet}
-                                          onClick={setScannedWallet}
+                                          onClick={(wallet) => {
+                                            // Open wallet transactions page in a new tab
+                                            const url = `/wallet/${wallet.address}`;
+                                            window.open(url, "_blank");
+                                          }}
                                           onNotificationToggle={async (
                                             address,
                                             enabled,
@@ -1734,904 +1726,7 @@ export default function TrackersPage() {
                               </div>
                             )}
                           </>
-                        ) : (
-                          <>
-                            {liveTradesToRender.length === 0 ? (
-                              <div className="flex h-64 flex-col items-center justify-center">
-                                <span className="text-neutral-400">
-                                  {wsConnected
-                                    ? "Listening for trades from tracked wallets..."
-                                    : "No live trades yet. Add wallets to start tracking!"}
-                                </span>
-                                <span className="mt-2 text-xs text-neutral-500">
-                                  {wsConnected
-                                    ? "✅ Connected and ready"
-                                    : "🔴 Disconnected - Check console for details"}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="overflow-x-auto overflow-y-auto">
-                                {/* Quick Buy Controls - Aligned to right above Action column */}
-                                <div className="mt-2 mb-2 flex flex-wrap items-center justify-end gap-1.5 sm:mt-4 sm:mb-4 sm:gap-2">
-                                  {/* Filter button */}
-                                  <div className="relative">
-                                    <button
-                                      className="relative flex cursor-pointer items-center justify-center gap-1 rounded-full border border-[#2A2B33] bg-[#17191E] px-2 py-1 text-[#9CA3AF] transition-all duration-300 ease-out hover:text-[#E6E7EA] sm:gap-2 sm:px-3.5 sm:py-1.5"
-                                      onClick={() =>
-                                        setIsFilterPopoutOpen(true)
-                                      }
-                                    >
-                                      {/* filter glyph */}
-                                      <svg
-                                        width="11"
-                                        height="11"
-                                        className="sm:h-[13px] sm:w-[13px]"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                      >
-                                        <line x1="4" y1="6" x2="20" y2="6" />
-                                        <circle cx="8" cy="6" r="2" />
-                                        <line x1="4" y1="12" x2="20" y2="12" />
-                                        <circle cx="16" cy="12" r="2" />
-                                        <line x1="4" y1="18" x2="20" y2="18" />
-                                        <circle cx="8" cy="18" r="2" />
-                                      </svg>
-                                      <span className="hidden text-[10px] font-medium sm:inline sm:text-sm">
-                                        Filter
-                                      </span>
-                                      <svg
-                                        className="hidden h-3 w-3 sm:block sm:h-3.5 sm:w-3.5"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="2"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          d="M19 9l-7 7-7-7"
-                                        />
-                                      </svg>
-                                    </button>
-                                  </div>
-
-                                  <div
-                                    className="flex items-center justify-center gap-1 rounded-full border bg-[#17191E] px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5"
-                                    style={{ borderColor: "#2A2B33" }}
-                                  >
-                                    {/* Amount - Editable */}
-                                    <div className="flex items-center justify-center gap-0.5 sm:gap-1">
-                                      <HiLightningBolt
-                                        size={10}
-                                        className="sm:h-3 sm:w-3"
-                                        style={{ color: "#22C55E" }}
-                                      />
-                                      <input
-                                        type="text"
-                                        value={quickBuyAmount}
-                                        inputMode="decimal"
-                                        onChange={(e) => {
-                                          const value = e.target.value;
-                                          // Allow only digits and at most one decimal point
-                                          if (
-                                            value === "" ||
-                                            /^\d*\.?\d*$/.test(value)
-                                          ) {
-                                            setQuickBuyAmount(value);
-                                            const numValue = Number(value) || 0;
-                                            if (typeof window !== "undefined") {
-                                              localStorage.setItem(
-                                                "quickBuyAmount",
-                                                numValue.toString(),
-                                              );
-                                            }
-                                          }
-                                        }}
-                                        onKeyDown={(e) => {
-                                          // Block non-numeric keys except control/navigation keys and '.'
-                                          const allowedKeys = [
-                                            "Backspace",
-                                            "Delete",
-                                            "ArrowLeft",
-                                            "ArrowRight",
-                                            "Tab",
-                                            "Home",
-                                            "End",
-                                          ];
-                                          if (allowedKeys.includes(e.key))
-                                            return;
-                                          if (e.key === ".") return;
-                                          if (!/^[0-9]$/.test(e.key)) {
-                                            e.preventDefault();
-                                          }
-                                        }}
-                                        className="w-8 border-none bg-transparent text-center text-[10px] font-medium outline-none sm:w-10 sm:text-xs"
-                                        style={{ color: "#E6E7EA" }}
-                                      />
-                                    </div>
-
-                                    {/* Solana Symbol */}
-                                    <div className="flex items-center justify-center">
-                                      <svg
-                                        width="10"
-                                        height="10"
-                                        className="sm:h-3 sm:w-3"
-                                        viewBox="0 0 397.7 311.7"
-                                        fill="none"
-                                      >
-                                        <path
-                                          d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 237.9z"
-                                          fill="url(#paint0_linear_solana_tracker)"
-                                        />
-                                        <path
-                                          d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1L333.1 73.8c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z"
-                                          fill="url(#paint1_linear_solana_tracker)"
-                                        />
-                                        <path
-                                          d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z"
-                                          fill="url(#paint2_linear_solana_tracker)"
-                                        />
-                                        <defs>
-                                          <linearGradient
-                                            id="paint0_linear_solana_tracker"
-                                            x1="360.8"
-                                            y1="351.5"
-                                            x2="141.44"
-                                            y2="132.14"
-                                            gradientUnits="userSpaceOnUse"
-                                          >
-                                            <stop
-                                              offset="0"
-                                              stopColor="#00FFA3"
-                                            />
-                                            <stop
-                                              offset="1"
-                                              stopColor="#DC1FFF"
-                                            />
-                                          </linearGradient>
-                                          <linearGradient
-                                            id="paint1_linear_solana_tracker"
-                                            x1="264.8"
-                                            y1="116.2"
-                                            x2="45.44"
-                                            y2="-103.16"
-                                            gradientUnits="userSpaceOnUse"
-                                          >
-                                            <stop
-                                              offset="0"
-                                              stopColor="#00FFA3"
-                                            />
-                                            <stop
-                                              offset="1"
-                                              stopColor="#DC1FFF"
-                                            />
-                                          </linearGradient>
-                                          <linearGradient
-                                            id="paint2_linear_solana_tracker"
-                                            x1="312.5"
-                                            y1="233.9"
-                                            x2="93.14"
-                                            y2="14.54"
-                                            gradientUnits="userSpaceOnUse"
-                                          >
-                                            <stop
-                                              offset="0"
-                                              stopColor="#00FFA3"
-                                            />
-                                            <stop
-                                              offset="1"
-                                              stopColor="#DC1FFF"
-                                            />
-                                          </linearGradient>
-                                        </defs>
-                                      </svg>
-                                    </div>
-
-                                    {/* Separator */}
-                                    <div className="h-3 w-px bg-gray-600 sm:h-4"></div>
-
-                                    {/* P1 P2 P3 Pill - Simple Toggle */}
-                                    <div className="relative flex items-center justify-center gap-0.5 sm:gap-1">
-                                      {["P1", "P2", "P3"].map((pill) => {
-                                        const presetIndex =
-                                          parseInt(pill.replace("P", "")) - 1;
-                                        const preset = presets[presetIndex];
-                                        const settings =
-                                          preset?.quickBuySettings;
-
-                                        return (
-                                          <div
-                                            key={pill}
-                                            className="relative flex items-center justify-center"
-                                          >
-                                            <button
-                                              className={`flex cursor-pointer items-center justify-center px-1 py-0.5 text-[10px] font-medium transition-all duration-200 sm:px-1.5 sm:text-xs ${
-                                                selectedPill === pill
-                                                  ? "text-green-400"
-                                                  : "text-gray-400 hover:text-white"
-                                              }`}
-                                              onClick={() => {
-                                                setSelectedPill(pill);
-                                                setActivePreset(presetIndex); // Also update global preset for consistency
-                                                console.log(
-                                                  `Selected ${pill} in trackers page`,
-                                                );
-                                              }}
-                                              onMouseEnter={() =>
-                                                setShowPillTooltip(pill)
-                                              }
-                                              onMouseLeave={() =>
-                                                setShowPillTooltip(null)
-                                              }
-                                            >
-                                              {pill}
-                                            </button>
-
-                                            {/* Tooltip for each pill */}
-                                            {showPillTooltip === pill &&
-                                              settings && (
-                                                <div
-                                                  className="absolute top-full left-0 z-50 mt-1 w-28 rounded-lg border shadow-xl"
-                                                  style={{
-                                                    backgroundColor:
-                                                      "rgba(15, 16, 18, 0.95)",
-                                                    borderColor: "#2A2B33",
-                                                  }}
-                                                >
-                                                  <div className="space-y-1.5 p-2">
-                                                    {/* Slippage - Running person icon */}
-                                                    <div className="flex items-center gap-1.5">
-                                                      <FaRunning
-                                                        size={10}
-                                                        className="opacity-80"
-                                                        style={{
-                                                          strokeWidth: "1",
-                                                        }}
-                                                      />
-                                                      <span className="text-xs font-light text-gray-300">
-                                                        {(
-                                                          settings.maxSlippage *
-                                                          100
-                                                        ).toFixed(0)}
-                                                        %
-                                                      </span>
-                                                    </div>
-
-                                                    {/* Priority Fee - Gas pump icon with yellow styling */}
-                                                    <div className="flex items-center gap-1.5">
-                                                      <FaGasPump
-                                                        size={10}
-                                                        className="opacity-90"
-                                                        style={{
-                                                          color: "#FCD34D",
-                                                          strokeWidth: "1",
-                                                        }}
-                                                      />
-                                                      <span className="text-xs font-light text-yellow-400">
-                                                        {settings.priority}
-                                                      </span>
-                                                      <span className="text-xs font-light text-red-500">
-                                                        ⚠
-                                                      </span>
-                                                    </div>
-
-                                                    {/* Bribe - Coins icon with yellow styling */}
-                                                    <div className="flex items-center gap-1.5">
-                                                      <FaCoins
-                                                        size={10}
-                                                        className="opacity-90"
-                                                        style={{
-                                                          color: "#FCD34D",
-                                                          strokeWidth: "1",
-                                                        }}
-                                                      />
-                                                      <span className="text-xs font-light text-yellow-400">
-                                                        {settings.bribe}
-                                                      </span>
-                                                      <span className="text-xs font-light text-red-500">
-                                                        ⚠
-                                                      </span>
-                                                    </div>
-
-                                                    {/* MEV Protection - Ban icon */}
-                                                    <div className="flex items-center gap-1.5">
-                                                      <FaBan
-                                                        size={10}
-                                                        className="opacity-90"
-                                                        style={{
-                                                          strokeWidth: "1",
-                                                        }}
-                                                      />
-                                                      <span className="text-xs font-light text-gray-300">
-                                                        {settings.mevMode ===
-                                                        "off"
-                                                          ? "Off"
-                                                          : settings.mevMode ===
-                                                              "reduced"
-                                                            ? "Reduced"
-                                                            : "Secure"}
-                                                      </span>
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* SVG gradient for Solana icon */}
-                                <svg className="pointer-events-none absolute h-0 w-0">
-                                  <defs>
-                                    <linearGradient
-                                      id="solana-gradient-tracker"
-                                      x1="0%"
-                                      y1="0%"
-                                      x2="100%"
-                                      y2="100%"
-                                    >
-                                      <stop
-                                        offset="0%"
-                                        style={{
-                                          stopColor: "#00FFA3",
-                                          stopOpacity: 1,
-                                        }}
-                                      />
-                                      <stop
-                                        offset="100%"
-                                        style={{
-                                          stopColor: "#DC1FFF",
-                                          stopOpacity: 1,
-                                        }}
-                                      />
-                                    </linearGradient>
-                                  </defs>
-                                </svg>
-                                <table className="mt-2 w-full min-w-[600px] text-[10px] sm:min-w-[720px] sm:text-xs">
-                                  <thead>
-                                    <tr className="border-b border-neutral-800/60">
-                                      <th className="w-16 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-20 sm:px-2 sm:py-2 sm:text-sm">
-                                        Time
-                                      </th>
-                                      <th className="w-20 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-24 sm:px-2 sm:py-2 sm:text-sm">
-                                        Wallet
-                                      </th>
-                                      <th className="w-10 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-12 sm:px-2 sm:py-2 sm:text-sm">
-                                        Side
-                                      </th>
-                                      <th className="w-36 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-48 sm:px-2 sm:py-2 sm:text-sm">
-                                        Token
-                                      </th>
-                                      <th className="w-20 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-24 sm:px-2 sm:py-2 sm:text-sm">
-                                        <div className="flex items-center gap-0.5 sm:gap-1">
-                                          <span>Amount</span>
-                                          <button
-                                            onClick={() => setShowUSD(!showUSD)}
-                                            className={`transition-colors ${showUSD ? "text-green-400" : "text-neutral-400 hover:text-neutral-300"}`}
-                                            title={
-                                              showUSD
-                                                ? "Switch to SOL"
-                                                : "Switch to USD"
-                                            }
-                                          >
-                                            <RiExchangeDollarLine className="h-3 w-3 sm:h-4 sm:w-4" />
-                                          </button>
-                                        </div>
-                                      </th>
-                                      <th className="w-16 px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:w-24 sm:px-2 sm:py-2 sm:text-sm">
-                                        MC
-                                      </th>
-                                      <th className="w-20 px-1 py-1.5 text-center text-[10px] text-neutral-400 sm:w-28 sm:px-2 sm:py-2 sm:text-sm">
-                                        Quick Buy
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {liveTradesToRender.map((trade, idx) => {
-                                      const wallet = wallets.find(
-                                        (w) => w.address === trade.wallet,
-                                      );
-                                      const timeAgo = new Date(
-                                        trade.at,
-                                      ).toLocaleTimeString();
-
-                                      // Prioritize websocket data (symbol/name) over metadata
-                                      const metadata = tokenMetadata.get(
-                                        trade.mint,
-                                      );
-
-                                      // Priority: websocket symbol > metadata symbol > websocket name > metadata name > fallback
-                                      const displaySymbol =
-                                        trade.symbol ||
-                                        metadata?.symbol ||
-                                        trade.name ||
-                                        metadata?.name ||
-                                        trade.mint.slice(0, 8) + "...";
-                                      const displayName =
-                                        trade.name || metadata?.name;
-
-                                      // Debug: Log what we're displaying
-                                      if (
-                                        displaySymbol ===
-                                        trade.mint.slice(0, 8) + "..."
-                                      ) {
-                                        console.log(
-                                          "[Live Trades] Showing fallback address for",
-                                          trade.mint.slice(0, 8),
-                                          {
-                                            trade_symbol: trade.symbol,
-                                            trade_name: trade.name,
-                                            metadata_symbol: metadata?.symbol,
-                                            metadata_name: metadata?.name,
-                                            has_metadata: !!metadata,
-                                          },
-                                        );
-                                      }
-
-                                      // Get token image URL - prioritize metadata image and normalize it
-                                      const rawImg = metadata?.image;
-                                      const tokenImageUrl =
-                                        normalizeAssetUrl(rawImg);
-                                      const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                                        displaySymbol || "T",
-                                      )}&background=0f1012&color=E6E7EA&size=28`;
-                                      const launchpadProtocol =
-                                        metadata?.launchpad_protocol?.toLowerCase() ||
-                                        "";
-
-                                      // Get protocol icon (exact logic from PulseTable)
-                                      const getProtocolIcon = (
-                                        protocol: string,
-                                      ): string => {
-                                        if (!protocol)
-                                          return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
-                                        if (protocol.includes("pump"))
-                                          return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
-                                        if (protocol.includes("meteora"))
-                                          return "https://s1.coincarp.com/logo/1/meteora.png?style=72&v=1759911013";
-                                        if (protocol.includes("raydium"))
-                                          return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
-                                        if (protocol.includes("boop"))
-                                          return "https://api.phantom.app/image-proxy/?image=https%3A%2F%2Fdhc7eusqrdwa0.cloudfront.net%2Fassets%2FBOOP_logo_icon_dark_bg.png&anim=true";
-                                        if (
-                                          protocol.includes("moonit") ||
-                                          protocol.includes("moonshot") ||
-                                          protocol.includes("moonshoot")
-                                        )
-                                          return "https://avatars.githubusercontent.com/u/174132191?s=280&v=4";
-                                        if (protocol.includes("bonk"))
-                                          return "https://s3.coinmarketcap.com/static-gravity/image/a28128d9ff7c49c9ad33ee2f626fda40.png";
-                                        if (protocol.includes("bags"))
-                                          return "https://play-lh.googleusercontent.com/7AxVcu1pumxavcGTb16WBJQU88CDZd0v8q0WzFwfin7zbBvItYMuNQ0Xkqq4srTw4A=w240-h480-rw";
-                                        if (protocol.includes("launch"))
-                                          return "https://s2.coinmarketcap.com/static/img/coins/64x64/8526.png";
-                                        return "https://logos-world.net/wp-content/uploads/2024/10/Pump-Fun-Logo.png";
-                                      };
-
-                                      // Get protocol color (exact logic from PulseTable)
-                                      const getProtocolColor = (
-                                        protocol: string,
-                                      ): string => {
-                                        if (!protocol) return "#22c55e";
-                                        if (protocol.includes("pump"))
-                                          return "#22c55e";
-                                        if (protocol.includes("meteora"))
-                                          return "#ff4662";
-                                        if (protocol.includes("raydium"))
-                                          return "#5c51f7";
-                                        if (
-                                          protocol.includes("moonit") ||
-                                          protocol.includes("moonshot") ||
-                                          protocol.includes("moonshoot")
-                                        )
-                                          return "#eab308";
-                                        if (protocol.includes("boop"))
-                                          return "#134577";
-                                        if (protocol.includes("bonk"))
-                                          return "#ff6b35";
-                                        if (protocol.includes("bags"))
-                                          return "#22c55e";
-                                        if (protocol.includes("launch"))
-                                          return "#3b82f6";
-                                        if (protocol.includes("orca"))
-                                          return "#0ea5e9";
-                                        if (protocol.includes("jupiter"))
-                                          return "#8b5cf6";
-                                        return "#22c55e";
-                                      };
-
-                                      const protocolIcon =
-                                        getProtocolIcon(launchpadProtocol);
-                                      const protocolColor =
-                                        getProtocolColor(launchpadProtocol);
-
-                                      // Check if token should have full circle image (no white space)
-                                      const isMeteora =
-                                        launchpadProtocol.includes("meteora");
-                                      const isBonk =
-                                        launchpadProtocol.includes("bonk");
-                                      const isBags =
-                                        launchpadProtocol.includes("bags");
-                                      const isMoonit =
-                                        launchpadProtocol.includes("moonit") ||
-                                        launchpadProtocol.includes(
-                                          "moonshot",
-                                        ) ||
-                                        launchpadProtocol.includes("moonshoot");
-                                      const isFullCircleImage =
-                                        isMeteora ||
-                                        isBonk ||
-                                        isBags ||
-                                        isMoonit;
-
-                                      const tokenAgeLabel = formatTokenAge(
-                                        (trade as any).created_at ??
-                                          (trade as any).createdAt ??
-                                          null,
-                                      );
-
-                                      return (
-                                        <tr
-                                          key={`${trade.tx}-${idx}`}
-                                          className="group relative border-b border-neutral-800/50 transition-all duration-300"
-                                          style={{
-                                            backgroundColor:
-                                              trade.side === "buy"
-                                                ? "rgba(34, 197, 94, 0.08)"
-                                                : "rgba(239, 68, 68, 0.08)",
-                                          }}
-                                          onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor =
-                                              trade.side === "buy"
-                                                ? "rgba(34, 197, 94, 0.15)"
-                                                : "rgba(239, 68, 68, 0.15)";
-                                          }}
-                                          onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor =
-                                              trade.side === "buy"
-                                                ? "rgba(34, 197, 94, 0.08)"
-                                                : "rgba(239, 68, 68, 0.08)";
-                                          }}
-                                        >
-                                          <td className="w-16 px-1 py-1.5 text-[9px] text-neutral-400 sm:w-20 sm:px-2 sm:py-2 sm:text-xs">
-                                            {timeAgo}
-                                          </td>
-                                          <td className="w-20 px-1 py-1.5 font-mono text-[9px] sm:w-24 sm:px-2 sm:py-2 sm:text-xs">
-                                            <span
-                                              className="truncate"
-                                              title={trade.wallet}
-                                            >
-                                              {wallet?.emoji || "💼"}{" "}
-                                              {wallet?.name ||
-                                                trade.wallet.slice(0, 4) +
-                                                  "..."}
-                                            </span>
-                                          </td>
-                                          <td className="w-10 px-1 py-1.5 sm:w-12 sm:px-2 sm:py-2">
-                                            <span
-                                              className={`rounded px-0.5 py-0.5 text-[9px] font-semibold sm:px-1 sm:text-[10px] ${
-                                                trade.side === "buy"
-                                                  ? "bg-green-500/20 text-green-400"
-                                                  : "bg-red-500/20 text-red-400"
-                                              }`}
-                                            >
-                                              {trade.side.toUpperCase()}
-                                            </span>
-                                          </td>
-                                          <td className="w-36 px-1 py-1.5 sm:w-48 sm:px-2 sm:py-2">
-                                            <button
-                                              onClick={async () => {
-                                                // Use liquidity pool / trading pair address (pair_address) for navigation
-                                                // This should be pre-resolved by WalletTrackerContext, but we have a fallback
-                                                let tokenAddress =
-                                                  trade.pair_address;
-
-                                                // Fallback: if pair_address is not available, resolve it now
-                                                if (
-                                                  !tokenAddress &&
-                                                  trade.mint
-                                                ) {
-                                                  console.log(
-                                                    "[Trackers] pair_address not found, resolving from mint:",
-                                                    trade.mint,
-                                                  );
-
-                                                  try {
-                                                    // First try to get it from token search (most reliable)
-                                                    const searchResponse =
-                                                      await fetch(
-                                                        `/api/token-service/search?phrase=${encodeURIComponent(trade.mint)}&limit=1`,
-                                                      );
-
-                                                    if (searchResponse.ok) {
-                                                      const searchData =
-                                                        await searchResponse.json();
-                                                      if (
-                                                        searchData.tokens &&
-                                                        searchData.tokens
-                                                          .length > 0
-                                                      ) {
-                                                        const token =
-                                                          searchData.tokens[0];
-                                                        tokenAddress =
-                                                          token.pair_address ||
-                                                          token.poolId;
-                                                        console.log(
-                                                          "[Trackers] Resolved pair_address from search:",
-                                                          tokenAddress,
-                                                        );
-                                                      }
-                                                    }
-
-                                                    // Fallback to hydrate-pair if search didn't work
-                                                    if (!tokenAddress) {
-                                                      const hydrateResponse =
-                                                        await fetch(
-                                                          "/api/token-service/hydrate-pair",
-                                                          {
-                                                            method: "POST",
-                                                            headers: {
-                                                              "Content-Type":
-                                                                "application/json",
-                                                            },
-                                                            body: JSON.stringify(
-                                                              {
-                                                                mint: trade.mint,
-                                                              },
-                                                            ),
-                                                          },
-                                                        );
-
-                                                      if (hydrateResponse.ok) {
-                                                        const hydrateData =
-                                                          await hydrateResponse.json();
-                                                        tokenAddress =
-                                                          hydrateData.pair_address ||
-                                                          hydrateData.poolId;
-                                                        console.log(
-                                                          "[Trackers] Resolved pair_address from hydrate:",
-                                                          tokenAddress,
-                                                        );
-                                                      }
-                                                    }
-                                                  } catch (error) {
-                                                    console.warn(
-                                                      "[Trackers] Failed to resolve pair_address:",
-                                                      error,
-                                                    );
-                                                  }
-                                                }
-
-                                                // Final fallback to mint if resolution failed
-                                                if (!tokenAddress) {
-                                                  tokenAddress = trade.mint;
-                                                  console.warn(
-                                                    "[Trackers] Using mint as fallback:",
-                                                    tokenAddress,
-                                                  );
-                                                }
-
-                                                console.log(
-                                                  "[Trackers] Navigating with address:",
-                                                  tokenAddress,
-                                                  "for token:",
-                                                  displaySymbol,
-                                                );
-                                                window.location.href = `/trade/${tokenAddress}`;
-                                              }}
-                                              className="flex cursor-pointer items-center gap-1 font-mono text-[9px] text-emerald-300 transition-colors hover:text-emerald-200 sm:gap-2 sm:text-xs"
-                                              title={displayName || undefined}
-                                            >
-                                              {/* Token icon with protocol badge (smaller version of PulseTable) */}
-                                              <div className="relative flex h-5 w-5 flex-shrink-0 items-center justify-center sm:h-7 sm:w-7">
-                                                {/* Main token image with border */}
-                                                <div
-                                                  className="relative rounded-sm"
-                                                  style={{
-                                                    border: `1px solid ${protocolColor}B3`,
-                                                    padding: "2px",
-                                                    backgroundColor: "#06070b",
-                                                  }}
-                                                >
-                                                  <div className="relative h-4 w-4 overflow-hidden rounded-sm sm:h-[22px] sm:w-[22px]">
-                                                    <img
-                                                      src={
-                                                        tokenImageUrl ||
-                                                        fallbackAvatar
-                                                      }
-                                                      alt={
-                                                        displayName ||
-                                                        displaySymbol
-                                                      }
-                                                      className="h-full w-full object-cover"
-                                                      onError={(e) => {
-                                                        e.currentTarget.src =
-                                                          fallbackAvatar;
-                                                      }}
-                                                    />
-                                                  </div>
-                                                </div>
-
-                                                {/* Protocol badge icon (bottom-right corner) */}
-                                                <div
-                                                  className="absolute right-0 bottom-0 flex translate-x-1/4 translate-y-1/4 transform items-center justify-center rounded-full bg-white"
-                                                  style={{
-                                                    width: 10,
-                                                    height: 10,
-                                                    border: `1px solid ${protocolColor}`,
-                                                    boxShadow: `0 0 2px ${protocolColor}60`,
-                                                  }}
-                                                >
-                                                  <img
-                                                    src={protocolIcon}
-                                                    alt="Protocol"
-                                                    className={`${isFullCircleImage ? "h-full w-full object-cover" : "h-3/4 w-3/4 object-contain"} rounded-full`}
-                                                    style={{
-                                                      filter:
-                                                        protocolColor ===
-                                                        "#eab308"
-                                                          ? "sepia(1) saturate(3) hue-rotate(-10deg) brightness(1.1)"
-                                                          : "none",
-                                                    }}
-                                                  />
-                                                </div>
-                                              </div>
-                                              <div className="flex min-w-0 items-center gap-1 text-left leading-tight sm:gap-1.5">
-                                                <span className="truncate text-xs font-medium text-neutral-100 sm:text-base">
-                                                  {displaySymbol}
-                                                </span>
-                                                {(() => {
-                                                  const age = getTokenAge(
-                                                    metadata?.createdAt,
-                                                  );
-                                                  if (age) {
-                                                    return (
-                                                      <>
-                                                        <span className="text-neutral-500">
-                                                          •
-                                                        </span>
-                                                        <span className="text-sm font-medium whitespace-nowrap text-green-400">
-                                                          {age}
-                                                        </span>
-                                                      </>
-                                                    );
-                                                  }
-                                                  return null;
-                                                })()}
-                                              </div>
-                                            </button>
-                                          </td>
-                                          <td className="w-20 px-1 py-1.5 text-[9px] text-neutral-200 sm:w-24 sm:px-2 sm:py-2 sm:text-xs">
-                                            <div className="flex items-center gap-0.5 sm:gap-1">
-                                              {showUSD ? (
-                                                <span className="text-[9px] font-semibold text-green-400 sm:text-xs">
-                                                  $
-                                                </span>
-                                              ) : (
-                                                <SiSolana
-                                                  className="inline-block h-2.5 w-2.5 flex-shrink-0 sm:h-3 sm:w-3"
-                                                  aria-hidden="true"
-                                                  style={{
-                                                    color: "unset",
-                                                    fill: "url(#solana-gradient-tracker)",
-                                                    filter: "none",
-                                                  }}
-                                                />
-                                              )}
-                                              <span className="text-[9px] sm:text-xs">
-                                                {(() => {
-                                                  if (showUSD) {
-                                                    // Display USD price from websocket
-                                                    if (
-                                                      trade.price_usd !==
-                                                        null &&
-                                                      trade.price_usd !==
-                                                        undefined
-                                                    ) {
-                                                      // Format USD with commas and 2 decimal places
-                                                      return new Intl.NumberFormat(
-                                                        "en-US",
-                                                        {
-                                                          minimumFractionDigits: 2,
-                                                          maximumFractionDigits: 2,
-                                                        },
-                                                      ).format(trade.price_usd);
-                                                    }
-                                                    return "-";
-                                                  } else {
-                                                    // Display SOL amount with 4 decimal places
-                                                    if (
-                                                      trade.sol_spent !==
-                                                        null &&
-                                                      trade.sol_spent !==
-                                                        undefined
-                                                    ) {
-                                                      // Check if value is in lamports (very large numbers) and convert to SOL
-                                                      let solAmount = Math.abs(
-                                                        trade.sol_spent,
-                                                      );
-                                                      if (solAmount > 1000) {
-                                                        // Likely in lamports, convert to SOL (1 SOL = 1e9 lamports)
-                                                        solAmount =
-                                                          solAmount / 1e9;
-                                                      }
-                                                      return solAmount.toFixed(
-                                                        4,
-                                                      );
-                                                    }
-                                                    // Fallback to token amount if sol_spent is not available
-                                                    return `${trade.amount.toFixed(4)} tokens`;
-                                                  }
-                                                })()}
-                                              </span>
-                                            </div>
-                                          </td>
-                                          <td className="w-16 px-1 py-1.5 text-[9px] text-neutral-300 sm:w-24 sm:px-2 sm:py-2 sm:text-xs">
-                                            {(() => {
-                                              const marketCap =
-                                                metadata?.market_cap_usd;
-                                              if (!marketCap || marketCap === 0)
-                                                return (
-                                                  <span className="text-neutral-500">
-                                                    -
-                                                  </span>
-                                                );
-                                              return `$${formatMarketCap(marketCap)}`;
-                                            })()}
-                                          </td>
-                                          <td className="w-20 px-1 py-1.5 sm:w-28 sm:px-2 sm:py-2">
-                                            <div className="flex items-center justify-center">
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handleQuickBuy(trade);
-                                                }}
-                                                className="z-50 flex cursor-pointer items-center justify-center gap-1 rounded-full px-2 py-1 text-[9px] font-bold whitespace-nowrap opacity-0 shadow-sm transition-all duration-200 ease-out group-hover:opacity-100 sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-sm"
-                                                style={{
-                                                  backgroundColor: "#18c48c",
-                                                  color: "#000000",
-                                                  border:
-                                                    "1px solid rgba(0,0,0,0.15)",
-                                                }}
-                                                onMouseEnter={(e) => {
-                                                  e.currentTarget.style.backgroundColor =
-                                                    "#12a877";
-                                                  e.currentTarget.style.transform =
-                                                    "translateY(-1px)";
-                                                  e.currentTarget.style.boxShadow =
-                                                    "0 4px 14px rgba(112, 224, 176, 0.25)";
-                                                }}
-                                                onMouseLeave={(e) => {
-                                                  e.currentTarget.style.backgroundColor =
-                                                    "#18c48c";
-                                                  e.currentTarget.style.transform =
-                                                    "translateY(0)";
-                                                  e.currentTarget.style.boxShadow =
-                                                    "none";
-                                                }}
-                                              >
-                                                <HiLightningBolt className="h-2.5 w-2.5 text-black sm:h-3.5 sm:w-3.5" />
-                                                <span className="text-[9px] sm:text-xs">
-                                                  {quickBuyAmount} SOL
-                                                </span>
-                                              </button>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
-                          </>
-                        )}
+                        ) : null}
                       </div>
                     </>
                   )}
@@ -2720,27 +1815,11 @@ export default function TrackersPage() {
                           </div>
                         ) : (
                           <div className="scrollbar-hide overflow-x-auto">
-                            <table className="w-full min-w-[400px] text-[10px] sm:min-w-[520px] sm:text-xs">
-                              <thead>
-                                <tr className="border-b border-neutral-800/60">
-                                  <th className="px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
-                                    Account
-                                  </th>
-                                  <th className="px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
-                                    Followers
-                                  </th>
-                                  <th className="px-1 py-1.5 text-left text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
-                                    Added
-                                  </th>
-                                  <th className="px-1 py-1.5 text-right text-[10px] text-neutral-400 sm:px-2 sm:py-2 sm:text-sm">
-                                    Actions
-                                  </th>
-                                </tr>
-                              </thead>
+                            <table className="w-full min-w-[500px] text-[10px] sm:min-w-[640px] sm:text-xs">
                               <tbody>
                                 {twitterAccounts.map((account) => (
                                   <TwitterAccountRow
-                                    key={account.id}
+                                    key={account.username}
                                     account={account}
                                     onRemove={handleRemoveTwitterAccount}
                                     onViewProfile={handleViewTwitterProfile}
@@ -2754,125 +1833,80 @@ export default function TrackersPage() {
                     ) : (
                       // X Feed Tab
                       <>
-                        {twitterAccounts.length === 0 ? (
+                        {loadingTwitterFeed ? (
                           <div className="flex h-full flex-col items-center justify-center py-8 text-center">
                             <span className="mb-4 text-neutral-400">
-                              Add Twitter accounts to see their feed
-                            </span>
-                          </div>
-                        ) : loadingTwitterFeed ? (
-                          <div className="flex h-full flex-col items-center justify-center py-8">
-                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-400 border-t-transparent" />
-                            <span className="mt-4 text-neutral-400">
                               Loading feed...
                             </span>
                           </div>
                         ) : twitterFeed.length === 0 ? (
                           <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                            <span className="text-neutral-400">
+                            <span className="mb-4 text-neutral-400">
                               No tweets found
                             </span>
                           </div>
                         ) : (
-                          <div className="space-y-3 p-2">
-                            {selectedTwitterUser && (
-                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-emerald-500/10 px-3 py-2">
-                                <span className="text-xs text-emerald-400">
-                                  Showing tweets from @{selectedTwitterUser}
-                                </span>
-                                <button
-                                  onClick={() => setSelectedTwitterUser(null)}
-                                  className="text-xs text-neutral-400 hover:text-white"
-                                >
-                                  Show All
-                                </button>
-                              </div>
-                            )}
+                          <div className="space-y-2 p-2">
                             {twitterFeed.map((tweet) => (
                               <div
                                 key={tweet.id}
-                                className="rounded-lg border border-neutral-800 bg-[#101010] p-3 transition-all duration-300 hover:border-emerald-400/40 hover:bg-[#141414]"
+                                className="rounded-lg border border-neutral-800/50 bg-neutral-900/30 p-3"
                               >
-                                {/* Tweet Header */}
-                                <div className="mb-2 flex items-start gap-2">
-                                  {tweet.authorProfileImage ? (
+                                <div className="mb-2 flex items-center gap-2">
+                                  {tweet.authorAvatar ? (
                                     <img
-                                      src={tweet.authorProfileImage}
+                                      src={tweet.authorAvatar}
                                       alt={tweet.authorName}
                                       className="h-8 w-8 rounded-full"
                                     />
                                   ) : (
-                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-700 text-xs text-neutral-300">
                                       {tweet.authorName.charAt(0).toUpperCase()}
                                     </div>
                                   )}
                                   <div className="min-w-0 flex-1">
                                     <div className="flex flex-wrap items-center gap-2">
-                                      <span className="truncate text-sm font-semibold text-white">
+                                      <span className="font-medium text-neutral-200">
                                         {tweet.authorName}
                                       </span>
-                                      <span className="truncate text-xs text-neutral-400">
+                                      <span className="text-xs text-neutral-400">
                                         @{tweet.authorUsername}
                                       </span>
+                                      <span className="text-xs text-neutral-500">
+                                        {new Date(
+                                          tweet.createdAt,
+                                        ).toLocaleString()}
+                                      </span>
                                     </div>
-                                    <span className="text-xs text-neutral-500">
-                                      {new Date(
-                                        tweet.createdAt,
-                                      ).toLocaleString()}
-                                    </span>
                                   </div>
                                 </div>
-
-                                {/* Tweet Text */}
-                                <p className="mb-2 text-sm break-words whitespace-pre-wrap text-neutral-200">
+                                <p className="mb-2 text-sm text-neutral-300">
                                   {tweet.text}
                                 </p>
-
-                                {/* Tweet Images */}
                                 {tweet.images && tweet.images.length > 0 && (
-                                  <div
-                                    className="mb-2 grid gap-2"
-                                    style={{
-                                      gridTemplateColumns:
-                                        tweet.images.length === 1
-                                          ? "1fr"
-                                          : tweet.images.length === 2
-                                            ? "1fr 1fr"
-                                            : tweet.images.length === 3
-                                              ? "1fr 1fr"
-                                              : "repeat(2, 1fr)",
-                                    }}
-                                  >
-                                    {tweet.images.map((imageUrl, idx) => (
+                                  <div className="mb-2 flex gap-2">
+                                    {tweet.images.map((img, idx) => (
                                       <img
                                         key={idx}
-                                        src={imageUrl}
+                                        src={img}
                                         alt={`Tweet image ${idx + 1}`}
-                                        className="h-auto max-h-96 w-full cursor-pointer rounded-lg border border-neutral-700/50 object-cover transition-opacity hover:opacity-90"
-                                        onClick={() =>
-                                          window.open(imageUrl, "_blank")
-                                        }
-                                        onError={(e) => {
-                                          (
-                                            e.target as HTMLImageElement
-                                          ).style.display = "none";
-                                        }}
+                                        className="max-h-48 rounded-lg"
                                       />
                                     ))}
                                   </div>
                                 )}
 
                                 {/* Tweet Stats */}
-                                <div className="flex flex-wrap items-center gap-4 text-xs text-neutral-400">
-                                  <span>💬 {tweet.replyCount || 0}</span>
-                                  <span>🔁 {tweet.retweetCount || 0}</span>
+                                <div className="flex items-center gap-4 text-xs text-neutral-500">
                                   <span>❤️ {tweet.likeCount || 0}</span>
+                                  <span>🔄 {tweet.retweetCount || 0}</span>
+                                  <span>💬 {tweet.replyCount || 0}</span>
                                   {tweet.url && (
                                     <a
                                       href={tweet.url}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="ml-auto text-emerald-400 hover:text-emerald-300"
+                                      className="text-[#70E0B0] hover:underline"
                                     >
                                       View on X →
                                     </a>
@@ -2890,169 +1924,37 @@ export default function TrackersPage() {
             </div>
           </div>
         </div>
-
-        <AddWalletModal
-          isOpen={showAddWalletModal}
-          onClose={() => setShowAddWalletModal(false)}
-          onAddWallet={handleAddWallet}
-          chain={selectedChain}
-        />
-        <ImportExportWalletModal
-          mode={"import"}
-          isOpen={showImportModal}
-          onClose={() => setShowImportModal(false)}
-          onImport={async (imported, onProgress) => {
-            try {
-              // Transform imported wallets to support different formats
-              const transformedWallets = imported.map((wallet: any) => {
-                // Handle Axiom.trade format
-                if (wallet.trackedWalletAddress) {
-                  return {
-                    address: wallet.trackedWalletAddress,
-                    name: wallet.name || "Imported Wallet",
-                    emoji: wallet.emoji || getRandomEmoji(),
-                    createdAt: Date.now(),
-                  };
-                }
-                // Handle standard format - ensure all required fields exist
-                return {
-                  address: wallet.address,
-                  name: wallet.name || "Imported Wallet",
-                  emoji: wallet.emoji || getRandomEmoji(),
-                  createdAt: wallet.createdAt || Date.now(),
-                };
-              });
-
-              const existingAddresses = new Set(
-                watchedWallets
-                  .map((wallet) => normalizeAddress(wallet.address))
-                  .filter(Boolean),
-              );
-              const batchAddresses = new Set<string>();
-              const duplicateExisting: string[] = [];
-              const duplicateWithinImport: string[] = [];
-              const invalidWallets: string[] = [];
-              const walletsToAdd = transformedWallets.filter((wallet) => {
-                const normalized = normalizeAddress(wallet.address);
-                if (!normalized) {
-                  invalidWallets.push(wallet.address);
-                  return false;
-                }
-                if (existingAddresses.has(normalized)) {
-                  duplicateExisting.push(wallet.address);
-                  return false;
-                }
-                if (batchAddresses.has(normalized)) {
-                  duplicateWithinImport.push(wallet.address);
-                  return false;
-                }
-                batchAddresses.add(normalized);
-                return true;
-              });
-
-              const availableSlots = MAX_WALLETS - watchedWallets.length;
-              if (walletsToAdd.length > availableSlots) {
-                const message =
-                  availableSlots > 0
-                    ? `You can only add ${availableSlots} more wallet${availableSlots === 1 ? "" : "s"}. Remove some before importing.`
-                    : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`;
-                throw new Error(message);
-              }
-
-              const total = walletsToAdd.length;
-              let successCount = 0;
-              let errorCount = 0;
-
-              if (total === 0) {
-                onProgress?.(0, 0);
-                showToastMessage(
-                  composeImportSummary({
-                    successCount: 0,
-                    duplicateExisting,
-                    duplicateWithinImport,
-                    invalidWallets,
-                    skippedByLimit: [],
-                    failedCount: 0,
-                  }),
-                );
-                return;
-              }
-
-              onProgress?.(0, total);
-
-              let processed = 0;
-              const bulkPayload = walletsToAdd.map((wallet) => ({
-                wallet: wallet.address,
-                walletName: wallet.name,
-                emoji: wallet.emoji || getRandomEmoji(),
-              }));
-
-              await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
-              await ensureNotificationsEnabled(walletsToAdd);
-              successCount = walletsToAdd.length;
-              processed = walletsToAdd.length;
-              onProgress?.(processed, total);
-
-              if (typeof window !== "undefined") {
-                walletsToAdd.forEach((wallet) => {
-                  localStorage.setItem(
-                    `wallet_notifications_${wallet.address}`,
-                    JSON.stringify(true),
-                  );
-                });
-              }
-
-              await loadWalletsFromBackend();
-
-              showToastMessage(
-                composeImportSummary({
-                  successCount,
-                  duplicateExisting,
-                  duplicateWithinImport,
-                  invalidWallets,
-                  skippedByLimit: [],
-                  failedCount: errorCount,
-                }),
-              );
-            } catch (error) {
-              console.error("Import error:", error);
-              showToastMessage(
-                (error as Error)?.message || "Failed to import wallets",
-              );
-              throw error; // Re-throw so modal can handle it
-            }
-          }}
-          wallets={wallets}
-        />
-        {toast && (
-          <div className="animate-fade-in fixed top-8 left-1/2 z-50 w-fit -translate-x-1/2 rounded-lg border border-emerald-400/50 bg-gradient-to-r from-emerald-500 to-green-500 px-6 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-400/30">
-            {toast}
-          </div>
-        )}
-        {scannedWallet && (
-          <WalletScanPanel
-            wallet={scannedWallet}
-            onClose={() => setScannedWallet(null)}
-          />
-        )}
-        <AddTwitterHandleModal
-          isOpen={showAddTwitterModal}
-          onClose={() => setShowAddTwitterModal(false)}
-          onAddTwitterHandle={handleAddTwitterAccount}
-        />
-
-        {/* Filter Popout */}
-        {isFilterPopoutOpen && (
-          <FilterPopout
-            open={isFilterPopoutOpen}
-            onClose={() => setIsFilterPopoutOpen(false)}
-            onApplyFilters={(filters) => setLocalFilters(filters)}
-            currentFilters={localFilters}
-          />
-        )}
-
-        <Footer />
       </div>
+
+      {/* Modals */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-neutral-800 px-4 py-2 text-white">
+          {toast}
+        </div>
+      )}
+      {scannedWallet && (
+        <WalletScanPanel
+          wallet={scannedWallet}
+          onClose={() => setScannedWallet(null)}
+        />
+      )}
+      <AddTwitterHandleModal
+        isOpen={showAddTwitterModal}
+        onClose={() => setShowAddTwitterModal(false)}
+        onAdd={handleAddTwitterAccount}
+      />
+      {isFilterPopoutOpen && (
+        <FilterPopout
+          onClose={() => setIsFilterPopoutOpen(false)}
+          onApply={(filters) => {
+            setLocalFilters(filters);
+            setIsFilterPopoutOpen(false);
+          }}
+          currentFilters={localFilters}
+        />
+      )}
+
+      <Footer />
     </>
   );
 }
