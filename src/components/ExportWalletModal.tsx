@@ -64,7 +64,6 @@ interface ExportWalletModalProps {
   walletAddress?: string; // The actual wallet address to display
   forceExport?: boolean;
   onForceExportConfirmed?: () => Promise<void> | void;
-  onForceExportSkipped?: () => void;
 }
 
 export default function ExportWalletModal({
@@ -74,14 +73,13 @@ export default function ExportWalletModal({
   walletAddress,
   forceExport = false,
   onForceExportConfirmed,
-  onForceExportSkipped,
 }: ExportWalletModalProps) {
   const turnkey = useTurnkey() as any;
   const { authState, clientState, wallets = [], exportWallet, user: turnkeyUser, session: turnkeySession } =
     turnkey || {};
   const session = turnkeySession || turnkey?.session;
   
-  const { user: appUser } = useUser();
+  const { logout } = useUser();
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [status, setStatus] = useState<ExportStatus>("idle");
@@ -103,7 +101,6 @@ export default function ExportWalletModal({
 
   const [hasConfirmedStorage, setHasConfirmedStorage] = useState(false);
   const [confirmingStorage, setConfirmingStorage] = useState(false);
-  const [showSkipModal, setShowSkipModal] = useState(false);
 
   // Check if authenticated
   const sessionFromContext = session || turnkey?.session;
@@ -687,14 +684,6 @@ export default function ExportWalletModal({
     onClose();
   };
 
-  const handleSkipBackup = useCallback(() => {
-    if (!forceExport) {
-      handleClose();
-      return;
-    }
-    setShowSkipModal(true);
-  }, [forceExport, handleClose]);
-
   const handleCancel = () => {
     // Cancel ongoing export
     if (timeoutRef.current) {
@@ -709,6 +698,11 @@ export default function ExportWalletModal({
     setError(null);
     setIframeVisible(false);
     setTargetPublicKey(null);
+  };
+
+  const handleLogout = () => {
+    handleCancel();
+    logout();
   };
 
   const currentStatus = statusCopy[status];
@@ -742,16 +736,31 @@ export default function ExportWalletModal({
         >
           {/* Header */}
           <div className="px-6 py-4 border-b border-[#2A2B33]">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-[#f0f5f5]">Export Wallet</h2>
-              {!isCloseDisabled && (
-                <button 
-                  className="text-[#9CA3AF] hover:text-[#f0f5f5] text-xl font-light transition-colors" 
-                  onClick={handleClose}
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-[#f0f5f5]">Export Wallet</h2>
+                {forceExport && (
+                  <p className="text-xs text-[#FF4D7F] mt-1">
+                    You must export and back up this key before continuing.
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-1.5 rounded-md border border-[#2A2B33] text-xs font-medium text-[#f0f5f5] hover:bg-[#2A2B33] transition whitespace-nowrap"
                 >
-                  <FaTimes />
+                  Log out
                 </button>
-              )}
+                {!isCloseDisabled && (
+                  <button 
+                    className="text-[#9CA3AF] hover:text-[#f0f5f5] text-xl font-light transition-colors" 
+                    onClick={handleClose}
+                  >
+                    <FaTimes />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -896,20 +905,6 @@ export default function ExportWalletModal({
               </p>
             </div>
 
-            {forceExport && !iframeVisible && (
-              <div className="mt-4 flex flex-col gap-2">
-                <button
-                  onClick={handleSkipBackup}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#FF4D7F] px-4 py-2 text-sm font-semibold text-[#FF4D7F] hover:bg-[#FF4D7F]/10 transition"
-                >
-                  Skip export for now
-                </button>
-                <p className="text-xs text-[#FF4D7F]">
-                  Skipping means you accept the risk of losing access if Turnkey is unavailable. We cannot recover this key for you later.
-                </p>
-              </div>
-            )}
-
             {forceExport && status === "done" && iframeVisible && (
               <div className="mt-4 p-4 rounded-lg border border-[#2A2B33] bg-[#13151B]">
                 <p className="text-sm text-[#f0f5f5]">
@@ -927,12 +922,6 @@ export default function ExportWalletModal({
                     {confirmingStorage && <Loader2 className="h-4 w-4 animate-spin" />}
                     {hasConfirmedStorage ? "Confirmed" : "I stored this key safely"}
                   </button>
-                  <button
-                    onClick={handleSkipBackup}
-                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#FF4D7F] px-4 py-2 text-sm font-semibold text-[#FF4D7F] hover:bg-[#FF4D7F]/10 transition"
-                  >
-                    Skip backup for now
-                  </button>
                 </div>
               </div>
             )}
@@ -948,41 +937,6 @@ export default function ExportWalletModal({
         />
       )}
 
-      {forceExport && showSkipModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={() => setShowSkipModal(false)}>
-          <div
-            className="bg-[#101114] border border-[#2A2B33] rounded-lg w-full max-w-md p-6 text-[#f0f5f5]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold mb-2">Skip wallet backup?</h3>
-            <p className="text-sm text-[#d1d5db] mb-4">
-              Without this key you may lose access forever if Turnkey is unavailable. Make sure you understand the risk
-              before skipping this step.
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={() => {
-                  setShowSkipModal(false);
-                  pendingRevealRef.current = false;
-                  setHasConfirmedStorage(false);
-                  setConfirmingStorage(false);
-                  onForceExportSkipped?.();
-                  onClose();
-                }}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#FF4D7F] px-4 py-2 text-sm font-semibold text-[#FF4D7F] hover:bg-[#FF4D7F]/10 transition"
-              >
-                Yes, I understand the risk
-              </button>
-              <button
-                onClick={() => setShowSkipModal(false)}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2A2B33] px-4 py-2 text-sm font-semibold text-[#f0f5f5] hover:bg-[#353742] transition"
-              >
-                Go back
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

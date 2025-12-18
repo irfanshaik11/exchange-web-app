@@ -8,10 +8,9 @@ import { acknowledgeWalletExport } from "../utils/api";
 export default function WalletExportGuard() {
   const { user, refreshUser, primaryWalletAddresses } = useUser();
   const [forceOpen, setForceOpen] = useState(false);
-  const [skipAcknowledged, setSkipAcknowledged] = useState(false);
 
   const mustForce =
-    !!user && user.hasExportedWallet === false && !skipAcknowledged;
+    !!user && user.hasExportedWallet === false;
   const derivedAddress =
     primaryWalletAddresses?.ethereum ||
     primaryWalletAddresses?.solana ||
@@ -21,12 +20,6 @@ export default function WalletExportGuard() {
   useEffect(() => {
     setForceOpen(mustForce);
   }, [mustForce]);
-
-  useEffect(() => {
-    if (user && user.hasExportedWallet === false) {
-      setSkipAcknowledged(false);
-    }
-  }, [user?.id, user?.hasExportedWallet]);
 
   const handleClose = useCallback(() => {
     if (mustForce) {
@@ -51,21 +44,6 @@ export default function WalletExportGuard() {
     }
   }, [refreshUser, user?.bearerToken]);
 
-  const onForceExportSkippedToast = () => {
-    toast(
-      "You skipped exporting your key. Keep in mind we can't recover it later.",
-      {
-        icon: "⚠️",
-      }
-    );
-  };
-
-  const handleSkip = useCallback(() => {
-    setSkipAcknowledged(true);
-    setForceOpen(false);
-    onForceExportSkippedToast();
-  }, []);
-
   if (!forceOpen) return null;
 
   return (
@@ -76,7 +54,6 @@ export default function WalletExportGuard() {
       walletId={user?.walletId || undefined}
       walletAddress={derivedAddress}
       onForceExportConfirmed={handleConfirm}
-      onForceExportSkipped={handleSkip}
     />
   );
 }
