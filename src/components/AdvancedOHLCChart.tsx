@@ -3132,13 +3132,13 @@ Maker: ${walletAddress}`;
           user_id: 'public_user_id',
           theme: 'dark', // Dark mode
           // Time frames shown in the bottom toolbar
-          // For Monad: Only show 5m and above in toolbar (1s-1m are available in dropdown only)
+          // For Monad: Show 1D, 7D, 30D, 180D as default timeframe options (all use 1s candles)
+          // The resolution field keeps the candle interval the same (1S), only changes visible range
           time_frames: isMonad ? [
-            { text: '5m', resolution: '5', description: '5 Minutes', title: '5m' },
-            { text: '15m', resolution: '15', description: '15 Minutes', title: '15m' },
-            { text: '1h', resolution: '60', description: '1 Hour', title: '1h' },
-            { text: '4h', resolution: '240', description: '4 Hours', title: '4h' },
-            { text: '1D', resolution: '1D', description: '1 Day', title: '1D' },
+            { text: '1D', resolution: '1S', description: '1 Day', title: '1D' },
+            { text: '7D', resolution: '1S', description: '7 Days', title: '7D' },
+            { text: '30D', resolution: '1S', description: '30 Days', title: '30D' },
+            { text: '180D', resolution: '1S', description: '180 Days', title: '180D' },
           ] : [
             { text: '1m', resolution: '1', description: '1 Minute', title: '1m' },
             { text: '5m', resolution: '5', description: '5 Minutes', title: '5m' },

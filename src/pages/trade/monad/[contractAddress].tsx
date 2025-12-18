@@ -344,35 +344,14 @@ export default function MonadTradePage() {
     ? `${tokenNameForTitle} | Monad Trade`
     : "Monad Trade";
 
-  // OHLC params - Monad uses 1s as default for real-time granularity
+  // OHLC params - Monad uses 1s (1-second) candles as default for all tokens
   // TimescaleDB supports: 1s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w
   const getOHLCParams = useComponentCache(
     "ohlc-params-monad",
     [tokenData, displayToken],
     () => {
-      const createdAt = tokenData?.created_at || tokenData?.launch_time;
-      // Default to 1s interval for Monad for real-time trading view
-      // Use 24h timeframe as default to capture sparse early trading data
-      if (!createdAt) return { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
-
-      let timestamp = createdAt as any;
-      if (typeof createdAt === "number" && createdAt < 10000000000) timestamp = createdAt * 1000;
-
-      const createdDate = new Date(timestamp);
-      const diffMs = Date.now() - createdDate.getTime();
-      const ageInHours = diffMs / (1000 * 60 * 60);
-      const ageInDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-      // Always use 1s candles by default, timeframe scales with token age
-      if (ageInHours < 1) return { interval: "1s", timeframe: "1h", optimize: false } as const;
-      if (ageInHours < 6) return { interval: "1s", timeframe: "4h", optimize: false } as const;
-      if (ageInDays < 1) return { interval: "1s", timeframe: "24h", optimize: false } as const;
-      if (ageInDays < 7) return { interval: "1s", timeframe: "7d", optimize: false } as const;
-      if (ageInDays < 30) return { interval: "1s", timeframe: "30d", optimize: false } as const;
-      if (ageInDays < 90) return { interval: "1s", timeframe: "90d", optimize: true } as const;
-      if (ageInDays < 180) return { interval: "1s", timeframe: "180d", optimize: true } as const;
-      if (ageInDays < 365) return { interval: "1s", timeframe: "365d", optimize: true } as const;
-      return { interval: "1s", timeframe: "365d", optimize: true } as const;
+      // Always use 1s interval with 1d (24h) timeframe for all tokens regardless of age
+      return { interval: "1s" as const, timeframe: "24h" as const, optimize: false };
     }
   );
 
@@ -386,7 +365,7 @@ export default function MonadTradePage() {
   // Chart container refs and resizing
   const containerRef = useRef<HTMLDivElement | null>(null);
   const MIN_CHART_HEIGHT = 350;
-  const DEFAULT_CHART_HEIGHT_RATIO = 0.65;
+  const DEFAULT_CHART_HEIGHT_RATIO = 0.45; // Reduced from 0.65 to 0.45 (45% of viewport height)
   const SSR_DEFAULT_CHART_HEIGHT = 900;
 
   const getResponsiveLimits = useCallback(() => {
