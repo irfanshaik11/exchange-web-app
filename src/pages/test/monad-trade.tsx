@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useUser } from "~/components/UserContext";
 import { useWallet } from "~/components/useWallet";
 import { tradeMonadBuy, tradeMonadSell } from "~/utils/api";
+import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";
 import Head from "next/head";
 import { env } from "~/env";
@@ -138,6 +139,7 @@ export default function MonadTradeTestPage() {
         );
         console.log("✅ Buy Result:", result);
         console.log("🔗 Explorer URL:", explorerUrl);
+        broadcastMonadQuickTrade(tokenAddress, 'buy');
       } else {
         toast.error("Buy failed - check console for details");
         console.error("❌ Buy Result:", result);
@@ -272,6 +274,7 @@ export default function MonadTradeTestPage() {
         );
         console.log("✅ Sell Result:", result);
         console.log("🔗 Explorer URL:", explorerUrl);
+        broadcastMonadQuickTrade(sellTokenAddress || params.tokenAddress, 'sell');
       } else {
         toast.error("Sell failed - check console for details");
         console.error("❌ Sell Result:", result);
@@ -770,4 +773,3 @@ export default function MonadTradeTestPage() {
     </>
   );
 }
-

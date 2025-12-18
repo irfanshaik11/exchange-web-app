@@ -39,6 +39,7 @@ interface UseMonadPositionWebSocketReturn {
   connected: boolean;
   error: string | null;
   loading: boolean;
+  refreshPosition: () => Promise<void>;
 }
 
 /**
@@ -270,13 +271,17 @@ export function useMonadPositionWebSocket(
     };
   }, [enabled, tokenAddress, user?.id]); // Only reconnect when these change
 
+  const refreshPosition = useCallback(() => {
+    return fetchInitialPosition();
+  }, [fetchInitialPosition]);
+
   return {
     position,
     connected,
     error,
     loading,
+    refreshPosition,
   };
 }
 
 export default useMonadPositionWebSocket;
-
