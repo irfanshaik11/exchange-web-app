@@ -13,6 +13,7 @@ import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
 import dynamic from 'next/dynamic';
 import { TurnkeyRootProvider } from "../components/TurnkeyRootProvider";
+import WalletExportGuard from "../components/WalletExportGuard";
 
 import { useTurnkey, AuthState } from '@turnkey/react-wallet-kit';
 import { turnkeyLogin } from '../utils/api';
@@ -625,6 +626,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                     </WatchlistProvider>
                   </QuickBuyProvider>
                   <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                  <WalletExportGuard />
                 </ThemeProvider>
               </SolPriceProvider>
             </UserProvider>

@@ -24,6 +24,9 @@ export interface UserInfo {
   email: string;
   publicKey: string;
   bearerToken: string;
+  walletId?: string;
+  hasExportedWallet: boolean;
+  walletExportedAt?: string | null;
 }
 
 interface WalletInfo {
@@ -77,7 +80,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
     try {
       const cached = window.localStorage.getItem(USER_CACHE_KEY);
       if (!cached) return null;
-      return JSON.parse(cached) as UserInfo;
+      const parsed = JSON.parse(cached);
+      if (parsed && typeof parsed === "object") {
+        return {
+          ...parsed,
+          hasExportedWallet: !!parsed.hasExportedWallet,
+          walletExportedAt: parsed.walletExportedAt ?? null,
+        } as UserInfo;
+      }
+      return null;
     } catch (error) {
       console.warn("Failed to parse cached user, clearing cache", error);
       window.localStorage.removeItem(USER_CACHE_KEY);
@@ -141,6 +152,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.warn("Failed to persist user cache", error);
     }
+  }, []);
+
+  const normalizeUserPayload = useCallback((raw: any) => {
+    if (!raw || typeof raw !== "object") return null;
+    return {
+      ...raw,
+      hasExportedWallet: !!raw.hasExportedWallet,
+      walletExportedAt: raw.walletExportedAt ?? null,
+    };
   }, []);
 
   useEffect(() => {
@@ -736,7 +756,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        setUser({ bearerToken: token, ...nextUser });
+      const normalizedUser = normalizeUserPayload(nextUser) || nextUser;
+      setUser({ bearerToken: token, ...normalizedUser });
+
+      // Clear stored referral code hint after successful login
+      // (referral tracking is now handled by exchange-backend during user creation)
+      const referralCode = getStoredReferralCodeHint();
+      if (referralCode) {
+        clearStoredReferralCodeHint();
+      }
+
       } else {
         Cookies.remove("token");
         setUser(null);
@@ -752,8 +781,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
             try {
               const cached = window.localStorage.getItem(USER_CACHE_KEY);
               if (cached) {
-                const parsed = JSON.parse(cached) as UserInfo;
-                setUserState(parsed);
+                const parsed = JSON.parse(cached);
+                const normalized = normalizeUserPayload(parsed);
+                if (normalized) {
+                  setUserState(normalized as UserInfo);
+                }
               }
             } catch (cacheError) {
               console.warn(
@@ -767,7 +799,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [setUser, turnkeyUser?.userEmail, turnkeyUser?.userName, session?.userId]);
+  }, [setUser, turnkeyUser?.userEmail, turnkeyUser?.userName, session?.userId, normalizeUserPayload]);
 
   const logout = () => {
     const doLogout = async () => {
@@ -815,7 +847,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         window.dispatchEvent(new Event("referral-access-reset"));
       }
 
-      router.push("/").catch((err) =>
+      router.push("/pulse?chain=monad").catch((err) =>
         console.warn("[logout] Failed to navigate to login", err)
       );
     };
