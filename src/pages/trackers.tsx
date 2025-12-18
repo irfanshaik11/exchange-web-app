@@ -1938,6 +1938,117 @@ export default function TrackersPage() {
           onClose={() => setScannedWallet(null)}
         />
       )}
+      <AddWalletModal
+        isOpen={showAddWalletModal}
+        onClose={() => setShowAddWalletModal(false)}
+        onAddWallet={handleAddWallet}
+        chain={selectedChain}
+      />
+      <ImportExportWalletModal
+        mode="import"
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={async (wallets: any[], onProgress?: (current: number, total: number) => void) => {
+          try {
+            const existingAddresses = new Set(
+              watchedWallets
+                .map((wallet) => normalizeAddress(wallet.address))
+                .filter(Boolean),
+            );
+            const batchAddresses = new Set<string>();
+            const duplicateExisting: string[] = [];
+            const duplicateWithinImport: string[] = [];
+            const invalidWallets: string[] = [];
+            const walletsToAdd: {
+              address: string;
+              name: string;
+              emoji?: string;
+            }[] = [];
+
+            wallets.forEach((wallet: any, index: number) => {
+              if (onProgress) {
+                onProgress(index + 1, wallets.length);
+              }
+              
+              const transformedWallet = wallet?.trackedWalletAddress
+                ? {
+                    address: wallet.trackedWalletAddress,
+                    name: wallet.name || "Imported Wallet",
+                    emoji: wallet.emoji || getRandomEmoji(),
+                  }
+                : {
+                    address: wallet?.address,
+                    name: wallet?.name || "Imported Wallet",
+                    emoji: wallet?.emoji || getRandomEmoji(),
+                  };
+
+              const normalized = normalizeAddress(transformedWallet.address);
+              if (!normalized) {
+                invalidWallets.push(transformedWallet.address);
+                return;
+              }
+              if (existingAddresses.has(normalized)) {
+                duplicateExisting.push(transformedWallet.address);
+                return;
+              }
+              if (batchAddresses.has(normalized)) {
+                duplicateWithinImport.push(transformedWallet.address);
+                return;
+              }
+              batchAddresses.add(normalized);
+              walletsToAdd.push(transformedWallet);
+            });
+
+            const availableSlots = MAX_WALLETS - watchedWallets.length;
+            if (walletsToAdd.length > availableSlots) {
+              showToastMessage(
+                availableSlots > 0
+                  ? `You can only add ${availableSlots} more wallet${availableSlots === 1 ? "" : "s"}. Remove some before importing.`
+                  : `You have reached the limit of ${MAX_WALLETS} wallets. Remove some before importing.`,
+              );
+              return;
+            }
+
+            const bulkPayload = walletsToAdd.map((wallet) => ({
+              wallet: wallet.address,
+              walletName: wallet.name,
+              emoji: wallet.emoji || getRandomEmoji(),
+            }));
+
+            await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
+            await ensureNotificationsEnabled(walletsToAdd);
+            await loadWalletsFromBackend();
+            setShowImportModal(false);
+
+            const messages: string[] = [];
+            if (walletsToAdd.length > 0) {
+              messages.push(`Imported ${walletsToAdd.length} wallet${walletsToAdd.length === 1 ? "" : "s"}`);
+            }
+            if (duplicateExisting.length > 0) {
+              messages.push(`${duplicateExisting.length} duplicate${duplicateExisting.length === 1 ? "" : "s"} (already tracked)`);
+            }
+            if (duplicateWithinImport.length > 0) {
+              messages.push(`${duplicateWithinImport.length} duplicate${duplicateWithinImport.length === 1 ? "" : "s"} (within import)`);
+            }
+            if (invalidWallets.length > 0) {
+              messages.push(`${invalidWallets.length} invalid address${invalidWallets.length === 1 ? "" : "es"}`);
+            }
+            showToastMessage(
+              composeImportSummary({
+                successCount: walletsToAdd.length,
+                duplicateExisting,
+                duplicateWithinImport,
+                invalidWallets,
+                skippedByLimit: [],
+                failedCount: 0,
+              }),
+            );
+          } catch (error: any) {
+            showToastMessage(error?.message || "Failed to import wallets");
+          }
+        }}
+        wallets={wallets}
+      />
       <AddTwitterHandleModal
         isOpen={showAddTwitterModal}
         onClose={() => setShowAddTwitterModal(false)}
