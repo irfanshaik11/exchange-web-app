@@ -312,33 +312,19 @@ export default function WalletRow({
     const minute = 60 * 1000;
     const hour = 60 * minute;
     const day = 24 * hour;
-    const week = 7 * day;
-    const month = 30 * day;
-    const year = 365 * day;
 
     if (diff < minute) return "Just now";
     if (diff < hour) {
       const mins = Math.floor(diff / minute);
-      return `${mins} min${mins === 1 ? "" : "s"} ago`;
+      return `${mins}m`;
     }
     if (diff < day) {
       const hours = Math.floor(diff / hour);
-      return `${hours}h ago`;
+      return `${hours}h`;
     }
-    if (diff < week) {
-      const days = Math.floor(diff / day);
-      return `${days} day${days === 1 ? "" : "s"} ago`;
-    }
-    if (diff < month) {
-      const weeks = Math.floor(diff / week);
-      return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
-    }
-    if (diff < year) {
-      const months = Math.floor(diff / month);
-      return `${months} month${months === 1 ? "" : "s"} ago`;
-    }
-    const years = Math.floor(diff / year);
-    return `${years} yr${years === 1 ? "" : "s"} ago`;
+    // For anything >= 1 day, show compact days (user preference: e.g. "15d").
+    const days = Math.floor(diff / day);
+    return `${Math.max(1, days)}d`;
   };
 
   return (
