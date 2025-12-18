@@ -28,17 +28,30 @@ interface CachedTradeData {
   cachedAt: number;
 }
 
+interface FailedToken {
+  pairAddress: string;
+  failedAt: number;
+  failureCount: number;
+}
+
 class RollingTradeCacheManager {
   private static instance: RollingTradeCacheManager;
   private cache: Map<string, CachedTradeData>;
+  private failedTokens: Map<string, FailedToken>; // Track failed pair addresses
   private readonly MAX_CACHE_SIZE = 90; // 30 tokens × 3 columns
   private readonly CACHE_KEY = 'pulse_trade_cache';
+  private readonly FAILED_KEY = 'pulse_trade_cache_failed';
   private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly FAILED_RETRY_DELAY = 10 * 60 * 1000; // Don't retry failed tokens for 10 minutes
+  private readonly MAX_FAILURE_COUNT = 3; // Stop retrying after 3 failures
   private syncInProgress = false;
+  private lastSyncTokens: string = ''; // Track last sync to prevent duplicate syncs
 
   private constructor() {
     this.cache = new Map();
+    this.failedTokens = new Map();
     this.loadFromLocalStorage();
+    this.loadFailedTokens();
   }
 
   static getInstance(): RollingTradeCacheManager {
@@ -63,15 +76,29 @@ class RollingTradeCacheManager {
       return;
     }
 
+    // Create a signature of current tokens to detect actual changes
+    const allVisibleTokens = [
+      ...newTokens.slice(0, 30),
+      ...finalStretchTokens.slice(0, 30),
+      ...migratedTokens.slice(0, 30)
+    ];
+    
+    // Create a signature from mint addresses
+    const currentSignature = allVisibleTokens
+      .map(t => t.mint)
+      .filter(Boolean)
+      .sort()
+      .join(',');
+    
+    // Skip if tokens haven't actually changed (deep equality check)
+    if (currentSignature === this.lastSyncTokens) {
+      return;
+    }
+    
+    this.lastSyncTokens = currentSignature;
     this.syncInProgress = true;
 
     try {
-      const allVisibleTokens = [
-        ...newTokens.slice(0, 30),
-        ...finalStretchTokens.slice(0, 30),
-        ...migratedTokens.slice(0, 30)
-      ];
-
       console.log(`[RollingCache] Syncing cache with ${allVisibleTokens.length} visible tokens`);
 
       // Step 1: Remove tokens that are no longer visible
@@ -90,10 +117,40 @@ class RollingTradeCacheManager {
       });
 
       // Step 2: Preload trade data for new tokens (in background)
-      const tokensToPreload = allVisibleTokens.filter(token => !this.cache.has(token.mint));
+      // Filter out tokens without valid pair_address and those that have failed recently
+      const tokensToPreload = allVisibleTokens.filter(token => {
+        // Skip if already cached
+        if (this.cache.has(token.mint)) {
+          return false;
+        }
+        
+        // Skip if no pair_address
+        if (!token.pair_address || typeof token.pair_address !== 'string' || token.pair_address.trim().length === 0) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[RollingCache] ⏭️  Skipping ${token.symbol || token.mint?.slice(0, 8)} - invalid pair_address`);
+          }
+          return false;
+        }
+        
+        // Skip if this pair_address has failed too many times
+        const failedToken = this.failedTokens.get(token.pair_address);
+        if (failedToken) {
+          const timeSinceFailure = Date.now() - failedToken.failedAt;
+          if (failedToken.failureCount >= this.MAX_FAILURE_COUNT) {
+            // Permanently skip tokens that have failed too many times
+            return false;
+          }
+          if (timeSinceFailure < this.FAILED_RETRY_DELAY) {
+            // Skip if failure was recent
+            return false;
+          }
+        }
+        
+        return true;
+      });
 
       if (tokensToPreload.length > 0) {
-        console.log(`[RollingCache] 🔥 Preloading ${tokensToPreload.length} new tokens`);
+        console.log(`[RollingCache] 🔥 Preloading ${tokensToPreload.length} new tokens (${allVisibleTokens.length - tokensToPreload.length} skipped)`);
         // Don't await - preload in background
         this.preloadTokens(tokensToPreload).catch(err => {
           console.warn('[RollingCache] Preload error:', err);
@@ -147,19 +204,19 @@ class RollingTradeCacheManager {
       return;
     }
 
+    // IMPORTANT: Only use pair_address, never mint address
+    if (!token.pair_address) {
+      console.log(`[RollingCache] ⏭️  Skipping ${token.symbol} - no pair_address available`);
+      return;
+    }
+
+    const pairAddress = token.pair_address; // Define outside try for catch block access
+
     try {
       const baseUrl = process.env.NEXT_PUBLIC_GO_SERVICE_URL;
       if (!baseUrl) {
         throw new Error('NEXT_PUBLIC_GO_SERVICE_URL not configured');
       }
-
-      // IMPORTANT: Only use pair_address, never mint address
-      if (!token.pair_address) {
-        console.log(`[RollingCache] ⏭️  Skipping ${token.symbol} - no pair_address available`);
-        return;
-      }
-
-      const pairAddress = token.pair_address;
       const apiKey = process.env.NEXT_PUBLIC_BACKEND_API_KEY || 'test-key';
 
       // Reduced logging for performance
@@ -171,8 +228,8 @@ class RollingTradeCacheManager {
       const controller = new AbortController();
       const timeout = setTimeout(() => {
         controller.abort();
-        console.warn(`[RollingCache] Request timeout for ${token.symbol} after 3 seconds`);
-      }, 3000); // Reduced timeout to 3 seconds for faster loading
+        console.warn(`[RollingCache] Request timeout for ${token.symbol} after 15 seconds`);
+      }, 15000); // Increased timeout to 15 seconds to allow slow backend responses
 
       const tradesRes = await fetch(`${baseUrl}/v1/trade/view?pair_address=${pairAddress}`, {
         headers: {
@@ -181,7 +238,10 @@ class RollingTradeCacheManager {
         },
         signal: controller.signal,
       }).catch((err) => {
-        console.log(`[RollingCache] ⚠️  Failed to fetch ${token.symbol}:`, err.message);
+        // Only log non-abort errors (abort errors are expected timeouts)
+        if (err.name !== 'AbortError') {
+          console.log(`[RollingCache] ⚠️  Failed to fetch ${token.symbol}:`, err.message);
+        }
         return null;
       }).finally(() => clearTimeout(timeout));
 
@@ -191,14 +251,32 @@ class RollingTradeCacheManager {
       if (tradesRes && tradesRes.ok) {
         const tradesData = await tradesRes.json();
         trades = tradesData.recentTrades || [];
+        
+        // Clear failure record on success
+        if (this.failedTokens.has(pairAddress)) {
+          this.failedTokens.delete(pairAddress);
+          this.saveFailedTokens();
+        }
+        
         // Reduced logging for performance
         if (process.env.NODE_ENV === 'development') {
           console.log(`[RollingCache] ✅ Fetched ${trades.length} trades for ${token.symbol}`);
         }
       } else {
+        // Record failure
+        const existingFailure = this.failedTokens.get(pairAddress);
+        const failureCount = existingFailure ? existingFailure.failureCount + 1 : 1;
+        
+        this.failedTokens.set(pairAddress, {
+          pairAddress,
+          failedAt: Date.now(),
+          failureCount,
+        });
+        this.saveFailedTokens();
+        
         // Reduced logging for performance
         if (process.env.NODE_ENV === 'development') {
-          console.log(`[RollingCache] ❌ No trade data for ${token.symbol} (${tradesRes?.status || 'timeout'})`);
+          console.log(`[RollingCache] ❌ No trade data for ${token.symbol} (${tradesRes?.status || 'timeout'}) - failure count: ${failureCount}`);
         }
         return; // Don't cache if no data
       }
@@ -231,6 +309,17 @@ class RollingTradeCacheManager {
       }
 
     } catch (error: any) {
+      // Record failure on exception
+      const existingFailure = this.failedTokens.get(pairAddress);
+      const failureCount = existingFailure ? existingFailure.failureCount + 1 : 1;
+      
+      this.failedTokens.set(pairAddress, {
+        pairAddress,
+        failedAt: Date.now(),
+        failureCount,
+      });
+      this.saveFailedTokens();
+      
       console.warn(`[RollingCache] ⚠️  Failed to preload ${token.symbol}:`, error.message);
     }
   }
@@ -343,6 +432,58 @@ class RollingTradeCacheManager {
     } catch (error) {
       console.warn('[RollingCache] Failed to load from localStorage:', error);
       this.cache.clear();
+    }
+  }
+
+  /**
+   * Load failed tokens from localStorage on init
+   */
+  private loadFailedTokens(): void {
+    if (!this.isBrowser()) {
+      return;
+    }
+
+    try {
+      const stored = localStorage.getItem(this.FAILED_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const now = Date.now();
+        
+        // Only load failures that are still relevant (not expired)
+        for (const [pairAddress, failure] of Object.entries(parsed)) {
+          const failedToken = failure as FailedToken;
+          // Remove old failures that are past retry delay
+          if (failedToken.failureCount < this.MAX_FAILURE_COUNT) {
+            const timeSinceFailure = now - failedToken.failedAt;
+            if (timeSinceFailure < this.FAILED_RETRY_DELAY * 2) { // Keep for 2x retry delay
+              this.failedTokens.set(pairAddress, failedToken);
+            }
+          }
+        }
+        
+        console.log(`[RollingCache] 📂 Loaded ${this.failedTokens.size} failed token records`);
+      }
+    } catch (error) {
+      console.warn('[RollingCache] Failed to load failed tokens:', error);
+      this.failedTokens.clear();
+    }
+  }
+
+  /**
+   * Save failed tokens to localStorage
+   */
+  private saveFailedTokens(): void {
+    if (!this.isBrowser()) return;
+
+    try {
+      // Convert Map to object for JSON serialization
+      const failedObj: Record<string, FailedToken> = {};
+      for (const [pairAddress, failure] of this.failedTokens) {
+        failedObj[pairAddress] = failure;
+      }
+      localStorage.setItem(this.FAILED_KEY, JSON.stringify(failedObj));
+    } catch (error) {
+      console.warn('[RollingCache] Failed to save failed tokens:', error);
     }
   }
 }

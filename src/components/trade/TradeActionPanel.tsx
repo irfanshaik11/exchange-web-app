@@ -200,13 +200,25 @@ const AddressDisplay: React.FC<{
 const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Get token metrics (using token-analytics if available)
-  const sniperPercent = token?.sniper_holding_percentage ?? 0;
-  const bundlePercent = token?.bundle_holding_percentage ?? 0;
-  const insiderPercent = token?.insider_holding_percentage ?? 0;
-  const devPercent = token?.dev_holding_percentage ?? 0;
+  // Get token metrics (using Codex fields if available, fallback to token-analytics)
+  // Parse string values to numbers (backend returns decimals as strings)
+  const parsePercentage = (val: any): number => {
+    if (val == null) return 0;
+    const num = typeof val === 'string' ? parseFloat(val) : Number(val);
+    return isNaN(num) ? 0 : num;
+  };
+  
+  const sniperPercent = parsePercentage(token?.sniper_held_percentage ?? token?.sniper_holding_percentage);
+  const bundlePercent = parsePercentage(token?.bundler_held_percentage ?? token?.bundle_holding_percentage);
+  const insiderPercent = parsePercentage(token?.insider_held_percentage ?? token?.insider_holding_percentage);
+  const devPercent = parsePercentage(token?.dev_held_percentage ?? token?.dev_holding_percentage);
   const top10Percent = token?.top10_holding_percentage ?? 0;
   const lpBurned = token?.lp_burned ?? false;
+  
+  // Get counts from Codex
+  const sniperCount = token?.sniper_count ?? undefined;
+  const bundlerCount = token?.bundler_count ?? undefined;
+  const insiderCount = token?.insider_count ?? undefined;
 
   return (
     <div className="border-t border-[#2A2B33]">
@@ -294,7 +306,12 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
                     {sniperPercent > 0 ? `${sniperPercent.toFixed(1)}%` : '0%'}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Snipers H.</div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                  Snipers H.
+                  {sniperCount !== undefined && (
+                    <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({sniperCount})</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -310,7 +327,12 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
                     {insiderPercent > 0 ? `${insiderPercent.toFixed(1)}%` : '0%'}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Insiders</div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                  Insiders
+                  {insiderCount !== undefined && (
+                    <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({insiderCount})</div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -323,7 +345,12 @@ const TokenInfoDropdown: React.FC<{ token: any }> = ({ token }) => {
                     {bundlePercent > 0 ? `${bundlePercent.toFixed(2)}%` : '0%'}
                   </div>
                 </div>
-                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>Bundlers</div>
+                <div className="text-[10px] uppercase tracking-wide text-center leading-tight" style={{ color: AX.muted }}>
+                  Bundlers
+                  {bundlerCount !== undefined && (
+                    <div className="text-[9px] mt-0.5" style={{ color: AX.muted }}>({bundlerCount})</div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -744,7 +771,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
   }, [mode, tab, timeRange, amount, targetMC, sliderPct, updateExternalParams]);
 
   const { presets: qbPresets, activePreset } = useQuickBuy();
-  const { user, solBalance } = useUser();
+  const { user, solBalance, refreshBalance } = useUser();
   
   // Calculate position data from trade activity (like Activity tab does)
   useEffect(() => {
@@ -1914,6 +1941,7 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
         user: { bearerToken: user.bearerToken, id: user.id },
         solBalance: Number(solBalance),
         solPriceUsd: 150,
+        refreshBalance,
         onSuccess: async (txHash, stats) => {
           console.log("✅ Enhanced Trade successful:", { txHash, stats });
           setSuccessMessage(
@@ -2031,9 +2059,9 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
       style={{ backgroundColor: '#0f1012', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif', paddingBottom: '100px' }}
     >
       {/* ===== A. Time buttons ===== */}
-      <div className="px-3 pt-2 pb-2 border-b border-[#2A2B33]">
+      <div className="px-3 pt-2 pb-2 border-neutral-800">
         <div className="mx-auto w-full max-w-xl overflow-hidden">
-          <div className="flex gap-1 rounded-xl bg-[#1E1F26] border border-[#2A2B33] p-1">
+          <div className="flex rounded-xl border border-neutral-700">
             {(["5m", "1h", "12h", "24h"] as TimeRange[]).map((rng) => {
               // Get change from WebSocket data if available, otherwise fallback to token properties
               let ch = 0;
@@ -2066,8 +2094,10 @@ const TradeActionPanel: React.FC<TradeActionPanelProps> = ({
                   onClick={() => setTimeRange(rng)}
                   aria-pressed={timeRange === rng}
                   className={cx(
-                    "flex-1 h-9 rounded-lg px-2 text-left flex flex-col items-start justify-center cursor-pointer",
-                    timeRange === rng ? "bg-[#17191E] ring-1 ring-white/10" : "hover:bg-[#1E1F26]"
+                    "flex-1 text-left flex flex-col items-start justify-center cursor-pointer px-2 py-1 border-neutral-700",
+                    timeRange === rng ? "bg-neutral-700 ring-1 ring-white/10" : "hover:bg-neutral-700",
+                    rng == "5m" ? `rounded-tl-xl rounded-bl-xl` : ``,
+                    rng == "24h" ? `rounded-tr-xl rounded-br-xl` : `border-r`
                   )}
                 >
                   <span

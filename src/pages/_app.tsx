@@ -7,16 +7,26 @@ import { queryClient } from '../lib/queryClient';
 import { WagmiProviderWrapper } from '../components/WagmiProviderWrapper';
 import { UserProvider, useUser } from "../components/UserContext";
 import { Toaster } from 'react-hot-toast';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import Cookies from 'js-cookie';
 import { mainnet } from 'viem/chains';
 import dynamic from 'next/dynamic';
+import { TurnkeyRootProvider } from "../components/TurnkeyRootProvider";
+import WalletExportGuard from "../components/WalletExportGuard";
+
+import { useTurnkey, AuthState } from '@turnkey/react-wallet-kit';
+import { turnkeyLogin } from '../utils/api';
 
 // Dynamically import LoginModal with no SSR to prevent wagmi provider issues
 const LoginModal = dynamic(() => import('../components/LoginModal'), {
   ssr: false,
 });
+
+// Dynamically import MonadTradeBanner with no SSR for animations
+// const MonadTradeBanner = dynamic(() => import('../components/MonadTradeBanner'), {
+//   ssr: false,
+// });
 import { env } from '../env';
 import { QuickBuyProvider } from '../components/QuickBuyContext';
 import { WatchlistProvider } from '../components/WatchlistContext';
@@ -28,7 +38,8 @@ import { ThemeProvider } from '../components/ThemeContext';
 import Head from 'next/head';
 import 'react-datepicker/dist/react-datepicker.css';
 import { showEnhancedToast } from '../utils/enhancedToast';
-import { storeReferralCodeHint } from '~/utils/referralStorage';
+import { storeReferralCodeHint, getStoredReferralCodeHint, clearStoredReferralCodeHint } from '~/utils/referralStorage';
+import PagePreloader from '../components/PagePreloader';
 
 // Suppress Next.js error overlay for caught errors in development
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
@@ -38,14 +49,19 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     const errorString = args[0]?.toString() || '';
     const stackTrace = args[1]?.stack || '';
 
-    // Suppress Next.js dev overlay for handled ApiErrors and trade-related errors
+    // Suppress Next.js dev overlay for handled ApiErrors, trade-related errors, and Turnkey errors
     if (
       errorString.includes('ApiError') ||
       errorString.includes('[Trade]') ||
       errorString.includes('Trade validation failed') ||
       errorString.includes('Insufficient') ||
+      errorString.includes('TurnkeyError') ||
+      errorString.includes('Session public key') ||
+      errorString.includes('session public key could not be found') ||
       stackTrace.includes('TradeActionPanel') ||
-      stackTrace.includes('api.ts')
+      stackTrace.includes('api.ts') ||
+      stackTrace.includes('turnkey') ||
+      stackTrace.includes('Turnkey')
     ) {
       // Still log to console for debugging, just don't trigger overlay
       originalConsoleError('[Handled Error - No Overlay]', ...args);
@@ -59,18 +75,22 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     const error = event.error;
     const errorMessage = error?.message || '';
 
-    // Check if this is an ApiError or trade-related error that we've already handled
+    // Check if this is an ApiError, trade-related error, or Turnkey error that we've already handled
     if (
       error?.name === 'ApiError' ||
       error?.constructor?.name === 'ApiError' ||
+      error?.name === 'TurnkeyError' ||
+      error?.constructor?.name === 'TurnkeyError' ||
       errorMessage.includes('Trade validation failed') ||
       errorMessage.includes('Insufficient') ||
       errorMessage.includes('NO_HOLDINGS') ||
-      errorMessage.includes('AMOUNT_TOO_SMALL')
+      errorMessage.includes('AMOUNT_TOO_SMALL') ||
+      errorMessage.includes('Session public key') ||
+      errorMessage.includes('session public key could not be found')
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      console.log('[Error Suppressed] ApiError caught and handled by application:', errorMessage);
+      console.log('[Error Suppressed] Error caught and handled by application:', errorMessage);
       return false;
     }
   }, true); // Use capture phase to intercept early
@@ -80,21 +100,243 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     const reason = event.reason;
     const reasonMessage = reason?.message || '';
 
-    // Check if this is an ApiError from our API
+    // Check if this is an ApiError, Turnkey error, or other handled error
     if (
       reason?.name === 'ApiError' ||
       reason?.constructor?.name === 'ApiError' ||
+      reason?.name === 'TurnkeyError' ||
+      reason?.constructor?.name === 'TurnkeyError' ||
       reasonMessage.includes('Trade validation failed') ||
       reasonMessage.includes('Insufficient') ||
       reasonMessage.includes('NO_HOLDINGS') ||
-      reasonMessage.includes('AMOUNT_TOO_SMALL')
+      reasonMessage.includes('AMOUNT_TOO_SMALL') ||
+      reasonMessage.includes('Session public key') ||
+      reasonMessage.includes('session public key could not be found')
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      console.log('[Error Suppressed] Unhandled ApiError rejection caught:', reasonMessage);
+      console.log('[Error Suppressed] Unhandled error rejection caught:', reasonMessage);
       return false;
     }
   }, true); // Use capture phase to intercept early
+}
+
+function TurnkeySessionBridge() {
+  const turnkeyCtx = useTurnkey() as any;
+  const {
+    authState,
+    session,
+    user,
+    fetchOrCreateP256ApiKeyUser,
+    fetchOrCreatePolicies,
+  } = turnkeyCtx;
+
+  const { refreshUser } = useUser();
+  const router = useRouter();
+
+  const hasProcessedRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
+  const hasUpdatedEmail = useRef(false);
+
+  const hasCreatedDelegatedUserRef = useRef(false);
+  const delegatedUserIdRef = useRef<string | null>(null);
+  const hasCreatedDelegatedPolicyRef = useRef(false);
+
+  const isRunningRef = useRef(false);
+
+  console.log(
+    "TurnkeySessionBridge authState:",
+    authState,
+    "session:",
+    session,
+    "user:",
+    user
+  );
+
+  // Reset all flags when auth state changes
+  useEffect(() => {
+    if (authState !== AuthState.Authenticated) {
+      hasProcessedRef.current = false;
+      pendingRefreshRef.current = false;
+      hasUpdatedEmail.current = false;
+      hasCreatedDelegatedUserRef.current = false;
+      delegatedUserIdRef.current = null;
+      hasCreatedDelegatedPolicyRef.current = false;
+      isRunningRef.current = false;
+    }
+  }, [authState]);
+
+  //
+  // Main Pipeline
+  //
+  useEffect(() => {
+    if (authState !== AuthState.Authenticated) return;
+
+    // avoid double runs
+    if (isRunningRef.current) return;
+    isRunningRef.current = true;
+
+    (async () => {
+      try {
+        const daPublicKey =   process.env.NEXT_PUBLIC_DA_PUBLIC_KEY || undefined;
+        //
+        // 1) Ensure delegated user exists (NO IndexedDB check)
+        //
+        if (
+          fetchOrCreateP256ApiKeyUser &&
+          daPublicKey &&
+          !hasCreatedDelegatedUserRef.current
+        ) {
+          try {
+            const res = await fetchOrCreateP256ApiKeyUser({
+              publicKey: daPublicKey,
+              createParams: {
+                userName: "Delegated Access",
+                apiKeyName: "Delegated User API Key",
+              },
+            });
+
+            const uid = res?.userId || res?.id;
+            if (uid) {
+              delegatedUserIdRef.current = uid;
+              hasCreatedDelegatedUserRef.current = true;
+              hasCreatedDelegatedPolicyRef.current = false;
+              console.log("Delegated user ready:", uid);
+            } else {
+              console.error(
+                "fetchOrCreateP256ApiKeyUser succeeded but no userId returned"
+              );
+              hasCreatedDelegatedUserRef.current = true; // prevent infinite loop
+            }
+          } catch (err: any) {
+            const errorMessage = err?.message || err?.toString() || "";
+            // Suppress Turnkey session errors - they're handled gracefully
+            if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
+              console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
+            } else {
+              console.error("Failed to create delegated Turnkey user", err);
+            }
+            hasCreatedDelegatedUserRef.current = true; // still continue pipeline
+          }
+        }
+
+        //
+        // 2) Ensure delegated policy exists
+        //
+        const delegatedUserId = delegatedUserIdRef.current;
+
+        if (
+          fetchOrCreatePolicies &&
+          delegatedUserId &&
+          !hasCreatedDelegatedPolicyRef.current
+        ) {
+          hasCreatedDelegatedPolicyRef.current = true;
+
+          const policies = [
+            {
+              policyName: `Allow user ${delegatedUserId} to sign`,
+              effect: "EFFECT_ALLOW",
+              consensus: `approvers.any(user, user.id == '${delegatedUserId}')`,
+              notes: "Allow Delegated Access user to sign transactions",
+            },
+          ];
+
+          try {
+            await fetchOrCreatePolicies({ policies });
+            console.log("Delegated policy ensured:", delegatedUserId);
+          } catch (err: any) {
+            const errorMessage = err?.message || err?.toString() || "";
+            // Suppress Turnkey session errors - they're handled gracefully
+            if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
+              console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
+            } else {
+              console.error("Failed to create delegated policy", err);
+            }
+            hasCreatedDelegatedPolicyRef.current = false; // retry next render
+          }
+        }
+
+        //
+        // 3) Backend login → Get App JWT
+        //
+        if (
+          session?.token &&
+          session.organizationId &&
+          session.userId &&
+          !hasProcessedRef.current
+        ) {
+          hasProcessedRef.current = true;
+
+          try {
+            const referralCode = getStoredReferralCodeHint() || undefined;
+            const data = await turnkeyLogin({
+              turnkeySessionToken: session.token,
+              organizationId: session.organizationId,
+              userId: session.userId,
+              referralCode,
+            });
+
+            console.log("Turnkey login response:", data);
+            const appToken =
+              data?.token || undefined;
+
+            if (!appToken) {
+              console.error("Turnkey login failed: no token in response");
+              hasProcessedRef.current = false;
+              return;
+            }
+
+            Cookies.set("token", appToken, { expires: 7, path: "/" });
+            // Clear referral code hint after successful login (it's been sent to backend)
+            clearStoredReferralCodeHint();
+
+            pendingRefreshRef.current = true;
+            if (user?.userEmail || user?.userName) {
+              await refreshUser();
+              pendingRefreshRef.current = false;
+            }
+
+            // Don't redirect if we're on the export page - let user stay there to export
+            const isOnExportPage =
+              router.pathname === "/turnkey/export" ||
+              router.asPath.includes("/turnkey/export") ||
+              router.pathname === "/portfolio";
+            if (!isOnExportPage) {
+              router.push("/pulse?chain=monad");
+            } else {
+              console.log("[TurnkeySessionBridge] User authenticated on export page, staying on page");
+            }
+          } catch (err: any) {
+            const errorMessage = err?.message || err?.toString() || "";
+            // Suppress Turnkey session errors - they're handled gracefully
+            if (errorMessage.includes("Session public key") || errorMessage.includes("session public key could not be found")) {
+              console.log("[TurnkeySessionBridge] Session error handled gracefully:", errorMessage);
+            } else {
+              console.error("Error linking Turnkey session to app user", err);
+            }
+            hasProcessedRef.current = false;
+          }
+        }
+      } finally {
+        isRunningRef.current = false;
+      }
+    })();
+  }, [
+    authState,
+    session?.token,
+    session?.organizationId,
+    session?.userId,
+    user?.userEmail,
+    user?.userName,
+    fetchOrCreateP256ApiKeyUser,
+    fetchOrCreatePolicies,
+    refreshUser,
+    router,
+    router.pathname,
+    router.asPath,
+  ]);
+
+  return null;
 }
 
 const config = getDefaultConfig({
@@ -194,67 +436,78 @@ function GlobalLoginModalManager({ enforceLogin }: { enforceLogin: boolean }) {
   );
 }
 
-function MobileBlocker({ children }: { children: React.ReactNode }) {
-  // Mobile blocker disabled - commented out but kept for future use
-  // const [isMobile, setIsMobile] = useState(false);
-  // const [isClient, setIsClient] = useState(false);
+// function MobileBlocker({ children }: { children: React.ReactNode }) {
+//   // Mobile blocker disabled - commented out but kept for future use
+//   // const [isMobile, setIsMobile] = useState(false);
+//   // const [isClient, setIsClient] = useState(false);
 
-  // useEffect(() => {
-  //   setIsClient(true);
-  //   
-  //   const checkMobile = () => {
-  //     setIsMobile(window.innerWidth < 500);
-  //   };
+//   // useEffect(() => {
+//   //   setIsClient(true);
+//   //   
+//   //   const checkMobile = () => {
+//   //     setIsMobile(window.innerWidth < 500);
+//   //   };
 
-  //   checkMobile();
-  //   window.addEventListener('resize', checkMobile);
-  //   return () => window.removeEventListener('resize', checkMobile);
-  // }, []);
+//   //   checkMobile();
+//   //   window.addEventListener('resize', checkMobile);
+//   //   return () => window.removeEventListener('resize', checkMobile);
+//   // }, []);
 
-  // // Show nothing during SSR/initial load to prevent hydration issues
-  // if (!isClient) {
-  //   return null;
-  // }
+//   // // Show nothing during SSR/initial load to prevent hydration issues
+//   // if (!isClient) {
+//   //   return null;
+//   // }
 
-  // if (isMobile) {
-  //   return (
-  //     <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
-  //       <div className="text-center">
-  //         <div className="mb-6">
-  //           <img 
-  //             src="/logo.png" 
-  //             alt="Logo" 
-  //             className="w-24 h-24 mx-auto mb-6 object-contain"
-  //           />
-  //         </div>
-  //         <h1 className="text-2xl font-bold mb-2">We're Coming Soon on Mobile!</h1>
-  //         <p className="text-gray-400 mb-4">
-  //           Our mobile experience is currently in development.
-  //         </p>
-  //         <p className="text-sm text-gray-500">
-  //           Please visit us on desktop for the full experience.
-  //         </p>
-  //       </div>
-  //     </div>
-  //   );
-  // }
+//   // if (isMobile) {
+//   //   return (
+//   //     <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white p-4">
+//   //       <div className="text-center">
+//   //         <div className="mb-6">
+//   //           <img 
+//   //             src="/logo.png" 
+//   //             alt="Logo" 
+//   //             className="w-24 h-24 mx-auto mb-6 object-contain"
+//   //           />
+//   //         </div>
+//   //         <h1 className="text-2xl font-bold mb-2">We're Coming Soon on Mobile!</h1>
+//   //         <p className="text-gray-400 mb-4">
+//   //           Our mobile experience is currently in development.
+//   //         </p>
+//   //         <p className="text-sm text-gray-500">
+//   //           Please visit us on desktop for the full experience.
+//   //         </p>
+//   //       </div>
+//   //     </div>
+//   //   );
+//   // }
 
-  return <>{children}</>;
-}
+//   return <>{children}</>;
+// }
 
 const MyApp: AppType = ({ Component, pageProps }) => {
-  const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('bottom-center');
+  const [toastPosition, setToastPosition] = useState<'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'>('top-center');
 
   // Load toast position from localStorage on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('toast-position');
-      if (saved && ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
+      
+      // Migrate from bottom-center to top-center (or if no value exists)
+      if (!saved || saved === 'bottom-center') {
+        localStorage.setItem('toast-position', 'top-center');
+        setToastPosition('top-center');
+        return;
+      }
+      
+      if (['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right'].includes(saved)) {
         setToastPosition(saved as any);
+      } else {
+        // Invalid value, migrate to top-center
+        localStorage.setItem('toast-position', 'top-center');
+        setToastPosition('top-center');
       }
     }
   }, []);
-
   // Listen for toast position changes
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -269,9 +522,37 @@ const MyApp: AppType = ({ Component, pageProps }) => {
     };
   }, []);
 
+  // Preload TradingView library script early for faster chart loading
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // Check if already loaded or loading
+    if ((window as any).TradingView) return;
+    
+    // Check if script tag already exists
+    const existingScript = document.querySelector('script[src="/charting_library/charting_library/charting_library.standalone.js"]');
+    if (existingScript) return;
+    
+    // Preload the script in the background
+    const script = document.createElement('script');
+    script.src = '/charting_library/charting_library/charting_library.standalone.js';
+    script.async = true;
+    script.defer = true;
+    // Don't set onload - let AdvancedOHLCChart handle it
+    document.head.appendChild(script);
+  }, []);
+
   return (
     <>
       <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+        {/* Preload TradingView library for faster chart loading */}
+        <link
+          rel="preload"
+          href="/charting_library/charting_library/charting_library.standalone.js"
+          as="script"
+          crossOrigin="anonymous"
+        />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
         <style jsx global>{`
@@ -320,9 +601,14 @@ const MyApp: AppType = ({ Component, pageProps }) => {
         }} />
       </Head>
       <div className={inter.className}>
+        {/* MobileBlocker disabled - MOBILE VIEW DISABLED
         <MobileBlocker>
+        */}
+        <TurnkeyRootProvider>
+          {/* <MonadTradeBanner /> */}
           <WagmiProviderWrapper config={config} queryClient={queryClient}>
             <UserProvider>
+              <TurnkeySessionBridge />
               <TokenHandler />
               <ReferralTracker />
               <SolPriceProvider>
@@ -332,6 +618,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                       <FilterProvider>
                         <WalletTrackerProvider>
                           <ReferralAccessGate>
+                            <PagePreloader />
                             <Component {...pageProps} />
                           </ReferralAccessGate>
                         </WalletTrackerProvider>
@@ -339,6 +626,7 @@ const MyApp: AppType = ({ Component, pageProps }) => {
                     </WatchlistProvider>
                   </QuickBuyProvider>
                   <GlobalLoginModalManager enforceLogin={!!env.NEXT_PUBLIC_IS_BACKEND_DEPLOYED} />
+                  <WalletExportGuard />
                 </ThemeProvider>
               </SolPriceProvider>
             </UserProvider>
@@ -371,7 +659,8 @@ const MyApp: AppType = ({ Component, pageProps }) => {
               },
             }}
           />
-        </MobileBlocker>
+          </TurnkeyRootProvider>
+        {/* </MobileBlocker> */}
       </div>
     </>
   );

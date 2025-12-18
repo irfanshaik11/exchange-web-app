@@ -47,7 +47,9 @@ export default function FastImage({
     finalSrc.startsWith('ipfs://') ||
     finalSrc.includes('tokens.debridge.finance') ||
     finalSrc.includes('debridge.finance') ||
-    finalSrc.includes('launchonsoar.com')
+    finalSrc.includes('launchonsoar.com') ||
+    finalSrc.includes('metadata.rapidlaunch.io') ||
+    finalSrc.includes('rapidlaunch.io')
   );
   
   const imageUrl = needsProxy && finalSrc
@@ -144,6 +146,7 @@ export default function FastImage({
         onError={handleError}
         loading={priority ? 'eager' : 'lazy'} // Eager loading for priority images
         decoding="async"
+        fetchPriority={priority ? 'high' : 'auto'} // High priority for important images
       />
       
       {/* Pump logo bubble */}

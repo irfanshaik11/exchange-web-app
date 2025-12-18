@@ -3,9 +3,26 @@ import type { Wallet } from '~/utils/functions';
 import type { WatchWallet, WalletEvent } from '~/utils/walletTracking';
 import { toggleWalletNotifications } from '~/utils/walletTracking';
 import { SolanaIcon } from './Footer';
+import { useUser } from './UserContext';
 import { FiBell, FiBarChart2, FiTrash2 } from 'react-icons/fi';
 import { TbChartBubble } from 'react-icons/tb';
 import { IoLogoRss } from 'react-icons/io5';
+
+// Chain-aware icon component
+const ChainIcon = ({ chain, size = 16 }: { chain?: 'monad' | 'sol'; size?: number }) => {
+  if (chain != 'sol') {
+    return (
+      <img
+        src="./monad_icon.png"
+        alt="Monad"
+        className="object-contain"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  // Default to Solana icon
+  return <SolanaIcon size={size} />;
+};
 
 interface WalletRowProps {
   wallet: Wallet;
@@ -73,6 +90,7 @@ export default function WalletRow({
   onClick,
   onNotificationToggle,
 }: WalletRowProps) {
+  const { user } = useUser();
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [analyticsEnabled, setAnalyticsEnabled] = React.useState(false);
@@ -221,12 +239,14 @@ export default function WalletRow({
         }
       }
       
-      // Call backend API with ownerId from watchedWallet (non-blocking - localStorage is source of truth)
+      // Call backend API with ownerId and chain from watchedWallet (non-blocking - localStorage is source of truth)
       try {
         await toggleWalletNotifications(
           wallet.address, 
           newState, 
-          watchedWallet?.ownerId || undefined
+          watchedWallet?.ownerId || undefined,
+          watchedWallet?.chain || 'sol',
+          user?.bearerToken
         );
         console.log(`✅ [TOGGLE] Backend updated successfully for ${wallet.address}`);
       } catch (apiError) {
@@ -292,33 +312,19 @@ export default function WalletRow({
     const minute = 60 * 1000;
     const hour = 60 * minute;
     const day = 24 * hour;
-    const week = 7 * day;
-    const month = 30 * day;
-    const year = 365 * day;
 
     if (diff < minute) return "Just now";
     if (diff < hour) {
       const mins = Math.floor(diff / minute);
-      return `${mins} min${mins === 1 ? "" : "s"} ago`;
+      return `${mins}m`;
     }
     if (diff < day) {
       const hours = Math.floor(diff / hour);
-      return `${hours}h ago`;
+      return `${hours}h`;
     }
-    if (diff < week) {
-      const days = Math.floor(diff / day);
-      return `${days} day${days === 1 ? "" : "s"} ago`;
-    }
-    if (diff < month) {
-      const weeks = Math.floor(diff / week);
-      return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
-    }
-    if (diff < year) {
-      const months = Math.floor(diff / month);
-      return `${months} month${months === 1 ? "" : "s"} ago`;
-    }
-    const years = Math.floor(diff / year);
-    return `${years} yr${years === 1 ? "" : "s"} ago`;
+    // For anything >= 1 day, show compact days (user preference: e.g. "15d").
+    const days = Math.floor(diff / day);
+    return `${Math.max(1, days)}d`;
   };
 
   return (
@@ -359,7 +365,7 @@ export default function WalletRow({
           <span className="w-36 text-xs text-neutral-300">
             {balance !== undefined ? (
               <span className="flex items-center gap-1 text-green-400 font-mono">
-                <SolanaIcon size={12} />
+                <ChainIcon chain={watchedWallet?.chain} size={12} />
                 <span>{balance.toFixed(4)}</span>
               </span>
             ) : watchedWallet ? (

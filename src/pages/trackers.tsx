@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Head from "next/head";
+import { useRouter } from "next/router";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { getActivePositionsByUser } from "~/utils/functions";
@@ -15,8 +16,7 @@ import {
   removeTrackedWallet,
   getTrackedWallets,
   getWalletHistory,
-  getWalletSolBalance,
-  getWalletsLastActive,
+  getWalletBalance,
   toggleWalletNotifications,
   type WatchWallet,
   type WalletEvent,
@@ -166,7 +166,30 @@ const WALLET_LIMIT_MESSAGE = `You can add up to ${MAX_WALLETS} wallets.`;
 
 const getRandomEmoji = () => EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
 
+const BLOCKVISION_API_KEY = process.env.NEXT_PUBLIC_BLOCKVISION_API_KEY;
+
+const ensureMs = (ts: unknown): number | null => {
+  if (typeof ts !== "number" || !Number.isFinite(ts) || ts <= 0) return null;
+  // Blockvision returns ms, but be defensive in case it ever returns seconds.
+  return ts < 1_000_000_000_000 ? ts * 1000 : ts;
+};
+
+const fetchWithTimeout = async (
+  url: string,
+  init: RequestInit,
+  timeoutMs = 10_000,
+) => {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+};
+
 export default function TrackersPage() {
+  const router = useRouter();
   const { user, solBalance } = useUser();
   const {
     wsConnected,
@@ -202,6 +225,9 @@ export default function TrackersPage() {
   const [lastActiveMap, setLastActiveMap] = useState<
     Record<string, number | null | undefined>
   >({});
+  // Get chain from router query (same as Header component)
+  const currentChain = (router.query.chain as string) || "monad";
+  const selectedChain = (currentChain === 'monad' || currentChain === 'sol') ? currentChain : 'monad';
   const walletsRef = useRef<Wallet[]>([]);
   const [tokenMetadata, setTokenMetadata] = useState<
     Map<
@@ -254,9 +280,11 @@ export default function TrackersPage() {
     if (!walletsToEnable.length) return;
     try {
       const results = await Promise.allSettled(
-        walletsToEnable.map((wallet) =>
-          toggleWalletNotifications(wallet.address, true, user?.id),
-        ),
+        walletsToEnable.map((wallet) => {
+          const walletData = watchedWallets.find(w => w.address === wallet.address);
+          const walletChain = walletData?.chain || selectedChain;
+          return toggleWalletNotifications(wallet.address, true, user?.id, walletChain, user?.bearerToken);
+        }),
       );
       const failures = results.filter((result) => result.status === "rejected");
       if (failures.length > 0) {
@@ -432,6 +460,7 @@ export default function TrackersPage() {
     null,
   );
   const isAtWalletLimit = watchedWallets.length >= MAX_WALLETS;
+  // Hide wallet section when chain is Monad
   const showWalletSection = !isMobile || mobileMainTab === "wallets";
   const showTwitterSection = !isMobile || mobileMainTab === "twitter";
 
@@ -494,10 +523,10 @@ export default function TrackersPage() {
     }
   }, [user?.id]);
 
-  // Load wallets when user changes or page loads (fetches fresh data in background)
+  // Load wallets when user changes, page loads, or chain changes (fetches fresh data in background)
   useEffect(() => {
     loadWalletsFromBackend();
-  }, [user?.id]);
+  }, [user?.id, router.query.chain]);
 
   // Load Twitter accounts on mount
   useEffect(() => {
@@ -559,21 +588,16 @@ export default function TrackersPage() {
         return;
       }
 
-      // Fetch wallets from backend
-      const tracked = await getTrackedWallets(user?.id);
+      // Fetch wallets from backend for the selected chain
+      const tracked = await getTrackedWallets(user?.bearerToken, user?.id, selectedChain);
 
       // Also refresh global watched wallets
       await refreshWatchedWallets();
 
       const allWallets = tracked;
 
-      // Only update state and cache if we actually got wallets
-      // This prevents empty arrays from overwriting cache on errors
-      if (allWallets.length === 0) {
-        console.log("No wallets returned from backend - keeping cached data");
-        return;
-      }
-
+      // Always update state with backend response (even if empty)
+      // This ensures removed wallets disappear from the UI
       setWatchedWallets(allWallets);
 
       // Convert backend wallets to frontend format
@@ -585,6 +609,18 @@ export default function TrackersPage() {
       }));
 
       setWallets(frontendWallets);
+
+      // Clear balances for wallets that are no longer tracked
+      setWalletBalances((prev) => {
+        const validAddresses = new Set(allWallets.map((w) => w.address));
+        const filtered: Record<string, number> = {};
+        Object.keys(prev).forEach((address) => {
+          if (validAddresses.has(address)) {
+            filtered[address] = prev[address];
+          }
+        });
+        return filtered;
+      });
 
       // Cache wallets to localStorage
       if (typeof window !== "undefined") {
@@ -602,30 +638,41 @@ export default function TrackersPage() {
         }
       }
 
-      // Fetch real balances for tracked wallets
+      // Fetch real balances for tracked wallets (both Solana and Monad)
+      console.log(`[Trackers] Fetching balances for ${allWallets.length} wallets:`, allWallets.map(w => ({ address: w.address.slice(0, 8) + '...', chain: w.chain })));
       allWallets.forEach(async (wallet) => {
-        const balance = await getWalletSolBalance(wallet.address);
-        if (balance !== null) {
-          setWalletBalances((prev) => {
-            const updated = { ...prev, [wallet.address]: balance };
+        // Use wallet.chain from backend, fallback to selectedChain if not available
+        const walletChain = (wallet.chain === 'monad' || wallet.chain === 'sol') ? wallet.chain : selectedChain;
+        console.log(`[Trackers] Fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain from wallet: ${wallet.chain}, using: ${walletChain})`);
+        try {
+          const balance = await getWalletBalance(wallet.address, walletChain);
+          console.log(`[Trackers] Got balance for ${wallet.address.slice(0, 8)}...: ${balance} (chain: ${walletChain})`);
+          if (balance !== null && !isNaN(balance)) {
+            setWalletBalances((prev) => {
+              const updated = { ...prev, [wallet.address]: balance };
 
-            // Update balance in cache
-            if (typeof window !== "undefined") {
-              const cacheKey = `walletTracker:wallets:${user.id}`;
-              const cached = localStorage.getItem(cacheKey);
-              if (cached) {
-                try {
-                  const cacheData = JSON.parse(cached);
-                  cacheData.balances = updated;
-                  localStorage.setItem(cacheKey, JSON.stringify(cacheData));
-                } catch (error) {
-                  // Silent fail
+              // Update balance in cache
+              if (typeof window !== "undefined") {
+                const cacheKey = `walletTracker:wallets:${user.id}`;
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) {
+                  try {
+                    const cacheData = JSON.parse(cached);
+                    cacheData.balances = updated;
+                    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+                  } catch (error) {
+                    // Silent fail
+                  }
                 }
               }
-            }
 
-            return updated;
-          });
+              return updated;
+            });
+          } else {
+            console.warn(`[Trackers] Balance is null or NaN for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain})`);
+          }
+        } catch (error) {
+          console.error(`[Trackers] Error fetching balance for wallet ${wallet.address.slice(0, 8)}... (chain: ${walletChain}):`, error);
         }
       });
     } catch (error) {
@@ -651,14 +698,7 @@ export default function TrackersPage() {
     setWatchedWallets(globalWatchedWallets);
   }, [globalWatchedWallets]);
   useEffect(() => {
-    const addresses = watchedWallets
-      .map((wallet) => wallet.address)
-      .filter(
-        (address): address is string =>
-          typeof address === "string" && address.length > 0,
-      );
-
-    if (addresses.length === 0) {
+    if (watchedWallets.length === 0) {
       setLastActiveMap({});
       return;
     }
@@ -667,27 +707,159 @@ export default function TrackersPage() {
 
     const fetchLastActive = async () => {
       try {
-        const results = await getWalletsLastActive(addresses);
-        if (cancelled) return;
+        // Group wallets by chain
+        const monadWallets = watchedWallets.filter(w => w.chain === 'monad').map(w => w.address);
+        const solWallets = watchedWallets.filter(w => w.chain !== 'monad').map(w => w.address);
+
+        console.log(
+          "[trackers:lastActive] fetching timestamps:",
+          { monad: monadWallets.length, sol: solWallets.length }
+        );
 
         const map: Record<string, number | null> = {};
-        results.forEach((item) => {
-          map[item.wallet] =
-            typeof item.lastActive === "number" ? item.lastActive : null;
-        });
 
-        // Ensure we have entries for every requested address
-        addresses.forEach((address) => {
-          if (!(address in map)) {
-            map[address] = null;
+        // Fetch Monad wallets using Blockvision API
+        if (monadWallets.length > 0) {
+          if (!BLOCKVISION_API_KEY) {
+            console.warn("[trackers:lastActive] BLOCKVISION_API_KEY not set, skipping Monad wallets");
+            monadWallets.forEach(addr => map[addr] = null);
+          } else {
+            const monadSettled = await Promise.allSettled(
+              monadWallets.map(async (address) => {
+                const url = `https://api.blockvision.org/v2/monad/account/transactions?address=${encodeURIComponent(
+                  address,
+                )}&limit=20&ascendingOrder=false`;
+
+                const resp = await fetchWithTimeout(
+                  url,
+                  {
+                    method: "GET",
+                    headers: {
+                      accept: "application/json",
+                      "x-api-key": BLOCKVISION_API_KEY,
+                    },
+                  },
+                  10_000,
+                );
+
+                const text = await resp.text();
+                let payload: any = null;
+                try {
+                  payload = JSON.parse(text);
+                } catch {
+                  payload = null;
+                }
+
+                if (!resp.ok) {
+                  const msg =
+                    (payload && (payload.message || payload.error)) ||
+                    `HTTP ${resp.status} ${resp.statusText}`;
+                  throw new Error(msg);
+                }
+
+                const newestRaw = payload?.result?.data?.[0]?.timestamp;
+                const newest = ensureMs(newestRaw);
+
+                console.log("[trackers:lastActive] Monad wallet result", {
+                  address,
+                  newestRaw,
+                  newest,
+                  newestIso: newest ? new Date(newest).toISOString() : null,
+                  txCount: Array.isArray(payload?.result?.data)
+                    ? payload.result.data.length
+                    : 0,
+                });
+
+                return { address, lastActive: newest };
+              }),
+            );
+
+            // Check if all failed due to CORS, fallback to proxy
+            const allFailed = monadSettled.every((r) => r.status === "rejected");
+            const likelyCors = monadSettled.every((r) => {
+              if (r.status !== "rejected") return false;
+              const msg = r.reason?.message || String(r.reason);
+              return /failed to fetch/i.test(msg) || /networkerror/i.test(msg);
+            });
+
+            if (allFailed && likelyCors) {
+              console.warn(
+                "[trackers:lastActive] direct Blockvision fetch failed (likely CORS). Falling back to proxy",
+              );
+              try {
+                const proxyResp = await fetch("/api/blockvision/monad/last-active", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ wallets: monadWallets, limit: 20 }),
+                });
+                const proxyPayload = await proxyResp.json().catch(() => null);
+                if (
+                  proxyResp.ok &&
+                  proxyPayload?.ok === true &&
+                  Array.isArray(proxyPayload?.data)
+                ) {
+                  for (const item of proxyPayload.data) {
+                    if (!item?.wallet) continue;
+                    map[item.wallet] = typeof item.lastActive === "number" ? item.lastActive : null;
+                  }
+                }
+              } catch (proxyError) {
+                console.error("[trackers:lastActive] Proxy fallback failed:", proxyError);
+              }
+            } else {
+              monadSettled.forEach((res, idx) => {
+                const address = monadWallets[idx];
+                if (res.status === "fulfilled") {
+                  map[address] = res.value.lastActive;
+                } else {
+                  map[address] = null;
+                  console.warn("[trackers:lastActive] Monad wallet fetch failed", {
+                    address,
+                    error: res.reason?.message || String(res.reason),
+                  });
+                }
+              });
+            }
+
+            // Set null for any Monad wallets not in map
+            monadWallets.forEach(addr => {
+              if (!(addr in map)) map[addr] = null;
+            });
           }
-        });
+        }
 
-        setLastActiveMap(map);
+        // Fetch Solana wallets using backend API
+        if (solWallets.length > 0) {
+          try {
+            const { getWalletsLastActive } = await import("~/utils/walletTracking");
+            const solResults = await getWalletsLastActive(solWallets, 'sol');
+            
+            for (const result of solResults) {
+              map[result.wallet] = result.lastActive;
+            }
+
+            // Set null for any Solana wallets not in results
+            solWallets.forEach(addr => {
+              if (!(addr in map)) map[addr] = null;
+            });
+          } catch (error) {
+            console.error("[trackers:lastActive] Failed to fetch Solana last active:", error);
+            solWallets.forEach(addr => map[addr] = null);
+          }
+        }
+
+        if (!cancelled) {
+          setLastActiveMap(map);
+        }
       } catch (error) {
         console.error("Failed to fetch last active timestamps:", error);
         if (!cancelled) {
-          setLastActiveMap((prev) => ({ ...prev }));
+          // Initialize with null values on error
+          const errorMap: Record<string, number | null> = {};
+          watchedWallets.forEach((wallet) => {
+            errorMap[wallet.address] = null;
+          });
+          setLastActiveMap(errorMap);
         }
       }
     };
@@ -808,6 +980,7 @@ export default function TrackersPage() {
     address: string,
     name: string,
     emoji?: string,
+    chain?: 'sol' | 'monad',
   ) => {
     if (isAtWalletLimit) {
       showWalletLimitToast();
@@ -815,8 +988,9 @@ export default function TrackersPage() {
     }
 
     try {
+      const walletChain = chain || 'monad';
       // Add to backend with notifications enabled by default
-      await addTrackedWallet(address, name, user?.id, emoji, true);
+      await addTrackedWallet(address, name, user?.id, emoji, true, walletChain, user?.bearerToken);
 
       // Save notification preference to localStorage
       if (typeof window !== "undefined") {
@@ -849,9 +1023,9 @@ export default function TrackersPage() {
   const handleRemoveWallet = async (addressToRemove: string) => {
     try {
       if (addressToRemove === "all") {
-        // Remove all wallets
+        // Remove all wallets for the selected chain
         await Promise.all(
-          wallets.map((w) => removeTrackedWallet(w.address, user?.id)),
+          wallets.map((w) => removeTrackedWallet(w.address, user?.id, selectedChain, user?.bearerToken)),
         );
 
         // Clear all state
@@ -879,8 +1053,10 @@ export default function TrackersPage() {
         // Refresh global watched wallets
         await refreshWatchedWallets();
       } else {
-        // Remove single wallet
-        await removeTrackedWallet(addressToRemove, user?.id);
+        // Remove single wallet - need to find the chain from watchedWallets
+        const wallet = watchedWallets.find(w => w.address === addressToRemove);
+        const walletChain = wallet?.chain || selectedChain;
+        await removeTrackedWallet(addressToRemove, user?.id, walletChain, user?.bearerToken);
 
         // Filter out trades from deleted wallet
         setCachedLiveTrades((prev) =>
@@ -954,6 +1130,8 @@ export default function TrackersPage() {
           wallet.address,
           newState,
           wallet.ownerId || undefined,
+          wallet.chain || selectedChain,
+          user?.bearerToken,
         );
       });
 
@@ -1086,7 +1264,7 @@ export default function TrackersPage() {
   // Twitter functions
   const loadTwitterAccounts = async () => {
     try {
-      const accounts = await getTrackedTwitterAccounts(user?.id);
+      const accounts = await getTrackedTwitterAccounts(user?.bearerToken || '');
       setTwitterAccounts(accounts);
     } catch (error) {
       console.error("Failed to load tracked Twitter accounts:", error);
@@ -1096,7 +1274,7 @@ export default function TrackersPage() {
 
   const handleAddTwitterAccount = async (username: string) => {
     try {
-      await addTrackedTwitterAccount(username, user?.id);
+      await addTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
       setToast(`Added @${username}`);
       setTimeout(() => setToast(""), 3000);
@@ -1109,7 +1287,7 @@ export default function TrackersPage() {
 
   const handleRemoveTwitterAccount = async (username: string) => {
     try {
-      await removeTrackedTwitterAccount(username, user?.id);
+      await removeTrackedTwitterAccount(username, user?.bearerToken || '');
       await loadTwitterAccounts();
       setToast(`Removed @${username}`);
       setTimeout(() => setToast(""), 3000);
@@ -1243,7 +1421,7 @@ export default function TrackersPage() {
             emoji: wallet.emoji || getRandomEmoji(),
           }));
 
-          await addTrackedWalletsBulk(bulkPayload, user?.id);
+          await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
           await ensureNotificationsEnabled(walletsToAdd);
 
           let successCount = walletsToAdd.length;
@@ -1294,7 +1472,7 @@ export default function TrackersPage() {
             {/* Tabs Section - Scrollable on mobile */}
             <div className="scrollbar-hide -mx-4 flex items-center gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:gap-4 sm:px-6 lg:mx-0 lg:gap-6 lg:px-0 lg:pb-0">
               <button
-                className={`hover:text-[#f0f5f5]"} cursor-pointer text-sm font-light whitespace-nowrap text-[#f0f5f5] transition-colors sm:text-base lg:text-lg`}
+                className={`hover:text-[#f0f5f5]"} text-sm font-light whitespace-nowrap text-[#f0f5f5] transition-colors sm:text-base lg:text-lg`}
               >
                 Trackers
               </button>
@@ -2460,7 +2638,7 @@ export default function TrackersPage() {
                 </div>
               )}
 
-              {/* RESIZE HANDLE (desktop only) */}
+              {/* RESIZE HANDLE (desktop only) - Hide when wallet section is hidden (Monad chain) */}
               {!isMobile && (
                 <div
                   className="group relative hidden h-full min-h-[530px] w-1 cursor-ew-resize items-center justify-center transition-colors hover:bg-emerald-400/10 lg:flex"
@@ -2717,6 +2895,7 @@ export default function TrackersPage() {
           isOpen={showAddWalletModal}
           onClose={() => setShowAddWalletModal(false)}
           onAddWallet={handleAddWallet}
+          chain={selectedChain}
         />
         <ImportExportWalletModal
           mode={"import"}
@@ -2808,7 +2987,7 @@ export default function TrackersPage() {
                 emoji: wallet.emoji || getRandomEmoji(),
               }));
 
-              await addTrackedWalletsBulk(bulkPayload, user?.id);
+              await addTrackedWalletsBulk(bulkPayload, user?.id, selectedChain, user?.bearerToken);
               await ensureNotificationsEnabled(walletsToAdd);
               successCount = walletsToAdd.length;
               processed = walletsToAdd.length;

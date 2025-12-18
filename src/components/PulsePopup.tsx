@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FaTimes } from 'react-icons/fa';
-import PulseContent from './PulseContent';
+import PulsePopoutContent from './PulsePopoutContent';
 
 interface PulsePopupProps {
   isOpen: boolean;
@@ -300,7 +300,7 @@ const PulsePopup: React.FC<PulsePopupProps> = ({ isOpen, onClose }) => {
         {/* Content - Pulse Page */}
         <div className="flex-1 overflow-hidden min-h-0" style={{ maxWidth: '100%' }}>
           <div className="h-full w-full" style={{ maxWidth: size.width < 1024 ? '100%' : 'none' }}>
-            <PulseContent forceMobileView={size.width < 1024} />
+            <PulsePopoutContent forceMobileView={size.width < 1024} />
           </div>
         </div>
 

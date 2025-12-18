@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/router';
 import { useUser } from '../components/UserContext';
-import { getTradeHistoryByUser, getActivePositionsByUser } from '~/utils/functions';
-import { formatSmartNumber } from '~/utils/db';
+import { getTradeActivityByUser, getActivePositionsByUser } from '~/utils/functions';
+import { formatSmartNumber, formatSmallPrice } from '~/utils/db';
 import type { PositionRow, TradeRow } from '~/utils/functions';
 import { SiSolana } from 'react-icons/si';
 import { FaTimes, FaChartLine } from 'react-icons/fa';
@@ -33,10 +34,19 @@ const SolanaIcon = ({ size = 16 }: { size?: number }) => (
 interface PnLModalProps {
   isOpen: boolean;
   onClose: () => void;
+  chain?: string;
 }
 
-export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
-  const { user, solBalance, usdcBalance } = useUser();
+export default function PnLModal({ isOpen, onClose, chain }: PnLModalProps) {
+  const router = useRouter();
+  const currentChain = chain || (router.query.chain as string) || 'sol';
+  const { user, solBalance, chainBalances, usdcBalance } = useUser();
+  const chainBalance = currentChain === 'monad' ? (chainBalances?.monad ?? 0) : solBalance;
+  
+  const chainLogos: Record<string, string> = {
+    sol: "https://www.pngall.com/wp-content/uploads/10/Solana-Crypto-Logo-PNG-File.png",
+    monad: "https://i0.wp.com/www.gizmotimes.com/wp-content/uploads/2023/10/Monad-Logo.png?fit=1920%2C1080&ssl=1",
+  };
   const [tradeHistory, setTradeHistory] = useState<TradeRow[]>([]);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [unrealizedPnlPercentage, setUnrealizedPnlPercentage] = useState(0);
@@ -47,6 +57,7 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
   const [timeframeMetrics, setTimeframeMetrics] = useState({
     unrealizedPnl: 0,
     realizedPnl: 0,
+    realizedPnlPercentage: 0,
     winningTrades: 0,
     losingTrades: 0,
   });
@@ -66,25 +77,25 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
         const response = await fetch(
           `https://hermes.pyth.network/v2/updates/price/latest?ids%5B%5D=${SOL_USD_FEED}`,
           { signal: AbortSignal.timeout(5000) }
-        );
-        
-        if (response.ok) {
-          const data = await response.json();
-          const priceData = data.parsed?.[0]?.price;
+        ).catch(() => null);
+
+        if (response?.ok) {
+          const data = await response.json().catch(() => null);
+          const priceData = data?.parsed?.[0]?.price;
           if (priceData?.price && priceData?.expo) {
             const price = Number(priceData.price) * Math.pow(10, priceData.expo);
             setSolPrice(price);
             return;
           }
         }
-      } catch (error) {
-        console.error('Error fetching SOL price from Pyth:', error);
+      } catch {
+        // Silently ignore network errors - fallback below
       }
-      
+
       // Fallback to static price if Pyth fails
       setSolPrice(150);
     };
-    fetchSolPrice();
+    fetchSolPrice().catch(() => setSolPrice(150));
   }, []);
 
   // Drag handlers
@@ -121,30 +132,242 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
     };
   }, [isDragging, dragStart]);
 
-  // Fetch positions and calculate metrics (same as portfolio page)
+  // Helper to normalize blockchain value (same as portfolio page)
+  const normalizeBlockchainValue = useCallback((value?: string | null) => {
+    if (!value) return "solana";
+    const normalized = value.toLowerCase();
+    if (normalized === "sol") return "solana";
+    return normalized;
+  }, []);
+
+  // Helper to filter trades by current chain (same as portfolio page)
+  const isTradeOnCurrentChain = useCallback(
+    (trade: TradeRow) => {
+      const normalized = normalizeBlockchainValue(trade.blockchain);
+      if (currentChain === "monad") {
+        return normalized === "monad";
+      }
+      // Default to Solana for undefined/other values
+      return normalized === "solana";
+    },
+    [currentChain, normalizeBlockchainValue],
+  );
+
+  // Fetch positions and calculate metrics (same comprehensive logic as portfolio page)
   useEffect(() => {
     const fetchData = async () => {
       if (user?.id && user?.bearerToken) {
         try {
-          // Use the same data source as portfolio page
-          const positions = await getActivePositionsByUser(user.id);
-          setPositions(positions);
+          // Map chain query param to blockchain: 'sol' -> 'solana', 'monad' -> 'monad'
+          const blockchain = currentChain === 'monad' ? 'monad' : currentChain === 'sol' ? 'solana' : undefined;
+          
+          // Fetch both positions and trade history (same as portfolio page)
+          const [fetchedPositions, fetchedTradeHistory] = await Promise.all([
+            getActivePositionsByUser(user.id, blockchain),
+            getTradeActivityByUser(user.id, blockchain),
+          ]);
+          
+          // Filter trade history by current chain
+          const filteredTradeHistory = Array.isArray(fetchedTradeHistory)
+            ? fetchedTradeHistory.filter(isTradeOnCurrentChain)
+            : [];
+          
+          setPositions(fetchedPositions);
+          setTradeHistory(filteredTradeHistory);
 
-          // Calculate realized PnL using the same logic as portfolio page
+          // COMPREHENSIVE REALIZED PNL CALCULATION (same as portfolio page)
           let totalRealizedPnl = 0;
+          const salesDetected: Array<{
+            tokenAddress: string;
+            soldAmount: number;
+            salePrice: number;
+            costBasis: number;
+            realizedPnl: number;
+            source: string;
+          }> = [];
+          
+          // 1. Calculate from TRADE HISTORY (most accurate - actual sell transactions)
+          // Normalize token addresses for matching (case-insensitive)
+          const normalizeAddress = (addr: string | undefined) => {
+            if (!addr) return '';
+            return addr.toLowerCase().trim();
+          };
+          
+          const sellTrades = filteredTradeHistory.filter(t => {
+            const type = t.type?.toLowerCase();
+            return type === "sell" || type === "s";
+          });
+          
+          const buyTradesByToken = new Map<string, Array<{
+            amount: number; 
+            usdValue: number;
+            pricePerToken: number; // Price per token for accurate cost basis
+            timestamp: number;
+            tradeId: string;
+            consumed: number; // Track how much of this buy has been used
+          }>>();
+          
+          // Group buys by token (normalized address)
+          filteredTradeHistory.filter(t => {
+            const type = t.type?.toLowerCase();
+            return type === "buy" || type === "b";
+          }).forEach(buy => {
+            const tokenAddress = normalizeAddress(buy.tokenAddress);
+            if (!tokenAddress) return;
+            
+            const tokenAmount = typeof buy.tokenAmount === 'string' ? parseFloat(buy.tokenAmount) : (buy.tokenAmount || 0);
+            const usdValue = typeof buy.usdValue === 'string' ? parseFloat(buy.usdValue) : (buy.usdValue || 0);
+            const timestamp = new Date(buy.tradeTime || buy.createdAt || Date.now()).getTime();
+            const tradeId = buy.transactionHash || `${buy.tokenAddress}_${timestamp}`;
+            
+            if (tokenAmount > 0 && usdValue > 0) {
+              if (!buyTradesByToken.has(tokenAddress)) {
+                buyTradesByToken.set(tokenAddress, []);
+              }
+              // Use stored pricePerToken if available, otherwise calculate
+              const pricePerToken = buy.pricePerToken || (usdValue / tokenAmount);
+              buyTradesByToken.get(tokenAddress)!.push({ 
+                amount: tokenAmount, 
+                usdValue,
+                pricePerToken, // Store price per token for accurate cost basis calculation
+                timestamp,
+                tradeId,
+                consumed: 0,
+              });
+            }
+          });
+          
+          // Sort all buys by timestamp (oldest first for FIFO)
+          buyTradesByToken.forEach((buys, tokenAddress) => {
+            buys.sort((a, b) => a.timestamp - b.timestamp);
+          });
+          
+          // Track which trades we've already counted (to avoid double-counting)
+          const processedSellTrades = new Set<string>();
+          
+          // Calculate realized PNL from sell trades
+          // PRIORITY: Use stored realizedPnl from database if available (more accurate)
+          sellTrades.forEach(sell => {
+            const tokenAddress = normalizeAddress(sell.tokenAddress);
+            if (!tokenAddress) return;
+            
+            const tradeId = sell.transactionHash || `${sell.tokenAddress}_${new Date(sell.tradeTime || sell.createdAt || Date.now()).getTime()}`;
+            
+            // Skip if already processed
+            if (processedSellTrades.has(tradeId)) return;
+            processedSellTrades.add(tradeId);
+            
+            const soldAmount = typeof sell.tokenAmount === 'string' ? parseFloat(sell.tokenAmount) : (sell.tokenAmount || 0);
+            const saleValueUsd = typeof sell.usdValue === 'string' ? parseFloat(sell.usdValue) : (sell.usdValue || 0);
+            
+            if (soldAmount <= 0 || saleValueUsd <= 0) return;
+            
+            // Check if we have stored realizedPnl from database (preferred - more accurate)
+            const storedRealizedPnl = typeof sell.realizedPnl === 'string' 
+              ? parseFloat(sell.realizedPnl) 
+              : (sell.realizedPnl || null);
+            const storedCostBasis = typeof sell.costBasis === 'string'
+              ? parseFloat(sell.costBasis)
+              : (sell.costBasis || null);
+            
+            let saleRealizedPnl: number;
+            let totalCostBasis: number;
+            
+            if (storedRealizedPnl !== null && storedRealizedPnl !== undefined && !isNaN(storedRealizedPnl)) {
+              // Use stored values from database (calculated at trade time)
+              saleRealizedPnl = storedRealizedPnl;
+              totalCostBasis = storedCostBasis || (saleValueUsd - saleRealizedPnl);
+            } else {
+              // Fallback: Calculate using FIFO matching (for older trades without stored PNL)
+              const buys = buyTradesByToken.get(tokenAddress) || [];
+              if (buys.length === 0) {
+                console.warn("⚠️ Sell trade found but no matching buys:", {
+                  tokenAddress: sell.tokenAddress,
+                  soldAmount,
+                  saleValueUsd,
+                });
+                return;
+              }
+              
+              // Match sold amount with buys (FIFO) - track consumed amounts
+              let remainingToSell = soldAmount;
+              totalCostBasis = 0;
+              
+              for (const buy of buys) {
+                if (remainingToSell <= 0) break;
+                
+                const availableFromThisBuy = buy.amount - buy.consumed;
+                if (availableFromThisBuy <= 0) continue; // This buy is fully consumed
+                
+                const buyPricePerToken = buy.pricePerToken || (buy.usdValue / buy.amount);
+                const amountFromThisBuy = Math.min(remainingToSell, availableFromThisBuy);
+                const costBasisForThisAmount = amountFromThisBuy * buyPricePerToken;
+                
+                totalCostBasis += costBasisForThisAmount;
+                buy.consumed += amountFromThisBuy; // Mark as consumed
+                remainingToSell -= amountFromThisBuy;
+              }
+              
+              // If we couldn't match all sold amount, use average buy price as fallback
+              if (remainingToSell > 0) {
+                const totalBuyAmount = buys.reduce((sum, b) => sum + b.amount, 0);
+                const totalBuyValue = buys.reduce((sum, b) => sum + b.usdValue, 0);
+                if (totalBuyAmount > 0) {
+                  const avgBuyPrice = totalBuyValue / totalBuyAmount;
+                  totalCostBasis += remainingToSell * avgBuyPrice;
+                }
+              }
+              
+              // Calculate realized PNL for this sale
+              saleRealizedPnl = saleValueUsd - totalCostBasis;
+            }
+            
+            totalRealizedPnl += saleRealizedPnl;
+            
+            salesDetected.push({
+              tokenAddress: sell.tokenAddress || tokenAddress,
+              soldAmount,
+              salePrice: saleValueUsd / soldAmount,
+              costBasis: totalCostBasis,
+              realizedPnl: saleRealizedPnl,
+              source: storedRealizedPnl !== null ? 'trade_history_stored' : 'trade_history',
+            });
+          });
+          
+          // 2. Calculate from backend-reported sales (for positions with sold > 0)
+          // Only count if not already counted from trade history
+          fetchedPositions.forEach((pos) => {
+            if (pos.sold > 0 && pos.bought > 0 && pos.boughtUsdValue > 0) {
+              // Check if already counted
+              const alreadyCounted = salesDetected.some(s => 
+                normalizeAddress(s.tokenAddress) === normalizeAddress(pos.tokenAddress) &&
+                (s.source === 'trade_history' || s.source === 'trade_history_stored')
+              );
+              
+              if (alreadyCounted) return;
+              
+              const avgBuyPrice = pos.boughtUsdValue / pos.bought;
+              const costBasisOfSold = pos.sold * avgBuyPrice;
+              const saleValueUsd = pos.soldUsdValue || (pos.sold * avgBuyPrice); // Use avg buy price if no sale value
+              const saleRealizedPnl = saleValueUsd - costBasisOfSold;
+              
+              totalRealizedPnl += saleRealizedPnl;
+              
+              salesDetected.push({
+                tokenAddress: pos.tokenAddress,
+                soldAmount: pos.sold,
+                salePrice: saleValueUsd / pos.sold,
+                costBasis: costBasisOfSold,
+                realizedPnl: saleRealizedPnl,
+                source: 'backend',
+              });
+            }
+          });
+
+          // Count winning/losing positions
           let winningTrades = 0;
           let losingTrades = 0;
-
-          positions.forEach(pos => {
-            // Calculate realized PNL from sold positions
-            // Realized PnL = Money received from selling - Cost basis of sold tokens
-            if (pos.sold > 0 && pos.bought > 0) {
-              const costBasisOfSold = pos.boughtUsdValue * (pos.sold / pos.bought);
-              const realizedPnl = pos.soldUsdValue - costBasisOfSold;
-              totalRealizedPnl += realizedPnl;
-            }
-
-            // Count winning/losing positions
+          fetchedPositions.forEach((pos) => {
             if (pos.pnl > 0) {
               winningTrades++;
             } else if (pos.pnl < 0) {
@@ -152,20 +375,29 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
             }
           });
 
+          const totalUnrealizedPnl = fetchedPositions.reduce((sum, pos) => sum + pos.pnl, 0);
+
+          // Calculate realized PNL percentage using cost basis of SOLD tokens only (same as portfolio page)
+          // This is the correct way: realizedPnl / costBasisOfSoldTokens
+          const totalCostBasisOfSoldTokens = salesDetected.reduce((acc, sale) => acc + (sale.costBasis || 0), 0);
+          const realizedPnlPercentage = totalCostBasisOfSoldTokens > 0 
+            ? (totalRealizedPnl / totalCostBasisOfSoldTokens) * 100 
+            : 0;
+
           setTimeframeMetrics({
-            unrealizedPnl: positions.reduce((sum, pos) => sum + pos.pnl, 0),
+            unrealizedPnl: totalUnrealizedPnl,
             realizedPnl: totalRealizedPnl,
+            realizedPnlPercentage: realizedPnlPercentage,
             winningTrades,
             losingTrades,
           });
 
           // Calculate total value
-          const totalRemainingValue = positions.reduce((acc, pos) => acc + pos.remainingUsdValue, 0);
-          const totalUsdValue = (solBalance || 0) * solPrice + (usdcBalance || 0) + totalRemainingValue;
+          const totalRemainingValue = fetchedPositions.reduce((acc, pos) => acc + pos.remainingUsdValue, 0);
+          const totalUsdValue = (chainBalance || 0) * solPrice + (usdcBalance || 0) + totalRemainingValue;
           setTotalValue(totalUsdValue);
 
-          // Generate chart data from positions (simplified for now)
-          // For now, just show the current realized PnL as a flat line
+          // Generate chart data from realized PNL
           setChartData([{ x: 0, y: 0 }, { x: 1, y: totalRealizedPnl }]);
 
         } catch (error) {
@@ -177,7 +409,7 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
     if (isOpen) {
       fetchData();
     }
-  }, [user?.id, user?.bearerToken, isOpen, solBalance, usdcBalance, solPrice]);
+  }, [user?.id, user?.bearerToken, isOpen, chainBalance, usdcBalance, solPrice, currentChain, isTradeOnCurrentChain]);
 
   if (!isOpen) return null;
 
@@ -236,10 +468,18 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
         <div className="relative p-6 h-full flex items-center justify-between">
           {/* Balance Section */}
           <div className="flex items-center gap-4">
-            <SolanaIcon size={28} />
+            {currentChain === 'monad' ? (
+              <img 
+                src={chainLogos.monad} 
+                alt="Monad" 
+                className="w-7 h-7 rounded-full object-cover"
+              />
+            ) : (
+              <SolanaIcon size={28} />
+            )}
             <div>
               <div className="text-white font-bold text-3xl">
-                {formatSmartNumber(solBalance || 0)}
+                {formatSmartNumber(chainBalance || 0)}
               </div>
               <div className="text-gray-300 text-lg">Balance</div>
             </div>
@@ -247,12 +487,24 @@ export default function PnLModal({ isOpen, onClose }: PnLModalProps) {
           
           {/* PnL Section */}
           <div className="flex items-center gap-4">
-            <SolanaIcon size={28} />
+            {currentChain === 'monad' ? (
+              <img 
+                src={chainLogos.monad} 
+                alt="Monad" 
+                className="w-7 h-7 rounded-full object-cover"
+              />
+            ) : (
+              <SolanaIcon size={28} />
+            )}
             <div>
               <div className={`font-bold text-3xl ${timeframeMetrics.realizedPnl >= 0 ? 'text-green-400' : 'text-pink-400'}`}>
-                {timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}${formatSmartNumber(Math.abs(timeframeMetrics.realizedPnl))}
+                {timeframeMetrics.realizedPnl >= 0 ? '+' : '-'}${formatSmallPrice(Math.abs(timeframeMetrics.realizedPnl))}
               </div>
-              <div className="text-gray-300 text-lg">PNL</div>
+              {/* Realized PNL Percentage - Always show (same as portfolio page) */}
+              <div className={`text-sm mt-1 ${timeframeMetrics.realizedPnlPercentage >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {timeframeMetrics.realizedPnlPercentage >= 0 ? "+" : ""}{formatSmallPrice(timeframeMetrics.realizedPnlPercentage)}%
+              </div>
+              <div className="text-gray-300 text-lg mt-1">PNL</div>
             </div>
           </div>
         </div>

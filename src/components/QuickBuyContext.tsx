@@ -11,6 +11,7 @@ export interface QuickBuySettings {
   autoFee: boolean;
   maxFee: number;
   rpc?: string;
+  gasPrice?: number; // Gas price in gwei for Monad (optional, defaults to network suggestion)
 }
 
 export interface QuickBuyContextType {
@@ -38,6 +39,7 @@ const defaultSettings: QuickBuySettings = {
   autoFee: false,
   maxFee: 0,
   rpc: undefined,
+  gasPrice: undefined, // Default to network suggestion for Monad
 };
 
 const defaultPresets: QuickBuyPreset[] = [
@@ -62,6 +64,10 @@ function validateSettings(settings: QuickBuySettings): QuickBuySettings {
   }
   if (isNaN(validated.bribe) || validated.bribe === null || validated.bribe === undefined) {
     validated.bribe = defaultSettings.bribe;
+  }
+  // gasPrice is optional, so only validate if it's set
+  if (validated.gasPrice !== undefined && validated.gasPrice !== null && (isNaN(validated.gasPrice) || validated.gasPrice < 0)) {
+    validated.gasPrice = undefined;
   }
   
   return validated;
@@ -115,7 +121,18 @@ export function QuickBuyProvider({ children }: { children: ReactNode }) {
   // Save to localStorage on change
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('quickBuySettings', JSON.stringify({ presets, activePreset }));
+      try {
+        localStorage.setItem('quickBuySettings', JSON.stringify({ presets, activePreset }));
+      } catch (e) {
+        // localStorage quota exceeded - clear old data and try again
+        console.warn('localStorage quota exceeded, clearing old data...');
+        try {
+          localStorage.clear();
+          localStorage.setItem('quickBuySettings', JSON.stringify({ presets, activePreset }));
+        } catch {
+          console.error('Failed to save quickBuySettings to localStorage');
+        }
+      }
     }
   }, [presets, activePreset]);
 
