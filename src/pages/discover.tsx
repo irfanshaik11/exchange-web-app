@@ -22,6 +22,7 @@ import { HiLightningBolt } from "react-icons/hi";
 import { BsSliders2 } from "react-icons/bs";
 import { prefetchTradeData } from "~/utils/tokenCache";
 import { extractTokenImage } from "~/utils/images";
+import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import toast from "react-hot-toast";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
@@ -1765,6 +1766,7 @@ export default function DiscoverPage() {
               console.warn('Failed to refresh balance:', err);
             });
           }, 1000);
+          broadcastMonadQuickTrade(tokenAddress, 'buy');
           console.log('✅ Monad Quick Buy successful:', result);
           return { success: true, txHash: result.txHash };
         } else {
@@ -3086,4 +3088,3 @@ export default function DiscoverPage() {
     </>
   );
 }
-

@@ -22,6 +22,7 @@ import type { Token } from "../utils/db";
 import { executeEnhancedTrade } from "~/utils/enhancedTradeHandler";
 import { tradeMonadBuy } from "~/utils/api";
 import { extractTokenImage } from "~/utils/images";
+import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import Cookies from "js-cookie";
 import toast from "react-hot-toast";
 import { FaCheckCircle } from "react-icons/fa";
@@ -720,6 +721,7 @@ export default function Header({
               console.warn('Failed to refresh balance:', err);
             });
           }, 1000);
+          broadcastMonadQuickTrade(tokenAddress, 'buy');
           console.log('✅ Header Watchlist Quick Buy successful:', result);
           return { success: true, txHash: result.txHash };
         } else {

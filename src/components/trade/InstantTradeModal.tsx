@@ -9,6 +9,7 @@ import { useUser } from '~/components/UserContext';
 import { useQuickBuy } from '~/components/QuickBuyContext';
 import { executeEnhancedTrade } from '~/utils/enhancedTradeHandler';
 import { tradeMonadBuy, tradeMonadSell, preCheckMonadBalance } from '~/utils/api';
+import { broadcastMonadQuickTrade } from '~/utils/monadTradeEvents';
 import { validateMonadBalance, validateSolanaBalance } from '~/utils/tradeBalanceValidation';
 import { getTradeActivityByUser } from '~/utils/functions';
 import { formatSmartNumber } from '~/utils/db';
@@ -790,6 +791,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               console.error('Error refreshing token balance:', error);
             }
           }, 2000);
+          broadcastMonadQuickTrade(tokenAddress, 'buy');
         } else {
           console.error("❌ Monad buy failed - result:", result);
           const errorMsg = formatMonadError((result as any)?.error || "Trade failed. Please try again.");
@@ -1033,6 +1035,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               console.error('Error refreshing token balance:', error);
             }
           }, 2000);
+          broadcastMonadQuickTrade(tokenAddress, 'sell');
         } else {
           toast.error(formatMonadError((result as any).error), { id: uniqueSellToastId, duration: 6000 });
           setIsLoading(false);
@@ -1167,6 +1170,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
                 console.error('Error refreshing token balance:', error);
               }
             }, 2000);
+            broadcastMonadQuickTrade(tokenAddress, 'buy');
           }
         } else {
           const result = await tradeMonadSell(
@@ -1210,6 +1214,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
                 console.error('Error refreshing token balance:', error);
               }
             }, 2000);
+            broadcastMonadQuickTrade(tokenAddress, 'sell');
           }
         }
       } else {
@@ -1353,6 +1358,7 @@ const InstantTradeModal: React.FC<InstantTradeModalProps> = ({ isOpen, onClose, 
               console.error('Error refreshing token balance:', error);
             }
           }, 2000);
+          broadcastMonadQuickTrade(tokenAddress, 'buy');
         }
       } else {
         // Use Solana enhanced trade handler for Solana tokens

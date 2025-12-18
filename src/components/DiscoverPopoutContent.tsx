@@ -20,6 +20,7 @@ import { BsSliders2 } from "react-icons/bs";
 import { prefetchTradeData } from "~/utils/tokenCache";
 import toast from "react-hot-toast";
 import { extractTokenImage } from "~/utils/images";
+import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 
 const WRAPPED_SOL_MINT = SOL_MINT_ADDRESS;
 
@@ -1740,6 +1741,7 @@ export default function DiscoverPopoutContent() {
             pendingQuickBuyToastRef.current = null;
           }
           console.log("✅ Monad Quick Buy successful:", result);
+          broadcastMonadQuickTrade(tokenAddress, 'buy');
           return { success: true, txHash: result.txHash };
         } else {
           clearInterval(timerInterval);
@@ -3066,4 +3068,3 @@ export default function DiscoverPopoutContent() {
     </div>
   );
 }
-

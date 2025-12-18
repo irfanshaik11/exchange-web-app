@@ -74,6 +74,7 @@ import SniperHoldingsDisplay from "./SniperHoldingsDisplay";
 import { useUser } from "~/components/UserContext";
 import { useQuickBuy } from "~/components/QuickBuyContext";
 import { extractTokenImage } from "~/utils/images";
+import { broadcastMonadQuickTrade } from "~/utils/monadTradeEvents";
 import { useSolPrice } from "~/components/SolPriceContext";
 import {
   tradeBuy,
@@ -2688,6 +2689,7 @@ function MonadTable({
             console.warn('Failed to refresh balance:', err);
           });
         }, 1000);
+        broadcastMonadQuickTrade(tokenAddress, 'buy');
         console.log("✅ Monad Quick Buy successful:", result);
         return { success: true, txHash: result.txHash };
       } else {

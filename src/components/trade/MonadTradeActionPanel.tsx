@@ -20,6 +20,7 @@ import useMonadXray from "~/hooks/useMonadXray";
 import { extractTokenImage } from "~/utils/images";
 import useMonadPositionWebSocket from "~/hooks/useMonadPositionWebSocket";
 import { useSolPrice } from "~/components/SolPriceContext";
+import { broadcastMonadQuickTrade, consumePendingMonadPositionRefresh } from "~/utils/monadTradeEvents";
 
 type TimeRange = "5m" | "1h" | "12h" | "24h";
 
@@ -326,7 +327,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     }, 10000);
   }, []);
   
-  const { position: wsPosition, loading: positionLoading, connected: positionConnected } = useMonadPositionWebSocket({
+  const { position: wsPosition, loading: positionLoading, connected: positionConnected, refreshPosition } = useMonadPositionWebSocket({
     tokenAddress,
     enabled: !!user?.id, // Don't require tokenAddress - we want to receive txHash even before token is loaded
     onUpdate: (pos) => {
@@ -353,6 +354,54 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
     realizedPnlMon: wsPosition.realizedPnlMon,
     realizedPnlPct: wsPosition.realizedPnlPct,
   } : null;
+
+  // Listen for external Monad quick trades (e.g., Quick Buy) and refetch position once history persists
+  useEffect(() => {
+    if (typeof window === 'undefined' || !tokenAddress) return;
+    const normalized = tokenAddress.toLowerCase();
+    const pendingRefreshes = new Set<ReturnType<typeof setTimeout>>();
+
+    const triggerRefresh = (delay: number) => {
+      const timeoutId = setTimeout(() => {
+        refreshPosition().catch((err) => {
+          console.error('[MonadTradeActionPanel] Failed to refresh position after quick trade:', err);
+        });
+        pendingRefreshes.delete(timeoutId);
+      }, delay);
+      pendingRefreshes.add(timeoutId);
+    };
+
+    const scheduleBatchRefresh = () => {
+      triggerRefresh(600);
+      triggerRefresh(2200);
+    };
+
+    const consumeAndMaybeRefresh = () => {
+      const timestamp = consumePendingMonadPositionRefresh(normalized);
+      if (timestamp && Date.now() - timestamp < 60_000) {
+        scheduleBatchRefresh();
+      }
+    };
+
+    const handleQuickTrade = (event: Event) => {
+      const detail = (event as CustomEvent<{ tokenAddress?: string }>).detail;
+      if (!detail?.tokenAddress) return;
+      if (detail.tokenAddress.toLowerCase() !== normalized) return;
+
+      consumeAndMaybeRefresh();
+    };
+
+    // Handle trades that occurred before this component mounted
+    consumeAndMaybeRefresh();
+
+    window.addEventListener('monadQuickTrade', handleQuickTrade as EventListener);
+
+    return () => {
+      window.removeEventListener('monadQuickTrade', handleQuickTrade as EventListener);
+      pendingRefreshes.forEach((timeoutId) => clearTimeout(timeoutId));
+      pendingRefreshes.clear();
+    };
+  }, [tokenAddress, refreshPosition]);
 
   // Sync slippage and gasPrice from active preset
   useEffect(() => {
@@ -750,6 +799,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               console.warn('Failed to refresh balance:', err);
             });
           }, 1000);
+          broadcastMonadQuickTrade(tokenAddress, 'buy');
           // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {
@@ -800,6 +850,7 @@ const MonadTradeActionPanel: React.FC<MonadTradeActionPanelProps> = ({ token }) 
               console.warn('Failed to refresh balance:', err);
             });
           }, 1000);
+          broadcastMonadQuickTrade(tokenAddress, 'sell');
           // Keep the amount value in the input field for easy re-trading
           setIsLoading(false);
         } else {
