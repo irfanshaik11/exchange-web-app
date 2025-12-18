@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/router";
 import { useUser } from "./UserContext";
 import { useWalletTracker } from "./WalletTrackerContext";
 import { useQuickBuy } from "./QuickBuyContext";
@@ -98,6 +99,7 @@ function getProtocolColor(protocol: string): string {
 }
 
 export default function WalletTrackerContent() {
+  const router = useRouter();
   const { user } = useUser();
   const {
     wsConnected,
@@ -106,6 +108,10 @@ export default function WalletTrackerContent() {
     refreshWatchedWallets,
   } = useWalletTracker();
   const { presets, activePreset } = useQuickBuy();
+
+  // Get chain from router query, default to 'sol'
+  const currentChain = (router.query.chain as string) || 'sol';
+  const selectedChain: 'sol' | 'monad' = (currentChain === 'monad' || currentChain === 'sol') ? currentChain : 'sol';
 
   // Load quickBuyAmount from localStorage with fallback
   const getInitialQuickBuyAmount = () => {
@@ -1006,7 +1012,7 @@ export default function WalletTrackerContent() {
           refreshWatchedWallets();
         }}
         onAddWallet={handleAddWallet}
-        chain="sol"
+        chain={selectedChain}
       />
       <ImportExportWalletModal
         mode="import"
